@@ -343,6 +343,7 @@ Fields:
 - `running` (map `card_id -> running entry`)
 - `claimed` (set of card IDs reserved/running/retrying)
 - `retry_attempts` (map `card_id -> RetryEntry`)
+- `ignored_worker_identities` (bounded set of worker identities whose late events are ignored)
 - `completed` (set of card IDs; bookkeeping only, not dispatch gating)
 - `codex_totals` (aggregate tokens + runtime seconds)
 - `codex_rate_limits` (latest rate-limit snapshot from agent events)
@@ -357,7 +358,10 @@ Fields:
   - Derive from `card.identifier` by replacing any character not in `[A-Za-z0-9._-]` with `_`.
   - Use the sanitized value for the workspace directory name.
 - `Normalized Card State`
-  - Compare states after `lowercase`.
+  - `normalize_state_name(value)` means trim leading/trailing whitespace, collapse internal
+    whitespace to a single space, and lowercase using locale-independent case folding.
+  - Compare configured state names and Trello list-derived state names only after
+    `normalize_state_name`.
   - For non-archived cards in open lists on open boards, the state is the current list name.
   - For archived cards, cards in archived lists, cards in archived boards, and deleted cards, use
     the special states defined in Section 4.1.1.
@@ -464,8 +468,7 @@ Fields:
 - `blocker_enforced_states` (list of strings)
   - Trello list names or normalized states where non-terminal blockers prevent dispatch.
   - Default: `Todo`, `Ready for Codex`
-  - State names are normalized with the same case-insensitive whitespace normalization used for
-    `active_states`.
+  - State names are normalized with `normalize_state_name` from Section 4.2.
 - `terminal_states` (list of strings)
   - Trello list names or normalized special states considered terminal.
   - Default: `Done`, `Archived`, `ArchivedList`, `ArchivedBoard`, `Deleted`
@@ -558,7 +561,7 @@ Fields:
   - Changes SHOULD be re-applied at runtime and affect future retry scheduling.
 - `max_concurrent_agents_by_state` (map `state_name -> positive integer`)
   - Default: empty map.
-  - State keys are normalized (`lowercase`) for lookup.
+  - State keys are normalized with `normalize_state_name` from Section 4.2 for lookup.
   - Invalid entries, non-positive or non-numeric, are ignored.
 
 #### 5.3.6 `codex` (object)
@@ -881,7 +884,7 @@ Distinct terminal reasons are important because retry logic and logs differ.
   - Schedule exponential-backoff retry.
 
 - `Codex Update Event`
-  - Update live session fields, token counters, and rate limits.
+  - After worker identity validation, update live session fields, token counters, and rate limits.
 
 - `Retry Timer Fired`
   - Re-fetch the current card and attempt re-dispatch, clean terminal/deleted workspaces, or release
@@ -904,7 +907,15 @@ Distinct terminal reasons are important because retry logic and logs differ.
 - Worker exit events MUST include that orchestrator-generated worker identity. The identity MUST be
   unique per worker spawn for at least the lifetime of the orchestrator process and MUST NOT be
   derived only from card ID, attempt number, or other values that can repeat for the same card.
-- A stale worker exit MUST NOT remove or retry a newer running entry for the same card.
+- All worker-originated events sent to the orchestrator MUST include that worker identity, including
+  Codex update events, worker lifecycle events, and worker exit events.
+- The orchestrator MUST ignore worker-originated events when the worker identity is marked ignored,
+  when no current running entry exists for the card, or when the current running entry's worker
+  identity differs from the event's worker identity.
+- A stale worker event MUST NOT update session metadata, token counters, stall timestamps, retry
+  state, or running card snapshots for a newer running entry for the same card.
+- Ignored worker identities MUST be bounded by size, TTL, or both. Expired entries MAY be removed
+  after the implementation's maximum expected worker shutdown grace period.
 - If worker spawn fails, the card MUST either remain claimed with a retry entry or be explicitly
   released.
 - Reconciliation runs before dispatch on every tick.
@@ -1307,8 +1318,16 @@ include:
 - `event` (enum/string)
 - `timestamp` (UTC timestamp)
 - `codex_app_server_pid` (if available)
+- `worker_identity` for all worker-originated events
 - OPTIONAL `usage` map (token counts)
 - payload fields as needed
+
+Worker-originated event handling requirements:
+
+- Events from a worker MUST include the orchestrator-generated worker identity assigned before spawn.
+- The orchestrator MUST validate worker identity before mutating running state, session metadata,
+  token counters, rate-limit snapshots, stall timestamps, retry state, or running card snapshots.
+- Events for ignored, missing, or stale worker identities MUST be logged at debug level and ignored.
 
 Important emitted events include, for example:
 
@@ -1402,6 +1421,13 @@ Optional client-side tool extension:
   supports another Trello request body shape.
 - The implementation MUST inject Trello auth from the active Symphony workflow/runtime config.
 - The coding agent MUST NOT be required to read raw Trello tokens from disk.
+- The tool MUST reject requests whose `query`, `body`, or implementation-supported headers contain
+  Trello authentication material, including `key`, `token`, `oauth_consumer_key`, `oauth_token`, or
+  equivalent auth fields. The runtime is solely responsible for injecting Trello auth.
+- The Trello tool execution context MUST include the current Trello card ID and canonical board ID
+  from the active worker session. For current-card-scoped operations, the tool MUST compare requested
+  card IDs against this session context and reject requests targeting any other card unless an
+  explicit allowlist permits broader access.
 - If `trello_tools.enabled == false`, implementations SHOULD NOT advertise `trello_rest`; any direct
   invocation MUST fail with a structured disabled-tool error.
 - The tool MUST execute one Trello HTTP operation per tool call.
@@ -1415,6 +1441,12 @@ Optional client-side tool extension:
 - Move operations MUST be limited to the configured board and the configured move allowlist.
 - Comment, checklist, and URL attachment writes MUST respect the corresponding `trello_tools`
   allow flags.
+- For write-capable operations, implementations SHOULD prefer typed high-level tools, for example
+  `trello_add_comment`, `trello_move_current_card`, `trello_upsert_checklist_item`, and
+  `trello_add_url_attachment`.
+- If writes are exposed through generic `trello_rest`, the implementation MUST classify each write
+  request before execution and enforce the same policy as the corresponding high-level operation. If
+  a write request cannot be safely classified, it MUST fail with a structured policy error.
 - A request that is valid Trello API syntax but violates local `trello_tools` policy MUST return
   `success=false` with a structured policy error.
 - Tool result semantics:
@@ -2174,7 +2206,7 @@ function start_service():
     running: {},
     claimed: set(),
     retry_attempts: {},
-    ignored_worker_exits: set(),
+    ignored_worker_identities: bounded_set(),
     completed: set(),
     codex_totals: {input_tokens: 0, output_tokens: 0, total_tokens: 0, seconds_running: 0},
     codex_rate_limits: null
@@ -2273,7 +2305,10 @@ function terminate_running_card(state, card_id, cleanup_workspace, suppress_retr
     return state
 
   if running_entry.worker_identity is not null:
-    state.ignored_worker_exits.add(running_entry.worker_identity)
+    state.ignored_worker_identities.add(
+      running_entry.worker_identity,
+      expires_after=max_worker_shutdown_grace_period()
+    )
   kill_worker_best_effort(running_entry.worker_handle)
 
   if cleanup_workspace:
@@ -2326,7 +2361,7 @@ function dispatch_card(card, state, attempt):
 
   worker = spawn_worker(
     identity=worker_identity,
-    fn -> run_agent_attempt(card, attempt, parent_orchestrator_pid) end
+    fn -> run_agent_attempt(card, attempt, worker_identity, parent_orchestrator_pid) end
   )
 
   if worker spawn failed:
@@ -2346,7 +2381,7 @@ function dispatch_card(card, state, attempt):
 ### 16.5 Worker Attempt (Workspace + Prompt + Agent)
 
 ```text
-function run_agent_attempt(card, attempt, orchestrator_channel):
+function run_agent_attempt(card, attempt, worker_identity, orchestrator_channel):
   workspace = workspace_manager.create_for_card(card.identifier)
   if workspace failed:
     fail_worker("workspace error")
@@ -2373,7 +2408,12 @@ function run_agent_attempt(card, attempt, orchestrator_channel):
       session=session,
       prompt=prompt,
       card=card,
-      on_message=(msg) -> send(orchestrator_channel, {codex_update, card.id, msg})
+      on_message=(msg) -> send(orchestrator_channel, {
+        codex_update,
+        card.id,
+        worker_identity,
+        msg
+      })
     )
 
     if turn_result failed:
@@ -2422,18 +2462,40 @@ function run_agent_attempt(card, attempt, orchestrator_channel):
 ### 16.6 Worker Exit and Retry Handling
 
 ```text
-on_worker_exit(card_id, worker_identity, reason, state):
-  if worker_identity in state.ignored_worker_exits:
-    state.ignored_worker_exits.remove(worker_identity)
-    return state
+function current_running_entry_for_worker_event(card_id, worker_identity, state):
+  state.ignored_worker_identities.remove_expired()
+
+  if worker_identity in state.ignored_worker_identities:
+    state.ignored_worker_identities.remove(worker_identity)
+    return ignored
 
   running_entry = state.running.get(card_id)
   if running_entry is missing:
-    log_debug("worker exit for unknown card")
-    return state
+    return missing
 
   if running_entry.worker_identity != worker_identity:
-    log_debug("stale worker exit ignored")
+    return stale
+
+  return running_entry
+```
+
+```text
+on_codex_update(card_id, worker_identity, msg, state):
+  running_entry = current_running_entry_for_worker_event(card_id, worker_identity, state)
+  if running_entry is ignored or missing or stale:
+    log_debug("stale or unknown Codex update ignored")
+    return state
+
+  state = apply_codex_update_to_running_entry(state, card_id, msg)
+  notify_observers()
+  return state
+```
+
+```text
+on_worker_exit(card_id, worker_identity, reason, state):
+  running_entry = current_running_entry_for_worker_event(card_id, worker_identity, state)
+  if running_entry is ignored or missing or stale:
+    log_debug("stale or unknown worker exit ignored")
     return state
 
   state.running.remove(card_id)
@@ -2611,8 +2673,10 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - Card is claimed before worker spawn begins
 - Pending running entry with unique per-spawn worker identity is recorded before worker spawn can
   emit lifecycle events
-- Worker exit events include the unique per-spawn worker identity
-- Stale worker exit for an older worker identity does not remove or retry a newer running entry
+- Worker-originated events include the unique per-spawn worker identity
+- Stale worker-originated events for an older worker identity do not update session metadata, token
+  counters, stall timestamps, retry state, running card snapshots, or newer running entries
+- Ignored worker identity tracking is bounded by size, TTL, or both
 - Worker spawn failure leaves a retry entry or explicitly releases the claim
 - Active-state card refresh updates running entry state
 - Non-active state stops running agent without workspace cleanup
@@ -2670,6 +2734,12 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
   - invalid arguments, missing auth, unsupported operations, and transport failures return
     structured failure payloads
   - unsupported tool names still fail without stalling the session
+  - caller-supplied Trello auth material in `query`, `body`, or implementation-supported headers is
+    rejected
+  - current-card-scoped operations reject card IDs outside the active worker session context unless
+    explicitly allowlisted
+  - generic write requests are classified before execution; unclassified writes fail with structured
+    policy errors
   - `trello_tools` policy violations return structured policy errors
   - destructive operations are disallowed by default unless explicitly configured
 - If the standardized `trello_rest` tool is implemented but disabled for the session, it is withheld
@@ -2761,7 +2831,7 @@ Use the same validation profiles as Section 17:
   non-active cards and retry stalled cards
 - Workspace cleanup for terminal cards, startup sweep + active/retry transition
 - Claim-before-spawn dispatch behavior with a pending running entry before worker spawn and unique
-  per-spawn worker identity checks on worker exit
+  per-spawn worker identity checks on worker-originated events
 - Structured logs with `card_id`, `card_identifier`, and `session_id`
 - Operator-visible observability, structured logs; OPTIONAL snapshot/status surface
 
@@ -2773,6 +2843,8 @@ Required when the workflow expects the agent to perform Trello handoff transitio
 - `trello_tools` policy enforcement before every Trello tool request.
 - `trello_tools.enabled=true` for the standardized `trello_rest` tool, or equivalent documented
   enablement for non-`trello_rest` tools.
+- Trello tool execution context includes the active worker session's current card ID and canonical
+  board ID.
 - Ability to add comments to the current card when `trello_tools.allow_comments` permits it.
 - Ability to move the current card to allowed board-local lists.
 - Ability to add or update checklist items on the current card when `trello_tools.allow_checklists`
@@ -2780,6 +2852,8 @@ Required when the workflow expects the agent to perform Trello handoff transitio
 - Ability to add policy-enabled URL attachments, such as GitHub PR links, when
   `trello_tools.allow_url_attachments` permits it.
 - Write operations are scoped to the configured board and current card unless explicitly allowlisted.
+- Generic `trello_rest` writes are classified and unclassified writes fail with structured policy
+  errors.
 - Destructive operations are disabled by default.
 - Write-capable operations require a Trello token with write permission, or an operator-visible
   warning when startup cannot verify write capability without side effects.
