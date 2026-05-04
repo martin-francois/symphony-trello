@@ -1090,6 +1090,9 @@ Termination policies:
 - When retry is suppressed, the running entry MUST be removed, the claim MUST be released, and the
   later worker process-exit notification for the same worker identity MUST be ignored for retry
   purposes.
+- When workspace cleanup follows worker termination, implementations SHOULD either wait until the
+  worker is confirmed stopped or document a bounded grace/force-kill policy before deleting the
+  workspace.
 
 ### 8.6 Startup Terminal Workspace Cleanup
 
