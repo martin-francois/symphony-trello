@@ -45,7 +45,8 @@ export TRELLO_API_TOKEN=...
 ```
 
 By default the status page binds to `127.0.0.1:8080`. Use `SYMPHONY_HTTP_PORT=0` for an ephemeral
-test port or another numeric value for local development.
+test port, configure `server.port` in `WORKFLOW.md`, or pass `--port` for local development.
+Command-line `--port` wins over `server.port`.
 
 Packaged runs also accept a positional workflow path and `--port`:
 
@@ -93,6 +94,9 @@ Useful endpoints:
   reported by Codex.
 - `GET /api/v1/{card_identifier}` returns card-specific runtime details.
 - `POST /api/v1/refresh` queues an immediate poll/reconciliation cycle.
+
+`WORKFLOW.md` is watched for changes and also checked defensively on each scheduler tick. Invalid
+reloads are logged and the last known good configuration remains active.
 
 Important environment variables:
 

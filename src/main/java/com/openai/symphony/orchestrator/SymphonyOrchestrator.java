@@ -16,8 +16,13 @@ import com.openai.symphony.workflow.WorkflowLoader;
 import com.openai.symphony.workspace.WorkspaceManager;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.io.IOException;
+import java.nio.file.ClosedWatchServiceException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardWatchEventKinds;
+import java.nio.file.WatchEvent;
+import java.nio.file.WatchKey;
+import java.nio.file.WatchService;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
@@ -35,6 +40,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
@@ -64,11 +70,16 @@ public class SymphonyOrchestrator {
     private WorkflowDefinition workflow;
     private Instant workflowLastModified;
     private ScheduledFuture<?> tickTimer;
+    private WatchService workflowWatchService;
+    private Thread workflowWatcher;
     private long endedRuntimeMillis;
     private long totalInputTokens;
     private long totalOutputTokens;
     private long totalTokens;
     private Object rateLimits;
+    private final AtomicBoolean refreshRequested = new AtomicBoolean();
+    private final AtomicBoolean workflowReloadRequested = new AtomicBoolean();
+    private volatile boolean tickRunning;
     private boolean started;
 
     @ConfigProperty(name = "symphony.workflow.path")
@@ -94,6 +105,7 @@ public class SymphonyOrchestrator {
             return;
         }
         reloadOrThrow();
+        startWorkflowWatcher();
         startupTerminalWorkspaceCleanup();
         started = true;
         scheduleTick(Duration.ZERO);
@@ -103,6 +115,7 @@ public class SymphonyOrchestrator {
         if (tickTimer != null) {
             tickTimer.cancel(false);
         }
+        stopWorkflowWatcher();
         running.values().forEach(entry -> agentRunner.cancel(entry.workerIdentity));
         scheduler.shutdownNow();
         workers.shutdownNow();
@@ -116,9 +129,36 @@ public class SymphonyOrchestrator {
         this.workflowPath = workflowPath;
     }
 
-    public synchronized void requestRefresh() {
-        if (started) {
+    public synchronized boolean isStarted() {
+        return started;
+    }
+
+    public synchronized Path selectedWorkflowPath() {
+        Path selected = config == null ? workflowPath : config.workflowPath();
+        return selected.toAbsolutePath().normalize();
+    }
+
+    public void requestRefresh() {
+        refreshRequested.set(true);
+        if (tickRunning) {
+            return;
+        }
+        synchronized (this) {
+            if (started && !tickRunning) {
+                scheduleTick(Duration.ZERO);
+            }
+        }
+    }
+
+    private boolean consumeRefreshRequest() {
+        return refreshRequested.getAndSet(false);
+    }
+
+    private void requestRefreshAfterCurrentTickIfNeeded() {
+        if (consumeRefreshRequest()) {
             scheduleTick(Duration.ZERO);
+        } else {
+            scheduleTick(config.polling().interval());
         }
     }
 
@@ -131,6 +171,8 @@ public class SymphonyOrchestrator {
             if (!started) {
                 return;
             }
+            tickRunning = true;
+            consumeRefreshRequest();
             reloadIfChanged();
             reconcileRunningCards();
             try {
@@ -149,7 +191,8 @@ public class SymphonyOrchestrator {
             } catch (RuntimeException e) {
                 LOG.errorf("dispatch outcome=skipped reason=%s", e.getMessage());
             } finally {
-                scheduleTick(config.polling().interval());
+                tickRunning = false;
+                requestRefreshAfterCurrentTickIfNeeded();
             }
         }
     }
@@ -176,7 +219,8 @@ public class SymphonyOrchestrator {
 
     private void reloadIfChanged() {
         Instant modified = lastModified(config.workflowPath());
-        if (workflowLastModified != null && !modified.isAfter(workflowLastModified)) {
+        boolean forced = workflowReloadRequested.getAndSet(false);
+        if (!forced && workflowLastModified != null && !modified.isAfter(workflowLastModified)) {
             return;
         }
         try {
@@ -197,6 +241,64 @@ public class SymphonyOrchestrator {
             return Files.getLastModifiedTime(path).toInstant();
         } catch (IOException e) {
             return Instant.EPOCH;
+        }
+    }
+
+    private void startWorkflowWatcher() {
+        stopWorkflowWatcher();
+        Path parent = config.workflowPath().getParent();
+        if (parent == null) {
+            return;
+        }
+        try {
+            workflowWatchService = parent.getFileSystem().newWatchService();
+            parent.register(
+                    workflowWatchService,
+                    StandardWatchEventKinds.ENTRY_CREATE,
+                    StandardWatchEventKinds.ENTRY_MODIFY,
+                    StandardWatchEventKinds.ENTRY_DELETE);
+            workflowWatcher = Thread.ofVirtual().name("symphony-workflow-watch").start(this::watchWorkflowChanges);
+        } catch (IOException e) {
+            LOG.warnf("workflow=%s watcher=disabled reason=%s", config.workflowPath(), e.getMessage());
+        }
+    }
+
+    private void stopWorkflowWatcher() {
+        if (workflowWatchService != null) {
+            try {
+                workflowWatchService.close();
+            } catch (IOException e) {
+                LOG.debugf("workflow_watcher outcome=close_failed reason=%s", e.getMessage());
+            }
+            workflowWatchService = null;
+        }
+    }
+
+    private void watchWorkflowChanges() {
+        Path fileName = config.workflowPath().getFileName();
+        while (workflowWatchService != null) {
+            try {
+                WatchKey key = workflowWatchService.take();
+                boolean changed = false;
+                for (WatchEvent<?> event : key.pollEvents()) {
+                    if (event.context() instanceof Path changedPath && changedPath.equals(fileName)) {
+                        changed = true;
+                    }
+                }
+                key.reset();
+                if (changed) {
+                    workflowReloadRequested.set(true);
+                    requestRefresh();
+                }
+            } catch (ClosedWatchServiceException e) {
+                return;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            } catch (RuntimeException e) {
+                LOG.warnf("workflow_watcher outcome=failed reason=%s", e.getMessage());
+                return;
+            }
         }
     }
 
@@ -353,6 +455,9 @@ public class SymphonyOrchestrator {
             entry.turnCount++;
         }
         applyUsage(entry, event.usage());
+        if ("account/rateLimits/updated".equals(event.event())) {
+            rateLimits = event.payload();
+        }
         addRecentEvent(cardId, new CardDebugDetails.EventInfo(event.timestamp(), event.event(), event.message()));
     }
 
