@@ -42,8 +42,8 @@ Important boundary:
 - A successful run can end at a workflow-defined handoff list or state, for example `Human Review`,
   not necessarily `Done`.
 - Trello Automation/Butler is not required for this workflow.
-- Trello custom fields are not required for this workflow.
 - The service uses the Trello REST API.
+- All Trello requirements in this specification MUST be implementable on a Trello Free Workspace.
 
 ## 2. Goals and Non-Goals
 
@@ -58,13 +58,14 @@ Important boundary:
 - Expose operator-visible observability, at minimum structured logs.
 - Support Trello/filesystem-driven restart recovery without requiring a persistent database; exact
   in-memory scheduler state is not restored.
-- Remain compatible with Trello Free plan constraints by relying on boards, lists, labels, comments,
-  checklists, due dates, and attachments rather than Trello Automation or custom fields.
+- Remain compatible with Trello Free plan constraints by relying only on boards, lists, cards,
+  labels, comments, normal card checklists, card due dates, and normal card attachments within
+  Free-plan limits.
 
 ### 2.2 Non-Goals
 
 - Rich web UI or multi-tenant control plane.
-- Prescribing a specific dashboard or terminal UI implementation.
+- Prescribing a specific status page or terminal UI implementation.
 - General-purpose workflow engine or distributed job scheduler.
 - Built-in business logic for how to edit cards, PRs, or comments. That logic lives in the workflow
   prompt and agent tooling.
@@ -72,9 +73,9 @@ Important boundary:
 - Mandating a single default approval, sandbox, or operator-confirmation posture for all
   implementations.
 - Requiring Trello Automation/Butler rules.
-- Requiring Trello custom fields.
-- Requiring a Trello Power-Up to be enabled on the configured board. Trello API keys are managed
-  through Trello's application/Power-Up admin flow, but this service does not depend on board-level
+- Requiring paid-plan-only Trello features.
+- Requiring a Trello Power-Up to be enabled on the configured board. Trello credentials are managed
+  through Trello's developer API key/token flow, but this service does not depend on board-level
   Power-Up behavior.
 
 ## 3. System Overview
@@ -116,7 +117,7 @@ Important boundary:
    - Streams agent updates back to the orchestrator.
 
 7. `Status Surface` (OPTIONAL)
-   - Presents human-readable runtime status, for example terminal output, dashboard, or another
+   - Presents human-readable runtime status, for example terminal output, status page, or another
      operator-facing view.
 
 8. `Logging`
@@ -1300,7 +1301,7 @@ Optional client-side tool extension:
 - The coding agent MUST NOT be required to read raw Trello tokens from disk.
 - The tool MUST execute one Trello HTTP operation per tool call.
 - Multipart attachment uploads are out of scope unless an implementation explicitly documents
-  support for them.
+  support for them within Trello Free-plan attachment limits.
 - Implementations SHOULD restrict the allowed path/method combinations to the current configured
   board and its cards unless they intentionally document broader access.
 - Implementations SHOULD disallow token, member account, organization-wide, enterprise, and
@@ -1585,7 +1586,7 @@ Requirements:
 
 ### 13.3 Runtime Snapshot / Monitoring Interface (OPTIONAL but RECOMMENDED)
 
-If the implementation exposes a synchronous runtime snapshot for dashboards or monitoring, it
+If the implementation exposes a synchronous runtime snapshot for status pages or monitoring, it
 SHOULD return:
 
 - `running` (list of running session rows)
@@ -1606,7 +1607,7 @@ RECOMMENDED snapshot error modes:
 
 ### 13.4 OPTIONAL Human-Readable Status Surface
 
-A human-readable status surface, terminal output, dashboard, etc., is OPTIONAL and
+A human-readable status surface, terminal output, status page, etc., is OPTIONAL and
 implementation-defined.
 
 If present, it SHOULD draw from orchestrator state/metrics only and MUST NOT be REQUIRED for
@@ -1620,7 +1621,7 @@ Token accounting rules:
 - Prefer absolute thread totals when available, such as:
   - `thread/tokenUsage/updated` payloads
   - `total_token_usage` within token-count wrapper events
-- Ignore delta-style payloads such as `last_token_usage` for dashboard/API totals.
+- Ignore delta-style payloads such as `last_token_usage` for status page/API totals.
 - Extract input/output/total token counts leniently from common field names within the selected
   payload.
 - For absolute totals, track deltas relative to last reported totals to avoid double-counting.
@@ -1659,8 +1660,8 @@ This section defines an OPTIONAL HTTP interface for observability and operationa
 If implemented:
 
 - The HTTP server is an extension and is not REQUIRED for conformance.
-- The implementation MAY serve server-rendered HTML or a client-side application for the dashboard.
-- The dashboard/API MUST be observability/control surfaces only and MUST NOT become REQUIRED for
+- The implementation MAY serve server-rendered HTML or a client-side application for the status page.
+- The status page/API MUST be observability/control surfaces only and MUST NOT become REQUIRED for
   orchestrator correctness.
 
 Extension config:
@@ -1681,9 +1682,9 @@ Enablement (extension):
 - Changes to HTTP listener settings, for example `server.port`, do not need to hot-rebind;
   restart-required behavior is conformant.
 
-#### 13.7.1 Human-Readable Dashboard (`/`)
+#### 13.7.1 Human-Readable Status Page (`/`)
 
-- Host a human-readable dashboard at `/`.
+- Host a human-readable status page at `/`.
 - The returned document SHOULD depict the current state of the system, for example active sessions,
   retry delays, token consumption, runtime totals, recent events, and health/error indicators.
 - It is up to the implementation whether this is server-generated HTML or a client-side app that
@@ -1822,7 +1823,7 @@ API design notes:
 - Endpoints SHOULD be read-only except for operational triggers like `/refresh`.
 - Unsupported methods on defined routes SHOULD return `405 Method Not Allowed`.
 - API errors SHOULD use a JSON envelope such as `{"error":{"code":"...","message":"..."}}`.
-- If the dashboard is a client-side app, it SHOULD consume this API rather than duplicating state
+- If the status page is a client-side app, it SHOULD consume this API rather than duplicating state
   logic.
 
 ## 14. Failure Model and Recovery Strategy
@@ -1861,7 +1862,7 @@ API design notes:
 
 5. `Observability Failures`
    - Snapshot timeout
-   - Dashboard render errors
+   - Status page render errors
    - Log sink configuration failure
 
 ### 14.2 Recovery Behavior
@@ -1887,7 +1888,7 @@ API design notes:
   - Back off and retry within configured bounds.
   - If retries are exhausted, surface a tracker failure and let the normal tick/retry path continue.
 
-- Dashboard/log failures:
+- Status page/log failures:
   - Do not crash the orchestrator.
 
 ### 14.3 Partial State Recovery (Restart)
