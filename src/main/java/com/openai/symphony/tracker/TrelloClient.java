@@ -354,8 +354,11 @@ public class TrelloClient implements TrackerClient {
     }
 
     private static String authorization(EffectiveConfig config) {
-        return "OAuth oauth_consumer_key=\"%s\", oauth_token=\"%s\""
-                .formatted(config.tracker().apiKey(), config.tracker().apiToken());
+        return authorization(config.tracker().apiKey(), config.tracker().apiToken());
+    }
+
+    public static String authorization(String apiKey, String apiToken) {
+        return "OAuth oauth_consumer_key=\"%s\", oauth_token=\"%s\"".formatted(apiKey, apiToken);
     }
 
     private TrelloList toList(Map<String, Object> payload) {

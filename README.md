@@ -34,10 +34,11 @@ Prerequisites:
 - Java 25 LTS.
 - The Maven wrapper in this repository.
 - Codex CLI with `codex app-server`.
-- A Trello board and a Trello API key/token with read access to that board.
+- A Trello API key/token. You can either create a board with the setup command or import an existing
+  Trello board.
 
-If you already have Trello credentials and a board, create a `WORKFLOW.md` from
-`WORKFLOW.example.md`, set credentials, and start the service:
+If you already have Trello credentials and a configured `WORKFLOW.md`, set credentials and start the
+service:
 
 ```bash
 export TRELLO_API_KEY=...
@@ -68,6 +69,8 @@ Trello has three concepts that matter for Symphony:
 Official Trello references if the UI has moved since this README was written:
 
 - Trello REST API introduction: <https://developer.atlassian.com/cloud/trello/guides/rest-api/api-introduction/>
+- Trello board creation API: <https://developer.atlassian.com/cloud/trello/rest/api-group-boards/>
+- Trello list creation API: <https://developer.atlassian.com/cloud/trello/rest/api-group-lists/>
 - Trello board/list basics: <https://support.atlassian.com/trello/docs/adding-lists-to-a-board/>
 
 Symphony reads cards, creates local Codex workspaces, and runs Codex. It does not currently move cards
@@ -75,9 +78,92 @@ or write Trello comments by itself. Start with read-only automation: move a card
 active list when you want Codex to work on it, then move it out of that active list when the work is
 ready for human review or done.
 
+### Fast Path: Create The Recommended Board
+
+Use this path when you are new to Trello or want the lowest-friction setup. Symphony cannot create the
+Workspace, API key, or API token for you because Trello requires browser authorization for those
+steps. After that, one command creates the board, creates the recommended lists, and writes
+`WORKFLOW.md`.
+
+1. Create a Trello Workspace. If you are not sure what to choose, name it `Symphony Automation`.
+2. Create a custom Power-Up in that Workspace.
+3. Generate an API key and token from the Power-Up page.
+4. Export the credentials locally:
+
+```bash
+export TRELLO_API_KEY=replace-with-generated-key
+export TRELLO_API_TOKEN=replace-with-generated-token
+```
+
+5. List the Workspace ids available to your token:
+
+```bash
+./mvnw -q exec:java -Dexec.args='list-workspaces'
+```
+
+6. Create the board and workflow. Use the Workspace id printed by the previous command:
+
+```bash
+./mvnw -q exec:java -Dexec.args='new-board --name "Symphony Work Queue" --workspace-id workspace-id-from-the-previous-command'
+```
+
+The command creates this Trello board layout:
+
+1. `Inbox`
+2. `Ready for Codex`
+3. `Review`
+4. `Done`
+
+It also writes `WORKFLOW.md` with `Ready for Codex` as the active list, `Done` as the terminal list,
+`./workspaces` as the local workspace root, and `max_concurrent_agents: 1`.
+
+If `WORKFLOW.md` already exists, the command stops instead of overwriting it. Pass `--force` only when
+you intentionally want to replace the file:
+
+```bash
+./mvnw -q exec:java -Dexec.args='new-board --name "Symphony Work Queue" --workspace-id workspace-id-from-the-previous-command --force'
+```
+
+Start Symphony after the file is generated:
+
+```bash
+./mvnw quarkus:dev
+```
+
+### Fast Path: Import An Existing Board
+
+Use this path when a Trello board already exists but you want Symphony to write the starter workflow
+for you.
+
+1. Copy the board short link from the board URL.
+   In `https://trello.com/b/abc123/my-board`, use `abc123`.
+2. Export `TRELLO_API_KEY` and `TRELLO_API_TOKEN`.
+3. Run the import command:
+
+```bash
+./mvnw -q exec:java -Dexec.args='import-board --board abc123 --active "Ready for Codex" --terminal Done'
+```
+
+You may omit `--active` when the board already has a list named `Ready for Codex`. You may omit
+`--terminal` when the board already has a list named `Done`.
+
+For an existing team board, be deliberate about `--active`: every open card in that list is eligible
+for Codex work. A conservative import starts with a new list named `Ready for Codex` and only moves
+cards there after they have a clear title, useful description, and acceptance criteria.
+
+Common setup command options:
+
+- `--workflow PATH`: write a workflow somewhere other than `WORKFLOW.md`.
+- `--workspace-root PATH`: set the generated `workspace.root`.
+- `--max-agents N`: set the initial `agent.max_concurrent_agents`.
+- `--force`: overwrite an existing workflow file.
+- `--key` and `--token`: pass credentials directly instead of using environment variables.
+- `--workspace-id ID`: for `new-board`, create the board in a specific Trello Workspace.
+
 ### Option A: Reuse An Existing Board
 
-Use this path when your team already has a Trello board for engineering work.
+Use this manual path when your team already has a Trello board for engineering work and you prefer to
+write `WORKFLOW.md` yourself.
 
 1. Pick the board Symphony should poll.
 2. Choose one or two list names that mean "Codex may work on this now".
@@ -129,7 +215,8 @@ Operationally, use the board like this:
 
 ### Option B: Create A New Beginner-Friendly Board
 
-Use this path when you want a clean board designed for Symphony from the start.
+Use this manual path when you want a clean board designed for Symphony from the start but do not want
+the setup command to create it for you.
 
 Create a board named `Symphony Work Queue` and add these lists in this order:
 
