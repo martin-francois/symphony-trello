@@ -415,6 +415,7 @@ Core top-level keys:
 Extension top-level keys defined in this specification:
 
 - `server`
+- `trello_tools`
 - `worker`
 
 Unknown keys SHOULD be ignored for forward compatibility.
@@ -454,10 +455,17 @@ Fields:
   - Default: `Todo`, `In Progress`
   - Production deployments SHOULD explicitly configure `active_states` or `active_list_ids` for the
     intended Trello workflow; the default preserves the original Symphony starter behavior.
+  - Production startup SHOULD emit an operator-visible warning when neither `active_states` nor
+    `active_list_ids` is explicitly configured.
 - `active_list_ids` (list of strings)
   - OPTIONAL Trello list IDs considered dispatch-active.
   - When non-empty, implementations MUST use list ID matching for list-backed open cards instead of
     list-name matching. When empty, active list-name matching uses `active_states`.
+- `blocker_enforced_states` (list of strings)
+  - Trello list names or normalized states where non-terminal blockers prevent dispatch.
+  - Default: `Todo`, `Ready for Codex`
+  - State names are normalized with the same case-insensitive whitespace normalization used for
+    `active_states`.
 - `terminal_states` (list of strings)
   - Trello list names or normalized special states considered terminal.
   - Default: `Done`, `Archived`, `ArchivedList`, `ArchivedBoard`, `Deleted`
@@ -585,6 +593,44 @@ these fields locally if they want stricter startup checks.
   - Default: `300000` (5 minutes)
   - If `<= 0`, stall detection is disabled.
 
+#### 5.3.7 `trello_tools` (object, OPTIONAL extension)
+
+This top-level key configures scoped Trello client-side tools such as `trello_rest` when an
+implementation ships them.
+
+Fields:
+
+- `enabled` (boolean)
+  - Default: `false`
+  - Enables the scoped Trello tool surface when implemented.
+- `allow_writes` (boolean)
+  - Default: `false`
+  - When false, all write-capable Trello tool operations MUST fail with a structured tool error.
+- `allowed_move_list_ids` (list of strings)
+  - Default: empty list.
+  - When non-empty, the tool MAY move the current card only to these Trello list IDs.
+- `allowed_move_list_names` (list of strings)
+  - Default: empty list.
+  - Used only when `allowed_move_list_ids` is empty.
+  - Implementations SHOULD prefer IDs over names because list names are mutable.
+- `allow_comments` (boolean)
+  - Default: true when `allow_writes == true`, otherwise false.
+- `allow_checklists` (boolean)
+  - Default: true when `allow_writes == true`, otherwise false.
+- `allow_url_attachments` (boolean)
+  - Default: true when `allow_writes == true`, otherwise false.
+- `allow_destructive_operations` (boolean)
+  - Default: `false`
+  - Destructive operations include deleting cards, deleting comments, deleting checklists, deleting
+    attachments, deleting labels, deleting tokens, and equivalent operations.
+- `assume_write_scope` (boolean)
+  - Default: `false`
+  - Lets an operator assert that the configured Trello token has write permission when startup cannot
+    verify write capability without side effects.
+
+Move operations MUST be disabled unless at least one move allowlist is configured or the
+implementation documents an equivalent local policy with the same board-local restriction.
+
 ### 5.4 Prompt Template Contract
 
 The Markdown body of `WORKFLOW.md` is the per-card prompt template.
@@ -701,11 +747,12 @@ Validation checks:
 - For Trello, `tracker.board_id` resolves to a canonical Trello board ID and that board is not closed.
 - `codex.command` is present and non-empty.
 
-### 6.4 Core Config Fields Summary (Cheat Sheet)
+### 6.4 Config Fields Summary (Cheat Sheet)
 
 This section is intentionally redundant so a coding agent can implement the config layer quickly.
-Extension fields are documented in the extension section that defines them. Core conformance does
-not require recognizing or validating extension fields unless that extension is implemented.
+Extension fields are documented in the section that defines them. Core conformance does not require
+recognizing or validating extension fields unless that extension or conformance profile is
+implemented.
 
 - `tracker.kind`: string, REQUIRED, currently `trello`
 - `tracker.endpoint`: string, default `https://api.trello.com/1` when `tracker.kind=trello`
@@ -716,6 +763,8 @@ not require recognizing or validating extension fields unless that extension is 
 - `tracker.active_states`: list of Trello list/state names, default
   `["Todo", "In Progress"]`
 - `tracker.active_list_ids`: list of Trello list IDs, default `[]`
+- `tracker.blocker_enforced_states`: list of Trello list/state names, default
+  `["Todo", "Ready for Codex"]`
 - `tracker.terminal_states`: list of Trello list/state names, default
   `["Done", "Archived", "ArchivedList", "ArchivedBoard", "Deleted"]`
 - `tracker.terminal_list_ids`: list of Trello list IDs, default `[]`
@@ -743,6 +792,15 @@ not require recognizing or validating extension fields unless that extension is 
 - `codex.turn_timeout_ms`: integer, default `3600000`
 - `codex.read_timeout_ms`: integer, default `5000`
 - `codex.stall_timeout_ms`: integer, default `300000`
+- `trello_tools.enabled`: boolean, default `false`
+- `trello_tools.allow_writes`: boolean, default `false`
+- `trello_tools.allowed_move_list_ids`: list of Trello list IDs, default `[]`
+- `trello_tools.allowed_move_list_names`: list of Trello list names, default `[]`
+- `trello_tools.allow_comments`: boolean, default true when writes are enabled
+- `trello_tools.allow_checklists`: boolean, default true when writes are enabled
+- `trello_tools.allow_url_attachments`: boolean, default true when writes are enabled
+- `trello_tools.allow_destructive_operations`: boolean, default `false`
+- `trello_tools.assume_write_scope`: boolean, default `false`
 
 ## 7. Orchestration State Machine
 
@@ -840,8 +898,13 @@ Distinct terminal reasons are important because retry logic and logs differ.
 - The orchestrator serializes state mutations through one authority to avoid duplicate dispatch.
 - `claimed` and `running` checks are REQUIRED before launching any worker.
 - A card MUST be claimed before worker spawn begins.
-- A pending `running` entry MUST be recorded before worker spawn can emit lifecycle events; worker
-  handles MAY be filled in after successful spawn.
+- A pending `running` entry with an orchestrator-generated per-spawn worker identity MUST be
+  recorded before worker spawn can emit lifecycle events; worker handles MAY be filled in after
+  successful spawn.
+- Worker exit events MUST include that orchestrator-generated worker identity. The identity MUST be
+  unique per worker spawn for at least the lifetime of the orchestrator process and MUST NOT be
+  derived only from card ID, attempt number, or other values that can repeat for the same card.
+- A stale worker exit MUST NOT remove or retry a newer running entry for the same card.
 - If worker spawn fails, the card MUST either remain claimed with a retry entry or be explicitly
   released.
 - Reconciliation runs before dispatch on every tick.
@@ -901,7 +964,8 @@ A card is dispatch-eligible only if all are true:
 - Global concurrency slots are available.
 - Per-state concurrency slots are available.
 - Blocker rule passes:
-  - If the card state is `Todo`, do not dispatch when any blocker is non-terminal.
+  - If the card state is in `tracker.blocker_enforced_states`, do not dispatch when any blocker is
+    non-terminal.
   - If the implementation does not support blocker derivation, `blocked_by` defaults to empty and
     this rule always passes.
 
@@ -1013,7 +1077,8 @@ Termination policies:
 - Operator-triggered cancellation is implementation-defined, but the implementation MUST document
   whether cancellation schedules retry.
 - When retry is suppressed, the running entry MUST be removed, the claim MUST be released, and the
-  later worker process-exit notification MUST be ignored for retry purposes.
+  later worker process-exit notification for the same worker identity MUST be ignored for retry
+  purposes.
 
 ### 8.6 Startup Terminal Workspace Cleanup
 
@@ -1296,6 +1361,8 @@ Optional client-side tool extension:
   equivalent version-specific mechanism.
 - Unsupported tool names SHOULD still return a failure result using the targeted protocol and
   continue the session.
+- When Trello tool operations are enabled, the implementation MUST enforce `trello_tools` policy
+  before executing the request.
 
 `trello_rest` extension contract:
 
@@ -1335,6 +1402,8 @@ Optional client-side tool extension:
   supports another Trello request body shape.
 - The implementation MUST inject Trello auth from the active Symphony workflow/runtime config.
 - The coding agent MUST NOT be required to read raw Trello tokens from disk.
+- If `trello_tools.enabled == false`, implementations SHOULD NOT advertise `trello_rest`; any direct
+  invocation MUST fail with a structured disabled-tool error.
 - The tool MUST execute one Trello HTTP operation per tool call.
 - Multipart attachment uploads are out of scope unless an implementation explicitly documents
   support for them within Trello Free-plan attachment limits.
@@ -1342,6 +1411,12 @@ Optional client-side tool extension:
   board and its cards unless they intentionally document broader access.
 - Implementations SHOULD disallow token, member account, organization-wide, enterprise, and
   destructive `DELETE` operations by default unless explicitly enabled by documented policy.
+- Write-capable operations MUST require `trello_tools.allow_writes == true`.
+- Move operations MUST be limited to the configured board and the configured move allowlist.
+- Comment, checklist, and URL attachment writes MUST respect the corresponding `trello_tools`
+  allow flags.
+- A request that is valid Trello API syntax but violates local `trello_tools` policy MUST return
+  `success=false` with a structured policy error.
 - Tool result semantics:
   - HTTP 2xx -> `success=true`
   - HTTP non-2xx -> `success=false`, preserving status code and response body when safe
@@ -1566,6 +1641,7 @@ Trello Workflow Conformance:
 
 - Workflows that expect the agent to perform Trello handoff transitions MUST provide a scoped
   Trello client-side tool, MCP tool, or documented equivalent that supports the required writes.
+- The configured Trello tool MUST enforce `trello_tools` or a documented equivalent local policy.
 - At minimum, write-capable workflows MUST support:
   - adding a comment to the current card
   - moving the current card to an allowed board-local list
@@ -1575,6 +1651,11 @@ Trello Workflow Conformance:
   permits broader access.
 - Read-only deployments MAY disable write-capable operations, but then the implementation MUST
   document that the agent cannot perform Trello handoff transitions itself.
+- When Trello Workflow Conformance is enabled and write-capable operations are enabled, startup
+  validation SHOULD verify that the configured token can perform write operations or emit an
+  operator-visible warning if capability verification is not possible without side effects.
+- Implementations MAY verify write capability using a documented non-destructive check, a dedicated
+  test card, or `trello_tools.assume_write_scope=true`.
 
 ## 12. Prompt Construction and Context Assembly
 
@@ -1727,6 +1808,8 @@ If implemented:
 - The implementation MAY serve server-rendered HTML or a client-side application for the status page.
 - The status page/API MUST be observability/control surfaces only and MUST NOT become REQUIRED for
   orchestrator correctness.
+- If the HTTP server binds to a non-loopback interface, operational endpoints such as
+  `POST /api/v1/refresh` SHOULD require authentication or be otherwise access-controlled.
 
 Extension config:
 
@@ -2092,6 +2175,7 @@ function start_service():
     running: {},
     claimed: set(),
     retry_attempts: {},
+    ignored_worker_exits: set(),
     completed: set(),
     codex_totals: {input_tokens: 0, output_tokens: 0, total_tokens: 0, seconds_running: 0},
     codex_rate_limits: null
@@ -2189,7 +2273,8 @@ function terminate_running_card(state, card_id, cleanup_workspace, suppress_retr
   if running_entry is missing:
     return state
 
-  mark_worker_exit_ignored(running_entry.worker_handle)
+  if running_entry.worker_identity is not null:
+    state.ignored_worker_exits.add(running_entry.worker_identity)
   kill_worker_best_effort(running_entry.worker_handle)
 
   if cleanup_workspace:
@@ -2216,10 +2301,12 @@ function dispatch_card(card, state, attempt):
   state.claimed.add(card.id)
   cancel_retry_timer_if_present(card.id)
   state.retry_attempts.remove(card.id)
+  worker_identity = new_unique_worker_identity()
 
   state.running[card.id] = {
     worker_handle: null,
     monitor_handle: null,
+    worker_identity,
     start_status: "pending_spawn",
     identifier: card.identifier,
     card,
@@ -2239,6 +2326,7 @@ function dispatch_card(card, state, attempt):
   }
 
   worker = spawn_worker(
+    identity=worker_identity,
     fn -> run_agent_attempt(card, attempt, parent_orchestrator_pid) end
   )
 
@@ -2335,12 +2423,21 @@ function run_agent_attempt(card, attempt, orchestrator_channel):
 ### 16.6 Worker Exit and Retry Handling
 
 ```text
-on_worker_exit(card_id, reason, state):
-  running_entry = state.running.remove(card_id)
+on_worker_exit(card_id, worker_identity, reason, state):
+  if worker_identity in state.ignored_worker_exits:
+    state.ignored_worker_exits.remove(worker_identity)
+    return state
+
+  running_entry = state.running.get(card_id)
   if running_entry is missing:
     log_debug("worker exit for unknown card")
     return state
 
+  if running_entry.worker_identity != worker_identity:
+    log_debug("stale worker exit ignored")
+    return state
+
+  state.running.remove(card_id)
   state = add_runtime_seconds_to_totals(state, running_entry)
 
   if reason == normal:
@@ -2424,6 +2521,8 @@ specification.
 Validation profiles:
 
 - `Core Conformance`: deterministic tests REQUIRED for all conforming implementations.
+- `Trello Workflow Conformance`: REQUIRED when the workflow expects the agent to perform Trello
+  handoff transitions.
 - `Extension Conformance`: REQUIRED only for OPTIONAL features that an implementation chooses to
   ship.
 - `Real Integration Profile`: environment-dependent smoke/integration checks RECOMMENDED before
@@ -2449,6 +2548,7 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - `tracker.api_token` works, including `$VAR` indirection
 - `$VAR` resolution works for tracker API key, tracker API token, and path values
 - `~` path expansion works
+- `tracker.blocker_enforced_states` defaults and normalization work
 - `codex.command` is preserved as a shell command string
 - Per-state concurrency override map normalizes state names and ignores invalid values
 - Priority label map normalizes label names and ignores invalid values
@@ -2507,10 +2607,13 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 
 - Dispatch sort order is priority, active-state/list order, Trello position, creation time,
   identifier
-- `Todo` card with non-terminal blockers is not eligible
-- `Todo` card with terminal blockers is eligible
+- Card in `tracker.blocker_enforced_states` with non-terminal blockers is not eligible
+- Card in `tracker.blocker_enforced_states` with terminal blockers is eligible
 - Card is claimed before worker spawn begins
-- Pending running entry is recorded before worker spawn can emit lifecycle events
+- Pending running entry with unique per-spawn worker identity is recorded before worker spawn can
+  emit lifecycle events
+- Worker exit events include the unique per-spawn worker identity
+- Stale worker exit for an older worker identity does not remove or retry a newer running entry
 - Worker spawn failure leaves a retry entry or explicitly releases the claim
 - Active-state card refresh updates running entry state
 - Non-active state stops running agent without workspace cleanup
@@ -2561,14 +2664,17 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
   the targeted app-server protocol
 - If client-side tools use Codex app-server experimental APIs, startup enables the targeted
   protocol's experimental capability
-- If the `trello_rest` client-side tool extension is implemented:
+- If the `trello_rest` client-side tool extension is implemented and enabled for the session:
   - the tool is advertised to the session
   - valid `method` / `path` / `query` / `body` inputs execute against configured Trello auth
   - HTTP non-2xx responses produce `success=false` while preserving safe response details
   - invalid arguments, missing auth, unsupported operations, and transport failures return
     structured failure payloads
   - unsupported tool names still fail without stalling the session
+  - `trello_tools` policy violations return structured policy errors
   - destructive operations are disallowed by default unless explicitly configured
+- If the standardized `trello_rest` tool is implemented but disabled for the session, it is withheld
+  or direct invocation fails with a structured disabled-tool error
 
 ### 17.6 Observability
 
@@ -2591,7 +2697,22 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - CLI exits with success when application starts and shuts down normally
 - CLI exits nonzero when startup fails or the host process exits abnormally
 
-### 17.8 Real Integration Profile (RECOMMENDED)
+### 17.8 Trello Workflow Conformance
+
+These checks are REQUIRED when the workflow expects the agent to perform Trello handoff transitions.
+
+- Scoped Trello write-capable tool, MCP tool, or equivalent is available to the agent.
+- `trello_tools.enabled=false` disables or withholds the standardized `trello_rest` tool.
+- `trello_tools.allow_writes=false` causes write requests to fail with structured policy errors.
+- Comment writes are allowed only when `trello_tools.allow_comments` permits them.
+- Card moves are allowed only to configured board-local list IDs or names.
+- Checklist writes are allowed only when `trello_tools.allow_checklists` permits them.
+- URL attachment writes are allowed only when `trello_tools.allow_url_attachments` permits them.
+- Destructive operations are disabled unless explicitly configured.
+- Startup validates write capability or emits an operator-visible warning when verification is not
+  possible without side effects.
+
+### 17.9 Real Integration Profile (RECOMMENDED)
 
 These checks are RECOMMENDED for production readiness and MAY be skipped in CI when credentials,
 network access, or external service permissions are unavailable.
@@ -2612,8 +2733,9 @@ network access, or external service permissions are unavailable.
 Use the same validation profiles as Section 17:
 
 - Section 18.1 = `Core Conformance`
-- Section 18.2 = `Extension Conformance`
-- Section 18.3 = `Real Integration Profile`
+- Section 18.2 = `Trello Workflow Conformance`
+- Section 18.3 = `Extension Conformance`
+- Section 18.4 = `Real Integration Profile`
 
 ### 18.1 REQUIRED for Conformance
 
@@ -2639,19 +2761,39 @@ Use the same validation profiles as Section 17:
 - Reconciliation termination policies that suppress retry for terminal/deleted/board-out-of-scope/
   non-active cards and retry stalled cards
 - Workspace cleanup for terminal cards, startup sweep + active/retry transition
-- Claim-before-spawn dispatch behavior with a pending running entry before worker spawn
+- Claim-before-spawn dispatch behavior with a pending running entry before worker spawn and unique
+  per-spawn worker identity checks on worker exit
 - Structured logs with `card_id`, `card_identifier`, and `session_id`
 - Operator-visible observability, structured logs; OPTIONAL snapshot/status surface
 
-### 18.2 RECOMMENDED Extensions (Not REQUIRED for Conformance)
+### 18.2 REQUIRED for Trello Workflow Conformance
+
+Required when the workflow expects the agent to perform Trello handoff transitions:
+
+- Scoped Trello write-capable client-side tool, MCP tool, or documented equivalent.
+- `trello_tools` policy enforcement before every Trello tool request.
+- `trello_tools.enabled=true` for the standardized `trello_rest` tool, or equivalent documented
+  enablement for non-`trello_rest` tools.
+- Ability to add comments to the current card when `trello_tools.allow_comments` permits it.
+- Ability to move the current card to allowed board-local lists.
+- Ability to add or update checklist items on the current card when `trello_tools.allow_checklists`
+  permits it.
+- Ability to add policy-enabled URL attachments, such as GitHub PR links, when
+  `trello_tools.allow_url_attachments` permits it.
+- Write operations are scoped to the configured board and current card unless explicitly allowlisted.
+- Destructive operations are disabled by default.
+- Write-capable operations require a Trello token with write permission, or an operator-visible
+  warning when startup cannot verify write capability without side effects.
+
+### 18.3 RECOMMENDED Extensions (Not REQUIRED for Core Conformance)
 
 - HTTP server extension honors CLI `--port` over `server.port`, uses a safe default bind host, and
   exposes the baseline endpoints/error semantics in Section 13.7 if shipped.
+- HTTP server extension access-controls operational endpoints when bound to a non-loopback
+  interface.
 - `trello_rest` client-side tool extension exposes scoped Trello REST access through the app-server
   session using configured Symphony auth.
 - `trello_rest` client-side tool extension disallows destructive operations by default.
-- Trello Workflow Conformance includes a scoped write-capable Trello tool or MCP equivalent for
-  comments, allowed list moves, checklist updates, and policy-enabled URL attachments.
 - TODO: Persist retry queue and session metadata across process restarts.
 - TODO: Make observability settings configurable in workflow front matter without prescribing UI
   implementation details.
@@ -2659,9 +2801,9 @@ Use the same validation profiles as Section 17:
   orchestrator instead of only via agent tools.
 - TODO: Add pluggable tracker adapters beyond Trello.
 
-### 18.3 Operational Validation Before Production (RECOMMENDED)
+### 18.4 Operational Validation Before Production (RECOMMENDED)
 
-- Run the `Real Integration Profile` from Section 17.8 with valid credentials and network access.
+- Run the `Real Integration Profile` from Section 17.9 with valid credentials and network access.
 - Verify hook execution and workflow path resolution on the target host OS/shell environment.
 - If the OPTIONAL HTTP server is shipped, verify the configured port behavior and loopback/default
   bind expectations on the target environment.
