@@ -452,6 +452,8 @@ Fields:
 - `active_states` (list of strings)
   - Trello list names or normalized special states considered dispatch-active.
   - Default: `Todo`, `In Progress`
+  - Production deployments SHOULD explicitly configure `active_states` or `active_list_ids` for the
+    intended Trello workflow; the default preserves the original Symphony starter behavior.
 - `active_list_ids` (list of strings)
   - OPTIONAL Trello list IDs considered dispatch-active.
   - When non-empty, implementations MUST use list ID matching for list-backed open cards instead of
@@ -838,6 +840,8 @@ Distinct terminal reasons are important because retry logic and logs differ.
 - The orchestrator serializes state mutations through one authority to avoid duplicate dispatch.
 - `claimed` and `running` checks are REQUIRED before launching any worker.
 - A card MUST be claimed before worker spawn begins.
+- A pending `running` entry MUST be recorded before worker spawn can emit lifecycle events; worker
+  handles MAY be filled in after successful spawn.
 - If worker spawn fails, the card MUST either remain claimed with a retry entry or be explicitly
   released.
 - Reconciliation runs before dispatch on every tick.
@@ -846,6 +850,9 @@ Distinct terminal reasons are important because retry logic and logs differ.
   states.
 - Deleted-card cleanup can only happen when the implementation can associate a deleted card with a
   stored or running card identifier.
+- Core conformance assumes one active orchestrator process per configured Trello board. If multiple
+  orchestrators may target the same board, the implementation MUST add an external claim mechanism
+  such as a dedicated running list, claim label/comment, or durable lock store.
 
 ## 8. Polling, Scheduling, and Reconciliation
 
@@ -987,16 +994,26 @@ Part B: Trello state refresh
 
 - Fetch current card states for all running card IDs.
 - For each running card:
-  - If the lookup returns not found/deleted: terminate worker and clean workspace.
+  - If the lookup returns not found/deleted: terminate worker, clean workspace, and suppress retry.
   - If the card's board ID no longer matches the canonical configured board ID: terminate worker
-    without workspace cleanup.
-  - If Trello state/list ID is terminal: terminate worker and clean workspace.
+    without workspace cleanup and suppress retry.
+  - If Trello state/list ID is terminal: terminate worker, clean workspace, and suppress retry.
   - If Trello state/list ID is still active: update the in-memory card snapshot.
   - If Trello state/list ID is neither active nor terminal: terminate worker without workspace
-    cleanup.
+    cleanup and suppress retry.
 - If state refresh fails globally, keep workers running and try again on the next tick.
 - If state refresh partially fails for some cards, implementations MAY keep those workers running
   and retry them on the next tick, but MUST log which card IDs were not refreshed.
+
+Termination policies:
+
+- Terminal, deleted, board-out-of-scope, and non-active reconciliation terminations MUST suppress
+  retry.
+- Stall terminations MUST schedule retry.
+- Operator-triggered cancellation is implementation-defined, but the implementation MUST document
+  whether cancellation schedules retry.
+- When retry is suppressed, the running entry MUST be removed, the claim MUST be released, and the
+  later worker process-exit notification MUST be ignored for retry purposes.
 
 ### 8.6 Startup Terminal Workspace Cleanup
 
@@ -1170,6 +1187,20 @@ client to:
   protocol supports turn or session titles.
 - Advertise implemented client-side tools using the targeted protocol.
 
+For stdio app-server transport, the client MUST:
+
+1. Start `codex app-server` or the configured compatible app-server command.
+2. Read and write messages using the framing required by the targeted protocol; current Codex stdio
+   app-server versions use newline-delimited JSON messages.
+3. Send the targeted protocol's `initialize` request.
+4. Send the targeted protocol's `initialized` notification after initialization succeeds.
+5. Only then call `thread/start`, `thread/resume`, or the equivalent version-specific thread
+   creation/resume method.
+
+If client-side dynamic tools are implemented through Codex app-server experimental APIs, startup
+MUST enable the experimental capability required by the targeted protocol, for example
+`capabilities.experimentalApi = true` in Codex protocol versions that define that field.
+
 Session identifiers:
 
 - Extract `thread_id` from the thread identity returned by the targeted Codex app-server protocol.
@@ -1260,6 +1291,9 @@ Optional client-side tool extension:
 - Current standardized optional tool: `trello_rest`.
 - If implemented, supported tools SHOULD be advertised to the app-server session during startup
   using the protocol mechanism supported by the targeted Codex app-server version.
+- If implemented using Codex app-server dynamic tools, the implementation MUST enable the targeted
+  protocol's experimental API capability and advertise the tool through `dynamicTools` or the
+  equivalent version-specific mechanism.
 - Unsupported tool names SHOULD still return a failure result using the targeted protocol and
   continue the session.
 
@@ -1270,6 +1304,8 @@ Optional client-side tool extension:
 - Availability: only meaningful when `tracker.kind == "trello"` and valid Trello auth is
   configured.
 - Trello Automation/Butler is not required for this tool.
+- Trello Workflow Conformance, defined in Section 11.5, requires this tool or an equivalent
+  write-capable Trello tool when workflows expect the agent to perform Trello handoff writes.
 - Preferred input shape:
 
   ```json
@@ -1406,6 +1442,10 @@ Trello-specific requirements for `tracker.kind == "trello"`:
   are terminal
 - Network timeout default: `30000 ms`
 - The adapter MUST account for documented Trello API rate limits and `429` responses
+- The adapter SHOULD enforce local rate limiting with separate buckets for Trello's documented
+  limits:
+  - API key: 300 requests per 10 seconds
+  - API token: 100 requests per 10 seconds
 - The adapter SHOULD use bounded exponential backoff with jitter for retryable Trello transport
   errors and `429` responses
 - The adapter SHOULD honor response retry hints such as `Retry-After` if Trello provides them
@@ -1426,6 +1466,16 @@ Recommended Trello API access pattern:
 7. Fetch archived/closed board cards only when needed for terminal cleanup or state reconciliation.
 8. For individual card refresh, fetch the card with `idBoard` and its list, or maintain a fresh enough
    list mapping, to normalize the current state accurately and reject cards that moved to another board.
+
+Recommended `fetch_terminal_cards()` strategy:
+
+1. Fetch the configured board metadata.
+2. Fetch all board lists with `filter=all`.
+3. Fetch board cards using a filter that includes closed/archived cards.
+4. For terminal list IDs and archived lists, fetch list cards when needed to avoid missing open cards
+   in terminal or archived lists.
+5. Normalize all results through the same card normalization pipeline and de-duplicate by Trello card
+   ID.
 
 Important:
 
@@ -1511,6 +1561,20 @@ Symphony does not require first-class tracker write APIs in the orchestrator.
   toolchain rather than orchestrator business logic.
 - Write-capable Trello operations require a token that was authorized with write permission.
 - Read-only deployments SHOULD disable write-capable Trello tool operations.
+
+Trello Workflow Conformance:
+
+- Workflows that expect the agent to perform Trello handoff transitions MUST provide a scoped
+  Trello client-side tool, MCP tool, or documented equivalent that supports the required writes.
+- At minimum, write-capable workflows MUST support:
+  - adding a comment to the current card
+  - moving the current card to an allowed board-local list
+  - adding or updating checklist items on the current card
+  - adding a URL attachment, such as a GitHub PR link, when enabled by policy
+- Write tools MUST be scoped to the configured board and current card unless an explicit allowlist
+  permits broader access.
+- Read-only deployments MAY disable write-capable operations, but then the implementation MUST
+  document that the agent cannot perform Trello handoff transitions itself.
 
 ## 12. Prompt Construction and Context Assembly
 
@@ -2095,17 +2159,48 @@ function reconcile_running_cards(state):
     result = refreshed.get(running_id)
 
     if result is missing_or_deleted:
-      state = terminate_running_card(state, running_id, cleanup_workspace=true)
+      state = terminate_running_card(
+        state, running_id, cleanup_workspace=true, suppress_retry=true
+      )
     else if result failed:
       log_debug("keep worker running for unrefreshed card")
     else if is_out_of_configured_board_scope(result.card):
-      state = terminate_running_card(state, result.card.id, cleanup_workspace=false)
+      state = terminate_running_card(
+        state, result.card.id, cleanup_workspace=false, suppress_retry=true
+      )
     else if is_terminal_card(result.card):
-      state = terminate_running_card(state, result.card.id, cleanup_workspace=true)
+      state = terminate_running_card(
+        state, result.card.id, cleanup_workspace=true, suppress_retry=true
+      )
     else if is_active_card(result.card):
       state.running[result.card.id].card = result.card
     else:
-      state = terminate_running_card(state, result.card.id, cleanup_workspace=false)
+      state = terminate_running_card(
+        state, result.card.id, cleanup_workspace=false, suppress_retry=true
+      )
+
+  return state
+```
+
+```text
+function terminate_running_card(state, card_id, cleanup_workspace, suppress_retry):
+  running_entry = state.running.remove(card_id)
+  if running_entry is missing:
+    return state
+
+  mark_worker_exit_ignored(running_entry.worker_handle)
+  kill_worker_best_effort(running_entry.worker_handle)
+
+  if cleanup_workspace:
+    workspace_manager.remove_for_identifier_if_present(running_entry.identifier)
+
+  if suppress_retry:
+    state.claimed.remove(card_id)
+  else:
+    state = schedule_retry(state, card_id, next_attempt_from(running_entry), {
+      identifier: running_entry.identifier,
+      error: "worker terminated"
+    })
 
   return state
 ```
@@ -2121,19 +2216,10 @@ function dispatch_card(card, state, attempt):
   cancel_retry_timer_if_present(card.id)
   state.retry_attempts.remove(card.id)
 
-  worker = spawn_worker(
-    fn -> run_agent_attempt(card, attempt, parent_orchestrator_pid) end
-  )
-
-  if worker spawn failed:
-    return schedule_retry(state, card.id, next_attempt(attempt), {
-      identifier: card.identifier,
-      error: "failed to spawn agent"
-    })
-
   state.running[card.id] = {
-    worker_handle,
-    monitor_handle,
+    worker_handle: null,
+    monitor_handle: null,
+    start_status: "pending_spawn",
     identifier: card.identifier,
     card,
     session_id: null,
@@ -2150,6 +2236,21 @@ function dispatch_card(card, state, attempt):
     retry_attempt: normalize_attempt(attempt),
     started_at: now_utc()
   }
+
+  worker = spawn_worker(
+    fn -> run_agent_attempt(card, attempt, parent_orchestrator_pid) end
+  )
+
+  if worker spawn failed:
+    state.running.remove(card.id)
+    return schedule_retry(state, card.id, next_attempt(attempt), {
+      identifier: card.identifier,
+      error: "failed to spawn agent"
+    })
+
+  state.running[card.id].worker_handle = worker.handle
+  state.running[card.id].monitor_handle = worker.monitor_handle
+  state.running[card.id].start_status = "running"
 
   return state
 ```
@@ -2381,7 +2482,12 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - Trello API fetch maps `idList` to Trello list name
 - Trello API fetch handles archived card, archived list, and archived board states separately
 - `fetch_terminal_cards()` includes configured terminal states and terminal list IDs
+- `fetch_terminal_cards()` uses a card filter that includes closed/archived cards when archived cards
+  are terminal
+- `fetch_terminal_cards()` fetches list cards when needed for terminal or archived list coverage
 - Candidate card fetch accounts for endpoint limits, batching, and rate limits when present
+- If proactive local Trello rate limiting is implemented, it tracks API-key and API-token buckets
+  independently
 - `429` rate-limit responses are retried within configured bounds
 - Archived cards normalize to terminal state `Archived` when configured
 - Cards in archived lists normalize to `ArchivedList` when list metadata is available
@@ -2403,6 +2509,7 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - `Todo` card with non-terminal blockers is not eligible
 - `Todo` card with terminal blockers is eligible
 - Card is claimed before worker spawn begins
+- Pending running entry is recorded before worker spawn can emit lifecycle events
 - Worker spawn failure leaves a retry entry or explicitly releases the claim
 - Active-state card refresh updates running entry state
 - Non-active state stops running agent without workspace cleanup
@@ -2411,6 +2518,8 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - Card in archived list stops running agent and cleans workspace when `ArchivedList` is terminal
 - Card in archived board stops running agent and cleans workspace when `ArchivedBoard` is terminal
 - Deleted/not-found card stops running agent and cleans workspace
+- Terminal, deleted, board-out-of-scope, and non-active reconciliation terminations suppress retry
+- Reconciliation-suppressed worker exits are ignored for retry purposes
 - Retry timer checks current card state before re-dispatch
 - Retry timer cleans terminal/deleted workspaces when possible
 - Reconciliation with no running cards is a no-op
@@ -2429,6 +2538,8 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - Launch command uses workspace cwd and invokes the configured command
 - On POSIX systems, launch supports `bash -lc <codex.command>`
 - Session startup follows the targeted Codex app-server protocol
+- For stdio app-server transport, startup sends initialize, then initialized, before thread start or
+  resume
 - Client identity/capability payloads are valid when the targeted Codex app-server protocol requires
   them
 - Policy-related startup payloads use the implementation's documented approval/sandbox settings
@@ -2447,6 +2558,8 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
   targeted protocol
 - If client-side tools are implemented, session startup advertises the supported tool specs using
   the targeted app-server protocol
+- If client-side tools use Codex app-server experimental APIs, startup enables the targeted
+  protocol's experimental capability
 - If the `trello_rest` client-side tool extension is implemented:
   - the tool is advertised to the session
   - valid `method` / `path` / `query` / `body` inputs execute against configured Trello auth
@@ -2522,8 +2635,10 @@ Use the same validation profiles as Section 17:
 - Exponential retry queue with continuation retries after normal exit
 - Configurable retry backoff cap (`agent.max_retry_backoff_ms`, default 5m)
 - Reconciliation that stops runs on terminal/non-active/deleted Trello states
+- Reconciliation termination policies that suppress retry for terminal/deleted/board-out-of-scope/
+  non-active cards and retry stalled cards
 - Workspace cleanup for terminal cards, startup sweep + active/retry transition
-- Claim-before-spawn dispatch behavior
+- Claim-before-spawn dispatch behavior with a pending running entry before worker spawn
 - Structured logs with `card_id`, `card_identifier`, and `session_id`
 - Operator-visible observability, structured logs; OPTIONAL snapshot/status surface
 
@@ -2534,6 +2649,8 @@ Use the same validation profiles as Section 17:
 - `trello_rest` client-side tool extension exposes scoped Trello REST access through the app-server
   session using configured Symphony auth.
 - `trello_rest` client-side tool extension disallows destructive operations by default.
+- Trello Workflow Conformance includes a scoped write-capable Trello tool or MCP equivalent for
+  comments, allowed list moves, checklist updates, and policy-enabled URL attachments.
 - TODO: Persist retry queue and session metadata across process restarts.
 - TODO: Make observability settings configurable in workflow front matter without prescribing UI
   implementation details.
@@ -2549,6 +2666,8 @@ Use the same validation profiles as Section 17:
   bind expectations on the target environment.
 - Verify that the Trello token has read permission for scheduler-only deployments and write
   permission only when write-capable Trello tools are intentionally enabled.
+- Verify proactive local Trello rate limiting against documented API-key and API-token limits when
+  the implementation chooses to ship local throttling.
 
 ## Appendix A. SSH Worker Extension (OPTIONAL)
 
