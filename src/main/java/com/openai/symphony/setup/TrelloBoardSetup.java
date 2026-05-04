@@ -48,10 +48,11 @@ public final class TrelloBoardSetup {
     public NewBoardResult createRecommendedBoard(NewBoardRequest request) {
         request.validate();
         ensureWorkflowWritable(request.workflowPath(), request.force());
+        String workspaceId = resolveWorkspaceId(request);
         Map<String, Object> board = postMap(
                 request.endpoint(),
                 "boards/",
-                createBoardQuery(request.boardName(), request.workspaceId()),
+                createBoardQuery(request.boardName(), workspaceId),
                 request.credentials());
         String boardId = requiredString(board, "id");
         String boardKey = boardKey(board);
@@ -79,6 +80,27 @@ public final class TrelloBoardSetup {
 
         return new NewBoardResult(
                 boardId, boardKey, request.boardName(), boardUrl, createdLists, request.workflowPath());
+    }
+
+    private String resolveWorkspaceId(NewBoardRequest request) {
+        if (!blank(request.workspaceId())) {
+            return request.workspaceId();
+        }
+
+        List<WorkspaceInfo> workspaces =
+                listWorkspaces(new WorkspaceListRequest(request.endpoint(), request.credentials()));
+        if (workspaces.size() == 1) {
+            return workspaces.getFirst().id();
+        }
+        if (workspaces.isEmpty()) {
+            throw new TrelloBoardSetupException(
+                    "setup_workspace_required",
+                    "No Trello Workspace was found for this token. Create a Workspace in Trello, then re-run new-board.");
+        }
+        throw new TrelloBoardSetupException(
+                "setup_workspace_id_required",
+                "This token can access multiple Trello Workspaces. Re-run with --workspace-id. Available Workspaces: "
+                        + workspaceChoices(workspaces));
     }
 
     public List<WorkspaceInfo> listWorkspaces(WorkspaceListRequest request) {
@@ -374,6 +396,12 @@ public final class TrelloBoardSetup {
             query.put("idOrganization", workspaceId);
         }
         return query;
+    }
+
+    private static String workspaceChoices(List<WorkspaceInfo> workspaces) {
+        return workspaces.stream()
+                .map(workspace -> workspace.id() + " (" + workspace.displayName() + ")")
+                .collect(Collectors.joining(", "));
     }
 
     private static Map<String, String> orderedMap(String... entries) {

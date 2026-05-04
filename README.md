@@ -95,16 +95,18 @@ export TRELLO_API_KEY=replace-with-generated-key
 export TRELLO_API_TOKEN=replace-with-generated-token
 ```
 
-5. List the Workspace ids available to your token:
+5. Create the board and workflow:
+
+```bash
+./mvnw -q exec:java -Dexec.args='new-board --name "Symphony Work Queue"'
+```
+
+If your token can access exactly one Workspace, Symphony uses it automatically. If your token can
+access multiple Workspaces, the command stops and asks for `--workspace-id`. List the available ids:
 
 ```bash
 ./mvnw -q exec:java -Dexec.args='list-workspaces'
-```
-
-6. Create the board and workflow. Use the Workspace id printed by the previous command:
-
-```bash
-./mvnw -q exec:java -Dexec.args='new-board --name "Symphony Work Queue" --workspace-id workspace-id-from-the-previous-command'
+./mvnw -q exec:java -Dexec.args='new-board --name "Symphony Work Queue" --workspace-id workspace-id-from-list-workspaces'
 ```
 
 The command creates this Trello board layout:
@@ -121,7 +123,7 @@ If `WORKFLOW.md` already exists, the command stops instead of overwriting it. Pa
 you intentionally want to replace the file:
 
 ```bash
-./mvnw -q exec:java -Dexec.args='new-board --name "Symphony Work Queue" --workspace-id workspace-id-from-the-previous-command --force'
+./mvnw -q exec:java -Dexec.args='new-board --name "Symphony Work Queue" --force'
 ```
 
 Start Symphony after the file is generated:
