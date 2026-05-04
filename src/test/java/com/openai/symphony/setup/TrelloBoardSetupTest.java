@@ -29,6 +29,7 @@ class TrelloBoardSetupTest {
     private TrelloBoardSetup setup;
     private final List<String> createdLists = new ArrayList<>();
     private final AtomicReference<String> authorization = new AtomicReference<>();
+    private final AtomicReference<String> workspaceResponse = new AtomicReference<>();
 
     @TempDir
     Path tempDir;
@@ -37,6 +38,12 @@ class TrelloBoardSetupTest {
     void startServer() throws Exception {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         setup = new TrelloBoardSetup(new ObjectMapper());
+        workspaceResponse.set(
+                """
+                [
+                  {"id":"workspace-1","name":"symphony-automation","displayName":"Symphony Automation","url":"https://trello.com/w/symphony-automation"}
+                ]
+                """);
 
         server.createContext("/1/boards/", exchange -> {
             assertThat(exchange.getRequestMethod()).isEqualTo("POST");
@@ -81,15 +88,7 @@ class TrelloBoardSetupTest {
                           {"id":"list-archive","name":"Archived old work","closed":true,"pos":5}
                         ]
                         """));
-        server.createContext(
-                "/1/members/me/organizations",
-                exchange -> respond(
-                        exchange,
-                        """
-                        [
-                          {"id":"workspace-1","name":"symphony-automation","displayName":"Symphony Automation","url":"https://trello.com/w/symphony-automation"}
-                        ]
-                        """));
+        server.createContext("/1/members/me/organizations", exchange -> respond(exchange, workspaceResponse.get()));
         server.start();
     }
 
@@ -106,7 +105,7 @@ class TrelloBoardSetupTest {
                 endpoint(),
                 new TrelloBoardSetup.TrelloCredentials("key", "token"),
                 "Symphony Work Queue",
-                "workspace-1",
+                null,
                 workflow,
                 Path.of("./workspaces"),
                 1,
@@ -126,6 +125,36 @@ class TrelloBoardSetupTest {
         assertThat(config.tracker().activeStates()).containsExactly("Ready for Codex");
         assertThat(config.tracker().terminalStates())
                 .contains("done", "archived", "archivedlist", "archivedboard", "deleted");
+    }
+
+    @Test
+    void requiresWorkspaceIdWhenTokenCanAccessMultipleWorkspaces() {
+        workspaceResponse.set(
+                """
+                [
+                  {"id":"workspace-1","name":"first","displayName":"First Workspace"},
+                  {"id":"workspace-2","name":"second","displayName":"Second Workspace"}
+                ]
+                """);
+        Path workflow = tempDir.resolve("generated-workflow.md");
+
+        var request = new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "Symphony Work Queue",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                1,
+                false);
+
+        assertThatThrownBy(() -> setup.createRecommendedBoard(request))
+                .isInstanceOf(TrelloBoardSetupException.class)
+                .hasMessageContaining("--workspace-id")
+                .hasMessageContaining("workspace-1")
+                .hasMessageContaining("workspace-2");
+        assertThat(workflow).doesNotExist();
+        assertThat(createdLists).isEmpty();
     }
 
     @Test
