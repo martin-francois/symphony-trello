@@ -64,13 +64,22 @@ sudo install -d -o root -g root -m 0755 /etc/symphony-trello/workflows
 sudo install -d -o symphony-trello -g symphony-trello -m 0750 /var/lib/symphony-trello
 ```
 
-Authenticate Codex for the service user before starting real workflows. The exact command depends on
-how your Codex CLI is installed, but run it as `symphony-trello` so credentials land under that
-user's home directory:
+Authenticate Codex for the service user before starting real workflows. If the server has an
+interactive shell for the service user, run `codex login` as that user so the Codex CLI writes its
+auth file below `/var/lib/symphony-trello/.codex`.
 
 ```bash
-sudo -u symphony-trello -H codex --help
+sudo -u symphony-trello -H codex login
 ```
+
+If you already use Codex CLI on another machine, copy that existing auth file instead:
+
+```bash
+sudo install -d -o symphony-trello -g symphony-trello -m 0700 /var/lib/symphony-trello/.codex
+sudo install -o symphony-trello -g symphony-trello -m 0600 ~/.codex/auth.json /var/lib/symphony-trello/.codex/auth.json
+```
+
+Do not put Codex auth in workflow files or `/etc/symphony-trello/service.env`.
 
 ## Build And Install The App
 

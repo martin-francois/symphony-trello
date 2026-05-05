@@ -177,6 +177,46 @@
   loop_control:
     label: "{{ item.path }}"
 
+- name: Check controller Codex auth file
+  ansible.builtin.stat:
+    path: "{{ symphony_trello_codex_auth_src }}"
+  delegate_to: localhost
+  become: false
+  when: symphony_trello_manage_codex_auth
+  register: symphony_trello_controller_codex_auth
+
+- name: Stop when controller Codex auth is missing
+  ansible.builtin.assert:
+    that:
+      - symphony_trello_controller_codex_auth.stat.exists
+      - symphony_trello_controller_codex_auth.stat.size > 0
+    fail_msg: >
+      Codex auth file {{ symphony_trello_codex_auth_src }} is missing or empty. Run codex login on
+      the machine where you run Ansible, set symphony_trello_codex_auth_src to the existing Codex
+      auth file, or set symphony_trello_manage_codex_auth to false when the service user is already
+      authenticated on the target server.
+  when: symphony_trello_manage_codex_auth
+
+- name: Create Codex config directory
+  ansible.builtin.file:
+    path: "{{ symphony_trello_codex_config_dir }}"
+    state: directory
+    owner: "{{ symphony_trello_user }}"
+    group: "{{ symphony_trello_group }}"
+    mode: "0700"
+  when: symphony_trello_manage_codex_auth
+
+- name: Deploy Codex auth file
+  ansible.builtin.copy:
+    src: "{{ symphony_trello_codex_auth_src }}"
+    dest: "{{ symphony_trello_codex_config_dir }}/auth.json"
+    owner: "{{ symphony_trello_user }}"
+    group: "{{ symphony_trello_group }}"
+    mode: "0600"
+  no_log: true
+  when: symphony_trello_manage_codex_auth
+  register: symphony_trello_codex_auth_file
+
 - name: Deploy Trello credential files
   ansible.builtin.copy:
     dest: "{{ item.dest }}"
@@ -300,6 +340,7 @@
           or (symphony_trello_env_file_removed.changed | default(false))
           or symphony_trello_legacy_env_file_removed.changed
           or (symphony_trello_secret_files.results | selectattr('changed') | list | length > 0)
+          or (symphony_trello_codex_auth_file.changed | default(false))
           or symphony_trello_unit_file.changed
           or symphony_trello_app_sync.changed
           or (symphony_trello_workflow_copy.results | selectattr('changed') | list | length > 0) }}

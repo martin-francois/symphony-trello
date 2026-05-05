@@ -8,3 +8,8 @@ symphony_trello_workflows:
 # Leave this unset when Java and Codex are already on the service user's normal systemd PATH.
 # Set it when they are installed in custom directories.
 # symphony_trello_service_path: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/opt/java/bin:/opt/codex/bin
+
+# By default, the playbook copies the Codex CLI auth from the user running Ansible:
+# ~/.codex/auth.json
+# Set this only when your existing Codex auth file is somewhere else.
+# symphony_trello_codex_auth_src: /path/to/existing/.codex/auth.json
