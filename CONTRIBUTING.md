@@ -38,8 +38,9 @@ engineering preferences that should persist across Codex sessions.
 Before submitting changes:
 
 - Run `./mvnw spotless:check`.
-- Run `./mvnw verify`; CI enforces the same PMD, ArchUnit, test, build, and JaCoCo checks. Coverage
-  currently requires at least 80% line coverage.
+- Run `./mvnw verify`; CI enforces the same PMD, ArchUnit, test, build, and JaCoCo checks. ArchUnit
+  rejects circular dependencies between production top-level packages. Coverage currently requires
+  at least 80% line coverage.
 - Add or update tests for scheduler, Trello normalization, workspace safety, prompt rendering, or
   Codex protocol behavior when those areas change.
 - Use imports instead of inline fully qualified Java type names in code. PMD enforces this so helpers

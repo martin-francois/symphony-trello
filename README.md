@@ -551,8 +551,9 @@ without waiting indefinitely.
 ```
 
 `verify` runs PMD's narrow source check, the deterministic test suite, ArchUnit architecture checks,
-the application build, and the JaCoCo coverage gate. It fails if line coverage drops below 80%. The
-test suite does not call Trello. Real Trello smoke testing is intentionally environment-dependent and
+the application build, and the JaCoCo coverage gate. The ArchUnit checks reject circular dependencies
+between production top-level packages. `verify` also fails if line coverage drops below 80%. The test
+suite does not call Trello. Real Trello smoke testing is intentionally environment-dependent and
 should use disposable boards/cards; see [docs/live-e2e.md](docs/live-e2e.md). See
 [CONTRIBUTING.md](CONTRIBUTING.md) for the full contributor checklist and [AGENTS.md](AGENTS.md) for
 repository-local AI agent instructions.
