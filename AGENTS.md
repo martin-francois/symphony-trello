@@ -47,6 +47,8 @@ matters, and easy for another engineer to understand without asking the original
 - Do not add convenience links that encourage readers to skip required earlier steps. If a section
   depends on previous setup, structure the document as a linear flow instead of linking directly past
   the prerequisite.
+- Prefer explaining intent, significance, and decision criteria over prescribing arbitrary defaults.
+  Recommend concrete names or values only when the choice is semantically important.
 
 ## Testing Preferences
 
