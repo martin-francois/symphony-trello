@@ -67,6 +67,36 @@ class SymphonyOrchestratorTest {
             assertThat(row.cardIdentifier()).isEqualTo("TRELLO-abc");
             assertThat(row.attempt()).isEqualTo(1);
         });
+        assertThat(snapshot.routing().activeColumns()).containsExactly("Todo");
+        assertThat(snapshot.routing().terminalColumns()).contains("done");
+    }
+
+    @Test
+    void doesNotDispatchCardsFromNonActiveColumns() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        writeWorkflow(workflow, "60000");
+        FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Human Review")));
+        AgentRunner runner = mock(AgentRunner.class);
+        SymphonyOrchestrator orchestrator = new SymphonyOrchestrator(
+                new WorkflowLoader(),
+                new ConfigResolver(),
+                tracker,
+                runner,
+                new PromptRenderer(),
+                new WorkspaceManager(new HookRunner()));
+        orchestrator.workflowPath = workflow;
+
+        // when
+        orchestrator.start();
+        Thread.sleep(250);
+        RuntimeSnapshot snapshot = orchestrator.snapshot();
+        orchestrator.stop();
+
+        // then
+        assertThat(snapshot.counts().running()).isZero();
+        assertThat(snapshot.counts().retrying()).isZero();
+        assertThat(tracker.promptStateFetches.get()).isZero();
     }
 
     @Test
