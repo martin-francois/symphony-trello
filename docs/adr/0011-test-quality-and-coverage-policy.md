@@ -48,7 +48,8 @@ project-specific conventions that standard tools cannot see cleanly.
 ### Consequences
 
 * Good, because `./mvnw verify` and CI fail when line coverage drops below 80 percent.
-* Good, because ArchUnit checks package cycles and important dependency boundaries.
+* Good, because ArchUnit checks circular dependencies between production top-level packages and
+  important dependency boundaries.
 * Good, because PMD replaces a hand-written source regex for inline fully qualified Java type names.
 * Good, because unit tests must use readable `// given`, `// when`, and `// then` sections.
 * Good, because simple mocks use Mockito instead of hand-written one-off doubles.
@@ -67,9 +68,9 @@ Review new ArchUnit and PMD rules for likely false positives before adding them.
 
 ### Enforce JaCoCo, ArchUnit, narrow PMD source rules, and focused custom convention tests
 
-Use JaCoCo's Maven check in `verify`, ArchUnit for compiled architecture rules, PMD for the narrow
-`UnnecessaryFullyQualifiedName` source rule, and custom JUnit tests for conventions that need source
-comments or Markdown parsing.
+Use JaCoCo's Maven check in `verify`, ArchUnit for compiled architecture rules such as top-level
+package cycle detection, PMD for the narrow `UnnecessaryFullyQualifiedName` source rule, and custom
+JUnit tests for conventions that need source comments or Markdown parsing.
 
 * Good, because the same command works locally and in CI.
 * Good, because the coverage gate catches accidental test deletion or large untested additions.
