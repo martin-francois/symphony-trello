@@ -81,13 +81,8 @@ Symphony reads cards, creates local Codex workspaces, and runs Codex. The genera
 Codex leave a Trello comment and move the card to `Review` when the prompt-defined work is ready for
 human review.
 
-The setup guide below is meant to be followed in order. First create the Trello Workspace and API
-credentials in the browser. After that, choose one of the two board setup paths:
-
-- **Create the recommended board**: best when you are new to Trello or want Symphony to create a
-  clean `Inbox` -> `Ready for Codex` -> `Review` -> `Done` board for you.
-- **Import an existing board**: best when you already have a Trello board and want Symphony to write
-  a starter `WORKFLOW.md` for it.
+Start with the browser setup below. Those steps create the Trello credentials used by both board
+setup paths.
 
 ### One-Time Browser Setup: Workspace, API Key, Token
 
@@ -144,15 +139,11 @@ export TRELLO_API_KEY=replace-with-generated-key
 export TRELLO_API_TOKEN=replace-with-generated-token
 ```
 
-If your token can access exactly one Workspace, the `new-board` command can select it automatically.
-If it can access multiple Workspaces, use `list-workspaces` first and pass `--workspace-id`.
-
 ### Fast Path: Create The Recommended Board
 
-Use this path when you are new to Trello or want the lowest-friction setup. Symphony cannot create the
-Workspace, API key, or API token for you because Trello requires browser authorization for those
-steps. After that, one command creates the board, creates the recommended lists, and writes
-[`WORKFLOW.md`](#workflow-contract).
+Use this path when you are new to Trello or want Symphony to create a clean `Inbox` -> `Ready for
+Codex` -> `Review` -> `Done` board for you. One command creates the board, creates the recommended
+lists, and writes [`WORKFLOW.md`](#workflow-contract).
 
 Now create the board and workflow:
 
@@ -203,8 +194,8 @@ Use the generated board like this:
 
 ### Fast Path: Import An Existing Board
 
-Use this path when a Trello board already exists but you want Symphony to write the starter
-[`WORKFLOW.md`](#workflow-contract) for you.
+Use this path when you already have a Trello board and want Symphony to write a starter
+[`WORKFLOW.md`](#workflow-contract) for that board.
 
 1. Copy the board short link from the board URL.
    In `https://trello.com/b/abc123/my-board`, use `abc123`.

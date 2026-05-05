@@ -52,6 +52,8 @@ matters, and easy for another engineer to understand without asking the original
   move optional modes, safety knobs, and advanced configuration into later sections.
 - For docs with multiple setup paths, read the flow once from each path's perspective and avoid
   wording that assumes the reader chose a different path.
+- Put "who this path is for" guidance next to the commands for that path. Do not make readers
+  remember an earlier decision list or scroll back to choose the right section.
 - Do not add convenience links that encourage readers to skip required earlier steps. If a section
   depends on previous setup, structure the document as a linear flow instead of linking directly past
   the prerequisite.
