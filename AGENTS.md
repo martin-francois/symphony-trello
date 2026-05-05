@@ -28,8 +28,10 @@ matters, and easy for another engineer to understand without asking the original
    agent-added rules for conflicts with that new preference in the same turn.
 7. When fixing a documentation pattern, search the relevant file or docs set for similar instances
    before committing instead of correcting only the one sentence the user pointed out.
-8. Track potential improvements and future work as GitHub issues, not as "future improvement" or
-   "convenience gap" sections in user-facing documentation.
+8. When you notice a potential improvement that is outside the current task scope, keep the current
+   work focused and create or suggest a GitHub issue instead of adding "future improvement",
+   "convenience gap", or similar sections to user-facing documentation. This applies across the
+   project, not only deployment.
 9. Run the relevant verification before finishing. For normal code changes, use:
 
    ```bash
