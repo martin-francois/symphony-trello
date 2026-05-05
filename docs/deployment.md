@@ -200,18 +200,3 @@ Restart all running workflow services:
 ```bash
 sudo systemctl restart 'symphony-trello@*'
 ```
-
-## Current Convenience Gap
-
-The systemd template removes most repeated service setup, but deployment is still manual. The next
-useful improvement would be a Java-based `install-systemd` command that:
-
-* builds or points to a packaged app directory,
-* creates the OS user and directory layout,
-* installs the systemd template,
-* copies selected workflow files,
-* validates that each workflow has a unique `server.port`, and
-* prints the exact `systemctl enable --now ...` commands.
-
-That command should not create Trello credentials. Keep credentials in `/etc/symphony-trello/env` or
-the server's normal secret store.
