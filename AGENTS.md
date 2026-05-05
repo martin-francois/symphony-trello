@@ -132,6 +132,8 @@ matters, and easy for another engineer to understand without asking the original
 - Live import-board coverage must include at least one genuinely non-default existing board
   structure, not only a Symphony-generated board imported back again. Use explicit non-default
   active and terminal list names, then verify fake-Codex first and strict real-Codex after.
+- When reporting test coverage gaps, do not list a redundant missing check if an existing check is
+  already close enough for the risk the user asked about. Explain what the existing check covers.
 
 ## Java Style
 
