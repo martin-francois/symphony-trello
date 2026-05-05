@@ -67,6 +67,8 @@ matters, and easy for another engineer to understand without asking the original
   helps the user recognize what the entry is for later.
 - When documenting third-party UI fields, use the current vendor label exactly when known instead of
   approximating it.
+- For third-party authorization screens, describe the concrete labels and permissions the user sees,
+  then connect them to the project need only when necessary.
 - When describing third-party UI layout, prefer location wording observed in the current UI and avoid
   overly specific positions unless they help the reader find the control.
 - Do not qualify setup instructions with "if possible" or similar hedges when the expected value is
