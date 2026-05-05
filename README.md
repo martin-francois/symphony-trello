@@ -18,14 +18,18 @@ the tools available to Codex.
 - Strict prompt rendering with `card`, `issue`, and `attempt` variables.
 - Per-card workspace creation, sanitization, root containment checks, and lifecycle hooks.
 - Codex app-server subprocess integration over newline-delimited JSON-RPC.
+- Scoped Trello handoff tools for Codex to add a comment to the current card and move that card to
+  configured board-local review lists.
 - Single-authority in-memory orchestration state, claim-before-spawn dispatch, retries, stall checks,
   stale worker identity filtering, and terminal workspace cleanup.
 - JSON and HTML status surfaces at `/api/v1/state`, `/api/v1/{card_identifier}`, `/api/v1/refresh`,
   and `/`.
 
-The standardized `trello_rest` dynamic tool extension is documented in `SPEC.md` but is not yet
-advertised to Codex by this Java implementation. Read-only scheduler deployments are supported; Trello
-handoff writes currently require external tools available to the Codex runtime.
+The standardized generic `trello_rest` dynamic tool extension is documented in `SPEC.md` but is not
+yet advertised to Codex by this Java implementation. Instead, Symphony advertises narrower high-level
+handoff tools when `trello_tools.enabled=true` and `trello_tools.allow_writes=true`:
+`trello_add_comment` and `trello_move_current_card`. Read-only scheduler deployments are still
+supported by disabling Trello writes.
 
 ## Quick Start
 
@@ -73,10 +77,11 @@ Official Trello references if the UI has moved since this README was written:
 - Trello list creation API: <https://developer.atlassian.com/cloud/trello/rest/api-group-lists/>
 - Trello board/list basics: <https://support.atlassian.com/trello/docs/adding-lists-to-a-board/>
 
-Symphony reads cards, creates local Codex workspaces, and runs Codex. It does not currently move cards
-or write Trello comments by itself. Start with read-only automation: move a card into a configured
-active list when you want Codex to work on it, then move it out of that active list when the work is
-ready for human review or done.
+Symphony reads cards, creates local Codex workspaces, and runs Codex. The scheduler itself does not
+decide when work is done. The generated workflow gives Codex two scoped Trello handoff tools instead:
+it can add a comment to the current card and move that same card to `Review` when the prompt says the
+work is ready for human review. If you want a strictly read-only deployment, set
+`trello_tools.allow_writes: false` and move cards manually.
 
 ### Fast Path: Create The Recommended Board
 
@@ -117,7 +122,8 @@ The command creates this Trello board layout:
 4. `Done`
 
 It also writes `WORKFLOW.md` with `Ready for Codex` as the active list, `Done` as the terminal list,
-`./workspaces` as the local workspace root, and `max_concurrent_agents: 1`.
+`Review` as the allowed handoff list, `./workspaces` as the local workspace root, and
+`max_concurrent_agents: 1`.
 
 If `WORKFLOW.md` already exists, the command stops instead of overwriting it. Pass `--force` only when
 you intentionally want to replace the file:
@@ -131,6 +137,19 @@ Start Symphony after the file is generated:
 ```bash
 ./mvnw quarkus:dev
 ```
+
+Use the generated board like this:
+
+1. Put raw ideas or incomplete tasks in `Inbox`.
+2. Move only cards that are ready for agent work into `Ready for Codex`.
+3. Symphony starts Codex for cards in `Ready for Codex`.
+4. Codex works in a local workspace, adds a Trello comment with its summary and verification notes,
+   and moves the card to `Review` when the prompt-defined work is ready for human review.
+5. A human reviews the code and the Trello comment, then moves the card to `Done` after acceptance.
+
+The API token must be authorized with write permission for the generated handoff workflow. If the
+token is read-only or Trello rejects writes, Codex will still run, but the handoff tool call will fail
+and the failure will be visible in the Codex session events.
 
 ### Fast Path: Import An Existing Board
 
@@ -152,6 +171,12 @@ You may omit `--active` when the board already has a list named `Ready for Codex
 For an existing team board, be deliberate about `--active`: every open card in that list is eligible
 for Codex work. A conservative import starts with a new list named `Ready for Codex` and only moves
 cards there after they have a clear title, useful description, and acceptance criteria.
+
+When the imported board has a list named `Review`, the starter workflow enables the same handoff
+tools as the recommended new board and allows Codex to move cards there. If your existing board uses
+a different review list, edit `trello_tools.allowed_move_list_names` and the final handoff
+instruction in `WORKFLOW.md` to the same list name before starting the daemon. If there is no obvious
+review list, the generated workflow keeps Trello writes disabled until you choose one.
 
 Common setup command options:
 
@@ -196,12 +221,23 @@ tracker:
     - Deleted
 workspace:
   root: ./workspaces
+trello_tools:
+  enabled: true
+  allow_writes: true
+  allowed_move_list_names:
+    - Review
+  allow_comments: true
+  allow_checklists: false
+  allow_url_attachments: false
 codex:
   command: codex app-server
 ---
 # Trello Card
 
 Work on {{ card.identifier }}: {{ card.title }}.
+
+When the work is ready for human review, call trello_add_comment with a concise summary and
+verification notes, then call trello_move_current_card with list_name "Review".
 
 Card URL: {{ card.url }}
 ```
@@ -212,8 +248,9 @@ Operationally, use the board like this:
 2. Move a card to `Ready for Codex` only when the title and description are clear enough for an
    engineer to start.
 3. Watch Symphony at `http://127.0.0.1:8080/`.
-4. Move the card to `Done` when the generated work has been reviewed and accepted.
+4. Review the card after Codex moves it to `Review`.
 5. Move the card out of `Ready for Codex` if you want to pause or prevent further retries.
+6. Move the card to `Done` when the generated work has been reviewed and accepted.
 
 ### Option B: Create A New Beginner-Friendly Board
 
@@ -272,6 +309,14 @@ tracker:
     - Deleted
 workspace:
   root: ./workspaces
+trello_tools:
+  enabled: true
+  allow_writes: true
+  allowed_move_list_names:
+    - Review
+  allow_comments: true
+  allow_checklists: false
+  allow_url_attachments: false
 agent:
   max_concurrent_agents: 1
 codex:
@@ -287,6 +332,9 @@ You are working on {{ card.identifier }}: {{ card.title }}.
 
 Read the Trello description carefully, inspect the repository, make the smallest maintainable change,
 run relevant verification, and leave the workspace in a reviewable state.
+
+When the work is ready for human review, call trello_add_comment with a concise summary and
+verification notes, then call trello_move_current_card with list_name "Review".
 
 Card URL: {{ card.url }}
 ```
@@ -311,7 +359,7 @@ Trello API access is created through a custom Power-Up:
 1. Open Trello's Power-Ups admin page: `https://trello.com/power-ups/admin`.
 2. Create a new Power-Up in the Workspace that contains your Symphony board.
 3. Name it something explicit, for example `Symphony Local Automation`.
-4. You do not need to enable this Power-Up on the board for Symphony's read-only polling use case.
+4. You do not need to enable this Power-Up on the board for Symphony.
 5. Open the Power-Up's API key area and generate an API key.
 6. Generate an API token for your Trello account from that API key page.
 7. Export both values before starting Symphony:

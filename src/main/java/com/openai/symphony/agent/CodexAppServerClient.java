@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.openai.symphony.config.EffectiveConfig;
+import com.openai.symphony.domain.Card;
 import com.openai.symphony.workspace.WorkspaceManager;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.io.BufferedReader;
@@ -31,13 +32,20 @@ public class CodexAppServerClient {
     private static final Logger LOG = Logger.getLogger(CodexAppServerClient.class);
 
     private final ObjectMapper json;
+    private final TrelloHandoffToolHandler trelloTools;
 
-    public CodexAppServerClient(ObjectMapper json) {
+    public CodexAppServerClient(ObjectMapper json, TrelloHandoffToolHandler trelloTools) {
         this.json = json;
+        this.trelloTools = trelloTools;
     }
 
     public AgentRunResult runTurn(
-            EffectiveConfig config, Path workspace, String prompt, String workerIdentity, AgentEventListener listener) {
+            EffectiveConfig config,
+            Card card,
+            Path workspace,
+            String prompt,
+            String workerIdentity,
+            AgentEventListener listener) {
         WorkspaceManager.requireInsideRoot(config.workspace().root(), workspace);
         Process process;
         try {
@@ -49,8 +57,12 @@ public class CodexAppServerClient {
             return AgentRunResult.fail("codex_not_found: " + e.getMessage());
         }
 
-        AppServerSession session = new AppServerSession(process, workerIdentity, listener);
+        AppServerSession session = new AppServerSession(process, config, card, workerIdentity, listener);
         try {
+            ObjectNode capabilities = object();
+            if (trelloTools.shouldEnableExperimentalApi(config)) {
+                capabilities.put("experimentalApi", true);
+            }
             session.start();
             JsonNode init = request(
                     session,
@@ -59,7 +71,7 @@ public class CodexAppServerClient {
                             "clientInfo",
                             object("name", "symphony-trello-java", "version", "0.1.0"),
                             "capabilities",
-                            object()),
+                            capabilities),
                     config.codex().readTimeout());
             LOG.debugf(
                     "codex_initialize outcome=completed user_agent=%s",
@@ -111,6 +123,10 @@ public class CodexAppServerClient {
                 object("cwd", workspace.toString(), "serviceName", "symphony-trello-java", "ephemeral", true);
         putIfPresent(params, "approvalPolicy", config.codex().approvalPolicy());
         putIfPresent(params, "sandbox", config.codex().threadSandbox());
+        var toolSpecs = trelloTools.toolSpecs(config);
+        if (!toolSpecs.isEmpty()) {
+            params.set("dynamicTools", toolSpecs);
+        }
         return params;
     }
 
@@ -160,6 +176,8 @@ public class CodexAppServerClient {
 
     private final class AppServerSession implements AutoCloseable {
         private final Process process;
+        private final EffectiveConfig config;
+        private final Card card;
         private final String workerIdentity;
         private final AgentEventListener listener;
         private final AtomicInteger ids = new AtomicInteger();
@@ -171,8 +189,15 @@ public class CodexAppServerClient {
         private Thread stdoutReader;
         private Thread stderrReader;
 
-        private AppServerSession(Process process, String workerIdentity, AgentEventListener listener) {
+        private AppServerSession(
+                Process process,
+                EffectiveConfig config,
+                Card card,
+                String workerIdentity,
+                AgentEventListener listener) {
             this.process = process;
+            this.config = config;
+            this.card = card;
             this.workerIdentity = workerIdentity;
             this.listener = listener;
         }
@@ -272,17 +297,7 @@ public class CodexAppServerClient {
                         case "item/permissions/requestApproval" -> object("decision", "cancel");
                         case "item/tool/requestUserInput", "mcpServer/elicitation/request" ->
                             object("answers", object());
-                        case "item/tool/call" ->
-                            object(
-                                    "success",
-                                    false,
-                                    "contentItems",
-                                    json.createArrayNode()
-                                            .add(object(
-                                                    "type",
-                                                    "inputText",
-                                                    "text",
-                                                    "Symphony did not advertise or implement this dynamic tool.")));
+                        case "item/tool/call" -> trelloTools.handle(config, card, request.path("params"));
                         default -> null;
                     };
             if (result == null) {
