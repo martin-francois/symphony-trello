@@ -53,10 +53,11 @@ class TrelloBoardSetupTest {
                 [
                   {"id":"list-inbox","name":"Inbox","closed":false,"pos":1},
                   {"id":"list-ready","name":"Ready for Codex","closed":false,"pos":2},
-                  {"id":"list-blocked","name":"Blocked","closed":false,"pos":3},
-                  {"id":"list-review","name":"Review","closed":false,"pos":4},
-                  {"id":"list-done","name":"Done","closed":false,"pos":5},
-                  {"id":"list-archive","name":"Archived old work","closed":true,"pos":6}
+                  {"id":"list-in-progress","name":"In Progress","closed":false,"pos":3},
+                  {"id":"list-blocked","name":"Blocked","closed":false,"pos":4},
+                  {"id":"list-review","name":"Review","closed":false,"pos":5},
+                  {"id":"list-done","name":"Done","closed":false,"pos":6},
+                  {"id":"list-archive","name":"Archived old work","closed":true,"pos":7}
                 ]
                 """);
 
@@ -120,17 +121,21 @@ class TrelloBoardSetupTest {
 
         // then
         assertThat(result.boardKey()).isEqualTo("abc123");
-        assertThat(createdColumns).containsExactly("Inbox", "Ready for Codex", "Blocked", "Review", "Done");
+        assertThat(createdColumns)
+                .containsExactly("Inbox", "Ready for Codex", "In Progress", "Blocked", "Review", "Done");
         assertThat(authorization.get()).contains("oauth_consumer_key=\"key\"").contains("oauth_token=\"token\"");
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("board_id: \"abc123\"")
                 .contains("- \"Ready for Codex\"")
+                .contains("- \"In Progress\"")
                 .contains("- \"Done\"")
                 .contains("trello_tools:")
                 .contains("allowed_move_list_names:")
+                .contains("- \"In Progress\"")
                 .contains("- \"Review\"")
                 .contains("- \"Blocked\"")
+                .contains("immediately call trello_move_current_card with list_name \"In Progress\"")
                 .contains("## Description")
                 .contains("{{ card.description }}")
                 .contains("If the Trello card names a specific local path or project")
@@ -140,12 +145,12 @@ class TrelloBoardSetupTest {
                 .contains("max_concurrent_agents: 1");
         EffectiveConfig config = resolve(workflow);
         assertThat(config.tracker().boardId()).isEqualTo("abc123");
-        assertThat(config.tracker().activeStates()).containsExactly("Ready for Codex");
+        assertThat(config.tracker().activeStates()).containsExactly("Ready for Codex", "In Progress");
         assertThat(config.tracker().terminalStates())
                 .contains("done", "archived", "archivedlist", "archivedboard", "deleted");
         assertThat(config.trelloTools().enabled()).isTrue();
         assertThat(config.trelloTools().allowWrites()).isTrue();
-        assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("review", "blocked");
+        assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("in progress", "review", "blocked");
         assertThat(config.trelloTools().allowChecklists()).isFalse();
         assertThat(config.trelloTools().allowUrlAttachments()).isFalse();
     }
@@ -205,21 +210,58 @@ class TrelloBoardSetupTest {
                 false));
 
         // then
-        assertThat(result.openColumns()).containsExactly("Inbox", "Ready for Codex", "Blocked", "Review", "Done");
-        assertThat(result.activeStates()).containsExactly("Ready for Codex");
+        assertThat(result.openColumns())
+                .containsExactly("Inbox", "Ready for Codex", "In Progress", "Blocked", "Review", "Done");
+        assertThat(result.activeStates()).containsExactly("Ready for Codex", "In Progress");
         assertThat(result.terminalStates()).containsExactly("Done");
+        assertThat(result.inProgressState()).isEqualTo("In Progress");
         assertThat(result.blockedState()).isEqualTo("Blocked");
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("board_id: \"existing\"")
                 .contains("root: \"./agent-workspaces\"")
                 .contains("allowed_move_list_names:")
+                .contains("- \"In Progress\"")
                 .contains("- \"Review\"")
                 .contains("- \"Blocked\"")
+                .contains("If the card is in \"Ready for Codex\"")
+                .contains("list_name \"In Progress\"")
                 .contains("max_concurrent_agents: 2");
         EffectiveConfig config = resolve(workflow);
         assertThat(config.tracker().boardId()).isEqualTo("existing");
         assertThat(config.workspace().root()).isEqualTo(workflow.getParent().resolve("agent-workspaces"));
+    }
+
+    @Test
+    void importCanDisableDetectedInProgressColumn() {
+        // given
+        Path workflow = tempDir.resolve("imported-without-in-progress.md");
+
+        // when
+        var result = setup.importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "input",
+                List.of(),
+                List.of(),
+                null,
+                false,
+                null,
+                workflow,
+                Path.of("./agent-workspaces"),
+                2,
+                false));
+
+        // then
+        assertThat(result.inProgressState()).isNull();
+        assertThat(result.activeStates()).containsExactly("Ready for Codex");
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("This workflow has no in-progress column configured")
+                .doesNotContain("list_name \"In Progress\"");
+        EffectiveConfig config = resolve(workflow);
+        assertThat(config.tracker().activeStates()).containsExactly("Ready for Codex");
+        assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("review", "blocked");
     }
 
     @Test

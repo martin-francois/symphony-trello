@@ -1692,6 +1692,9 @@ Symphony does not require first-class tracker write APIs in the orchestrator.
   `Human Review`, rather than Trello terminal state `Done`.
 - The handoff signal is normally produced by the agent, because the agent has the semantic context
   to know whether the requested work is reviewable, blocked, or unsafe to hand off.
+- A workflow MAY also ask the agent to perform an initial pickup transition, such as moving a Trello
+  card from `Ready for Codex` to `In Progress`, before implementation work starts. This mirrors the
+  original Symphony workflow pattern while keeping the mutation decision in the agent toolchain.
 - If the `trello_rest` client-side tool extension is implemented, it is still part of the agent
   toolchain rather than orchestrator business logic.
 - Write-capable Trello operations require a token that was authorized with write permission.

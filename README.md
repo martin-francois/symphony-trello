@@ -175,8 +175,8 @@ TRELLO_API_TOKEN=replace-with-generated-token
 ### Fast Path: Create The Recommended Board
 
 Use this path when you are new to Trello or want Symphony to create a clean `Inbox` -> `Ready for
-Codex` -> `Blocked` -> `Review` -> `Done` board for you. One command creates the board, creates the
-recommended columns, and writes a workflow file for that board.
+Codex` -> `In Progress` -> `Blocked` -> `Review` -> `Done` board for you. One command creates the
+board, creates the recommended columns, and writes a workflow file for that board.
 
 Now create the board and workflow:
 
@@ -196,14 +196,15 @@ The command creates this Trello board layout:
 
 1. `Inbox`
 2. `Ready for Codex`
-3. `Blocked`
-4. `Review`
-5. `Done`
+3. `In Progress`
+4. `Blocked`
+5. `Review`
+6. `Done`
 
-It also writes a workflow with `Ready for Codex` as the active column, `Done` as the terminal column,
-`Review` and `Blocked` as allowed handoff columns, `./workspaces` as the local workspace directory,
-and `max_concurrent_agents: 1`. With that default, Symphony starts one card at a time from this
-board.
+It also writes a workflow with `Ready for Codex` and `In Progress` as active columns, `Done` as the
+terminal column, `In Progress`, `Review`, and `Blocked` as allowed move columns, `./workspaces` as
+the local workspace directory, and `max_concurrent_agents: 1`. With that default, Symphony starts one
+card at a time from this board.
 
 The first run writes `WORKFLOW.md`. If that file already exists and you did not pass `--workflow`,
 Symphony keeps the existing file and writes a board-specific file instead. For a board named
@@ -227,11 +228,12 @@ Use the generated board like this:
 1. Put raw ideas or incomplete tasks in `Inbox`.
 2. Move only cards that are ready for agent work into `Ready for Codex`.
 3. Symphony starts Codex for cards in `Ready for Codex`.
-4. Codex works in a local workspace, adds a Trello comment with its summary and verification notes,
+4. Codex moves the card to `In Progress` first, so the board shows that the card was picked up.
+5. Codex works in a local workspace, adds a Trello comment with its summary and verification notes,
    and moves the card to `Review` when the prompt-defined work is ready for human review.
-5. If Codex cannot safely finish the work, it adds a blocker comment and moves the card to
+6. If Codex cannot safely finish the work, it adds a blocker comment and moves the card to
    `Blocked` so the problem is visible from the board.
-6. A human reviews the code and the Trello comment, then moves the card to `Done` after acceptance.
+7. A human reviews the code and the Trello comment, then moves the card to `Done` after acceptance.
 
 ### Fast Path: Import An Existing Board
 
@@ -243,14 +245,16 @@ Use this path when you already have a Trello board and want Symphony to write a 
 2. Run the import command:
 
 ```bash
-./mvnw -q exec:java -Dexec.args='import-board --board abc123 --active "Ready for Codex" --terminal Done --blocked Blocked'
+./mvnw -q exec:java -Dexec.args='import-board --board abc123 --active "Ready for Codex" --in-progress "In Progress" --terminal Done --blocked Blocked'
 ```
 
 You may omit `--active` when the board already has a column named `Ready for Codex`. You may omit
-`--terminal` when the board already has a column named `Done`. You may omit `--blocked` when the board
-already has a column named `Blocked`. If your board has no blocked column, import falls back to
-`Review` when that column exists, so blocked cards still leave the active column. Create a blocked
-column or pass
+`--in-progress` when the board already has a column named `In Progress`. You may omit `--terminal`
+when the board already has a column named `Done`. You may omit `--blocked` when the board already has
+a column named `Blocked`. If your board has no in-progress column, Codex leaves picked-up cards in
+the active column until it moves them to review or blocked. If your board has no blocked column,
+import falls back to `Review` when that column exists, so blocked cards still leave the active column.
+Create a blocked column or pass
 `--blocked` when you want blocked work separated from reviewable work.
 
 For an existing team board, be deliberate about `--active`: every open card in that column is eligible
@@ -279,6 +283,12 @@ Common setup command options:
   them from `.env` or environment variables.
 - `--workspace-id ID`: choose the Trello Workspace for a new board when your token can access more
   than one Workspace.
+- `--in-progress NAME`: during `import-board`, choose the Trello column where Codex should move a
+  card immediately after it is picked up. If you omit it, import uses `In Progress` when the board has
+  that column. If no in-progress column is configured, the card stays in the active column while
+  Codex works.
+- `--no-in-progress`: during `import-board`, do not configure pickup moves even when the board has an
+  `In Progress` column.
 - `--blocked NAME`: during `import-board`, choose the Trello column where Codex should move cards it
   cannot safely finish. If you omit it, import uses a column named `Blocked` when the board has one.
 
@@ -290,13 +300,15 @@ write [`WORKFLOW.md`](#workflow-contract) yourself.
 1. Pick the board Symphony should poll.
 2. Choose one or two column names that mean "Codex may work on this now".
    A low-risk default is a single column named `Ready for Codex`.
-3. Choose terminal column names that mean "never run Codex for this card again".
+3. Choose an optional in-progress column, such as `In Progress`, if you want Trello to show when
+   Codex has picked up a card.
+4. Choose terminal column names that mean "never run Codex for this card again".
    A common default is `Done`.
-4. Choose a non-active column for blocked work, such as `Blocked`. If your board does not have one,
+5. Choose a non-active column for blocked work, such as `Blocked`. If your board does not have one,
    use your review column so blocked cards still leave the active column.
-5. Copy the board short link from the board URL.
+6. Copy the board short link from the board URL.
    In `https://trello.com/b/abc123/my-board`, the `board_id` value can be `abc123`.
-6. Create [`WORKFLOW.md`](#workflow-contract) and set `tracker.board_id`, `tracker.active_states`,
+7. Create [`WORKFLOW.md`](#workflow-contract) and set `tracker.board_id`, `tracker.active_states`,
    `tracker.terminal_states`, and the handoff column names to match your board.
 
 Example for an existing board:
@@ -310,6 +322,10 @@ tracker:
   board_id: abc123
   active_states:
     - Ready for Codex
+    - In Progress
+  blocker_enforced_states:
+    - Ready for Codex
+    - In Progress
   terminal_states:
     - Done
     - Archived
@@ -322,6 +338,7 @@ trello_tools:
   enabled: true
   allow_writes: true
   allowed_move_list_names:
+    - In Progress
     - Review
     - Blocked
   allow_comments: true
@@ -341,6 +358,10 @@ Work on {{ card.identifier }}: {{ card.title }}.
 Use the current workspace by default. If the Trello card names a specific local path or project
 checkout, inspect that path instead. If that path is inaccessible, treat it as a blocker and follow
 the filesystem access blocker instructions below.
+
+If the card is in "Ready for Codex", immediately call trello_move_current_card with list_name
+"In Progress" before implementation work. If the card is already in "In Progress", continue the
+existing execution flow.
 
 When the work is ready for human review, call trello_add_comment with a concise summary and
 verification notes, then call trello_move_current_card with list_name "Review". If the work is
@@ -362,11 +383,12 @@ Operationally, use the board like this:
 1. Put new ideas wherever your team normally triages work.
 2. Move a card to `Ready for Codex` only when the title and description are clear enough for an
    engineer to start.
-3. Watch Symphony at `http://127.0.0.1:8080/`; see [Operations](#operations) for the available
+3. Watch the card move to `In Progress` after Codex picks it up.
+4. Watch Symphony at `http://127.0.0.1:8080/`; see [Operations](#operations) for the available
    status endpoints.
-4. Review the card after Codex moves it to `Review` or `Blocked`.
-5. Move the card out of `Ready for Codex` if you want to pause or prevent further retries.
-6. Move the card to `Done` when the generated work has been reviewed and accepted.
+5. Review the card after Codex moves it to `Review` or `Blocked`.
+6. Move the card out of active columns if you want to pause or prevent further retries.
+7. Move the card to `Done` when the generated work has been reviewed and accepted.
 
 ### Option B: Create A New Beginner-Friendly Board
 
@@ -377,14 +399,17 @@ Create a board named `Symphony Work Queue` and add these columns in this order:
 
 1. `Inbox`
 2. `Ready for Codex`
-3. `Blocked`
-4. `Review`
-5. `Done`
+3. `In Progress`
+4. `Blocked`
+5. `Review`
+6. `Done`
 
 Recommended meaning:
 
 - `Inbox`: rough tasks, ideas, or incomplete cards. Symphony ignores this column.
 - `Ready for Codex`: cards that are ready to run. Symphony polls this column.
+- `In Progress`: cards Codex has picked up. Symphony also treats this as active so a restart or
+  retry can continue the card.
 - `Blocked`: cards Codex could not safely finish. Symphony ignores this column.
 - `Review`: work produced by Codex that needs human review. Symphony ignores this column.
 - `Done`: finished cards. Symphony treats this as terminal.
@@ -417,8 +442,10 @@ tracker:
   board_id: replace-with-board-shortlink
   active_states:
     - Ready for Codex
+    - In Progress
   blocker_enforced_states:
     - Ready for Codex
+    - In Progress
   terminal_states:
     - Done
     - Archived
@@ -431,6 +458,7 @@ trello_tools:
   enabled: true
   allow_writes: true
   allowed_move_list_names:
+    - In Progress
     - Review
     - Blocked
   allow_comments: true
@@ -458,6 +486,10 @@ run relevant verification, and leave the workspace in a reviewable state.
 Use the current workspace by default. If the Trello card names a specific local path or project
 checkout, inspect that path instead. If that path is inaccessible, treat it as a blocker and follow
 the filesystem access blocker instructions below.
+
+If the card is in "Ready for Codex", immediately call trello_move_current_card with list_name
+"In Progress" before implementation work. If the card is already in "In Progress", continue the
+existing execution flow.
 
 When the work is ready for human review, call trello_add_comment with a concise summary and
 verification notes, then call trello_move_current_card with list_name "Review". If the work is
@@ -541,8 +573,8 @@ environment before starting `codex app-server`.
 The recommended workflow gives Codex two scoped Trello handoff tools:
 
 - `trello_add_comment`: add a comment to the current card.
-- `trello_move_current_card`: move the current card to a configured board-local handoff column such as
-  `Review` or `Blocked`.
+- `trello_move_current_card`: move the current card to a configured board-local column such as
+  `In Progress`, `Review`, or `Blocked`.
 
 The move tool uses argument names such as `list_name` and `list_id` because Trello's API calls board
 columns lists.
@@ -554,11 +586,11 @@ Symphony advertises those tools when `trello_tools.enabled=true` and
 If the API token is read-only or Trello rejects writes, Codex still runs, but handoff tool calls fail
 and the failures are visible in the Codex session events.
 
-To move cards to handoff columns with different names, set `trello_tools.allowed_move_list_names` to
-those allowed column names and update the final handoff instruction in
+To move cards to workflow columns with different names, set `trello_tools.allowed_move_list_names` to
+those allowed column names and update the pickup and final handoff instructions in
 [`WORKFLOW.md`](#workflow-contract) to match them. Do not tell Codex to leave blocked cards in an
-active column such as `Ready for Codex`; Symphony may treat the card as still eligible and run it
-again.
+active column such as `Ready for Codex` or `In Progress`; Symphony may treat the card as still
+eligible and run it again.
 
 The standardized generic `trello_rest` dynamic tool extension is documented in [SPEC.md](SPEC.md) but
 is not yet advertised to Codex by this Java implementation. The Java implementation currently uses
