@@ -113,6 +113,9 @@ matters, and easy for another engineer to understand without asking the original
 - For live E2E, run the deterministic fake-Codex phase before real Codex. Then run strict real-Codex
   checks against real Trello with fresh cards and wait for both Trello handoff completion and
   `/api/v1/state` returning to zero running/retrying before claiming real-Codex coverage.
+- Live import-board coverage must include at least one genuinely non-default existing board
+  structure, not only a Symphony-generated board imported back again. Use explicit non-default
+  active and terminal list names, then verify fake-Codex first and strict real-Codex after.
 
 ## Java Style
 
