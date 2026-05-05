@@ -251,12 +251,20 @@ keeps Trello writes disabled until you choose one.
 
 Common setup command options:
 
-- `--workflow PATH`: write a workflow somewhere other than `WORKFLOW.md`.
-- `--workspace-root PATH`: set the generated `workspace.root`.
-- `--max-agents N`: set the initial `agent.max_concurrent_agents`.
-- `--force`: overwrite an existing workflow file.
-- `--key` and `--token`: pass credentials directly instead of using environment variables.
-- `--workspace-id ID`: for `new-board`, create the board in a specific Trello Workspace.
+- `--workflow PATH`: write the generated workflow file somewhere other than `WORKFLOW.md`. Use this
+  when you want separate workflow files for multiple boards.
+- `--workspace-root PATH`: choose where Symphony creates the local work directory for each Trello
+  card. The generated workflow uses `./workspaces`; choose another path when you want those
+  checkouts on a different disk or clearly separated from the repository.
+- `--max-agents N`: choose how many cards from this board may run at the same time. Start with `1`
+  if you want one-at-a-time review, or raise it when your machine and workflow can handle parallel
+  Codex sessions.
+- `--force`: replace an existing workflow file. Use this only when you are fine losing the current
+  generated workflow content.
+- `--key` and `--token`: pass Trello credentials directly for this one command instead of reading
+  them from `.env` or environment variables.
+- `--workspace-id ID`: choose the Trello Workspace for a new board when your token can access more
+  than one Workspace.
 
 ### Option A: Reuse An Existing Board
 
