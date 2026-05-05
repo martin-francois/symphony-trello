@@ -45,11 +45,16 @@ Prerequisites:
 - Java 25 LTS.
 - The Maven wrapper in this repository.
 - Codex CLI with `codex app-server`.
-- A Trello API key/token. If you do not have one yet, follow the Trello Setup section below in
-  order.
 
-If you already have Trello credentials and a configured [`WORKFLOW.md`](#workflow-contract), put the
-credentials in an ignored project-root `.env` file and start the service:
+Start with [Trello Setup](#trello-setup) if you do not yet have Trello credentials or
+[`WORKFLOW.md`](#workflow-contract). That section walks you through creating the Trello key/token,
+then either creating the recommended board or importing an existing board.
+
+If you already have the Trello key/token but no `WORKFLOW.md`, skip the browser credential steps and
+use one of the board setup paths in [Trello Setup](#trello-setup).
+
+If you already have both Trello credentials and `WORKFLOW.md`, put the credentials in an ignored
+project-root `.env` file:
 
 ```bash
 cp .env.example .env
@@ -64,6 +69,8 @@ TRELLO_API_TOKEN=replace-with-generated-token
 ```
 
 Exported environment variables with the same names also work and take precedence over `.env`.
+
+Start the service:
 
 ```bash
 ./mvnw quarkus:dev
