@@ -77,6 +77,9 @@ matters, and easy for another engineer to understand without asking the original
   concept, path, command, or setup mode before introducing it.
 - Use progressive disclosure in README setup flows: explain the simplest successful path first, and
   move optional modes, safety knobs, and advanced configuration into later sections.
+- In prerequisites, name only tools the reader must install or provide. Do not list the Maven wrapper
+  as a prerequisite when it is already committed. For command-line tools such as Codex, state exactly
+  how the service finds them, such as `PATH` lookup or a configurable command path.
 - For docs with multiple setup paths, read the flow once from each path's perspective and avoid
   wording that assumes the reader chose a different path.
 - Put "who this path is for" guidance next to the commands for that path. Do not make readers
