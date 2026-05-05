@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.agent;
 
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.domain.Card;
+import ch.fmartin.symphony.trello.process.ProcessEnvironment;
 import ch.fmartin.symphony.trello.workspace.WorkspaceManager;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -49,10 +50,12 @@ public class CodexAppServerClient {
         WorkspaceManager.requireInsideRoot(config.workspace().root(), workspace);
         Process process;
         try {
-            process = new ProcessBuilder("bash", "-lc", config.codex().command())
+            ProcessBuilder processBuilder = new ProcessBuilder(
+                            "bash", "-lc", config.codex().command())
                     .directory(workspace.toFile())
-                    .redirectError(ProcessBuilder.Redirect.PIPE)
-                    .start();
+                    .redirectError(ProcessBuilder.Redirect.PIPE);
+            ProcessEnvironment.removeDefaultSecrets(processBuilder);
+            process = processBuilder.start();
         } catch (IOException e) {
             return AgentRunResult.fail("codex_not_found: " + e.getMessage());
         }

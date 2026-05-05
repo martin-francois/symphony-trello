@@ -23,6 +23,8 @@ manager or changing the one-workflow-per-process contract?
 * Make several workflows easy to start, stop, inspect, and restart independently.
 * Use standard Linux service management instead of a custom supervisor.
 * Keep credentials outside workflow files.
+* Avoid exposing Trello credentials to Codex and hook subprocess environments when those
+  credentials are only needed by Symphony.
 * Keep installation understandable before adding more automation.
 * Avoid pretending the project has a full installer before the deployment shape has been used more.
 
@@ -45,6 +47,8 @@ the existing process model.
 * Good, because each workflow keeps separate logs, restart state, HTTP port, and workspace root.
 * Good, because systemd handles restart-on-failure and boot-time startup.
 * Good, because secrets live in `/etc/symphony-trello/env` instead of workflow files.
+* Good, because default Trello credential variables are removed before Codex and workflow hooks are
+  launched.
 * Bad, because installing users, directories, workflow files, and unit files is still manual.
 * Bad, because non-systemd platforms still need their own deployment guide.
 
@@ -63,6 +67,8 @@ Provide `deploy/systemd/symphony-trello@.service` and a deployment guide that ma
 
 * Good, because systemd template instances match the one-workflow-per-process runtime model.
 * Good, because operators can use normal `systemctl` and `journalctl` commands.
+* Good, because the unit applies basic filesystem and process hardening without changing the runtime
+  contract.
 * Good, because this is easy to review and adjust before automating installation.
 * Neutral, because workflow files still carry per-board configuration such as `server.port`.
 * Bad, because the first setup still has several copy and directory commands.
@@ -96,3 +102,6 @@ Document only direct Java commands for every workflow.
 Future deployment automation work is tracked in
 [GitHub issue #6](https://github.com/martinfrancois/symphony-trello/issues/6) instead of
 user-facing setup documentation.
+
+File-based production secrets for systemd credential support are tracked in
+[GitHub issue #8](https://github.com/martinfrancois/symphony-trello/issues/8).

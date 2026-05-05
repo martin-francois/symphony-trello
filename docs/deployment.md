@@ -86,6 +86,7 @@ Create `/etc/symphony-trello/env`:
 ```bash
 sudo install -m 0600 -o root -g root /dev/null /etc/symphony-trello/env
 sudoedit /etc/symphony-trello/env
+sudo stat -c '%U %G %a %n' /etc/symphony-trello/env
 ```
 
 Use your real Trello credentials:
@@ -94,6 +95,9 @@ Use your real Trello credentials:
 TRELLO_API_KEY=replace-with-your-key
 TRELLO_API_TOKEN=replace-with-your-token
 ```
+
+The `stat` command should print `root root 600 /etc/symphony-trello/env`. systemd reads this file
+before starting the service, so the `symphony-trello` user does not need direct read access to it.
 
 If Java or Codex is not on systemd's normal service path, add a `PATH` line that includes their
 directories:
@@ -104,6 +108,12 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/opt/java/bin:/opt/codex/
 
 Do not put secrets in workflow files. Reference them from workflow config with `$TRELLO_API_KEY` and
 `$TRELLO_API_TOKEN`.
+
+Do not put Trello credentials in shell commands, the systemd unit, or workflow files. Treat backups
+and config-management copies of `/etc/symphony-trello/env` as secrets too.
+
+The production layout uses the standard `TRELLO_API_KEY` and `TRELLO_API_TOKEN` names because
+Symphony removes those variables before launching Codex and workflow hook scripts.
 
 ## Install The systemd Template
 
