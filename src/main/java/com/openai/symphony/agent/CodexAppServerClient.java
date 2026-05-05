@@ -183,6 +183,8 @@ public class CodexAppServerClient {
         private final AtomicInteger ids = new AtomicInteger();
         private final Map<Integer, CompletableFuture<JsonNode>> responses = new ConcurrentHashMap<>();
         private final Map<String, CompletableFuture<JsonNode>> turnCompletions = new ConcurrentHashMap<>();
+        private final Map<String, JsonNode> completedTurns = new ConcurrentHashMap<>();
+        private final Object turnCompletionLock = new Object();
         private final AtomicReference<Throwable> readerFailure = new AtomicReference<>();
         private final CountDownLatch readerStarted = new CountDownLatch(1);
         private BufferedWriter writer;
@@ -227,8 +229,15 @@ public class CodexAppServerClient {
         }
 
         JsonNode awaitTurnCompleted(String turnId, Duration timeout) throws Exception {
-            CompletableFuture<JsonNode> future = new CompletableFuture<>();
-            turnCompletions.put(turnId, future);
+            CompletableFuture<JsonNode> future;
+            synchronized (turnCompletionLock) {
+                JsonNode completed = completedTurns.remove(turnId);
+                if (completed != null) {
+                    return completed;
+                }
+                future = new CompletableFuture<>();
+                turnCompletions.put(turnId, future);
+            }
             return future.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
         }
 
@@ -317,10 +326,15 @@ public class CodexAppServerClient {
             listener.onEvent(
                     event(method, workerIdentity, process.pid(), threadId, turnId, summarize(params), usage, params));
             if (Objects.equals(method, "turn/completed") && turnId != null) {
-                CompletableFuture<JsonNode> future = turnCompletions.remove(turnId);
-                if (future != null) {
-                    future.complete(params);
+                CompletableFuture<JsonNode> future;
+                synchronized (turnCompletionLock) {
+                    future = turnCompletions.remove(turnId);
+                    if (future == null) {
+                        completedTurns.put(turnId, params);
+                        return;
+                    }
                 }
+                future.complete(params);
             }
         }
 
