@@ -115,10 +115,11 @@ Workspace and authorize the API token in the browser.
 2. [Create a Workspace](https://support.atlassian.com/trello/docs/creating-a-new-workspace/) if you
    do not already have one that you want to use with Symphony.
 3. Choose the Workspace intentionally. The Workspace owns the Trello app/admin entry that provides
-   the API key, and the generated board will be created there. It is fine to use a Workspace that
-   also contains non-Symphony boards; Symphony only polls the board configured in `WORKFLOW.md`.
-   Create a separate Workspace when you want cleaner separation of automation credentials,
-   collaborators, or boards.
+   the API key. If you create a new board with Symphony, the board is created in this Workspace. If
+   you import an existing board, the token you generate here must be able to access that board. It is
+   fine to use a Workspace that also contains non-Symphony boards; Symphony only polls the board
+   configured in `WORKFLOW.md`. Create a separate Workspace when you want cleaner separation of
+   automation credentials, collaborators, or boards.
 4. Open Trello's app admin portal: <https://trello.com/power-ups/admin>.
    Trello's developer guide for this page is
    <https://developer.atlassian.com/cloud/trello/guides/power-ups/managing-apps/>.
