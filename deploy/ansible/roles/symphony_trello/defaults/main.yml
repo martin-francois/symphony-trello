@@ -1,6 +1,7 @@
 ---
 symphony_trello_user: symphony-trello
 symphony_trello_group: symphony-trello
+symphony_trello_extra_groups: []
 
 symphony_trello_opt_dir: /opt/symphony-trello
 symphony_trello_app_dir: /opt/symphony-trello/app

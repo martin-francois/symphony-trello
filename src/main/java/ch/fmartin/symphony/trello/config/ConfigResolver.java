@@ -62,6 +62,7 @@ public class ConfigResolver {
                         resolvedBoardId,
                         list(tracker, "active_states", List.of("Todo", "In Progress")),
                         list(tracker, "active_list_ids", List.of()),
+                        string(tracker, "in_progress_state", null),
                         normalizedList(tracker, "blocker_enforced_states", List.of("Todo", "Ready for Codex")),
                         normalizedList(
                                 tracker,
@@ -127,6 +128,15 @@ public class ConfigResolver {
         }
         if (blank(config.codex().command())) {
             throw new ConfigException("missing_codex_command", "codex.command is required");
+        }
+        if (!blank(config.tracker().inProgressState())
+                && config.tracker().activeListIds().isEmpty()
+                && config.tracker().activeStates().stream()
+                        .map(StateNames::normalize)
+                        .noneMatch(StateNames.normalize(config.tracker().inProgressState())::equals)) {
+            throw new ConfigException(
+                    "invalid_in_progress_state",
+                    "tracker.in_progress_state must also be listed in tracker.active_states");
         }
     }
 

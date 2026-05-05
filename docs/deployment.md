@@ -177,6 +177,8 @@ tracker:
   board_id: abc123
   active_states:
     - Ready for Codex
+    - In Progress
+  in_progress_state: In Progress
   terminal_states:
     - Done
 workspace:
@@ -185,6 +187,7 @@ trello_tools:
   enabled: true
   allow_writes: true
   allowed_move_list_names:
+    - In Progress
     - Human Review
     - Blocked
   allow_comments: true

@@ -8,6 +8,7 @@ tracker:
     - Todo
     - In Progress
     - Merging
+  in_progress_state: In Progress
   blocker_enforced_states:
     - Todo
     - Ready for Codex
@@ -64,7 +65,7 @@ acceptance criteria, progress, validation evidence, blockers, and handoff notes.
 Symphony only dispatches cards from configured active columns: `Todo`, `In Progress`, and
 `Merging`.
 
-- `Todo`: queued work; move the card to `In Progress` before active implementation.
+- `Todo`: queued work; Symphony moves the card to `In Progress` before Codex starts.
 - `In Progress`: active work already picked up by Codex; continue the existing execution flow.
 - `Blocked`: blocked work. Symphony does not dispatch it while this column is not configured as
   active.

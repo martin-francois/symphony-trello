@@ -158,10 +158,13 @@
   ansible.builtin.user:
     name: "{{ symphony_trello_user }}"
     group: "{{ symphony_trello_group }}"
+    groups: "{{ symphony_trello_extra_groups }}"
+    append: true
     system: true
     create_home: true
     home: "{{ symphony_trello_state_dir }}"
     shell: /usr/sbin/nologin
+  register: symphony_trello_service_user
 
 - name: Create install and config directories
   ansible.builtin.file:
@@ -398,6 +401,7 @@
   ansible.builtin.set_fact:
     symphony_trello_restart_services: >-
       {{ (symphony_trello_env_file.changed | default(false))
+          or symphony_trello_service_user.changed
           or (symphony_trello_env_file_removed.changed | default(false))
           or symphony_trello_legacy_env_file_removed.changed
           or (symphony_trello_secret_files.results | selectattr('changed') | list | length > 0)

@@ -522,17 +522,29 @@ Use this when changing generated workflows, Trello move tools, or the recommende
 1. Deploy a workflow whose board has `Ready for Codex`, `In Progress`, `Human Review`, and
    `Blocked`.
 2. Ensure `tracker.active_states` includes both `Ready for Codex` and `In Progress`.
-3. Ensure `trello_tools.allowed_move_list_names` includes `In Progress`, `Human Review`, and
+3. Ensure `tracker.in_progress_state` is set to `In Progress`.
+4. Ensure `trello_tools.allowed_move_list_names` includes `In Progress`, `Human Review`, and
    `Blocked`.
-4. Create a fresh card in `Ready for Codex`.
-5. Verify Trello card actions include a move from `Ready for Codex` to `In Progress` after the card is
+5. Create a fresh card in `Ready for Codex`.
+6. Verify Trello card actions include a move from `Ready for Codex` to `In Progress` after the card is
    picked up.
-6. Wait for the normal handoff. The card should then move to `Human Review` or `Blocked`, and
+7. Wait for the normal handoff. The card should then move to `Human Review` or `Blocked`, and
    `/api/v1/state` should drain to zero running and retrying entries.
-7. Deploy a second workflow for the same board shape without an in-progress column configured in the
+8. Deploy a second workflow for the same board shape without an in-progress column configured in the
    workflow.
-8. Create a fresh card in `Ready for Codex` and verify it reaches the final handoff column without any
+9. Create a fresh card in `Ready for Codex` and verify it reaches the final handoff column without any
    Trello action moving it to `In Progress`.
+
+Observed on 2026-05-06 against a real deployed workflow:
+
+- The service dispatched a card from `Ready for Codex`, and `/api/v1/state` showed one running
+  worker.
+- Trello still showed the card in `Ready for Codex` while Codex was already executing the requested
+  command.
+- An operator manually moved the card to `In Progress` so the board matched the running state.
+
+The fix is to set `tracker.in_progress_state` and let Symphony move the card during pre-dispatch
+preparation instead of relying on the agent prompt alone.
 
 ### Regression Scenario: Blocked Work Stays Active
 

@@ -124,6 +124,45 @@ public class TrelloClient implements TrackerClient {
         return fetchCardStatesByIds(config, cardIds, true);
     }
 
+    @Override
+    public Card prepareForDispatch(EffectiveConfig config, Card card) {
+        String inProgressState = config.tracker().inProgressState();
+        if (blank(inProgressState)
+                || StateNames.normalize(inProgressState).equals(StateNames.normalize(card.state()))) {
+            return card;
+        }
+
+        BoardContext context = boardContext(config);
+        Optional<BoardList> target = context.lists().values().stream()
+                .filter(list -> !list.closed())
+                .filter(list -> StateNames.normalize(list.name()).equals(StateNames.normalize(inProgressState)))
+                .findFirst();
+        if (target.isEmpty()) {
+            throw new TrelloException(
+                    "trello_in_progress_list_not_found",
+                    "Configured in-progress column was not found on the Trello board");
+        }
+        if (!shouldMoveBeforeDispatch(config, card, target.get())) {
+            return card;
+        }
+
+        moveCardToList(config, card.id(), target.get().id());
+        CardLookupResult refreshed =
+                fetchCardStatesForPromptByIds(config, List.of(card.id())).get(card.id());
+        if (refreshed instanceof CardLookupResult.Found found) {
+            if (!target.get().id().equals(found.card().listId())) {
+                throw new TrelloException(
+                        "trello_in_progress_move_not_visible",
+                        "Card was not visible in the configured in-progress column after Trello accepted the move");
+            }
+            return found.card();
+        }
+        if (refreshed instanceof CardLookupResult.Failed failed) {
+            throw new TrelloException(failed.code(), failed.message());
+        }
+        throw new TrelloException("trello_card_missing", "Card disappeared after moving to in-progress column");
+    }
+
     private Map<String, CardLookupResult> fetchCardStatesByIds(
             EffectiveConfig config, List<String> cardIds, boolean includeOlderWorkpad) {
         BoardContext context = boardContext(config);
@@ -307,6 +346,20 @@ public class TrelloClient implements TrackerClient {
 
     public Map<String, Object> moveCardToList(EffectiveConfig config, String cardId, String listId) {
         return putMap(config, "cards/" + encodeSegment(cardId) + "/idList", Map.of("value", listId));
+    }
+
+    private static boolean shouldMoveBeforeDispatch(EffectiveConfig config, Card card, BoardList target) {
+        if (card.listId() != null && !config.tracker().activeListIds().isEmpty()) {
+            int currentIndex = config.tracker().activeListIds().indexOf(card.listId());
+            int targetIndex = config.tracker().activeListIds().indexOf(target.id());
+            return currentIndex >= 0 && targetIndex >= 0 && currentIndex < targetIndex;
+        }
+        List<String> active = config.tracker().activeStates().stream()
+                .map(StateNames::normalize)
+                .toList();
+        int currentIndex = active.indexOf(StateNames.normalize(card.state()));
+        int targetIndex = active.indexOf(StateNames.normalize(target.name()));
+        return currentIndex >= 0 && targetIndex >= 0 && currentIndex < targetIndex;
     }
 
     private Optional<Card> normalize(Map<String, Object> payload, BoardContext context, EffectiveConfig config) {

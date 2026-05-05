@@ -22,6 +22,11 @@ symphony_trello_workflows:
 # Less secure: expose the host filesystem broadly to Codex sessions run by the service.
 # symphony_trello_allow_host_filesystem: true
 
+# Optional supplementary OS groups for the service user. For example, add docker only when workflow
+# cards intentionally need Docker daemon access through the host socket.
+# symphony_trello_extra_groups:
+#   - docker
+
 # By default, the playbook copies the Codex CLI auth from the user running Ansible:
 # ~/.codex/auth.json
 # Set this only when your existing Codex auth file is somewhere else.

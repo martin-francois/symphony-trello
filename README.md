@@ -345,7 +345,8 @@ write [`WORKFLOW.md`](#workflow-contract) yourself.
 6. Copy the board short link from the board URL.
    In `https://trello.com/b/abc123/my-board`, the `board_id` value can be `abc123`.
 7. Create [`WORKFLOW.md`](#workflow-contract) and set `tracker.board_id`, `tracker.active_states`,
-   `tracker.terminal_states`, and the handoff column names to match your board.
+   `tracker.in_progress_state`, `tracker.terminal_states`, and the handoff column names to match
+   your board.
 
 Example for an existing board:
 
@@ -359,6 +360,7 @@ tracker:
   active_states:
     - Ready for Codex
     - In Progress
+  in_progress_state: In Progress
   blocker_enforced_states:
     - Ready for Codex
     - In Progress
@@ -417,9 +419,9 @@ Track the acceptance criteria, required validation, current-state signal, and fi
 evidence in the workpad and handoff comment. If required validation cannot be performed, treat the
 work as blocked.
 
-If the card is in "Ready for Codex", immediately call trello_move_current_card with list_name
-"In Progress" before implementation work. If the card is already in "In Progress", continue the
-existing execution flow.
+When `tracker.in_progress_state` is configured, Symphony moves cards from "Ready for Codex" to
+"In Progress" before Codex starts. If the card is already in "In Progress", continue the existing
+execution flow.
 
 If a human moves a reviewed card from "Human Review" back to "Ready for Codex" or "In Progress",
 treat the next run as rework. Reread the card, new Trello comments, existing workpad, and linked PR
@@ -518,6 +520,7 @@ tracker:
     - Ready for Codex
     - In Progress
     - Merging
+  in_progress_state: In Progress
   blocker_enforced_states:
     - Ready for Codex
     - In Progress
@@ -587,9 +590,9 @@ Track the acceptance criteria, required validation, current-state signal, and fi
 evidence in the workpad and handoff comment. If required validation cannot be performed, treat the
 work as blocked.
 
-If the card is in "Ready for Codex", immediately call trello_move_current_card with list_name
-"In Progress" before implementation work. If the card is already in "In Progress", continue the
-existing execution flow.
+When `tracker.in_progress_state` is configured, Symphony moves cards from "Ready for Codex" to
+"In Progress" before Codex starts. If the card is already in "In Progress", continue the existing
+execution flow.
 
 If a human moves a reviewed card from "Human Review" back to "Ready for Codex" or "In Progress",
 treat the next run as rework. Reread the card, new Trello comments, existing workpad, and linked PR
@@ -668,6 +671,7 @@ tracker:
   api_token: $TRELLO_API_TOKEN
   board_id: your-board-id-or-shortlink
   active_states: [Todo, In Progress]
+  in_progress_state: In Progress
   terminal_states: [Done, Archived, ArchivedList, ArchivedBoard, Deleted]
 workspace:
   root: ./workspaces

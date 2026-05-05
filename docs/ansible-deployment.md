@@ -152,6 +152,17 @@ Use that only for a trusted single-user machine. It gives Codex sessions run by 
 host filesystem access than the default deployment. The playbook also tells Codex to use
 `dangerFullAccess` for turns when this is enabled.
 
+If cards should run Docker commands through the host Docker daemon, add the service user to the
+host's Docker group:
+
+```yaml
+symphony_trello_extra_groups:
+  - docker
+```
+
+Use this only when the workflow is trusted to control Docker on that host. Access to the Docker
+socket is effectively administrative access to the machine.
+
 By default, the playbook reuses the Codex CLI auth file from the user running Ansible:
 
 ```text
