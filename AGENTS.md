@@ -138,6 +138,10 @@ matters, and easy for another engineer to understand without asking the original
 - When "list" remains in user-facing text because it is a Trello API/config term, make the
   column-equivalence clear nearby if a reader could otherwise wonder whether it is a different Trello
   concept.
+- Use Trello's UI term "archived" in prose for archived cards, columns/lists, and boards. Use
+  `closed` only when naming Trello REST API fields or parameters, and explain nearby that Trello's
+  API uses `closed` for archived resources. Distinguish archived lists from deleted lists; Trello
+  requires a list to be archived before it can be permanently deleted.
 - For deployment auth, prefer reusing the existing Codex CLI auth file from `codex login`. Do not
   steer users toward configuring raw OpenAI API keys unless they explicitly ask for that mode.
 - For docs with multiple setup paths, read the flow once from each path's perspective and avoid

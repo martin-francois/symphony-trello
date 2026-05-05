@@ -210,14 +210,17 @@ Fields:
 - `list_name` (string or null)
   - Current Trello list name when available.
 - `list_closed` (boolean or null)
-  - Whether the containing Trello list is archived/closed when known.
+  - Whether the containing Trello list is archived when known.
+  - Trello's REST API exposes this archived-list state as `closed`.
 - `board_id` (string or null)
   - Trello board ID for the card.
   - For Trello candidate cards and per-card refresh results, this MUST be populated from `idBoard`.
 - `board_closed` (boolean or null)
-  - Whether the containing Trello board is archived/closed when known.
+  - Whether the containing Trello board is archived when known.
+  - Trello's REST API exposes this archived-board state as `closed`.
 - `closed` (boolean)
-  - Trello card archived/closed flag.
+  - Trello card archived flag.
+  - Trello's REST API field name is `closed`.
 - `id_short` (integer or null)
   - Trello `idShort`, when available.
 - `short_link` (string or null)
@@ -981,9 +984,9 @@ A card is dispatch-eligible only if all are true:
     `terminal_states`.
   - Non-list-backed special states such as `Archived`, `ArchivedList`, `ArchivedBoard`, and `Deleted`
     MUST NOT be in `terminal_states`.
-- It is not archived/closed.
-- It is not in an archived/closed list.
-- It is not in an archived/closed board.
+- It is not archived.
+- It is not in an archived list.
+- It is not in an archived board.
 - It is not deleted or missing.
 - It is not already in `running`.
 - It is not already in `claimed`.
@@ -1589,7 +1592,7 @@ Recommended Trello API access pattern:
    `state_source`, and `board_id`.
 6. Filter candidate cards using `tracker.active_list_ids` as authoritative for list-backed open
    cards when configured, otherwise using `tracker.active_states`.
-7. Fetch archived/closed board cards only when needed for terminal cleanup or state reconciliation.
+7. Fetch archived board cards only when needed for terminal cleanup or state reconciliation.
 8. For individual card refresh, fetch the card with `idBoard` and its list, or maintain a fresh enough
    list mapping, to normalize the current state accurately and reject cards that moved to another board.
 
@@ -1597,7 +1600,8 @@ Recommended `fetch_terminal_cards()` strategy:
 
 1. Fetch the configured board metadata.
 2. Fetch all board lists with `filter=all`.
-3. Fetch board cards using a filter that includes closed/archived cards.
+3. Fetch board cards using a filter that includes archived cards. Trello's REST API calls archived
+   cards `closed`.
 4. For terminal list IDs and archived lists, fetch list cards when needed to avoid missing open cards
    in terminal or archived lists.
 5. Normalize all results through the same card normalization pipeline and de-duplicate by Trello card
@@ -2674,8 +2678,8 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - Trello API fetch maps `idList` to Trello list name
 - Trello API fetch handles archived card, archived list, and archived board states separately
 - `fetch_terminal_cards()` includes configured terminal states and terminal list IDs
-- `fetch_terminal_cards()` uses a card filter that includes closed/archived cards when archived cards
-  are terminal
+- `fetch_terminal_cards()` uses a card filter that includes archived cards when archived cards are
+  terminal
 - `fetch_terminal_cards()` fetches list cards when needed for terminal or archived list coverage
 - Candidate card fetch accounts for endpoint limits, batching, and rate limits when present
 - If proactive local Trello rate limiting is implemented, it tracks API-key and API-token buckets
