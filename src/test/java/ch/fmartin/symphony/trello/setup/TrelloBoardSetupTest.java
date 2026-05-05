@@ -131,6 +131,12 @@ class TrelloBoardSetupTest {
                 .contains("allowed_move_list_names:")
                 .contains("- \"Review\"")
                 .contains("- \"Blocked\"")
+                .contains("## Description")
+                .contains("{{ card.description }}")
+                .contains("If the Trello card names a specific local path or project")
+                .contains("Filesystem access blocker details")
+                .contains("inaccessible path")
+                .contains("allowed project roots")
                 .contains("max_concurrent_agents: 1");
         EffectiveConfig config = resolve(workflow);
         assertThat(config.tracker().boardId()).isEqualTo("abc123");
@@ -336,7 +342,11 @@ class TrelloBoardSetupTest {
                 .contains("blocked or unsafe to hand off")
                 .contains("list_name \"Review\" so the card leaves the active column")
                 .contains("Do not leave")
-                .contains("blocked work in an active column");
+                .contains("blocked work in an active column")
+                .contains("Filesystem access blocker details")
+                .contains("accessible files are available")
+                .contains("per-card workspace")
+                .contains("shown by `pwd`");
         EffectiveConfig config = resolve(workflow);
         assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("review");
     }

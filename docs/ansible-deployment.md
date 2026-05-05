@@ -112,6 +112,46 @@ symphony_trello_service_path: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:
 Use paths the `symphony-trello` service user can read. The systemd unit protects home directories, so
 do not point this at tools installed below `/root` or a personal home directory.
 
+By default, the deployed service lets Codex read and write only Symphony-managed paths such as
+`/var/lib/symphony-trello`. This is safer for production because Trello cards cannot make Codex edit
+unrelated host files.
+
+If cards should work in an existing project checkout, explicitly allow that project root:
+
+```yaml
+symphony_trello_allowed_project_roots:
+  - /srv/projects/example
+```
+
+The playbook installs a systemd drop-in that hides undeclared home-directory contents behind
+read-only empty filesystems and makes the declared roots visible and writable for the service. It
+also updates the service environment so Codex's own sandbox treats those roots as additional
+writable roots. Keep the entries concrete project roots without whitespace, double quotes, or
+colons. Do not use `/` here.
+
+If you expose a parent directory that contains several project checkouts and Codex still reports a
+sandbox error for that parent, keep the systemd roots narrow and relax only Codex's inner sandbox:
+
+```yaml
+symphony_trello_allowed_project_roots:
+  - /srv/projects
+symphony_trello_codex_danger_full_access: true
+```
+
+This is less strict than adding exact checkout roots. The systemd namespace still limits writable
+host paths to the declared roots, but Codex no longer applies its own workspace-write root list inside
+that namespace.
+
+A broader mode is available but less secure:
+
+```yaml
+symphony_trello_allow_host_filesystem: true
+```
+
+Use that only for a trusted single-user machine. It gives Codex sessions run by the service much more
+host filesystem access than the default deployment. The playbook also tells Codex to use
+`dangerFullAccess` for turns when this is enabled.
+
 By default, the playbook reuses the Codex CLI auth file from the user running Ansible:
 
 ```text

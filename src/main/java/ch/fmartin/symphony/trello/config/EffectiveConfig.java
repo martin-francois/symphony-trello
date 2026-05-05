@@ -82,6 +82,8 @@ public record EffectiveConfig(
             Object approvalPolicy,
             Object threadSandbox,
             Object turnSandboxPolicy,
+            List<Path> additionalWritableRoots,
+            boolean forceDangerFullAccess,
             Duration turnTimeout,
             Duration readTimeout,
             Duration stallTimeout) {}

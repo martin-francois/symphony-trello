@@ -2,15 +2,19 @@ package ch.fmartin.symphony.trello.config;
 
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import jakarta.enterprise.context.ApplicationScoped;
+import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalInt;
+import java.util.regex.Pattern;
 
 @ApplicationScoped
 public class ConfigResolver {
@@ -88,6 +92,10 @@ public class ConfigResolver {
                         codex.get("approval_policy"),
                         codex.get("thread_sandbox"),
                         codex.get("turn_sandbox_policy"),
+                        additionalWritableRoots(workflow.path().getParent(), codex),
+                        LocalEnvironment.get("SYMPHONY_CODEX_DANGER_FULL_ACCESS")
+                                .map(Boolean::parseBoolean)
+                                .orElse(false),
                         millis(codex, "turn_timeout_ms", 3_600_000),
                         millis(codex, "read_timeout_ms", 5_000),
                         millis(codex, "stall_timeout_ms", 300_000)),
@@ -231,6 +239,20 @@ public class ConfigResolver {
 
     private static List<String> normalizedList(Map<String, Object> root, String key, List<String> defaultValue) {
         return list(root, key, defaultValue).stream().map(StateNames::normalize).toList();
+    }
+
+    private static List<Path> additionalWritableRoots(Path workflowDirectory, Map<String, Object> codex) {
+        List<Path> roots = new ArrayList<>();
+        list(codex, "additional_writable_roots", List.of()).stream()
+                .map(value -> path(workflowDirectory, value))
+                .forEach(roots::add);
+        LocalEnvironment.get("SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS").stream()
+                .flatMap(value -> Arrays.stream(value.split(Pattern.quote(File.pathSeparator))))
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .map(value -> path(workflowDirectory, value))
+                .forEach(roots::add);
+        return roots.stream().distinct().toList();
     }
 
     private static Map<String, Integer> priorityLabels(Map<String, Object> configured) {

@@ -9,6 +9,19 @@ symphony_trello_workflows:
 # Set it when they are installed in custom directories.
 # symphony_trello_service_path: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/opt/java/bin:/opt/codex/bin
 
+# Leave this empty for the secure default. Add concrete project roots only when deployed cards should
+# let Codex read and write existing checkouts outside /var/lib/symphony-trello. The playbook updates
+# both systemd path access and Codex sandbox writable roots.
+# symphony_trello_allowed_project_roots:
+#   - /srv/projects/example
+
+# Less strict Codex sandbox inside the still-restricted systemd namespace. Use this when you expose a
+# parent directory of several checkouts and Codex's workspaceWrite sandbox cannot use it cleanly.
+# symphony_trello_codex_danger_full_access: true
+
+# Less secure: expose the host filesystem broadly to Codex sessions run by the service.
+# symphony_trello_allow_host_filesystem: true
+
 # By default, the playbook copies the Codex CLI auth from the user running Ansible:
 # ~/.codex/auth.json
 # Set this only when your existing Codex auth file is somewhere else.

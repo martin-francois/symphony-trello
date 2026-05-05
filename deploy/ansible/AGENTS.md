@@ -14,6 +14,9 @@ These instructions apply to files under `deploy/ansible`. Follow the repository 
 - Do not hide required manual cleanup in documentation. Workspace data under
   `/var/lib/symphony-trello` may contain useful run output and should not be deleted automatically
   when a workflow is removed.
+- Keep project-checkout access opt-in. Use `symphony_trello_allowed_project_roots` for specific
+  roots, and reserve `symphony_trello_allow_host_filesystem` for explicitly accepted broad host
+  access.
 
 ## Local Verification Commands
 

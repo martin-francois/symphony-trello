@@ -198,6 +198,98 @@ directories makes cleanup and debugging easier. Include a non-active blocked han
 `Blocked` when the board has one, so blocked cards do not stay eligible for another run.
 The `allowed_move_list_names` key uses Trello's API term for board columns.
 
+## Allow Project Checkout Access
+
+By default, the systemd unit lets Codex read and write only Symphony-managed paths such as
+`/var/lib/symphony-trello`. This is safer for production because a Trello card cannot make Codex edit
+unrelated host files.
+
+If cards should work in an existing project checkout, explicitly allow that project root. Create a
+drop-in:
+
+```bash
+sudo install -d -o root -g root -m 0755 /etc/systemd/system/symphony-trello@.service.d
+sudoedit /etc/systemd/system/symphony-trello@.service.d/10-project-roots.conf
+```
+
+Use a concrete project root:
+
+```ini
+[Service]
+ProtectHome=false
+TemporaryFileSystem=
+TemporaryFileSystem=/home:ro /root:ro /run/user:ro
+BindPaths=/srv/projects/example
+ReadWritePaths=
+ReadWritePaths=/var/lib/symphony-trello /srv/projects/example
+```
+
+Also add the same root to `/etc/symphony-trello/service.env` so Codex's own sandbox can write there:
+
+```dotenv
+SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS=/srv/projects/example
+```
+
+Then reload and restart the affected workflows:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart symphony-trello@project-a
+```
+
+The read-only temporary filesystems hide undeclared home-directory contents while allowing
+`BindPaths` to make the declared root visible. The `ReadWritePaths` reset keeps Symphony's state
+directory writable and adds the project root as another writable location.
+
+To allow more than one checkout, repeat `BindPaths=` and add every root to `ReadWritePaths=`:
+
+```ini
+[Service]
+ProtectHome=false
+TemporaryFileSystem=
+TemporaryFileSystem=/home:ro /root:ro /run/user:ro
+BindPaths=/srv/projects/example-a
+BindPaths=/srv/projects/example-b
+ReadWritePaths=
+ReadWritePaths=/var/lib/symphony-trello /srv/projects/example-a /srv/projects/example-b
+```
+
+Use `:` between roots in `/etc/symphony-trello/service.env`:
+
+```dotenv
+SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS=/srv/projects/example-a:/srv/projects/example-b
+```
+
+If you expose a parent directory that contains several project checkouts and Codex reports a sandbox
+error for that parent, keep the systemd drop-in narrow and relax only Codex's inner sandbox:
+
+```dotenv
+SYMPHONY_CODEX_DANGER_FULL_ACCESS=true
+```
+
+This is less strict than setting exact checkout roots in
+`SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS`. The systemd namespace still limits writable host paths to
+the roots in `ReadWritePaths=`, but Codex no longer applies its own workspace-write root list inside
+that namespace.
+
+A broader override is possible but less secure:
+
+```ini
+[Service]
+ProtectHome=false
+ReadWritePaths=
+ReadWritePaths=/
+```
+
+Set this in `/etc/symphony-trello/service.env` with the broad systemd override:
+
+```dotenv
+SYMPHONY_CODEX_DANGER_FULL_ACCESS=true
+```
+
+Use the broad override only for a trusted single-user machine. It gives Codex sessions run by the
+service much more host filesystem access than the default deployment.
+
 ## Start Workflows
 
 Start one workflow:
