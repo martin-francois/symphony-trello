@@ -46,6 +46,10 @@ matters, and easy for another engineer to understand without asking the original
    claiming the work is done.
 12. When the user asks for a concrete repo change, commit and push the completed change unless they
    explicitly ask not to.
+13. When a change affects runtime behavior and the user is likely to verify it manually afterward,
+   deploy it with the Ansible workflow before finishing when the deployment inputs are available.
+   If unsure, ask at the end whether to deploy with Ansible next. Do not deploy or suggest
+   deployment for docs-only changes.
 
 ## Design Preferences
 
