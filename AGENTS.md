@@ -42,6 +42,8 @@ matters, and easy for another engineer to understand without asking the original
   for its own sake.
 - Keep the project open-source-ready even while private: clear README, usable CONTRIBUTING, useful
   ADRs, no committed secrets, and reviewable history.
+- Write user-facing docs so they can be read from top to bottom without confusion. Do not refer to a
+  concept, path, command, or setup mode before introducing it.
 
 ## Testing Preferences
 
