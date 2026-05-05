@@ -24,16 +24,18 @@ matters, and easy for another engineer to understand without asking the original
    explicitly asks for a durable preference to persist, update this file in the same change when
    reasonable so future sessions do not repeat the issue. Do not add new rules only because the agent
    independently chose a reasonable improvement.
-6. When fixing a documentation pattern, search the relevant file or docs set for similar instances
+6. When a new user preference changes how this file itself should be maintained, review existing
+   agent-added rules for conflicts with that new preference in the same turn.
+7. When fixing a documentation pattern, search the relevant file or docs set for similar instances
    before committing instead of correcting only the one sentence the user pointed out.
-7. Run the relevant verification before finishing. For normal code changes, use:
+8. Run the relevant verification before finishing. For normal code changes, use:
 
    ```bash
    JAVA_HOME=/tmp/jdk25 ./mvnw -q spotless:check test package
    ```
 
    Use `spotless:apply` before that when formatting changed.
-8. Commit with Conventional Commits when asked to commit, and keep the working tree clean before
+9. Commit with Conventional Commits when asked to commit, and keep the working tree clean before
    claiming the work is done.
 
 ## Design Preferences
