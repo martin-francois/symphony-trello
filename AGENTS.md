@@ -92,9 +92,12 @@ matters, and easy for another engineer to understand without asking the original
 - Write README prose in simple, direct language. Prefer short sentences and plain words over
   polished or elaborate wording.
 - Avoid redundant clarifications that create false significance. If a sentence already states the
-  rule clearly, do not add a follow-up such as "not only X", "meaning...", or "in other words..."
+  point clearly, do not add a follow-up such as "not only X", "meaning...", or "in other words..."
   unless it removes a real ambiguity, adds an exception, or changes the action the reader should
-  take.
+  take. When revising text based on feedback, preserve the intended scope. Do not carry over an old
+  narrow example or introduce a new limiting qualifier unless that limit is intentional. If the
+  intended scope is unclear, ask a clarifying question and offer likely scope options before writing
+  the final text.
 - Do not document options or config fields by only restating their names. Explain what the value is
   used for, when the reader should change it, and how to choose a sensible value.
 - For CLI commands, follow the principle of least surprise: avoid silent no-ops, print actionable
