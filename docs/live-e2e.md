@@ -457,6 +457,27 @@ If new comments mention `bwrap: Can't read /proc/sys/kernel/overflowuid`, the sy
 `bwrap: loopback: Failed to create NETLINK_ROUTE socket`, the unit is blocking the address family
 Codex's sandbox needs; `RestrictAddressFamilies` must include `AF_NETLINK`.
 
+### Regression Scenario: Deployed Project Root Access
+
+Use this when changing systemd hardening or Ansible deployment access.
+
+1. Deploy with no extra project roots.
+2. Create a Trello card that asks Codex to inspect a disposable host path outside
+   `/var/lib/symphony-trello`.
+3. Verify the card moves to the blocked handoff column and the new Trello comment says which path was
+   inaccessible, why the deployed service could not access it, that files are available in the
+   per-card workspace shown by `pwd`, and that deployment access can be relaxed with allowed project
+   roots.
+4. Deploy again with that disposable path in `symphony_trello_allowed_project_roots`.
+5. Create a fresh card that asks Codex to read and write a harmless marker file in the allowed path.
+6. Verify the card moves to the review handoff column, the marker file changed as requested, and
+   `/api/v1/state` drains to zero running and retrying entries.
+7. If the allowed path is a parent directory of several checkouts and Codex reports a sandbox error
+   for the parent, rerun with `symphony_trello_codex_danger_full_access: true` while keeping
+   `symphony_trello_allowed_project_roots` narrow.
+8. Deploy again with a different allowed root and create a card for the previous path. It should
+   block again, proving the allowlist did not become broad host access.
+
 ### Regression Scenario: Blocked Work Stays Active
 
 Observed on 2026-05-05 against a real Trello board:

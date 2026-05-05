@@ -38,6 +38,13 @@ public final class TrelloBoardSetup {
 
     private static final List<String> SYSTEM_TERMINAL_STATES =
             List.of("Archived", "ArchivedList", "ArchivedBoard", "Deleted");
+    private static final String FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION =
+            """
+            Filesystem access blocker details must include the inaccessible path, why it is inaccessible,
+            that deployed Symphony exposes only managed workspaces and explicitly allowed project roots by
+            default, that accessible files are available in the current per-card workspace shown by `pwd`,
+            and that an operator can relax access with the systemd or Ansible allowed-project-roots
+            deployment setting.""";
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
     private static final TypeReference<List<Map<String, Object>>> LIST_MAP_TYPE = new TypeReference<>() {};
 
@@ -343,8 +350,15 @@ public final class TrelloBoardSetup {
 
                 You are working on {{ card.identifier }}: {{ card.title }}.
 
+                ## Description
+
+                {{ card.description }}
+
                 Read the Trello description carefully, inspect the repository, make the smallest maintainable change,
                 run relevant verification, and leave the workspace in a reviewable state.
+                Use the current workspace by default. If the Trello card names a specific local path or project
+                checkout, inspect that path instead. If that path is inaccessible, treat it as a blocker and follow
+                the filesystem access blocker instructions below.
 
                 %s
 
@@ -389,15 +403,17 @@ public final class TrelloBoardSetup {
         if (blank(reviewState) && blank(blockedDestination)) {
             return """
                     When the work is ready for human review, leave the workspace in a reviewable state and summarize the status in the Codex response. Trello handoff tools are disabled in this starter workflow until you configure trello_tools.allowed_move_list_names.
-                    If the work is blocked, summarize the blocker in the Codex response; an operator must move the card out of the active column manually. Leaving blocked work active can make Symphony run it again."""
+                    If the work is blocked, summarize the blocker in the Codex response; an operator must move the card out of the active column manually. Leaving blocked work active can make Symphony run it again.
+                    %s"""
+                    .formatted(FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION)
                     .stripTrailing();
         }
         if (blank(reviewState)) {
             return """
                     When the work is ready for human review, leave the workspace in a reviewable state and summarize the status in the Codex response.
                     If the work is blocked or unsafe to hand off, call trello_add_comment with the blocker, then call
-                    trello_move_current_card with list_name "%s"."""
-                    .formatted(blockedDestination);
+                    trello_move_current_card with list_name "%s". %s"""
+                    .formatted(blockedDestination, FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION);
         }
         if (blank(blockedState)) {
             return """
@@ -405,15 +421,15 @@ public final class TrelloBoardSetup {
                     verification notes, then call trello_move_current_card with list_name "%s". If the work is
                     blocked or unsafe to hand off, add a Trello comment explaining the blocker, then call
                     trello_move_current_card with list_name "%s" so the card leaves the active column. Do not leave
-                    blocked work in an active column; Symphony may run it again."""
-                    .formatted(reviewState, blockedDestination);
+                    blocked work in an active column; Symphony may run it again. %s"""
+                    .formatted(reviewState, blockedDestination, FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION);
         }
         return """
                 When the work is ready for human review, call trello_add_comment with a concise summary and
                 verification notes, then call trello_move_current_card with list_name "%s". If the work is
                 blocked or unsafe to hand off, add a Trello comment explaining the blocker, then call
-                trello_move_current_card with list_name "%s"."""
-                .formatted(reviewState, blockedDestination);
+                trello_move_current_card with list_name "%s". %s"""
+                .formatted(reviewState, blockedDestination, FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION);
     }
 
     private static List<String> allowedMoveStates(String reviewState, String blockedState) {

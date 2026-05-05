@@ -7,9 +7,26 @@
       - symphony_trello_trello_api_token is defined
       - symphony_trello_trello_api_token | length > 0
       - symphony_trello_workflows is defined
+      - symphony_trello_allowed_project_roots is iterable
+      - symphony_trello_allowed_project_roots is not string
     fail_msg: >
       Define symphony_trello_trello_api_key and symphony_trello_trello_api_token in an Ansible Vault
       file, and define symphony_trello_workflows in group_vars.
+
+- name: Validate allowed project roots
+  ansible.builtin.assert:
+    that:
+      - item is match('^/')
+      - item != '/'
+      - item is not search('[\\s":]')
+    fail_msg: >
+      symphony_trello_allowed_project_roots entries must be absolute paths below a concrete project
+      directory and must not contain whitespace, double quotes, or colons. Use
+      symphony_trello_allow_host_filesystem only when you intentionally accept broad host filesystem
+      access.
+  loop: "{{ symphony_trello_allowed_project_roots }}"
+  loop_control:
+    label: configured project root
 
 - name: Calculate local build input fingerprint
   ansible.builtin.command:
@@ -234,22 +251,38 @@
   no_log: true
   register: symphony_trello_secret_files
 
-- name: Deploy service environment file for custom PATH
+- name: Deploy service environment file
   ansible.builtin.copy:
     dest: "{{ symphony_trello_config_dir }}/service.env"
     owner: root
     group: root
     mode: "0644"
     content: |
+      {% if symphony_trello_service_path is defined %}
       PATH="{{ symphony_trello_service_path | replace('\\', '\\\\') | replace('"', '\\"') }}"
-  when: symphony_trello_service_path is defined
+      {% endif %}
+      {% if symphony_trello_allowed_project_roots | length > 0 %}
+      SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS="{{ symphony_trello_allowed_project_roots | join(':') }}"
+      {% endif %}
+      {% if symphony_trello_allow_host_filesystem or symphony_trello_codex_danger_full_access %}
+      SYMPHONY_CODEX_DANGER_FULL_ACCESS=true
+      {% endif %}
+  when: >
+    symphony_trello_service_path is defined
+    or (symphony_trello_allowed_project_roots | length > 0)
+    or symphony_trello_codex_danger_full_access
+    or symphony_trello_allow_host_filesystem
   register: symphony_trello_env_file
 
-- name: Remove service environment file when no custom PATH is configured
+- name: Remove service environment file when no service environment is configured
   ansible.builtin.file:
     path: "{{ symphony_trello_config_dir }}/service.env"
     state: absent
-  when: symphony_trello_service_path is not defined
+  when: >
+    symphony_trello_service_path is not defined
+    and (symphony_trello_allowed_project_roots | length == 0)
+    and not symphony_trello_codex_danger_full_access
+    and not symphony_trello_allow_host_filesystem
   register: symphony_trello_env_file_removed
 
 - name: Remove legacy environment file that could contain old secrets
@@ -266,6 +299,34 @@
     group: root
     mode: "0644"
   register: symphony_trello_unit_file
+  notify: Reload systemd
+
+- name: Create systemd drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/symphony-trello@.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: symphony_trello_allow_host_filesystem or (symphony_trello_allowed_project_roots | length > 0)
+
+- name: Deploy project access systemd drop-in
+  ansible.builtin.template:
+    src: project-roots.conf.j2
+    dest: /etc/systemd/system/symphony-trello@.service.d/10-project-roots.conf
+    owner: root
+    group: root
+    mode: "0644"
+  when: symphony_trello_allow_host_filesystem or (symphony_trello_allowed_project_roots | length > 0)
+  register: symphony_trello_project_roots_dropin
+  notify: Reload systemd
+
+- name: Remove project access systemd drop-in
+  ansible.builtin.file:
+    path: /etc/systemd/system/symphony-trello@.service.d/10-project-roots.conf
+    state: absent
+  when: not symphony_trello_allow_host_filesystem and (symphony_trello_allowed_project_roots | length == 0)
+  register: symphony_trello_project_roots_dropin_removed
   notify: Reload systemd
 
 - name: Apply pending systemd reload before service changes
@@ -342,6 +403,8 @@
           or (symphony_trello_secret_files.results | selectattr('changed') | list | length > 0)
           or (symphony_trello_codex_auth_file.changed | default(false))
           or symphony_trello_unit_file.changed
+          or (symphony_trello_project_roots_dropin.changed | default(false))
+          or (symphony_trello_project_roots_dropin_removed.changed | default(false))
           or symphony_trello_app_sync.changed
           or (symphony_trello_workflow_copy.results | selectattr('changed') | list | length > 0) }}
 

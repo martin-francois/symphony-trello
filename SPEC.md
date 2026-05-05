@@ -597,6 +597,11 @@ these fields locally if they want stricter startup checks.
   - Default: implementation-defined.
 - `turn_sandbox_policy` (Codex `SandboxPolicy` value)
   - Default: implementation-defined.
+- `additional_writable_roots` (list of path strings, OPTIONAL Java implementation extension)
+  - Additional roots to merge into a Codex `workspaceWrite` turn sandbox policy.
+  - Relative paths resolve relative to the workflow file.
+  - The Java implementation also supports the `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS`
+    environment value for deployment-managed roots.
 - `turn_timeout_ms` (integer)
   - Default: `3600000` (1 hour)
 - `read_timeout_ms` (integer)
@@ -2155,6 +2160,9 @@ RECOMMENDED additional hardening for deployments:
 - Run under a dedicated OS user.
 - Restrict workspace root permissions.
 - Mount workspace root on a dedicated volume if possible.
+- Keep deployed access to existing project checkouts opt-in. If a deployment supports access to
+  host paths outside the managed workspace root, operators SHOULD configure explicit allowed project
+  roots rather than exposing broad filesystem access by default.
 
 ### 15.3 Secret Handling
 

@@ -28,3 +28,6 @@ symphony_trello_maven_arguments:
 symphony_trello_unit_src: "{{ playbook_dir }}/../systemd/symphony-trello@.service"
 symphony_trello_workflows: []
 symphony_trello_remove_unmanaged_workflows: true
+symphony_trello_allowed_project_roots: []
+symphony_trello_codex_danger_full_access: false
+symphony_trello_allow_host_filesystem: false

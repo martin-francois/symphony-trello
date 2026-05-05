@@ -334,10 +334,22 @@ codex:
 
 Work on {{ card.identifier }}: {{ card.title }}.
 
+## Description
+
+{{ card.description }}
+
+Use the current workspace by default. If the Trello card names a specific local path or project
+checkout, inspect that path instead. If that path is inaccessible, treat it as a blocker and follow
+the filesystem access blocker instructions below.
+
 When the work is ready for human review, call trello_add_comment with a concise summary and
 verification notes, then call trello_move_current_card with list_name "Review". If the work is
 blocked or unsafe to hand off, add a Trello comment explaining the blocker, then call
-trello_move_current_card with list_name "Blocked".
+trello_move_current_card with list_name "Blocked". If the blocker is a local filesystem access
+problem, the Trello comment must include the inaccessible path, why it is inaccessible, that deployed
+Symphony exposes only managed workspaces and explicitly allowed project roots by default, that
+accessible files are available in the current per-card workspace shown by `pwd`, and that an operator
+can relax access with the systemd or Ansible allowed-project-roots deployment setting.
 
 Card URL: {{ card.url }}
 ```
@@ -437,13 +449,24 @@ codex:
 
 You are working on {{ card.identifier }}: {{ card.title }}.
 
+## Description
+
+{{ card.description }}
+
 Read the Trello description carefully, inspect the repository, make the smallest maintainable change,
 run relevant verification, and leave the workspace in a reviewable state.
+Use the current workspace by default. If the Trello card names a specific local path or project
+checkout, inspect that path instead. If that path is inaccessible, treat it as a blocker and follow
+the filesystem access blocker instructions below.
 
 When the work is ready for human review, call trello_add_comment with a concise summary and
 verification notes, then call trello_move_current_card with list_name "Review". If the work is
 blocked or unsafe to hand off, add a Trello comment explaining the blocker, then call
-trello_move_current_card with list_name "Blocked".
+trello_move_current_card with list_name "Blocked". If the blocker is a local filesystem access
+problem, the Trello comment must include the inaccessible path, why it is inaccessible, that deployed
+Symphony exposes only managed workspaces and explicitly allowed project roots by default, that
+accessible files are available in the current per-card workspace shown by `pwd`, and that an operator
+can relax access with the systemd or Ansible allowed-project-roots deployment setting.
 
 Card URL: {{ card.url }}
 ```
@@ -560,6 +583,10 @@ Important environment variables:
 - `SYMPHONY_HTTP_PORT`: Quarkus HTTP port, default `8080`.
 - `SYMPHONY_AUTOSTART`: set `false` in tests or when only using injected services.
 - `TRELLO_API_KEY` and `TRELLO_API_TOKEN`: default Trello credential variable names.
+- `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS`: path-separated roots that are added to Codex's
+  `workspaceWrite` sandbox policy.
+- `SYMPHONY_CODEX_DANGER_FULL_ACCESS`: set `true` only with an intentionally broad deployment
+  sandbox.
 
 For local runs, the same names can be placed in ignored `.env`; real environment variables take
 precedence.
@@ -578,8 +605,10 @@ deployments should use a dedicated OS user, a dedicated workspace volume, narrow
 credentials, and Codex approval/sandbox settings appropriate to the board's trust level.
 
 Approval and sandbox values are passed through from [`WORKFLOW.md`](#workflow-contract) to the
-installed Codex app-server schema. User-input and unsupported dynamic tool requests are answered
-without waiting indefinitely.
+installed Codex app-server schema. When additional writable roots are configured, this implementation
+adds them to a `workspaceWrite` turn sandbox policy unless the workflow already uses
+`dangerFullAccess`. User-input and unsupported dynamic tool requests are answered without waiting
+indefinitely.
 
 ## Production Deployment
 
