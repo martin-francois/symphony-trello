@@ -11,6 +11,21 @@ well when an existing Trello board already represents engineering work. Symphony
 narrow: it schedules, isolates, observes, and retries work. Card handoff behavior belongs in
 `WORKFLOW.md` and in the tools available to Codex.
 
+## Table of Contents
+
+- [Current Capabilities](#current-capabilities)
+- [Quick Start](#quick-start)
+- [Trello Setup](#trello-setup)
+  - [One-Time Browser Setup: Workspace, API Key, Token](#one-time-browser-setup-workspace-api-key-token)
+  - [Fast Path: Create The Recommended Board](#fast-path-create-the-recommended-board)
+  - [Fast Path: Import An Existing Board](#fast-path-import-an-existing-board)
+  - [Option A: Reuse An Existing Board](#option-a-reuse-an-existing-board)
+  - [Option B: Create A New Beginner-Friendly Board](#option-b-create-a-new-beginner-friendly-board)
+- [Workflow Contract](#workflow-contract)
+- [Operations](#operations)
+- [Safety Posture](#safety-posture)
+- [Build and Test](#build-and-test)
+
 ## Current Capabilities
 
 - Trello REST polling for active cards, terminal cards, and per-card reconciliation.
@@ -286,7 +301,7 @@ trello_tools:
 codex:
   command: codex app-server
 ---
-# Trello Card
+\# Trello Card
 
 Work on {{ card.identifier }}: {{ card.title }}.
 
@@ -380,7 +395,7 @@ codex:
   read_timeout_ms: 5000
   stall_timeout_ms: 300000
 ---
-# Trello Card
+\# Trello Card
 
 You are working on {{ card.identifier }}: {{ card.title }}.
 
@@ -418,7 +433,7 @@ workspace:
 codex:
   command: codex app-server
 ---
-# Task
+\# Task
 
 Work on Trello card {{ card.identifier }}: {{ card.title }}.
 ```
