@@ -112,18 +112,13 @@ Workspace and authorize the API token in the browser.
    - `Email` / `Support Email`: an email you control
    - `Author`: your name or your team name
    - `iframe Connector URL`: leave this blank if Trello allows it. Symphony only needs REST API
-     credentials and does not need a board-enabled Power-Up UI. If Trello changes the form, follow
-     the field help in Trello and Atlassian's
-     [Managing Apps](https://developer.atlassian.com/cloud/trello/guides/power-ups/managing-apps/)
-     guide.
+     credentials and does not need a board-enabled Power-Up UI.
 
 7. Create the app/admin entry.
 8. Open its `API Key` tab and choose `Generate a new API Key`.
 9. Copy the API key somewhere temporary. The API key identifies the app, but the token is the
     sensitive credential.
-10. On the same API key page, click the `Token` link next to the key. Use Atlassian's
-    [REST API introduction](https://developer.atlassian.com/cloud/trello/guides/rest-api/api-introduction/)
-    if the token page has changed.
+10. On the same API key page, click the `Token` link next to the key.
 11. Review the authorization screen. For the generated handoff workflow, the token needs write
     access because Codex can add comments and move the current card to `Review`.
 12. Click `Allow`.
