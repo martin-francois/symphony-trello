@@ -1,0 +1,6 @@
+---
+exclude_paths:
+  - deploy/ansible/.vault-password
+  - deploy/ansible/group_vars/symphony_trello/vars.yml
+  - deploy/ansible/group_vars/symphony_trello/vault.yml
+  - deploy/ansible/inventory.yml

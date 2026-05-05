@@ -137,11 +137,10 @@
     group: root
     mode: "0644"
   register: symphony_trello_unit_file
+  notify: Reload systemd
 
-- name: Reload systemd when unit changed
-  ansible.builtin.systemd_service:
-    daemon_reload: true
-  when: symphony_trello_unit_file.changed
+- name: Apply pending systemd reload before service changes
+  ansible.builtin.meta: flush_handlers
 
 - name: Sync packaged app
   ansible.posix.synchronize:

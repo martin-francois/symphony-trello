@@ -13,6 +13,19 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - name: Markdown lint
         uses: DavidAnson/markdownlint-cli2-action@6b51ade7a9e4a75a7ad929842dd298a3804ebe8b # v23
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: deploy/ansible/requirements-lint.txt
+      - name: Install Ansible lint tooling
+        run: python -m pip install --disable-pip-version-check -r deploy/ansible/requirements-lint.txt
+      - name: Install Ansible collections
+        run: ansible-galaxy collection install -r deploy/ansible/requirements.yml
+      - name: Ansible syntax check
+        run: ansible-playbook -i deploy/ansible/inventory.example.yml deploy/ansible/site.yml --syntax-check
+      - name: Ansible lint
+        run: ansible-lint deploy/ansible
 
   renovate:
     runs-on: ubuntu-latest
