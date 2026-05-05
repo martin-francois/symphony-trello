@@ -67,6 +67,8 @@ matters, and easy for another engineer to understand without asking the original
   helps the user recognize what the entry is for later.
 - When documenting third-party UI fields, use the current vendor label exactly when known instead of
   approximating it.
+- Do not qualify setup instructions with "if possible" or similar hedges when the expected value is
+  known.
 - Keep setup steps focused on what the reader must do now. Avoid naming external documentation
   terminology or adding fallback-guide chatter unless it solves a likely problem in that step.
 - Avoid repeating limitations already made clear by the surrounding setup context.
