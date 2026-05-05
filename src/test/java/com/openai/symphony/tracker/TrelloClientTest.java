@@ -226,13 +226,13 @@ class TrelloClientTest {
     }
 
     @Test
-    void resolveCanonicalBoardIdRejectsClosedBoard() {
+    void resolveBoardIdRejectsClosedBoard() {
         // given
         TrelloClient client = new TrelloClient(new ObjectMapper());
         var config = config("closed-input", Map.of());
 
         // when
-        Throwable thrown = catchThrowable(() -> client.resolveCanonicalBoardId(config));
+        Throwable thrown = catchThrowable(() -> client.resolveBoardId(config));
 
         // then
         assertThat(thrown).isInstanceOfSatisfying(TrelloException.class, exception -> assertThat(exception.code())
@@ -303,7 +303,7 @@ class TrelloClientTest {
         tracker.putAll(trackerOverrides);
         return new ConfigResolver()
                 .resolve(new WorkflowDefinition(tempDir.resolve("WORKFLOW.md"), Map.of("tracker", tracker), ""))
-                .withCanonicalBoardId(boardId.equals("input") ? "board-1" : boardId);
+                .withResolvedBoardId(boardId.equals("input") ? "board-1" : boardId);
     }
 
     private static Card card(

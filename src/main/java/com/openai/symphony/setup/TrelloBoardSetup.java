@@ -131,10 +131,10 @@ public final class TrelloBoardSetup {
             throw new TrelloBoardSetupException("trello_board_closed", "Trello board is closed");
         }
 
-        String canonicalBoardId = requiredString(board, "id");
+        String resolvedBoardId = requiredString(board, "id");
         List<BoardList> lists = getList(
                         request.endpoint(),
-                        "boards/" + encodeSegment(canonicalBoardId) + "/lists",
+                        "boards/" + encodeSegment(resolvedBoardId) + "/lists",
                         Map.of("filter", "all", "fields", "id,name,closed,pos"),
                         request.credentials())
                 .stream()
@@ -172,7 +172,7 @@ public final class TrelloBoardSetup {
                         request.maxConcurrentAgents()));
 
         return new ImportBoardResult(
-                canonicalBoardId,
+                resolvedBoardId,
                 boardKey,
                 requiredString(board, "name"),
                 string(board.get("url")),

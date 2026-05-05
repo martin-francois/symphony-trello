@@ -199,7 +199,7 @@ public class SymphonyOrchestrator {
 
     private void reloadOrThrow() {
         workflow = workflowLoader.load(workflowPath);
-        config = canonicalize(configResolver.resolve(workflow));
+        config = resolveBoardScope(configResolver.resolve(workflow));
         configResolver.validateForDispatch(config);
         workflowLastModified = lastModified(workflow.path());
         if (config.tracker().activeListIds().isEmpty()
@@ -212,9 +212,9 @@ public class SymphonyOrchestrator {
         LOG.infof("workflow=%s outcome=loaded", workflow.path());
     }
 
-    private EffectiveConfig canonicalize(EffectiveConfig raw) {
-        String canonicalBoardId = tracker.resolveCanonicalBoardId(raw);
-        return raw.withCanonicalBoardId(canonicalBoardId);
+    private EffectiveConfig resolveBoardScope(EffectiveConfig raw) {
+        String resolvedBoardId = tracker.resolveBoardId(raw);
+        return raw.withResolvedBoardId(resolvedBoardId);
     }
 
     private void reloadIfChanged() {
@@ -225,7 +225,7 @@ public class SymphonyOrchestrator {
         }
         try {
             WorkflowDefinition nextWorkflow = workflowLoader.load(config.workflowPath());
-            EffectiveConfig nextConfig = canonicalize(configResolver.resolve(nextWorkflow));
+            EffectiveConfig nextConfig = resolveBoardScope(configResolver.resolve(nextWorkflow));
             configResolver.validateForDispatch(nextConfig);
             workflow = nextWorkflow;
             config = nextConfig;
@@ -586,7 +586,7 @@ public class SymphonyOrchestrator {
     }
 
     private boolean isOutOfBoardScope(Card card) {
-        return card.boardId() != null && !card.boardId().equals(config.tracker().canonicalBoardId());
+        return card.boardId() != null && !card.boardId().equals(config.tracker().resolvedBoardId());
     }
 
     private Duration backoff(int attempt) {

@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 public interface TrackerClient {
-    String resolveCanonicalBoardId(EffectiveConfig config);
+    String resolveBoardId(EffectiveConfig config);
 
     List<Card> fetchCandidateCards(EffectiveConfig config);
 

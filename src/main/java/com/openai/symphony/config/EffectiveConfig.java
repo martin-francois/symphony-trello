@@ -17,7 +17,7 @@ public record EffectiveConfig(
         TrelloToolsConfig trelloTools,
         ServerConfig server) {
 
-    public EffectiveConfig withCanonicalBoardId(String canonicalBoardId) {
+    public EffectiveConfig withResolvedBoardId(String resolvedBoardId) {
         return new EffectiveConfig(
                 workflowPath,
                 new TrackerConfig(
@@ -26,7 +26,7 @@ public record EffectiveConfig(
                         tracker.apiKey(),
                         tracker.apiToken(),
                         tracker.boardId(),
-                        canonicalBoardId,
+                        resolvedBoardId,
                         tracker.activeStates(),
                         tracker.activeListIds(),
                         tracker.blockerEnforcedStates(),
@@ -52,7 +52,7 @@ public record EffectiveConfig(
             String apiKey,
             String apiToken,
             String boardId,
-            String canonicalBoardId,
+            String resolvedBoardId,
             List<String> activeStates,
             List<String> activeListIds,
             List<String> blockerEnforcedStates,

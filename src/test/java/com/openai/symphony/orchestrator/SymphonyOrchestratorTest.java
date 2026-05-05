@@ -376,7 +376,7 @@ class SymphonyOrchestratorTest {
         }
 
         @Override
-        public String resolveCanonicalBoardId(EffectiveConfig config) {
+        public String resolveBoardId(EffectiveConfig config) {
             return "board-1";
         }
 
@@ -405,7 +405,7 @@ class SymphonyOrchestratorTest {
         private final CountDownLatch releaseFirstFetch = new CountDownLatch(1);
 
         @Override
-        public String resolveCanonicalBoardId(EffectiveConfig config) {
+        public String resolveBoardId(EffectiveConfig config) {
             return "board-1";
         }
 
