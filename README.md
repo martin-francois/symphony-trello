@@ -104,12 +104,14 @@ work is ready for human review. If you want a strictly read-only deployment, set
 
 There are two setup paths:
 
-- **Create the recommended board**: best when you are new to Trello or want Symphony to create a
-  clean `Inbox` -> `Ready for Codex` -> `Review` -> `Done` board for you.
-- **Import an existing board**: best when you already have a Trello board and want Symphony to write
-  a starter `WORKFLOW.md` for it.
+- **[Create the recommended board](#fast-path-create-the-recommended-board)**: best when you are new
+  to Trello or want Symphony to create a clean `Inbox` -> `Ready for Codex` -> `Review` -> `Done`
+  board for you.
+- **[Import an existing board](#fast-path-import-an-existing-board)**: best when you already have a
+  Trello board and want Symphony to write a starter `WORKFLOW.md` for it.
 
-Both paths need the same one-time browser setup first.
+Both paths need the same [one-time browser setup](#one-time-browser-setup-workspace-api-key-token)
+first.
 
 ### One-Time Browser Setup: Workspace, API Key, Token
 
@@ -168,7 +170,7 @@ Workspace, API key, or API token for you because Trello requires browser authori
 steps. After that, one command creates the board, creates the recommended lists, and writes
 `WORKFLOW.md`.
 
-1. Complete the one-time browser setup above.
+1. Complete the [one-time browser setup](#one-time-browser-setup-workspace-api-key-token) above.
 2. Create the board and workflow:
 
 ```bash
@@ -225,7 +227,8 @@ and the failure will be visible in the Codex session events.
 Use this path when a Trello board already exists but you want Symphony to write the starter workflow
 for you.
 
-1. Complete the one-time browser setup above if you have not already generated a key/token.
+1. Complete the [one-time browser setup](#one-time-browser-setup-workspace-api-key-token) above if
+   you have not already generated a key/token.
 2. Copy the board short link from the board URL.
    In `https://trello.com/b/abc123/my-board`, use `abc123`.
 3. Run the import command:
