@@ -453,6 +453,25 @@ If new comments mention `bwrap: Can't read /proc/sys/kernel/overflowuid`, the sy
 `bwrap: loopback: Failed to create NETLINK_ROUTE socket`, the unit is blocking the address family
 Codex's sandbox needs; `RestrictAddressFamilies` must include `AF_NETLINK`.
 
+### Known Broken Live Scenario: Blocked Work Stays Active
+
+Observed on 2026-05-05 against a real Trello board:
+
+- Card: requested running Docker-based E2E tests for another local project checkout.
+- The deployed `symphony-trello@local` workflow watched `Ready for Codex`.
+- The service user could not access the requested local project checkout.
+- Codex added a `Blocked:` Trello comment and left the card in `Ready for Codex`, as the workflow
+  prompt instructed for blocked work.
+- Symphony saw a successful Codex turn, saw the card still in an active list, and scheduled another
+  continuation run.
+- The second run added another `Blocked:` comment for the same underlying problem.
+
+Keep this scenario reproducible until the linked GitHub issues are fixed. A live deployment check for
+this scenario should fail when a new blocker comment appears after the verification cutoff, and it
+should also flag repeated blocker comments on the same card as a product problem. The expected future
+behavior should make the blocked state visible on the Trello board without requiring the operator to
+open the card and read comments.
+
 ## Deterministic App-Server
 
 For reproducible live testing, point `codex.command` at:
