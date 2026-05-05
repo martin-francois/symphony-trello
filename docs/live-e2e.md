@@ -23,7 +23,8 @@ Use a unique run id such as `live-e2e-YYYYMMDD-HHMMSS`.
 
 1. `list-workspaces` reads credentials from `.env` and returns accessible Workspaces.
 2. `new-board` creates a disposable board and writes a workflow.
-3. `import-board` reads that board and writes a second workflow.
+3. `import-board` reads both a Symphony-generated board and a custom existing-board structure, then
+   writes workflows for them.
 4. A disposable card in `Ready for Codex` is picked up by Symphony.
 5. The app-server calls `trello_add_comment` and `trello_move_current_card`.
 6. The card has a handoff comment and ends in `Review`.
@@ -78,6 +79,51 @@ JAVA_HOME=/tmp/jdk25 PATH=/tmp/jdk25/bin:$PATH \
   -Dexec.args="import-board --board $BOARD_A_ID --active 'Ready for Codex' --terminal Done --workflow $RUN_DIR/imported-a.WORKFLOW.md"
 ```
 
+Create and import a disposable board that represents a non-default existing team workflow. This
+proves `import-board` is not only compatible with Symphony-generated boards.
+
+```bash
+if [ -z "${TRELLO_API_KEY:-}" ] || [ -z "${TRELLO_API_TOKEN:-}" ]; then
+  set -a
+  . ./.env
+  set +a
+fi
+
+WORKSPACE_ID="$(JAVA_HOME=/tmp/jdk25 PATH=/tmp/jdk25/bin:$PATH ./mvnw -q exec:java -Dexec.args='list-workspaces' \
+  | grep -Eo '[0-9a-f]{24}' \
+  | head -1)"
+
+curl -fsS -X POST "https://api.trello.com/1/boards" \
+  --data-urlencode "key=$TRELLO_API_KEY" \
+  --data-urlencode "token=$TRELLO_API_TOKEN" \
+  --data-urlencode "name=Symphony $RUN_ID Custom Existing Board" \
+  --data-urlencode "defaultLists=false" \
+  --data-urlencode "defaultLabels=false" \
+  --data-urlencode "idOrganization=$WORKSPACE_ID" \
+  > "$RUN_DIR/custom-board.json"
+
+CUSTOM_BOARD_ID="$(jq -r .id "$RUN_DIR/custom-board.json")"
+
+for list_name in "Intake" "Queue for Codex" "Escalated for Codex" "Review" "Released" "Parked"; do
+  safe_name="$(printf '%s' "$list_name" | tr '[:upper:] ' '[:lower:]-')"
+  curl -fsS -X POST "https://api.trello.com/1/lists" \
+    --data-urlencode "key=$TRELLO_API_KEY" \
+    --data-urlencode "token=$TRELLO_API_TOKEN" \
+    --data-urlencode "idBoard=$CUSTOM_BOARD_ID" \
+    --data-urlencode "name=$list_name" \
+    --data-urlencode "pos=bottom" \
+    > "$RUN_DIR/list-$safe_name.json"
+done
+
+JAVA_HOME=/tmp/jdk25 PATH=/tmp/jdk25/bin:$PATH \
+  ./mvnw -q exec:java \
+  -Dexec.args="import-board --board $CUSTOM_BOARD_ID --active 'Queue for Codex' --active 'Escalated for Codex' --terminal Released --terminal Parked --max-agents 2 --workflow $RUN_DIR/custom-import.WORKFLOW.md"
+
+JAVA_HOME=/tmp/jdk25 PATH=/tmp/jdk25/bin:$PATH \
+  ./mvnw -q exec:java \
+  -Dexec.args="import-board --board $CUSTOM_BOARD_ID --active 'Queue for Codex' --active 'Escalated for Codex' --terminal Released --terminal Parked --max-agents 2 --workflow $RUN_DIR/custom-import-real.WORKFLOW.md"
+```
+
 Patch the generated workflows to use the deterministic Java app-server and different ports. Board B
 uses two workers and a delay so `/api/v1/state` can prove that two cards run at once while the third
 waits for a refresh.
@@ -91,6 +137,7 @@ FAKE_CODEX="$(pwd)/scripts/FakeCodexAppServer.java"
 $FAKE_JAVA --source 25 scripts/PatchLiveE2eWorkflow.java "$RUN_DIR/board-a.WORKFLOW.md" 1 250 "$FAKE_JAVA" "$FAKE_CODEX"
 $FAKE_JAVA --source 25 scripts/PatchLiveE2eWorkflow.java "$RUN_DIR/imported-a.WORKFLOW.md" 1 250 "$FAKE_JAVA" "$FAKE_CODEX"
 $FAKE_JAVA --source 25 scripts/PatchLiveE2eWorkflow.java "$RUN_DIR/board-b.WORKFLOW.md" 2 7000 "$FAKE_JAVA" "$FAKE_CODEX"
+$FAKE_JAVA --source 25 scripts/PatchLiveE2eWorkflow.java "$RUN_DIR/custom-import.WORKFLOW.md" 2 7000 "$FAKE_JAVA" "$FAKE_CODEX"
 ```
 
 Create disposable cards in the active lists. Use Trello's REST API directly so the live test is
@@ -195,6 +242,31 @@ JAVA_HOME=/tmp/jdk25 PATH=/tmp/jdk25/bin:$PATH \
   java -jar target/quarkus-app/quarkus-run.jar "$RUN_DIR/imported-a.WORKFLOW.md" --port 18183
 ```
 
+For the custom imported board, create one card in each configured active list and run that workflow
+on a separate port. The expected concurrency state is the same as Board B: `counts.running == 2`,
+then both cards end in `Review` with at least one comment and state drains to zero.
+
+```bash
+jq -r .id "$RUN_DIR/list-queue-for-codex.json" > "$RUN_DIR/custom-queue-list.txt"
+jq -r .id "$RUN_DIR/list-escalated-for-codex.json" > "$RUN_DIR/custom-escalated-list.txt"
+jq -r .id "$RUN_DIR/list-review.json" > "$RUN_DIR/custom-review-list.txt"
+
+for spec in "queue:$(cat "$RUN_DIR/custom-queue-list.txt")" "escalated:$(cat "$RUN_DIR/custom-escalated-list.txt")"; do
+  key="${spec%%:*}"
+  list_id="${spec#*:}"
+  curl -fsS -X POST "https://api.trello.com/1/cards" \
+    --data-urlencode "key=$TRELLO_API_KEY" \
+    --data-urlencode "token=$TRELLO_API_TOKEN" \
+    --data-urlencode "idList=$list_id" \
+    --data-urlencode "name=Symphony $RUN_ID custom import $key handoff" \
+    --data-urlencode "desc=Disposable live E2E card for custom existing-board import." \
+    > "$RUN_DIR/card-custom-$key.json"
+done
+
+JAVA_HOME=/tmp/jdk25 PATH=/tmp/jdk25/bin:$PATH \
+  java -jar target/quarkus-app/quarkus-run.jar "$RUN_DIR/custom-import.WORKFLOW.md" --port 18184
+```
+
 Check any card's final Trello state with:
 
 ```bash
@@ -244,6 +316,7 @@ REAL_JAVA="${JAVA_HOME:-/tmp/jdk25}/bin/java"
 $REAL_JAVA --source 25 scripts/WriteNarrowRealCodexWorkflow.java "$RUN_DIR/real-board-a.WORKFLOW.md" "$RUN_DIR/real-narrow-a.WORKFLOW.md" "real Codex generated handoff" "$RUN_ID"
 $REAL_JAVA --source 25 scripts/WriteNarrowRealCodexWorkflow.java "$RUN_DIR/real-imported-a.WORKFLOW.md" "$RUN_DIR/real-narrow-imported-a.WORKFLOW.md" "real Codex imported handoff" "$RUN_ID"
 $REAL_JAVA --source 25 scripts/WriteNarrowRealCodexWorkflow.java "$RUN_DIR/real-board-b.WORKFLOW.md" "$RUN_DIR/real-narrow-b.WORKFLOW.md" "real Codex concurrent handoff" "$RUN_ID"
+$REAL_JAVA --source 25 scripts/WriteNarrowRealCodexWorkflow.java "$RUN_DIR/custom-import-real.WORKFLOW.md" "$RUN_DIR/real-narrow-custom-import.WORKFLOW.md" "real Codex custom import handoff" "$RUN_ID"
 ```
 
 Create fresh cards in `Ready for Codex` for each strict workflow. Start the strict workflows on
@@ -256,6 +329,11 @@ first Trello move. Wait until both conditions are true:
 For the concurrency workflow, first verify `/api/v1/state` shows `counts.running == 2` while both
 real Codex workers are active, then wait for both cards to satisfy the final handoff and zero-state
 conditions.
+
+Repeat the strict real-Codex concurrency check for the custom existing-board import workflow with one
+fresh card in `Queue for Codex` and one fresh card in `Escalated for Codex`. This is the live proof
+that imported boards with non-default active and terminal lists still dispatch, expose the Trello
+handoff tools, and move cards to the board-local `Review` list.
 
 You may also run an exploratory smoke with an unmodified generated workflow. Record it separately
 from the strict real-Codex phase because the generated prompt represents real engineering work and is

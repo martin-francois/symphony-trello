@@ -197,6 +197,46 @@ class TrelloBoardSetupTest {
     }
 
     @Test
+    void importsExistingBoardWithExplicitNonDefaultLists() {
+        boardListsResponse.set(
+                """
+                [
+                  {"id":"list-intake","name":"Intake","closed":false,"pos":1},
+                  {"id":"list-queue","name":"Queue for Codex","closed":false,"pos":2},
+                  {"id":"list-escalated","name":"Escalated for Codex","closed":false,"pos":3},
+                  {"id":"list-review","name":"Review","closed":false,"pos":4},
+                  {"id":"list-released","name":"Released","closed":false,"pos":5},
+                  {"id":"list-parked","name":"Parked","closed":false,"pos":6},
+                  {"id":"list-archive","name":"Archived experiments","closed":true,"pos":7}
+                ]
+                """);
+        Path workflow = tempDir.resolve("imported-custom-workflow.md");
+
+        var result = setup.importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "input",
+                List.of("Queue for Codex", "Escalated for Codex"),
+                List.of("Released", "Parked"),
+                workflow,
+                Path.of("./agent-workspaces"),
+                2,
+                false));
+
+        assertThat(result.openLists())
+                .containsExactly("Intake", "Queue for Codex", "Escalated for Codex", "Review", "Released", "Parked");
+        assertThat(result.activeStates()).containsExactly("Queue for Codex", "Escalated for Codex");
+        assertThat(result.terminalStates()).containsExactly("Released", "Parked");
+        EffectiveConfig config = resolve(workflow);
+        assertThat(config.tracker().activeStates()).containsExactly("Queue for Codex", "Escalated for Codex");
+        assertThat(config.tracker().terminalStates())
+                .contains("released", "parked", "archived", "archivedlist", "archivedboard", "deleted");
+        assertThat(config.trelloTools().enabled()).isTrue();
+        assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("review");
+        assertThat(config.agent().maxConcurrentAgents()).isEqualTo(2);
+    }
+
+    @Test
     void importDisablesTrelloWritesWhenNoReviewListExists() {
         boardListsResponse.set(
                 """
