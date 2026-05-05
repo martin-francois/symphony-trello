@@ -1,13 +1,18 @@
 package com.openai.symphony.agent;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openai.symphony.TestCards;
 import com.openai.symphony.config.ConfigResolver;
 import com.openai.symphony.config.EffectiveConfig;
 import com.openai.symphony.domain.Card;
-import com.openai.symphony.tracker.TrelloClient;
 import com.openai.symphony.workflow.WorkflowDefinition;
 import com.openai.symphony.workspace.HookRunner;
 import com.openai.symphony.workspace.WorkspaceManager;
@@ -19,6 +24,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.mockito.ArgumentCaptor;
 
 class LocalAgentRunnerTest {
     @TempDir
@@ -27,7 +33,8 @@ class LocalAgentRunnerTest {
     @Test
     void createsWorkspaceRunsHooksAndPassesPromptToCodexClient() throws Exception {
         // given
-        RecordingCodexClient codex = new RecordingCodexClient();
+        CodexAppServerClient codex = mock(CodexAppServerClient.class);
+        when(codex.runTurn(any(), any(), any(), any(), any(), any())).thenReturn(AgentRunResult.ok());
         var runner = new LocalAgentRunner(new WorkspaceManager(new HookRunner()), new HookRunner(), codex);
         EffectiveConfig config = config(Map.of(
                 "before_run", "echo before > before.txt",
@@ -39,18 +46,22 @@ class LocalAgentRunnerTest {
                 new AgentRunner.AgentRunRequest(card, null, "handoff prompt", config, "worker-success", event -> {}));
 
         // then
-        Path workspace = config.workspace().root().resolve("TRELLO-local");
+        ArgumentCaptor<Path> workspace = ArgumentCaptor.forClass(Path.class);
+        ArgumentCaptor<String> prompt = ArgumentCaptor.forClass(String.class);
+        Path expectedWorkspace = config.workspace().root().resolve("TRELLO-local");
         assertThat(result).isEqualTo(AgentRunResult.ok());
-        assertThat(codex.prompt).hasValue("handoff prompt");
-        assertThat(codex.workspace).hasValue(workspace.toAbsolutePath().normalize());
-        assertThat(Files.readString(workspace.resolve("before.txt"))).contains("before");
-        assertThat(Files.readString(workspace.resolve("after.txt"))).contains("after");
+        verify(codex).runTurn(eq(config), eq(card), workspace.capture(), prompt.capture(), eq("worker-success"), any());
+        assertThat(prompt.getValue()).isEqualTo("handoff prompt");
+        assertThat(workspace.getValue())
+                .isEqualTo(expectedWorkspace.toAbsolutePath().normalize());
+        assertThat(Files.readString(expectedWorkspace.resolve("before.txt"))).contains("before");
+        assertThat(Files.readString(expectedWorkspace.resolve("after.txt"))).contains("after");
     }
 
     @Test
     void returnsFailureWhenRequiredHookFailsAndStillRemovesWorkerFromActiveSet() throws Exception {
         // given
-        RecordingCodexClient codex = new RecordingCodexClient();
+        CodexAppServerClient codex = mock(CodexAppServerClient.class);
         var runner = new LocalAgentRunner(new WorkspaceManager(new HookRunner()), new HookRunner(), codex);
         EffectiveConfig config = config(Map.of("before_run", "echo broken && exit 9"));
 
@@ -67,13 +78,28 @@ class LocalAgentRunnerTest {
         // then
         assertThat(result.success()).isFalse();
         assertThat(result.reason()).contains("Hook before_run failed");
-        assertThat(codex.prompt).hasValue(null);
+        verifyNoInteractions(codex);
     }
 
     @Test
     void cancelInterruptsActiveWorkerThread() throws Exception {
         // given
-        BlockingCodexClient codex = new BlockingCodexClient();
+        CodexAppServerClient codex = mock(CodexAppServerClient.class);
+        CountDownLatch entered = new CountDownLatch(1);
+        AtomicReference<Boolean> interrupted = new AtomicReference<>(false);
+        doAnswer(invocation -> {
+                    entered.countDown();
+                    try {
+                        Thread.sleep(TimeUnit.SECONDS.toMillis(30));
+                        return AgentRunResult.ok();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        interrupted.set(true);
+                        return AgentRunResult.fail("interrupted");
+                    }
+                })
+                .when(codex)
+                .runTurn(any(), any(), any(), any(), any(), any());
         var runner = new LocalAgentRunner(new WorkspaceManager(new HookRunner()), new HookRunner(), codex);
         EffectiveConfig config = config(Map.of());
         var result = new AtomicReference<AgentRunResult>();
@@ -85,14 +111,14 @@ class LocalAgentRunnerTest {
                         config,
                         "worker-cancel",
                         event -> {}))));
-        assertThat(codex.entered.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
 
         // when
         runner.cancel("worker-cancel");
         worker.join(TimeUnit.SECONDS.toMillis(5));
 
         // then
-        assertThat(codex.interrupted).isTrue();
+        assertThat(interrupted).hasValue(true);
         assertThat(result.get().success()).isFalse();
         assertThat(result.get().reason()).isEqualTo("interrupted");
     }
@@ -109,53 +135,5 @@ class LocalAgentRunnerTest {
                                 "hooks",
                                 hooks),
                         ""));
-    }
-
-    private static class RecordingCodexClient extends CodexAppServerClient {
-        private final AtomicReference<Path> workspace = new AtomicReference<>();
-        private final AtomicReference<String> prompt = new AtomicReference<>();
-
-        private RecordingCodexClient() {
-            super(
-                    new ObjectMapper(),
-                    new TrelloHandoffToolHandler(new ObjectMapper(), new TrelloClient(new ObjectMapper())));
-        }
-
-        @Override
-        public AgentRunResult runTurn(
-                EffectiveConfig config,
-                Card card,
-                Path workspace,
-                String prompt,
-                String workerIdentity,
-                AgentEventListener listener) {
-            this.workspace.set(workspace);
-            this.prompt.set(prompt);
-            return AgentRunResult.ok();
-        }
-    }
-
-    private static final class BlockingCodexClient extends RecordingCodexClient {
-        private final CountDownLatch entered = new CountDownLatch(1);
-        private volatile boolean interrupted;
-
-        @Override
-        public AgentRunResult runTurn(
-                EffectiveConfig config,
-                Card card,
-                Path workspace,
-                String prompt,
-                String workerIdentity,
-                AgentEventListener listener) {
-            entered.countDown();
-            try {
-                Thread.sleep(TimeUnit.SECONDS.toMillis(30));
-                return AgentRunResult.ok();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                interrupted = true;
-                return AgentRunResult.fail("interrupted");
-            }
-        }
     }
 }

@@ -21,6 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -100,8 +101,10 @@ class TrelloBoardSetupTest {
 
     @Test
     void createsRecommendedBoardListsAndWorkflow() {
+        // given
         Path workflow = tempDir.resolve("generated-workflow.md");
 
+        // when
         var result = setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
                 endpoint(),
                 new TrelloBoardSetup.TrelloCredentials("key", "token"),
@@ -112,6 +115,7 @@ class TrelloBoardSetupTest {
                 1,
                 false));
 
+        // then
         assertThat(result.boardKey()).isEqualTo("abc123");
         assertThat(createdLists).containsExactly("Inbox", "Ready for Codex", "Review", "Done");
         assertThat(authorization.get()).contains("oauth_consumer_key=\"key\"").contains("oauth_token=\"token\"");
@@ -138,6 +142,7 @@ class TrelloBoardSetupTest {
 
     @Test
     void requiresWorkspaceIdWhenTokenCanAccessMultipleWorkspaces() {
+        // given
         workspaceResponse.set(
                 """
                 [
@@ -157,7 +162,11 @@ class TrelloBoardSetupTest {
                 1,
                 false);
 
-        assertThatThrownBy(() -> setup.createRecommendedBoard(request))
+        // when
+        ThrowingCallable action = () -> setup.createRecommendedBoard(request);
+
+        // then
+        assertThatThrownBy(action)
                 .isInstanceOf(TrelloBoardSetupException.class)
                 .hasMessageContaining("--workspace-id")
                 .hasMessageContaining("workspace-1")
@@ -168,8 +177,10 @@ class TrelloBoardSetupTest {
 
     @Test
     void importsExistingBoardAndWritesWorkflowUsingDiscoveredRecommendedLists() {
+        // given
         Path workflow = tempDir.resolve("imported-workflow.md");
 
+        // when
         var result = setup.importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
                 endpoint(),
                 new TrelloBoardSetup.TrelloCredentials("key", "token"),
@@ -181,6 +192,7 @@ class TrelloBoardSetupTest {
                 2,
                 false));
 
+        // then
         assertThat(result.openLists()).containsExactly("Inbox", "Ready for Codex", "Review", "Done");
         assertThat(result.activeStates()).containsExactly("Ready for Codex");
         assertThat(result.terminalStates()).containsExactly("Done");
@@ -198,6 +210,7 @@ class TrelloBoardSetupTest {
 
     @Test
     void importsExistingBoardWithExplicitNonDefaultLists() {
+        // given
         boardListsResponse.set(
                 """
                 [
@@ -212,6 +225,7 @@ class TrelloBoardSetupTest {
                 """);
         Path workflow = tempDir.resolve("imported-custom-workflow.md");
 
+        // when
         var result = setup.importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
                 endpoint(),
                 new TrelloBoardSetup.TrelloCredentials("key", "token"),
@@ -223,6 +237,7 @@ class TrelloBoardSetupTest {
                 2,
                 false));
 
+        // then
         assertThat(result.openLists())
                 .containsExactly("Intake", "Queue for Codex", "Escalated for Codex", "Review", "Released", "Parked");
         assertThat(result.activeStates()).containsExactly("Queue for Codex", "Escalated for Codex");
@@ -238,6 +253,7 @@ class TrelloBoardSetupTest {
 
     @Test
     void importDisablesTrelloWritesWhenNoReviewListExists() {
+        // given
         boardListsResponse.set(
                 """
                 [
@@ -247,6 +263,7 @@ class TrelloBoardSetupTest {
                 """);
         Path workflow = tempDir.resolve("imported-without-review.md");
 
+        // when
         setup.importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
                 endpoint(),
                 new TrelloBoardSetup.TrelloCredentials("key", "token"),
@@ -258,6 +275,7 @@ class TrelloBoardSetupTest {
                 2,
                 false));
 
+        // then
         EffectiveConfig config = resolve(workflow);
         assertThat(config.trelloTools().enabled()).isFalse();
         assertThat(config.trelloTools().allowWrites()).isFalse();
@@ -266,9 +284,14 @@ class TrelloBoardSetupTest {
 
     @Test
     void listsWorkspacesAvailableToTheToken() {
-        var workspaces = setup.listWorkspaces(new TrelloBoardSetup.WorkspaceListRequest(
-                endpoint(), new TrelloBoardSetup.TrelloCredentials("key", "token")));
+        // given
+        var request = new TrelloBoardSetup.WorkspaceListRequest(
+                endpoint(), new TrelloBoardSetup.TrelloCredentials("key", "token"));
 
+        // when
+        var workspaces = setup.listWorkspaces(request);
+
+        // then
         assertThat(workspaces).singleElement().satisfies(workspace -> {
             assertThat(workspace.id()).isEqualTo("workspace-1");
             assertThat(workspace.displayName()).isEqualTo("Symphony Automation");
@@ -277,6 +300,7 @@ class TrelloBoardSetupTest {
 
     @Test
     void refusesToOverwriteExistingWorkflowUnlessForced() throws IOException {
+        // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         Files.writeString(workflow, "keep me", StandardCharsets.UTF_8);
 
@@ -291,9 +315,11 @@ class TrelloBoardSetupTest {
                 1,
                 false);
 
-        assertThatThrownBy(() -> setup.importExistingBoard(request))
-                .isInstanceOf(TrelloBoardSetupException.class)
-                .hasMessageContaining("--force");
+        // when
+        ThrowingCallable action = () -> setup.importExistingBoard(request);
+
+        // then
+        assertThatThrownBy(action).isInstanceOf(TrelloBoardSetupException.class).hasMessageContaining("--force");
         assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo("keep me");
     }
 

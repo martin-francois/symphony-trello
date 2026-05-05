@@ -68,10 +68,13 @@ class TrelloHandoffToolHandlerTest {
 
     @Test
     void advertisesCommentAndMoveToolsWhenWritesAreEnabledAndMoveAllowlistExists() {
+        // given
         TrelloHandoffToolHandler handler = handler();
 
+        // when
         var tools = handler.toolSpecs(config(List.of("Review"), List.of()));
 
+        // then
         assertThat(tools)
                 .extracting(tool -> tool.path("name").asText())
                 .containsExactly(TrelloHandoffToolHandler.ADD_COMMENT, TrelloHandoffToolHandler.MOVE_CURRENT_CARD);
@@ -79,8 +82,10 @@ class TrelloHandoffToolHandlerTest {
 
     @Test
     void addsCommentToCurrentCard() {
+        // given
         TrelloHandoffToolHandler handler = handler();
 
+        // when
         var result = handler.handle(
                 config(List.of("Review"), List.of()),
                 TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
@@ -88,14 +93,17 @@ class TrelloHandoffToolHandlerTest {
                         .put("tool", TrelloHandoffToolHandler.ADD_COMMENT)
                         .set("arguments", json.createObjectNode().put("text", "Ready for review")));
 
+        // then
         assertThat(result.path("success").asBoolean()).isTrue();
         assertThat(commentText.get()).isEqualTo("Ready for review");
     }
 
     @Test
     void movesCurrentCardToAllowedListName() {
+        // given
         TrelloHandoffToolHandler handler = handler();
 
+        // when
         var result = handler.handle(
                 config(List.of("Review"), List.of()),
                 TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
@@ -103,14 +111,17 @@ class TrelloHandoffToolHandlerTest {
                         .put("tool", TrelloHandoffToolHandler.MOVE_CURRENT_CARD)
                         .set("arguments", json.createObjectNode().put("list_name", "Review")));
 
+        // then
         assertThat(result.path("success").asBoolean()).isTrue();
         assertThat(movedToListId.get()).isEqualTo("list-review");
     }
 
     @Test
     void movesCurrentCardToAllowedListIdWhenNamesAreNotConfigured() {
+        // given
         TrelloHandoffToolHandler handler = handler();
 
+        // when
         var result = handler.handle(
                 config(List.of(), List.of("list-review")),
                 TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
@@ -118,14 +129,17 @@ class TrelloHandoffToolHandlerTest {
                         .put("tool", TrelloHandoffToolHandler.MOVE_CURRENT_CARD)
                         .set("arguments", json.createObjectNode().put("list_id", "list-review")));
 
+        // then
         assertThat(result.path("success").asBoolean()).isTrue();
         assertThat(movedToListId.get()).isEqualTo("list-review");
     }
 
     @Test
     void rejectsMoveOutsideAllowlistWithoutCallingTrelloWriteEndpoint() {
+        // given
         TrelloHandoffToolHandler handler = handler();
 
+        // when
         var result = handler.handle(
                 config(List.of("Done"), List.of()),
                 TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
@@ -133,6 +147,7 @@ class TrelloHandoffToolHandlerTest {
                         .put("tool", TrelloHandoffToolHandler.MOVE_CURRENT_CARD)
                         .set("arguments", json.createObjectNode().put("list_name", "Review")));
 
+        // then
         assertThat(result.path("success").asBoolean()).isFalse();
         assertThat(result.path("contentItems").get(0).path("text").asText()).contains("trello_move_not_allowed");
         assertThat(movedToListId.get()).isNull();
@@ -140,9 +155,14 @@ class TrelloHandoffToolHandlerTest {
 
     @Test
     void withholdsToolsWhenWritesAreDisabled() {
+        // given
         TrelloHandoffToolHandler handler = handler();
 
-        assertThat(handler.toolSpecs(configWithWrites(false))).isEmpty();
+        // when
+        var tools = handler.toolSpecs(configWithWrites(false));
+
+        // then
+        assertThat(tools).isEmpty();
     }
 
     private TrelloHandoffToolHandler handler() {

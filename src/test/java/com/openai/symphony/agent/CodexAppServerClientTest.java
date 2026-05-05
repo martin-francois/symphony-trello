@@ -22,6 +22,7 @@ class CodexAppServerClientTest {
 
     @Test
     void handlesTurnCompletedArrivingBeforeAwaiterIsRegistered() throws Exception {
+        // given
         Path appServer = tempDir.resolve("fast-app-server.sh");
         Files.writeString(
                 appServer,
@@ -45,6 +46,7 @@ class CodexAppServerClientTest {
         CodexAppServerClient client =
                 new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
 
+        // when
         AgentRunResult result = client.runTurn(
                 config,
                 TestCards.card("card-1", "TRELLO-fast", "Ready for Codex"),
@@ -53,6 +55,7 @@ class CodexAppServerClientTest {
                 "worker-fast",
                 event -> {});
 
+        // then
         assertThat(result).isEqualTo(AgentRunResult.ok());
     }
 
