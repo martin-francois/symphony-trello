@@ -112,11 +112,10 @@ board. Symphony can create boards and write `WORKFLOW.md`, but Trello requires y
 Workspace and authorize the API token in the browser.
 
 1. Sign in to Trello in your browser.
-2. Create a Workspace if you do not already have one for Symphony.
-   Trello's current guide is
-   <https://support.atlassian.com/trello/docs/creating-a-new-workspace/>. At the time of writing,
-   the path is: profile icon in the Trello header, then `Create Workspace`.
-3. Use a clear Workspace name. `Symphony Automation` is a good default for a personal setup.
+2. [Create a Workspace](https://support.atlassian.com/trello/docs/creating-a-new-workspace/) if you
+   do not already have one that you want to use with Symphony.
+3. Use a clear Workspace name if you create a new one. `Symphony Automation` is a good default for a
+   personal setup.
 4. Open Trello's app admin portal: <https://trello.com/power-ups/admin>.
    Trello's developer guide for this page is
    <https://developer.atlassian.com/cloud/trello/guides/power-ups/managing-apps/>.
