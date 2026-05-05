@@ -31,16 +31,20 @@ matters, and easy for another engineer to understand without asking the original
 8. When you notice a potential improvement that is outside the current task scope, keep the current
    work focused and create or suggest a GitHub issue instead of adding "future improvement",
    "convenience gap", or similar sections to user-facing documentation.
-9. Run the relevant verification before finishing. For normal code changes, use:
+9. Redact private project names, host paths, Trello card ids, short links, account names, and similar
+   internals from committed files, GitHub issues, and user-facing summaries unless the user
+   explicitly asks to preserve them. Keep only the minimum technical detail needed to reproduce or
+   understand the issue.
+10. Run the relevant verification before finishing. For normal code changes, use:
 
    ```bash
    ./mvnw -q spotless:check verify
    ```
 
    Use `spotless:apply` before that when formatting changed.
-10. Commit with Conventional Commits when asked to commit, and keep the working tree clean before
+11. Commit with Conventional Commits when asked to commit, and keep the working tree clean before
    claiming the work is done.
-11. When the user asks for a concrete repo change, commit and push the completed change unless they
+12. When the user asks for a concrete repo change, commit and push the completed change unless they
    explicitly ask not to.
 
 ## Design Preferences
