@@ -50,6 +50,10 @@ the existing process model.
   credentials instead of workflow files or the service environment.
 * Good, because default Trello credential variables are removed before Codex and workflow hooks are
   launched for local or legacy environment-backed runs.
+* Bad, because the unit cannot use `ProcSubset=pid`; Codex's Linux sandbox needs read access to
+  `/proc/sys/kernel/overflowuid`.
+* Bad, because `RestrictAddressFamilies` must allow `AF_NETLINK`; Codex's Linux sandbox uses a
+  NETLINK_ROUTE socket while preparing loopback networking.
 * Bad, because installing users, directories, workflow files, and unit files is still manual.
 * Bad, because non-systemd platforms still need their own deployment guide.
 
@@ -70,6 +74,8 @@ Provide `deploy/systemd/symphony-trello@.service` and a deployment guide that ma
 * Good, because operators can use normal `systemctl` and `journalctl` commands.
 * Good, because the unit applies basic filesystem and process hardening without changing the runtime
   contract.
+* Neutral, because `/proc/sys` remains visible and `AF_NETLINK` remains available so Codex can start
+  its own sandbox.
 * Good, because this is easy to review and adjust before automating installation.
 * Neutral, because workflow files still carry per-board configuration such as `server.port`.
 * Bad, because the first setup still has several copy and directory commands.

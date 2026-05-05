@@ -121,6 +121,8 @@ matters, and easy for another engineer to understand without asking the original
   explanatory sentence when lookup, authentication, or configuration details matter.
 - When referring to the local `codex` command in user setup docs, call it "Codex CLI" so readers do
   not confuse it with other Codex surfaces.
+- For deployment auth, prefer reusing the existing Codex CLI auth file from `codex login`. Do not
+  steer users toward configuring raw OpenAI API keys unless they explicitly ask for that mode.
 - For docs with multiple setup paths, read the flow once from each path's perspective and avoid
   wording that assumes the reader chose a different path.
 - Put "who this path is for" guidance next to the commands for that path. Do not make readers
@@ -173,6 +175,10 @@ matters, and easy for another engineer to understand without asking the original
 - When reporting live E2E results, state which external systems were real and which parts used test
   doubles. Do not imply that real Codex completed a path when only deterministic fake Codex completed
   it against real Trello.
+- Do not call a live deployment healthy just because the systemd service is active. When a real
+  workflow has active work, verify that Codex can authenticate, the work finishes or reaches an
+  expected terminal state, Trello handoff happens when required, and `/api/v1/state` has no
+  unexpected running or retrying entries.
 - For live E2E, run the deterministic fake-Codex phase before real Codex. Then run strict real-Codex
   checks against real Trello with fresh cards and wait for both Trello handoff completion and
   `/api/v1/state` returning to zero running/retrying before claiming real-Codex coverage.

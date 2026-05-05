@@ -20,9 +20,18 @@ On the machine where you run Ansible, install:
 
 - Ansible
 - Java 25 LTS
+- Codex CLI
 
 The playbook uses the Maven wrapper in this repository, so you do not need to install Maven
 separately.
+
+Log in with the Codex CLI on the machine where you run Ansible:
+
+```bash
+codex login
+```
+
+The playbook copies that existing Codex CLI auth file to the service user on the target server.
 
 Make sure the target server has:
 
@@ -103,6 +112,24 @@ symphony_trello_service_path: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:
 Use paths the `symphony-trello` service user can read. The systemd unit protects home directories, so
 do not point this at tools installed below `/root` or a personal home directory.
 
+By default, the playbook reuses the Codex CLI auth file from the user running Ansible:
+
+```text
+~/.codex/auth.json
+```
+
+If your existing Codex auth file is somewhere else, add:
+
+```yaml
+symphony_trello_codex_auth_src: /path/to/existing/.codex/auth.json
+```
+
+The target server receives that file as `/var/lib/symphony-trello/.codex/auth.json`, owned by the
+`symphony-trello` service user with mode `0600`.
+
+Set `symphony_trello_manage_codex_auth: false` only when you already created that auth file for the
+service user on the target server.
+
 `vars.yml` is ignored because workflow paths and host-specific choices differ per deployment.
 
 ## Configure Secrets With Ansible Vault
@@ -125,6 +152,9 @@ symphony_trello_trello_api_token: replace-with-your-token
 
 The playbook writes the vault values to root-only files on the server and loads them through systemd
 credentials. They are not written to the service environment.
+
+Codex CLI auth is copied from the existing auth file configured in `vars.yml`; do not put it in the
+vault file.
 
 ## Deploy
 
