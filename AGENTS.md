@@ -28,16 +28,18 @@ matters, and easy for another engineer to understand without asking the original
    agent-added rules for conflicts with that new preference in the same turn.
 7. When fixing a documentation pattern, search the relevant file or docs set for similar instances
    before committing instead of correcting only the one sentence the user pointed out.
-8. Run the relevant verification before finishing. For normal code changes, use:
+8. Track potential improvements and future work as GitHub issues, not as "future improvement" or
+   "convenience gap" sections in user-facing documentation.
+9. Run the relevant verification before finishing. For normal code changes, use:
 
    ```bash
    ./mvnw -q spotless:check verify
    ```
 
    Use `spotless:apply` before that when formatting changed.
-9. Commit with Conventional Commits when asked to commit, and keep the working tree clean before
+10. Commit with Conventional Commits when asked to commit, and keep the working tree clean before
    claiming the work is done.
-10. When the user asks for a concrete repo change, commit and push the completed change unless they
+11. When the user asks for a concrete repo change, commit and push the completed change unless they
    explicitly ask not to.
 
 ## Design Preferences

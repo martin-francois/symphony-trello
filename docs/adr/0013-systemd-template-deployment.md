@@ -93,5 +93,6 @@ Document only direct Java commands for every workflow.
 
 ## More Information
 
-The next likely improvement is a Java-based installer command that installs this systemd layout after
-the manual guide has been used enough to prove the defaults.
+Future deployment automation work is tracked in
+[GitHub issue #6](https://github.com/martinfrancois/symphony-trello/issues/6) instead of
+user-facing setup documentation.
