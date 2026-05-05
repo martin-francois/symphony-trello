@@ -4,6 +4,10 @@ Symphony Trello Java is a Quarkus daemon that turns Trello cards into isolated C
 It polls a configured Trello board, creates one deterministic workspace per card, renders your
 repository-owned `WORKFLOW.md` prompt, and runs `codex app-server` in that card's workspace.
 
+One running Symphony process reads one workflow file, and that workflow points to one Trello board.
+To automate multiple Trello boards at the same time, run one Symphony process per board with a
+separate `WORKFLOW.md` and HTTP port.
+
 The service is useful when you want Trello to become a lightweight control surface for parallel
 software work: one place to capture tasks, see what is ready for Codex, track what is in review, and
 resume context across multiple projects without hand-running scripts for every card. It also works
@@ -183,7 +187,7 @@ The command creates this Trello board layout:
 
 It also writes `WORKFLOW.md` with `Ready for Codex` as the active list, `Done` as the terminal list,
 `Review` as the allowed handoff list, `./workspaces` as the local workspace root, and
-`max_concurrent_agents: 1`.
+`max_concurrent_agents: 1`. With that default, Symphony starts one card at a time from this board.
 
 If `WORKFLOW.md` already exists, the command stops instead of overwriting it. Pass `--force` only when
 you intentionally want to replace the file:
@@ -395,14 +399,21 @@ verification notes, then call trello_move_current_card with list_name "Review".
 Card URL: {{ card.url }}
 ```
 
-Start with `max_concurrent_agents: 1`. Raise it only after one-card-at-a-time runs are routine and
-predictable.
+Start with `max_concurrent_agents: 1`. If two cards are in an active list such as `Ready for Codex`,
+that default makes Symphony run one card and leave the other waiting until a slot is free. Raising
+the value to `2` lets two cards from the same configured board run at the same time; raising it to
+`N` allows up to `N` simultaneous Codex sessions for that process. Raise it only after
+one-card-at-a-time runs are routine and predictable.
 
 ## Workflow Contract
 
 Symphony reads `WORKFLOW.md` from the working directory unless `SYMPHONY_WORKFLOW_PATH` points to a
-different file. [`WORKFLOW.example.md`](WORKFLOW.example.md) contains a complete starter. YAML front
-matter configures runtime behavior. The Markdown body becomes the prompt template for the card.
+different file. Each running process uses one workflow file, and the Trello workflow contains one
+`tracker.board_id`, so one process polls one Trello board. For multiple boards or projects, create
+one workflow per board and start one process per workflow, for example by giving each process its own
+workflow path and `--port`. [`WORKFLOW.example.md`](WORKFLOW.example.md) contains a complete starter.
+YAML front matter configures runtime behavior. The Markdown body becomes the prompt template for the
+card.
 
 Minimum example:
 

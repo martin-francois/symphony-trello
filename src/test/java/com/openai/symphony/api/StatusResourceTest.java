@@ -2,8 +2,10 @@ package com.openai.symphony.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
-import com.openai.symphony.config.ConfigResolver;
 import com.openai.symphony.orchestrator.CardDebugDetails;
 import com.openai.symphony.orchestrator.RuntimeSnapshot;
 import com.openai.symphony.orchestrator.SymphonyOrchestrator;
@@ -14,14 +16,15 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
 
 class StatusResourceTest {
     @Test
     void rendersEscapedHtmlStatusRows() {
         // given
-        var resource = new StatusResource(new FakeOrchestrator(snapshotWithRunningCard(), Optional.empty()));
+        SymphonyOrchestrator orchestrator = mock(SymphonyOrchestrator.class);
+        when(orchestrator.snapshot()).thenReturn(snapshotWithRunningCard());
+        var resource = new StatusResource(orchestrator);
 
         // when
         String html = resource.index();
@@ -38,7 +41,9 @@ class StatusResourceTest {
     void returnsSnapshotFromStateEndpoint() {
         // given
         RuntimeSnapshot snapshot = snapshotWithRunningCard();
-        var resource = new StatusResource(new FakeOrchestrator(snapshot, Optional.empty()));
+        SymphonyOrchestrator orchestrator = mock(SymphonyOrchestrator.class);
+        when(orchestrator.snapshot()).thenReturn(snapshot);
+        var resource = new StatusResource(orchestrator);
 
         // when
         Object state = resource.state();
@@ -62,7 +67,10 @@ class StatusResourceTest {
                 List.of(),
                 null,
                 Map.of());
-        var resource = new StatusResource(new FakeOrchestrator(snapshotWithRunningCard(), Optional.of(details)));
+        SymphonyOrchestrator orchestrator = mock(SymphonyOrchestrator.class);
+        when(orchestrator.cardDetails("TRELLO-abc")).thenReturn(Optional.of(details));
+        when(orchestrator.cardDetails("missing")).thenReturn(Optional.empty());
+        var resource = new StatusResource(orchestrator);
 
         // when
         Object found = resource.card("TRELLO-abc");
@@ -77,7 +85,7 @@ class StatusResourceTest {
     @Test
     void queuesRefreshAndMapsErrorsToJsonResponses() {
         // given
-        var orchestrator = new FakeOrchestrator(snapshotWithRunningCard(), Optional.empty());
+        SymphonyOrchestrator orchestrator = mock(SymphonyOrchestrator.class);
         var resource = new StatusResource(orchestrator);
         var mapper = new ApiExceptionMapper();
 
@@ -87,7 +95,7 @@ class StatusResourceTest {
         Response internal = mapper.toResponse(new IllegalStateException("boom"));
 
         // then
-        assertThat(orchestrator.refreshRequested).isTrue();
+        verify(orchestrator).requestRefresh();
         assertThat(refresh.getStatus()).isEqualTo(202);
         assertThat(notFound.getStatus()).isEqualTo(404);
         assertThat(notFound.getEntity().toString()).contains("card_not_found").contains("missing");
@@ -113,32 +121,5 @@ class StatusResourceTest {
                 List.of(),
                 new RuntimeSnapshot.TokenTotals(4, 8, 12, 1.25),
                 null);
-    }
-
-    private static final class FakeOrchestrator extends SymphonyOrchestrator {
-        private final RuntimeSnapshot snapshot;
-        private final Optional<CardDebugDetails> details;
-        private final AtomicBoolean refreshRequested = new AtomicBoolean();
-
-        private FakeOrchestrator(RuntimeSnapshot snapshot, Optional<CardDebugDetails> details) {
-            super(null, new ConfigResolver(), null, null, null, null);
-            this.snapshot = snapshot;
-            this.details = details;
-        }
-
-        @Override
-        public synchronized RuntimeSnapshot snapshot() {
-            return snapshot;
-        }
-
-        @Override
-        public synchronized Optional<CardDebugDetails> cardDetails(String cardIdentifier) {
-            return details.filter(detail -> detail.cardIdentifier().equals(cardIdentifier));
-        }
-
-        @Override
-        public void requestRefresh() {
-            refreshRequested.set(true);
-        }
     }
 }

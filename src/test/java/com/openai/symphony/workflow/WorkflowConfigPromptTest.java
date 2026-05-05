@@ -1,13 +1,14 @@
 package com.openai.symphony.workflow;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 import com.openai.symphony.TestCards;
 import com.openai.symphony.config.ConfigResolver;
 import com.openai.symphony.prompt.PromptRenderer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -21,6 +22,7 @@ class WorkflowConfigPromptTest {
 
     @Test
     void parsesFrontMatterAppliesDefaultsAndRendersStrictPrompt() throws Exception {
+        // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         Files.writeString(
                 workflow,
@@ -46,26 +48,35 @@ class WorkflowConfigPromptTest {
                 Work on {{ card.identifier }} / {{ issue.identifier }} attempt={{ attempt }}.
                 """);
 
+        // when
         WorkflowDefinition definition = loader.load(workflow);
         var config = configs.resolve(definition);
+        String renderedPrompt =
+                prompts.render(definition.promptTemplate(), TestCards.card("1", "TRELLO-abc", "Todo"), 3);
 
+        // then
         assertThat(config.tracker().activeStates()).containsExactly("Todo", "In Progress");
         assertThat(config.tracker().priorityLabels()).containsEntry("urgent", 1).doesNotContainKey("invalid");
         assertThat(config.agent().maxConcurrentAgentsByState()).containsEntry("ready for codex", 2);
         assertThat(config.workspace().root())
                 .isEqualTo(tempDir.resolve("workspaces").toAbsolutePath().normalize());
-        assertThat(prompts.render(definition.promptTemplate(), TestCards.card("1", "TRELLO-abc", "Todo"), 3))
-                .contains("TRELLO-abc / TRELLO-abc attempt=3");
+        assertThat(renderedPrompt).contains("TRELLO-abc / TRELLO-abc attempt=3");
     }
 
     @Test
     void missingWorkflowAndUnknownTemplateVariablesUseTypedErrors() {
-        assertThatThrownBy(() -> loader.load(tempDir.resolve("missing.md")))
-                .isInstanceOfSatisfying(WorkflowException.class, error -> assertThat(error.code())
-                        .isEqualTo("missing_workflow_file"));
+        // given
+        ThrowingCallable missingWorkflow = () -> loader.load(tempDir.resolve("missing.md"));
+        ThrowingCallable unknownTemplateVariable =
+                () -> prompts.render("{{ card.nope }}", TestCards.card("1", "TRELLO-abc", "Todo"), null);
 
-        assertThatThrownBy(() -> prompts.render("{{ card.nope }}", TestCards.card("1", "TRELLO-abc", "Todo"), null))
-                .isInstanceOfSatisfying(WorkflowException.class, error -> assertThat(error.code())
-                        .isEqualTo("template_render_error"));
+        // when
+        WorkflowException missingWorkflowError = catchThrowableOfType(WorkflowException.class, missingWorkflow);
+        WorkflowException unknownTemplateVariableError =
+                catchThrowableOfType(WorkflowException.class, unknownTemplateVariable);
+
+        // then
+        assertThat(missingWorkflowError.code()).isEqualTo("missing_workflow_file");
+        assertThat(unknownTemplateVariableError.code()).isEqualTo("template_render_error");
     }
 }

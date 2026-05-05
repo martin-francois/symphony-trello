@@ -102,6 +102,8 @@ matters, and easy for another engineer to understand without asking the original
 - Follow the testing pyramid: fast focused unit tests first, broader integration tests where shared
   contracts or external boundaries are involved.
 - Use JUnit 5 and AssertJ. Prefer readable AssertJ chains when they improve the failure message.
+- Use Mockito for mocks. Keep purpose-built fakes only when they model an external protocol,
+  stateful fixture, or concurrency behavior more clearly than Mockito stubbing.
 - Prefer parameterized tests with `@MethodSource` for data-driven behavior.
 - Structure unit tests with `// given`, `// when`, and `// then` sections separated by blank lines.
 - Test names and assertion descriptions should make failures actionable without requiring a debug

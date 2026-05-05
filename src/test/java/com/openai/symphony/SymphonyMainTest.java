@@ -13,6 +13,7 @@ class SymphonyMainTest {
 
     @Test
     void parsesServerPortFromWorkflowFrontMatterBeforeQuarkusStarts() throws Exception {
+        // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         Files.writeString(
                 workflow,
@@ -26,11 +27,16 @@ class SymphonyMainTest {
                 Prompt
                 """);
 
-        assertThat(SymphonyMain.configuredServerPort(workflow)).contains("9090");
+        // when
+        var port = SymphonyMain.configuredServerPort(workflow);
+
+        // then
+        assertThat(port).contains("9090");
     }
 
     @Test
     void parsesServerPortWithYamlInlineCommentsBeforeQuarkusStarts() throws Exception {
+        // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         Files.writeString(
                 workflow,
@@ -42,19 +48,29 @@ class SymphonyMainTest {
                 Prompt
                 """);
 
-        assertThat(SymphonyMain.configuredServerPort(workflow)).contains("9090");
+        // when
+        var port = SymphonyMain.configuredServerPort(workflow);
+
+        // then
+        assertThat(port).contains("9090");
     }
 
     @Test
     void cliPortOverridesWorkflowPortInParsedOptions() {
-        var options = SymphonyMain.CliOptions.parse("WORKFLOW.md", "--port", "8081");
+        // given
+        String[] args = {"WORKFLOW.md", "--port", "8081"};
 
+        // when
+        var options = SymphonyMain.CliOptions.parse(args);
+
+        // then
         assertThat(options.workflowPath()).contains("WORKFLOW.md");
         assertThat(options.port()).contains("8081");
     }
 
     @Test
     void externalQuarkusPortOverridesWorkflowPort() throws Exception {
+        // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         Files.writeString(
                 workflow,
@@ -69,8 +85,11 @@ class SymphonyMainTest {
         try {
             System.setProperty("quarkus.http.port", "8181");
 
-            assertThat(SymphonyMain.configuredPort(SymphonyMain.CliOptions.parse("WORKFLOW.md"), workflow))
-                    .isEmpty();
+            // when
+            var port = SymphonyMain.configuredPort(SymphonyMain.CliOptions.parse("WORKFLOW.md"), workflow);
+
+            // then
+            assertThat(port).isEmpty();
         } finally {
             if (oldValue == null) {
                 System.clearProperty("quarkus.http.port");
@@ -82,6 +101,7 @@ class SymphonyMainTest {
 
     @Test
     void cliPortStillWinsOverExternalQuarkusPort() throws Exception {
+        // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         Files.writeString(
                 workflow,
@@ -96,9 +116,12 @@ class SymphonyMainTest {
         try {
             System.setProperty("quarkus.http.port", "8181");
 
-            assertThat(SymphonyMain.configuredPort(
-                            SymphonyMain.CliOptions.parse("WORKFLOW.md", "--port=8282"), workflow))
-                    .contains("8282");
+            // when
+            var port =
+                    SymphonyMain.configuredPort(SymphonyMain.CliOptions.parse("WORKFLOW.md", "--port=8282"), workflow);
+
+            // then
+            assertThat(port).contains("8282");
         } finally {
             if (oldValue == null) {
                 System.clearProperty("quarkus.http.port");
@@ -110,11 +133,16 @@ class SymphonyMainTest {
 
     @Test
     void prebootWorkflowPathHonorsSystemPropertyBeforeDefault() {
+        // given
         String oldValue = System.getProperty("symphony.workflow.path");
         try {
             System.setProperty("symphony.workflow.path", "custom/WORKFLOW.md");
 
-            assertThat(SymphonyMain.configuredWorkflowPath()).isEqualTo("custom/WORKFLOW.md");
+            // when
+            String workflowPath = SymphonyMain.configuredWorkflowPath();
+
+            // then
+            assertThat(workflowPath).isEqualTo("custom/WORKFLOW.md");
         } finally {
             if (oldValue == null) {
                 System.clearProperty("symphony.workflow.path");
