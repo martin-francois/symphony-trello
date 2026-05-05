@@ -63,6 +63,8 @@ matters, and easy for another engineer to understand without asking the original
   reader needs them.
 - Prefer explaining intent, significance, and decision criteria over prescribing arbitrary defaults.
   Recommend concrete names or values only when the choice is semantically important.
+- Keep setup steps focused on what the reader must do now. Avoid naming external documentation
+  terminology or adding fallback-guide chatter unless it solves a likely problem in that step.
 - In numbered setup instructions, each numbered item should be an action the reader performs at that
   point. Put explanatory context under the relevant action instead of creating a separate fake step.
   Avoid filler like "intentionally" unless it changes the reader's decision.
