@@ -616,6 +616,24 @@ starts a Codex app-server on stdio for the same OS user that runs Symphony. Exam
 absolute path such as `/opt/codex/bin/codex app-server` or a small wrapper script that sets up the
 environment before starting `codex app-server`.
 
+### Repository-Local Skills
+
+The generated workflow points Codex to small procedure files in `.codex/skills/`. They keep the
+workflow prompt readable while still spelling out repeated work such as committing, pushing a PR,
+sweeping review comments, updating the Trello workpad, and handling Trello handoff.
+
+The most common skills are:
+
+- `.codex/skills/trello-workpad/SKILL.md`: keep the single `## Codex Workpad` comment current.
+- `.codex/skills/trello-handoff/SKILL.md`: move the current card through pickup, review, blocked,
+  merge, and done handoff.
+- `.codex/skills/review-sweep/SKILL.md`: check PR comments, inline review feedback, and checks
+  before handoff.
+- `.codex/skills/land/SKILL.md`: land an approved PR only from `Merging`.
+- `.codex/skills/debug/SKILL.md`: diagnose stuck, retrying, blocked, or failed runs.
+
+These files are instructions for Codex. Symphony does not execute them directly.
+
 ### Trello Write Controls
 
 The recommended workflow gives Codex three scoped Trello handoff tools:
