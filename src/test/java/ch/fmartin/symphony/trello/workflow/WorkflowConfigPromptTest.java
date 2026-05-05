@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import ch.fmartin.symphony.trello.TestCards;
 import ch.fmartin.symphony.trello.config.ConfigException;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
+import ch.fmartin.symphony.trello.config.StateNames;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -91,6 +92,21 @@ class WorkflowConfigPromptTest {
         // then
         assertThat(config.tracker().apiKey()).isEqualTo("key-from-file");
         assertThat(config.tracker().apiToken()).isEqualTo("token-from-file");
+    }
+
+    @Test
+    void exampleWorkflowEnforcesBlockersForEveryActiveState() {
+        // given
+        Path workflow = Path.of("WORKFLOW.example.md");
+
+        // when
+        var config = configs.resolve(loader.load(workflow));
+
+        // then
+        assertThat(config.tracker().blockerEnforcedStates())
+                .containsAll(config.tracker().activeStates().stream()
+                        .map(StateNames::normalize)
+                        .toList());
     }
 
     @Test

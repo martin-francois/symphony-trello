@@ -43,7 +43,7 @@ public final class TrelloBoardSetup {
             RECOMMENDED_MERGING_STATE,
             "Done");
     public static final List<String> RECOMMENDED_ACTIVE_STATES =
-            List.of(RECOMMENDED_ACTIVE_STATE, RECOMMENDED_IN_PROGRESS_STATE);
+            List.of(RECOMMENDED_ACTIVE_STATE, RECOMMENDED_IN_PROGRESS_STATE, RECOMMENDED_MERGING_STATE);
     public static final List<String> RECOMMENDED_TERMINAL_STATES = List.of("Done");
 
     private static final List<String> SYSTEM_TERMINAL_STATES =
@@ -101,6 +101,7 @@ public final class TrelloBoardSetup {
                         RECOMMENDED_IN_PROGRESS_STATE,
                         RECOMMENDED_REVIEW_STATE,
                         RECOMMENDED_BLOCKED_STATE,
+                        RECOMMENDED_MERGING_STATE,
                         request.workspaceRoot(),
                         request.maxConcurrentAgents()));
 
@@ -184,12 +185,15 @@ public final class TrelloBoardSetup {
                 blank(request.blockedState()) ? defaultBlockedState(openListNames) : request.blockedState();
         String inProgressState =
                 request.detectInProgressState() ? defaultInProgressState(openListNames) : request.inProgressState();
+        String mergingState = defaultMergingState(openListNames, terminalStates);
         String reviewState = defaultReviewState(openListNames);
         activeStates = withOptionalActiveState(activeStates, inProgressState);
+        activeStates = withOptionalActiveState(activeStates, mergingState);
         validateConfiguredLists("active", activeStates, openListNames);
         validateConfiguredLists("terminal", terminalStates, openListNames);
         validateConfiguredList("in-progress", inProgressState, openListNames);
         validateConfiguredList("blocked", blockedState, openListNames);
+        validateConfiguredList("merging", mergingState, openListNames);
 
         String boardKey = boardKey(board);
         writeWorkflow(
@@ -202,6 +206,7 @@ public final class TrelloBoardSetup {
                         inProgressState,
                         reviewState,
                         blockedState,
+                        mergingState,
                         request.workspaceRoot(),
                         request.maxConcurrentAgents()));
 
@@ -338,9 +343,12 @@ public final class TrelloBoardSetup {
             String inProgressState,
             String reviewState,
             String blockedState,
+            String mergingState,
             Path workspaceRoot,
             int maxAgents) {
-        List<String> handoffStates = allowedMoveStates(inProgressState, reviewState, blockedState);
+        String doneState = landingDoneState(terminalStates);
+        List<String> handoffStates =
+                allowedMoveStates(inProgressState, reviewState, blockedState, mergingState, doneState);
         return """
                 ---
                 tracker:
@@ -414,6 +422,8 @@ public final class TrelloBoardSetup {
 
                 %s
 
+                %s
+
                 Card URL: {{ card.url }}
                 """
                 .formatted(
@@ -425,11 +435,13 @@ public final class TrelloBoardSetup {
                         trelloToolsYaml(handoffStates),
                         maxAgents,
                         workpadPrompt(!handoffStates.isEmpty()),
-                        routingPrompt(activeStates, terminalStates, inProgressState, reviewState, blockedState),
+                        routingPrompt(
+                                activeStates, terminalStates, inProgressState, reviewState, blockedState, mergingState),
                         validationPrompt(!handoffStates.isEmpty(), reviewState),
                         prFeedbackPrompt(reviewState),
-                        reworkPrompt(activeStates, reviewState),
-                        pickupPrompt(activeStates, inProgressState),
+                        reworkPrompt(activeStates, reviewState, mergingState),
+                        landingPrompt(mergingState, doneState, blockedDestination(reviewState, blockedState)),
+                        pickupPrompt(activeStates, inProgressState, mergingState),
                         handoffPrompt(reviewState, blockedState, !handoffStates.isEmpty()));
     }
 
@@ -520,9 +532,11 @@ public final class TrelloBoardSetup {
                 .stripTrailing();
     }
 
-    private static String reworkPrompt(List<String> activeStates, String reviewState) {
+    private static String reworkPrompt(List<String> activeStates, String reviewState, String mergingState) {
         String reviewHandoff = blank(reviewState) ? "human review" : quote(reviewState);
-        String activeText = activeStates.isEmpty() ? "an active column" : quotedList(activeStates);
+        List<String> implementationStates = implementationActiveStates(activeStates, mergingState);
+        String activeText =
+                implementationStates.isEmpty() ? "an active implementation column" : quotedList(implementationStates);
         return """
                 ## Rework From Human Review
 
@@ -543,14 +557,50 @@ public final class TrelloBoardSetup {
                 .stripTrailing();
     }
 
+    private static String landingPrompt(String mergingState, String doneState, String blockedDestination) {
+        if (blank(mergingState)) {
+            return """
+                    ## Landing
+
+                    This workflow has no landing approval column configured. Do not merge or land from Human Review.
+                    A human must land outside Symphony or add a Merging-style column to the workflow active columns
+                    and Trello move allowlist.
+                    """
+                    .stripTrailing();
+        }
+        String doneDestination = blank(doneState) ? "the configured done column" : quote(doneState);
+        String blockedText = blank(blockedDestination)
+                ? "block with a visible Codex response because no blocked destination is configured"
+                : "move the card to " + quote(blockedDestination) + " with a concise blocker";
+        return """
+                ## Landing From %s
+
+                %s is human approval for landing. Only run landing when the current Trello column is %s. Do not
+                merge from Human Review, and do not call `gh pr merge` directly from the workflow prompt. Open
+                `.codex/skills/land/SKILL.md` and follow it.
+
+                Before landing, identify the PR, run the PR feedback sweep, run current card-specific validation,
+                check mergeability, branch state, required reviews, and CI/check status, and follow the repository's
+                merge policy. Do not enable auto-merge unless the repository policy explicitly requires it.
+
+                If PR discovery, checks, auth, branch state, merge policy, or outstanding review feedback is unclear,
+                update the workpad and %s. After successful landing, update the workpad with merge evidence, add a
+                concise completion comment when useful, and move the card to %s.
+                """
+                .formatted(quote(mergingState), quote(mergingState), quote(mergingState), blockedText, doneDestination)
+                .stripTrailing();
+    }
+
     private static String routingPrompt(
             List<String> activeStates,
             List<String> terminalStates,
             String inProgressState,
             String reviewState,
-            String blockedState) {
+            String blockedState,
+            String mergingState) {
         List<String> queueStates = activeStates.stream()
                 .filter(state -> blank(inProgressState) || !state.equalsIgnoreCase(inProgressState))
+                .filter(state -> blank(mergingState) || !state.equalsIgnoreCase(mergingState))
                 .toList();
         String activeText = activeStates.isEmpty() ? "no active columns" : quotedList(activeStates);
         String queueText = queueStates.isEmpty() ? "active queue columns" : quotedList(queueStates);
@@ -560,6 +610,10 @@ public final class TrelloBoardSetup {
         String inProgressText = blank(inProgressState) ? "No in-progress column" : quote(inProgressState);
         String blockedText = blank(blockedState) ? "no configured blocked column" : quote(blockedState);
         String reviewText = blank(reviewState) ? "no configured human review column" : quote(reviewState);
+        String mergingText = blank(mergingState) ? "No landing approval column" : quote(mergingState);
+        String landingText = blank(mergingState)
+                ? "landing automation is disabled until one is configured"
+                : "human approval for landing. Run landing only from this column";
         String terminalText = terminalStates.isEmpty() ? "configured terminal columns" : quotedList(terminalStates);
         return """
                 ## Trello Column Routing
@@ -570,11 +624,20 @@ public final class TrelloBoardSetup {
                 - %s: active work already picked up by Codex; continue the existing execution flow.
                 - %s: blocked work. Symphony does not dispatch it while this column is not configured as active.
                 - %s: human review. Do not code from this column unless a human moves the card back to an active column.
-                - `Merging`: human approval for landing. Do not merge from Human Review, and do not run landing unless this workflow explicitly configures Merging as active.
+                - %s: %s.
                 - %s: terminal work. Symphony cleans up matching workspaces for terminal cards.
                 - Any other column: out of scope for this Symphony process unless it is added to active_states or terminal_states.
                 """
-                .formatted(activeText, queueText, pickupText, inProgressText, blockedText, reviewText, terminalText)
+                .formatted(
+                        activeText,
+                        queueText,
+                        pickupText,
+                        inProgressText,
+                        blockedText,
+                        reviewText,
+                        mergingText,
+                        landingText,
+                        terminalText)
                 .stripTrailing();
     }
 
@@ -630,15 +693,20 @@ public final class TrelloBoardSetup {
                 .formatted(reviewState, blockedDestination, FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION);
     }
 
-    private static String pickupPrompt(List<String> activeStates, String inProgressState) {
+    private static String pickupPrompt(List<String> activeStates, String inProgressState, String mergingState) {
         if (blank(inProgressState)) {
-            return """
+            String landingException = blank(mergingState)
+                    ? ""
+                    : " If the card is in " + quote(mergingState) + ", follow the landing section instead.";
+            return ("""
                     This workflow has no in-progress column configured. Leave the card in its current active column
                     while working, then move it to the configured handoff column when the work is ready or blocked."""
+                            + landingException)
                     .stripTrailing();
         }
         List<String> queueStates = activeStates.stream()
                 .filter(state -> !state.equalsIgnoreCase(inProgressState))
+                .filter(state -> blank(mergingState) || !state.equalsIgnoreCase(mergingState))
                 .toList();
         String queueText = queueStates.isEmpty() ? "an active queue column" : quotedList(queueStates);
         return """
@@ -647,7 +715,8 @@ public final class TrelloBoardSetup {
                 .formatted(queueText, inProgressState, inProgressState);
     }
 
-    private static List<String> allowedMoveStates(String inProgressState, String reviewState, String blockedState) {
+    private static List<String> allowedMoveStates(
+            String inProgressState, String reviewState, String blockedState, String mergingState, String doneState) {
         List<String> states = new ArrayList<>();
         if (!blank(inProgressState)) {
             states.add(inProgressState);
@@ -659,6 +728,11 @@ public final class TrelloBoardSetup {
         if (!blank(blockedDestination)
                 && states.stream().noneMatch(existing -> existing.equalsIgnoreCase(blockedDestination))) {
             states.add(blockedDestination);
+        }
+        if (!blank(mergingState)
+                && !blank(doneState)
+                && states.stream().noneMatch(existing -> existing.equalsIgnoreCase(doneState))) {
+            states.add(doneState);
         }
         return List.copyOf(states);
     }
@@ -728,11 +802,37 @@ public final class TrelloBoardSetup {
                 .orElse(null);
     }
 
+    private static String defaultMergingState(List<String> openListNames, List<String> terminalStates) {
+        if (blank(landingDoneState(terminalStates))) {
+            return null;
+        }
+        return openListNames.stream()
+                .filter(name -> name.equalsIgnoreCase(RECOMMENDED_MERGING_STATE))
+                .findFirst()
+                .orElse(null);
+    }
+
     private static String defaultBlockedState(List<String> openListNames) {
         return openListNames.stream()
                 .filter(name -> name.equalsIgnoreCase(RECOMMENDED_BLOCKED_STATE))
                 .findFirst()
                 .orElse(null);
+    }
+
+    private static String landingDoneState(List<String> terminalStates) {
+        return terminalStates.stream()
+                .filter(state -> state.equalsIgnoreCase("Done"))
+                .findFirst()
+                .orElseGet(() -> terminalStates.stream().findFirst().orElse(null));
+    }
+
+    private static List<String> implementationActiveStates(List<String> activeStates, String mergingState) {
+        if (blank(mergingState)) {
+            return activeStates;
+        }
+        return activeStates.stream()
+                .filter(state -> !state.equalsIgnoreCase(mergingState))
+                .toList();
     }
 
     private static List<String> withOptionalActiveState(List<String> activeStates, String extraState) {

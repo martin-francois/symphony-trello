@@ -110,6 +110,26 @@ class CodexSkillStructureTest {
                 .contains("Do not create duplicate progress summary comments");
     }
 
+    @Test
+    void landSkillFailsClosedAndAvoidsAutoMergeByDefault() throws IOException {
+        // given
+        Path skill = SKILLS_ROOT.resolve("land").resolve("SKILL.md");
+
+        // when
+        String body = readSkillMetadata(skill).body();
+
+        // then
+        assertThat(body)
+                .contains("Land only after a human moves the Trello card to `Merging`")
+                .contains("Do not enable auto-merge unless the repository policy explicitly requires it")
+                .contains("mergeability")
+                .contains("review feedback")
+                .contains("required checks are green")
+                .contains("move the card to the configured landing completion column")
+                .contains("move the card to `Blocked`")
+                .contains("The card is in `Human Review` rather than `Merging`");
+    }
+
     private SkillMetadata readSkillMetadata(Path file) {
         try {
             String content = Files.readString(file, StandardCharsets.UTF_8);
