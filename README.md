@@ -54,9 +54,12 @@ cards.
 
 Prerequisites:
 
-- Java 25 LTS.
-- The Maven wrapper in this repository.
-- Codex CLI with `codex app-server`.
+- Java 25 JDK. `JAVA_HOME` should point to it, and `java` / `javac` should resolve from that JDK.
+- Codex CLI authenticated for the user that runs Symphony for Trello.
+
+The generated workflow runs `codex app-server`, so `codex` must be on that user's `PATH`. If Codex is
+installed somewhere else, set `codex.command` in [`WORKFLOW.md`](#workflow-contract) to an absolute
+path or wrapper command that starts Codex app-server over stdio.
 
 Start with [Trello Setup](#trello-setup) if you do not yet have Trello credentials or
 [`WORKFLOW.md`](#workflow-contract). That section walks you through creating the Trello key/token,
@@ -450,6 +453,20 @@ Unknown template variables fail the affected attempt, then the orchestrator appl
 behavior. This is intentional; typo-tolerant prompts hide broken automation.
 
 ## Advanced Configuration
+
+### Codex Command
+
+Generated workflows use:
+
+```yaml
+codex:
+  command: codex app-server
+```
+
+Symphony runs that value with `bash -lc` from the card workspace. Any command is acceptable if it
+starts a Codex app-server on stdio for the same OS user that runs Symphony. Examples include an
+absolute path such as `/opt/codex/bin/codex app-server` or a small wrapper script that sets up the
+environment before starting `codex app-server`.
 
 ### Trello Write Controls
 
