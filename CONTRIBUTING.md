@@ -2,6 +2,9 @@
 
 This repository is maintained as if it were open source, even while visibility is private.
 
+AI agents working in this repository must also follow `AGENTS.md`. It captures the project-specific
+engineering preferences that should persist across Codex sessions.
+
 ## Development Setup
 
 1. Install Java 25 LTS.
