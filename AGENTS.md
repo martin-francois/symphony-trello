@@ -48,6 +48,10 @@ matters, and easy for another engineer to understand without asking the original
   down a future maintainer.
 - Use Java 25 LTS language/runtime features where they make the code clearer, but do not be clever
   for its own sake.
+- Prefer Java/JVM-based maintained project tooling over Python or other helper languages when the
+  task can be handled cleanly in Java. Short shell snippets in documentation are fine for command
+  orchestration, but committed reusable helpers should fit the repository's Java-first maintenance
+  model unless there is a concrete reason not to.
 - Keep the project open-source-ready even while private: clear README, usable CONTRIBUTING, useful
   ADRs, no committed secrets, and reviewable history.
 - For local Trello credentials, use ignored project-root `.env` files created from `.env.example`.
@@ -101,6 +105,9 @@ matters, and easy for another engineer to understand without asking the original
   session.
 - Do not write low-value tests that only restate a constant. Do test parsing, policy enforcement,
   edge cases, failure modes, and cross-component contracts.
+- When reporting live E2E results, state which external systems were real and which parts used test
+  doubles. Do not imply that real Codex completed a path when only deterministic fake Codex completed
+  it against real Trello.
 
 ## Java Style
 

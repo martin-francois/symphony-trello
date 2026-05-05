@@ -3,6 +3,11 @@
 This runbook verifies Symphony against real Trello boards without committing secrets or disposable
 board ids.
 
+The main flow uses real Trello and a deterministic Java app-server test double in place of real
+Codex. That makes Trello reads, board creation, card scheduling, comments, moves, and concurrency
+reproducible. Run the optional real Codex smoke separately when you need confidence that the local
+Codex CLI starts and speaks the app-server protocol in this checkout.
+
 ## Inputs
 
 1. Create `.env` from `.env.example`.
@@ -73,35 +78,22 @@ JAVA_HOME=/tmp/jdk25 PATH=/tmp/jdk25/bin:$PATH \
   -Dexec.args="import-board --board $BOARD_A_ID --active 'Ready for Codex' --terminal Done --workflow $RUN_DIR/imported-a.WORKFLOW.md"
 ```
 
-Patch the generated workflows to use the deterministic app-server and different ports. Board B uses
-two workers and a delay so `/api/v1/state` can prove that two cards run at once while the third waits
-for a refresh.
+Patch the generated workflows to use the deterministic Java app-server and different ports. Board B
+uses two workers and a delay so `/api/v1/state` can prove that two cards run at once while the third
+waits for a refresh.
 
 ```bash
-python3 - <<'PY'
-from pathlib import Path
+RUN_ID="$(cat target/live-e2e-current-run-id)"
+RUN_DIR="target/$RUN_ID"
+FAKE_JAVA="${JAVA_HOME:-/tmp/jdk25}/bin/java"
+FAKE_CODEX="$(pwd)/scripts/FakeCodexAppServer.java"
 
-root = Path.cwd()
-run_id = Path("target/live-e2e-current-run-id").read_text().strip()
-run_dir = Path("target") / run_id
-fake = root / "scripts/fake-codex-app-server.py"
+perl -0pi -e "s|command: codex app-server|command: \"SYMPHONY_FAKE_CODEX_SLEEP_MS=250 $FAKE_JAVA --source 25 $FAKE_CODEX\"|" \
+  "$RUN_DIR/board-a.WORKFLOW.md" "$RUN_DIR/imported-a.WORKFLOW.md"
 
-patches = {
-    "board-a.WORKFLOW.md": (18181, 1, 250),
-    "board-b.WORKFLOW.md": (18182, 2, 7000),
-    "imported-a.WORKFLOW.md": (18183, 1, 250),
-}
-
-for name, (port, workers, sleep_ms) in patches.items():
-    path = run_dir / name
-    text = path.read_text()
-    text = text.replace("max_concurrent_agents: 1", f"max_concurrent_agents: {workers}")
-    text = text.replace(
-        "command: codex app-server",
-        f"command: \"SYMPHONY_FAKE_CODEX_SLEEP_MS={sleep_ms} python3 {fake}\"",
-    )
-    path.write_text(text)
-PY
+perl -0pi -e "s/max_concurrent_agents: 1/max_concurrent_agents: 2/;
+  s|command: codex app-server|command: \"SYMPHONY_FAKE_CODEX_SLEEP_MS=7000 $FAKE_JAVA --source 25 $FAKE_CODEX\"|" \
+  "$RUN_DIR/board-b.WORKFLOW.md"
 ```
 
 Create disposable cards in the active lists. Use Trello's REST API directly so the live test is
@@ -228,12 +220,13 @@ check because it removes model latency and behavior variability from Trello prot
 For reproducible live testing, point `codex.command` at:
 
 ```bash
-python3 /absolute/path/to/scripts/fake-codex-app-server.py
+${JAVA_HOME:-/tmp/jdk25}/bin/java --source 25 /absolute/path/to/scripts/FakeCodexAppServer.java
 ```
 
-The fake app-server speaks the same app-server protocol Symphony uses for Codex, then calls the
-scoped Trello tools exposed by Symphony. This verifies the scheduler, workspace creation, app-server
-protocol, Trello comments, Trello moves, and handoff allowlist without relying on model behavior.
+The fake app-server is a single-file Java program that speaks the same stdin/stdout app-server
+protocol Symphony uses for Codex, then calls the scoped Trello tools exposed by Symphony. This
+verifies the scheduler, workspace creation, app-server protocol, Trello comments, Trello moves, and
+handoff allowlist without relying on model behavior.
 
 Optional environment variables:
 
