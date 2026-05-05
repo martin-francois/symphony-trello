@@ -487,7 +487,7 @@ Important environment variables:
 - `SYMPHONY_WORKFLOW_PATH`: workflow file path, default `WORKFLOW.md`.
 - `SYMPHONY_HTTP_PORT`: Quarkus HTTP port, default `8080`.
 - `SYMPHONY_AUTOSTART`: set `false` in tests or when only using injected services.
-- `TRELLO_API_KEY` and `TRELLO_API_TOKEN`: canonical Trello credentials.
+- `TRELLO_API_KEY` and `TRELLO_API_TOKEN`: default Trello credential variable names.
 
 For local runs, the same names can be placed in ignored `.env`; real environment variables take
 precedence.
