@@ -16,11 +16,6 @@ narrow: it schedules, isolates, observes, and retries work. Card handoff behavio
 - [Current Capabilities](#current-capabilities)
 - [Quick Start](#quick-start)
 - [Trello Setup](#trello-setup)
-  - [One-Time Browser Setup: Workspace, API Key, Token](#one-time-browser-setup-workspace-api-key-token)
-  - [Fast Path: Create The Recommended Board](#fast-path-create-the-recommended-board)
-  - [Fast Path: Import An Existing Board](#fast-path-import-an-existing-board)
-  - [Option A: Reuse An Existing Board](#option-a-reuse-an-existing-board)
-  - [Option B: Create A New Beginner-Friendly Board](#option-b-create-a-new-beginner-friendly-board)
 - [Workflow Contract](#workflow-contract)
 - [Operations](#operations)
 - [Safety Posture](#safety-posture)
@@ -55,9 +50,8 @@ Prerequisites:
 - Java 25 LTS.
 - The Maven wrapper in this repository.
 - Codex CLI with `codex app-server`.
-- A Trello API key/token. You can either
-  [create a board with the setup command](#fast-path-create-the-recommended-board) or
-  [import an existing Trello board](#fast-path-import-an-existing-board).
+- A Trello API key/token. If you do not have one yet, follow the Trello Setup section below in
+  order.
 
 If you already have Trello credentials and a configured [`WORKFLOW.md`](#workflow-contract), set
 credentials and start the service:
@@ -103,16 +97,15 @@ it can add a comment to the current card and move that same card to `Review` whe
 work is ready for human review. If you want a strictly read-only deployment, set
 `trello_tools.allow_writes: false` and move cards manually.
 
-There are two setup paths:
+The setup guide below is meant to be followed in order. First create the Trello Workspace and API
+credentials in the browser. After that, choose one of the two board setup paths:
 
-- **[Create the recommended board](#fast-path-create-the-recommended-board)**: best when you are new
-  to Trello or want Symphony to create a clean `Inbox` -> `Ready for Codex` -> `Review` -> `Done`
-  board for you.
-- **[Import an existing board](#fast-path-import-an-existing-board)**: best when you already have a
-  Trello board and want Symphony to write a starter `WORKFLOW.md` for it.
+- **Create the recommended board**: best when you are new to Trello or want Symphony to create a
+  clean `Inbox` -> `Ready for Codex` -> `Review` -> `Done` board for you.
+- **Import an existing board**: best when you already have a Trello board and want Symphony to write
+  a starter `WORKFLOW.md` for it.
 
-Both paths need the same [one-time browser setup](#one-time-browser-setup-workspace-api-key-token)
-first.
+Do not skip the browser setup. Both board setup paths need the key/token it creates.
 
 ### One-Time Browser Setup: Workspace, API Key, Token
 
@@ -171,8 +164,7 @@ Workspace, API key, or API token for you because Trello requires browser authori
 steps. After that, one command creates the board, creates the recommended lists, and writes
 [`WORKFLOW.md`](#workflow-contract).
 
-1. Complete the [one-time browser setup](#one-time-browser-setup-workspace-api-key-token) above.
-2. Create the board and workflow:
+Now create the board and workflow:
 
 ```bash
 ./mvnw -q exec:java -Dexec.args='new-board --name "Symphony Work Queue"'
@@ -228,11 +220,9 @@ and the failure will be visible in the Codex session events.
 Use this path when a Trello board already exists but you want Symphony to write the starter
 [`WORKFLOW.md`](#workflow-contract) for you.
 
-1. Complete the [one-time browser setup](#one-time-browser-setup-workspace-api-key-token) above if
-   you have not already generated a key/token.
-2. Copy the board short link from the board URL.
+1. Copy the board short link from the board URL.
    In `https://trello.com/b/abc123/my-board`, use `abc123`.
-3. Run the import command:
+2. Run the import command:
 
 ```bash
 ./mvnw -q exec:java -Dexec.args='import-board --board abc123 --active "Ready for Codex" --terminal Done'
@@ -330,7 +320,7 @@ Operationally, use the board like this:
 ### Option B: Create A New Beginner-Friendly Board
 
 Use this manual path when you want a clean board designed for Symphony from the start but do not want
-the [setup command](#fast-path-create-the-recommended-board) to create it for you.
+the setup command to create it for you.
 
 Create a board named `Symphony Work Queue` and add these lists in this order:
 
