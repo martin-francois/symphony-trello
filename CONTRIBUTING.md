@@ -71,7 +71,8 @@ app-server test double so Trello behavior can be verified without depending on m
 Recommended smoke path:
 
 1. Create one test card in an active list.
-2. Start Symphony with a temporary `workspace.root`.
+2. Start Symphony with a temporary workspace directory so smoke-test checkouts stay away from real
+   project work.
 3. Confirm the card appears as running or retrying in `/api/v1/state`.
 4. Move the card to a terminal list.
 5. Confirm the workspace is removed after reconciliation.
