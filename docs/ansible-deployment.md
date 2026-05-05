@@ -98,6 +98,9 @@ If Java or Codex is installed in a directory systemd does not normally search, a
 symphony_trello_service_path: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/opt/java/bin:/opt/codex/bin
 ```
 
+Use paths the `symphony-trello` service user can read. The systemd unit protects home directories, so
+do not point this at tools installed below `/root` or a personal home directory.
+
 `vars.yml` is ignored because workflow paths and host-specific choices differ per deployment.
 
 ## Configure Secrets With Ansible Vault
