@@ -7,6 +7,18 @@ on:
       - main
 
 jobs:
+  renovate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Validate Renovate config
+        run: pnpm dlx --package renovate renovate-config-validator renovate.json
+
   test:
     runs-on: ubuntu-latest
     steps:

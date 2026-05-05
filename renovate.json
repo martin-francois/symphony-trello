@@ -1,0 +1,58 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":rebaseStalePrs",
+    ":dependencyDashboard",
+    "group:all"
+  ],
+  "reviewers": ["martinfrancois"],
+  "labels": ["dependencies"],
+  "rangeStrategy": "replace",
+  "minimumReleaseAge": "3 days",
+  "minimumReleaseAgeBehaviour": "timestamp-required",
+  "separateMinorPatch": false,
+  "automerge": true,
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["security"]
+  },
+  "packageRules": [
+    {
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "dependencyDashboardApproval": true,
+      "labels": ["dependencies", "major-update"],
+      "prBodyNotes": [
+        "## Manual review required for major updates",
+        "",
+        "Major dependency updates can change runtime, test, or plugin behavior. Review release notes and run the full verification before merging."
+      ]
+    },
+    {
+      "matchManagers": ["maven-wrapper"],
+      "allowedVersions": "<4.0.0",
+      "groupName": "Maven 3 wrapper updates",
+      "groupSlug": "maven-3-wrapper-updates",
+      "prBodyNotes": [
+        "## Maven wrapper update",
+        "",
+        "This project intentionally uses Maven 3. Keep wrapper updates on the Maven 3 line unless the project explicitly moves back to Maven 4."
+      ]
+    },
+    {
+      "matchPackageNames": ["org.apache.maven.plugins:maven-compiler-plugin"],
+      "allowedVersions": "<4.0.0",
+      "prBodyNotes": [
+        "## Maven compiler plugin update",
+        "",
+        "This project intentionally uses Maven 3, so the compiler plugin must stay on the Maven-3-compatible 3.x line."
+      ]
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "groupName": "GitHub Actions updates",
+      "groupSlug": "github-actions-updates"
+    }
+  ]
+}
