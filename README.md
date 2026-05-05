@@ -4,10 +4,12 @@ Symphony Trello Java is a Quarkus daemon that turns Trello cards into isolated C
 It polls a configured Trello board, creates one deterministic workspace per card, renders your
 repository-owned `WORKFLOW.md` prompt, and runs `codex app-server` in that card's workspace.
 
-The service is useful when a Trello board already represents engineering work and you want repeatable
-agent execution without hand-running scripts for every card. Symphony stays deliberately narrow: it
-schedules, isolates, observes, and retries work. Card handoff behavior belongs in `WORKFLOW.md` and in
-the tools available to Codex.
+The service is useful when you want Trello to become a lightweight control surface for parallel
+software work: one place to capture tasks, see what is ready for Codex, track what is in review, and
+resume context across multiple projects without hand-running scripts for every card. It also works
+well when an existing Trello board already represents engineering work. Symphony stays deliberately
+narrow: it schedules, isolates, observes, and retries work. Card handoff behavior belongs in
+`WORKFLOW.md` and in the tools available to Codex.
 
 ## Current Capabilities
 
