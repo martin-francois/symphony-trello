@@ -87,10 +87,20 @@ it can add a comment to the current card and move that same card to `Review` whe
 work is ready for human review. If you want a strictly read-only deployment, set
 `trello_tools.allow_writes: false` and move cards manually.
 
+There are two setup paths:
+
+- **Create the recommended board**: best when you are new to Trello or want Symphony to create a
+  clean `Inbox` -> `Ready for Codex` -> `Review` -> `Done` board for you.
+- **Import an existing board**: best when you already have a Trello board and want Symphony to write
+  a starter `WORKFLOW.md` for it.
+
+Both paths need the same one-time browser setup first.
+
 ### One-Time Browser Setup: Workspace, API Key, Token
 
-Do this once before using either fast path. Symphony can create boards and write `WORKFLOW.md`, but
-Trello requires you to create the Workspace and authorize the API token in the browser.
+Complete these browser steps once before creating the recommended board or importing an existing
+board. Symphony can create boards and write `WORKFLOW.md`, but Trello requires you to create the
+Workspace and authorize the API token in the browser.
 
 1. Sign in to Trello in your browser.
 2. Create a Workspace if you do not already have one for Symphony.
