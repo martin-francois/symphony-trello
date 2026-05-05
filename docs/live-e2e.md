@@ -3,10 +3,10 @@
 This runbook verifies Symphony against real Trello boards without committing secrets or disposable
 board ids.
 
-The main flow uses real Trello and a deterministic Java app-server test double in place of real
-Codex. That makes Trello reads, board creation, card scheduling, comments, moves, and concurrency
-reproducible. Run the optional real Codex smoke separately when you need confidence that the local
-Codex CLI starts and speaks the app-server protocol in this checkout.
+Run this in two phases. First use real Trello with the deterministic Java app-server test double in
+place of real Codex. That catches scheduler, Trello, workflow import, handoff tool, and concurrency
+issues without model variability. Then run the strict real-Codex phase against fresh disposable
+cards before claiming real `codex app-server` coverage.
 
 ## Inputs
 
@@ -207,10 +207,59 @@ jq -r '[.id, .name, .idList, (.actions | length)] | @tsv' "$RUN_DIR/status-$card
 The final `idList` must match the board's `review-list-*.txt`, and the comment count must be at
 least `1`.
 
-An optional real Codex smoke can use an unpatched generated workflow whose `codex.command` remains
-`codex app-server`. Keep it bounded and record whether Codex starts, emits app-server events, and
-finishes the Trello handoff. The deterministic fake app-server remains the authoritative regression
-check because it removes model latency and behavior variability from Trello protocol verification.
+## Strict Real-Codex Phase
+
+After the deterministic phase passes, create fresh disposable real-Codex boards. Do not reuse the
+deterministic workflows here because those were patched to run the fake app-server.
+
+```bash
+RUN_ID="$(cat target/live-e2e-current-run-id)"
+RUN_DIR="target/$RUN_ID"
+
+JAVA_HOME=/tmp/jdk25 PATH=/tmp/jdk25/bin:$PATH \
+  ./mvnw -q exec:java \
+  -Dexec.args="new-board --name 'Symphony $RUN_ID Real Codex Board A' --workflow $RUN_DIR/real-board-a.WORKFLOW.md"
+
+REAL_BOARD_A_ID="$(awk -F'"' '/board_id:/ {print $2; exit}' "$RUN_DIR/real-board-a.WORKFLOW.md")"
+
+JAVA_HOME=/tmp/jdk25 PATH=/tmp/jdk25/bin:$PATH \
+  ./mvnw -q exec:java \
+  -Dexec.args="import-board --board $REAL_BOARD_A_ID --active 'Ready for Codex' --terminal Done --workflow $RUN_DIR/real-imported-a.WORKFLOW.md"
+
+JAVA_HOME=/tmp/jdk25 PATH=/tmp/jdk25/bin:$PATH \
+  ./mvnw -q exec:java \
+  -Dexec.args="new-board --name 'Symphony $RUN_ID Real Codex Board B' --max-agents 2 --workflow $RUN_DIR/real-board-b.WORKFLOW.md"
+```
+
+Create strict real-Codex workflows from those fresh generated workflows. These keep the same real
+Trello board configuration and `codex.command: codex app-server`, but replace the normal engineering
+prompt with a handoff-only E2E prompt. The normal generated prompt is intentionally broader and can
+make Codex inspect or verify code instead of finishing a small protocol check quickly.
+
+```bash
+RUN_ID="$(cat target/live-e2e-current-run-id)"
+RUN_DIR="target/$RUN_ID"
+REAL_JAVA="${JAVA_HOME:-/tmp/jdk25}/bin/java"
+
+$REAL_JAVA --source 25 scripts/WriteNarrowRealCodexWorkflow.java "$RUN_DIR/real-board-a.WORKFLOW.md" "$RUN_DIR/real-narrow-a.WORKFLOW.md" "real Codex generated handoff" "$RUN_ID"
+$REAL_JAVA --source 25 scripts/WriteNarrowRealCodexWorkflow.java "$RUN_DIR/real-imported-a.WORKFLOW.md" "$RUN_DIR/real-narrow-imported-a.WORKFLOW.md" "real Codex imported handoff" "$RUN_ID"
+$REAL_JAVA --source 25 scripts/WriteNarrowRealCodexWorkflow.java "$RUN_DIR/real-board-b.WORKFLOW.md" "$RUN_DIR/real-narrow-b.WORKFLOW.md" "real Codex concurrent handoff" "$RUN_ID"
+```
+
+Create fresh cards in `Ready for Codex` for each strict workflow. Start the strict workflows on
+separate unused ports the same way as the deterministic phase, but do not stop the service at the
+first Trello move. Wait until both conditions are true:
+
+1. Each target card has at least one Trello comment and its `idList` matches the board's Review list.
+2. `/api/v1/state` reports `counts.running == 0` and `counts.retrying == 0`.
+
+For the concurrency workflow, first verify `/api/v1/state` shows `counts.running == 2` while both
+real Codex workers are active, then wait for both cards to satisfy the final handoff and zero-state
+conditions.
+
+You may also run an exploratory smoke with an unmodified generated workflow. Record it separately
+from the strict real-Codex phase because the generated prompt represents real engineering work and is
+not a deterministic handoff-only protocol check.
 
 ## Deterministic App-Server
 

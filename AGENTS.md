@@ -110,6 +110,9 @@ matters, and easy for another engineer to understand without asking the original
 - When reporting live E2E results, state which external systems were real and which parts used test
   doubles. Do not imply that real Codex completed a path when only deterministic fake Codex completed
   it against real Trello.
+- For live E2E, run the deterministic fake-Codex phase before real Codex. Then run strict real-Codex
+  checks against real Trello with fresh cards and wait for both Trello handoff completion and
+  `/api/v1/state` returning to zero running/retrying before claiming real-Codex coverage.
 
 ## Java Style
 
