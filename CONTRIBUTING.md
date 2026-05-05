@@ -11,7 +11,8 @@ engineering preferences that should persist across Codex sessions.
 2. Use the Maven wrapper: `./mvnw test`.
 3. Install Codex CLI if you want to run real worker sessions.
 4. Create a local `WORKFLOW.md` from `WORKFLOW.example.md`.
-5. Keep Trello secrets in environment variables, not in committed files.
+5. Keep Trello secrets in environment variables or ignored local files such as `.secrets/trello.env`,
+   not in committed files.
 
 ## Quality Bar
 
