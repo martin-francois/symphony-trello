@@ -7,3 +7,6 @@ target/
 .mvn/wrapper/dists/
 workspaces/
 logs/
+.secrets/
+.env.local
+.env.*.local
