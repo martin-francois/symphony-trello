@@ -46,6 +46,10 @@ Use Conventional Commits:
 Use a disposable Trello board and token. Do not run real smoke tests against a production board until
 the workflow prompt, active lists, terminal lists, and workspace hooks have been reviewed.
 
+For a reproducible board-creation, import, handoff, and concurrency check, follow
+[docs/live-e2e.md](docs/live-e2e.md). It uses `.env`, disposable boards, and a deterministic
+app-server test double so Trello behavior can be verified without depending on model output.
+
 Recommended smoke path:
 
 1. Create one test card in an active list.

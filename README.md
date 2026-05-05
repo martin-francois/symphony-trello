@@ -496,6 +496,6 @@ without waiting indefinitely.
 ```
 
 The test suite is deterministic and does not call Trello. Real Trello smoke testing is intentionally
-environment-dependent and should use an isolated board/card. See [CONTRIBUTING.md](CONTRIBUTING.md)
-for the full contributor checklist and [AGENTS.md](AGENTS.md) for repository-local AI agent
-instructions.
+environment-dependent and should use disposable boards/cards; see
+[docs/live-e2e.md](docs/live-e2e.md). See [CONTRIBUTING.md](CONTRIBUTING.md) for the full
+contributor checklist and [AGENTS.md](AGENTS.md) for repository-local AI agent instructions.

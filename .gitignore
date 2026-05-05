@@ -7,6 +7,8 @@ target/
 .mvn/wrapper/dists/
 workspaces/
 logs/
+__pycache__/
+*.pyc
 .secrets/
 .env
 .env.*
