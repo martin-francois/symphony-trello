@@ -9,7 +9,7 @@ software work: one place to capture tasks, see what is ready for Codex, track wh
 resume context across multiple projects without hand-running scripts for every card. It also works
 well when an existing Trello board already represents engineering work. Symphony stays deliberately
 narrow: it schedules, isolates, observes, and retries work. Card handoff behavior belongs in
-`WORKFLOW.md` and in the tools available to Codex.
+[`WORKFLOW.md`](#workflow-contract) and in the tools available to Codex.
 
 ## Table of Contents
 
@@ -42,9 +42,9 @@ narrow: it schedules, isolates, observes, and retries work. Card handoff behavio
 - JSON and HTML status surfaces at `/api/v1/state`, `/api/v1/{card_identifier}`, `/api/v1/refresh`,
   and `/`.
 
-The standardized generic `trello_rest` dynamic tool extension is documented in `SPEC.md` but is not
-yet advertised to Codex by this Java implementation. Instead, Symphony advertises narrower high-level
-handoff tools when `trello_tools.enabled=true` and `trello_tools.allow_writes=true`:
+The standardized generic `trello_rest` dynamic tool extension is documented in [SPEC.md](SPEC.md) but
+is not yet advertised to Codex by this Java implementation. Instead, Symphony advertises narrower
+high-level handoff tools when `trello_tools.enabled=true` and `trello_tools.allow_writes=true`:
 `trello_add_comment` and `trello_move_current_card`. Read-only scheduler deployments are still
 supported by disabling Trello writes.
 
@@ -55,11 +55,12 @@ Prerequisites:
 - Java 25 LTS.
 - The Maven wrapper in this repository.
 - Codex CLI with `codex app-server`.
-- A Trello API key/token. You can either create a board with the setup command or import an existing
-  Trello board.
+- A Trello API key/token. You can either
+  [create a board with the setup command](#fast-path-create-the-recommended-board) or
+  [import an existing Trello board](#fast-path-import-an-existing-board).
 
-If you already have Trello credentials and a configured `WORKFLOW.md`, set credentials and start the
-service:
+If you already have Trello credentials and a configured [`WORKFLOW.md`](#workflow-contract), set
+credentials and start the service:
 
 ```bash
 export TRELLO_API_KEY=...
@@ -67,9 +68,9 @@ export TRELLO_API_TOKEN=...
 ./mvnw quarkus:dev
 ```
 
-By default the status page binds to `127.0.0.1:8080`. Use `SYMPHONY_HTTP_PORT=0` for an ephemeral
-test port, configure `server.port` in `WORKFLOW.md`, or pass `--port` for local development.
-Command-line `--port` wins over `server.port`.
+By default the [status page](#operations) binds to `127.0.0.1:8080`. Use `SYMPHONY_HTTP_PORT=0` for
+an ephemeral test port, configure `server.port` in [`WORKFLOW.md`](#workflow-contract), or pass
+`--port` for local development. Command-line `--port` wins over `server.port`.
 
 Packaged runs also accept a positional workflow path and `--port`:
 
@@ -168,7 +169,7 @@ If it can access multiple Workspaces, use `list-workspaces` first and pass `--wo
 Use this path when you are new to Trello or want the lowest-friction setup. Symphony cannot create the
 Workspace, API key, or API token for you because Trello requires browser authorization for those
 steps. After that, one command creates the board, creates the recommended lists, and writes
-`WORKFLOW.md`.
+[`WORKFLOW.md`](#workflow-contract).
 
 1. Complete the [one-time browser setup](#one-time-browser-setup-workspace-api-key-token) above.
 2. Create the board and workflow:
@@ -224,8 +225,8 @@ and the failure will be visible in the Codex session events.
 
 ### Fast Path: Import An Existing Board
 
-Use this path when a Trello board already exists but you want Symphony to write the starter workflow
-for you.
+Use this path when a Trello board already exists but you want Symphony to write the starter
+[`WORKFLOW.md`](#workflow-contract) for you.
 
 1. Complete the [one-time browser setup](#one-time-browser-setup-workspace-api-key-token) above if
    you have not already generated a key/token.
@@ -247,8 +248,9 @@ cards there after they have a clear title, useful description, and acceptance cr
 When the imported board has a list named `Review`, the starter workflow enables the same handoff
 tools as the recommended new board and allows Codex to move cards there. If your existing board uses
 a different review list, edit `trello_tools.allowed_move_list_names` and the final handoff
-instruction in `WORKFLOW.md` to the same list name before starting the daemon. If there is no obvious
-review list, the generated workflow keeps Trello writes disabled until you choose one.
+instruction in [`WORKFLOW.md`](#workflow-contract) to the same list name before starting the daemon.
+If there is no obvious review list, the generated workflow keeps Trello writes disabled until you
+choose one.
 
 Common setup command options:
 
@@ -262,7 +264,7 @@ Common setup command options:
 ### Option A: Reuse An Existing Board
 
 Use this manual path when your team already has a Trello board for engineering work and you prefer to
-write `WORKFLOW.md` yourself.
+write [`WORKFLOW.md`](#workflow-contract) yourself.
 
 1. Pick the board Symphony should poll.
 2. Choose one or two list names that mean "Codex may work on this now".
@@ -271,8 +273,8 @@ write `WORKFLOW.md` yourself.
    A common default is `Done`.
 4. Copy the board short link from the board URL.
    In `https://trello.com/b/abc123/my-board`, the `board_id` value can be `abc123`.
-5. Create `WORKFLOW.md` and set `tracker.board_id`, `tracker.active_states`, and
-   `tracker.terminal_states` to match your board.
+5. Create [`WORKFLOW.md`](#workflow-contract) and set `tracker.board_id`, `tracker.active_states`,
+   and `tracker.terminal_states` to match your board.
 
 Example for an existing board:
 
@@ -319,7 +321,8 @@ Operationally, use the board like this:
 1. Put new ideas wherever your team normally triages work.
 2. Move a card to `Ready for Codex` only when the title and description are clear enough for an
    engineer to start.
-3. Watch Symphony at `http://127.0.0.1:8080/`.
+3. Watch Symphony at `http://127.0.0.1:8080/`; see [Operations](#operations) for the available
+   status endpoints.
 4. Review the card after Codex moves it to `Review`.
 5. Move the card out of `Ready for Codex` if you want to pause or prevent further retries.
 6. Move the card to `Done` when the generated work has been reviewed and accepted.
@@ -327,7 +330,7 @@ Operationally, use the board like this:
 ### Option B: Create A New Beginner-Friendly Board
 
 Use this manual path when you want a clean board designed for Symphony from the start but do not want
-the setup command to create it for you.
+the [setup command](#fast-path-create-the-recommended-board) to create it for you.
 
 Create a board named `Symphony Work Queue` and add these lists in this order:
 
@@ -360,7 +363,7 @@ Notes:
 - Links, constraints, or gotchas.
 ```
 
-Use this `WORKFLOW.md` starter for the new board:
+Use this [`WORKFLOW.md`](#workflow-contract) starter for the new board:
 
 ```markdown
 ---
@@ -417,8 +420,8 @@ predictable.
 ## Workflow Contract
 
 Symphony reads `WORKFLOW.md` from the working directory unless `SYMPHONY_WORKFLOW_PATH` points to a
-different file. YAML front matter configures runtime behavior. The Markdown body becomes the prompt
-template for the card.
+different file. [`WORKFLOW.example.md`](WORKFLOW.example.md) contains a complete starter. YAML front
+matter configures runtime behavior. The Markdown body becomes the prompt template for the card.
 
 Minimum example:
 
@@ -454,8 +457,8 @@ Useful endpoints:
 - `GET /api/v1/{card_identifier}` returns card-specific runtime details.
 - `POST /api/v1/refresh` queues an immediate poll/reconciliation cycle.
 
-`WORKFLOW.md` is watched for changes and also checked defensively on each scheduler tick. Invalid
-reloads are logged and the last known good configuration remains active.
+[`WORKFLOW.md`](#workflow-contract) is watched for changes and also checked defensively on each
+scheduler tick. Invalid reloads are logged and the last known good configuration remains active.
 
 Important environment variables:
 
@@ -472,8 +475,9 @@ requests rather than prompts. Hooks and Codex still execute trusted local code, 
 deployments should use a dedicated OS user, a dedicated workspace volume, narrowly scoped Trello
 credentials, and Codex approval/sandbox settings appropriate to the board's trust level.
 
-Approval and sandbox values are passed through from `WORKFLOW.md` to the installed Codex app-server
-schema. User-input and unsupported dynamic tool requests are answered without waiting indefinitely.
+Approval and sandbox values are passed through from [`WORKFLOW.md`](#workflow-contract) to the
+installed Codex app-server schema. User-input and unsupported dynamic tool requests are answered
+without waiting indefinitely.
 
 ## Build and Test
 
@@ -484,4 +488,6 @@ schema. User-input and unsupported dynamic tool requests are answered without wa
 ```
 
 The test suite is deterministic and does not call Trello. Real Trello smoke testing is intentionally
-environment-dependent and should use an isolated board/card.
+environment-dependent and should use an isolated board/card. See [CONTRIBUTING.md](CONTRIBUTING.md)
+for the full contributor checklist and [AGENTS.md](AGENTS.md) for repository-local AI agent
+instructions.
