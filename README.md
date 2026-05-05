@@ -105,20 +105,22 @@ Workspace and authorize the API token in the browser.
 1. Sign in to Trello in your browser.
 2. [Create a Workspace](https://support.atlassian.com/trello/docs/creating-a-new-workspace/) if you
    do not already have one that you want to use with Symphony.
-3. Choose the Workspace intentionally. The Workspace owns the Trello app/admin entry that provides
-   the API key. If you create a new board with Symphony, the board is created in this Workspace. If
-   you import an existing board, the token you generate here must be able to access that board. It is
-   fine to use a Workspace that also contains non-Symphony boards; Symphony only polls the board
-   configured in `WORKFLOW.md`. Create a separate Workspace when you want cleaner separation of
-   automation credentials, collaborators, or boards.
-4. Open the [Trello apps administration page](https://trello.com/power-ups/admin). Atlassian calls
+
+   The Workspace owns the Trello app/admin entry that provides the API key. If you create a new
+   board with Symphony, the board is created in this Workspace. If you import an existing board, the
+   token you generate here must be able to access that board. It is fine to use a Workspace that also
+   contains non-Symphony boards; Symphony only polls the board configured in `WORKFLOW.md`. Create a
+   separate Workspace when you want cleaner separation of automation credentials, collaborators, or
+   boards.
+
+3. Open the [Trello apps administration page](https://trello.com/power-ups/admin). Atlassian calls
    this the App Admin Portal; use its
    [Managing Apps](https://developer.atlassian.com/cloud/trello/guides/power-ups/managing-apps/)
    guide if the page layout has changed.
-5. If Trello asks you to accept or complete a developer agreement before creating an app, complete
+4. If Trello asks you to accept or complete a developer agreement before creating an app, complete
    that browser flow. Symphony cannot automate that part.
-6. Click `New` to create a new app/admin entry for the Workspace.
-7. Fill the required fields with boring, recognizable values:
+5. Click `New` to create a new app/admin entry for the Workspace.
+6. Fill the required fields with clear, recognizable values:
 
    - `Name`: `Symphony Local Automation`
    - `Workspace`: the Workspace you created or chose above
@@ -130,19 +132,19 @@ Workspace and authorize the API token in the browser.
      [Managing Apps](https://developer.atlassian.com/cloud/trello/guides/power-ups/managing-apps/)
      guide.
 
-8. Create the app/admin entry.
-9. Open its `API Key` tab and choose `Generate a new API Key`.
-10. Copy the API key somewhere temporary. The API key identifies the app, but the token is the
+7. Create the app/admin entry.
+8. Open its `API Key` tab and choose `Generate a new API Key`.
+9. Copy the API key somewhere temporary. The API key identifies the app, but the token is the
     sensitive credential.
-11. On the same API key page, click the `Token` link next to the key. Use Atlassian's
+10. On the same API key page, click the `Token` link next to the key. Use Atlassian's
     [REST API introduction](https://developer.atlassian.com/cloud/trello/guides/rest-api/api-introduction/)
     if the token page has changed.
-12. Review the authorization screen. For the generated handoff workflow, the token needs write
+11. Review the authorization screen. For the generated handoff workflow, the token needs write
     access because Codex can add comments and move the current card to `Review`.
-13. Click `Allow`.
-14. Copy the generated token. Treat it like a password: it grants access as your Trello account to
+12. Click `Allow`.
+13. Copy the generated token. Treat it like a password: it grants access as your Trello account to
     boards and Workspaces your account can access.
-15. Export both values in the terminal where you will run Symphony:
+14. Export both values in the terminal where you will run Symphony:
 
 ```bash
 export TRELLO_API_KEY=replace-with-generated-key
@@ -399,7 +401,7 @@ verification notes, then call trello_move_current_card with list_name "Review".
 Card URL: {{ card.url }}
 ```
 
-Start with `max_concurrent_agents: 1`. Raise it only after one-card-at-a-time runs are boring and
+Start with `max_concurrent_agents: 1`. Raise it only after one-card-at-a-time runs are routine and
 predictable.
 
 ## Workflow Contract
