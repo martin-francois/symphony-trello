@@ -82,15 +82,6 @@ Trello has three concepts that matter for Symphony:
 - A **Board** is the project or queue Symphony polls.
 - **Lists** are the columns on the board. Symphony treats configured list names as states.
 
-Official Trello references if the UI has moved since this README was written:
-
-- [Create a Trello Workspace](https://support.atlassian.com/trello/docs/creating-a-new-workspace/)
-- [Manage Trello apps and Power-Ups](https://developer.atlassian.com/cloud/trello/guides/power-ups/managing-apps/)
-- [Authorize Trello REST API requests](https://developer.atlassian.com/cloud/trello/guides/rest-api/api-introduction/)
-- [Create boards with the Trello REST API](https://developer.atlassian.com/cloud/trello/rest/api-group-boards/)
-- [Create lists with the Trello REST API](https://developer.atlassian.com/cloud/trello/rest/api-group-lists/)
-- [Add lists to a Trello board](https://support.atlassian.com/trello/docs/adding-lists-to-a-board/)
-
 Symphony reads cards, creates local Codex workspaces, and runs Codex. The scheduler itself does not
 decide when work is done. The generated workflow gives Codex two scoped Trello handoff tools instead:
 it can add a comment to the current card and move that same card to `Review` when the prompt says the

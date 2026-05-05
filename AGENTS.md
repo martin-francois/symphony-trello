@@ -55,6 +55,8 @@ matters, and easy for another engineer to understand without asking the original
   the prerequisite.
 - Prefer descriptive Markdown links over bare URLs in prose. In setup instructions, tell the reader
   what the linked page is for instead of placing multiple raw links next to each other.
+- Avoid upfront reference dumps when the same links can be placed contextually in the step where the
+  reader needs them.
 - Prefer explaining intent, significance, and decision criteria over prescribing arbitrary defaults.
   Recommend concrete names or values only when the choice is semantically important.
 
