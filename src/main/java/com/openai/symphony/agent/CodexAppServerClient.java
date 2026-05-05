@@ -69,7 +69,7 @@ public class CodexAppServerClient {
                     "initialize",
                     object(
                             "clientInfo",
-                            object("name", "symphony-trello-java", "version", "0.1.0"),
+                            object("name", "symphony-trello", "version", "0.1.0"),
                             "capabilities",
                             capabilities),
                     config.codex().readTimeout());
@@ -119,8 +119,7 @@ public class CodexAppServerClient {
     }
 
     private ObjectNode threadStartParams(EffectiveConfig config, Path workspace) {
-        ObjectNode params =
-                object("cwd", workspace.toString(), "serviceName", "symphony-trello-java", "ephemeral", true);
+        ObjectNode params = object("cwd", workspace.toString(), "serviceName", "symphony-trello", "ephemeral", true);
         putIfPresent(params, "approvalPolicy", config.codex().approvalPolicy());
         putIfPresent(params, "sandbox", config.codex().threadSandbox());
         var toolSpecs = trelloTools.toolSpecs(config);
