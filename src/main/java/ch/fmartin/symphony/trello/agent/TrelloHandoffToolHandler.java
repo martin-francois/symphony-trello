@@ -57,7 +57,7 @@ public class TrelloHandoffToolHandler {
                                     "list_name",
                                     stringSchema("Allowed destination column name, for example Review."),
                                     "list_id",
-                                    stringSchema("Allowed destination Trello list id.")),
+                                    stringSchema("Allowed destination Trello list id for a board column.")),
                             List.of())));
         }
         return tools;
@@ -109,7 +109,7 @@ public class TrelloHandoffToolHandler {
         String listId = text(arguments, "list_id");
         String listName = text(arguments, "list_name");
         if (blank(listId) && blank(listName)) {
-            return failure("missing_destination_list", "Provide list_name or list_id.");
+            return failure("missing_destination_list", "Provide list_name or list_id for the destination column.");
         }
 
         BoardListMatch target = resolveAllowedTarget(config, listId, listName)

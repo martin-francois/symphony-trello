@@ -102,13 +102,13 @@ curl -fsS -X POST "https://api.trello.com/1/boards" \
 
 CUSTOM_BOARD_ID="$(jq -r .id "$RUN_DIR/custom-board.json")"
 
-for list_name in "Intake" "Queue for Codex" "Escalated for Codex" "Review" "Blocked Work" "Released" "Parked"; do
-  safe_name="$(printf '%s' "$list_name" | tr '[:upper:] ' '[:lower:]-')"
+for column_name in "Intake" "Queue for Codex" "Escalated for Codex" "Review" "Blocked Work" "Released" "Parked"; do
+  safe_name="$(printf '%s' "$column_name" | tr '[:upper:] ' '[:lower:]-')"
   curl -fsS -X POST "https://api.trello.com/1/lists" \
     --data-urlencode "key=$TRELLO_API_KEY" \
     --data-urlencode "token=$TRELLO_API_TOKEN" \
     --data-urlencode "idBoard=$CUSTOM_BOARD_ID" \
-    --data-urlencode "name=$list_name" \
+    --data-urlencode "name=$column_name" \
     --data-urlencode "pos=bottom" \
     > "$RUN_DIR/list-$safe_name.json"
 done
@@ -119,6 +119,9 @@ done
 ./mvnw -q exec:java \
   -Dexec.args="import-board --board $CUSTOM_BOARD_ID --active 'Queue for Codex' --active 'Escalated for Codex' --terminal Released --terminal Parked --blocked 'Blocked Work' --max-agents 2 --workflow $RUN_DIR/custom-import-real.WORKFLOW.md"
 ```
+
+The Trello REST API path is `/lists` because Trello calls board columns lists in API fields and
+endpoints.
 
 Patch the generated workflows to use the deterministic Java app-server and different ports. Board A
 uses one worker and a delay so `/api/v1/state` can prove that one card runs while another waits.
