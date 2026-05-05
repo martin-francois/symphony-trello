@@ -17,6 +17,7 @@ narrow: it schedules, isolates, observes, and retries work. Card handoff behavio
 - [Quick Start](#quick-start)
 - [Trello Setup](#trello-setup)
 - [Workflow Contract](#workflow-contract)
+- [Advanced Configuration](#advanced-configuration)
 - [Operations](#operations)
 - [Safety Posture](#safety-posture)
 - [Build and Test](#build-and-test)
@@ -36,12 +37,6 @@ narrow: it schedules, isolates, observes, and retries work. Card handoff behavio
   stale worker identity filtering, and terminal workspace cleanup.
 - JSON and HTML status surfaces at `/api/v1/state`, `/api/v1/{card_identifier}`, `/api/v1/refresh`,
   and `/`.
-
-The standardized generic `trello_rest` dynamic tool extension is documented in [SPEC.md](SPEC.md) but
-is not yet advertised to Codex by this Java implementation. Instead, Symphony advertises narrower
-high-level handoff tools when `trello_tools.enabled=true` and `trello_tools.allow_writes=true`:
-`trello_add_comment` and `trello_move_current_card`. Read-only scheduler deployments are still
-supported by disabling Trello writes.
 
 ## Quick Start
 
@@ -82,11 +77,9 @@ Trello has three concepts that matter for Symphony:
 - A **Board** is the project or queue Symphony polls.
 - **Lists** are the columns on the board. Symphony treats configured list names as states.
 
-Symphony reads cards, creates local Codex workspaces, and runs Codex. The scheduler itself does not
-decide when work is done. The generated workflow gives Codex two scoped Trello handoff tools instead:
-it can add a comment to the current card and move that same card to `Review` when the prompt says the
-work is ready for human review. If you want a strictly read-only deployment, set
-`trello_tools.allow_writes: false` and move cards manually.
+Symphony reads cards, creates local Codex workspaces, and runs Codex. The generated workflow lets
+Codex leave a Trello comment and move the card to `Review` when the prompt-defined work is ready for
+human review.
 
 The setup guide below is meant to be followed in order. First create the Trello Workspace and API
 credentials in the browser. After that, choose one of the two board setup paths:
@@ -208,10 +201,6 @@ Use the generated board like this:
    and moves the card to `Review` when the prompt-defined work is ready for human review.
 5. A human reviews the code and the Trello comment, then moves the card to `Done` after acceptance.
 
-The API token must be authorized with write permission for the generated handoff workflow. If the
-token is read-only or Trello rejects writes, Codex will still run, but the handoff tool call will fail
-and the failure will be visible in the Codex session events.
-
 ### Fast Path: Import An Existing Board
 
 Use this path when a Trello board already exists but you want Symphony to write the starter
@@ -234,10 +223,9 @@ cards there after they have a clear title, useful description, and acceptance cr
 
 When the imported board has a list named `Review`, the starter workflow enables the same handoff
 tools as the recommended new board and allows Codex to move cards there. If your existing board uses
-a different review list, edit `trello_tools.allowed_move_list_names` and the final handoff
-instruction in [`WORKFLOW.md`](#workflow-contract) to the same list name before starting the daemon.
-If there is no obvious review list, the generated workflow keeps Trello writes disabled until you
-choose one.
+a different review list, update the generated [`WORKFLOW.md`](#workflow-contract) to use that same
+list name before starting the daemon. If there is no obvious review list, the generated workflow
+keeps Trello writes disabled until you choose one.
 
 Common setup command options:
 
@@ -433,6 +421,30 @@ Work on Trello card {{ card.identifier }}: {{ card.title }}.
 
 Unknown template variables fail the affected attempt, then the orchestrator applies normal retry
 behavior. This is intentional; typo-tolerant prompts hide broken automation.
+
+## Advanced Configuration
+
+### Trello Write Controls
+
+The recommended workflow gives Codex two scoped Trello handoff tools:
+
+- `trello_add_comment`: add a comment to the current card.
+- `trello_move_current_card`: move the current card to a configured board-local review list.
+
+Symphony advertises those tools when `trello_tools.enabled=true` and
+`trello_tools.allow_writes=true`. For a read-only scheduler deployment, set
+`trello_tools.allow_writes: false` and move cards manually.
+
+If the API token is read-only or Trello rejects writes, Codex still runs, but handoff tool calls fail
+and the failures are visible in the Codex session events.
+
+To move cards to a review list other than `Review`, set `trello_tools.allowed_move_list_names` to the
+allowed list name and update the final handoff instruction in [`WORKFLOW.md`](#workflow-contract) to
+match it.
+
+The standardized generic `trello_rest` dynamic tool extension is documented in [SPEC.md](SPEC.md) but
+is not yet advertised to Codex by this Java implementation. The Java implementation currently uses
+the narrower handoff tools above.
 
 ## Operations
 
