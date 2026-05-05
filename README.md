@@ -57,15 +57,8 @@ export TRELLO_API_TOKEN=...
 ./mvnw quarkus:dev
 ```
 
-For local live tests, use an ignored `.env.local` file instead of pasting secrets into chat:
-
-```bash
-cp .env.example .env.local
-chmod 600 .env.local
-```
-
-Fill in `TRELLO_API_KEY` and `TRELLO_API_TOKEN` in `.env.local`, then load it only in the shell that
-will run Symphony:
+For repeated local runs, you can put the same values in ignored `.env.local` and load them before
+starting Symphony:
 
 ```bash
 set -a
@@ -144,12 +137,14 @@ Workspace and authorize the API token in the browser.
 13. Click `Allow`.
 14. Copy the generated token. Treat it like a password: it grants access as your Trello account to
     boards and Workspaces your account can access.
-15. Put both values in `.env.local` or export them in the terminal where you will run Symphony:
+15. Export both values in the terminal where you will run Symphony:
 
 ```bash
 export TRELLO_API_KEY=replace-with-generated-key
 export TRELLO_API_TOKEN=replace-with-generated-token
 ```
+
+For repeated local runs, you can put the same values in ignored `.env.local` instead.
 
 ### Fast Path: Create The Recommended Board
 
