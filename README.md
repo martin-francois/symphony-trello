@@ -44,6 +44,7 @@ and maps it to Trello boards, columns, and cards.
 - Strict prompt rendering with `card`, `issue`, and `attempt` variables.
 - Per-card workspace creation, sanitization, root containment checks, and lifecycle hooks.
 - Codex app-server subprocess integration over newline-delimited JSON-RPC.
+- Same-session Codex continuation turns while a card remains active, capped by `agent.max_turns`.
 - Scoped Trello handoff tools for Codex to add a comment to the current card and move that card to
   configured board-local review columns.
 - Single-authority in-memory orchestration state, claim-before-spawn dispatch, retries, stall checks,
@@ -539,6 +540,12 @@ one-card-at-a-time runs are routine and predictable.
 Within the available slots, Symphony starts cards in a predictable order. Priority labels run first
 when you use them. Otherwise, it follows the configured active-column order, then the order of cards
 in the Trello column from top to bottom. If there is still a tie, older cards run first.
+
+Each running card keeps one Codex app-server session while it remains active. After a successful
+turn, Symphony refreshes the Trello card. If the card is still in an active column and the worker has
+not reached `agent.max_turns`, Symphony sends a short continuation prompt to the same Codex thread.
+If the card moved to `Human Review`, `Blocked`, `Done`, or another non-active column, that worker
+stops.
 
 ## Workflow Contract
 

@@ -13,11 +13,15 @@ import ch.fmartin.symphony.trello.TestCards;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.domain.Card;
+import ch.fmartin.symphony.trello.prompt.PromptRenderer;
+import ch.fmartin.symphony.trello.tracker.CardLookupResult;
+import ch.fmartin.symphony.trello.tracker.TrackerClient;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import ch.fmartin.symphony.trello.workspace.HookRunner;
 import ch.fmartin.symphony.trello.workspace.WorkspaceManager;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -34,8 +38,8 @@ class LocalAgentRunnerTest {
     void createsWorkspaceRunsHooksAndPassesPromptToCodexClient() throws Exception {
         // given
         CodexAppServerClient codex = mock(CodexAppServerClient.class);
-        when(codex.runTurn(any(), any(), any(), any(), any(), any())).thenReturn(AgentRunResult.ok());
-        var runner = new LocalAgentRunner(new WorkspaceManager(new HookRunner()), new HookRunner(), codex);
+        when(codex.runSession(any(), any(), any(), any(), any(), any(), any())).thenReturn(AgentRunResult.ok());
+        var runner = runner(codex, CardLookupResult.Found::new);
         EffectiveConfig config = config(Map.of(
                 "before_run", "echo before > before.txt",
                 "after_run", "echo after > after.txt"));
@@ -50,7 +54,15 @@ class LocalAgentRunnerTest {
         ArgumentCaptor<String> prompt = ArgumentCaptor.forClass(String.class);
         Path expectedWorkspace = config.workspace().root().resolve("TRELLO-local");
         assertThat(result).isEqualTo(AgentRunResult.ok());
-        verify(codex).runTurn(eq(config), eq(card), workspace.capture(), prompt.capture(), eq("worker-success"), any());
+        verify(codex)
+                .runSession(
+                        eq(config),
+                        eq(card),
+                        workspace.capture(),
+                        prompt.capture(),
+                        eq("worker-success"),
+                        any(),
+                        any());
         assertThat(prompt.getValue()).isEqualTo("handoff prompt");
         assertThat(workspace.getValue())
                 .isEqualTo(expectedWorkspace.toAbsolutePath().normalize());
@@ -62,7 +74,7 @@ class LocalAgentRunnerTest {
     void returnsFailureWhenRequiredHookFailsAndStillRemovesWorkerFromActiveSet() throws Exception {
         // given
         CodexAppServerClient codex = mock(CodexAppServerClient.class);
-        var runner = new LocalAgentRunner(new WorkspaceManager(new HookRunner()), new HookRunner(), codex);
+        var runner = runner(codex, CardLookupResult.Found::new);
         EffectiveConfig config = config(Map.of("before_run", "echo broken && exit 9"));
 
         // when
@@ -99,8 +111,8 @@ class LocalAgentRunnerTest {
                     }
                 })
                 .when(codex)
-                .runTurn(any(), any(), any(), any(), any(), any());
-        var runner = new LocalAgentRunner(new WorkspaceManager(new HookRunner()), new HookRunner(), codex);
+                .runSession(any(), any(), any(), any(), any(), any(), any());
+        var runner = runner(codex, CardLookupResult.Found::new);
         EffectiveConfig config = config(Map.of());
         var result = new AtomicReference<AgentRunResult>();
         Thread worker = Thread.ofVirtual()
@@ -123,17 +135,126 @@ class LocalAgentRunnerTest {
         assertThat(result.get().reason()).isEqualTo("interrupted");
     }
 
+    @Test
+    void continuesSameSessionWhileCardRemainsActiveAndMaxTurnsAllowsIt() throws Exception {
+        // given
+        CodexAppServerClient codex = mock(CodexAppServerClient.class);
+        AtomicReference<CodexAppServerClient.TurnController> controller = new AtomicReference<>();
+        when(codex.runSession(any(), any(), any(), any(), any(), any(), any())).thenAnswer(invocation -> {
+            controller.set(invocation.getArgument(6));
+            return AgentRunResult.ok();
+        });
+        var runner = runner(codex, CardLookupResult.Found::new);
+        EffectiveConfig config = config(Map.of(), Map.of("max_turns", 2));
+
+        // when
+        AgentRunResult result = runner.run(new AgentRunner.AgentRunRequest(
+                TestCards.card("card-1", "TRELLO-active", "Ready for Codex"),
+                null,
+                "prompt",
+                config,
+                "worker-multiturn",
+                event -> {}));
+
+        // then
+        assertThat(result).isEqualTo(AgentRunResult.ok());
+        assertThat(controller.get().afterSuccessfulTurn(1).nextPrompt()).contains("continuation turn 2 of at most 2");
+        assertThat(controller.get().afterSuccessfulTurn(2)).isEqualTo(CodexAppServerClient.TurnDecision.stop());
+    }
+
+    @Test
+    void stopsSameSessionWhenCardLeavesActiveStates() throws Exception {
+        // given
+        CodexAppServerClient codex = mock(CodexAppServerClient.class);
+        AtomicReference<CodexAppServerClient.TurnController> controller = new AtomicReference<>();
+        when(codex.runSession(any(), any(), any(), any(), any(), any(), any())).thenAnswer(invocation -> {
+            controller.set(invocation.getArgument(6));
+            return AgentRunResult.ok();
+        });
+        var runner = runner(
+                codex,
+                ignored -> new CardLookupResult.Found(TestCards.card("card-1", "TRELLO-review", "Human Review")));
+        EffectiveConfig config = config(Map.of(), Map.of("max_turns", 2));
+
+        // when
+        AgentRunResult result = runner.run(new AgentRunner.AgentRunRequest(
+                TestCards.card("card-1", "TRELLO-review", "Ready for Codex"),
+                null,
+                "prompt",
+                config,
+                "worker-stop",
+                event -> {}));
+
+        // then
+        assertThat(result).isEqualTo(AgentRunResult.ok());
+        assertThat(controller.get().afterSuccessfulTurn(1)).isEqualTo(CodexAppServerClient.TurnDecision.stop());
+    }
+
+    private LocalAgentRunner runner(CodexAppServerClient codex, CardLookup lookup) {
+        return new LocalAgentRunner(
+                new WorkspaceManager(new HookRunner()), new HookRunner(), codex, tracker(lookup), new PromptRenderer());
+    }
+
+    private TrackerClient tracker(CardLookup lookup) {
+        return new TrackerClient() {
+            @Override
+            public String resolveBoardId(EffectiveConfig config) {
+                return config.tracker().boardId();
+            }
+
+            @Override
+            public List<Card> fetchCandidateCards(EffectiveConfig config) {
+                return List.of();
+            }
+
+            @Override
+            public List<Card> fetchTerminalCards(EffectiveConfig config) {
+                return List.of();
+            }
+
+            @Override
+            public Map<String, CardLookupResult> fetchCardStatesByIds(EffectiveConfig config, List<String> cardIds) {
+                return Map.of(
+                        cardIds.getFirst(),
+                        lookup.lookup(TestCards.card(cardIds.getFirst(), "TRELLO-card", "Ready for Codex")));
+            }
+        };
+    }
+
     private EffectiveConfig config(Map<String, String> hooks) {
+        return config(hooks, Map.of());
+    }
+
+    private EffectiveConfig config(Map<String, String> hooks, Map<String, Object> agent) {
         return new ConfigResolver()
                 .resolve(new WorkflowDefinition(
                         tempDir.resolve("WORKFLOW.md"),
                         Map.of(
                                 "tracker",
-                                Map.of("kind", "trello", "api_key", "key", "api_token", "token", "board_id", "board"),
+                                Map.of(
+                                        "kind",
+                                        "trello",
+                                        "api_key",
+                                        "key",
+                                        "api_token",
+                                        "token",
+                                        "board_id",
+                                        "board-1",
+                                        "active_states",
+                                        List.of("Ready for Codex", "In Progress"),
+                                        "terminal_states",
+                                        List.of("Done")),
                                 "workspace",
                                 Map.of("root", tempDir.resolve("workspaces").toString()),
+                                "agent",
+                                agent,
                                 "hooks",
                                 hooks),
                         ""));
+    }
+
+    @FunctionalInterface
+    private interface CardLookup {
+        CardLookupResult lookup(Card card);
     }
 }

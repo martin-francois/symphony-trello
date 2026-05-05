@@ -470,7 +470,9 @@ public class SymphonyOrchestrator {
         if (entry.threadId != null && entry.turnId != null) {
             entry.sessionId = entry.threadId + "-" + entry.turnId;
         }
-        if ("turn/started".equals(event.event()) || "session_started".equals(event.event())) {
+        if ("turn/started".equals(event.event())
+                || "session_started".equals(event.event())
+                || "session_continued".equals(event.event())) {
             entry.turnCount++;
         }
         applyUsage(entry, event.usage());
