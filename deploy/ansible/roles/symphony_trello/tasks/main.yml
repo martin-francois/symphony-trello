@@ -71,8 +71,12 @@
       mode: "0755"
     - path: "{{ symphony_trello_config_dir }}"
       owner: root
-      group: "{{ symphony_trello_group }}"
-      mode: "0750"
+      group: root
+      mode: "0755"
+    - path: "{{ symphony_trello_secret_dir }}"
+      owner: root
+      group: root
+      mode: "0700"
     - path: "{{ symphony_trello_workflow_dir }}"
       owner: root
       group: "{{ symphony_trello_group }}"
@@ -84,20 +88,46 @@
   loop_control:
     label: "{{ item.path }}"
 
-- name: Deploy service environment file
+- name: Deploy Trello credential files
   ansible.builtin.copy:
-    dest: "{{ symphony_trello_config_dir }}/env"
+    dest: "{{ item.dest }}"
     owner: root
     group: root
     mode: "0600"
-    content: |
-      TRELLO_API_KEY="{{ symphony_trello_trello_api_key | replace('\\', '\\\\') | replace('"', '\\"') }}"
-      TRELLO_API_TOKEN="{{ symphony_trello_trello_api_token | replace('\\', '\\\\') | replace('"', '\\"') }}"
-      {% if symphony_trello_service_path is defined %}
-      PATH="{{ symphony_trello_service_path | replace('\\', '\\\\') | replace('"', '\\"') }}"
-      {% endif %}
+    content: "{{ item.value }}"
+  loop:
+    - dest: "{{ symphony_trello_secret_dir }}/trello-api-key"
+      value: "{{ symphony_trello_trello_api_key }}"
+    - dest: "{{ symphony_trello_secret_dir }}/trello-api-token"
+      value: "{{ symphony_trello_trello_api_token }}"
+  loop_control:
+    label: "{{ item.dest }}"
   no_log: true
+  register: symphony_trello_secret_files
+
+- name: Deploy service environment file for custom PATH
+  ansible.builtin.copy:
+    dest: "{{ symphony_trello_config_dir }}/service.env"
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      PATH="{{ symphony_trello_service_path | replace('\\', '\\\\') | replace('"', '\\"') }}"
+  when: symphony_trello_service_path is defined
   register: symphony_trello_env_file
+
+- name: Remove service environment file when no custom PATH is configured
+  ansible.builtin.file:
+    path: "{{ symphony_trello_config_dir }}/service.env"
+    state: absent
+  when: symphony_trello_service_path is not defined
+  register: symphony_trello_env_file_removed
+
+- name: Remove legacy environment file that could contain old secrets
+  ansible.builtin.file:
+    path: "{{ symphony_trello_config_dir }}/env"
+    state: absent
+  register: symphony_trello_legacy_env_file_removed
 
 - name: Deploy systemd unit template
   ansible.builtin.copy:
@@ -178,7 +208,10 @@
 - name: Calculate whether managed services need restart
   ansible.builtin.set_fact:
     symphony_trello_restart_services: >-
-      {{ symphony_trello_env_file.changed
+      {{ (symphony_trello_env_file.changed | default(false))
+          or (symphony_trello_env_file_removed.changed | default(false))
+          or symphony_trello_legacy_env_file_removed.changed
+          or (symphony_trello_secret_files.results | selectattr('changed') | list | length > 0)
           or symphony_trello_unit_file.changed
           or symphony_trello_app_sync.changed
           or (symphony_trello_workflow_copy.results | selectattr('changed') | list | length > 0) }}

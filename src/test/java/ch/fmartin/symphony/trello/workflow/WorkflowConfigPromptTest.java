@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 import ch.fmartin.symphony.trello.TestCards;
+import ch.fmartin.symphony.trello.config.ConfigException;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
 import java.nio.file.Files;
@@ -61,6 +62,64 @@ class WorkflowConfigPromptTest {
         assertThat(config.workspace().root())
                 .isEqualTo(tempDir.resolve("workspaces").toAbsolutePath().normalize());
         assertThat(renderedPrompt).contains("TRELLO-abc / TRELLO-abc attempt=3");
+    }
+
+    @Test
+    void readsFileBackedTrackerSecrets() throws Exception {
+        // given
+        Path secretDirectory = tempDir.resolve("secrets");
+        Files.createDirectories(secretDirectory);
+        Files.writeString(secretDirectory.resolve("trello-api-key"), "key-from-file\n");
+        Files.writeString(secretDirectory.resolve("trello-api-token"), "token-from-file\r\n");
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: file:secrets/trello-api-key
+                  api_token: file:secrets/trello-api-token
+                  board_id: board-1
+                ---
+                Do the work.
+                """);
+
+        // when
+        var config = configs.resolve(loader.load(workflow));
+
+        // then
+        assertThat(config.tracker().apiKey()).isEqualTo("key-from-file");
+        assertThat(config.tracker().apiToken()).isEqualTo("token-from-file");
+    }
+
+    @Test
+    void fileBackedTrackerSecretFailureDoesNotExposeSecretValues() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: file:secrets/missing-api-key
+                  api_token: literal-token
+                  board_id: board-1
+                ---
+                Do the work.
+                """);
+
+        // when
+        ConfigException error =
+                catchThrowableOfType(ConfigException.class, () -> configs.resolve(loader.load(workflow)));
+
+        // then
+        assertThat(error.code()).isEqualTo("secret_file_read_error");
+        assertThat(error)
+                .hasMessageContaining("tracker.api_key")
+                .hasMessageContaining("missing-api-key")
+                .hasMessageNotContaining("literal-token");
     }
 
     @Test

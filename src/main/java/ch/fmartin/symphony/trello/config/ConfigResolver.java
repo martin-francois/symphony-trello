@@ -2,6 +2,9 @@ package ch.fmartin.symphony.trello.config;
 
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import jakarta.enterprise.context.ApplicationScoped;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -11,6 +14,9 @@ import java.util.OptionalInt;
 
 @ApplicationScoped
 public class ConfigResolver {
+    private static final String FILE_SECRET_PREFIX = "file:";
+    private static final int MAX_SECRET_BYTES = 64 * 1024;
+
     private static final Map<String, Integer> DEFAULT_PRIORITIES = Map.of(
             "p1", 1,
             "p2", 2,
@@ -34,8 +40,9 @@ public class ConfigResolver {
 
         String trackerKind = string(tracker, "kind", null);
         String endpoint = string(tracker, "endpoint", "https://api.trello.com/1");
-        String apiKey = secret(tracker, "api_key", "TRELLO_API_KEY");
-        String apiToken = secret(tracker, "api_token", "TRELLO_API_TOKEN");
+        String apiKey = secret(workflow.path().getParent(), tracker, "api_key", "tracker.api_key", "TRELLO_API_KEY");
+        String apiToken =
+                secret(workflow.path().getParent(), tracker, "api_token", "tracker.api_token", "TRELLO_API_TOKEN");
         String boardId = string(tracker, "board_id", null);
         String resolvedBoardId = string(tracker, "resolved_board_id", boardId);
 
@@ -135,12 +142,39 @@ public class ConfigResolver {
         return value.toString();
     }
 
-    private static String secret(Map<String, Object> root, String key, String defaultEnv) {
+    private static String secret(
+            Path workflowDirectory, Map<String, Object> root, String key, String displayName, String defaultEnv) {
         String configured = string(root, key, "$" + defaultEnv);
         if (configured != null && configured.startsWith("$") && configured.length() > 1) {
             return LocalEnvironment.get(configured.substring(1)).orElse(null);
         }
+        if (configured != null && configured.startsWith(FILE_SECRET_PREFIX)) {
+            return fileSecret(workflowDirectory, displayName, configured.substring(FILE_SECRET_PREFIX.length()));
+        }
         return configured;
+    }
+
+    private static String fileSecret(Path workflowDirectory, String displayName, String configuredPath) {
+        Path secretPath = path(workflowDirectory, configuredPath);
+        try {
+            long size = Files.size(secretPath);
+            if (size > MAX_SECRET_BYTES) {
+                throw new ConfigException(
+                        "secret_file_too_large", displayName + " secret file is too large: " + secretPath);
+            }
+            return stripTrailingLineBreaks(Files.readString(secretPath, StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            throw new ConfigException(
+                    "secret_file_read_error", displayName + " secret file cannot be read: " + secretPath);
+        }
+    }
+
+    private static String stripTrailingLineBreaks(String value) {
+        String stripped = value;
+        while (stripped.endsWith("\n") || stripped.endsWith("\r")) {
+            stripped = stripped.substring(0, stripped.length() - 1);
+        }
+        return stripped;
     }
 
     private static Duration millis(Map<String, Object> root, String key, long defaultValue) {
@@ -245,6 +279,13 @@ public class ConfigResolver {
         }
         if (expanded.startsWith("$") && expanded.indexOf('/') < 0) {
             expanded = LocalEnvironment.get(expanded.substring(1)).orElse(expanded);
+        } else if (expanded.startsWith("$")) {
+            int separator = expanded.indexOf('/');
+            String name = expanded.substring(1, separator);
+            String suffix = expanded.substring(separator);
+            expanded = LocalEnvironment.get(name)
+                    .map(envValue -> envValue + suffix)
+                    .orElse(expanded);
         }
         return expanded;
     }

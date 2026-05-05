@@ -532,6 +532,11 @@ Important environment variables:
 For local runs, the same names can be placed in ignored `.env`; real environment variables take
 precedence.
 
+For server deployments, workflow values can also read root-managed secret files with `file:/path`.
+The deployment guides use `file:$CREDENTIALS_DIRECTORY/trello-api-key` and
+`file:$CREDENTIALS_DIRECTORY/trello-api-token` with systemd credentials so Trello secrets are not
+placed in the service environment.
+
 ## Safety Posture
 
 This implementation targets trusted automation environments by default. Workspace boundaries are

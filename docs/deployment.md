@@ -20,7 +20,7 @@ One installed application can run many workflows:
 
 1. Build Symphony once.
 2. Copy the packaged app to `/opt/symphony-trello/app`.
-3. Store shared secrets in `/etc/symphony-trello/env`.
+3. Store Trello secrets in `/etc/symphony-trello/secrets`.
 4. Store one workflow file per board in `/etc/symphony-trello/workflows`.
 5. Start one systemd service instance per workflow.
 
@@ -59,6 +59,7 @@ Create a dedicated OS user and directories:
 sudo useradd --system --create-home --home-dir /var/lib/symphony-trello --shell /usr/sbin/nologin symphony-trello
 sudo install -d -o root -g root -m 0755 /opt/symphony-trello
 sudo install -d -o root -g root -m 0755 /etc/symphony-trello
+sudo install -d -o root -g root -m 0700 /etc/symphony-trello/secrets
 sudo install -d -o root -g root -m 0755 /etc/symphony-trello/workflows
 sudo install -d -o symphony-trello -g symphony-trello -m 0750 /var/lib/symphony-trello
 ```
@@ -89,39 +90,45 @@ sudo chown -R root:root /opt/symphony-trello/app
 
 ## Configure Secrets
 
-Create `/etc/symphony-trello/env`:
+Create root-only files for the Trello credentials:
 
 ```bash
-sudo install -m 0600 -o root -g root /dev/null /etc/symphony-trello/env
-sudoedit /etc/symphony-trello/env
-sudo stat -c '%U %G %a %n' /etc/symphony-trello/env
+sudo install -m 0600 -o root -g root /dev/null /etc/symphony-trello/secrets/trello-api-key
+sudo install -m 0600 -o root -g root /dev/null /etc/symphony-trello/secrets/trello-api-token
+sudoedit /etc/symphony-trello/secrets/trello-api-key
+sudoedit /etc/symphony-trello/secrets/trello-api-token
+sudo stat -c '%U %G %a %n' /etc/symphony-trello/secrets/trello-api-key /etc/symphony-trello/secrets/trello-api-token
 ```
 
-Use your real Trello credentials:
+Put only the raw API key into `trello-api-key` and only the raw token into `trello-api-token`. The
+`stat` command should print `root root 600` for both files. systemd loads them as service
+credentials and exposes them to Symphony as private files, not as normal environment variables.
 
-```dotenv
-TRELLO_API_KEY=replace-with-your-key
-TRELLO_API_TOKEN=replace-with-your-token
+If Java or Codex is not on systemd's normal service path, create
+`/etc/symphony-trello/service.env` with a `PATH` line that includes their directories:
+
+```bash
+sudo install -m 0644 -o root -g root /dev/null /etc/symphony-trello/service.env
+sudoedit /etc/symphony-trello/service.env
 ```
 
-The `stat` command should print `root root 600 /etc/symphony-trello/env`. systemd reads this file
-before starting the service, so the `symphony-trello` user does not need direct read access to it.
-
-If Java or Codex is not on systemd's normal service path, add a `PATH` line that includes their
-directories:
+Do not put Trello credentials in `/etc/symphony-trello/service.env`. That file is only for non-secret
+service environment settings such as `PATH`.
 
 ```dotenv
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/opt/java/bin:/opt/codex/bin
 ```
 
-Do not put secrets in workflow files. Reference them from workflow config with `$TRELLO_API_KEY` and
-`$TRELLO_API_TOKEN`.
-
 Do not put Trello credentials in shell commands, the systemd unit, or workflow files. Treat backups
-and config-management copies of `/etc/symphony-trello/env` as secrets too.
+and config-management copies of `/etc/symphony-trello/secrets` as secrets too.
 
-The production layout uses the standard `TRELLO_API_KEY` and `TRELLO_API_TOKEN` names because
-Symphony removes those variables before launching Codex and workflow hook scripts.
+In workflow files, reference the systemd credential files:
+
+```yaml
+tracker:
+  api_key: file:$CREDENTIALS_DIRECTORY/trello-api-key
+  api_token: file:$CREDENTIALS_DIRECTORY/trello-api-token
+```
 
 ## Install The systemd Template
 
@@ -156,8 +163,8 @@ server:
   port: 18081
 tracker:
   kind: trello
-  api_key: $TRELLO_API_KEY
-  api_token: $TRELLO_API_TOKEN
+  api_key: file:$CREDENTIALS_DIRECTORY/trello-api-key
+  api_token: file:$CREDENTIALS_DIRECTORY/trello-api-token
   board_id: abc123
   active_states:
     - Ready for Codex
