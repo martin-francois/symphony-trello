@@ -11,8 +11,10 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -236,7 +238,7 @@ class TrelloBoardSetupTest {
     @Test
     void refusesToOverwriteExistingWorkflowUnlessForced() throws IOException {
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        java.nio.file.Files.writeString(workflow, "keep me", StandardCharsets.UTF_8);
+        Files.writeString(workflow, "keep me", StandardCharsets.UTF_8);
 
         var request = new TrelloBoardSetup.ImportBoardRequest(
                 endpoint(),
@@ -255,8 +257,8 @@ class TrelloBoardSetupTest {
         assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo("keep me");
     }
 
-    private java.net.URI endpoint() {
-        return java.net.URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/1");
+    private URI endpoint() {
+        return URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/1");
     }
 
     private static EffectiveConfig resolve(Path workflow) {

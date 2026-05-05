@@ -18,6 +18,9 @@ Before submitting changes:
 - Run `./mvnw spotless:check`.
 - Add or update tests for scheduler, Trello normalization, workspace safety, prompt rendering, or
   Codex protocol behavior when those areas change.
+- Use imports instead of inline fully qualified Java type names in code. The test suite enforces this
+  so helpers like `java.util.Arrays.stream(...)` should be written as `Arrays.stream(...)` with an
+  import.
 - Document non-obvious design choices in `docs/adr/`.
 - Keep refactors separate from behavior changes when practical.
 
