@@ -19,9 +19,9 @@ so the same workflow can run again and again.
 
 You can use it with one board, or run it for several boards at the same time.
 
-Symphony for Trello is a variant of OpenAI's Symphony adapted for Trello. The original Symphony spec
-uses Linear; this project keeps the same orchestration idea and maps it to Trello boards, lists, and
-cards.
+Symphony for Trello is a variant of [OpenAI's Symphony](https://github.com/openai/symphony) adapted
+for Trello. The original Symphony spec uses Linear; this project keeps the same orchestration idea
+and maps it to Trello boards, lists, and cards.
 
 ## Table of Contents
 
@@ -54,12 +54,12 @@ cards.
 
 Prerequisites:
 
-- Java 25 JDK. `JAVA_HOME` should point to it, and `java` / `javac` should resolve from that JDK.
-- Codex CLI authenticated for the user that runs Symphony for Trello.
+- JDK 25 installed.
+- Codex installed and signed in.
 
-The generated workflow runs `codex app-server`, so `codex` must be on that user's `PATH`. If Codex is
-installed somewhere else, set `codex.command` in [`WORKFLOW.md`](#workflow-contract) to an absolute
-path or wrapper command that starts Codex app-server over stdio.
+By default, Symphony starts Codex by running `codex app-server`. That works when `codex` is on the
+`PATH` for the user that starts Symphony. If not, set `codex.command` in
+[`WORKFLOW.md`](#workflow-contract) to the full path or to a wrapper script.
 
 Start with [Trello Setup](#trello-setup) if you do not yet have Trello credentials or
 [`WORKFLOW.md`](#workflow-contract). That section walks you through creating the Trello key/token,
