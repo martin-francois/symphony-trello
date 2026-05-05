@@ -56,6 +56,9 @@ matters, and easy for another engineer to understand without asking the original
   project workflow when a small Java helper would keep the workflow easier to maintain in this repo.
 - Keep the project open-source-ready even while private: clear README, usable CONTRIBUTING, useful
   ADRs, no committed secrets, and reviewable history.
+- Lead the README with who the project is for, why they should use it, and the practical benefits
+  before implementation details. Move technical mechanics into supporting sections once the value is
+  clear.
 - For local Trello credentials, use ignored project-root `.env` files created from `.env.example`.
   Real environment variables still take precedence over `.env`. Do not print secret values in
   command output.
