@@ -1,0 +1,6 @@
+---
+symphony_trello:
+  hosts:
+    symphony-server:
+      ansible_host: 203.0.113.10
+      ansible_user: deploy

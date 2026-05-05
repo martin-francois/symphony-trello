@@ -6,6 +6,14 @@ Use this when you have one or more `WORKFLOW.md` files and want Symphony to keep
 log out. Each workflow file maps to one Trello board, so each workflow runs as one systemd service
 instance.
 
+## Deployment Paths
+
+Use the manual steps below when you want to understand or control every server command.
+
+Use the [Ansible deployment guide](ansible-deployment.md) when you want repeatable deployment from
+declared workflow files and Ansible Vault secrets. The Ansible path manages the same systemd layout
+and is easier to rerun when you add, change, or remove workflows.
+
 ## How It Works
 
 One installed application can run many workflows:

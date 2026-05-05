@@ -1,0 +1,14 @@
+---
+symphony_trello_user: symphony-trello
+symphony_trello_group: symphony-trello
+
+symphony_trello_opt_dir: /opt/symphony-trello
+symphony_trello_app_dir: /opt/symphony-trello/app
+symphony_trello_config_dir: /etc/symphony-trello
+symphony_trello_workflow_dir: /etc/symphony-trello/workflows
+symphony_trello_state_dir: /var/lib/symphony-trello
+
+symphony_trello_app_src: "{{ playbook_dir }}/../../target/quarkus-app/"
+symphony_trello_unit_src: "{{ playbook_dir }}/../systemd/symphony-trello@.service"
+symphony_trello_workflows: []
+symphony_trello_remove_unmanaged_workflows: true

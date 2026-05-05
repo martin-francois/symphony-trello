@@ -17,3 +17,7 @@ WORKFLOW.*.md
 .env.*.local
 !.env.example
 !.env.template
+deploy/ansible/.vault-password
+deploy/ansible/inventory.yml
+deploy/ansible/group_vars/symphony_trello/vars.yml
+deploy/ansible/group_vars/symphony_trello/vault.yml

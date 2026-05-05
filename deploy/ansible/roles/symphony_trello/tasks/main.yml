@@ -1,0 +1,199 @@
+---
+- name: Validate required deployment variables
+  ansible.builtin.assert:
+    that:
+      - symphony_trello_trello_api_key is defined
+      - symphony_trello_trello_api_key | length > 0
+      - symphony_trello_trello_api_token is defined
+      - symphony_trello_trello_api_token | length > 0
+      - symphony_trello_workflows is defined
+    fail_msg: >
+      Define symphony_trello_trello_api_key and symphony_trello_trello_api_token in an Ansible Vault
+      file, and define symphony_trello_workflows in group_vars.
+
+- name: Validate local packaged app exists
+  ansible.builtin.stat:
+    path: "{{ symphony_trello_app_src }}/quarkus-run.jar"
+  delegate_to: localhost
+  become: false
+  register: symphony_trello_local_runner
+
+- name: Stop when the packaged app is missing
+  ansible.builtin.assert:
+    that:
+      - symphony_trello_local_runner.stat.exists
+    fail_msg: "Run ./mvnw -q package before the Ansible deployment."
+
+- name: Validate local workflow files exist
+  ansible.builtin.stat:
+    path: "{{ item.src }}"
+  loop: "{{ symphony_trello_workflows }}"
+  loop_control:
+    label: "{{ item.name }}"
+  delegate_to: localhost
+  become: false
+  register: symphony_trello_local_workflow_files
+
+- name: Stop when a configured workflow file is missing
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+    fail_msg: "Workflow {{ item.item.name }} points to missing local file {{ item.item.src }}."
+  loop: "{{ symphony_trello_local_workflow_files.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+
+- name: Create service group
+  ansible.builtin.group:
+    name: "{{ symphony_trello_group }}"
+    system: true
+
+- name: Create service user
+  ansible.builtin.user:
+    name: "{{ symphony_trello_user }}"
+    group: "{{ symphony_trello_group }}"
+    system: true
+    create_home: true
+    home: "{{ symphony_trello_state_dir }}"
+    shell: /usr/sbin/nologin
+
+- name: Create install and config directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: "{{ symphony_trello_opt_dir }}"
+      owner: root
+      group: root
+      mode: "0755"
+    - path: "{{ symphony_trello_config_dir }}"
+      owner: root
+      group: "{{ symphony_trello_group }}"
+      mode: "0750"
+    - path: "{{ symphony_trello_workflow_dir }}"
+      owner: root
+      group: "{{ symphony_trello_group }}"
+      mode: "0750"
+    - path: "{{ symphony_trello_state_dir }}"
+      owner: "{{ symphony_trello_user }}"
+      group: "{{ symphony_trello_group }}"
+      mode: "0750"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Deploy service environment file
+  ansible.builtin.copy:
+    dest: "{{ symphony_trello_config_dir }}/env"
+    owner: root
+    group: root
+    mode: "0600"
+    content: |
+      TRELLO_API_KEY="{{ symphony_trello_trello_api_key | replace('\\', '\\\\') | replace('"', '\\"') }}"
+      TRELLO_API_TOKEN="{{ symphony_trello_trello_api_token | replace('\\', '\\\\') | replace('"', '\\"') }}"
+      {% if symphony_trello_service_path is defined %}
+      PATH="{{ symphony_trello_service_path | replace('\\', '\\\\') | replace('"', '\\"') }}"
+      {% endif %}
+  no_log: true
+  register: symphony_trello_env_file
+
+- name: Deploy systemd unit template
+  ansible.builtin.copy:
+    src: "{{ symphony_trello_unit_src }}"
+    dest: /etc/systemd/system/symphony-trello@.service
+    owner: root
+    group: root
+    mode: "0644"
+  register: symphony_trello_unit_file
+
+- name: Reload systemd when unit changed
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: symphony_trello_unit_file.changed
+
+- name: Sync packaged app
+  ansible.posix.synchronize:
+    src: "{{ symphony_trello_app_src }}/"
+    dest: "{{ symphony_trello_app_dir }}/"
+    archive: true
+    delete: true
+    rsync_path: "sudo rsync"
+  become: false
+  register: symphony_trello_app_sync
+
+- name: Ensure packaged app ownership
+  ansible.builtin.file:
+    path: "{{ symphony_trello_app_dir }}"
+    state: directory
+    owner: root
+    group: root
+    recurse: true
+
+- name: Deploy workflow files
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "{{ symphony_trello_workflow_dir }}/{{ item.name }}.WORKFLOW.md"
+    owner: root
+    group: "{{ symphony_trello_group }}"
+    mode: "0640"
+  loop: "{{ symphony_trello_workflows }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: symphony_trello_workflow_copy
+
+- name: Find deployed workflow files
+  ansible.builtin.find:
+    paths: "{{ symphony_trello_workflow_dir }}"
+    patterns: "*.WORKFLOW.md"
+    file_type: file
+  register: symphony_trello_deployed_workflows
+
+- name: Calculate managed and deployed workflow names
+  ansible.builtin.set_fact:
+    symphony_trello_managed_workflow_names: "{{ symphony_trello_workflows | map(attribute='name') | list }}"
+    symphony_trello_deployed_workflow_names: >-
+      {{ symphony_trello_deployed_workflows.files
+          | map(attribute='path')
+          | map('basename')
+          | map('regex_replace', '\.WORKFLOW\.md$', '')
+          | list }}
+
+- name: Stop and disable removed workflow services
+  ansible.builtin.systemd_service:
+    name: "symphony-trello@{{ item }}"
+    state: stopped
+    enabled: false
+  loop: "{{ symphony_trello_deployed_workflow_names | difference(symphony_trello_managed_workflow_names) }}"
+  when: symphony_trello_remove_unmanaged_workflows
+
+- name: Remove unmanaged workflow files
+  ansible.builtin.file:
+    path: "{{ symphony_trello_workflow_dir }}/{{ item }}.WORKFLOW.md"
+    state: absent
+  loop: "{{ symphony_trello_deployed_workflow_names | difference(symphony_trello_managed_workflow_names) }}"
+  when: symphony_trello_remove_unmanaged_workflows
+
+- name: Calculate whether managed services need restart
+  ansible.builtin.set_fact:
+    symphony_trello_restart_services: >-
+      {{ symphony_trello_env_file.changed
+          or symphony_trello_unit_file.changed
+          or symphony_trello_app_sync.changed
+          or (symphony_trello_workflow_copy.results | selectattr('changed') | list | length > 0) }}
+
+- name: Enable and start managed workflow services
+  ansible.builtin.systemd_service:
+    name: "symphony-trello@{{ item }}"
+    state: started
+    enabled: true
+  loop: "{{ symphony_trello_managed_workflow_names }}"
+
+- name: Restart managed workflow services after changed inputs
+  ansible.builtin.systemd_service:
+    name: "symphony-trello@{{ item }}"
+    state: restarted
+    enabled: true
+  loop: "{{ symphony_trello_managed_workflow_names }}"
+  when: symphony_trello_restart_services
