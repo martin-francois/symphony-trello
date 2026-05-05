@@ -445,11 +445,13 @@ Fields:
 - `endpoint` (string)
   - Default for `tracker.kind == "trello"`: `https://api.trello.com/1`
 - `api_key` (string)
-  - MAY be a literal token or `$VAR_NAME`.
+  - MAY be a literal token, `$VAR_NAME`, or an implementation-defined file reference.
+  - This Java implementation supports `file:/path` for file-backed secrets.
   - Default environment variable for `tracker.kind == "trello"`: `TRELLO_API_KEY`.
   - If `$VAR_NAME` resolves to an empty string, treat the key as missing.
 - `api_token` (string)
-  - MAY be a literal token or `$VAR_NAME`.
+  - MAY be a literal token, `$VAR_NAME`, or an implementation-defined file reference.
+  - This Java implementation supports `file:/path` for file-backed secrets.
   - Default environment variable for `tracker.kind == "trello"`: `TRELLO_API_TOKEN`.
   - If `$VAR_NAME` resolves to an empty string, treat the token as missing.
 - `board_id` (string)
@@ -763,10 +765,10 @@ implemented.
 
 - `tracker.kind`: string, REQUIRED, currently `trello`
 - `tracker.endpoint`: string, default `https://api.trello.com/1` when `tracker.kind=trello`
-- `tracker.api_key`: string or `$VAR`, default environment variable `TRELLO_API_KEY` when
-  `tracker.kind=trello`
-- `tracker.api_token`: string or `$VAR`, default environment variable `TRELLO_API_TOKEN` when
-  `tracker.kind=trello`
+- `tracker.api_key`: string, `$VAR`, or implementation-defined file reference, default environment
+  variable `TRELLO_API_KEY` when `tracker.kind=trello`
+- `tracker.api_token`: string, `$VAR`, or implementation-defined file reference, default
+  environment variable `TRELLO_API_TOKEN` when `tracker.kind=trello`
 - `tracker.board_id`: string, REQUIRED when `tracker.kind=trello`
 - `tracker.active_states`: list of Trello list/state names, default
   `["Todo", "In Progress"]`
@@ -2155,6 +2157,8 @@ RECOMMENDED additional hardening for deployments:
 ### 15.3 Secret Handling
 
 - Support `$VAR` indirection in workflow config.
+- For production deployments, prefer file-backed secret mechanisms over plain service environment
+  variables when the host supervisor supports them.
 - Do not log Trello API keys, Trello tokens, Codex credentials, or secret env values.
 - Validate presence of secrets without printing them.
 - Do not place Trello credentials in rendered prompts.

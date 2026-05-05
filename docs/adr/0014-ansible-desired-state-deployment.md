@@ -41,6 +41,8 @@ installer code.
 ### Consequences
 
 * Good, because operators can keep hosts, workflows, and secrets as declared Ansible inputs.
+* Good, because Ansible Vault values are installed as root-only files and loaded by systemd
+  credentials instead of service environment variables.
 * Good, because rerunning the playbook applies changed app files and workflow files.
 * Good, because removing a workflow from desired state stops and disables the corresponding service.
 * Good, because the manual guide remains useful for understanding and troubleshooting.
@@ -61,7 +63,8 @@ that deploys the same systemd template layout from declared workflow files.
 
 * Good, because it preserves the current deployment contract.
 * Good, because it handles app sync, workflow sync, service startup, and removed workflow cleanup.
-* Good, because Ansible Vault is familiar for production secrets.
+* Good, because Ansible Vault is familiar for production secrets and the remote service receives
+  those secrets as credential files.
 * Neutral, because operators still build the Quarkus package locally before deploying.
 * Bad, because the playbook needs Ansible, the `ansible.posix` collection, and `rsync`.
 

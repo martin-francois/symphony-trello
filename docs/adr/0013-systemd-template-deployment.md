@@ -46,9 +46,10 @@ the existing process model.
 * Good, because one installed app can run many workflow service instances.
 * Good, because each workflow keeps separate logs, restart state, HTTP port, and workspace root.
 * Good, because systemd handles restart-on-failure and boot-time startup.
-* Good, because secrets live in `/etc/symphony-trello/env` instead of workflow files.
+* Good, because secrets live in `/etc/symphony-trello/secrets` and are loaded through systemd
+  credentials instead of workflow files or the service environment.
 * Good, because default Trello credential variables are removed before Codex and workflow hooks are
-  launched.
+  launched for local or legacy environment-backed runs.
 * Bad, because installing users, directories, workflow files, and unit files is still manual.
 * Bad, because non-systemd platforms still need their own deployment guide.
 
@@ -103,5 +104,4 @@ Future deployment automation work is tracked in
 [GitHub issue #6](https://github.com/martinfrancois/symphony-trello/issues/6) instead of
 user-facing setup documentation.
 
-File-based production secrets for systemd credential support are tracked in
-[GitHub issue #8](https://github.com/martinfrancois/symphony-trello/issues/8).
+Production secrets use systemd credentials with `file:$CREDENTIALS_DIRECTORY/...` workflow values.

@@ -7,7 +7,7 @@ The playbook manages:
 
 - the `symphony-trello` service user and directories
 - `/opt/symphony-trello/app`
-- `/etc/symphony-trello/env`
+- `/etc/symphony-trello/secrets`
 - `/etc/symphony-trello/workflows/*.WORKFLOW.md`
 - one `symphony-trello@name` systemd service per workflow
 - removed workflow files and their stopped systemd services
@@ -81,6 +81,14 @@ Each `name` becomes a systemd service instance. For example, `project-a` becomes
 
 Each `src` points to the local workflow file that should be deployed for that service.
 
+For deployed workflow files, set Trello credentials to the systemd credential files:
+
+```yaml
+tracker:
+  api_key: file:$CREDENTIALS_DIRECTORY/trello-api-key
+  api_token: file:$CREDENTIALS_DIRECTORY/trello-api-token
+```
+
 The workflow list is the desired state. By default, a workflow service that exists on the server but
 is no longer listed here is stopped, disabled, and removed from `/etc/symphony-trello/workflows`.
 
@@ -109,6 +117,9 @@ symphony_trello_trello_api_token: replace-with-your-token
 ```
 
 `vault.yml` is ignored. Keep the vault password outside the repository.
+
+The playbook writes the vault values to root-only files on the server and loads them through systemd
+credentials. They are not written to the service environment.
 
 ## Deploy
 
