@@ -446,18 +446,18 @@ Fields:
   - Default for `tracker.kind == "trello"`: `https://api.trello.com/1`
 - `api_key` (string)
   - MAY be a literal token or `$VAR_NAME`.
-  - Canonical environment variable for `tracker.kind == "trello"`: `TRELLO_API_KEY`.
+  - Default environment variable for `tracker.kind == "trello"`: `TRELLO_API_KEY`.
   - If `$VAR_NAME` resolves to an empty string, treat the key as missing.
 - `api_token` (string)
   - MAY be a literal token or `$VAR_NAME`.
-  - Canonical environment variable for `tracker.kind == "trello"`: `TRELLO_API_TOKEN`.
+  - Default environment variable for `tracker.kind == "trello"`: `TRELLO_API_TOKEN`.
   - If `$VAR_NAME` resolves to an empty string, treat the token as missing.
 - `board_id` (string)
   - REQUIRED for dispatch when `tracker.kind == "trello"`.
   - May be a Trello board ID, shortLink, or another board identifier accepted by the implementation's
     Trello API client.
-  - Implementations MUST resolve this value to Trello's canonical board ID during validation/startup
-    and use that canonical ID for all runtime board-scope checks.
+  - Implementations MUST resolve this value to the board ID returned by Trello during validation/startup
+    and use that resolved ID for all runtime board-scope checks.
 - `active_states` (list of strings)
   - Trello list names or normalized special states considered dispatch-active.
   - Default: `Todo`, `In Progress`
@@ -751,7 +751,7 @@ Validation checks:
 - `tracker.api_key` is present after `$` resolution.
 - `tracker.api_token` is present after `$` resolution.
 - `tracker.board_id` is present when REQUIRED by the selected tracker kind.
-- For Trello, `tracker.board_id` resolves to a canonical Trello board ID and that board is not closed.
+- For Trello, `tracker.board_id` resolves to a Trello board ID and that board is not closed.
 - `codex.command` is present and non-empty.
 
 ### 6.4 Config Fields Summary (Cheat Sheet)
@@ -763,8 +763,9 @@ implemented.
 
 - `tracker.kind`: string, REQUIRED, currently `trello`
 - `tracker.endpoint`: string, default `https://api.trello.com/1` when `tracker.kind=trello`
-- `tracker.api_key`: string or `$VAR`, canonical env `TRELLO_API_KEY` when `tracker.kind=trello`
-- `tracker.api_token`: string or `$VAR`, canonical env `TRELLO_API_TOKEN` when
+- `tracker.api_key`: string or `$VAR`, default environment variable `TRELLO_API_KEY` when
+  `tracker.kind=trello`
+- `tracker.api_token`: string or `$VAR`, default environment variable `TRELLO_API_TOKEN` when
   `tracker.kind=trello`
 - `tracker.board_id`: string, REQUIRED when `tracker.kind=trello`
 - `tracker.active_states`: list of Trello list/state names, default
@@ -958,7 +959,7 @@ first.
 A card is dispatch-eligible only if all are true:
 
 - It has `id`, `identifier`, `title`, and `state`.
-- Its `board_id`, when known, matches the canonical configured Trello board ID.
+- Its `board_id`, when known, matches the resolved configured Trello board ID.
 - It matches active selection:
   - If it is a list-backed open card and `active_list_ids` is non-empty, `list_id` MUST be in
     `active_list_ids`.
@@ -985,7 +986,7 @@ A card is dispatch-eligible only if all are true:
     this rule always passes.
 
 `is_out_of_configured_board_scope(card)` means the card is normalized from Trello, `board_id` is known,
-and `board_id` differs from the canonical configured board ID. Trello candidate and state-refresh
+and `board_id` differs from the resolved configured board ID. Trello candidate and state-refresh
 fetches MUST include `idBoard`; if a Trello result omits it, the implementation SHOULD treat that card
 as a refresh/normalization failure instead of dispatching it.
 
@@ -1032,7 +1033,7 @@ Retry handling behavior:
    - Remove the retry entry.
    - Remove the claim.
    - Clean the workspace using the retry entry's stored identifier when available.
-3. If the card's board ID no longer matches the canonical configured Trello board ID:
+3. If the card's board ID no longer matches the resolved configured Trello board ID:
    - Remove the retry entry.
    - Remove the claim.
    - Do not clean the workspace.
@@ -1074,7 +1075,7 @@ Part B: Trello state refresh
 - Fetch current card states for all running card IDs.
 - For each running card:
   - If the lookup returns not found/deleted: terminate worker, clean workspace, and suppress retry.
-  - If the card's board ID no longer matches the canonical configured board ID: terminate worker
+  - If the card's board ID no longer matches the resolved configured board ID: terminate worker
     without workspace cleanup and suppress retry.
   - If Trello state/list ID is terminal: terminate worker, clean workspace, and suppress retry.
   - If Trello state/list ID is still active: update the in-memory card snapshot.
@@ -1431,7 +1432,7 @@ Optional client-side tool extension:
 - The tool MUST reject requests whose `query`, `body`, or implementation-supported headers contain
   Trello authentication material, including `key`, `token`, `oauth_consumer_key`, `oauth_token`, or
   equivalent auth fields. The runtime is solely responsible for injecting Trello auth.
-- The Trello tool execution context MUST include the current Trello card ID and canonical board ID
+- The Trello tool execution context MUST include the current Trello card ID and resolved board ID
   from the active worker session. For current-card-scoped operations, the tool MUST compare requested
   card IDs against this session context and reject requests targeting any other card unless an
   explicit allowlist permits broader access.
@@ -1547,7 +1548,8 @@ Trello-specific requirements for `tracker.kind == "trello"`:
   - `Authorization: OAuth oauth_consumer_key="<api_key>", oauth_token="<api_token>"`
 - Implementations MAY use Trello's documented `key=<api_key>` and `token=<api_token>` query
   parameters when necessary, but request URLs MUST be redacted before logging.
-- `tracker.board_id` maps to the configured Trello board and is resolved to Trello's canonical board ID
+- `tracker.board_id` maps to the configured Trello board and is resolved to the board ID returned by
+  Trello
 - Candidate card fetch uses the configured board and the active selection rules in Section 8.2
 - State refresh by ID uses Trello card IDs and resolves each card's current board ID, list name, and
   list archived state
@@ -1569,7 +1571,7 @@ Trello-specific requirements for `tracker.kind == "trello"`:
 Recommended Trello API access pattern:
 
 1. Fetch the configured board with at least `id`, `name`, and `closed`, and store the returned `id` as
-   the canonical configured board ID.
+   the resolved configured board ID.
 2. Fetch board lists with `filter=all` and fields such as `id`, `name`, `closed`, and `pos`.
 3. Build `list_id -> list` mapping from the fetched lists.
 4. Fetch open board cards from the configured board for candidate dispatch.
@@ -2856,7 +2858,7 @@ Required when the workflow expects the agent to perform Trello handoff transitio
 - `trello_tools` policy enforcement before every Trello tool request.
 - `trello_tools.enabled=true` for the standardized `trello_rest` tool, or equivalent documented
   enablement for non-`trello_rest` tools.
-- Trello tool execution context includes the active worker session's current card ID and canonical
+- Trello tool execution context includes the active worker session's current card ID and resolved
   board ID.
 - Ability to add comments to the current card when `trello_tools.allow_comments` permits it.
 - Ability to move the current card to allowed board-local lists.

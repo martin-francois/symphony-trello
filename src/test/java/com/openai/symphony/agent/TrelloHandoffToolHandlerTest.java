@@ -207,7 +207,7 @@ class TrelloHandoffToolHandlerTest {
                                         "allowed_move_list_ids",
                                         allowedMoveListIds)),
                         ""))
-                .withCanonicalBoardId("board-1");
+                .withResolvedBoardId("board-1");
     }
 
     private static Map<String, String> query(HttpExchange exchange) {

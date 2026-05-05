@@ -65,8 +65,8 @@ matters, and easy for another engineer to understand without asking the original
   contract section instead of the README opening.
 - Write README prose in simple, direct language. Prefer short sentences and plain words over
   polished or elaborate wording.
-- Avoid the word "canonical" in user-facing docs unless it is truly needed. Prefer simpler words
-  such as "default", "resolved", "configured", or "official".
+- Avoid unclear normalization jargon in code and docs. Prefer simple words such as "default",
+  "resolved", "configured", or "official".
 - For local Trello credentials, use ignored project-root `.env` files created from `.env.example`.
   Real environment variables still take precedence over `.env`. Do not print secret values in
   command output.

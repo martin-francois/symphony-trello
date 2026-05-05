@@ -37,7 +37,7 @@ public class ConfigResolver {
         String apiKey = secret(tracker, "api_key", "TRELLO_API_KEY");
         String apiToken = secret(tracker, "api_token", "TRELLO_API_TOKEN");
         String boardId = string(tracker, "board_id", null);
-        String canonicalBoardId = string(tracker, "canonical_board_id", boardId);
+        String resolvedBoardId = string(tracker, "resolved_board_id", boardId);
 
         boolean writes = bool(trelloTools, "allow_writes", false);
         return new EffectiveConfig(
@@ -48,7 +48,7 @@ public class ConfigResolver {
                         apiKey,
                         apiToken,
                         boardId,
-                        canonicalBoardId,
+                        resolvedBoardId,
                         list(tracker, "active_states", List.of("Todo", "In Progress")),
                         list(tracker, "active_list_ids", List.of()),
                         normalizedList(tracker, "blocker_enforced_states", List.of("Todo", "Ready for Codex")),
@@ -135,8 +135,8 @@ public class ConfigResolver {
         return value.toString();
     }
 
-    private static String secret(Map<String, Object> root, String key, String canonicalEnv) {
-        String configured = string(root, key, "$" + canonicalEnv);
+    private static String secret(Map<String, Object> root, String key, String defaultEnv) {
+        String configured = string(root, key, "$" + defaultEnv);
         if (configured != null && configured.startsWith("$") && configured.length() > 1) {
             return LocalEnvironment.get(configured.substring(1)).orElse(null);
         }

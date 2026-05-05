@@ -47,7 +47,7 @@ public class TrelloClient implements TrackerClient {
     }
 
     @Override
-    public String resolveCanonicalBoardId(EffectiveConfig config) {
+    public String resolveBoardId(EffectiveConfig config) {
         Map<String, Object> board = getMap(
                 config, "boards/" + encodeSegment(config.tracker().boardId()), Map.of("fields", "id,name,closed"));
         if (bool(board.get("closed"))) {
@@ -141,7 +141,7 @@ public class TrelloClient implements TrackerClient {
             return false;
         }
         if (card.boardId() != null
-                && !Objects.equals(card.boardId(), config.tracker().canonicalBoardId())) {
+                && !Objects.equals(card.boardId(), config.tracker().resolvedBoardId())) {
             return false;
         }
         if (card.listId() != null && !config.tracker().activeListIds().isEmpty()) {
@@ -184,13 +184,13 @@ public class TrelloClient implements TrackerClient {
                 config, "boards/" + encodeSegment(config.tracker().boardId()), Map.of("fields", "id,name,closed"));
         String boardId = requiredString(board, "id", "trello_unknown_payload");
         boolean boardClosed = bool(board.get("closed"));
-        Map<String, BoardList> listMap = fetchBoardLists(config.withCanonicalBoardId(boardId)).stream()
+        Map<String, BoardList> listMap = fetchBoardLists(config.withResolvedBoardId(boardId)).stream()
                 .collect(Collectors.toMap(BoardList::id, list -> list, (left, right) -> left, LinkedHashMap::new));
         return new BoardContext(boardId, boardClosed, listMap);
     }
 
     public List<BoardList> fetchBoardLists(EffectiveConfig config) {
-        String boardId = config.tracker().canonicalBoardId();
+        String boardId = config.tracker().resolvedBoardId();
         return getList(
                         config,
                         "boards/" + encodeSegment(boardId) + "/lists",
