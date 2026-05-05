@@ -247,17 +247,16 @@ Use this path when you already have a Trello board and want Symphony to write a 
 
 You may omit `--active` when the board already has a list named `Ready for Codex`. You may omit
 `--terminal` when the board already has a list named `Done`. You may omit `--blocked` when the board
-already has a list named `Blocked`.
+already has a list named `Blocked`. If your board has no blocked list, import falls back to `Review`
+when that list exists, so blocked cards still leave the active list. Create a blocked list or pass
+`--blocked` when you want blocked work separated from reviewable work.
 
 For an existing team board, be deliberate about `--active`: every open card in that list is eligible
 for Codex work. A conservative import starts with a new list named `Ready for Codex` and only moves
 cards there after they have a clear title, useful description, and acceptance criteria.
 
 When the imported board has a list named `Review`, the starter workflow allows Codex to move
-reviewable work there. When it also has a blocked list, either named `Blocked` or passed with
-`--blocked`, the workflow allows Codex to move blocked work there. If there is no blocked list but
-there is a `Review` list, blocked work moves to `Review` so it leaves the active list and does not run
-again immediately. If there is no obvious review list, the generated workflow keeps Trello writes
+reviewable work there. If there is no obvious review list, the generated workflow keeps Trello writes
 disabled until you choose one. Do not run a write-disabled workflow with blocked cards left in
 `Ready for Codex` unless you plan to move them manually; they can be picked up again.
 
