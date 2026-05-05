@@ -57,6 +57,22 @@ export TRELLO_API_TOKEN=...
 ./mvnw quarkus:dev
 ```
 
+For local live tests, use an ignored `.env.local` file instead of pasting secrets into chat:
+
+```bash
+cp .env.example .env.local
+chmod 600 .env.local
+```
+
+Fill in `TRELLO_API_KEY` and `TRELLO_API_TOKEN` in `.env.local`, then load it only in the shell that
+will run Symphony:
+
+```bash
+set -a
+. ./.env.local
+set +a
+```
+
 By default the [status page](#operations) binds to `127.0.0.1:8080`. Use `SYMPHONY_HTTP_PORT=0` for
 an ephemeral test port, configure `server.port` in [`WORKFLOW.md`](#workflow-contract), or pass
 `--port` for local development. Command-line `--port` wins over `server.port`.
@@ -128,7 +144,7 @@ Workspace and authorize the API token in the browser.
 13. Click `Allow`.
 14. Copy the generated token. Treat it like a password: it grants access as your Trello account to
     boards and Workspaces your account can access.
-15. Export both values in the terminal where you will run Symphony:
+15. Put both values in `.env.local` or export them in the terminal where you will run Symphony:
 
 ```bash
 export TRELLO_API_KEY=replace-with-generated-key

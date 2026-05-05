@@ -46,8 +46,9 @@ matters, and easy for another engineer to understand without asking the original
   for its own sake.
 - Keep the project open-source-ready even while private: clear README, usable CONTRIBUTING, useful
   ADRs, no committed secrets, and reviewable history.
-- Never ask the user to paste secrets into chat. For local live tests, use ignored files under
-  `.secrets/` or environment variables, and avoid printing secret values in command output.
+- Never ask the user to paste secrets into chat. For local live tests, prefer ignored `.env.local`
+  files created from `.env.example`, or environment variables, and avoid printing secret values in
+  command output. `.secrets/` is also ignored for ad hoc local secret files.
 - Write user-facing docs so they can be read from top to bottom without confusion. Do not refer to a
   concept, path, command, or setup mode before introducing it.
 - Use progressive disclosure in README setup flows: explain the simplest successful path first, and
