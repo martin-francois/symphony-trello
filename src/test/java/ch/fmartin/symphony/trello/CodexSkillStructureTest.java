@@ -88,6 +88,28 @@ class CodexSkillStructureTest {
                 .contains("Repeat the sweep until no actionable comments remain");
     }
 
+    @Test
+    void trelloHandoffSkillCoversReworkWithoutResetByDefault() throws IOException {
+        // given
+        Path skill = SKILLS_ROOT.resolve("trello-handoff").resolve("SKILL.md");
+
+        // when
+        String body = readSkillMetadata(skill).body();
+
+        // then
+        assertThat(body)
+                .contains("## Rework")
+                .contains("moves a card from `Human Review` back to an active column")
+                .contains("Read the existing `## Codex Workpad` comment")
+                .contains("Run `review-sweep` when a PR or branch exists")
+                .contains("Preserve completed work")
+                .contains("Do not close the")
+                .contains("existing PR")
+                .contains("delete the workpad")
+                .contains("create a new branch")
+                .contains("Do not create duplicate progress summary comments");
+    }
+
     private SkillMetadata readSkillMetadata(Path file) {
         try {
             String content = Files.readString(file, StandardCharsets.UTF_8);

@@ -54,6 +54,28 @@ Before moving to `Human Review`:
 
 Do not attempt landing from `Human Review`; that column is for a person.
 
+## Rework
+
+When a human moves a card from `Human Review` back to an active column such as
+`Ready for Codex`, treat it as rework rather than a new task.
+
+Before changing code:
+
+1. Reread the full card description and recent Trello comments.
+2. Read the existing `## Codex Workpad` comment.
+3. Run `review-sweep` when a PR or branch exists.
+4. Identify what changed since the last handoff.
+5. Update the workpad with a short rework plan.
+
+Preserve completed work that still satisfies the current card. Do not close the
+existing PR, delete the workpad, create a new branch, or restart from scratch
+unless the Trello card or a human explicitly asks for a reset.
+
+Before moving back to `Human Review`, rerun card-specific validation and the PR
+feedback sweep, update the existing workpad with evidence, and add one concise
+handoff comment. Do not create duplicate progress summary comments when the
+workpad already contains the details.
+
 ## Blocked
 
 Move to `Blocked` when the card cannot proceed safely because of missing auth,
