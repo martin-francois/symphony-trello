@@ -191,7 +191,7 @@ class TrelloBoardSetupMainTest {
                 .contains("Imported Trello board: Existing Board")
                 .contains("Active lists: Queue for Codex")
                 .contains("Terminal lists: Released")
-                .contains("Blocked list: Blocked");
+                .contains("Blocked column: Blocked");
         assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
     }
 

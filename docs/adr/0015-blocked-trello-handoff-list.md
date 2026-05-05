@@ -41,7 +41,7 @@ blocked list is configured.
 
 The recommended board setup creates `Blocked` and the generated workflow allows Codex to move blocked
 work there. Existing-board import detects a list named `Blocked`, and also accepts an explicit
-`--blocked` list name. If there is no blocked list but there is a review handoff list, the generated
+`--blocked` column name. If there is no blocked list but there is a review handoff list, the generated
 prompt tells Codex to move blocked work to review so it leaves the active list.
 
 ### Consequences

@@ -79,7 +79,7 @@ public final class TrelloBoardSetupMain {
         out.println("Open lists: " + String.join(", ", result.openLists()));
         out.println("Active lists: " + String.join(", ", result.activeStates()));
         out.println("Terminal lists: " + String.join(", ", result.terminalStates()));
-        out.println("Blocked list: " + optionalListName(result.blockedState()));
+        out.println("Blocked column: " + optionalListName(result.blockedState()));
         out.println("Wrote workflow: " + result.workflowPath().toAbsolutePath().normalize());
         out.println();
         out.println("Next:");
@@ -127,7 +127,7 @@ public final class TrelloBoardSetupMain {
                   --board ID            Required Trello board id or short link
                   --active LIST         Repeatable or comma-separated. Defaults to Ready for Codex when present.
                   --terminal LIST       Repeatable or comma-separated. Defaults to Done when present.
-                  --blocked LIST        Optional blocked handoff list. Defaults to Blocked when present.
+                  --blocked NAME        Optional blocked column name. Defaults to Blocked when present.
                 """;
     }
 

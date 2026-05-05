@@ -277,8 +277,8 @@ Common setup command options:
   them from `.env` or environment variables.
 - `--workspace-id ID`: choose the Trello Workspace for a new board when your token can access more
   than one Workspace.
-- `--blocked LIST`: during `import-board`, choose the list where Codex should move cards it cannot
-  safely finish. If you omit it, import uses a list named `Blocked` when the board has one.
+- `--blocked NAME`: during `import-board`, choose the Trello column where Codex should move cards it
+  cannot safely finish. If you omit it, import uses a column named `Blocked` when the board has one.
 
 ### Option A: Reuse An Existing Board
 
