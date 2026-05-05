@@ -32,6 +32,7 @@ and maps it to Trello boards, lists, and cards.
 - [Advanced Configuration](#advanced-configuration)
 - [Operations](#operations)
 - [Safety Posture](#safety-posture)
+- [Production Deployment](#production-deployment)
 - [Build and Test](#build-and-test)
 
 ## Current Capabilities
@@ -542,6 +543,12 @@ credentials, and Codex approval/sandbox settings appropriate to the board's trus
 Approval and sandbox values are passed through from [`WORKFLOW.md`](#workflow-contract) to the
 installed Codex app-server schema. User-input and unsupported dynamic tool requests are answered
 without waiting indefinitely.
+
+## Production Deployment
+
+For a server deployment with one or more workflow files, use the systemd guide in
+[docs/deployment.md](docs/deployment.md). It shows the recommended Linux layout, shared secret file,
+one service instance per workflow, and the included `symphony-trello@.service` template.
 
 ## Build and Test
 
