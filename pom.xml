@@ -3,9 +3,9 @@
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>com.openai.symphony</groupId>
-  <artifactId>symphony-trello-java</artifactId>
+  <artifactId>symphony-trello</artifactId>
   <version>0.1.0-SNAPSHOT</version>
-  <name>Symphony Trello Java</name>
+  <name>symphony-trello</name>
   <description>Quarkus service that orchestrates Codex workers from Trello cards.</description>
 
   <properties>

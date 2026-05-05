@@ -1,8 +1,8 @@
-# Symphony Trello Java
+# symphony-trello
 
-Symphony Trello Java lets Codex work from Trello cards. Use it when prompts and terminal history are
-not enough, and you want a clear board that shows what Codex should do, what is running, and what is
-ready for review.
+symphony-trello lets Codex work from Trello cards. Use it when prompts and terminal history are not
+enough, and you want a clear board that shows what Codex should do, what is running, and what is ready
+for review.
 
 Use it when you want to:
 
@@ -18,6 +18,9 @@ Trello is still where you plan and review work. Codex still writes the code. Sym
 so the same workflow can run again and again.
 
 You can use it with one board, or run it for several boards at the same time.
+
+symphony-trello is a variant of OpenAI's Symphony adapted for Trello. The original Symphony spec uses
+Linear; this project keeps the same orchestration idea and maps it to Trello boards, lists, and cards.
 
 ## Table of Contents
 
