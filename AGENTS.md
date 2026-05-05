@@ -31,7 +31,7 @@ matters, and easy for another engineer to understand without asking the original
 8. Run the relevant verification before finishing. For normal code changes, use:
 
    ```bash
-   JAVA_HOME=/tmp/jdk25 ./mvnw -q spotless:check verify
+   ./mvnw -q spotless:check verify
    ```
 
    Use `spotless:apply` before that when formatting changed.
@@ -50,6 +50,9 @@ matters, and easy for another engineer to understand without asking the original
   down a future maintainer.
 - Use Java 25 LTS language/runtime features where they make the code clearer, but do not be clever
   for its own sake.
+- Use the SDKMAN-managed Azul Zulu Java 25 LTS default for local work. Do not hardcode temporary JDK
+  paths or prefix Maven commands with custom `JAVA_HOME`/`PATH` assignments; `java`, `javac`, and
+  `./mvnw` should resolve through the shell environment.
 - Prefer Java/JVM-based maintained project tooling over Python or other helper languages when the
   task can be handled cleanly in Java. Short shell snippets in documentation are fine for command
   orchestration, but committed reusable helpers should fit the repository's Java-first maintenance

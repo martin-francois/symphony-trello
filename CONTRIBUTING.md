@@ -7,11 +7,28 @@ engineering preferences that should persist across Codex sessions.
 
 ## Development Setup
 
-1. Install Java 25 LTS.
-2. Use the Maven wrapper: `./mvnw verify`.
-3. Install Codex CLI if you want to run real worker sessions.
-4. Create a local `WORKFLOW.md` from `WORKFLOW.example.md`.
-5. Copy `.env.example` to `.env`, set Trello credentials there, and keep `.env` uncommitted:
+1. Install SDKMAN if it is not already installed:
+
+   ```bash
+   curl -s "https://get.sdkman.io" | bash
+   source "$HOME/.sdkman/bin/sdkman-init.sh"
+   ```
+
+2. Install the project Java runtime and make it the default for your shell:
+
+   ```bash
+   sdk install java 25.0.3-zulu
+   sdk default java 25.0.3-zulu
+   java -version
+   ```
+
+   The repository also includes `.sdkmanrc`, so `sdk env install` can install the pinned runtime
+   when SDKMAN's environment feature is enabled.
+
+3. Use the Maven wrapper: `./mvnw verify`.
+4. Install Codex CLI if you want to run real worker sessions.
+5. Create a local `WORKFLOW.md` from `WORKFLOW.example.md`.
+6. Copy `.env.example` to `.env`, set Trello credentials there, and keep `.env` uncommitted:
 
    ```bash
    cp .env.example .env

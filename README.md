@@ -54,7 +54,7 @@ and maps it to Trello boards, lists, and cards.
 
 Prerequisites:
 
-- JDK 25 installed.
+- JDK 25 available on `PATH`. The project uses Azul Zulu 25 through SDKMAN for local development.
 - [Codex CLI installed](https://help.openai.com/en/articles/11096431-openai-codex-ligetting-started)
   and signed in.
 
