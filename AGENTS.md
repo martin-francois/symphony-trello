@@ -22,14 +22,16 @@ matters, and easy for another engineer to understand without asking the original
 4. Update documentation and ADRs when behavior, setup, architecture, or tradeoffs change.
 5. When the user corrects an agent mistake or clarifies a durable preference, update this file in
    the same change when reasonable so future sessions do not repeat the issue.
-6. Run the relevant verification before finishing. For normal code changes, use:
+6. When fixing a documentation pattern, search the relevant file or docs set for similar instances
+   before committing instead of correcting only the one sentence the user pointed out.
+7. Run the relevant verification before finishing. For normal code changes, use:
 
    ```bash
    JAVA_HOME=/tmp/jdk25 ./mvnw -q spotless:check test package
    ```
 
    Use `spotless:apply` before that when formatting changed.
-7. Commit with Conventional Commits when asked to commit, and keep the working tree clean before
+8. Commit with Conventional Commits when asked to commit, and keep the working tree clean before
    claiming the work is done.
 
 ## Design Preferences

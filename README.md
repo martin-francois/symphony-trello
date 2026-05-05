@@ -84,12 +84,12 @@ Trello has three concepts that matter for Symphony:
 
 Official Trello references if the UI has moved since this README was written:
 
-- Trello Workspace creation guide: <https://support.atlassian.com/trello/docs/creating-a-new-workspace/>
-- Trello app/Power-Up admin guide: <https://developer.atlassian.com/cloud/trello/guides/power-ups/managing-apps/>
-- Trello REST API introduction: <https://developer.atlassian.com/cloud/trello/guides/rest-api/api-introduction/>
-- Trello board creation API: <https://developer.atlassian.com/cloud/trello/rest/api-group-boards/>
-- Trello list creation API: <https://developer.atlassian.com/cloud/trello/rest/api-group-lists/>
-- Trello board/list basics: <https://support.atlassian.com/trello/docs/adding-lists-to-a-board/>
+- [Create a Trello Workspace](https://support.atlassian.com/trello/docs/creating-a-new-workspace/)
+- [Manage Trello apps and Power-Ups](https://developer.atlassian.com/cloud/trello/guides/power-ups/managing-apps/)
+- [Authorize Trello REST API requests](https://developer.atlassian.com/cloud/trello/guides/rest-api/api-introduction/)
+- [Create boards with the Trello REST API](https://developer.atlassian.com/cloud/trello/rest/api-group-boards/)
+- [Create lists with the Trello REST API](https://developer.atlassian.com/cloud/trello/rest/api-group-lists/)
+- [Add lists to a Trello board](https://support.atlassian.com/trello/docs/adding-lists-to-a-board/)
 
 Symphony reads cards, creates local Codex workspaces, and runs Codex. The scheduler itself does not
 decide when work is done. The generated workflow gives Codex two scoped Trello handoff tools instead:
@@ -135,15 +135,17 @@ Workspace and authorize the API token in the browser.
    - `Author`: your name or your team name
    - `iframe Connector URL`: leave this blank if Trello allows it. Symphony only needs REST API
      credentials and does not need a board-enabled Power-Up UI. If Trello changes the form, follow
-     the field help in Trello and the official app admin guide linked above.
+     the field help in Trello and Atlassian's
+     [Managing Apps](https://developer.atlassian.com/cloud/trello/guides/power-ups/managing-apps/)
+     guide.
 
 8. Create the app/admin entry.
 9. Open its `API Key` tab and choose `Generate a new API Key`.
 10. Copy the API key somewhere temporary. The API key identifies the app, but the token is the
     sensitive credential.
-11. On the same API key page, click the `Token` link next to the key. Trello's API introduction
-    walks through this flow:
-    <https://developer.atlassian.com/cloud/trello/guides/rest-api/api-introduction/>.
+11. On the same API key page, click the `Token` link next to the key. Use Atlassian's
+    [REST API introduction](https://developer.atlassian.com/cloud/trello/guides/rest-api/api-introduction/)
+    if the token page has changed.
 12. Review the authorization screen. For the generated handoff workflow, the token needs write
     access because Codex can add comments and move the current card to `Review`.
 13. Click `Allow`.
