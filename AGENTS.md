@@ -31,7 +31,7 @@ matters, and easy for another engineer to understand without asking the original
 8. Run the relevant verification before finishing. For normal code changes, use:
 
    ```bash
-   JAVA_HOME=/tmp/jdk25 ./mvnw -q spotless:check test package
+   JAVA_HOME=/tmp/jdk25 ./mvnw -q spotless:check verify
    ```
 
    Use `spotless:apply` before that when formatting changed.
@@ -103,10 +103,13 @@ matters, and easy for another engineer to understand without asking the original
   contracts or external boundaries are involved.
 - Use JUnit 5 and AssertJ. Prefer readable AssertJ chains when they improve the failure message.
 - Prefer parameterized tests with `@MethodSource` for data-driven behavior.
+- Structure unit tests with `// given`, `// when`, and `// then` sections separated by blank lines.
 - Test names and assertion descriptions should make failures actionable without requiring a debug
   session.
 - Do not write low-value tests that only restate a constant. Do test parsing, policy enforcement,
   edge cases, failure modes, and cross-component contracts.
+- Do not add tests whose only purpose is to exercise POJOs, records, getters, setters, or generated
+  accessors without logic. Coverage should come from meaningful behavior.
 - When reporting live E2E results, state which external systems were real and which parts used test
   doubles. Do not imply that real Codex completed a path when only deterministic fake Codex completed
   it against real Trello.

@@ -490,12 +490,12 @@ without waiting indefinitely.
 ## Build and Test
 
 ```bash
-./mvnw test
 ./mvnw spotless:check
-./mvnw package
+./mvnw verify
 ```
 
-The test suite is deterministic and does not call Trello. Real Trello smoke testing is intentionally
-environment-dependent and should use disposable boards/cards; see
+`verify` runs the deterministic test suite, builds the application, generates the JaCoCo report, and
+fails if line coverage drops below 80%. The test suite does not call Trello. Real Trello smoke
+testing is intentionally environment-dependent and should use disposable boards/cards; see
 [docs/live-e2e.md](docs/live-e2e.md). See [CONTRIBUTING.md](CONTRIBUTING.md) for the full
 contributor checklist and [AGENTS.md](AGENTS.md) for repository-local AI agent instructions.
