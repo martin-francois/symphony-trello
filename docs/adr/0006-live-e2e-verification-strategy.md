@@ -23,6 +23,8 @@ and real Codex sessions?
 * Preserve a reproducible path for testing real Trello and real Codex behavior.
 * Test fake-Codex paths first to catch local bugs before spending live Codex time.
 * Include multi-card and multi-board concurrency scenarios.
+* Keep reusable live-runbook helpers in Java instead of adding Python, Perl, or Node maintenance
+  paths.
 * Avoid committing secrets or requiring live credentials for every developer.
 
 ## Considered Options
@@ -41,6 +43,7 @@ because it keeps CI stable while preserving a detailed, repeatable live verifica
 * Good, because maintainers can reproduce real Trello/Codex checks before risky releases.
 * Good, because CI remains usable without external secrets or live account side effects.
 * Good, because fake-Codex checks can be run before real-Codex checks.
+* Good, because executable helper logic stays in the repository's Java-first toolchain.
 * Bad, because live E2E coverage is not enforced on every pull request.
 * Bad, because manual execution can drift unless the document is kept current.
 
@@ -54,10 +57,13 @@ Run `./mvnw -q spotless:check verify` for normal verification. For live integrat
 ### Document live E2E checks in `docs/live-e2e.md` and run them manually when needed
 
 Keep a markdown runbook for live Trello and Codex verification, including setup, fake-Codex phase,
-real-Codex phase, card ordering, and multi-board scenarios.
+real-Codex phase, card ordering, multi-board scenarios, and Java source-file helpers for repeatable
+workflow patching and fake Codex behavior.
 
 * Good, because it is transparent and easy for an agent or maintainer to follow.
 * Good, because it avoids secret-dependent CI failures.
+* Good, because Java helpers avoid a second scripting language for maintained live verification
+  behavior.
 * Neutral, because execution frequency depends on maintainer judgment.
 * Bad, because it does not provide automatic regression protection for live-only failures.
 
