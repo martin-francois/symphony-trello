@@ -179,6 +179,10 @@ matters, and easy for another engineer to understand without asking the original
   workflow has active work, verify that Codex can authenticate, the work finishes or reaches an
   expected terminal state, Trello handoff happens when required, and `/api/v1/state` has no
   unexpected running or retrying entries.
+- Live deployment verification loops must poll Trello comments and the card's current list on every
+  pass, not only the local state endpoint. Use a fresh timestamp cutoff after each restart so old
+  blocker comments do not fail a fixed run, but fail immediately on any new blocker, auth, or sandbox
+  comment.
 - For live E2E, run the deterministic fake-Codex phase before real Codex. Then run strict real-Codex
   checks against real Trello with fresh cards and wait for both Trello handoff completion and
   `/api/v1/state` returning to zero running/retrying before claiming real-Codex coverage.

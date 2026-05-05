@@ -378,6 +378,81 @@ You may also run an exploratory smoke with an unmodified generated workflow. Rec
 from the strict real-Codex phase because the generated prompt represents real engineering work and is
 not a deterministic handoff-only protocol check.
 
+## Live Deployment Troubleshooting Loop
+
+Use this loop when a real deployed workflow is already running and you need to prove whether the
+deployment is healthy. Checking only `systemctl` or `/api/v1/state` is not enough: Codex can add a
+Trello blocker comment while the service still looks active.
+
+Set `CARD_ID` to the card currently being processed and `EXPECTED_LIST` to the handoff list for that
+workflow, usually `Review`.
+
+```bash
+if [ -z "${TRELLO_API_KEY:-}" ] || [ -z "${TRELLO_API_TOKEN:-}" ]; then
+  TRELLO_API_KEY="$(tr -d '\r\n' </etc/symphony-trello/secrets/trello-api-key)"
+  TRELLO_API_TOKEN="$(tr -d '\r\n' </etc/symphony-trello/secrets/trello-api-token)"
+fi
+
+CARD_ID="replace-with-card-id"
+EXPECTED_LIST="Review"
+STATE_URL="http://127.0.0.1:8080/api/v1/state"
+CUTOFF="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+for attempt in {1..60}; do
+  state="$(curl -fsS "$STATE_URL")"
+  card="$(curl -fsS "https://api.trello.com/1/cards/$CARD_ID?fields=name,idList,url&actions=commentCard&actions_limit=10&key=$TRELLO_API_KEY&token=$TRELLO_API_TOKEN")"
+  list_id="$(printf '%s' "$card" | jq -r '.idList')"
+  list_name="$(curl -fsS "https://api.trello.com/1/lists/$list_id?fields=name&key=$TRELLO_API_KEY&token=$TRELLO_API_TOKEN" | jq -r '.name')"
+  new_comments="$(printf '%s' "$card" | jq --arg cutoff "$CUTOFF" '[.actions[]? | select(.date >= $cutoff) | {date, text: .data.text}]')"
+
+  jq -n \
+    --argjson state "$state" \
+    --argjson card "$card" \
+    --arg list "$list_name" \
+    --argjson newComments "$new_comments" \
+    '{
+      card: {name: $card.name, url: $card.url, list: $list},
+      counts: $state.counts,
+      runningLastEvent: ($state.running[0].lastEvent // null),
+      runningLastMessage: ($state.running[0].lastMessage // null),
+      retrying: $state.retrying,
+      newComments: $newComments
+    }' | tee target/live-deployment-check.json
+
+  if printf '%s' "$new_comments" | rg -q 'Blocked:|bwrap:|Unauthorized|Address family not supported|overflowuid'; then
+    echo "Live deployment failed: Codex added a new blocker/auth/sandbox comment after $CUTOFF." >&2
+    exit 2
+  fi
+
+  if [ "$list_name" = "$EXPECTED_LIST" ] \
+      && printf '%s' "$state" | jq -e '.counts.running == 0 and .counts.retrying == 0' >/dev/null; then
+    echo "Live deployment passed: card moved to $EXPECTED_LIST and state is drained."
+    exit 0
+  fi
+
+  sleep 10
+done
+
+echo "Live deployment did not finish before the timeout." >&2
+exit 1
+```
+
+Use a fresh `CUTOFF` after every deployment restart or systemd hardening change. That prevents old
+blocker comments from failing a fixed run, while still catching new comments created after the
+current verification started.
+
+The deployment is healthy only when all of these are true:
+
+1. The service is active.
+2. `/api/v1/state` reaches `counts.running == 0` and `counts.retrying == 0`.
+3. The card moved out of the active list into the expected handoff list.
+4. The latest new Trello comments are successful handoff notes, not blocker/auth/sandbox comments.
+
+If new comments mention `bwrap: Can't read /proc/sys/kernel/overflowuid`, the systemd unit is hiding
+`/proc/sys`; do not use `ProcSubset=pid` for this service. If new comments mention
+`bwrap: loopback: Failed to create NETLINK_ROUTE socket`, the unit is blocking the address family
+Codex's sandbox needs; `RestrictAddressFamilies` must include `AF_NETLINK`.
+
 ## Deterministic App-Server
 
 For reproducible live testing, point `codex.command` at:
