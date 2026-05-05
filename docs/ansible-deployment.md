@@ -16,18 +16,20 @@ Run it twice with the same inputs. The second run should report `ok` for already
 
 ## Prerequisites
 
-Install Ansible and make sure the target server has:
+On the machine where you run Ansible, install:
+
+- Ansible
+- Java 25 LTS
+
+The playbook uses the Maven wrapper in this repository, so you do not need to install Maven
+separately.
+
+Make sure the target server has:
 
 - Java 25 LTS
 - Codex CLI available to the service, or a workflow-specific `codex.command`
 - `rsync`
 - passwordless `sudo` for the Ansible user
-
-Build the app locally before deploying:
-
-```bash
-./mvnw -q package
-```
 
 Install the Ansible collection used for file sync:
 
@@ -132,20 +134,23 @@ Run the playbook:
 ansible-playbook -i inventory.yml site.yml --ask-vault-pass
 ```
 
-Run it again after it finishes. With no local changes, the second run should report no changed tasks.
+The playbook packages the app on your machine when build inputs changed or when the packaged app is
+missing. It checks the Maven wrapper, Maven config, `pom.xml`, `src/main`, and `src/test`.
+
+Run the playbook again after it finishes. With no local changes, the second run should report no
+changed tasks.
 
 ## Update The App
 
-Build the newer version locally, then rerun the playbook:
+Pull or edit the newer version, then rerun the playbook:
 
 ```bash
-./mvnw -q package
 cd deploy/ansible
 ansible-playbook -i inventory.yml site.yml --ask-vault-pass
 ```
 
-The playbook syncs changed app files to `/opt/symphony-trello/app` and restarts the managed workflow
-services when the app changed.
+The playbook packages the app if needed, syncs changed app files to `/opt/symphony-trello/app`, and
+restarts the managed workflow services when the app changed.
 
 ## Add Or Change A Workflow
 
