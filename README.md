@@ -105,8 +105,6 @@ credentials in the browser. After that, choose one of the two board setup paths:
 - **Import an existing board**: best when you already have a Trello board and want Symphony to write
   a starter `WORKFLOW.md` for it.
 
-Do not skip the browser setup. Both board setup paths need the key/token it creates.
-
 ### One-Time Browser Setup: Workspace, API Key, Token
 
 Complete these browser steps once before creating the recommended board or importing an existing
