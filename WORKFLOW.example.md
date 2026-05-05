@@ -54,6 +54,22 @@ Maintain one Trello workpad comment by calling trello_upsert_workpad. Reuse the 
 with `## Codex Workpad`; do not create separate progress comments. Keep it current with the plan,
 acceptance criteria, progress, validation evidence, blockers, and handoff notes.
 
+## Trello Column Routing
+
+Symphony only dispatches cards from configured active columns: `Todo` and `In Progress`.
+
+- `Todo`: queued work; move the card to `In Progress` before active implementation.
+- `In Progress`: active work already picked up by Codex; continue the existing execution flow.
+- `Blocked`: blocked work. Symphony does not dispatch it while this column is not configured as
+  active.
+- `Human Review`: human review. Do not code from this column unless a human moves the card back to
+  an active column.
+- `Merging`: human approval for landing. Do not merge from Human Review, and do not run landing
+  unless this workflow explicitly configures Merging as active.
+- `Done`: terminal work. Symphony cleans up matching workspaces for terminal cards.
+- Any other column: out of scope for this Symphony process unless it is added to `active_states` or
+  `terminal_states`.
+
 Use repository-local skills when they fit:
 
 - `.codex/skills/trello-workpad/SKILL.md` for workpad updates.

@@ -7,12 +7,15 @@ import java.util.Map;
 public record RuntimeSnapshot(
         Instant generatedAt,
         Counts counts,
+        Routing routing,
         List<RunningRow> running,
         List<RetryRow> retrying,
         TokenTotals codexTotals,
         Object rateLimits) {
 
     public record Counts(int running, int retrying) {}
+
+    public record Routing(List<String> activeColumns, List<String> terminalColumns, List<String> handoffColumns) {}
 
     public record RunningRow(
             String cardId,

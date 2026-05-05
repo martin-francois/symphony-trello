@@ -406,6 +406,8 @@ public final class TrelloBoardSetup {
 
                 %s
 
+                %s
+
                 Card URL: {{ card.url }}
                 """
                 .formatted(
@@ -417,6 +419,7 @@ public final class TrelloBoardSetup {
                         trelloToolsYaml(handoffStates),
                         maxAgents,
                         workpadPrompt(!handoffStates.isEmpty()),
+                        routingPrompt(activeStates, terminalStates, inProgressState, reviewState, blockedState),
                         pickupPrompt(activeStates, inProgressState),
                         handoffPrompt(reviewState, blockedState, !handoffStates.isEmpty()));
     }
@@ -456,6 +459,41 @@ public final class TrelloBoardSetup {
                   allow_url_attachments: false
                 """
                 .formatted(yamlList(handoffStates))
+                .stripTrailing();
+    }
+
+    private static String routingPrompt(
+            List<String> activeStates,
+            List<String> terminalStates,
+            String inProgressState,
+            String reviewState,
+            String blockedState) {
+        List<String> queueStates = activeStates.stream()
+                .filter(state -> blank(inProgressState) || !state.equalsIgnoreCase(inProgressState))
+                .toList();
+        String activeText = activeStates.isEmpty() ? "no active columns" : quotedList(activeStates);
+        String queueText = queueStates.isEmpty() ? "active queue columns" : quotedList(queueStates);
+        String pickupText = blank(inProgressState)
+                ? "work from the current active column because no in-progress column is configured"
+                : "move the card to " + quote(inProgressState) + " before active implementation";
+        String inProgressText = blank(inProgressState) ? "No in-progress column" : quote(inProgressState);
+        String blockedText = blank(blockedState) ? "no configured blocked column" : quote(blockedState);
+        String reviewText = blank(reviewState) ? "no configured human review column" : quote(reviewState);
+        String terminalText = terminalStates.isEmpty() ? "configured terminal columns" : quotedList(terminalStates);
+        return """
+                ## Trello Column Routing
+
+                Symphony only dispatches cards from configured active columns: %s.
+
+                - %s: queued work; %s.
+                - %s: active work already picked up by Codex; continue the existing execution flow.
+                - %s: blocked work. Symphony does not dispatch it while this column is not configured as active.
+                - %s: human review. Do not code from this column unless a human moves the card back to an active column.
+                - `Merging`: human approval for landing. Do not merge from Human Review, and do not run landing unless this workflow explicitly configures Merging as active.
+                - %s: terminal work. Symphony cleans up matching workspaces for terminal cards.
+                - Any other column: out of scope for this Symphony process unless it is added to active_states or terminal_states.
+                """
+                .formatted(activeText, queueText, pickupText, inProgressText, blockedText, reviewText, terminalText)
                 .stripTrailing();
     }
 
@@ -570,6 +608,10 @@ public final class TrelloBoardSetup {
 
     private static String quotedList(List<String> values) {
         return values.stream().map(value -> "\"" + value + "\"").collect(Collectors.joining(", "));
+    }
+
+    private static String quote(String value) {
+        return "\"" + value + "\"";
     }
 
     private static List<String> defaultActiveStates(List<String> openListNames) {

@@ -107,6 +107,7 @@ class StatusResourceTest {
         return new RuntimeSnapshot(
                 Instant.parse("2026-05-05T00:00:00Z"),
                 new RuntimeSnapshot.Counts(1, 0),
+                new RuntimeSnapshot.Routing(List.of("Ready for Codex"), List.of("Done"), List.of("human review")),
                 List.of(new RuntimeSnapshot.RunningRow(
                         "card-1",
                         "TRELLO-<abc>",

@@ -668,11 +668,22 @@ public class SymphonyOrchestrator {
         return new RuntimeSnapshot(
                 now,
                 new RuntimeSnapshot.Counts(runningRows.size(), retryRows.size()),
+                routing(),
                 runningRows,
                 retryRows,
                 new RuntimeSnapshot.TokenTotals(
                         totalInputTokens, totalOutputTokens, totalTokens, endedRuntimeMillis / 1000.0 + activeSeconds),
                 rateLimits);
+    }
+
+    private RuntimeSnapshot.Routing routing() {
+        if (config == null) {
+            return new RuntimeSnapshot.Routing(List.of(), List.of(), List.of());
+        }
+        return new RuntimeSnapshot.Routing(
+                List.copyOf(config.tracker().activeStates()),
+                List.copyOf(config.tracker().terminalStates()),
+                List.copyOf(config.trelloTools().allowedMoveListNames()));
     }
 
     public synchronized Optional<CardDebugDetails> cardDetails(String cardIdentifier) {

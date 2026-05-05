@@ -50,7 +50,7 @@ and maps it to Trello boards, columns, and cards.
 - Single-authority in-memory orchestration state, claim-before-spawn dispatch, retries, stall checks,
   stale worker identity filtering, and terminal workspace cleanup.
 - JSON and HTML status surfaces at `/api/v1/state`, `/api/v1/{card_identifier}`, `/api/v1/refresh`,
-  and `/`.
+  and `/`, including the configured active, terminal, and handoff routing columns.
 
 ## Quick Start
 
@@ -557,6 +557,21 @@ one-card-at-a-time runs are routine and predictable.
 Within the available slots, Symphony starts cards in a predictable order. Priority labels run first
 when you use them. Otherwise, it follows the configured active-column order, then the order of cards
 in the Trello column from top to bottom. If there is still a tie, older cards run first.
+
+Column routing for the recommended board:
+
+- `Inbox`: rough ideas or incomplete tasks. Symphony ignores this column.
+- `Ready for Codex`: queued work. Symphony dispatches from here and Codex moves the card to
+  `In Progress`.
+- `In Progress`: active work that Codex has picked up. Symphony can continue it after retries or
+  restarts.
+- `Blocked`: work that needs a human or environment fix. Symphony ignores it until a human moves it
+  back to an active column.
+- `Human Review`: work ready for a person. Symphony does not code from this column.
+- `Merging`: human approval for landing. Landing automation must explicitly configure this as
+  active before Codex can act from it.
+- `Done`: terminal work. Symphony treats it as complete and removes matching workspaces during
+  terminal cleanup.
 
 Each running card keeps one Codex app-server session while it remains active. After a successful
 turn, Symphony refreshes the Trello card. If the card is still in an active column and the worker has
