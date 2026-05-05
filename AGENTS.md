@@ -72,6 +72,8 @@ matters, and easy for another engineer to understand without asking the original
 - Keep setup steps focused on what the reader must do now. Avoid naming external documentation
   terminology or adding fallback-guide chatter unless it solves a likely problem in that step.
 - Avoid repeating limitations already made clear by the surrounding setup context.
+- If a user hits a vendor warning during setup, document the expected action and the condition where
+  it would be unsafe, close to the triggering step.
 - For optional external docs in setup steps, prefer omitting the link over adding "if the page
   changed" text. Use a precise official link when it materially reduces ambiguity for the current
   action or replaces duplicated vendor-owned setup instructions that are better kept up to date by

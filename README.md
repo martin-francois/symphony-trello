@@ -116,15 +116,18 @@ Workspace and authorize the API token in the browser.
 
 7. Create the app/admin entry.
 8. Open its `API Key` tab and choose `Generate a new API Key`.
-9. Copy the API key somewhere temporary. The API key identifies the app, but the token is the
+9. If Trello warns that generating a key replaces the API key used for Personal Data Storage and
+   GDPR compliance, continue when this is the new `Symphony Trello Automation` app/admin entry. For
+   an existing app already used elsewhere, rotating the key means those uses must be updated.
+10. Copy the API key somewhere temporary. The API key identifies the app, but the token is the
     sensitive credential.
-10. On the same API key page, click the `Token` link next to the key.
-11. Review the authorization screen. For the generated handoff workflow, the token needs write
+11. On the same API key page, click the `Token` link next to the key.
+12. Review the authorization screen. For the generated handoff workflow, the token needs write
     access because Codex can add comments and move the current card to `Review`.
-12. Click `Allow`.
-13. Copy the generated token. Treat it like a password: it grants access as your Trello account to
+13. Click `Allow`.
+14. Copy the generated token. Treat it like a password: it grants access as your Trello account to
     boards and Workspaces your account can access.
-14. Export both values in the terminal where you will run Symphony:
+15. Export both values in the terminal where you will run Symphony:
 
 ```bash
 export TRELLO_API_KEY=replace-with-generated-key
