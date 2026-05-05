@@ -195,6 +195,9 @@ matters, and easy for another engineer to understand without asking the original
 - When a session contains multiple durable design decisions, review the recent conversation and
   commit history before finishing so relevant decisions are captured in ADRs instead of living only
   in chat.
+- Run markdownlint when changing Markdown, especially ADRs. The CI lint job is based on MADR's
+  markdownlint workflow and uses `.markdownlint-cli2.yaml`; do not disable rules inline unless the
+  exception is narrow and justified.
 - Do not silently reinterpret `SPEC.md`. If the implementation needs a clarified adaptation, update
   the spec wording carefully without breaking conformance to the original Symphony intent.
 
