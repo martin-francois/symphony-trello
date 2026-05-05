@@ -102,7 +102,7 @@ curl -fsS -X POST "https://api.trello.com/1/boards" \
 
 CUSTOM_BOARD_ID="$(jq -r .id "$RUN_DIR/custom-board.json")"
 
-for list_name in "Intake" "Queue for Codex" "Escalated for Codex" "Review" "Released" "Parked"; do
+for list_name in "Intake" "Queue for Codex" "Escalated for Codex" "Review" "Blocked Work" "Released" "Parked"; do
   safe_name="$(printf '%s' "$list_name" | tr '[:upper:] ' '[:lower:]-')"
   curl -fsS -X POST "https://api.trello.com/1/lists" \
     --data-urlencode "key=$TRELLO_API_KEY" \
@@ -114,10 +114,10 @@ for list_name in "Intake" "Queue for Codex" "Escalated for Codex" "Review" "Rele
 done
 
 ./mvnw -q exec:java \
-  -Dexec.args="import-board --board $CUSTOM_BOARD_ID --active 'Queue for Codex' --active 'Escalated for Codex' --terminal Released --terminal Parked --max-agents 2 --workflow $RUN_DIR/custom-import.WORKFLOW.md"
+  -Dexec.args="import-board --board $CUSTOM_BOARD_ID --active 'Queue for Codex' --active 'Escalated for Codex' --terminal Released --terminal Parked --blocked 'Blocked Work' --max-agents 2 --workflow $RUN_DIR/custom-import.WORKFLOW.md"
 
 ./mvnw -q exec:java \
-  -Dexec.args="import-board --board $CUSTOM_BOARD_ID --active 'Queue for Codex' --active 'Escalated for Codex' --terminal Released --terminal Parked --max-agents 2 --workflow $RUN_DIR/custom-import-real.WORKFLOW.md"
+  -Dexec.args="import-board --board $CUSTOM_BOARD_ID --active 'Queue for Codex' --active 'Escalated for Codex' --terminal Released --terminal Parked --blocked 'Blocked Work' --max-agents 2 --workflow $RUN_DIR/custom-import-real.WORKFLOW.md"
 ```
 
 Patch the generated workflows to use the deterministic Java app-server and different ports. Board A
@@ -453,7 +453,7 @@ If new comments mention `bwrap: Can't read /proc/sys/kernel/overflowuid`, the sy
 `bwrap: loopback: Failed to create NETLINK_ROUTE socket`, the unit is blocking the address family
 Codex's sandbox needs; `RestrictAddressFamilies` must include `AF_NETLINK`.
 
-### Known Broken Live Scenario: Blocked Work Stays Active
+### Regression Scenario: Blocked Work Stays Active
 
 Observed on 2026-05-05 against a real Trello board:
 
@@ -466,11 +466,11 @@ Observed on 2026-05-05 against a real Trello board:
   continuation run.
 - The second run added another `Blocked:` comment for the same underlying problem.
 
-Keep this scenario reproducible until the linked GitHub issues are fixed. A live deployment check for
-this scenario should fail when a new blocker comment appears after the verification cutoff, and it
-should also flag repeated blocker comments on the same card as a product problem. The expected future
-behavior should make the blocked state visible on the Trello board without requiring the operator to
-open the card and read comments.
+A live deployment check for this scenario should fail when a new blocker comment appears after the
+verification cutoff, and it should also flag repeated blocker comments on the same card as a product
+problem. A workflow with a configured blocked handoff list should move blocked cards out of the
+active list. A workflow without a blocked list should move blocked cards to the review handoff list
+when one is configured.
 
 ## Deterministic App-Server
 

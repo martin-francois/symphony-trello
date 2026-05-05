@@ -181,13 +181,21 @@ tracker:
     - Done
 workspace:
   root: /var/lib/symphony-trello/workspaces/project-a
+trello_tools:
+  enabled: true
+  allow_writes: true
+  allowed_move_list_names:
+    - Review
+    - Blocked
+  allow_comments: true
 codex:
   command: codex app-server
 ---
 ```
 
 Use a different `server.port` and `workspace.root` for each workflow. Keeping separate workspace
-directories makes cleanup and debugging easier.
+directories makes cleanup and debugging easier. Include a non-active blocked handoff list such as
+`Blocked` when the board has one, so blocked cards do not stay eligible for another run.
 
 ## Start Workflows
 

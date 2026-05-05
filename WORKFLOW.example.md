@@ -35,6 +35,7 @@ trello_tools:
   allow_writes: true
   allowed_move_list_names:
     - Review
+    - Blocked
   allow_comments: true
   allow_checklists: false
   allow_url_attachments: false
@@ -48,7 +49,8 @@ satisfies the card, run relevant verification, and leave the workspace in a revi
 
 When the work is ready for human review, call trello_add_comment with a concise summary and
 verification notes, then call trello_move_current_card with list_name "Review". If the work is
-blocked or unsafe to hand off, add a Trello comment explaining the blocker and do not move the card.
+blocked or unsafe to hand off, add a Trello comment explaining the blocker, then call
+trello_move_current_card with list_name "Blocked".
 
 Card URL: {{ card.url }}
 
