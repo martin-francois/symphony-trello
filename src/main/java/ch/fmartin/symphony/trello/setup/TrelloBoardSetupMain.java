@@ -79,6 +79,7 @@ public final class TrelloBoardSetupMain {
         out.println("Open lists: " + String.join(", ", result.openLists()));
         out.println("Active lists: " + String.join(", ", result.activeStates()));
         out.println("Terminal lists: " + String.join(", ", result.terminalStates()));
+        out.println("Blocked list: " + optionalListName(result.blockedState()));
         out.println("Wrote workflow: " + result.workflowPath().toAbsolutePath().normalize());
         out.println();
         out.println("Next:");
@@ -89,6 +90,10 @@ public final class TrelloBoardSetupMain {
         return e instanceof TrelloBoardSetupException setupException
                 ? setupException.code()
                 : "setup_invalid_arguments";
+    }
+
+    private static String optionalListName(String value) {
+        return value == null || value.isBlank() ? "<none>" : value;
     }
 
     private static String usage() {
@@ -122,6 +127,7 @@ public final class TrelloBoardSetupMain {
                   --board ID            Required Trello board id or short link
                   --active LIST         Repeatable or comma-separated. Defaults to Ready for Codex when present.
                   --terminal LIST       Repeatable or comma-separated. Defaults to Done when present.
+                  --blocked LIST        Optional blocked handoff list. Defaults to Blocked when present.
                 """;
     }
 
@@ -139,7 +145,8 @@ public final class TrelloBoardSetupMain {
             String workspaceId,
             String boardId,
             List<String> activeStates,
-            List<String> terminalStates) {
+            List<String> terminalStates,
+            String blockedState) {
         private NewBoardRequest newBoardRequest() {
             return new NewBoardRequest(
                     endpoint,
@@ -160,6 +167,7 @@ public final class TrelloBoardSetupMain {
                     boardId,
                     List.copyOf(activeStates),
                     List.copyOf(terminalStates),
+                    blockedState,
                     workflowPath,
                     workspaceRoot,
                     maxConcurrentAgents,
@@ -191,6 +199,7 @@ public final class TrelloBoardSetupMain {
             String boardId = null;
             List<String> activeStates = new ArrayList<>();
             List<String> terminalStates = new ArrayList<>();
+            String blockedState = null;
 
             for (int i = 0; i < remaining.size(); i++) {
                 String option = remaining.get(i);
@@ -210,6 +219,8 @@ public final class TrelloBoardSetupMain {
                     case "--board" -> boardId = value(remaining, ++i, option);
                     case "--active" -> activeStates.addAll(csv(value(remaining, ++i, option)));
                     case "--terminal" -> terminalStates.addAll(csv(value(remaining, ++i, option)));
+                    case "--blocked" ->
+                        blockedState = value(remaining, ++i, option).trim();
                     default -> throw new IllegalArgumentException("Unknown option: " + option);
                 }
             }
@@ -228,7 +239,8 @@ public final class TrelloBoardSetupMain {
                     workspaceId,
                     boardId,
                     activeStates,
-                    terminalStates);
+                    terminalStates,
+                    blockedState);
         }
 
         private static String value(List<String> args, int index, String option) {

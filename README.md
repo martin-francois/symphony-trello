@@ -174,8 +174,8 @@ TRELLO_API_TOKEN=replace-with-generated-token
 ### Fast Path: Create The Recommended Board
 
 Use this path when you are new to Trello or want Symphony to create a clean `Inbox` -> `Ready for
-Codex` -> `Review` -> `Done` board for you. One command creates the board, creates the recommended
-lists, and writes a workflow file for that board.
+Codex` -> `Blocked` -> `Review` -> `Done` board for you. One command creates the board, creates the
+recommended lists, and writes a workflow file for that board.
 
 Now create the board and workflow:
 
@@ -195,12 +195,14 @@ The command creates this Trello board layout:
 
 1. `Inbox`
 2. `Ready for Codex`
-3. `Review`
-4. `Done`
+3. `Blocked`
+4. `Review`
+5. `Done`
 
 It also writes a workflow with `Ready for Codex` as the active list, `Done` as the terminal list,
-`Review` as the allowed handoff list, `./workspaces` as the local workspace directory, and
-`max_concurrent_agents: 1`. With that default, Symphony starts one card at a time from this board.
+`Review` and `Blocked` as allowed handoff lists, `./workspaces` as the local workspace directory,
+and `max_concurrent_agents: 1`. With that default, Symphony starts one card at a time from this
+board.
 
 The first run writes `WORKFLOW.md`. If that file already exists and you did not pass `--workflow`,
 Symphony keeps the existing file and writes a board-specific file instead. For a board named
@@ -226,7 +228,9 @@ Use the generated board like this:
 3. Symphony starts Codex for cards in `Ready for Codex`.
 4. Codex works in a local workspace, adds a Trello comment with its summary and verification notes,
    and moves the card to `Review` when the prompt-defined work is ready for human review.
-5. A human reviews the code and the Trello comment, then moves the card to `Done` after acceptance.
+5. If Codex cannot safely finish the work, it adds a blocker comment and moves the card to
+   `Blocked` so the problem is visible from the board.
+6. A human reviews the code and the Trello comment, then moves the card to `Done` after acceptance.
 
 ### Fast Path: Import An Existing Board
 
@@ -238,21 +242,24 @@ Use this path when you already have a Trello board and want Symphony to write a 
 2. Run the import command:
 
 ```bash
-./mvnw -q exec:java -Dexec.args='import-board --board abc123 --active "Ready for Codex" --terminal Done'
+./mvnw -q exec:java -Dexec.args='import-board --board abc123 --active "Ready for Codex" --terminal Done --blocked Blocked'
 ```
 
 You may omit `--active` when the board already has a list named `Ready for Codex`. You may omit
-`--terminal` when the board already has a list named `Done`.
+`--terminal` when the board already has a list named `Done`. You may omit `--blocked` when the board
+already has a list named `Blocked`.
 
 For an existing team board, be deliberate about `--active`: every open card in that list is eligible
 for Codex work. A conservative import starts with a new list named `Ready for Codex` and only moves
 cards there after they have a clear title, useful description, and acceptance criteria.
 
-When the imported board has a list named `Review`, the starter workflow enables the same handoff
-tools as the recommended new board and allows Codex to move cards there. If your existing board uses
-a different review list, update the generated [`WORKFLOW.md`](#workflow-contract) to use that same
-list name before starting the daemon. If there is no obvious review list, the generated workflow
-keeps Trello writes disabled until you choose one.
+When the imported board has a list named `Review`, the starter workflow allows Codex to move
+reviewable work there. When it also has a blocked list, either named `Blocked` or passed with
+`--blocked`, the workflow allows Codex to move blocked work there. If there is no blocked list but
+there is a `Review` list, blocked work moves to `Review` so it leaves the active list and does not run
+again immediately. If there is no obvious review list, the generated workflow keeps Trello writes
+disabled until you choose one. Do not run a write-disabled workflow with blocked cards left in
+`Ready for Codex` unless you plan to move them manually; they can be picked up again.
 
 Common setup command options:
 
@@ -271,6 +278,8 @@ Common setup command options:
   them from `.env` or environment variables.
 - `--workspace-id ID`: choose the Trello Workspace for a new board when your token can access more
   than one Workspace.
+- `--blocked LIST`: during `import-board`, choose the list where Codex should move cards it cannot
+  safely finish. If you omit it, import uses a list named `Blocked` when the board has one.
 
 ### Option A: Reuse An Existing Board
 
@@ -282,10 +291,12 @@ write [`WORKFLOW.md`](#workflow-contract) yourself.
    A low-risk default is a single list named `Ready for Codex`.
 3. Choose terminal list names that mean "never run Codex for this card again".
    A common default is `Done`.
-4. Copy the board short link from the board URL.
+4. Choose a non-active list for blocked work, such as `Blocked`. If your board does not have one,
+   use your review list so blocked cards still leave the active list.
+5. Copy the board short link from the board URL.
    In `https://trello.com/b/abc123/my-board`, the `board_id` value can be `abc123`.
-5. Create [`WORKFLOW.md`](#workflow-contract) and set `tracker.board_id`, `tracker.active_states`,
-   and `tracker.terminal_states` to match your board.
+6. Create [`WORKFLOW.md`](#workflow-contract) and set `tracker.board_id`, `tracker.active_states`,
+   `tracker.terminal_states`, and the handoff list names to match your board.
 
 Example for an existing board:
 
@@ -311,6 +322,7 @@ trello_tools:
   allow_writes: true
   allowed_move_list_names:
     - Review
+    - Blocked
   allow_comments: true
   allow_checklists: false
   allow_url_attachments: false
@@ -322,7 +334,9 @@ codex:
 Work on {{ card.identifier }}: {{ card.title }}.
 
 When the work is ready for human review, call trello_add_comment with a concise summary and
-verification notes, then call trello_move_current_card with list_name "Review".
+verification notes, then call trello_move_current_card with list_name "Review". If the work is
+blocked or unsafe to hand off, add a Trello comment explaining the blocker, then call
+trello_move_current_card with list_name "Blocked".
 
 Card URL: {{ card.url }}
 ```
@@ -334,7 +348,7 @@ Operationally, use the board like this:
    engineer to start.
 3. Watch Symphony at `http://127.0.0.1:8080/`; see [Operations](#operations) for the available
    status endpoints.
-4. Review the card after Codex moves it to `Review`.
+4. Review the card after Codex moves it to `Review` or `Blocked`.
 5. Move the card out of `Ready for Codex` if you want to pause or prevent further retries.
 6. Move the card to `Done` when the generated work has been reviewed and accepted.
 
@@ -347,13 +361,15 @@ Create a board named `Symphony Work Queue` and add these lists in this order:
 
 1. `Inbox`
 2. `Ready for Codex`
-3. `Review`
-4. `Done`
+3. `Blocked`
+4. `Review`
+5. `Done`
 
 Recommended meaning:
 
 - `Inbox`: rough tasks, ideas, or incomplete cards. Symphony ignores this list.
 - `Ready for Codex`: cards that are ready to run. Symphony polls this list.
+- `Blocked`: cards Codex could not safely finish. Symphony ignores this list.
 - `Review`: work produced by Codex that needs human review. Symphony ignores this list.
 - `Done`: finished cards. Symphony treats this as terminal.
 
@@ -400,6 +416,7 @@ trello_tools:
   allow_writes: true
   allowed_move_list_names:
     - Review
+    - Blocked
   allow_comments: true
   allow_checklists: false
   allow_url_attachments: false
@@ -420,7 +437,9 @@ Read the Trello description carefully, inspect the repository, make the smallest
 run relevant verification, and leave the workspace in a reviewable state.
 
 When the work is ready for human review, call trello_add_comment with a concise summary and
-verification notes, then call trello_move_current_card with list_name "Review".
+verification notes, then call trello_move_current_card with list_name "Review". If the work is
+blocked or unsafe to hand off, add a Trello comment explaining the blocker, then call
+trello_move_current_card with list_name "Blocked".
 
 Card URL: {{ card.url }}
 ```
@@ -492,7 +511,8 @@ environment before starting `codex app-server`.
 The recommended workflow gives Codex two scoped Trello handoff tools:
 
 - `trello_add_comment`: add a comment to the current card.
-- `trello_move_current_card`: move the current card to a configured board-local review list.
+- `trello_move_current_card`: move the current card to a configured board-local handoff list such as
+  `Review` or `Blocked`.
 
 Symphony advertises those tools when `trello_tools.enabled=true` and
 `trello_tools.allow_writes=true`. For a read-only scheduler deployment, set
@@ -501,9 +521,11 @@ Symphony advertises those tools when `trello_tools.enabled=true` and
 If the API token is read-only or Trello rejects writes, Codex still runs, but handoff tool calls fail
 and the failures are visible in the Codex session events.
 
-To move cards to a review list other than `Review`, set `trello_tools.allowed_move_list_names` to the
-allowed list name and update the final handoff instruction in [`WORKFLOW.md`](#workflow-contract) to
-match it.
+To move cards to handoff lists with different names, set `trello_tools.allowed_move_list_names` to
+those allowed list names and update the final handoff instruction in
+[`WORKFLOW.md`](#workflow-contract) to match them. Do not tell Codex to leave blocked cards in an
+active list such as `Ready for Codex`; Symphony may treat the card as still eligible and run it
+again.
 
 The standardized generic `trello_rest` dynamic tool extension is documented in [SPEC.md](SPEC.md) but
 is not yet advertised to Codex by this Java implementation. The Java implementation currently uses

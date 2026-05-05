@@ -71,7 +71,8 @@ class TrelloBoardSetupMainTest {
                 [
                   {"id":"list-ready","name":"Queue for Codex","closed":false,"pos":1},
                   {"id":"list-review","name":"Review","closed":false,"pos":2},
-                  {"id":"list-done","name":"Released","closed":false,"pos":3}
+                  {"id":"list-blocked","name":"Blocked","closed":false,"pos":3},
+                  {"id":"list-done","name":"Released","closed":false,"pos":4}
                 ]
                 """));
         server.start();
@@ -144,7 +145,7 @@ class TrelloBoardSetupMainTest {
         // then
         assertThat(exitCode).isZero();
         assertThat(createdBoardName).hasValue("Symphony Work Queue");
-        assertThat(createdLists).containsExactly("Inbox", "Ready for Codex", "Review", "Done");
+        assertThat(createdLists).containsExactly("Inbox", "Ready for Codex", "Blocked", "Review", "Done");
         assertThat(workflow).content(StandardCharsets.UTF_8).contains("board_id: \"abc123\"");
         assertThat(stdout.toString(StandardCharsets.UTF_8))
                 .contains("Created Trello board: Symphony Work Queue")
@@ -189,7 +190,8 @@ class TrelloBoardSetupMainTest {
         assertThat(stdout.toString(StandardCharsets.UTF_8))
                 .contains("Imported Trello board: Existing Board")
                 .contains("Active lists: Queue for Codex")
-                .contains("Terminal lists: Released");
+                .contains("Terminal lists: Released")
+                .contains("Blocked list: Blocked");
         assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
     }
 

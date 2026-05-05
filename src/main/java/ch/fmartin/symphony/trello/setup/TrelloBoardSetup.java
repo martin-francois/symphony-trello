@@ -28,8 +28,12 @@ public final class TrelloBoardSetup {
     public static final Path DEFAULT_WORKFLOW_PATH = Path.of("WORKFLOW.md");
     public static final Path DEFAULT_WORKSPACE_ROOT = Path.of("./workspaces");
     public static final int DEFAULT_MAX_CONCURRENT_AGENTS = 1;
-    public static final List<String> RECOMMENDED_LISTS = List.of("Inbox", "Ready for Codex", "Review", "Done");
-    public static final List<String> RECOMMENDED_ACTIVE_STATES = List.of("Ready for Codex");
+    public static final String RECOMMENDED_ACTIVE_STATE = "Ready for Codex";
+    public static final String RECOMMENDED_BLOCKED_STATE = "Blocked";
+    public static final String RECOMMENDED_REVIEW_STATE = "Review";
+    public static final List<String> RECOMMENDED_LISTS =
+            List.of("Inbox", RECOMMENDED_ACTIVE_STATE, RECOMMENDED_BLOCKED_STATE, RECOMMENDED_REVIEW_STATE, "Done");
+    public static final List<String> RECOMMENDED_ACTIVE_STATES = List.of(RECOMMENDED_ACTIVE_STATE);
     public static final List<String> RECOMMENDED_TERMINAL_STATES = List.of("Done");
 
     private static final List<String> SYSTEM_TERMINAL_STATES =
@@ -77,7 +81,8 @@ public final class TrelloBoardSetup {
                         boardKey,
                         RECOMMENDED_ACTIVE_STATES,
                         RECOMMENDED_TERMINAL_STATES,
-                        List.of("Review"),
+                        RECOMMENDED_REVIEW_STATE,
+                        RECOMMENDED_BLOCKED_STATE,
                         request.workspaceRoot(),
                         request.maxConcurrentAgents()));
 
@@ -157,8 +162,11 @@ public final class TrelloBoardSetup {
 
         List<String> terminalStates =
                 request.terminalStates().isEmpty() ? defaultTerminalStates(openListNames) : request.terminalStates();
+        String blockedState =
+                blank(request.blockedState()) ? defaultBlockedState(openListNames) : request.blockedState();
         validateConfiguredLists("active", activeStates, openListNames);
         validateConfiguredLists("terminal", terminalStates, openListNames);
+        validateConfiguredList("blocked", blockedState, openListNames);
 
         String boardKey = boardKey(board);
         writeWorkflow(
@@ -168,7 +176,8 @@ public final class TrelloBoardSetup {
                         boardKey,
                         activeStates,
                         terminalStates,
-                        defaultHandoffStates(openListNames),
+                        defaultReviewState(openListNames),
+                        blockedState,
                         request.workspaceRoot(),
                         request.maxConcurrentAgents()));
 
@@ -180,6 +189,7 @@ public final class TrelloBoardSetup {
                 openListNames,
                 activeStates,
                 terminalStates,
+                blockedState,
                 request.workflowPath());
     }
 
@@ -300,7 +310,8 @@ public final class TrelloBoardSetup {
             String boardId,
             List<String> activeStates,
             List<String> terminalStates,
-            List<String> handoffStates,
+            String reviewState,
+            String blockedState,
             Path workspaceRoot,
             int maxAgents) {
         return """
@@ -345,9 +356,9 @@ public final class TrelloBoardSetup {
                         yamlList(activeStates),
                         yamlList(withSystemTerminalStates(terminalStates)),
                         yamlScalar(workspaceRoot.toString()),
-                        trelloToolsYaml(handoffStates),
+                        trelloToolsYaml(allowedMoveStates(reviewState, blockedState)),
                         maxAgents,
-                        handoffPrompt(handoffStates));
+                        handoffPrompt(reviewState, blockedState));
     }
 
     private static String trelloToolsYaml(List<String> handoffStates) {
@@ -373,15 +384,53 @@ public final class TrelloBoardSetup {
                 .stripTrailing();
     }
 
-    private static String handoffPrompt(List<String> handoffStates) {
-        if (handoffStates.isEmpty()) {
-            return "When the work is ready for human review, leave the workspace in a reviewable state and summarize the status in the Codex response. Trello handoff tools are disabled in this starter workflow until you configure trello_tools.allowed_move_list_names.";
+    private static String handoffPrompt(String reviewState, String blockedState) {
+        String blockedDestination = blockedDestination(reviewState, blockedState);
+        if (blank(reviewState) && blank(blockedDestination)) {
+            return """
+                    When the work is ready for human review, leave the workspace in a reviewable state and summarize the status in the Codex response. Trello handoff tools are disabled in this starter workflow until you configure trello_tools.allowed_move_list_names.
+                    If the work is blocked, summarize the blocker in the Codex response; an operator must move the card out of the active list manually. Leaving blocked work active can make Symphony run it again."""
+                    .stripTrailing();
+        }
+        if (blank(reviewState)) {
+            return """
+                    When the work is ready for human review, leave the workspace in a reviewable state and summarize the status in the Codex response.
+                    If the work is blocked or unsafe to hand off, call trello_add_comment with the blocker, then call
+                    trello_move_current_card with list_name "%s"."""
+                    .formatted(blockedDestination);
+        }
+        if (blank(blockedState)) {
+            return """
+                    When the work is ready for human review, call trello_add_comment with a concise summary and
+                    verification notes, then call trello_move_current_card with list_name "%s". If the work is
+                    blocked or unsafe to hand off, add a Trello comment explaining the blocker, then call
+                    trello_move_current_card with list_name "%s" so the card leaves the active list. Do not leave
+                    blocked work in an active list; Symphony may run it again."""
+                    .formatted(reviewState, blockedDestination);
         }
         return """
                 When the work is ready for human review, call trello_add_comment with a concise summary and
                 verification notes, then call trello_move_current_card with list_name "%s". If the work is
-                blocked or unsafe to hand off, add a Trello comment explaining the blocker and do not move the card."""
-                .formatted(handoffStates.getFirst());
+                blocked or unsafe to hand off, add a Trello comment explaining the blocker, then call
+                trello_move_current_card with list_name "%s"."""
+                .formatted(reviewState, blockedDestination);
+    }
+
+    private static List<String> allowedMoveStates(String reviewState, String blockedState) {
+        List<String> states = new ArrayList<>();
+        if (!blank(reviewState)) {
+            states.add(reviewState);
+        }
+        String blockedDestination = blockedDestination(reviewState, blockedState);
+        if (!blank(blockedDestination)
+                && states.stream().noneMatch(existing -> existing.equalsIgnoreCase(blockedDestination))) {
+            states.add(blockedDestination);
+        }
+        return List.copyOf(states);
+    }
+
+    private static String blockedDestination(String reviewState, String blockedState) {
+        return blank(blockedState) ? reviewState : blockedState;
     }
 
     private static List<String> withSystemTerminalStates(List<String> terminalStates) {
@@ -406,7 +455,7 @@ public final class TrelloBoardSetup {
 
     private static List<String> defaultActiveStates(List<String> openListNames) {
         return openListNames.stream()
-                .filter(name -> name.equalsIgnoreCase("Ready for Codex"))
+                .filter(name -> name.equalsIgnoreCase(RECOMMENDED_ACTIVE_STATE))
                 .findFirst()
                 .map(List::of)
                 .orElseGet(List::of);
@@ -420,12 +469,18 @@ public final class TrelloBoardSetup {
                 .orElseGet(List::of);
     }
 
-    private static List<String> defaultHandoffStates(List<String> openListNames) {
+    private static String defaultReviewState(List<String> openListNames) {
         return openListNames.stream()
-                .filter(name -> name.equalsIgnoreCase("Review"))
+                .filter(name -> name.equalsIgnoreCase(RECOMMENDED_REVIEW_STATE))
                 .findFirst()
-                .map(List::of)
-                .orElseGet(List::of);
+                .orElse(null);
+    }
+
+    private static String defaultBlockedState(List<String> openListNames) {
+        return openListNames.stream()
+                .filter(name -> name.equalsIgnoreCase(RECOMMENDED_BLOCKED_STATE))
+                .findFirst()
+                .orElse(null);
     }
 
     private static void validateConfiguredLists(String label, List<String> configured, List<String> openListNames) {
@@ -440,6 +495,13 @@ public final class TrelloBoardSetup {
                     "Unknown " + label + " list(s): " + String.join(", ", missing) + ". Open lists: "
                             + String.join(", ", openListNames));
         }
+    }
+
+    private static void validateConfiguredList(String label, String configured, List<String> openListNames) {
+        if (blank(configured)) {
+            return;
+        }
+        validateConfiguredLists(label, List.of(configured), openListNames);
     }
 
     private static BoardList toBoardList(Map<String, Object> payload) {
@@ -591,6 +653,7 @@ public final class TrelloBoardSetup {
             String boardId,
             List<String> activeStates,
             List<String> terminalStates,
+            String blockedState,
             Path workflowPath,
             Path workspaceRoot,
             int maxConcurrentAgents,
@@ -630,6 +693,7 @@ public final class TrelloBoardSetup {
             List<String> openLists,
             List<String> activeStates,
             List<String> terminalStates,
+            String blockedState,
             Path workflowPath) {}
 
     private record BoardList(String id, String name, boolean closed) {}

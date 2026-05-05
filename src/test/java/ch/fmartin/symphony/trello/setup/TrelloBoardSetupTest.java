@@ -53,9 +53,10 @@ class TrelloBoardSetupTest {
                 [
                   {"id":"list-inbox","name":"Inbox","closed":false,"pos":1},
                   {"id":"list-ready","name":"Ready for Codex","closed":false,"pos":2},
-                  {"id":"list-review","name":"Review","closed":false,"pos":3},
-                  {"id":"list-done","name":"Done","closed":false,"pos":4},
-                  {"id":"list-archive","name":"Archived old work","closed":true,"pos":5}
+                  {"id":"list-blocked","name":"Blocked","closed":false,"pos":3},
+                  {"id":"list-review","name":"Review","closed":false,"pos":4},
+                  {"id":"list-done","name":"Done","closed":false,"pos":5},
+                  {"id":"list-archive","name":"Archived old work","closed":true,"pos":6}
                 ]
                 """);
 
@@ -119,7 +120,7 @@ class TrelloBoardSetupTest {
 
         // then
         assertThat(result.boardKey()).isEqualTo("abc123");
-        assertThat(createdLists).containsExactly("Inbox", "Ready for Codex", "Review", "Done");
+        assertThat(createdLists).containsExactly("Inbox", "Ready for Codex", "Blocked", "Review", "Done");
         assertThat(authorization.get()).contains("oauth_consumer_key=\"key\"").contains("oauth_token=\"token\"");
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
@@ -129,6 +130,7 @@ class TrelloBoardSetupTest {
                 .contains("trello_tools:")
                 .contains("allowed_move_list_names:")
                 .contains("- \"Review\"")
+                .contains("- \"Blocked\"")
                 .contains("max_concurrent_agents: 1");
         EffectiveConfig config = resolve(workflow);
         assertThat(config.tracker().boardId()).isEqualTo("abc123");
@@ -137,7 +139,7 @@ class TrelloBoardSetupTest {
                 .contains("done", "archived", "archivedlist", "archivedboard", "deleted");
         assertThat(config.trelloTools().enabled()).isTrue();
         assertThat(config.trelloTools().allowWrites()).isTrue();
-        assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("review");
+        assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("review", "blocked");
         assertThat(config.trelloTools().allowChecklists()).isFalse();
         assertThat(config.trelloTools().allowUrlAttachments()).isFalse();
     }
@@ -190,21 +192,24 @@ class TrelloBoardSetupTest {
                 "input",
                 List.of(),
                 List.of(),
+                null,
                 workflow,
                 Path.of("./agent-workspaces"),
                 2,
                 false));
 
         // then
-        assertThat(result.openLists()).containsExactly("Inbox", "Ready for Codex", "Review", "Done");
+        assertThat(result.openLists()).containsExactly("Inbox", "Ready for Codex", "Blocked", "Review", "Done");
         assertThat(result.activeStates()).containsExactly("Ready for Codex");
         assertThat(result.terminalStates()).containsExactly("Done");
+        assertThat(result.blockedState()).isEqualTo("Blocked");
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("board_id: \"existing\"")
                 .contains("root: \"./agent-workspaces\"")
                 .contains("allowed_move_list_names:")
                 .contains("- \"Review\"")
+                .contains("- \"Blocked\"")
                 .contains("max_concurrent_agents: 2");
         EffectiveConfig config = resolve(workflow);
         assertThat(config.tracker().boardId()).isEqualTo("existing");
@@ -221,9 +226,10 @@ class TrelloBoardSetupTest {
                   {"id":"list-queue","name":"Queue for Codex","closed":false,"pos":2},
                   {"id":"list-escalated","name":"Escalated for Codex","closed":false,"pos":3},
                   {"id":"list-review","name":"Review","closed":false,"pos":4},
-                  {"id":"list-released","name":"Released","closed":false,"pos":5},
-                  {"id":"list-parked","name":"Parked","closed":false,"pos":6},
-                  {"id":"list-archive","name":"Archived experiments","closed":true,"pos":7}
+                  {"id":"list-needs-help","name":"Needs Help","closed":false,"pos":5},
+                  {"id":"list-released","name":"Released","closed":false,"pos":6},
+                  {"id":"list-parked","name":"Parked","closed":false,"pos":7},
+                  {"id":"list-archive","name":"Archived experiments","closed":true,"pos":8}
                 ]
                 """);
         Path workflow = tempDir.resolve("imported-custom-workflow.md");
@@ -235,6 +241,7 @@ class TrelloBoardSetupTest {
                 "input",
                 List.of("Queue for Codex", "Escalated for Codex"),
                 List.of("Released", "Parked"),
+                "Needs Help",
                 workflow,
                 Path.of("./agent-workspaces"),
                 2,
@@ -242,15 +249,23 @@ class TrelloBoardSetupTest {
 
         // then
         assertThat(result.openLists())
-                .containsExactly("Intake", "Queue for Codex", "Escalated for Codex", "Review", "Released", "Parked");
+                .containsExactly(
+                        "Intake",
+                        "Queue for Codex",
+                        "Escalated for Codex",
+                        "Review",
+                        "Needs Help",
+                        "Released",
+                        "Parked");
         assertThat(result.activeStates()).containsExactly("Queue for Codex", "Escalated for Codex");
         assertThat(result.terminalStates()).containsExactly("Released", "Parked");
+        assertThat(result.blockedState()).isEqualTo("Needs Help");
         EffectiveConfig config = resolve(workflow);
         assertThat(config.tracker().activeStates()).containsExactly("Queue for Codex", "Escalated for Codex");
         assertThat(config.tracker().terminalStates())
                 .contains("released", "parked", "archived", "archivedlist", "archivedboard", "deleted");
         assertThat(config.trelloTools().enabled()).isTrue();
-        assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("review");
+        assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("review", "needs help");
         assertThat(config.agent().maxConcurrentAgents()).isEqualTo(2);
     }
 
@@ -273,6 +288,7 @@ class TrelloBoardSetupTest {
                 "input",
                 List.of(),
                 List.of(),
+                null,
                 workflow,
                 Path.of("./agent-workspaces"),
                 2,
@@ -283,6 +299,46 @@ class TrelloBoardSetupTest {
         assertThat(config.trelloTools().enabled()).isFalse();
         assertThat(config.trelloTools().allowWrites()).isFalse();
         assertThat(config.trelloTools().allowedMoveListNames()).isEmpty();
+    }
+
+    @Test
+    void importMovesBlockedCardsToReviewWhenNoBlockedListExists() {
+        // given
+        boardListsResponse.set(
+                """
+                [
+                  {"id":"list-ready","name":"Ready for Codex","closed":false,"pos":1},
+                  {"id":"list-review","name":"Review","closed":false,"pos":2},
+                  {"id":"list-done","name":"Done","closed":false,"pos":3}
+                ]
+                """);
+        Path workflow = tempDir.resolve("imported-without-blocked.md");
+
+        // when
+        var result = setup.importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "input",
+                List.of(),
+                List.of(),
+                null,
+                workflow,
+                Path.of("./agent-workspaces"),
+                2,
+                false));
+
+        // then
+        assertThat(result.blockedState()).isNull();
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("allowed_move_list_names:")
+                .contains("- \"Review\"")
+                .contains("blocked or unsafe to hand off")
+                .contains("list_name \"Review\" so the card leaves the active list")
+                .contains("Do not leave")
+                .contains("blocked work in an active list");
+        EffectiveConfig config = resolve(workflow);
+        assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("review");
     }
 
     @Test
@@ -313,6 +369,7 @@ class TrelloBoardSetupTest {
                 "input",
                 List.of("Ready for Codex"),
                 List.of("Done"),
+                null,
                 workflow,
                 Path.of("./workspaces"),
                 1,
