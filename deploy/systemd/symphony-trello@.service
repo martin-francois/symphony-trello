@@ -1,0 +1,24 @@
+[Unit]
+Description=Symphony for Trello workflow %i
+Documentation=https://github.com/martinfrancois/symphony-trello
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=symphony-trello
+Group=symphony-trello
+WorkingDirectory=/var/lib/symphony-trello
+EnvironmentFile=/etc/symphony-trello/env
+ExecStart=/usr/bin/env java -jar /opt/symphony-trello/app/quarkus-run.jar /etc/symphony-trello/workflows/%i.WORKFLOW.md
+Restart=on-failure
+RestartSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/symphony-trello
+ReadOnlyPaths=/opt/symphony-trello /etc/symphony-trello
+
+[Install]
+WantedBy=multi-user.target
