@@ -215,6 +215,122 @@ class SymphonyOrchestratorTest {
     }
 
     @Test
+    void tokenTotalsUseAbsoluteSnapshotsAcrossMultipleTurnEvents() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        writeWorkflow(workflow, "60000");
+        FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
+        AgentRunner runner = mock(AgentRunner.class);
+        doAnswer(invocation -> {
+                    AgentRunner.AgentRunRequest request = invocation.getArgument(0);
+                    request.listener()
+                            .onEvent(new AgentEvent(
+                                    "thread/tokenUsage/updated",
+                                    Instant.now(),
+                                    request.workerIdentity(),
+                                    123L,
+                                    "thread-1",
+                                    "turn-1",
+                                    "first turn usage",
+                                    Map.of("input_tokens", 10L, "output_tokens", 3L, "total_tokens", 13L),
+                                    new ObjectMapper().createObjectNode()));
+                    request.listener()
+                            .onEvent(new AgentEvent(
+                                    "thread/tokenUsage/updated",
+                                    Instant.now(),
+                                    request.workerIdentity(),
+                                    123L,
+                                    "thread-1",
+                                    "turn-2",
+                                    "second turn usage",
+                                    Map.of("input_tokens", 14L, "output_tokens", 5L, "total_tokens", 19L),
+                                    new ObjectMapper().createObjectNode()));
+                    return AgentRunResult.ok();
+                })
+                .when(runner)
+                .run(any());
+        SymphonyOrchestrator orchestrator = new SymphonyOrchestrator(
+                new WorkflowLoader(),
+                new ConfigResolver(),
+                tracker,
+                runner,
+                new PromptRenderer(),
+                new WorkspaceManager(new HookRunner()));
+        orchestrator.workflowPath = workflow;
+
+        // when
+        orchestrator.start();
+        waitUntil(() -> orchestrator.snapshot().counts().retrying() == 1);
+        RuntimeSnapshot snapshot = orchestrator.snapshot();
+        orchestrator.stop();
+
+        // then
+        assertThat(snapshot.codexTotals().inputTokens()).isEqualTo(14);
+        assertThat(snapshot.codexTotals().outputTokens()).isEqualTo(5);
+        assertThat(snapshot.codexTotals().totalTokens()).isEqualTo(19);
+    }
+
+    @Test
+    void runningSnapshotCountsContinuationTurns() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        writeWorkflow(workflow, "60000");
+        FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
+        AgentRunner runner = mock(AgentRunner.class);
+        CountDownLatch eventsEmitted = new CountDownLatch(1);
+        CountDownLatch releaseWorker = new CountDownLatch(1);
+        doAnswer(invocation -> {
+                    AgentRunner.AgentRunRequest request = invocation.getArgument(0);
+                    request.listener()
+                            .onEvent(new AgentEvent(
+                                    "session_started",
+                                    Instant.now(),
+                                    request.workerIdentity(),
+                                    123L,
+                                    "thread-1",
+                                    "turn-1",
+                                    null,
+                                    Map.of(),
+                                    new ObjectMapper().createObjectNode()));
+                    request.listener()
+                            .onEvent(new AgentEvent(
+                                    "session_continued",
+                                    Instant.now(),
+                                    request.workerIdentity(),
+                                    123L,
+                                    "thread-1",
+                                    "turn-2",
+                                    null,
+                                    Map.of(),
+                                    new ObjectMapper().createObjectNode()));
+                    eventsEmitted.countDown();
+                    releaseWorker.await(5, TimeUnit.SECONDS);
+                    return AgentRunResult.ok();
+                })
+                .when(runner)
+                .run(any());
+        SymphonyOrchestrator orchestrator = new SymphonyOrchestrator(
+                new WorkflowLoader(),
+                new ConfigResolver(),
+                tracker,
+                runner,
+                new PromptRenderer(),
+                new WorkspaceManager(new HookRunner()));
+        orchestrator.workflowPath = workflow;
+
+        // when
+        orchestrator.start();
+        assertThat(eventsEmitted.await(5, TimeUnit.SECONDS)).isTrue();
+        RuntimeSnapshot snapshot = orchestrator.snapshot();
+        releaseWorker.countDown();
+        orchestrator.stop();
+
+        // then
+        assertThat(snapshot.running()).singleElement().satisfies(row -> assertThat(row.turnCount())
+                .isEqualTo(2));
+    }
+
+    @Test
     void failedAgentRunSchedulesRetryAndExposesTokenUsageAndCardDetails() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");

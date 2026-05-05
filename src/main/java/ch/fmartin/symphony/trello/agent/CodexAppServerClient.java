@@ -49,6 +49,17 @@ public class CodexAppServerClient {
             String prompt,
             String workerIdentity,
             AgentEventListener listener) {
+        return runSession(config, card, workspace, prompt, workerIdentity, listener, turn -> TurnDecision.stop());
+    }
+
+    public AgentRunResult runSession(
+            EffectiveConfig config,
+            Card card,
+            Path workspace,
+            String prompt,
+            String workerIdentity,
+            AgentEventListener listener,
+            TurnController controller) {
         WorkspaceManager.requireInsideRoot(config.workspace().root(), workspace);
         Process process;
         try {
@@ -93,23 +104,40 @@ public class CodexAppServerClient {
                 return AgentRunResult.fail("codex_protocol_error: missing thread id");
             }
 
-            JsonNode turn = request(
-                    session,
-                    "turn/start",
-                    turnStartParams(config, threadId, workspace, prompt),
-                    config.codex().readTimeout());
-            String turnId = turn.at("/turn/id").asText(null);
-            if (turnId == null) {
-                return AgentRunResult.fail("codex_protocol_error: missing turn id");
-            }
-            listener.onEvent(
-                    event("session_started", workerIdentity, process.pid(), threadId, turnId, null, Map.of(), turn));
+            String nextPrompt = prompt;
+            int turnNumber = 0;
+            while (nextPrompt != null) {
+                turnNumber++;
+                JsonNode turn = request(
+                        session,
+                        "turn/start",
+                        turnStartParams(config, threadId, workspace, nextPrompt),
+                        config.codex().readTimeout());
+                String turnId = turn.at("/turn/id").asText(null);
+                if (turnId == null) {
+                    return AgentRunResult.fail("codex_protocol_error: missing turn id");
+                }
+                listener.onEvent(event(
+                        turnNumber == 1 ? "session_started" : "session_continued",
+                        workerIdentity,
+                        process.pid(),
+                        threadId,
+                        turnId,
+                        null,
+                        Map.of(),
+                        turn));
 
-            JsonNode completed =
-                    session.awaitTurnCompleted(turnId, config.codex().turnTimeout());
-            JsonNode error = completed.at("/turn/error");
-            if (!error.isMissingNode() && !error.isNull()) {
-                return AgentRunResult.fail("turn_failed: " + summarize(error));
+                JsonNode completed =
+                        session.awaitTurnCompleted(turnId, config.codex().turnTimeout());
+                JsonNode error = completed.at("/turn/error");
+                if (!error.isMissingNode() && !error.isNull()) {
+                    return AgentRunResult.fail("turn_failed: " + summarize(error));
+                }
+                TurnDecision decision = controller.afterSuccessfulTurn(turnNumber);
+                if (decision.failureReason() != null) {
+                    return AgentRunResult.fail(decision.failureReason());
+                }
+                nextPrompt = decision.nextPrompt();
             }
             return AgentRunResult.ok();
         } catch (TimeoutException e) {
@@ -120,6 +148,25 @@ public class CodexAppServerClient {
             return AgentRunResult.fail("codex_protocol_error: " + e.getMessage());
         } finally {
             session.close();
+        }
+    }
+
+    @FunctionalInterface
+    public interface TurnController {
+        TurnDecision afterSuccessfulTurn(int completedTurns);
+    }
+
+    public record TurnDecision(String nextPrompt, String failureReason) {
+        public static TurnDecision stop() {
+            return new TurnDecision(null, null);
+        }
+
+        public static TurnDecision continueWith(String prompt) {
+            return new TurnDecision(prompt, null);
+        }
+
+        public static TurnDecision fail(String reason) {
+            return new TurnDecision(null, reason);
         }
     }
 
@@ -396,6 +443,9 @@ public class CodexAppServerClient {
                 return Map.of();
             }
             JsonNode usage = params.path("usage");
+            if (usage.isMissingNode() || usage.isNull() || usage.isEmpty()) {
+                usage = params.path("tokenUsage").path("total");
+            }
             return Map.of(
                     "input_tokens",
                     usage.path("inputTokens").asLong(usage.path("input_tokens").asLong(0)),

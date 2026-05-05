@@ -118,6 +118,71 @@ class CodexAppServerClientTest {
                 .contains(extraRoot.toAbsolutePath().normalize().toString());
     }
 
+    @Test
+    void continuesMultipleTurnsOnOneThreadWhenControllerRequestsIt() throws Exception {
+        // given
+        Path capture = tempDir.resolve("turns.jsonl");
+        Path appServer = tempDir.resolve("multi-turn-app-server.sh");
+        Files.writeString(
+                appServer,
+                """
+                #!/usr/bin/env bash
+                capture="$1"
+                turn_count=0
+                while IFS= read -r line; do
+                  [[ "$line" =~ \\"id\\":([0-9]+) ]] && id="${BASH_REMATCH[1]}"
+                  case "$line" in
+                    *\\"method\\":\\"initialize\\"*) echo "{\\"id\\":$id,\\"result\\":{\\"userAgent\\":\\"multi-turn-test\\"}}" ;;
+                    *\\"method\\":\\"thread/start\\"*) echo "{\\"id\\":$id,\\"result\\":{\\"thread\\":{\\"id\\":\\"thread-shared\\"}}}" ;;
+                    *\\"method\\":\\"turn/start\\"*)
+                      turn_count=$((turn_count + 1))
+                      printf '%s\\n' "$line" >> "$capture"
+                      echo "{\\"id\\":$id,\\"result\\":{\\"turn\\":{\\"id\\":\\"turn-$turn_count\\"}}}"
+                      echo "{\\"method\\":\\"turn/completed\\",\\"params\\":{\\"threadId\\":\\"thread-shared\\",\\"turn\\":{\\"id\\":\\"turn-$turn_count\\",\\"error\\":null}}}"
+                      ;;
+                  esac
+                done
+                """);
+        appServer.toFile().setExecutable(true);
+        EffectiveConfig config =
+                config(Map.of("command", appServer + " " + capture, "read_timeout_ms", 1000, "turn_timeout_ms", 1000));
+        Path workspace = config.workspace().root().resolve("TRELLO-multi-turn");
+        Files.createDirectories(workspace);
+        CodexAppServerClient client =
+                new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
+
+        // when
+        AgentRunResult result = client.runSession(
+                config,
+                TestCards.card("card-1", "TRELLO-multi-turn", "Ready for Codex"),
+                workspace,
+                "first turn",
+                "worker-multi-turn",
+                event -> {},
+                completedTurns -> completedTurns == 1
+                        ? CodexAppServerClient.TurnDecision.continueWith("second turn")
+                        : CodexAppServerClient.TurnDecision.stop());
+
+        // then
+        assertThat(result).isEqualTo(AgentRunResult.ok());
+        List<JsonNode> turns = Files.readAllLines(capture).stream()
+                .map(line -> {
+                    try {
+                        return json.readTree(line);
+                    } catch (Exception e) {
+                        throw new AssertionError(e);
+                    }
+                })
+                .toList();
+        assertThat(turns).hasSize(2);
+        assertThat(turns)
+                .extracting(turn -> turn.path("params").path("threadId").asText())
+                .containsExactly("thread-shared", "thread-shared");
+        assertThat(turns)
+                .extracting(turn -> turn.at("/params/input/0/text").asText())
+                .containsExactly("first turn", "second turn");
+    }
+
     private EffectiveConfig config(Path appServer) {
         return config(Map.of("command", appServer.toString(), "read_timeout_ms", 1000, "turn_timeout_ms", 1000));
     }
