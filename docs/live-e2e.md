@@ -48,26 +48,23 @@ printf '%s\n' "$RUN_ID" > target/live-e2e-current-run-id
 Build the packaged runner used by the service-start commands later in this runbook:
 
 ```bash
-JAVA_HOME=/tmp/jdk25 PATH=/tmp/jdk25/bin:$PATH ./mvnw -q package
+./mvnw -q package
 ```
 
 Verify `.env` loading and Workspace discovery:
 
 ```bash
-JAVA_HOME=/tmp/jdk25 PATH=/tmp/jdk25/bin:$PATH \
-  ./mvnw -q exec:java -Dexec.args='list-workspaces'
+./mvnw -q exec:java -Dexec.args='list-workspaces'
 ```
 
 Create two disposable boards. If the token can see exactly one Workspace, omit `--workspace-id`;
 that path must create the board in the only accessible Workspace.
 
 ```bash
-JAVA_HOME=/tmp/jdk25 PATH=/tmp/jdk25/bin:$PATH \
-  ./mvnw -q exec:java \
+./mvnw -q exec:java \
   -Dexec.args="new-board --name 'Symphony $RUN_ID Board A' --workflow $RUN_DIR/board-a.WORKFLOW.md"
 
-JAVA_HOME=/tmp/jdk25 PATH=/tmp/jdk25/bin:$PATH \
-  ./mvnw -q exec:java \
+./mvnw -q exec:java \
   -Dexec.args="new-board --name 'Symphony $RUN_ID Board B' --workflow $RUN_DIR/board-b.WORKFLOW.md"
 ```
 
@@ -76,8 +73,7 @@ Import Board A back into a separate workflow:
 ```bash
 BOARD_A_ID="$(awk -F'"' '/board_id:/ {print $2; exit}' "$RUN_DIR/board-a.WORKFLOW.md")"
 
-JAVA_HOME=/tmp/jdk25 PATH=/tmp/jdk25/bin:$PATH \
-  ./mvnw -q exec:java \
+./mvnw -q exec:java \
   -Dexec.args="import-board --board $BOARD_A_ID --active 'Ready for Codex' --terminal Done --workflow $RUN_DIR/imported-a.WORKFLOW.md"
 ```
 
@@ -91,7 +87,7 @@ if [ -z "${TRELLO_API_KEY:-}" ] || [ -z "${TRELLO_API_TOKEN:-}" ]; then
   set +a
 fi
 
-WORKSPACE_ID="$(JAVA_HOME=/tmp/jdk25 PATH=/tmp/jdk25/bin:$PATH ./mvnw -q exec:java -Dexec.args='list-workspaces' \
+WORKSPACE_ID="$(./mvnw -q exec:java -Dexec.args='list-workspaces' \
   | grep -Eo '[0-9a-f]{24}' \
   | head -1)"
 
@@ -117,12 +113,10 @@ for list_name in "Intake" "Queue for Codex" "Escalated for Codex" "Review" "Rele
     > "$RUN_DIR/list-$safe_name.json"
 done
 
-JAVA_HOME=/tmp/jdk25 PATH=/tmp/jdk25/bin:$PATH \
-  ./mvnw -q exec:java \
+./mvnw -q exec:java \
   -Dexec.args="import-board --board $CUSTOM_BOARD_ID --active 'Queue for Codex' --active 'Escalated for Codex' --terminal Released --terminal Parked --max-agents 2 --workflow $RUN_DIR/custom-import.WORKFLOW.md"
 
-JAVA_HOME=/tmp/jdk25 PATH=/tmp/jdk25/bin:$PATH \
-  ./mvnw -q exec:java \
+./mvnw -q exec:java \
   -Dexec.args="import-board --board $CUSTOM_BOARD_ID --active 'Queue for Codex' --active 'Escalated for Codex' --terminal Released --terminal Parked --max-agents 2 --workflow $RUN_DIR/custom-import-real.WORKFLOW.md"
 ```
 
@@ -134,7 +128,7 @@ the third waits for a refresh.
 ```bash
 RUN_ID="$(cat target/live-e2e-current-run-id)"
 RUN_DIR="target/$RUN_ID"
-FAKE_JAVA="${JAVA_HOME:-/tmp/jdk25}/bin/java"
+FAKE_JAVA="$(command -v java)"
 FAKE_CODEX="$(pwd)/scripts/FakeCodexAppServer.java"
 
 $FAKE_JAVA --source 25 scripts/PatchLiveE2eWorkflow.java "$RUN_DIR/board-a.WORKFLOW.md" 1 7000 "$FAKE_JAVA" "$FAKE_CODEX"
@@ -204,8 +198,7 @@ card was moved to the top of `Ready for Codex`, so it should run first while the
 RUN_ID="$(cat target/live-e2e-current-run-id)"
 RUN_DIR="target/$RUN_ID"
 
-JAVA_HOME=/tmp/jdk25 PATH=/tmp/jdk25/bin:$PATH \
-  java -jar target/quarkus-app/quarkus-run.jar "$RUN_DIR/board-a.WORKFLOW.md" --port 18181
+java -jar target/quarkus-app/quarkus-run.jar "$RUN_DIR/board-a.WORKFLOW.md" --port 18181
 ```
 
 Board B proves `max_concurrent_agents: 2` on a second board at the same time. Two cards should run
@@ -215,8 +208,7 @@ while the third waits.
 RUN_ID="$(cat target/live-e2e-current-run-id)"
 RUN_DIR="target/$RUN_ID"
 
-JAVA_HOME=/tmp/jdk25 PATH=/tmp/jdk25/bin:$PATH \
-  java -jar target/quarkus-app/quarkus-run.jar "$RUN_DIR/board-b.WORKFLOW.md" --port 18182
+java -jar target/quarkus-app/quarkus-run.jar "$RUN_DIR/board-b.WORKFLOW.md" --port 18182
 ```
 
 Verify both boards from a third shell while the fake app-server is sleeping:
@@ -290,8 +282,7 @@ Run the same single-card handoff with the imported workflow:
 RUN_ID="$(cat target/live-e2e-current-run-id)"
 RUN_DIR="target/$RUN_ID"
 
-JAVA_HOME=/tmp/jdk25 PATH=/tmp/jdk25/bin:$PATH \
-  java -jar target/quarkus-app/quarkus-run.jar "$RUN_DIR/imported-a.WORKFLOW.md" --port 18183
+java -jar target/quarkus-app/quarkus-run.jar "$RUN_DIR/imported-a.WORKFLOW.md" --port 18183
 ```
 
 For the custom imported board, create one card in each configured active list and run that workflow
@@ -315,8 +306,7 @@ for spec in "queue:$(cat "$RUN_DIR/custom-queue-list.txt")" "escalated:$(cat "$R
     > "$RUN_DIR/card-custom-$key.json"
 done
 
-JAVA_HOME=/tmp/jdk25 PATH=/tmp/jdk25/bin:$PATH \
-  java -jar target/quarkus-app/quarkus-run.jar "$RUN_DIR/custom-import.WORKFLOW.md" --port 18184
+java -jar target/quarkus-app/quarkus-run.jar "$RUN_DIR/custom-import.WORKFLOW.md" --port 18184
 ```
 
 Check any card's final Trello state with:
@@ -340,18 +330,15 @@ deterministic workflows here because those were patched to run the fake app-serv
 RUN_ID="$(cat target/live-e2e-current-run-id)"
 RUN_DIR="target/$RUN_ID"
 
-JAVA_HOME=/tmp/jdk25 PATH=/tmp/jdk25/bin:$PATH \
-  ./mvnw -q exec:java \
+./mvnw -q exec:java \
   -Dexec.args="new-board --name 'Symphony $RUN_ID Real Codex Board A' --workflow $RUN_DIR/real-board-a.WORKFLOW.md"
 
 REAL_BOARD_A_ID="$(awk -F'"' '/board_id:/ {print $2; exit}' "$RUN_DIR/real-board-a.WORKFLOW.md")"
 
-JAVA_HOME=/tmp/jdk25 PATH=/tmp/jdk25/bin:$PATH \
-  ./mvnw -q exec:java \
+./mvnw -q exec:java \
   -Dexec.args="import-board --board $REAL_BOARD_A_ID --active 'Ready for Codex' --terminal Done --workflow $RUN_DIR/real-imported-a.WORKFLOW.md"
 
-JAVA_HOME=/tmp/jdk25 PATH=/tmp/jdk25/bin:$PATH \
-  ./mvnw -q exec:java \
+./mvnw -q exec:java \
   -Dexec.args="new-board --name 'Symphony $RUN_ID Real Codex Board B' --max-agents 2 --workflow $RUN_DIR/real-board-b.WORKFLOW.md"
 ```
 
@@ -363,7 +350,7 @@ make Codex inspect or verify code instead of finishing a small protocol check qu
 ```bash
 RUN_ID="$(cat target/live-e2e-current-run-id)"
 RUN_DIR="target/$RUN_ID"
-REAL_JAVA="${JAVA_HOME:-/tmp/jdk25}/bin/java"
+REAL_JAVA="$(command -v java)"
 
 $REAL_JAVA --source 25 scripts/WriteNarrowRealCodexWorkflow.java "$RUN_DIR/real-board-a.WORKFLOW.md" "$RUN_DIR/real-narrow-a.WORKFLOW.md" "real Codex generated handoff" "$RUN_ID"
 $REAL_JAVA --source 25 scripts/WriteNarrowRealCodexWorkflow.java "$RUN_DIR/real-imported-a.WORKFLOW.md" "$RUN_DIR/real-narrow-imported-a.WORKFLOW.md" "real Codex imported handoff" "$RUN_ID"
@@ -396,7 +383,7 @@ not a deterministic handoff-only protocol check.
 For reproducible live testing, point `codex.command` at:
 
 ```bash
-${JAVA_HOME:-/tmp/jdk25}/bin/java --source 25 /absolute/path/to/scripts/FakeCodexAppServer.java
+java --source 25 /absolute/path/to/scripts/FakeCodexAppServer.java
 ```
 
 The fake app-server is a single-file Java program that speaks the same stdin/stdout app-server
