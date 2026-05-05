@@ -5,7 +5,7 @@
   <groupId>com.openai.symphony</groupId>
   <artifactId>symphony-trello</artifactId>
   <version>0.1.0-SNAPSHOT</version>
-  <name>symphony-trello</name>
+  <name>Symphony for Trello</name>
   <description>Quarkus service that orchestrates Codex workers from Trello cards.</description>
 
   <properties>

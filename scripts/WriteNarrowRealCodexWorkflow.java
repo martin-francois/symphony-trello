@@ -44,7 +44,7 @@ public class WriteNarrowRealCodexWorkflow {
 
                 This is a strict live E2E test for Symphony with real Codex and real Trello.
                 Do not inspect the repository, do not edit files, do not run shell commands, and do not create a pull request.
-                Use the available symphony-trello tools only:
+                Use the available Symphony for Trello tools only:
 
                 1. Call trello_add_comment with text: "%s complete for %s".
                 2. Call trello_move_current_card with list_name "Review".

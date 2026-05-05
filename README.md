@@ -1,8 +1,8 @@
-# symphony-trello
+# Symphony for Trello
 
-symphony-trello lets Codex work from Trello cards. Use it when prompts and terminal history are not
-enough, and you want a clear board that shows what Codex should do, what is running, and what is ready
-for review.
+Symphony for Trello lets Codex work from Trello cards. Use it when prompts and terminal history are
+not enough, and you want a clear board that shows what Codex should do, what is running, and what is
+ready for review.
 
 Use it when you want to:
 
@@ -19,8 +19,9 @@ so the same workflow can run again and again.
 
 You can use it with one board, or run it for several boards at the same time.
 
-symphony-trello is a variant of OpenAI's Symphony adapted for Trello. The original Symphony spec uses
-Linear; this project keeps the same orchestration idea and maps it to Trello boards, lists, and cards.
+Symphony for Trello is a variant of OpenAI's Symphony adapted for Trello. The original Symphony spec
+uses Linear; this project keeps the same orchestration idea and maps it to Trello boards, lists, and
+cards. The technical project name is `symphony-trello`.
 
 ## Table of Contents
 
@@ -137,7 +138,7 @@ Workspace and authorize the API token in the browser.
 5. Click `New` to create a new app/admin entry for the Workspace.
 6. Fill the required fields with clear, recognizable values:
 
-   - `Name`: `Symphony Trello Automation`
+   - `Name`: `Symphony for Trello Automation`
    - `Workspace`: the Workspace you created or chose above
    - `Email` / `Support Contact`: an email you control
    - `Author`: your name or your team name
@@ -147,12 +148,12 @@ Workspace and authorize the API token in the browser.
 7. Create the app/admin entry.
 8. Open its `API Key` tab and choose `Generate a new API Key`.
 9. If Trello warns that generating a key replaces the API key used for Personal Data Storage and
-   GDPR compliance, continue when this is the new `Symphony Trello Automation` app/admin entry. For
-   an existing app already used elsewhere, rotating the key means those uses must be updated.
+   GDPR compliance, continue when this is the new `Symphony for Trello Automation` app/admin entry.
+   For an existing app already used elsewhere, rotating the key means those uses must be updated.
 10. Copy the API key somewhere temporary. The API key identifies the app, but the token is the
     sensitive credential.
 11. On the same API key page, click the `Token` link below the key.
-12. Review the authorization screen. Confirm it shows `Symphony Trello Automation`, your Trello
+12. Review the authorization screen. Confirm it shows `Symphony for Trello Automation`, your Trello
     account, and permissions to make comments and create or update cards, lists, boards, and
     Workspaces.
 13. Click `Allow`.

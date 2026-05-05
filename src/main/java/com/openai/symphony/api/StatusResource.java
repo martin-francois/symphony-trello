@@ -30,7 +30,7 @@ public class StatusResource {
                 <head>
                   <meta charset="utf-8">
                   <meta name="viewport" content="width=device-width, initial-scale=1">
-                  <title>symphony-trello</title>
+                  <title>Symphony for Trello</title>
                   <style>
                     body { font: 14px system-ui, sans-serif; margin: 2rem; color: #1f2937; }
                     table { border-collapse: collapse; width: 100%%; margin-top: 1rem; }
@@ -39,7 +39,7 @@ public class StatusResource {
                   </style>
                 </head>
                 <body>
-                  <h1>symphony-trello</h1>
+                  <h1>Symphony for Trello</h1>
                   <p><code>%s</code> running, <code>%s</code> retrying.</p>
                   <table>
                     <thead><tr><th>Card</th><th>State</th><th>Session</th><th>Last event</th><th>Turns</th></tr></thead>
