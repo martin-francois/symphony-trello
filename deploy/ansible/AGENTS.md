@@ -54,15 +54,15 @@ After deploying runtime-impacting changes, verify more than `systemctl`:
 
 - `systemctl status symphony-trello@<workflow>`
 - `curl -fsS http://127.0.0.1:<port>/api/v1/state`
-- Trello card list and comments when a live card was processed
+- Trello card column and comments when a live card was processed
 
 For a bug observed in live deployment, reproduce the relevant live behavior when reasonable. The
 deployment is not healthy until the service is active, `/api/v1/state` has no unexpected running or
 retrying entries, and Trello handoff matches the workflow expectation.
 
 When verifying blocked-card behavior, check that a blocker comment does not leave the card in an
-active list. If the workflow has no dedicated blocked list, the generated fallback should move the
-card to the review handoff list so it stops running.
+active column. If the workflow has no dedicated blocked column, the generated fallback should move the
+card to the review handoff column so it stops running.
 
 ## Secrets And Redaction
 

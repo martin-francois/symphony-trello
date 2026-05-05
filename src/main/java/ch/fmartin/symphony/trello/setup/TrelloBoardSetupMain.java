@@ -52,7 +52,7 @@ public final class TrelloBoardSetupMain {
             out.println("Board URL: " + result.boardUrl());
         }
         out.println("Board ID for WORKFLOW.md: " + result.boardKey());
-        out.println("Created lists: " + String.join(", ", result.lists()));
+        out.println("Created columns: " + String.join(", ", result.columns()));
         out.println("Wrote workflow: " + result.workflowPath().toAbsolutePath().normalize());
         out.println();
         out.println("Next:");
@@ -76,10 +76,10 @@ public final class TrelloBoardSetupMain {
             out.println("Board URL: " + result.boardUrl());
         }
         out.println("Board ID for WORKFLOW.md: " + result.boardKey());
-        out.println("Open lists: " + String.join(", ", result.openLists()));
-        out.println("Active lists: " + String.join(", ", result.activeStates()));
-        out.println("Terminal lists: " + String.join(", ", result.terminalStates()));
-        out.println("Blocked column: " + optionalListName(result.blockedState()));
+        out.println("Open columns: " + String.join(", ", result.openColumns()));
+        out.println("Active columns: " + String.join(", ", result.activeStates()));
+        out.println("Terminal columns: " + String.join(", ", result.terminalStates()));
+        out.println("Blocked column: " + optionalColumnName(result.blockedState()));
         out.println("Wrote workflow: " + result.workflowPath().toAbsolutePath().normalize());
         out.println();
         out.println("Next:");
@@ -92,7 +92,7 @@ public final class TrelloBoardSetupMain {
                 : "setup_invalid_arguments";
     }
 
-    private static String optionalListName(String value) {
+    private static String optionalColumnName(String value) {
         return value == null || value.isBlank() ? "<none>" : value;
     }
 
@@ -107,7 +107,7 @@ public final class TrelloBoardSetupMain {
                   Put TRELLO_API_KEY and TRELLO_API_TOKEN in .env, export them, or pass --key and --token.
 
                 Commands:
-                  new-board     Create the recommended board, create lists, and write a workflow file.
+                  new-board     Create the recommended board, create columns, and write a workflow file.
                   import-board  Read an existing board and write a workflow file for it.
                   list-workspaces  Print workspace ids available to the token.
 
@@ -125,8 +125,8 @@ public final class TrelloBoardSetupMain {
 
                 import-board options:
                   --board ID            Required Trello board id or short link
-                  --active LIST         Repeatable or comma-separated. Defaults to Ready for Codex when present.
-                  --terminal LIST       Repeatable or comma-separated. Defaults to Done when present.
+                  --active NAME         Repeatable or comma-separated column name. Defaults to Ready for Codex when present.
+                  --terminal NAME       Repeatable or comma-separated column name. Defaults to Done when present.
                   --blocked NAME        Optional blocked column name. Defaults to Blocked when present.
                 """;
     }

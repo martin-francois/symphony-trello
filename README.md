@@ -21,7 +21,7 @@ You can use it with one board, or run it for several boards at the same time.
 
 Symphony for Trello is a variant of [OpenAI's Symphony](https://github.com/openai/symphony) adapted
 for Trello. The original Symphony spec uses Linear; this project keeps the same orchestration idea
-and maps it to Trello boards, lists, and cards.
+and maps it to Trello boards, columns, and cards.
 
 ## Table of Contents
 
@@ -38,14 +38,14 @@ and maps it to Trello boards, lists, and cards.
 ## Current Capabilities
 
 - Trello REST polling for active cards, terminal cards, and per-card reconciliation.
-- Trello normalization for open cards, archived cards, archived lists, archived boards, labels,
-  priority labels, due dates, positions, and ObjectId-derived creation time.
+- Trello normalization for open cards, archived cards, archived Trello lists (closed columns),
+  archived boards, labels, priority labels, due dates, positions, and ObjectId-derived creation time.
 - Dynamic `WORKFLOW.md` reload with last-known-good behavior after invalid edits.
 - Strict prompt rendering with `card`, `issue`, and `attempt` variables.
 - Per-card workspace creation, sanitization, root containment checks, and lifecycle hooks.
 - Codex app-server subprocess integration over newline-delimited JSON-RPC.
 - Scoped Trello handoff tools for Codex to add a comment to the current card and move that card to
-  configured board-local review lists.
+  configured board-local review columns.
 - Single-authority in-memory orchestration state, claim-before-spawn dispatch, retries, stall checks,
   stale worker identity filtering, and terminal workspace cleanup.
 - JSON and HTML status surfaces at `/api/v1/state`, `/api/v1/{card_identifier}`, `/api/v1/refresh`,
@@ -111,7 +111,8 @@ Trello has three concepts that matter for Symphony:
 - A **Workspace** groups boards and is also where Trello lets you create a custom Power-Up for API
   access.
 - A **Board** is the project or queue Symphony polls.
-- **Lists** are the columns on the board. Symphony treats configured list names as states.
+- **Columns** are the lanes on the board. Trello's API calls them lists, so `WORKFLOW.md` and tool
+  fields use names like `active_list_ids`, `allowed_move_list_names`, `list_id`, and `list_name`.
 
 Symphony reads cards, creates local Codex workspaces, and runs Codex. The generated workflow lets
 Codex leave a Trello comment and move the card to `Review` when the prompt-defined work is ready for
@@ -160,7 +161,7 @@ Workspace and authorize the API token in the browser.
 11. On the same API key page, click the `Token` link below the key.
 12. Review the authorization screen. Confirm it shows `Symphony for Trello Automation`, your Trello
     account, and permissions to make comments and create or update cards, lists, boards, and
-    Workspaces.
+    Workspaces. Trello uses "lists" there for board columns.
 13. Click `Allow`.
 14. Copy the generated token. Treat it like a password: it grants access as your Trello account to
     boards and Workspaces your account can access.
@@ -175,7 +176,7 @@ TRELLO_API_TOKEN=replace-with-generated-token
 
 Use this path when you are new to Trello or want Symphony to create a clean `Inbox` -> `Ready for
 Codex` -> `Blocked` -> `Review` -> `Done` board for you. One command creates the board, creates the
-recommended lists, and writes a workflow file for that board.
+recommended columns, and writes a workflow file for that board.
 
 Now create the board and workflow:
 
@@ -184,7 +185,7 @@ Now create the board and workflow:
 ```
 
 If your token can access exactly one Workspace, Symphony uses it automatically. If your token can
-access multiple Workspaces, the command stops and asks for `--workspace-id`. List the available ids:
+access multiple Workspaces, the command stops and asks for `--workspace-id`. Show the available ids:
 
 ```bash
 ./mvnw -q exec:java -Dexec.args='list-workspaces'
@@ -199,8 +200,8 @@ The command creates this Trello board layout:
 4. `Review`
 5. `Done`
 
-It also writes a workflow with `Ready for Codex` as the active list, `Done` as the terminal list,
-`Review` and `Blocked` as allowed handoff lists, `./workspaces` as the local workspace directory,
+It also writes a workflow with `Ready for Codex` as the active column, `Done` as the terminal column,
+`Review` and `Blocked` as allowed handoff columns, `./workspaces` as the local workspace directory,
 and `max_concurrent_agents: 1`. With that default, Symphony starts one card at a time from this
 board.
 
@@ -245,18 +246,19 @@ Use this path when you already have a Trello board and want Symphony to write a 
 ./mvnw -q exec:java -Dexec.args='import-board --board abc123 --active "Ready for Codex" --terminal Done --blocked Blocked'
 ```
 
-You may omit `--active` when the board already has a list named `Ready for Codex`. You may omit
-`--terminal` when the board already has a list named `Done`. You may omit `--blocked` when the board
-already has a list named `Blocked`. If your board has no blocked list, import falls back to `Review`
-when that list exists, so blocked cards still leave the active list. Create a blocked list or pass
+You may omit `--active` when the board already has a column named `Ready for Codex`. You may omit
+`--terminal` when the board already has a column named `Done`. You may omit `--blocked` when the board
+already has a column named `Blocked`. If your board has no blocked column, import falls back to
+`Review` when that column exists, so blocked cards still leave the active column. Create a blocked
+column or pass
 `--blocked` when you want blocked work separated from reviewable work.
 
-For an existing team board, be deliberate about `--active`: every open card in that list is eligible
-for Codex work. A conservative import starts with a new list named `Ready for Codex` and only moves
+For an existing team board, be deliberate about `--active`: every open card in that column is eligible
+for Codex work. A conservative import starts with a new column named `Ready for Codex` and only moves
 cards there after they have a clear title, useful description, and acceptance criteria.
 
-When the imported board has a list named `Review`, the starter workflow allows Codex to move
-reviewable work there. If there is no obvious review list, the generated workflow keeps Trello writes
+When the imported board has a column named `Review`, the starter workflow allows Codex to move
+reviewable work there. If there is no obvious review column, the generated workflow keeps Trello writes
 disabled until you choose one. Do not run a write-disabled workflow with blocked cards left in
 `Ready for Codex` unless you plan to move them manually; they can be picked up again.
 
@@ -286,16 +288,16 @@ Use this manual path when your team already has a Trello board for engineering w
 write [`WORKFLOW.md`](#workflow-contract) yourself.
 
 1. Pick the board Symphony should poll.
-2. Choose one or two list names that mean "Codex may work on this now".
-   A low-risk default is a single list named `Ready for Codex`.
-3. Choose terminal list names that mean "never run Codex for this card again".
+2. Choose one or two column names that mean "Codex may work on this now".
+   A low-risk default is a single column named `Ready for Codex`.
+3. Choose terminal column names that mean "never run Codex for this card again".
    A common default is `Done`.
-4. Choose a non-active list for blocked work, such as `Blocked`. If your board does not have one,
-   use your review list so blocked cards still leave the active list.
+4. Choose a non-active column for blocked work, such as `Blocked`. If your board does not have one,
+   use your review column so blocked cards still leave the active column.
 5. Copy the board short link from the board URL.
    In `https://trello.com/b/abc123/my-board`, the `board_id` value can be `abc123`.
 6. Create [`WORKFLOW.md`](#workflow-contract) and set `tracker.board_id`, `tracker.active_states`,
-   `tracker.terminal_states`, and the handoff list names to match your board.
+   `tracker.terminal_states`, and the handoff column names to match your board.
 
 Example for an existing board:
 
@@ -356,7 +358,7 @@ Operationally, use the board like this:
 Use this manual path when you want a clean board designed for Symphony from the start but do not want
 the setup command to create it for you.
 
-Create a board named `Symphony Work Queue` and add these lists in this order:
+Create a board named `Symphony Work Queue` and add these columns in this order:
 
 1. `Inbox`
 2. `Ready for Codex`
@@ -366,10 +368,10 @@ Create a board named `Symphony Work Queue` and add these lists in this order:
 
 Recommended meaning:
 
-- `Inbox`: rough tasks, ideas, or incomplete cards. Symphony ignores this list.
-- `Ready for Codex`: cards that are ready to run. Symphony polls this list.
-- `Blocked`: cards Codex could not safely finish. Symphony ignores this list.
-- `Review`: work produced by Codex that needs human review. Symphony ignores this list.
+- `Inbox`: rough tasks, ideas, or incomplete cards. Symphony ignores this column.
+- `Ready for Codex`: cards that are ready to run. Symphony polls this column.
+- `Blocked`: cards Codex could not safely finish. Symphony ignores this column.
+- `Review`: work produced by Codex that needs human review. Symphony ignores this column.
 - `Done`: finished cards. Symphony treats this as terminal.
 
 For each task card, use a title that reads like a pull request title, then put the useful details in
@@ -443,15 +445,15 @@ trello_move_current_card with list_name "Blocked".
 Card URL: {{ card.url }}
 ```
 
-Start with `max_concurrent_agents: 1`. If two cards are in an active list such as `Ready for Codex`,
+Start with `max_concurrent_agents: 1`. If two cards are in an active column such as `Ready for Codex`,
 that default makes Symphony run one card and leave the other waiting until a slot is free. Raising
 the value to `2` lets two cards from the same configured board run at the same time; raising it to
 `N` allows up to `N` simultaneous Codex sessions for that process. Raise it only after
 one-card-at-a-time runs are routine and predictable.
 
 Within the available slots, Symphony starts cards in a predictable order. Priority labels run first
-when you use them. Otherwise, it follows the configured active-list order, then the order of cards in
-the Trello list from top to bottom. If there is still a tie, older cards run first.
+when you use them. Otherwise, it follows the configured active-column order, then the order of cards
+in the Trello column from top to bottom. If there is still a tie, older cards run first.
 
 ## Workflow Contract
 
@@ -510,7 +512,7 @@ environment before starting `codex app-server`.
 The recommended workflow gives Codex two scoped Trello handoff tools:
 
 - `trello_add_comment`: add a comment to the current card.
-- `trello_move_current_card`: move the current card to a configured board-local handoff list such as
+- `trello_move_current_card`: move the current card to a configured board-local handoff column such as
   `Review` or `Blocked`.
 
 Symphony advertises those tools when `trello_tools.enabled=true` and
@@ -520,10 +522,10 @@ Symphony advertises those tools when `trello_tools.enabled=true` and
 If the API token is read-only or Trello rejects writes, Codex still runs, but handoff tool calls fail
 and the failures are visible in the Codex session events.
 
-To move cards to handoff lists with different names, set `trello_tools.allowed_move_list_names` to
-those allowed list names and update the final handoff instruction in
+To move cards to handoff columns with different names, set `trello_tools.allowed_move_list_names` to
+those allowed column names and update the final handoff instruction in
 [`WORKFLOW.md`](#workflow-contract) to match them. Do not tell Codex to leave blocked cards in an
-active list such as `Ready for Codex`; Symphony may treat the card as still eligible and run it
+active column such as `Ready for Codex`; Symphony may treat the card as still eligible and run it
 again.
 
 The standardized generic `trello_rest` dynamic tool extension is documented in [SPEC.md](SPEC.md) but

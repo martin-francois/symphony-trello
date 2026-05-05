@@ -22,7 +22,7 @@ write access?
 
 * Keep the orchestrator responsible for scheduling, not subjective handoff policy.
 * Avoid forcing operators to watch logs and move cards manually.
-* Limit Trello write access to the current card and configured destination lists.
+* Limit Trello write access to the current card and configured destination columns.
 * Keep dynamic tools easy to explain, test, and audit.
 * Preserve a clear path for future Trello helper tools without opening a generic REST bridge.
 
@@ -43,7 +43,7 @@ enough authority to perform the common handoff while keeping writes narrow and w
 * Good, because the agent can add review context and move the current card when the prompt policy
   says the work is ready.
 * Good, because a worker cannot pass an arbitrary card id.
-* Good, because allowed destination lists are explicit workflow configuration.
+* Good, because allowed destination columns are explicit workflow configuration.
 * Bad, because additional handoff actions, such as checklist updates or URL attachments, require new
   typed tools.
 * Bad, because workflow prompts must clearly instruct agents when to use the handoff tools.
@@ -51,7 +51,7 @@ enough authority to perform the common handoff while keeping writes narrow and w
 ### Confirmation
 
 Run `./mvnw -q spotless:check verify`. Tests should cover tool advertisement, current-card scoping,
-comment permission checks, and allowed destination-list validation.
+comment permission checks, and allowed destination-column validation.
 
 ## Pros and Cons of the Options
 
@@ -72,7 +72,7 @@ Expose a dynamic tool that lets the agent call arbitrary Trello REST endpoints.
 
 * Good, because it would cover many Trello use cases immediately.
 * Bad, because it is much harder to audit and safely constrain.
-* Bad, because prompt mistakes could affect unrelated cards, lists, or boards.
+* Bad, because prompt mistakes could affect unrelated cards, columns, or boards.
 
 ### Read-only Trello workflow with manual operator handoff
 
@@ -99,5 +99,5 @@ The initial typed tools are:
 
 The tools are advertised only when `trello_tools.enabled=true` and
 `trello_tools.allow_writes=true`. Comment writes also require
-`trello_tools.allow_comments=true`. Card moves require configured allowed destination list ids or
-names, and the destination must resolve to an open list on the configured board.
+`trello_tools.allow_comments=true`. Card moves require configured allowed destination Trello list ids
+or column names, and the destination must resolve to an open column on the configured board.

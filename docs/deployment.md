@@ -194,7 +194,7 @@ codex:
 ```
 
 Use a different `server.port` and `workspace.root` for each workflow. Keeping separate workspace
-directories makes cleanup and debugging easier. Include a non-active blocked handoff list such as
+directories makes cleanup and debugging easier. Include a non-active blocked handoff column such as
 `Blocked` when the board has one, so blocked cards do not stay eligible for another run.
 
 ## Start Workflows

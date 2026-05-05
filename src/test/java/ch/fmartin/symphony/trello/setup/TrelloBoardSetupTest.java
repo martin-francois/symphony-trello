@@ -30,7 +30,7 @@ import org.junit.jupiter.api.io.TempDir;
 class TrelloBoardSetupTest {
     private HttpServer server;
     private TrelloBoardSetup setup;
-    private final List<String> createdLists = new ArrayList<>();
+    private final List<String> createdColumns = new ArrayList<>();
     private final AtomicReference<String> authorization = new AtomicReference<>();
     private final AtomicReference<String> workspaceResponse = new AtomicReference<>();
     private final AtomicReference<String> boardListsResponse = new AtomicReference<>();
@@ -80,8 +80,8 @@ class TrelloBoardSetupTest {
             assertThat(exchange.getRequestMethod()).isEqualTo("POST");
             Map<String, String> query = query(exchange);
             assertThat(query).containsEntry("idBoard", "board-1").containsEntry("pos", "bottom");
-            createdLists.add(query.get("name"));
-            respond(exchange, "{\"id\":\"list-" + createdLists.size() + "\",\"name\":\"" + query.get("name") + "\"}");
+            createdColumns.add(query.get("name"));
+            respond(exchange, "{\"id\":\"list-" + createdColumns.size() + "\",\"name\":\"" + query.get("name") + "\"}");
         });
         server.createContext("/1/boards/input", exchange -> {
             assertThat(exchange.getRequestMethod()).isEqualTo("GET");
@@ -120,7 +120,7 @@ class TrelloBoardSetupTest {
 
         // then
         assertThat(result.boardKey()).isEqualTo("abc123");
-        assertThat(createdLists).containsExactly("Inbox", "Ready for Codex", "Blocked", "Review", "Done");
+        assertThat(createdColumns).containsExactly("Inbox", "Ready for Codex", "Blocked", "Review", "Done");
         assertThat(authorization.get()).contains("oauth_consumer_key=\"key\"").contains("oauth_token=\"token\"");
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
@@ -177,7 +177,7 @@ class TrelloBoardSetupTest {
                 .hasMessageContaining("workspace-1")
                 .hasMessageContaining("workspace-2");
         assertThat(workflow).doesNotExist();
-        assertThat(createdLists).isEmpty();
+        assertThat(createdColumns).isEmpty();
     }
 
     @Test
@@ -199,7 +199,7 @@ class TrelloBoardSetupTest {
                 false));
 
         // then
-        assertThat(result.openLists()).containsExactly("Inbox", "Ready for Codex", "Blocked", "Review", "Done");
+        assertThat(result.openColumns()).containsExactly("Inbox", "Ready for Codex", "Blocked", "Review", "Done");
         assertThat(result.activeStates()).containsExactly("Ready for Codex");
         assertThat(result.terminalStates()).containsExactly("Done");
         assertThat(result.blockedState()).isEqualTo("Blocked");
@@ -248,7 +248,7 @@ class TrelloBoardSetupTest {
                 false));
 
         // then
-        assertThat(result.openLists())
+        assertThat(result.openColumns())
                 .containsExactly(
                         "Intake",
                         "Queue for Codex",
@@ -334,9 +334,9 @@ class TrelloBoardSetupTest {
                 .contains("allowed_move_list_names:")
                 .contains("- \"Review\"")
                 .contains("blocked or unsafe to hand off")
-                .contains("list_name \"Review\" so the card leaves the active list")
+                .contains("list_name \"Review\" so the card leaves the active column")
                 .contains("Do not leave")
-                .contains("blocked work in an active list");
+                .contains("blocked work in an active column");
         EffectiveConfig config = resolve(workflow);
         assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("review");
     }

@@ -132,6 +132,9 @@ matters, and easy for another engineer to understand without asking the original
   explanatory sentence when lookup, authentication, or configuration details matter.
 - When referring to the local `codex` command in user setup docs, call it "Codex CLI" so readers do
   not confuse it with other Codex surfaces.
+- In user-facing docs and CLI text, call visible Trello board lanes "columns". Reserve "list" for
+  Trello API terms, configuration keys, Java collection types, and quoted REST fields such as
+  `idList`, `list_id`, `list_name`, or `allowed_move_list_names`.
 - For deployment auth, prefer reusing the existing Codex CLI auth file from `codex login`. Do not
   steer users toward configuring raw OpenAI API keys unless they explicitly ask for that mode.
 - For docs with multiple setup paths, read the flow once from each path's perspective and avoid
@@ -190,7 +193,7 @@ matters, and easy for another engineer to understand without asking the original
   workflow has active work, verify that Codex can authenticate, the work finishes or reaches an
   expected terminal state, Trello handoff happens when required, and `/api/v1/state` has no
   unexpected running or retrying entries.
-- Live deployment verification loops must poll Trello comments and the card's current list on every
+- Live deployment verification loops must poll Trello comments and the card's current column on every
   pass, not only the local state endpoint. Use a fresh timestamp cutoff after each restart so old
   blocker comments do not fail a fixed run, but fail immediately on any new blocker, auth, or sandbox
   comment.
@@ -199,7 +202,7 @@ matters, and easy for another engineer to understand without asking the original
   `/api/v1/state` returning to zero running/retrying before claiming real-Codex coverage.
 - Live import-board coverage must include at least one genuinely non-default existing board
   structure, not only a Symphony-generated board imported back again. Use explicit non-default
-  active and terminal list names, then verify fake-Codex first and strict real-Codex after.
+  active and terminal column names, then verify fake-Codex first and strict real-Codex after.
 - When a live run uncovers a broken scenario after an earlier health claim, record the reproducible
   scenario in `docs/live-e2e.md` and create or update GitHub issues before fixing behavior. Capture
   both the user-visible symptoms and the underlying cause when they are distinct. Keep the broken

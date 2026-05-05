@@ -64,6 +64,9 @@ Important boundary:
   labels, comments, normal card checklists, card due dates, and normal card attachments within
   Free-plan limits.
 
+Note: this specification uses Trello's API term "list". User-facing documentation and CLI text may
+call the same visible board lane a "column" when that is clearer for Trello users.
+
 ### 2.2 Non-Goals
 
 - Rich web UI or multi-tenant control plane.

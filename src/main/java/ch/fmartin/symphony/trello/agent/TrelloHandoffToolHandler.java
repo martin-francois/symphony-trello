@@ -51,11 +51,11 @@ public class TrelloHandoffToolHandler {
         if (moveAllowlistConfigured(config)) {
             tools.add(tool(
                     MOVE_CURRENT_CARD,
-                    "Move the current Trello card to one configured board-local handoff list. Use list_name unless the workflow explicitly gives a list_id.",
+                    "Move the current Trello card to one configured board-local handoff column. Use list_name unless the workflow explicitly gives a Trello list_id.",
                     objectSchema(
                             Map.of(
                                     "list_name",
-                                    stringSchema("Allowed destination list name, for example Review."),
+                                    stringSchema("Allowed destination column name, for example Review."),
                                     "list_id",
                                     stringSchema("Allowed destination Trello list id.")),
                             List.of())));
@@ -113,7 +113,8 @@ public class TrelloHandoffToolHandler {
         }
 
         BoardListMatch target = resolveAllowedTarget(config, listId, listName)
-                .orElseGet(() -> new BoardListMatch(null, "No configured open destination list matches the request."));
+                .orElseGet(
+                        () -> new BoardListMatch(null, "No configured open destination column matches the request."));
         if (target.list() == null) {
             return failure("trello_move_not_allowed", target.error());
         }
@@ -141,15 +142,14 @@ public class TrelloHandoffToolHandler {
                         .findFirst();
 
         if (target.isEmpty()) {
-            return Optional.of(
-                    new BoardListMatch(null, "Destination list is not an open list on the configured board."));
+            return Optional.of(new BoardListMatch(null, "Destination column is not open on the configured board."));
         }
         TrelloClient.BoardList list = target.get();
         if (allowedById(config, list) || allowedByName(config, list)) {
             return Optional.of(new BoardListMatch(list, null));
         }
-        return Optional.of(
-                new BoardListMatch(null, "Destination list is not included in the configured Trello move allowlist."));
+        return Optional.of(new BoardListMatch(
+                null, "Destination column is not included in the configured Trello move allowlist."));
     }
 
     private boolean allowedById(EffectiveConfig config, TrelloClient.BoardList list) {
