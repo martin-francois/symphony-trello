@@ -68,7 +68,6 @@ sudo -u symphony-trello -H codex --help
 From your checkout:
 
 ```bash
-./mvnw -q spotless:check verify
 ./mvnw -q package
 ```
 
@@ -188,7 +187,6 @@ curl http://127.0.0.1:18081/api/v1/state
 Build the new version from the checkout or release you want to deploy:
 
 ```bash
-./mvnw -q spotless:check verify
 ./mvnw -q package
 ```
 
