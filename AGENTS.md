@@ -73,6 +73,9 @@ matters, and easy for another engineer to understand without asking the original
   polished or elaborate wording.
 - Do not document options or config fields by only restating their names. Explain what the value is
   used for, when the reader should change it, and how to choose a sensible value.
+- For CLI commands, follow the principle of least surprise: avoid silent no-ops, print actionable
+  success/error output, and prefer preserving existing user files with a clear alternate path over
+  making repeated setup commands appear to do nothing.
 - Avoid unclear normalization jargon in code and docs. Prefer simple words such as "default",
   "resolved", "configured", or "official".
 - For local Trello credentials, use ignored project-root `.env` files created from `.env.example`.

@@ -174,7 +174,7 @@ TRELLO_API_TOKEN=replace-with-generated-token
 
 Use this path when you are new to Trello or want Symphony to create a clean `Inbox` -> `Ready for
 Codex` -> `Review` -> `Done` board for you. One command creates the board, creates the recommended
-lists, and writes [`WORKFLOW.md`](#workflow-contract).
+lists, and writes a workflow file for that board.
 
 Now create the board and workflow:
 
@@ -197,12 +197,16 @@ The command creates this Trello board layout:
 3. `Review`
 4. `Done`
 
-It also writes `WORKFLOW.md` with `Ready for Codex` as the active list, `Done` as the terminal list,
-`Review` as the allowed handoff list, `./workspaces` as the local workspace root, and
+It also writes a workflow with `Ready for Codex` as the active list, `Done` as the terminal list,
+`Review` as the allowed handoff list, `./workspaces` as the local workspace directory, and
 `max_concurrent_agents: 1`. With that default, Symphony starts one card at a time from this board.
 
-If `WORKFLOW.md` already exists, the command stops instead of overwriting it. Pass `--force` only when
-you intentionally want to replace the file:
+The first run writes `WORKFLOW.md`. If that file already exists and you did not pass `--workflow`,
+Symphony keeps the existing file and writes a board-specific file instead. For a board named
+`My Project`, the next file is `WORKFLOW.my-project.md`. If that file also exists, Symphony adds a
+number, such as `WORKFLOW.my-project-2.md`.
+
+Pass `--force` only when you intentionally want to replace the selected workflow file:
 
 ```bash
 ./mvnw -q exec:java -Dexec.args='new-board --name "Symphony Work Queue" --force'
@@ -252,7 +256,8 @@ keeps Trello writes disabled until you choose one.
 Common setup command options:
 
 - `--workflow PATH`: write the generated workflow file somewhere other than `WORKFLOW.md`. Use this
-  when you want separate workflow files for multiple boards.
+  when you want to choose the exact file name yourself. If that file exists, Symphony stops unless
+  you also pass `--force`.
 - `--workspace-root PATH`: choose where Symphony creates the local work directory for each Trello
   card. The generated workflow uses `./workspaces`; choose another path when you want those
   checkouts on a different disk or clearly separated from the repository.
