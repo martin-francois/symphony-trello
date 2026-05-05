@@ -1,6 +1,7 @@
 package com.openai.symphony.setup;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.openai.symphony.config.LocalEnvironment;
 import com.openai.symphony.setup.TrelloBoardSetup.ImportBoardRequest;
 import com.openai.symphony.setup.TrelloBoardSetup.NewBoardRequest;
 import com.openai.symphony.setup.TrelloBoardSetup.TrelloCredentials;
@@ -98,7 +99,7 @@ public final class TrelloBoardSetupMain {
                   ./mvnw -q exec:java -Dexec.args='import-board --board abc123 --active "Ready for Codex" --terminal Done'
 
                 Credentials:
-                  Export TRELLO_API_KEY and TRELLO_API_TOKEN, or pass --key and --token.
+                  Put TRELLO_API_KEY and TRELLO_API_TOKEN in .env, export them, or pass --key and --token.
 
                 Commands:
                   new-board     Create the recommended board, create lists, and write WORKFLOW.md.
@@ -238,8 +239,7 @@ public final class TrelloBoardSetupMain {
         }
 
         private static Optional<String> env(String name) {
-            String value = System.getenv(name);
-            return value == null || value.isBlank() ? Optional.empty() : Optional.of(value);
+            return LocalEnvironment.get(name);
         }
     }
 

@@ -48,22 +48,25 @@ Prerequisites:
 - A Trello API key/token. If you do not have one yet, follow the Trello Setup section below in
   order.
 
-If you already have Trello credentials and a configured [`WORKFLOW.md`](#workflow-contract), set
-credentials and start the service:
+If you already have Trello credentials and a configured [`WORKFLOW.md`](#workflow-contract), put the
+credentials in an ignored project-root `.env` file and start the service:
 
 ```bash
-export TRELLO_API_KEY=...
-export TRELLO_API_TOKEN=...
-./mvnw quarkus:dev
+cp .env.example .env
+chmod 600 .env
 ```
 
-For repeated local runs, you can put the same values in ignored `.env.local` and load them before
-starting Symphony:
+Fill `.env` with:
+
+```properties
+TRELLO_API_KEY=replace-with-generated-key
+TRELLO_API_TOKEN=replace-with-generated-token
+```
+
+Exported environment variables with the same names also work and take precedence over `.env`.
 
 ```bash
-set -a
-. ./.env.local
-set +a
+./mvnw quarkus:dev
 ```
 
 By default the [status page](#operations) binds to `127.0.0.1:8080`. Use `SYMPHONY_HTTP_PORT=0` for
@@ -137,14 +140,12 @@ Workspace and authorize the API token in the browser.
 13. Click `Allow`.
 14. Copy the generated token. Treat it like a password: it grants access as your Trello account to
     boards and Workspaces your account can access.
-15. Export both values in the terminal where you will run Symphony:
+15. Save both values in the project-root `.env` file:
 
-```bash
-export TRELLO_API_KEY=replace-with-generated-key
-export TRELLO_API_TOKEN=replace-with-generated-token
+```properties
+TRELLO_API_KEY=replace-with-generated-key
+TRELLO_API_TOKEN=replace-with-generated-token
 ```
-
-For repeated local runs, you can put the same values in ignored `.env.local` instead.
 
 ### Fast Path: Create The Recommended Board
 
@@ -463,6 +464,9 @@ Important environment variables:
 - `SYMPHONY_HTTP_PORT`: Quarkus HTTP port, default `8080`.
 - `SYMPHONY_AUTOSTART`: set `false` in tests or when only using injected services.
 - `TRELLO_API_KEY` and `TRELLO_API_TOKEN`: canonical Trello credentials.
+
+For local runs, the same names can be placed in ignored `.env`; real environment variables take
+precedence.
 
 ## Safety Posture
 

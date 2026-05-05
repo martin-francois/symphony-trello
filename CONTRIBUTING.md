@@ -11,12 +11,11 @@ engineering preferences that should persist across Codex sessions.
 2. Use the Maven wrapper: `./mvnw test`.
 3. Install Codex CLI if you want to run real worker sessions.
 4. Create a local `WORKFLOW.md` from `WORKFLOW.example.md`.
-5. For repeated local runs, copy `.env.example` to `.env.local`, set Trello credentials there, and
-   keep `.env.local` uncommitted:
+5. Copy `.env.example` to `.env`, set Trello credentials there, and keep `.env` uncommitted:
 
    ```bash
-   cp .env.example .env.local
-   chmod 600 .env.local
+   cp .env.example .env
+   chmod 600 .env
    ```
 
 ## Quality Bar

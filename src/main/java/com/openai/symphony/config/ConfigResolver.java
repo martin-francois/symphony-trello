@@ -138,8 +138,7 @@ public class ConfigResolver {
     private static String secret(Map<String, Object> root, String key, String canonicalEnv) {
         String configured = string(root, key, "$" + canonicalEnv);
         if (configured != null && configured.startsWith("$") && configured.length() > 1) {
-            String resolved = System.getenv(configured.substring(1));
-            return resolved == null || resolved.isBlank() ? null : resolved;
+            return LocalEnvironment.get(configured.substring(1)).orElse(null);
         }
         return configured;
     }
@@ -245,10 +244,7 @@ public class ConfigResolver {
             expanded = System.getProperty("user.home") + expanded.substring(1);
         }
         if (expanded.startsWith("$") && expanded.indexOf('/') < 0) {
-            String resolved = System.getenv(expanded.substring(1));
-            if (resolved != null && !resolved.isBlank()) {
-                expanded = resolved;
-            }
+            expanded = LocalEnvironment.get(expanded.substring(1)).orElse(expanded);
         }
         return expanded;
     }
