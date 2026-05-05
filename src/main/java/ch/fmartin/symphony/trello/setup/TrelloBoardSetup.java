@@ -31,7 +31,7 @@ public final class TrelloBoardSetup {
     public static final String RECOMMENDED_ACTIVE_STATE = "Ready for Codex";
     public static final String RECOMMENDED_BLOCKED_STATE = "Blocked";
     public static final String RECOMMENDED_REVIEW_STATE = "Review";
-    public static final List<String> RECOMMENDED_LISTS =
+    public static final List<String> RECOMMENDED_COLUMNS =
             List.of("Inbox", RECOMMENDED_ACTIVE_STATE, RECOMMENDED_BLOCKED_STATE, RECOMMENDED_REVIEW_STATE, "Done");
     public static final List<String> RECOMMENDED_ACTIVE_STATES = List.of(RECOMMENDED_ACTIVE_STATE);
     public static final List<String> RECOMMENDED_TERMINAL_STATES = List.of("Done");
@@ -64,14 +64,14 @@ public final class TrelloBoardSetup {
         String boardKey = boardKey(board);
         String boardUrl = string(board.get("url"));
 
-        List<String> createdLists = new ArrayList<>();
-        for (String listName : RECOMMENDED_LISTS) {
+        List<String> createdColumns = new ArrayList<>();
+        for (String columnName : RECOMMENDED_COLUMNS) {
             postMap(
                     request.endpoint(),
                     "lists",
-                    orderedMap("name", listName, "idBoard", boardId, "pos", "bottom"),
+                    orderedMap("name", columnName, "idBoard", boardId, "pos", "bottom"),
                     request.credentials());
-            createdLists.add(listName);
+            createdColumns.add(columnName);
         }
 
         writeWorkflow(
@@ -86,7 +86,7 @@ public final class TrelloBoardSetup {
                         request.workspaceRoot(),
                         request.maxConcurrentAgents()));
 
-        return new NewBoardResult(boardId, boardKey, request.boardName(), boardUrl, createdLists, workflowPath);
+        return new NewBoardResult(boardId, boardKey, request.boardName(), boardUrl, createdColumns, workflowPath);
     }
 
     private String resolveWorkspaceId(NewBoardRequest request) {
@@ -156,7 +156,7 @@ public final class TrelloBoardSetup {
         if (activeStates.isEmpty()) {
             throw new TrelloBoardSetupException(
                     "setup_active_state_required",
-                    "No active list was provided and the board has no 'Ready for Codex' list. Pass --active with the list Codex should poll. Open lists: "
+                    "No active column was provided and the board has no 'Ready for Codex' column. Pass --active with the column Codex should poll. Open columns: "
                             + String.join(", ", openListNames));
         }
 
@@ -389,7 +389,7 @@ public final class TrelloBoardSetup {
         if (blank(reviewState) && blank(blockedDestination)) {
             return """
                     When the work is ready for human review, leave the workspace in a reviewable state and summarize the status in the Codex response. Trello handoff tools are disabled in this starter workflow until you configure trello_tools.allowed_move_list_names.
-                    If the work is blocked, summarize the blocker in the Codex response; an operator must move the card out of the active list manually. Leaving blocked work active can make Symphony run it again."""
+                    If the work is blocked, summarize the blocker in the Codex response; an operator must move the card out of the active column manually. Leaving blocked work active can make Symphony run it again."""
                     .stripTrailing();
         }
         if (blank(reviewState)) {
@@ -404,8 +404,8 @@ public final class TrelloBoardSetup {
                     When the work is ready for human review, call trello_add_comment with a concise summary and
                     verification notes, then call trello_move_current_card with list_name "%s". If the work is
                     blocked or unsafe to hand off, add a Trello comment explaining the blocker, then call
-                    trello_move_current_card with list_name "%s" so the card leaves the active list. Do not leave
-                    blocked work in an active list; Symphony may run it again."""
+                    trello_move_current_card with list_name "%s" so the card leaves the active column. Do not leave
+                    blocked work in an active column; Symphony may run it again."""
                     .formatted(reviewState, blockedDestination);
         }
         return """
@@ -492,7 +492,7 @@ public final class TrelloBoardSetup {
         if (!missing.isEmpty()) {
             throw new TrelloBoardSetupException(
                     "setup_unknown_" + label + "_state",
-                    "Unknown " + label + " list(s): " + String.join(", ", missing) + ". Open lists: "
+                    "Unknown " + label + " column(s): " + String.join(", ", missing) + ". Open columns: "
                             + String.join(", ", openListNames));
         }
     }
@@ -680,7 +680,7 @@ public final class TrelloBoardSetup {
             String boardKey,
             String boardName,
             String boardUrl,
-            List<String> lists,
+            List<String> columns,
             Path workflowPath) {}
 
     public record WorkspaceInfo(String id, String name, String displayName, String url) {}
@@ -690,7 +690,7 @@ public final class TrelloBoardSetup {
             String boardKey,
             String boardName,
             String boardUrl,
-            List<String> openLists,
+            List<String> openColumns,
             List<String> activeStates,
             List<String> terminalStates,
             String blockedState,

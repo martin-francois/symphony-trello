@@ -20,7 +20,7 @@ users still have the details they need?
 ## Decision Drivers
 
 * Make the practical value clear before implementation details.
-* Support readers who are new to Trello workspaces, API keys, tokens, boards, and lists.
+* Support readers who are new to Trello workspaces, API keys, tokens, boards, and columns.
 * Keep setup readable from top to bottom without requiring backtracking.
 * Put guidance next to the command or step where the reader needs it.
 * Avoid duplicating vendor-owned instructions when an official guide explains the current UI.
@@ -82,7 +82,7 @@ Describe every setup path, option, and external reference before the guided setu
 Keep only a short project summary and link out for most setup details.
 
 * Good, because it is easy to maintain.
-* Bad, because Symphony-specific decisions, such as active lists and handoff workflow, are not
+* Bad, because Symphony-specific decisions, such as active columns and handoff workflow, are not
   explained by Trello's docs.
 * Bad, because first-time users would still need project-specific handholding outside the README.
 

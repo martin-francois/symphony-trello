@@ -23,7 +23,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 class TrelloBoardSetupMainTest {
     private HttpServer server;
-    private final List<String> createdLists = new ArrayList<>();
+    private final List<String> createdColumns = new ArrayList<>();
     private final AtomicReference<String> createdBoardName = new AtomicReference<>();
 
     @TempDir
@@ -53,8 +53,8 @@ class TrelloBoardSetupMainTest {
         });
         server.createContext("/1/lists", exchange -> {
             Map<String, String> query = query(exchange);
-            createdLists.add(query.get("name"));
-            respond(exchange, "{\"id\":\"list-" + createdLists.size() + "\",\"name\":\"" + query.get("name") + "\"}");
+            createdColumns.add(query.get("name"));
+            respond(exchange, "{\"id\":\"list-" + createdColumns.size() + "\",\"name\":\"" + query.get("name") + "\"}");
         });
         server.createContext(
                 "/1/boards/input",
@@ -145,7 +145,7 @@ class TrelloBoardSetupMainTest {
         // then
         assertThat(exitCode).isZero();
         assertThat(createdBoardName).hasValue("Symphony Work Queue");
-        assertThat(createdLists).containsExactly("Inbox", "Ready for Codex", "Blocked", "Review", "Done");
+        assertThat(createdColumns).containsExactly("Inbox", "Ready for Codex", "Blocked", "Review", "Done");
         assertThat(workflow).content(StandardCharsets.UTF_8).contains("board_id: \"abc123\"");
         assertThat(stdout.toString(StandardCharsets.UTF_8))
                 .contains("Created Trello board: Symphony Work Queue")
@@ -189,8 +189,8 @@ class TrelloBoardSetupMainTest {
                 .contains("- \"Released\"");
         assertThat(stdout.toString(StandardCharsets.UTF_8))
                 .contains("Imported Trello board: Existing Board")
-                .contains("Active lists: Queue for Codex")
-                .contains("Terminal lists: Released")
+                .contains("Active columns: Queue for Codex")
+                .contains("Terminal columns: Released")
                 .contains("Blocked column: Blocked");
         assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
     }

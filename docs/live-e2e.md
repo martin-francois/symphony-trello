@@ -137,7 +137,7 @@ $FAKE_JAVA --source 25 scripts/PatchLiveE2eWorkflow.java "$RUN_DIR/board-b.WORKF
 $FAKE_JAVA --source 25 scripts/PatchLiveE2eWorkflow.java "$RUN_DIR/custom-import.WORKFLOW.md" 2 7000 "$FAKE_JAVA" "$FAKE_CODEX"
 ```
 
-Create disposable cards in the active lists. Use Trello's REST API directly so the live test is
+Create disposable cards in the active columns. Use Trello's REST API directly so the live test is
 independent of manual board interaction.
 
 ```bash
@@ -285,7 +285,7 @@ RUN_DIR="target/$RUN_ID"
 java -jar target/quarkus-app/quarkus-run.jar "$RUN_DIR/imported-a.WORKFLOW.md" --port 18183
 ```
 
-For the custom imported board, create one card in each configured active list and run that workflow
+For the custom imported board, create one card in each configured active column and run that workflow
 on a separate port. The expected concurrency state is the same as Board B: `counts.running == 2`,
 then both cards end in `Review` with at least one comment and state drains to zero.
 
@@ -318,8 +318,8 @@ curl -fsS "https://api.trello.com/1/cards/$card_id?fields=name,idList&actions=co
 jq -r '[.id, .name, .idList, (.actions | length)] | @tsv' "$RUN_DIR/status-$card_id.json"
 ```
 
-The final `idList` must match the board's `review-list-*.txt`, and the comment count must be at
-least `1`.
+The final `idList` must match the Trello list id for the board's Review column, and the comment count
+must be at least `1`.
 
 ## Strict Real-Codex Phase
 
@@ -362,7 +362,8 @@ Create fresh cards in `Ready for Codex` for each strict workflow. Start the stri
 separate unused ports the same way as the deterministic phase, but do not stop the service at the
 first Trello move. Wait until both conditions are true:
 
-1. Each target card has at least one Trello comment and its `idList` matches the board's Review list.
+1. Each target card has at least one Trello comment and its `idList` matches the board's Review
+   column.
 2. `/api/v1/state` reports `counts.running == 0` and `counts.retrying == 0`.
 
 For the concurrency workflow, first verify `/api/v1/state` shows `counts.running == 2` while both
@@ -371,8 +372,8 @@ conditions.
 
 Repeat the strict real-Codex concurrency check for the custom existing-board import workflow with one
 fresh card in `Queue for Codex` and one fresh card in `Escalated for Codex`. This is the live proof
-that imported boards with non-default active and terminal lists still dispatch, expose the Trello
-handoff tools, and move cards to the board-local `Review` list.
+that imported boards with non-default active and terminal columns still dispatch, expose the Trello
+handoff tools, and move cards to the board-local `Review` column.
 
 You may also run an exploratory smoke with an unmodified generated workflow. Record it separately
 from the strict real-Codex phase because the generated prompt represents real engineering work and is
@@ -384,8 +385,8 @@ Use this loop when a real deployed workflow is already running and you need to p
 deployment is healthy. Checking only `systemctl` or `/api/v1/state` is not enough: Codex can add a
 Trello blocker comment while the service still looks active.
 
-Set `CARD_ID` to the card currently being processed and `EXPECTED_LIST` to the handoff list for that
-workflow, usually `Review`.
+Set `CARD_ID` to the card currently being processed and `EXPECTED_COLUMN` to the handoff column for
+that workflow, usually `Review`.
 
 ```bash
 if [ -z "${TRELLO_API_KEY:-}" ] || [ -z "${TRELLO_API_TOKEN:-}" ]; then
@@ -394,7 +395,7 @@ if [ -z "${TRELLO_API_KEY:-}" ] || [ -z "${TRELLO_API_TOKEN:-}" ]; then
 fi
 
 CARD_ID="replace-with-card-id"
-EXPECTED_LIST="Review"
+EXPECTED_COLUMN="Review"
 STATE_URL="http://127.0.0.1:8080/api/v1/state"
 CUTOFF="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
@@ -402,16 +403,16 @@ for attempt in {1..60}; do
   state="$(curl -fsS "$STATE_URL")"
   card="$(curl -fsS "https://api.trello.com/1/cards/$CARD_ID?fields=name,idList,url&actions=commentCard&actions_limit=10&key=$TRELLO_API_KEY&token=$TRELLO_API_TOKEN")"
   list_id="$(printf '%s' "$card" | jq -r '.idList')"
-  list_name="$(curl -fsS "https://api.trello.com/1/lists/$list_id?fields=name&key=$TRELLO_API_KEY&token=$TRELLO_API_TOKEN" | jq -r '.name')"
+  column_name="$(curl -fsS "https://api.trello.com/1/lists/$list_id?fields=name&key=$TRELLO_API_KEY&token=$TRELLO_API_TOKEN" | jq -r '.name')"
   new_comments="$(printf '%s' "$card" | jq --arg cutoff "$CUTOFF" '[.actions[]? | select(.date >= $cutoff) | {date, text: .data.text}]')"
 
   jq -n \
     --argjson state "$state" \
     --argjson card "$card" \
-    --arg list "$list_name" \
+    --arg column "$column_name" \
     --argjson newComments "$new_comments" \
     '{
-      card: {name: $card.name, url: $card.url, list: $list},
+      card: {name: $card.name, url: $card.url, column: $column},
       counts: $state.counts,
       runningLastEvent: ($state.running[0].lastEvent // null),
       runningLastMessage: ($state.running[0].lastMessage // null),
@@ -424,9 +425,9 @@ for attempt in {1..60}; do
     exit 2
   fi
 
-  if [ "$list_name" = "$EXPECTED_LIST" ] \
+  if [ "$column_name" = "$EXPECTED_COLUMN" ] \
       && printf '%s' "$state" | jq -e '.counts.running == 0 and .counts.retrying == 0' >/dev/null; then
-    echo "Live deployment passed: card moved to $EXPECTED_LIST and state is drained."
+    echo "Live deployment passed: card moved to $EXPECTED_COLUMN and state is drained."
     exit 0
   fi
 
@@ -445,7 +446,7 @@ The deployment is healthy only when all of these are true:
 
 1. The service is active.
 2. `/api/v1/state` reaches `counts.running == 0` and `counts.retrying == 0`.
-3. The card moved out of the active list into the expected handoff list.
+3. The card moved out of the active column into the expected handoff column.
 4. The latest new Trello comments are successful handoff notes, not blocker/auth/sandbox comments.
 
 If new comments mention `bwrap: Can't read /proc/sys/kernel/overflowuid`, the systemd unit is hiding
@@ -462,14 +463,14 @@ Observed on 2026-05-05 against a real Trello board:
 - The service user could not access the requested local project checkout.
 - Codex added a `Blocked:` Trello comment and left the card in `Ready for Codex`, as the workflow
   prompt instructed for blocked work.
-- Symphony saw a successful Codex turn, saw the card still in an active list, and scheduled another
+- Symphony saw a successful Codex turn, saw the card still in an active column, and scheduled another
   continuation run.
 - The second run added another `Blocked:` comment for the same underlying problem.
 
 A live deployment check for this scenario should fail when a new blocker comment appears after the
 verification cutoff, and it should also flag repeated blocker comments on the same card as a product
-problem. A workflow with a configured blocked handoff list should move blocked cards out of the
-active list. A workflow without a blocked list should move blocked cards to the review handoff list
+problem. A workflow with a configured blocked handoff column should move blocked cards out of the
+active column. A workflow without a blocked column should move blocked cards to the review handoff column
 when one is configured.
 
 ## Deterministic App-Server
