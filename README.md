@@ -17,9 +17,7 @@ Use it when you want to:
 Trello is still where you plan and review work. Codex still writes the code. Symphony connects them
 so the same workflow can run again and again.
 
-One Symphony process uses one `WORKFLOW.md`, and that workflow points to one Trello board. To run
-multiple boards at the same time, start one Symphony process per board with its own workflow file and
-HTTP port.
+You can use it with one board, or run it for several boards at the same time.
 
 ## Table of Contents
 
@@ -414,12 +412,14 @@ one-card-at-a-time runs are routine and predictable.
 ## Workflow Contract
 
 Symphony reads `WORKFLOW.md` from the working directory unless `SYMPHONY_WORKFLOW_PATH` points to a
-different file. Each running process uses one workflow file, and the Trello workflow contains one
-`tracker.board_id`, so one process polls one Trello board. For multiple boards or projects, create
-one workflow per board and start one process per workflow, for example by giving each process its own
-workflow path and `--port`. [`WORKFLOW.example.md`](WORKFLOW.example.md) contains a complete starter.
-YAML front matter configures runtime behavior. The Markdown body becomes the prompt template for the
-card.
+different file. Each running process uses one workflow file. For Trello, that workflow contains one
+`tracker.board_id`, so one process polls one Trello board.
+
+For multiple boards or projects, create one workflow per board and start one process per workflow.
+Give each process its own workflow path and HTTP port.
+
+[`WORKFLOW.example.md`](WORKFLOW.example.md) contains a complete starter. YAML front matter
+configures runtime behavior. The Markdown body becomes the prompt template for the card.
 
 Minimum example:
 
