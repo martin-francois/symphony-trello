@@ -30,6 +30,7 @@ class TrelloBoardSetupTest {
     private final List<String> createdLists = new ArrayList<>();
     private final AtomicReference<String> authorization = new AtomicReference<>();
     private final AtomicReference<String> workspaceResponse = new AtomicReference<>();
+    private final AtomicReference<String> boardListsResponse = new AtomicReference<>();
 
     @TempDir
     Path tempDir;
@@ -42,6 +43,16 @@ class TrelloBoardSetupTest {
                 """
                 [
                   {"id":"workspace-1","name":"symphony-automation","displayName":"Symphony Automation","url":"https://trello.com/w/symphony-automation"}
+                ]
+                """);
+        boardListsResponse.set(
+                """
+                [
+                  {"id":"list-inbox","name":"Inbox","closed":false,"pos":1},
+                  {"id":"list-ready","name":"Ready for Codex","closed":false,"pos":2},
+                  {"id":"list-review","name":"Review","closed":false,"pos":3},
+                  {"id":"list-done","name":"Done","closed":false,"pos":4},
+                  {"id":"list-archive","name":"Archived old work","closed":true,"pos":5}
                 ]
                 """);
 
@@ -75,19 +86,7 @@ class TrelloBoardSetupTest {
                     {"id":"board-1","name":"Existing Board","shortLink":"existing","url":"https://trello.com/b/existing/existing-board","closed":false}
                     """);
         });
-        server.createContext(
-                "/1/boards/board-1/lists",
-                exchange -> respond(
-                        exchange,
-                        """
-                        [
-                          {"id":"list-inbox","name":"Inbox","closed":false,"pos":1},
-                          {"id":"list-ready","name":"Ready for Codex","closed":false,"pos":2},
-                          {"id":"list-review","name":"Review","closed":false,"pos":3},
-                          {"id":"list-done","name":"Done","closed":false,"pos":4},
-                          {"id":"list-archive","name":"Archived old work","closed":true,"pos":5}
-                        ]
-                        """));
+        server.createContext("/1/boards/board-1/lists", exchange -> respond(exchange, boardListsResponse.get()));
         server.createContext("/1/members/me/organizations", exchange -> respond(exchange, workspaceResponse.get()));
         server.start();
     }
@@ -119,12 +118,20 @@ class TrelloBoardSetupTest {
                 .contains("board_id: \"abc123\"")
                 .contains("- \"Ready for Codex\"")
                 .contains("- \"Done\"")
+                .contains("trello_tools:")
+                .contains("allowed_move_list_names:")
+                .contains("- \"Review\"")
                 .contains("max_concurrent_agents: 1");
         EffectiveConfig config = resolve(workflow);
         assertThat(config.tracker().boardId()).isEqualTo("abc123");
         assertThat(config.tracker().activeStates()).containsExactly("Ready for Codex");
         assertThat(config.tracker().terminalStates())
                 .contains("done", "archived", "archivedlist", "archivedboard", "deleted");
+        assertThat(config.trelloTools().enabled()).isTrue();
+        assertThat(config.trelloTools().allowWrites()).isTrue();
+        assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("review");
+        assertThat(config.trelloTools().allowChecklists()).isFalse();
+        assertThat(config.trelloTools().allowUrlAttachments()).isFalse();
     }
 
     @Test
@@ -179,10 +186,40 @@ class TrelloBoardSetupTest {
                 .content(StandardCharsets.UTF_8)
                 .contains("board_id: \"existing\"")
                 .contains("root: \"./agent-workspaces\"")
+                .contains("allowed_move_list_names:")
+                .contains("- \"Review\"")
                 .contains("max_concurrent_agents: 2");
         EffectiveConfig config = resolve(workflow);
         assertThat(config.tracker().boardId()).isEqualTo("existing");
         assertThat(config.workspace().root()).isEqualTo(workflow.getParent().resolve("agent-workspaces"));
+    }
+
+    @Test
+    void importDisablesTrelloWritesWhenNoReviewListExists() {
+        boardListsResponse.set(
+                """
+                [
+                  {"id":"list-ready","name":"Ready for Codex","closed":false,"pos":1},
+                  {"id":"list-done","name":"Done","closed":false,"pos":2}
+                ]
+                """);
+        Path workflow = tempDir.resolve("imported-without-review.md");
+
+        setup.importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "input",
+                List.of(),
+                List.of(),
+                workflow,
+                Path.of("./agent-workspaces"),
+                2,
+                false));
+
+        EffectiveConfig config = resolve(workflow);
+        assertThat(config.trelloTools().enabled()).isFalse();
+        assertThat(config.trelloTools().allowWrites()).isFalse();
+        assertThat(config.trelloTools().allowedMoveListNames()).isEmpty();
     }
 
     @Test

@@ -33,7 +33,12 @@ public class LocalAgentRunner implements AgentRunner {
                     workspace.path(),
                     request.config().hooks());
             return codex.runTurn(
-                    request.config(), workspace.path(), request.prompt(), request.workerIdentity(), request.listener());
+                    request.config(),
+                    request.card(),
+                    workspace.path(),
+                    request.prompt(),
+                    request.workerIdentity(),
+                    request.listener());
         } catch (RuntimeException e) {
             return AgentRunResult.fail(e.getMessage());
         } finally {

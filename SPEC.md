@@ -36,6 +36,8 @@ stricter approvals or sandboxing.
 Important boundary:
 
 - Symphony is a scheduler/runner and Trello reader.
+- This means the orchestrator does not hard-code business-specific card mutation policy. It does
+  not mean every Symphony workflow is read-only.
 - Card writes, such as list moves, comments, checklist updates, labels, attachments, and PR links,
   are typically performed by the coding agent using tools available in the workflow/runtime
   environment.
@@ -69,6 +71,8 @@ Important boundary:
 - General-purpose workflow engine or distributed job scheduler.
 - Built-in business logic for how to edit cards, PRs, or comments. That logic lives in the workflow
   prompt and agent tooling.
+- Requiring workflow handoff to be manual. Read-only operation is a valid deployment mode, but
+  write-capable workflows may provide scoped Trello tools for agent-driven handoff.
 - Mandating strong sandbox controls beyond what the coding agent and host OS provide.
 - Mandating a single default approval, sandbox, or operator-confirmation posture for all
   implementations.
@@ -1665,8 +1669,13 @@ Symphony does not require first-class tracker write APIs in the orchestrator.
 - Card mutations, such as list moves, comments, checklist updates, labels, attachments, and PR
   metadata, are typically handled by the coding agent using tools defined by the workflow prompt.
 - The service remains a scheduler/runner and Trello reader.
+- This boundary only limits where card mutation decisions live. It does not require operators to
+  infer completion from logs or move cards manually when a workflow is configured with scoped Trello
+  write tools.
 - Workflow-specific success often means "reached the next handoff state", for example
   `Human Review`, rather than Trello terminal state `Done`.
+- The handoff signal is normally produced by the agent, because the agent has the semantic context
+  to know whether the requested work is reviewable, blocked, or unsafe to hand off.
 - If the `trello_rest` client-side tool extension is implemented, it is still part of the agent
   toolchain rather than orchestrator business logic.
 - Write-capable Trello operations require a token that was authorized with write permission.
@@ -2874,8 +2883,9 @@ Required when the workflow expects the agent to perform Trello handoff transitio
 - TODO: Persist retry queue and session metadata across process restarts.
 - TODO: Make observability settings configurable in workflow front matter without prescribing UI
   implementation details.
-- TODO: Add first-class Trello write APIs, comments/list transitions/checklist updates, in the
-  orchestrator instead of only via agent tools.
+- TODO: Consider additional typed Trello write tools, such as checklist and URL attachment helpers,
+  while keeping workflow-specific mutation decisions in the agent toolchain rather than the
+  orchestrator.
 - TODO: Add pluggable tracker adapters beyond Trello.
 
 ### 18.4 Operational Validation Before Production (RECOMMENDED)

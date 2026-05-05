@@ -75,6 +75,7 @@ public final class TrelloBoardSetup {
                         boardKey,
                         RECOMMENDED_ACTIVE_STATES,
                         RECOMMENDED_TERMINAL_STATES,
+                        List.of("Review"),
                         request.workspaceRoot(),
                         request.maxConcurrentAgents()));
 
@@ -166,6 +167,7 @@ public final class TrelloBoardSetup {
                         boardKey,
                         activeStates,
                         terminalStates,
+                        defaultHandoffStates(openListNames),
                         request.workspaceRoot(),
                         request.maxConcurrentAgents()));
 
@@ -264,7 +266,12 @@ public final class TrelloBoardSetup {
     }
 
     private static String workflowTemplate(
-            String boardId, List<String> activeStates, List<String> terminalStates, Path workspaceRoot, int maxAgents) {
+            String boardId,
+            List<String> activeStates,
+            List<String> terminalStates,
+            List<String> handoffStates,
+            Path workspaceRoot,
+            int maxAgents) {
         return """
                 ---
                 tracker:
@@ -280,6 +287,7 @@ public final class TrelloBoardSetup {
                 %s
                 workspace:
                   root: %s
+                %s
                 agent:
                   max_concurrent_agents: %d
                 codex:
@@ -296,6 +304,8 @@ public final class TrelloBoardSetup {
                 Read the Trello description carefully, inspect the repository, make the smallest maintainable change,
                 run relevant verification, and leave the workspace in a reviewable state.
 
+                %s
+
                 Card URL: {{ card.url }}
                 """
                 .formatted(
@@ -304,7 +314,43 @@ public final class TrelloBoardSetup {
                         yamlList(activeStates),
                         yamlList(withSystemTerminalStates(terminalStates)),
                         yamlScalar(workspaceRoot.toString()),
-                        maxAgents);
+                        trelloToolsYaml(handoffStates),
+                        maxAgents,
+                        handoffPrompt(handoffStates));
+    }
+
+    private static String trelloToolsYaml(List<String> handoffStates) {
+        if (handoffStates.isEmpty()) {
+            return """
+                    trello_tools:
+                      enabled: false
+                      allow_writes: false
+                    """
+                    .stripTrailing();
+        }
+        return """
+                trello_tools:
+                  enabled: true
+                  allow_writes: true
+                  allowed_move_list_names:
+                %s
+                  allow_comments: true
+                  allow_checklists: false
+                  allow_url_attachments: false
+                """
+                .formatted(yamlList(handoffStates))
+                .stripTrailing();
+    }
+
+    private static String handoffPrompt(List<String> handoffStates) {
+        if (handoffStates.isEmpty()) {
+            return "When the work is ready for human review, leave the workspace in a reviewable state and summarize the status in the Codex response. Trello handoff tools are disabled in this starter workflow until you configure trello_tools.allowed_move_list_names.";
+        }
+        return """
+                When the work is ready for human review, call trello_add_comment with a concise summary and
+                verification notes, then call trello_move_current_card with list_name "%s". If the work is
+                blocked or unsafe to hand off, add a Trello comment explaining the blocker and do not move the card."""
+                .formatted(handoffStates.getFirst());
     }
 
     private static List<String> withSystemTerminalStates(List<String> terminalStates) {
@@ -338,6 +384,14 @@ public final class TrelloBoardSetup {
     private static List<String> defaultTerminalStates(List<String> openListNames) {
         return openListNames.stream()
                 .filter(name -> name.equalsIgnoreCase("Done"))
+                .findFirst()
+                .map(List::of)
+                .orElseGet(List::of);
+    }
+
+    private static List<String> defaultHandoffStates(List<String> openListNames) {
+        return openListNames.stream()
+                .filter(name -> name.equalsIgnoreCase("Review"))
                 .findFirst()
                 .map(List::of)
                 .orElseGet(List::of);

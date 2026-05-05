@@ -86,8 +86,8 @@ public class TrelloClient implements TrackerClient {
                 .collect(Collectors.toCollection(ArrayList::new));
 
         Set<String> archivedListIds = context.lists().values().stream()
-                .filter(TrelloList::closed)
-                .map(TrelloList::id)
+                .filter(BoardList::closed)
+                .map(BoardList::id)
                 .collect(Collectors.toSet());
         for (String listId : archivedListIds) {
             List<Map<String, Object>> listCards = getList(
@@ -184,14 +184,28 @@ public class TrelloClient implements TrackerClient {
                 config, "boards/" + encodeSegment(config.tracker().boardId()), Map.of("fields", "id,name,closed"));
         String boardId = requiredString(board, "id", "trello_unknown_payload");
         boolean boardClosed = bool(board.get("closed"));
-        List<Map<String, Object>> lists = getList(
-                config,
-                "boards/" + encodeSegment(boardId) + "/lists",
-                Map.of("filter", "all", "fields", "id,name,closed,pos"));
-        Map<String, TrelloList> listMap = lists.stream()
-                .map(this::toList)
-                .collect(Collectors.toMap(TrelloList::id, list -> list, (left, right) -> left, LinkedHashMap::new));
+        Map<String, BoardList> listMap = fetchBoardLists(config.withCanonicalBoardId(boardId)).stream()
+                .collect(Collectors.toMap(BoardList::id, list -> list, (left, right) -> left, LinkedHashMap::new));
         return new BoardContext(boardId, boardClosed, listMap);
+    }
+
+    public List<BoardList> fetchBoardLists(EffectiveConfig config) {
+        String boardId = config.tracker().canonicalBoardId();
+        return getList(
+                        config,
+                        "boards/" + encodeSegment(boardId) + "/lists",
+                        Map.of("filter", "all", "fields", "id,name,closed,pos"))
+                .stream()
+                .map(this::toList)
+                .toList();
+    }
+
+    public Map<String, Object> addComment(EffectiveConfig config, String cardId, String text) {
+        return postMap(config, "cards/" + encodeSegment(cardId) + "/actions/comments", Map.of("text", text));
+    }
+
+    public Map<String, Object> moveCardToList(EffectiveConfig config, String cardId, String listId) {
+        return putMap(config, "cards/" + encodeSegment(cardId) + "/idList", Map.of("value", listId));
     }
 
     private Optional<Card> normalize(Map<String, Object> payload, BoardContext context, EffectiveConfig config) {
@@ -203,7 +217,7 @@ public class TrelloClient implements TrackerClient {
             LOG.warnf("trello_card outcome=skipped reason=missing_required_fields card_id=%s", id);
             return Optional.empty();
         }
-        TrelloList list = listId == null ? null : context.lists().get(listId);
+        BoardList list = listId == null ? null : context.lists().get(listId);
         boolean cardClosed = bool(payload.get("closed"));
         String state;
         String source;
@@ -262,24 +276,47 @@ public class TrelloClient implements TrackerClient {
     }
 
     private Map<String, Object> getMap(EffectiveConfig config, String path, Map<String, String> query) {
-        return request(config, path, query, MAP_TYPE);
+        return request("GET", config, path, query, MAP_TYPE, true);
     }
 
     private List<Map<String, Object>> getList(EffectiveConfig config, String path, Map<String, String> query) {
-        return request(config, path, query, LIST_MAP_TYPE);
+        return request("GET", config, path, query, LIST_MAP_TYPE, true);
     }
 
-    private <T> T request(EffectiveConfig config, String path, Map<String, String> query, TypeReference<T> type) {
+    private Map<String, Object> postMap(EffectiveConfig config, String path, Map<String, String> query) {
+        // Do not automatically retry writes; a network failure after Trello applied a comment could duplicate it.
+        return request("POST", config, path, query, MAP_TYPE, false);
+    }
+
+    private Map<String, Object> putMap(EffectiveConfig config, String path, Map<String, String> query) {
+        return request("PUT", config, path, query, MAP_TYPE, false);
+    }
+
+    private <T> T request(
+            String method,
+            EffectiveConfig config,
+            String path,
+            Map<String, String> query,
+            TypeReference<T> type,
+            boolean retry) {
         URI uri = uri(config, path, query);
-        int maxAttempts = Math.max(1, config.tracker().maxApiRetries() + 1);
+        int maxAttempts = retry ? Math.max(1, config.tracker().maxApiRetries() + 1) : 1;
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
-                HttpRequest request = HttpRequest.newBuilder(uri)
+                HttpRequest.Builder builder = HttpRequest.newBuilder(uri)
                         .timeout(config.tracker().requestTimeout())
                         .header("Accept", "application/json")
-                        .header("Authorization", authorization(config))
-                        .GET()
-                        .build();
+                        .header("Authorization", authorization(config));
+                HttpRequest request =
+                        switch (method) {
+                            case "GET" -> builder.GET().build();
+                            case "POST" ->
+                                builder.POST(HttpRequest.BodyPublishers.noBody())
+                                        .build();
+                            case "PUT" ->
+                                builder.PUT(HttpRequest.BodyPublishers.noBody()).build();
+                            default -> throw new IllegalArgumentException("Unsupported Trello method: " + method);
+                        };
                 HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
                 if (response.statusCode() >= 200 && response.statusCode() < 300) {
                     return json.readValue(response.body(), type);
@@ -361,8 +398,8 @@ public class TrelloClient implements TrackerClient {
         return "OAuth oauth_consumer_key=\"%s\", oauth_token=\"%s\"".formatted(apiKey, apiToken);
     }
 
-    private TrelloList toList(Map<String, Object> payload) {
-        return new TrelloList(
+    private BoardList toList(Map<String, Object> payload) {
+        return new BoardList(
                 requiredString(payload, "id", "trello_unknown_payload"),
                 requiredString(payload, "name", "trello_unknown_payload"),
                 bool(payload.get("closed")));
@@ -469,7 +506,7 @@ public class TrelloClient implements TrackerClient {
         return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
 
-    private record BoardContext(String boardId, boolean boardClosed, Map<String, TrelloList> lists) {}
+    private record BoardContext(String boardId, boolean boardClosed, Map<String, BoardList> lists) {}
 
-    private record TrelloList(String id, String name, boolean closed) {}
+    public record BoardList(String id, String name, boolean closed) {}
 }
