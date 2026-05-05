@@ -121,7 +121,7 @@ Workspace and authorize the API token in the browser.
    an existing app already used elsewhere, rotating the key means those uses must be updated.
 10. Copy the API key somewhere temporary. The API key identifies the app, but the token is the
     sensitive credential.
-11. On the same API key page, click the `Token` link next to the key.
+11. On the same API key page, click the `Token` link below the key.
 12. Review the authorization screen. For the generated handoff workflow, the token needs write
     access because Codex can add comments and move the current card to `Review`.
 13. Click `Allow`.
