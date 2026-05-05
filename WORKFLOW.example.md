@@ -50,9 +50,14 @@ satisfies the card, run relevant verification, and leave the workspace in a revi
 Recent Trello comments are available in `{{ card.comments }}`. Read them before changing code when
 the card is returned for rework.
 
-When the work is ready for human review, call trello_add_comment with a concise summary and
-verification notes, then call trello_move_current_card with list_name "Human Review". If the work is
-blocked or unsafe to hand off, add a Trello comment explaining the blocker, then call
+Maintain one Trello workpad comment by calling trello_upsert_workpad. Reuse the comment that starts
+with `## Codex Workpad`; do not create separate progress comments. Keep it current with the plan,
+acceptance criteria, progress, validation evidence, blockers, and handoff notes.
+
+When the work is ready for human review, update the workpad with the final summary and validation
+evidence, call trello_add_comment with a concise summary and verification notes, then call
+trello_move_current_card with list_name "Human Review". If the work is blocked or unsafe to hand off,
+update the workpad with the blocker, add a Trello comment explaining the blocker, then call
 trello_move_current_card with list_name "Blocked".
 
 Card URL: {{ card.url }}

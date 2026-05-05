@@ -370,9 +370,11 @@ class LiveTrelloE2eIT {
                 HANDOFF_TIMEOUT,
                 () -> {
                     CardState state = trello.cardState(card.id());
-                    return state.commentCount() >= 1 && expectedListId.equals(state.listId());
+                    return state.commentCount() >= 2
+                            && state.workpadCount() == 1
+                            && expectedListId.equals(state.listId());
                 },
-                "card reaches expected handoff column with a Trello comment");
+                "card reaches expected handoff column with one workpad and one handoff comment");
     }
 
     private void waitForSuccessfulFakeCodexTurns(Path completions, int expectedCount) {
@@ -576,10 +578,30 @@ class LiveTrelloE2eIT {
         CardState cardState(String cardId) {
             Map<String, Object> card = getMap(
                     "cards/" + encodeSegment(cardId),
-                    Map.of("fields", "idList,name", "actions", "commentCard", "actions_limit", "20"));
+                    Map.of(
+                            "fields",
+                            "idList,name",
+                            "actions",
+                            "commentCard",
+                            "actions_limit",
+                            Integer.toString(TrelloClient.RECENT_COMMENT_ACTION_LIMIT)));
             Object actions = card.get("actions");
-            int commentCount = actions instanceof List<?> comments ? comments.size() : 0;
-            return new CardState(requiredText(card, "idList"), commentCount);
+            List<?> comments = actions instanceof List<?> values ? values : List.of();
+            long workpadCount =
+                    comments.stream().filter(LiveTrelloClient::isWorkpadComment).count();
+            return new CardState(requiredText(card, "idList"), comments.size(), workpadCount);
+        }
+
+        private static boolean isWorkpadComment(Object action) {
+            if (!(action instanceof Map<?, ?> actionMap)) {
+                return false;
+            }
+            Object data = actionMap.get("data");
+            if (!(data instanceof Map<?, ?> dataMap)) {
+                return false;
+            }
+            Object text = dataMap.get("text");
+            return text != null && text.toString().startsWith("## Codex Workpad");
         }
 
         void archiveBoard(String boardId) {
@@ -737,5 +759,5 @@ class LiveTrelloE2eIT {
 
     private record CardRef(String id) {}
 
-    private record CardState(String listId, int commentCount) {}
+    private record CardState(String listId, int commentCount, long workpadCount) {}
 }

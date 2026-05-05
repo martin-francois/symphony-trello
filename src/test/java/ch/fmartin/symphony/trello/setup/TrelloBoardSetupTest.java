@@ -145,6 +145,9 @@ class TrelloBoardSetupTest {
                 .contains("{{ card.description }}")
                 .contains("## Trello Comments")
                 .contains("{% for comment in card.comments %}")
+                .contains("## Codex Workpad")
+                .contains("trello_upsert_workpad")
+                .contains("do not create separate progress comments")
                 .contains("If the Trello card names a specific local path or project")
                 .contains("Filesystem access blocker details")
                 .contains("inaccessible path")
@@ -235,6 +238,8 @@ class TrelloBoardSetupTest {
                 .contains("- \"Blocked\"")
                 .contains("If the card is in \"Ready for Codex\"")
                 .contains("## Trello Comments")
+                .contains("## Codex Workpad")
+                .contains("trello_upsert_workpad")
                 .contains("list_name \"In Progress\"")
                 .contains("list_name \"Human Review\"")
                 .contains("A Merging column, when configured, is a human approval signal")
@@ -396,6 +401,10 @@ class TrelloBoardSetupTest {
         assertThat(config.trelloTools().enabled()).isFalse();
         assertThat(config.trelloTools().allowWrites()).isFalse();
         assertThat(config.trelloTools().allowedMoveListNames()).isEmpty();
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .doesNotContain("## Codex Workpad")
+                .doesNotContain("trello_upsert_workpad");
     }
 
     @Test

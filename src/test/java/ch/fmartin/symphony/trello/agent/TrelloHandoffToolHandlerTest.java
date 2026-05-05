@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,7 +29,10 @@ import org.junit.jupiter.api.io.TempDir;
 class TrelloHandoffToolHandlerTest {
     private final ObjectMapper json = new ObjectMapper();
     private final AtomicReference<String> commentText = new AtomicReference<>();
+    private final AtomicReference<String> updatedCommentText = new AtomicReference<>();
     private final AtomicReference<String> movedToListId = new AtomicReference<>();
+    private final AtomicReference<String> cardResponse = new AtomicReference<>();
+    private final AtomicReference<Integer> cardStatus = new AtomicReference<>();
     private HttpServer server;
 
     @TempDir
@@ -37,6 +41,9 @@ class TrelloHandoffToolHandlerTest {
     @BeforeEach
     void startServer() throws Exception {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext(
+                "/1/boards/board-1",
+                exchange -> respond(exchange, "{\"id\":\"board-1\",\"name\":\"Test Board\",\"closed\":false}"));
         server.createContext(
                 "/1/boards/board-1/lists",
                 exchange -> respond(
@@ -48,16 +55,26 @@ class TrelloHandoffToolHandlerTest {
                           {"id":"list-closed","name":"Closed Review","closed":true,"pos":3}
                         ]
                         """));
+        server.createContext(
+                "/1/cards/card-1",
+                exchange -> respond(exchange, cardStatus.get(), cardResponseForRequestedFields(exchange)));
         server.createContext("/1/cards/card-1/actions/comments", exchange -> {
             assertThat(exchange.getRequestMethod()).isEqualTo("POST");
             commentText.set(query(exchange).get("text"));
             respond(exchange, "{\"id\":\"action-1\"}");
+        });
+        server.createContext("/1/actions/action-workpad/text", exchange -> {
+            assertThat(exchange.getRequestMethod()).isEqualTo("PUT");
+            updatedCommentText.set(query(exchange).get("value"));
+            respond(exchange, "{\"id\":\"action-workpad\"}");
         });
         server.createContext("/1/cards/card-1/idList", exchange -> {
             assertThat(exchange.getRequestMethod()).isEqualTo("PUT");
             movedToListId.set(query(exchange).get("value"));
             respond(exchange, "{\"id\":\"card-1\"}");
         });
+        cardResponse.set(cardJson("[]"));
+        cardStatus.set(200);
         server.start();
     }
 
@@ -77,7 +94,10 @@ class TrelloHandoffToolHandlerTest {
         // then
         assertThat(tools)
                 .extracting(tool -> tool.path("name").asText())
-                .containsExactly(TrelloHandoffToolHandler.ADD_COMMENT, TrelloHandoffToolHandler.MOVE_CURRENT_CARD);
+                .containsExactly(
+                        TrelloHandoffToolHandler.ADD_COMMENT,
+                        TrelloHandoffToolHandler.UPSERT_WORKPAD,
+                        TrelloHandoffToolHandler.MOVE_CURRENT_CARD);
     }
 
     @Test
@@ -96,6 +116,102 @@ class TrelloHandoffToolHandlerTest {
         // then
         assertThat(result.path("success").asBoolean()).isTrue();
         assertThat(commentText.get()).isEqualTo("Ready for review");
+    }
+
+    @Test
+    void createsWorkpadCommentWhenNoMarkerCommentExists() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson("[]"));
+
+        // when
+        var result = handler.handle(
+                config(List.of("Review"), List.of()),
+                TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
+                json.createObjectNode()
+                        .put("tool", TrelloHandoffToolHandler.UPSERT_WORKPAD)
+                        .set("arguments", json.createObjectNode().put("text", "- Plan: inspect the failure")));
+
+        // then
+        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("contentItems").get(0).path("text").asText()).contains("workpad_created");
+        assertThat(commentText.get()).startsWith(TrelloHandoffToolHandler.WORKPAD_MARKER);
+        assertThat(updatedCommentText.get()).isNull();
+    }
+
+    @Test
+    void updatesExistingWorkpadCommentInsteadOfCreatingDuplicate() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(
+                cardJson(
+                        """
+                [
+                  {
+                    "id":"action-workpad",
+                    "data":{"text":"## Codex Workpad\\n\\nOld plan"},
+                    "date":"2026-05-05T00:00:00.000Z",
+                    "memberCreator":{"fullName":"Codex"}
+                  }
+                ]
+                """));
+
+        // when
+        var result = handler.handle(
+                config(List.of("Review"), List.of()),
+                TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
+                json.createObjectNode()
+                        .put("tool", TrelloHandoffToolHandler.UPSERT_WORKPAD)
+                        .set("arguments", json.createObjectNode().put("text", "## Codex Workpad\n\nUpdated plan")));
+
+        // then
+        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("contentItems").get(0).path("text").asText()).contains("workpad_updated");
+        assertThat(updatedCommentText.get()).isEqualTo("## Codex Workpad\n\nUpdated plan");
+        assertThat(commentText.get()).isNull();
+    }
+
+    @Test
+    void failsWorkpadUpsertWhenCardRefreshFailsWithoutCreatingDuplicate() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardStatus.set(500);
+
+        // when
+        var result = handler.handle(
+                config(List.of("Review"), List.of()),
+                TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
+                json.createObjectNode()
+                        .put("tool", TrelloHandoffToolHandler.UPSERT_WORKPAD)
+                        .set("arguments", json.createObjectNode().put("text", "Updated plan")));
+
+        // then
+        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("contentItems").get(0).path("text").asText()).contains("trello_workpad_refresh_failed");
+        assertThat(commentText.get()).isNull();
+        assertThat(updatedCommentText.get()).isNull();
+    }
+
+    @Test
+    void failsWorkpadCreateWhenFetchedCommentWindowMayBeIncomplete() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson(commentActions(TrelloClient.WORKPAD_COMMENT_ACTION_LIMIT)));
+
+        // when
+        var result = handler.handle(
+                config(List.of("Review"), List.of()),
+                TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
+                json.createObjectNode()
+                        .put("tool", TrelloHandoffToolHandler.UPSERT_WORKPAD)
+                        .set("arguments", json.createObjectNode().put("text", "New plan")));
+
+        // then
+        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("contentItems").get(0).path("text").asText())
+                .contains("trello_workpad_comment_window_incomplete");
+        assertThat(commentText.get()).isNull();
+        assertThat(updatedCommentText.get()).isNull();
     }
 
     @Test
@@ -223,16 +339,66 @@ class TrelloHandoffToolHandlerTest {
                         (left, right) -> right));
     }
 
+    private String cardResponseForRequestedFields(HttpExchange exchange) {
+        String response = cardResponse.get();
+        String actionFields = query(exchange).getOrDefault("action_fields", "");
+        if (Arrays.asList(actionFields.split(",")).contains("id")) {
+            return response;
+        }
+        return response.replace("\"id\":\"action-workpad\",", "");
+    }
+
     private static String decode(String value) {
         return URLDecoder.decode(value, StandardCharsets.UTF_8);
     }
 
     private static void respond(HttpExchange exchange, String body) throws IOException {
+        respond(exchange, 200, body);
+    }
+
+    private static void respond(HttpExchange exchange, int statusCode, String body) throws IOException {
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json");
-        exchange.sendResponseHeaders(200, bytes.length);
+        exchange.sendResponseHeaders(statusCode, bytes.length);
         try (var output = exchange.getResponseBody()) {
             output.write(bytes);
         }
+    }
+
+    private static String cardJson(String actionsJson) {
+        return """
+                {
+                  "id":"card-1",
+                  "name":"Implement feature",
+                  "desc":"Description",
+                  "idList":"list-ready",
+                  "idBoard":"board-1",
+                  "closed":false,
+                  "idShort":1,
+                  "shortLink":"abc",
+                  "shortUrl":"https://trello.com/c/abc",
+                  "url":"https://trello.com/c/abc",
+                  "labels":[],
+                  "dateLastActivity":"2026-05-05T00:00:00.000Z",
+                  "pos":1,
+                  "actions":%s
+                }
+                """
+                .formatted(actionsJson);
+    }
+
+    private static String commentActions(int count) {
+        return IntStream.range(0, count)
+                .mapToObj(index ->
+                        """
+                        {
+                          "id":"action-%d",
+                          "data":{"text":"Regular comment %d"},
+                          "date":"2026-05-05T00:00:00.000Z",
+                          "memberCreator":{"fullName":"Codex"}
+                        }
+                        """
+                                .formatted(index, index))
+                .collect(Collectors.joining(",", "[", "]"));
     }
 }

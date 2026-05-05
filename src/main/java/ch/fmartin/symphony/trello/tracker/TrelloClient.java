@@ -37,7 +37,10 @@ public class TrelloClient implements TrackerClient {
     private static final String CARD_FIELDS =
             "id,name,desc,idList,idBoard,closed,idShort,shortLink,shortUrl,url,labels,dateLastActivity,due,dueComplete,pos";
     private static final String COMMENT_ACTION_FIELDS = "data,date,memberCreator";
-    private static final String COMMENT_ACTION_LIMIT = "20";
+    private static final String COMMENT_ACTION_FIELDS_WITH_ID = "id,data,date,memberCreator";
+    public static final String WORKPAD_MARKER = "## Codex Workpad";
+    public static final int RECENT_COMMENT_ACTION_LIMIT = 20;
+    public static final int WORKPAD_COMMENT_ACTION_LIMIT = 1000;
 
     private final ObjectMapper json;
     private final HttpClient httpClient;
@@ -113,11 +116,24 @@ public class TrelloClient implements TrackerClient {
 
     @Override
     public Map<String, CardLookupResult> fetchCardStatesByIds(EffectiveConfig config, List<String> cardIds) {
+        return fetchCardStatesByIds(config, cardIds, false);
+    }
+
+    @Override
+    public Map<String, CardLookupResult> fetchCardStatesForPromptByIds(EffectiveConfig config, List<String> cardIds) {
+        return fetchCardStatesByIds(config, cardIds, true);
+    }
+
+    private Map<String, CardLookupResult> fetchCardStatesByIds(
+            EffectiveConfig config, List<String> cardIds, boolean includeOlderWorkpad) {
         BoardContext context = boardContext(config);
         Map<String, CardLookupResult> results = new LinkedHashMap<>();
         for (String cardId : cardIds) {
             try {
-                Map<String, Object> payload = cardWithComments(config, cardId);
+                Map<String, Object> payload = cardWithComments(config, cardId, RECENT_COMMENT_ACTION_LIMIT);
+                if (includeOlderWorkpad) {
+                    payload = includeOlderWorkpadComment(config, cardId, payload);
+                }
                 Optional<Card> card = normalize(payload, context, config);
                 results.put(
                         cardId,
@@ -135,7 +151,23 @@ public class TrelloClient implements TrackerClient {
         return results;
     }
 
-    private Map<String, Object> cardWithComments(EffectiveConfig config, String cardId) {
+    public CardLookupResult fetchCardStateForWorkpad(EffectiveConfig config, String cardId) {
+        BoardContext context = boardContext(config);
+        try {
+            Map<String, Object> payload = cardWithComments(config, cardId, WORKPAD_COMMENT_ACTION_LIMIT);
+            Optional<Card> card = normalize(payload, context, config);
+            return card.<CardLookupResult>map(CardLookupResult.Found::new)
+                    .orElseGet(() -> new CardLookupResult.Failed(
+                            cardId, "trello_unknown_payload", "Card payload could not be normalized"));
+        } catch (TrelloException e) {
+            if (e.statusCode() == 404) {
+                return new CardLookupResult.Missing(cardId);
+            }
+            return new CardLookupResult.Failed(cardId, e.code(), e.getMessage());
+        }
+    }
+
+    private Map<String, Object> cardWithComments(EffectiveConfig config, String cardId, int actionLimit) {
         return getMap(
                 config,
                 "cards/" + encodeSegment(cardId),
@@ -147,9 +179,58 @@ public class TrelloClient implements TrackerClient {
                         "actions",
                         "commentCard",
                         "actions_limit",
-                        COMMENT_ACTION_LIMIT,
+                        Integer.toString(actionLimit),
                         "action_fields",
-                        COMMENT_ACTION_FIELDS));
+                        actionLimit == WORKPAD_COMMENT_ACTION_LIMIT
+                                ? COMMENT_ACTION_FIELDS_WITH_ID
+                                : COMMENT_ACTION_FIELDS));
+    }
+
+    private Map<String, Object> includeOlderWorkpadComment(
+            EffectiveConfig config, String cardId, Map<String, Object> recentPayload) {
+        List<Map<String, Object>> recentActions = actionMaps(recentPayload);
+        if (hasWorkpadComment(recentActions) || recentActions.size() < RECENT_COMMENT_ACTION_LIMIT) {
+            return recentPayload;
+        }
+
+        Map<String, Object> deepPayload;
+        try {
+            deepPayload = cardWithComments(config, cardId, WORKPAD_COMMENT_ACTION_LIMIT);
+        } catch (TrelloException e) {
+            if (e.statusCode() == 404) {
+                throw e;
+            }
+            return recentPayload;
+        }
+        Optional<Map<String, Object>> workpad = actionMaps(deepPayload).stream()
+                .filter(action -> commentText(action).startsWith(WORKPAD_MARKER))
+                .findFirst();
+        if (workpad.isEmpty()) {
+            return recentPayload;
+        }
+
+        List<Map<String, Object>> mergedActions = new ArrayList<>();
+        mergedActions.add(workpad.get());
+        mergedActions.addAll(recentActions);
+        Map<String, Object> mergedPayload = new LinkedHashMap<>(recentPayload);
+        mergedPayload.put("actions", mergedActions);
+        return mergedPayload;
+    }
+
+    private static boolean hasWorkpadComment(List<Map<String, Object>> actions) {
+        return actions.stream().anyMatch(action -> commentText(action).startsWith(WORKPAD_MARKER));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> actionMaps(Map<String, Object> payload) {
+        Object actions = payload.get("actions");
+        if (!(actions instanceof List<?> actionList)) {
+            return List.of();
+        }
+        return actionList.stream()
+                .filter(Map.class::isInstance)
+                .map(action -> (Map<String, Object>) action)
+                .toList();
     }
 
     public static boolean isActive(Card card, EffectiveConfig config) {
@@ -218,6 +299,10 @@ public class TrelloClient implements TrackerClient {
 
     public Map<String, Object> addComment(EffectiveConfig config, String cardId, String text) {
         return postMap(config, "cards/" + encodeSegment(cardId) + "/actions/comments", Map.of("text", text));
+    }
+
+    public Map<String, Object> updateComment(EffectiveConfig config, String actionId, String text) {
+        return putMap(config, "actions/" + encodeSegment(actionId) + "/text", Map.of("value", text));
     }
 
     public Map<String, Object> moveCardToList(EffectiveConfig config, String cardId, String listId) {
@@ -306,11 +391,7 @@ public class TrelloClient implements TrackerClient {
     }
 
     private static Optional<Card.Comment> comment(Map<?, ?> action) {
-        String text = null;
-        Object data = action.get("data");
-        if (data instanceof Map<?, ?> dataMap) {
-            text = string(dataMap.get("text"));
-        }
+        String text = commentText(action);
         if (blank(text)) {
             return Optional.empty();
         }
@@ -319,6 +400,15 @@ public class TrelloClient implements TrackerClient {
                 text,
                 commentAuthor(action.get("memberCreator")),
                 instant(action.get("date"))));
+    }
+
+    private static String commentText(Map<?, ?> action) {
+        Object data = action.get("data");
+        if (!(data instanceof Map<?, ?> dataMap)) {
+            return "";
+        }
+        String text = string(dataMap.get("text"));
+        return text == null ? "" : text;
     }
 
     private static String commentAuthor(Object memberCreator) {

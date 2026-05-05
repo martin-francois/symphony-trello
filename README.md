@@ -371,6 +371,13 @@ Work on {{ card.identifier }}: {{ card.title }}.
 - {{ comment.created_at }}{% if comment.author %} {{ comment.author }}{% endif %}: {{ comment.text }}
 {% endfor %}
 
+## Codex Workpad
+
+Maintain one Trello workpad comment for this card by calling trello_upsert_workpad. Reuse the
+existing comment that starts with "## Codex Workpad"; do not create separate progress comments.
+Keep it current with the plan, acceptance criteria, progress, validation evidence, blockers, and
+handoff notes.
+
 Use the current workspace by default. If the Trello card names a specific local path or project
 checkout, inspect that path instead. If that path is inaccessible, treat it as a blocker and follow
 the filesystem access blocker instructions below.
@@ -379,9 +386,10 @@ If the card is in "Ready for Codex", immediately call trello_move_current_card w
 "In Progress" before implementation work. If the card is already in "In Progress", continue the
 existing execution flow.
 
-When the work is ready for human review, call trello_add_comment with a concise summary and
-verification notes, then call trello_move_current_card with list_name "Human Review". If the work is
-blocked or unsafe to hand off, add a Trello comment explaining the blocker, then call
+When the work is ready for human review, update the workpad with the final summary and validation
+evidence, call trello_add_comment with a concise summary and verification notes, then call
+trello_move_current_card with list_name "Human Review". If the work is blocked or unsafe to hand off,
+update the workpad with the blocker, add a Trello comment explaining the blocker, then call
 trello_move_current_card with list_name "Blocked". If the blocker is a local filesystem access
 problem, the Trello comment must include the inaccessible path, why it is inaccessible, that deployed
 Symphony exposes only managed workspaces and explicitly allowed project roots by default, that
@@ -506,6 +514,14 @@ You are working on {{ card.identifier }}: {{ card.title }}.
 - {{ comment.created_at }}{% if comment.author %} {{ comment.author }}{% endif %}: {{ comment.text }}
 {% endfor %}
 
+## Codex Workpad
+
+Maintain one Trello workpad comment for this card by calling trello_upsert_workpad. Reuse the
+existing comment that starts with "## Codex Workpad"; do not create separate progress comments.
+Keep it current with the plan, acceptance criteria, progress, validation evidence, blockers, and
+handoff notes. Do not include private host paths; use sanitized workspace or repository names when
+context is needed.
+
 Read the Trello description carefully, inspect the repository, make the smallest maintainable change,
 run relevant verification, and leave the workspace in a reviewable state.
 Use the current workspace by default. If the Trello card names a specific local path or project
@@ -516,9 +532,10 @@ If the card is in "Ready for Codex", immediately call trello_move_current_card w
 "In Progress" before implementation work. If the card is already in "In Progress", continue the
 existing execution flow.
 
-When the work is ready for human review, call trello_add_comment with a concise summary and
-verification notes, then call trello_move_current_card with list_name "Human Review". If the work is
-blocked or unsafe to hand off, add a Trello comment explaining the blocker, then call
+When the work is ready for human review, update the workpad with the final summary and validation
+evidence, call trello_add_comment with a concise summary and verification notes, then call
+trello_move_current_card with list_name "Human Review". If the work is blocked or unsafe to hand off,
+update the workpad with the blocker, add a Trello comment explaining the blocker, then call
 trello_move_current_card with list_name "Blocked". If the blocker is a local filesystem access
 problem, the Trello comment must include the inaccessible path, why it is inaccessible, that deployed
 Symphony exposes only managed workspaces and explicitly allowed project roots by default, that
@@ -601,9 +618,11 @@ environment before starting `codex app-server`.
 
 ### Trello Write Controls
 
-The recommended workflow gives Codex two scoped Trello handoff tools:
+The recommended workflow gives Codex three scoped Trello handoff tools:
 
 - `trello_add_comment`: add a comment to the current card.
+- `trello_upsert_workpad`: create or update the single `## Codex Workpad` comment on the current
+  card.
 - `trello_move_current_card`: move the current card to a configured board-local column such as
   `In Progress`, `Human Review`, or `Blocked`.
 
