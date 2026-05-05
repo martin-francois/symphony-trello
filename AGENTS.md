@@ -61,6 +61,8 @@ matters, and easy for another engineer to understand without asking the original
   adding a `package.json` solely to run a JavaScript CLI in this Java project.
 - When pinning tool versions outside their native manifest files, ensure Renovate can update them
   through an existing manager or an explicit custom manager.
+- Keep automation config minimal. Do not restate inherited defaults or duplicate global Renovate
+  policy in package rules unless the narrower rule changes behavior.
 - Pin GitHub Actions to full commit SHAs with the tracked version tag in a comment. Renovate may
   automerge non-major GitHub Actions updates after the configured release-age delay, but major
   action updates still need human review.
