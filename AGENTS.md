@@ -61,6 +61,8 @@ matters, and easy for another engineer to understand without asking the original
   adding a `package.json` solely to run a JavaScript CLI in this Java project.
 - When pinning tool versions outside their native manifest files, ensure Renovate can update them
   through an existing manager or an explicit custom manager.
+- When configuring build-tool integrations such as Java agents, prefer the official documented
+  Maven pattern over hand-built local repository paths or other brittle shortcuts.
 - Do not use Perl/Python/Ruby/Node one-liners as the documented implementation of a reproducible
   project workflow when a small Java helper would keep the workflow easier to maintain in this repo.
 - Keep the project open-source-ready even while private: clear README, usable CONTRIBUTING, useful
