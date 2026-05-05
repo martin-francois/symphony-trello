@@ -8,7 +8,7 @@ engineering preferences that should persist across Codex sessions.
 ## Development Setup
 
 1. Install Java 25 LTS.
-2. Use the Maven wrapper: `./mvnw test`.
+2. Use the Maven wrapper: `./mvnw verify`.
 3. Install Codex CLI if you want to run real worker sessions.
 4. Create a local `WORKFLOW.md` from `WORKFLOW.example.md`.
 5. Copy `.env.example` to `.env`, set Trello credentials there, and keep `.env` uncommitted:
@@ -22,8 +22,9 @@ engineering preferences that should persist across Codex sessions.
 
 Before submitting changes:
 
-- Run `./mvnw test`.
 - Run `./mvnw spotless:check`.
+- Run `./mvnw verify`; CI enforces the same JaCoCo coverage gate and currently requires at least
+  80% line coverage.
 - Add or update tests for scheduler, Trello normalization, workspace safety, prompt rendering, or
   Codex protocol behavior when those areas change.
 - Use imports instead of inline fully qualified Java type names in code. The test suite enforces this
