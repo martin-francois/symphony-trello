@@ -36,6 +36,8 @@ public class TrelloClient implements TrackerClient {
     private static final TypeReference<List<Map<String, Object>>> LIST_MAP_TYPE = new TypeReference<>() {};
     private static final String CARD_FIELDS =
             "id,name,desc,idList,idBoard,closed,idShort,shortLink,shortUrl,url,labels,dateLastActivity,due,dueComplete,pos";
+    private static final String COMMENT_ACTION_FIELDS = "data,date,memberCreator";
+    private static final String COMMENT_ACTION_LIMIT = "20";
 
     private final ObjectMapper json;
     private final HttpClient httpClient;
@@ -115,10 +117,7 @@ public class TrelloClient implements TrackerClient {
         Map<String, CardLookupResult> results = new LinkedHashMap<>();
         for (String cardId : cardIds) {
             try {
-                Map<String, Object> payload = getMap(
-                        config,
-                        "cards/" + encodeSegment(cardId),
-                        Map.of("fields", CARD_FIELDS, "attachments", "false"));
+                Map<String, Object> payload = cardWithComments(config, cardId);
                 Optional<Card> card = normalize(payload, context, config);
                 results.put(
                         cardId,
@@ -134,6 +133,23 @@ public class TrelloClient implements TrackerClient {
             }
         }
         return results;
+    }
+
+    private Map<String, Object> cardWithComments(EffectiveConfig config, String cardId) {
+        return getMap(
+                config,
+                "cards/" + encodeSegment(cardId),
+                Map.of(
+                        "fields",
+                        CARD_FIELDS,
+                        "attachments",
+                        "false",
+                        "actions",
+                        "commentCard",
+                        "actions_limit",
+                        COMMENT_ACTION_LIMIT,
+                        "action_fields",
+                        COMMENT_ACTION_FIELDS));
     }
 
     public static boolean isActive(Card card, EffectiveConfig config) {
@@ -268,11 +284,49 @@ public class TrelloClient implements TrackerClient {
                 labelIds(payload),
                 List.of(),
                 List.<BlockerRef>of(),
+                comments(payload),
                 createdAtFromObjectId(id),
                 instant(payload.get("dateLastActivity")),
                 instant(payload.get("due")),
                 nullableBool(payload.get("dueComplete")),
                 decimal(payload.get("pos"))));
+    }
+
+    private static List<Card.Comment> comments(Map<String, Object> payload) {
+        Object actions = payload.get("actions");
+        if (!(actions instanceof List<?> actionList)) {
+            return List.of();
+        }
+        return actionList.stream()
+                .filter(Map.class::isInstance)
+                .map(Map.class::cast)
+                .map(TrelloClient::comment)
+                .flatMap(Optional::stream)
+                .toList();
+    }
+
+    private static Optional<Card.Comment> comment(Map<?, ?> action) {
+        String text = null;
+        Object data = action.get("data");
+        if (data instanceof Map<?, ?> dataMap) {
+            text = string(dataMap.get("text"));
+        }
+        if (blank(text)) {
+            return Optional.empty();
+        }
+        return Optional.of(new Card.Comment(
+                string(action.get("id")),
+                text,
+                commentAuthor(action.get("memberCreator")),
+                instant(action.get("date"))));
+    }
+
+    private static String commentAuthor(Object memberCreator) {
+        if (!(memberCreator instanceof Map<?, ?> member)) {
+            return null;
+        }
+        String fullName = string(member.get("fullName"));
+        return blank(fullName) ? string(member.get("username")) : fullName;
     }
 
     private Map<String, Object> getMap(EffectiveConfig config, String path, Map<String, String> query) {

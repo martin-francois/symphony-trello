@@ -29,6 +29,7 @@ import org.junit.jupiter.api.io.TempDir;
 class TrelloClientTest {
     private HttpServer server;
     private final AtomicReference<String> authorization = new AtomicReference<>();
+    private final List<String> readRequests = new ArrayList<>();
     private final List<String> writeRequests = new ArrayList<>();
 
     @TempDir
@@ -53,6 +54,7 @@ class TrelloClientTest {
                         """));
         server.createContext("/1/boards/board-1/cards/open", exchange -> {
             authorization.set(exchange.getRequestHeaders().getFirst("Authorization"));
+            readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
             respond(
                     exchange,
                     """
@@ -60,6 +62,14 @@ class TrelloClientTest {
                       {"id":"65df9f70b4a22a1234567890","name":"A","desc":"","idList":"list-todo","idBoard":"board-1","closed":false,"idShort":7,"shortLink":"abc","shortUrl":"u","url":"u","labels":[{"id":"l1","name":"P1"}],"dateLastActivity":"2026-02-24T20:10:12.000Z","pos":2},
                       {"id":"65df9f71b4a22a1234567891","name":"B","desc":"","idList":"list-done","idBoard":"board-1","closed":false,"shortLink":"def","labels":[],"pos":1}
                     ]
+                    """);
+        });
+        server.createContext("/1/cards/65df9f70b4a22a1234567890", exchange -> {
+            readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
+            respond(
+                    exchange,
+                    """
+                    {"id":"65df9f70b4a22a1234567890","name":"A","desc":"","idList":"list-todo","idBoard":"board-1","closed":false,"idShort":7,"shortLink":"abc","shortUrl":"u","url":"u","labels":[{"id":"l1","name":"P1"}],"actions":[{"id":"comment-1","date":"2026-02-24T20:11:12.000Z","data":{"text":"Please rework the edge case."},"memberCreator":{"fullName":"Reviewer"}}],"dateLastActivity":"2026-02-24T20:10:12.000Z","pos":2}
                     """);
         });
         server.createContext(
@@ -114,7 +124,7 @@ class TrelloClientTest {
                 "/1/cards/card-found",
                 exchange -> respond(
                         exchange,
-                        "{\"id\":\"card-found\",\"name\":\"Found\",\"idList\":\"lookup-review\",\"idBoard\":\"lookup-board\",\"closed\":false,\"shortLink\":\"found\",\"labels\":[]}"));
+                        "{\"id\":\"card-found\",\"name\":\"Found\",\"idList\":\"lookup-review\",\"idBoard\":\"lookup-board\",\"closed\":false,\"shortLink\":\"found\",\"labels\":[],\"actions\":[{\"id\":\"comment-2\",\"date\":\"2026-02-25T20:11:12.000Z\",\"data\":{\"text\":\"Follow-up review note.\"},\"memberCreator\":{\"username\":\"reviewer\"}}]}"));
         server.createContext("/1/cards/card-missing", exchange -> respond(exchange, 404, "{}"));
         server.createContext("/1/cards/card-failed", exchange -> respond(exchange, 500, "{}"));
         server.createContext(
@@ -159,9 +169,15 @@ class TrelloClientTest {
             assertThat(card.identifier()).isEqualTo("TRELLO-abc");
             assertThat(card.priority()).isEqualTo(1);
             assertThat(card.state()).isEqualTo("Todo");
+            assertThat(card.comments()).isEmpty();
             assertThat(card.createdAt()).isNotNull();
         });
         assertThat(authorization.get()).contains("oauth_consumer_key=\"key\"").contains("oauth_token=\"token\"");
+        assertThat(readRequests).hasSize(1);
+        assertThat(readRequests.getFirst())
+                .startsWith("GET /1/boards/board-1/cards/open?")
+                .contains("fields=")
+                .doesNotContain("actions=");
     }
 
     @Test
@@ -192,9 +208,15 @@ class TrelloClientTest {
 
         // then
         assertThat(results.keySet()).containsExactly("card-found", "card-missing", "card-failed", "card-malformed");
-        assertThat(results.get("card-found")).isInstanceOfSatisfying(CardLookupResult.Found.class, found -> assertThat(
-                        found.card().state())
-                .isEqualTo("Review"));
+        assertThat(results.get("card-found"))
+                .isInstanceOfSatisfying(CardLookupResult.Found.class, found -> assertThat(found.card())
+                        .satisfies(card -> {
+                            assertThat(card.state()).isEqualTo("Review");
+                            assertThat(card.comments()).singleElement().satisfies(comment -> {
+                                assertThat(comment.text()).isEqualTo("Follow-up review note.");
+                                assertThat(comment.author()).isEqualTo("reviewer");
+                            });
+                        }));
         assertThat(results.get("card-missing")).isInstanceOf(CardLookupResult.Missing.class);
         assertThat(results.get("card-failed"))
                 .isInstanceOfSatisfying(CardLookupResult.Failed.class, failed -> assertThat(failed.code())
@@ -271,6 +293,7 @@ class TrelloClientTest {
                 List.of(),
                 List.of(),
                 List.of(),
+                List.of(),
                 Instant.parse("2026-01-04T00:00:00Z"),
                 Instant.parse("2026-01-04T00:00:00Z"),
                 null,
@@ -327,6 +350,7 @@ class TrelloClientTest {
                 null,
                 null,
                 null,
+                List.of(),
                 List.of(),
                 List.of(),
                 List.of(),

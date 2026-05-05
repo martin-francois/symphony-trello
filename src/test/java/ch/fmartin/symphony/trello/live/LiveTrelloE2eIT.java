@@ -119,10 +119,10 @@ class LiveTrelloE2eIT {
                     2,
                     true));
 
-            patchWorkflow(boardAWorkflow, completions, 1, 7_000);
-            patchWorkflow(importedAWorkflow, completions, 1, 250);
-            patchWorkflow(boardBWorkflow, completions, 2, 7_000);
-            patchWorkflow(customWorkflow, completions, 2, 7_000);
+            patchWorkflow(boardAWorkflow, completions, TrelloBoardSetup.RECOMMENDED_REVIEW_STATE, 1, 7_000);
+            patchWorkflow(importedAWorkflow, completions, TrelloBoardSetup.RECOMMENDED_REVIEW_STATE, 1, 250);
+            patchWorkflow(boardBWorkflow, completions, TrelloBoardSetup.RECOMMENDED_REVIEW_STATE, 2, 7_000);
+            patchWorkflow(customWorkflow, completions, "Review", 2, 7_000);
 
             Map<String, String> boardALists = trello.listIdsByName(boardA.boardId());
             Map<String, String> boardBLists = trello.listIdsByName(boardB.boardId());
@@ -310,17 +310,20 @@ class LiveTrelloE2eIT {
                 force);
     }
 
-    private static void patchWorkflow(Path workflow, Path completions, int maxConcurrentAgents, int sleepMs)
+    private static void patchWorkflow(
+            Path workflow, Path completions, String reviewState, int maxConcurrentAgents, int sleepMs)
             throws IOException {
         Path java = Path.of(System.getProperty("java.home"), "bin", executable("java"))
                 .toAbsolutePath();
         Path fakeCodex = Path.of("scripts/FakeCodexAppServer.java").toAbsolutePath();
-        String command = "SYMPHONY_FAKE_CODEX_SLEEP_MS=%d SYMPHONY_FAKE_CODEX_COMPLETIONS_FILE=%s %s --source 25 %s"
-                .formatted(
-                        sleepMs,
-                        shellQuote(completions.toAbsolutePath().toString()),
-                        shellQuote(java.toString()),
-                        shellQuote(fakeCodex.toString()));
+        String command =
+                "SYMPHONY_FAKE_CODEX_SLEEP_MS=%d SYMPHONY_FAKE_CODEX_COMPLETIONS_FILE=%s SYMPHONY_FAKE_CODEX_REVIEW_STATE=%s %s --source 25 %s"
+                        .formatted(
+                                sleepMs,
+                                shellQuote(completions.toAbsolutePath().toString()),
+                                shellQuote(reviewState),
+                                shellQuote(java.toString()),
+                                shellQuote(fakeCodex.toString()));
         String patched = Files.readString(workflow)
                 .replaceFirst("(?m)^  max_concurrent_agents: \\d+$", "  max_concurrent_agents: " + maxConcurrentAgents)
                 .replaceFirst("(?m)^  command: codex app-server$", "  command: " + yamlScalar(command));

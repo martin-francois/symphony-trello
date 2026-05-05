@@ -10,9 +10,9 @@ import java.nio.file.Path;
  */
 public class PatchLiveE2eWorkflow {
     public static void main(String[] args) throws IOException {
-        if (args.length != 5) {
+        if (args.length != 5 && args.length != 6) {
             System.err.println(
-                    "Usage: java --source 25 scripts/PatchLiveE2eWorkflow.java <workflow> <max-agents> <sleep-ms> <java> <fake-codex-java>");
+                    "Usage: java --source 25 scripts/PatchLiveE2eWorkflow.java <workflow> <max-agents> <sleep-ms> <java> <fake-codex-java> [review-column]");
             System.exit(2);
         }
 
@@ -21,13 +21,19 @@ public class PatchLiveE2eWorkflow {
         int sleepMs = nonNegativeInt(args[2], "sleep-ms");
         String java = args[3];
         String fakeCodex = args[4];
+        String reviewColumn = args.length == 6 ? args[5] : "Human Review";
 
-        String command = "command: \"SYMPHONY_FAKE_CODEX_SLEEP_MS=%d %s --source 25 %s\""
-                .formatted(sleepMs, java, fakeCodex);
+        String command =
+                "command: \"SYMPHONY_FAKE_CODEX_SLEEP_MS=%d SYMPHONY_FAKE_CODEX_REVIEW_STATE=%s %s --source 25 %s\""
+                        .formatted(sleepMs, shellQuote(reviewColumn), shellQuote(java), shellQuote(fakeCodex));
         String patched = Files.readString(workflow)
                 .replaceFirst("(?m)^  max_concurrent_agents: \\d+$", "  max_concurrent_agents: " + maxAgents)
                 .replaceFirst("(?m)^  command: codex app-server$", "  " + command);
         Files.writeString(workflow, patched);
+    }
+
+    private static String shellQuote(String value) {
+        return "'" + value.replace("'", "'\"'\"'") + "'";
     }
 
     private static int positiveInt(String value, String name) {

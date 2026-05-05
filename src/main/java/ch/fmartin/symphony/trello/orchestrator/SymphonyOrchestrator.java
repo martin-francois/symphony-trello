@@ -185,7 +185,7 @@ public class SymphonyOrchestrator {
                         break;
                     }
                     if (shouldDispatch(card, false)) {
-                        dispatch(card, null);
+                        refreshForDispatch(card).ifPresent(refreshed -> dispatch(refreshed, null));
                     }
                 }
             } catch (RuntimeException e) {
@@ -410,6 +410,25 @@ public class SymphonyOrchestrator {
         LOG.infof(
                 "card_id=%s card_identifier=%s worker_identity=%s outcome=dispatched",
                 card.id(), card.identifier(), workerIdentity);
+    }
+
+    private Optional<Card> refreshForDispatch(Card card) {
+        try {
+            CardLookupResult result =
+                    tracker.fetchCardStatesByIds(config, List.of(card.id())).get(card.id());
+            if (result instanceof CardLookupResult.Found found && shouldDispatch(found.card(), false)) {
+                return Optional.of(found.card());
+            }
+            if (result instanceof CardLookupResult.Failed failed) {
+                LOG.warnf(
+                        "card_id=%s card_identifier=%s dispatch=skipped reason=%s",
+                        card.id(), card.identifier(), failed.message());
+            }
+            return Optional.empty();
+        } catch (RuntimeException e) {
+            LOG.warnf("card_id=%s card_identifier=%s dispatch=skipped reason=%s", card.id(), card.identifier(), e);
+            return Optional.empty();
+        }
     }
 
     private synchronized void onWorkerExit(String cardId, String workerIdentity, AgentRunResult result) {

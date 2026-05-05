@@ -31,13 +31,16 @@ public final class TrelloBoardSetup {
     public static final String RECOMMENDED_ACTIVE_STATE = "Ready for Codex";
     public static final String RECOMMENDED_IN_PROGRESS_STATE = "In Progress";
     public static final String RECOMMENDED_BLOCKED_STATE = "Blocked";
-    public static final String RECOMMENDED_REVIEW_STATE = "Review";
+    public static final String RECOMMENDED_REVIEW_STATE = "Human Review";
+    public static final String RECOMMENDED_MERGING_STATE = "Merging";
+    public static final String LEGACY_REVIEW_STATE = "Review";
     public static final List<String> RECOMMENDED_COLUMNS = List.of(
             "Inbox",
             RECOMMENDED_ACTIVE_STATE,
             RECOMMENDED_IN_PROGRESS_STATE,
             RECOMMENDED_BLOCKED_STATE,
             RECOMMENDED_REVIEW_STATE,
+            RECOMMENDED_MERGING_STATE,
             "Done");
     public static final List<String> RECOMMENDED_ACTIVE_STATES =
             List.of(RECOMMENDED_ACTIVE_STATE, RECOMMENDED_IN_PROGRESS_STATE);
@@ -181,6 +184,7 @@ public final class TrelloBoardSetup {
                 blank(request.blockedState()) ? defaultBlockedState(openListNames) : request.blockedState();
         String inProgressState =
                 request.detectInProgressState() ? defaultInProgressState(openListNames) : request.inProgressState();
+        String reviewState = defaultReviewState(openListNames);
         activeStates = withOptionalActiveState(activeStates, inProgressState);
         validateConfiguredLists("active", activeStates, openListNames);
         validateConfiguredLists("terminal", terminalStates, openListNames);
@@ -196,7 +200,7 @@ public final class TrelloBoardSetup {
                         activeStates,
                         terminalStates,
                         inProgressState,
-                        defaultReviewState(openListNames),
+                        reviewState,
                         blockedState,
                         request.workspaceRoot(),
                         request.maxConcurrentAgents()));
@@ -369,6 +373,12 @@ public final class TrelloBoardSetup {
 
                 {{ card.description }}
 
+                ## Trello Comments
+
+                {%% for comment in card.comments %%}
+                - {{ comment.created_at }}{%% if comment.author %%} {{ comment.author }}{%% endif %%}: {{ comment.text }}
+                {%% endfor %%}
+
                 %s
 
                 Read the Trello description carefully, inspect the repository, make the smallest maintainable change,
@@ -422,6 +432,8 @@ public final class TrelloBoardSetup {
             return """
                     When the work is ready for human review, leave the workspace in a reviewable state and summarize the status in the Codex response. Trello handoff tools are disabled in this starter workflow until you configure trello_tools.allowed_move_list_names.
                     If the work is blocked, summarize the blocker in the Codex response; an operator must move the card out of the active column manually. Leaving blocked work active can make Symphony run it again.
+                    If a human returns a reviewed card to an active column, reread the card, the Trello comments rendered above, and linked PR feedback when available before changing code again.
+                    A Merging column, when configured, is a human approval signal for a landing flow; do not merge from human review.
                     %s"""
                     .formatted(FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION)
                     .stripTrailing();
@@ -430,7 +442,9 @@ public final class TrelloBoardSetup {
             return """
                     When the work is ready for human review, leave the workspace in a reviewable state and summarize the status in the Codex response.
                     If the work is blocked or unsafe to hand off, call trello_add_comment with the blocker, then call
-                    trello_move_current_card with list_name "%s". %s"""
+                    trello_move_current_card with list_name "%s".
+                    If a human returns a reviewed card to an active column, reread the card, the Trello comments rendered above, and linked PR feedback when available before changing code again.
+                    A Merging column, when configured, is a human approval signal for a landing flow; do not merge from human review. %s"""
                     .formatted(blockedDestination, FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION);
         }
         if (blank(blockedState)) {
@@ -439,14 +453,18 @@ public final class TrelloBoardSetup {
                     verification notes, then call trello_move_current_card with list_name "%s". If the work is
                     blocked or unsafe to hand off, add a Trello comment explaining the blocker, then call
                     trello_move_current_card with list_name "%s" so the card leaves the active column. Do not leave
-                    blocked work in an active column; Symphony may run it again. %s"""
+                    blocked work in an active column; Symphony may run it again.
+                    If a human returns a reviewed card to an active column, treat it as rework: reread the card, the Trello comments rendered above, and linked PR feedback when available before changing code again.
+                    A Merging column, when configured, is a human approval signal for a landing flow; do not merge from human review. %s"""
                     .formatted(reviewState, blockedDestination, FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION);
         }
         return """
                 When the work is ready for human review, call trello_add_comment with a concise summary and
                 verification notes, then call trello_move_current_card with list_name "%s". If the work is
                 blocked or unsafe to hand off, add a Trello comment explaining the blocker, then call
-                trello_move_current_card with list_name "%s". %s"""
+                trello_move_current_card with list_name "%s".
+                If a human returns a reviewed card to an active column, treat it as rework: reread the card, the Trello comments rendered above, and linked PR feedback when available before changing code again.
+                A Merging column, when configured, is a human approval signal for a landing flow; do not merge from human review. %s"""
                 .formatted(reviewState, blockedDestination, FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION);
     }
 
@@ -531,7 +549,10 @@ public final class TrelloBoardSetup {
         return openListNames.stream()
                 .filter(name -> name.equalsIgnoreCase(RECOMMENDED_REVIEW_STATE))
                 .findFirst()
-                .orElse(null);
+                .orElseGet(() -> openListNames.stream()
+                        .filter(name -> name.equalsIgnoreCase(LEGACY_REVIEW_STATE))
+                        .findFirst()
+                        .orElse(null));
     }
 
     private static String defaultInProgressState(List<String> openListNames) {

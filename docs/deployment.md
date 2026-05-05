@@ -185,7 +185,7 @@ trello_tools:
   enabled: true
   allow_writes: true
   allowed_move_list_names:
-    - Review
+    - Human Review
     - Blocked
   allow_comments: true
 codex:

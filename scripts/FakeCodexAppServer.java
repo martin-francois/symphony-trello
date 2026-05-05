@@ -80,7 +80,7 @@ public class FakeCodexAppServer {
         String moveResponse = requestTool(
                 10_002,
                 "trello_move_current_card",
-                "{\"list_name\":\"Review\"}");
+                "{\"list_name\":\"%s\"}".formatted(jsonString(reviewState())));
         String moveError = toolError(moveResponse);
         if (moveError == null) {
             recordSuccessfulCompletion(turnId);
@@ -127,6 +127,10 @@ public class FakeCodexAppServer {
                 StandardCharsets.UTF_8,
                 StandardOpenOption.CREATE,
                 StandardOpenOption.APPEND);
+    }
+
+    private static String reviewState() {
+        return System.getenv().getOrDefault("SYMPHONY_FAKE_CODEX_REVIEW_STATE", "Human Review");
     }
 
     private static Optional<Integer> captureInt(Pattern pattern, String value) {

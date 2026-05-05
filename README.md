@@ -115,8 +115,8 @@ Trello has three concepts that matter for Symphony:
   fields use names like `active_list_ids`, `allowed_move_list_names`, `list_id`, and `list_name`.
 
 Symphony reads cards, creates local Codex workspaces, and runs Codex. The generated workflow lets
-Codex leave a Trello comment and move the card to `Review` when the prompt-defined work is ready for
-human review.
+Codex leave a Trello comment and move the card to `Human Review` when the prompt-defined work is
+ready for a person to review.
 
 Start with the browser setup below. Those steps create the Trello credentials used by both board
 setup paths.
@@ -175,8 +175,9 @@ TRELLO_API_TOKEN=replace-with-generated-token
 ### Fast Path: Create The Recommended Board
 
 Use this path when you are new to Trello or want Symphony to create a clean `Inbox` -> `Ready for
-Codex` -> `In Progress` -> `Blocked` -> `Review` -> `Done` board for you. One command creates the
-board, creates the recommended columns, and writes a workflow file for that board.
+Codex` -> `In Progress` -> `Blocked` -> `Human Review` -> `Merging` -> `Done` board for you. One
+command creates the board, creates the recommended columns, and writes a workflow file for that
+board.
 
 Now create the board and workflow:
 
@@ -198,13 +199,14 @@ The command creates this Trello board layout:
 2. `Ready for Codex`
 3. `In Progress`
 4. `Blocked`
-5. `Review`
-6. `Done`
+5. `Human Review`
+6. `Merging`
+7. `Done`
 
 It also writes a workflow with `Ready for Codex` and `In Progress` as active columns, `Done` as the
-terminal column, `In Progress`, `Review`, and `Blocked` as allowed move columns, `./workspaces` as
-the local workspace directory, and `max_concurrent_agents: 1`. With that default, Symphony starts one
-card at a time from this board.
+terminal column, `In Progress`, `Human Review`, and `Blocked` as allowed move columns,
+`./workspaces` as the local workspace directory, and `max_concurrent_agents: 1`. With that default,
+Symphony starts one card at a time from this board.
 
 The first run writes `WORKFLOW.md`. If that file already exists and you did not pass `--workflow`,
 Symphony keeps the existing file and writes a board-specific file instead. For a board named
@@ -230,10 +232,16 @@ Use the generated board like this:
 3. Symphony starts Codex for cards in `Ready for Codex`.
 4. Codex moves the card to `In Progress` first, so the board shows that the card was picked up.
 5. Codex works in a local workspace, adds a Trello comment with its summary and verification notes,
-   and moves the card to `Review` when the prompt-defined work is ready for human review.
+   and moves the card to `Human Review` when the prompt-defined work is ready for human review.
 6. If Codex cannot safely finish the work, it adds a blocker comment and moves the card to
    `Blocked` so the problem is visible from the board.
-7. A human reviews the code and the Trello comment, then moves the card to `Done` after acceptance.
+7. If changes are needed, a human moves the card from `Human Review` back to `Ready for Codex`.
+   Codex treats that as rework and reads the Trello comments rendered into the prompt, plus linked
+   PR feedback when available, before changing code again.
+8. If the work is accepted and should be landed by Codex, a human moves the card to `Merging`.
+   Landing automation is implemented separately; until then, use `Merging` as the approval signal
+   for your own landing process.
+9. Move the card to `Done` after the work is accepted and landed.
 
 ### Fast Path: Import An Existing Board
 
@@ -253,7 +261,7 @@ You may omit `--active` when the board already has a column named `Ready for Cod
 when the board already has a column named `Done`. You may omit `--blocked` when the board already has
 a column named `Blocked`. If your board has no in-progress column, Codex leaves picked-up cards in
 the active column until it moves them to review or blocked. If your board has no blocked column,
-import falls back to `Review` when that column exists, so blocked cards still leave the active column.
+import falls back to the review handoff column, so blocked cards still leave the active column.
 Create a blocked column or pass
 `--blocked` when you want blocked work separated from reviewable work.
 
@@ -261,10 +269,11 @@ For an existing team board, be deliberate about `--active`: every open card in t
 for Codex work. A conservative import starts with a new column named `Ready for Codex` and only moves
 cards there after they have a clear title, useful description, and acceptance criteria.
 
-When the imported board has a column named `Review`, the starter workflow allows Codex to move
-reviewable work there. If there is no obvious review column, the generated workflow keeps Trello writes
-disabled until you choose one. Do not run a write-disabled workflow with blocked cards left in
-`Ready for Codex` unless you plan to move them manually; they can be picked up again.
+When the imported board has a column named `Human Review`, the starter workflow allows Codex to move
+reviewable work there. Boards that still use a `Review` column remain supported when `Human Review`
+is absent. If there is no obvious review column, the generated workflow keeps Trello writes disabled
+until you choose one. Do not run a write-disabled workflow with blocked cards left in `Ready for
+Codex` unless you plan to move them manually; they can be picked up again.
 
 Common setup command options:
 
@@ -339,7 +348,7 @@ trello_tools:
   allow_writes: true
   allowed_move_list_names:
     - In Progress
-    - Review
+    - Human Review
     - Blocked
   allow_comments: true
   allow_checklists: false
@@ -355,6 +364,12 @@ Work on {{ card.identifier }}: {{ card.title }}.
 
 {{ card.description }}
 
+## Trello Comments
+
+{% for comment in card.comments %}
+- {{ comment.created_at }}{% if comment.author %} {{ comment.author }}{% endif %}: {{ comment.text }}
+{% endfor %}
+
 Use the current workspace by default. If the Trello card names a specific local path or project
 checkout, inspect that path instead. If that path is inaccessible, treat it as a blocker and follow
 the filesystem access blocker instructions below.
@@ -364,7 +379,7 @@ If the card is in "Ready for Codex", immediately call trello_move_current_card w
 existing execution flow.
 
 When the work is ready for human review, call trello_add_comment with a concise summary and
-verification notes, then call trello_move_current_card with list_name "Review". If the work is
+verification notes, then call trello_move_current_card with list_name "Human Review". If the work is
 blocked or unsafe to hand off, add a Trello comment explaining the blocker, then call
 trello_move_current_card with list_name "Blocked". If the blocker is a local filesystem access
 problem, the Trello comment must include the inaccessible path, why it is inaccessible, that deployed
@@ -386,7 +401,7 @@ Operationally, use the board like this:
 3. Watch the card move to `In Progress` after Codex picks it up.
 4. Watch Symphony at `http://127.0.0.1:8080/`; see [Operations](#operations) for the available
    status endpoints.
-5. Review the card after Codex moves it to `Review` or `Blocked`.
+5. Review the card after Codex moves it to `Human Review` or `Blocked`.
 6. Move the card out of active columns if you want to pause or prevent further retries.
 7. Move the card to `Done` when the generated work has been reviewed and accepted.
 
@@ -401,8 +416,9 @@ Create a board named `Symphony Work Queue` and add these columns in this order:
 2. `Ready for Codex`
 3. `In Progress`
 4. `Blocked`
-5. `Review`
-6. `Done`
+5. `Human Review`
+6. `Merging`
+7. `Done`
 
 Recommended meaning:
 
@@ -411,7 +427,9 @@ Recommended meaning:
 - `In Progress`: cards Codex has picked up. Symphony also treats this as active so a restart or
   retry can continue the card.
 - `Blocked`: cards Codex could not safely finish. Symphony ignores this column.
-- `Review`: work produced by Codex that needs human review. Symphony ignores this column.
+- `Human Review`: work produced by Codex that needs human review. Symphony ignores this column.
+- `Merging`: human-approved work that is ready for a landing flow. Symphony ignores this column
+  until landing automation is configured.
 - `Done`: finished cards. Symphony treats this as terminal.
 
 For each task card, use a title that reads like a pull request title, then put the useful details in
@@ -459,7 +477,7 @@ trello_tools:
   allow_writes: true
   allowed_move_list_names:
     - In Progress
-    - Review
+    - Human Review
     - Blocked
   allow_comments: true
   allow_checklists: false
@@ -481,6 +499,12 @@ You are working on {{ card.identifier }}: {{ card.title }}.
 
 {{ card.description }}
 
+## Trello Comments
+
+{% for comment in card.comments %}
+- {{ comment.created_at }}{% if comment.author %} {{ comment.author }}{% endif %}: {{ comment.text }}
+{% endfor %}
+
 Read the Trello description carefully, inspect the repository, make the smallest maintainable change,
 run relevant verification, and leave the workspace in a reviewable state.
 Use the current workspace by default. If the Trello card names a specific local path or project
@@ -492,7 +516,7 @@ If the card is in "Ready for Codex", immediately call trello_move_current_card w
 existing execution flow.
 
 When the work is ready for human review, call trello_add_comment with a concise summary and
-verification notes, then call trello_move_current_card with list_name "Review". If the work is
+verification notes, then call trello_move_current_card with list_name "Human Review". If the work is
 blocked or unsafe to hand off, add a Trello comment explaining the blocker, then call
 trello_move_current_card with list_name "Blocked". If the blocker is a local filesystem access
 problem, the Trello comment must include the inaccessible path, why it is inaccessible, that deployed
@@ -574,7 +598,7 @@ The recommended workflow gives Codex two scoped Trello handoff tools:
 
 - `trello_add_comment`: add a comment to the current card.
 - `trello_move_current_card`: move the current card to a configured board-local column such as
-  `In Progress`, `Review`, or `Blocked`.
+  `In Progress`, `Human Review`, or `Blocked`.
 
 The move tool uses argument names such as `list_name` and `list_id` because Trello's API calls board
 columns lists.
