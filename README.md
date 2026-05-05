@@ -109,7 +109,7 @@ Workspace and authorize the API token in the browser.
 
    - `Name`: `Symphony Trello Automation`
    - `Workspace`: the Workspace you created or chose above
-   - `Email` / `Support Email`: an email you control
+   - `Email` / `Support Contact`: an email you control
    - `Author`: your name or your team name
    - `iframe Connector URL`: leave this blank if Trello allows it. Symphony only needs REST API
      credentials and does not need a board-enabled Power-Up UI.
