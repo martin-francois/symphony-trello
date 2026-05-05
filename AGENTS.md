@@ -30,8 +30,7 @@ matters, and easy for another engineer to understand without asking the original
    before committing instead of correcting only the one sentence the user pointed out.
 8. When you notice a potential improvement that is outside the current task scope, keep the current
    work focused and create or suggest a GitHub issue instead of adding "future improvement",
-   "convenience gap", or similar sections to user-facing documentation. This applies across the
-   project, not only deployment.
+   "convenience gap", or similar sections to user-facing documentation.
 9. Run the relevant verification before finishing. For normal code changes, use:
 
    ```bash
@@ -92,6 +91,9 @@ matters, and easy for another engineer to understand without asking the original
   contract section instead of the README opening.
 - Write README prose in simple, direct language. Prefer short sentences and plain words over
   polished or elaborate wording.
+- Avoid redundant clarification sentences that restate the obvious scope of the previous sentence.
+  If a sentence already says "any", "all", "never", or names the broad scope, do not add a second
+  sentence explaining that the rule is broad.
 - Do not document options or config fields by only restating their names. Explain what the value is
   used for, when the reader should change it, and how to choose a sensible value.
 - For CLI commands, follow the principle of least surprise: avoid silent no-ops, print actionable
