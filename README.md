@@ -21,7 +21,7 @@ You can use it with one board, or run it for several boards at the same time.
 
 Symphony for Trello is a variant of OpenAI's Symphony adapted for Trello. The original Symphony spec
 uses Linear; this project keeps the same orchestration idea and maps it to Trello boards, lists, and
-cards. The technical project name is `symphony-trello`.
+cards.
 
 ## Table of Contents
 
