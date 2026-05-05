@@ -183,7 +183,18 @@ matters, and easy for another engineer to understand without asking the original
 - When the spec is ambiguous, compare plausible options and choose the least surprising option that
   preserves conformance.
 - If a decision explains why an obvious alternative was not chosen, record it in `docs/adr/` using
-  the existing MADR-style format.
+  the official MADR template structure: YAML front matter with `status`, `date`,
+  `decision-makers`, `consulted`, and `informed`; then `Context and Problem Statement`, `Decision
+  Drivers`, `Considered Options`, `Decision Outcome`, `Consequences`, `Confirmation`,
+  `Pros and Cons of the Options`, and `More Information` when relevant. Fill the sections with
+  concrete project-specific content; do not leave template placeholders or write a short free-form
+  note.
+- When adding or updating ADRs, document the options that were seriously considered, why the chosen
+  option won, what becomes easier, what becomes worse, and how future maintainers can confirm the
+  decision is still implemented.
+- When a session contains multiple durable design decisions, review the recent conversation and
+  commit history before finishing so relevant decisions are captured in ADRs instead of living only
+  in chat.
 - Do not silently reinterpret `SPEC.md`. If the implementation needs a clarified adaptation, update
   the spec wording carefully without breaking conformance to the original Symphony intent.
 
