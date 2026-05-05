@@ -59,6 +59,35 @@ class CodexSkillStructureTest {
         });
     }
 
+    @Test
+    void reviewSweepSkillCoversPrFeedbackSourcesAndOutcomes() throws IOException {
+        // given
+        Path skill = SKILLS_ROOT.resolve("review-sweep").resolve("SKILL.md");
+
+        // when
+        String body = readSkillMetadata(skill).body();
+
+        // then
+        assertThat(body)
+                .contains("PR URLs in the Trello card description")
+                .contains("PR URLs in recent Trello comments")
+                .contains("Branch names in the Trello card description or comments")
+                .contains("gh pr view --json")
+                .contains("gh api \"repos/{owner}/{repo}/issues/$pr_number/comments\"")
+                .contains("gh api \"repos/{owner}/{repo}/pulls/$pr_number/comments\"")
+                .contains("gh api \"repos/{owner}/{repo}/pulls/$pr_number/reviews\"")
+                .contains("Codex review issue comments")
+                .contains("correctness")
+                .contains("design")
+                .contains("style")
+                .contains("clarification")
+                .contains("scope")
+                .contains("inline replies for inline review comments")
+                .contains("PR title, body, branch, labels, or linked card references")
+                .contains("Failing or stale required checks")
+                .contains("Repeat the sweep until no actionable comments remain");
+    }
+
     private SkillMetadata readSkillMetadata(Path file) {
         try {
             String content = Files.readString(file, StandardCharsets.UTF_8);

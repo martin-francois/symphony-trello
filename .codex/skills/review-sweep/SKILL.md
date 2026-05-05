@@ -15,6 +15,8 @@ description: >
 - Treat actionable human, bot, and Codex review feedback as blocking until
   handled.
 - Reply in the right place when accepting, clarifying, or pushing back.
+- Keep PR title, body, branch, and metadata aligned with the current Trello
+  scope when an existing PR is reused.
 - Record the outcome in the Trello workpad before handoff.
 
 ## Finding The PR
@@ -23,16 +25,18 @@ Try these sources in order:
 
 1. PR URLs in the Trello card description.
 2. PR URLs in recent Trello comments.
-3. The current branch:
+3. Branch names in the Trello card description or comments.
+4. The current branch:
 
    ```bash
+   git branch --show-current
    gh pr view --json number,url,title,state,headRefName,baseRefName
    ```
 
-4. Open PRs whose branch or title matches card context:
+5. Open PRs whose branch, title, body, or labels match card context:
 
    ```bash
-   gh pr list --state open --json number,url,title,headRefName
+   gh pr list --state open --json number,url,title,body,headRefName,labels
    ```
 
 If no PR exists, skip GitHub review checks and continue with local validation.
@@ -49,6 +53,9 @@ gh api "repos/{owner}/{repo}/pulls/$pr_number/comments"
 gh api "repos/{owner}/{repo}/pulls/$pr_number/reviews"
 gh pr checks "$pr_number"
 ```
+
+Treat Codex review issue comments as part of the PR feedback set when the
+repository uses GitHub issue comments for Codex review output.
 
 Classify each actionable item as one of:
 
@@ -71,6 +78,9 @@ agent-authored GitHub comments to be marked.
 
 Use inline replies for inline review comments. Use the PR issue thread for
 top-level comments and Codex review issue comments.
+
+If the PR title, body, branch, labels, or linked card references no longer
+match the work actually completed, update the PR metadata before handoff.
 
 ## Checks
 
