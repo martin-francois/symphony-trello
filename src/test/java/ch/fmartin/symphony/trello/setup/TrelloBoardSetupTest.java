@@ -148,6 +148,13 @@ class TrelloBoardSetupTest {
                 .contains("## Codex Workpad")
                 .contains("trello_upsert_workpad")
                 .contains("do not create separate progress comments")
+                .contains("## Acceptance Criteria And Validation")
+                .contains("extract the card-specific acceptance criteria")
+                .contains("Validation`, `Test Plan`, or `Testing` section as")
+                .contains("capture a concrete current-state signal")
+                .contains("Verification evidence must be specific to this card")
+                .contains("Temporary local proof edits are allowed only")
+                .contains("Do not move the card to \"Human Review\"")
                 .contains("## Trello Column Routing")
                 .contains("Symphony only dispatches cards from configured active columns")
                 .contains("\"Ready for Codex\": queued work")
@@ -252,6 +259,11 @@ class TrelloBoardSetupTest {
                 .contains("## Trello Comments")
                 .contains("## Codex Workpad")
                 .contains("trello_upsert_workpad")
+                .contains("## Acceptance Criteria And Validation")
+                .contains("extract the card-specific acceptance criteria")
+                .contains("Validation`, `Test Plan`, or `Testing` section as")
+                .contains("current-state signal")
+                .contains("final validation")
                 .contains("## Trello Column Routing")
                 .contains("\"Ready for Codex\": queued work")
                 .contains("\"In Progress\": active work already picked up by Codex")
@@ -349,6 +361,7 @@ class TrelloBoardSetupTest {
         assertThat(config.trelloTools().enabled()).isTrue();
         assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("review", "needs help");
         assertThat(config.agent().maxConcurrentAgents()).isEqualTo(2);
+        assertThat(workflow).content(StandardCharsets.UTF_8).contains("Do not move the card to \"Review\"");
     }
 
     @Test
@@ -421,7 +434,9 @@ class TrelloBoardSetupTest {
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .doesNotContain("## Codex Workpad")
-                .doesNotContain("trello_upsert_workpad");
+                .doesNotContain("trello_upsert_workpad")
+                .contains("## Acceptance Criteria And Validation")
+                .contains("the final Codex response or handoff comment");
     }
 
     @Test
