@@ -478,6 +478,23 @@ Use this when changing systemd hardening or Ansible deployment access.
 8. Deploy again with a different allowed root and create a card for the previous path. It should
    block again, proving the allowlist did not become broad host access.
 
+### Regression Scenario: In-Progress Pickup Visibility
+
+Use this when changing generated workflows, Trello move tools, or the recommended board layout.
+
+1. Deploy a workflow whose board has `Ready for Codex`, `In Progress`, `Review`, and `Blocked`.
+2. Ensure `tracker.active_states` includes both `Ready for Codex` and `In Progress`.
+3. Ensure `trello_tools.allowed_move_list_names` includes `In Progress`, `Review`, and `Blocked`.
+4. Create a fresh card in `Ready for Codex`.
+5. Verify Trello card actions include a move from `Ready for Codex` to `In Progress` after the card is
+   picked up.
+6. Wait for the normal handoff. The card should then move to `Review` or `Blocked`, and
+   `/api/v1/state` should drain to zero running and retrying entries.
+7. Deploy a second workflow for the same board shape without an in-progress column configured in the
+   workflow.
+8. Create a fresh card in `Ready for Codex` and verify it reaches the final handoff column without any
+   Trello action moving it to `In Progress`.
+
 ### Regression Scenario: Blocked Work Stays Active
 
 Observed on 2026-05-05 against a real Trello board:

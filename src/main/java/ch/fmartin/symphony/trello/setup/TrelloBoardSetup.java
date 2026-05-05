@@ -29,11 +29,18 @@ public final class TrelloBoardSetup {
     public static final Path DEFAULT_WORKSPACE_ROOT = Path.of("./workspaces");
     public static final int DEFAULT_MAX_CONCURRENT_AGENTS = 1;
     public static final String RECOMMENDED_ACTIVE_STATE = "Ready for Codex";
+    public static final String RECOMMENDED_IN_PROGRESS_STATE = "In Progress";
     public static final String RECOMMENDED_BLOCKED_STATE = "Blocked";
     public static final String RECOMMENDED_REVIEW_STATE = "Review";
-    public static final List<String> RECOMMENDED_COLUMNS =
-            List.of("Inbox", RECOMMENDED_ACTIVE_STATE, RECOMMENDED_BLOCKED_STATE, RECOMMENDED_REVIEW_STATE, "Done");
-    public static final List<String> RECOMMENDED_ACTIVE_STATES = List.of(RECOMMENDED_ACTIVE_STATE);
+    public static final List<String> RECOMMENDED_COLUMNS = List.of(
+            "Inbox",
+            RECOMMENDED_ACTIVE_STATE,
+            RECOMMENDED_IN_PROGRESS_STATE,
+            RECOMMENDED_BLOCKED_STATE,
+            RECOMMENDED_REVIEW_STATE,
+            "Done");
+    public static final List<String> RECOMMENDED_ACTIVE_STATES =
+            List.of(RECOMMENDED_ACTIVE_STATE, RECOMMENDED_IN_PROGRESS_STATE);
     public static final List<String> RECOMMENDED_TERMINAL_STATES = List.of("Done");
 
     private static final List<String> SYSTEM_TERMINAL_STATES =
@@ -88,6 +95,7 @@ public final class TrelloBoardSetup {
                         boardKey,
                         RECOMMENDED_ACTIVE_STATES,
                         RECOMMENDED_TERMINAL_STATES,
+                        RECOMMENDED_IN_PROGRESS_STATE,
                         RECOMMENDED_REVIEW_STATE,
                         RECOMMENDED_BLOCKED_STATE,
                         request.workspaceRoot(),
@@ -171,8 +179,12 @@ public final class TrelloBoardSetup {
                 request.terminalStates().isEmpty() ? defaultTerminalStates(openListNames) : request.terminalStates();
         String blockedState =
                 blank(request.blockedState()) ? defaultBlockedState(openListNames) : request.blockedState();
+        String inProgressState =
+                request.detectInProgressState() ? defaultInProgressState(openListNames) : request.inProgressState();
+        activeStates = withOptionalActiveState(activeStates, inProgressState);
         validateConfiguredLists("active", activeStates, openListNames);
         validateConfiguredLists("terminal", terminalStates, openListNames);
+        validateConfiguredList("in-progress", inProgressState, openListNames);
         validateConfiguredList("blocked", blockedState, openListNames);
 
         String boardKey = boardKey(board);
@@ -183,6 +195,7 @@ public final class TrelloBoardSetup {
                         boardKey,
                         activeStates,
                         terminalStates,
+                        inProgressState,
                         defaultReviewState(openListNames),
                         blockedState,
                         request.workspaceRoot(),
@@ -196,6 +209,7 @@ public final class TrelloBoardSetup {
                 openListNames,
                 activeStates,
                 terminalStates,
+                inProgressState,
                 blockedState,
                 request.workflowPath());
     }
@@ -317,6 +331,7 @@ public final class TrelloBoardSetup {
             String boardId,
             List<String> activeStates,
             List<String> terminalStates,
+            String inProgressState,
             String reviewState,
             String blockedState,
             Path workspaceRoot,
@@ -354,6 +369,8 @@ public final class TrelloBoardSetup {
 
                 {{ card.description }}
 
+                %s
+
                 Read the Trello description carefully, inspect the repository, make the smallest maintainable change,
                 run relevant verification, and leave the workspace in a reviewable state.
                 Use the current workspace by default. If the Trello card names a specific local path or project
@@ -370,8 +387,9 @@ public final class TrelloBoardSetup {
                         yamlList(activeStates),
                         yamlList(withSystemTerminalStates(terminalStates)),
                         yamlScalar(workspaceRoot.toString()),
-                        trelloToolsYaml(allowedMoveStates(reviewState, blockedState)),
+                        trelloToolsYaml(allowedMoveStates(inProgressState, reviewState, blockedState)),
                         maxAgents,
+                        pickupPrompt(activeStates, inProgressState),
                         handoffPrompt(reviewState, blockedState));
     }
 
@@ -432,8 +450,28 @@ public final class TrelloBoardSetup {
                 .formatted(reviewState, blockedDestination, FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION);
     }
 
-    private static List<String> allowedMoveStates(String reviewState, String blockedState) {
+    private static String pickupPrompt(List<String> activeStates, String inProgressState) {
+        if (blank(inProgressState)) {
+            return """
+                    This workflow has no in-progress column configured. Leave the card in its current active column
+                    while working, then move it to the configured handoff column when the work is ready or blocked."""
+                    .stripTrailing();
+        }
+        List<String> queueStates = activeStates.stream()
+                .filter(state -> !state.equalsIgnoreCase(inProgressState))
+                .toList();
+        String queueText = queueStates.isEmpty() ? "an active queue column" : quotedList(queueStates);
+        return """
+                If the card is in %s, immediately call trello_move_current_card with list_name "%s" before
+                implementation work. If the card is already in "%s", continue the existing execution flow."""
+                .formatted(queueText, inProgressState, inProgressState);
+    }
+
+    private static List<String> allowedMoveStates(String inProgressState, String reviewState, String blockedState) {
         List<String> states = new ArrayList<>();
+        if (!blank(inProgressState)) {
+            states.add(inProgressState);
+        }
         if (!blank(reviewState)) {
             states.add(reviewState);
         }
@@ -469,6 +507,10 @@ public final class TrelloBoardSetup {
         return "\"%s\"".formatted(value.replace("\\", "\\\\").replace("\"", "\\\""));
     }
 
+    private static String quotedList(List<String> values) {
+        return values.stream().map(value -> "\"" + value + "\"").collect(Collectors.joining(", "));
+    }
+
     private static List<String> defaultActiveStates(List<String> openListNames) {
         return openListNames.stream()
                 .filter(name -> name.equalsIgnoreCase(RECOMMENDED_ACTIVE_STATE))
@@ -492,11 +534,27 @@ public final class TrelloBoardSetup {
                 .orElse(null);
     }
 
+    private static String defaultInProgressState(List<String> openListNames) {
+        return openListNames.stream()
+                .filter(name -> name.equalsIgnoreCase(RECOMMENDED_IN_PROGRESS_STATE))
+                .findFirst()
+                .orElse(null);
+    }
+
     private static String defaultBlockedState(List<String> openListNames) {
         return openListNames.stream()
                 .filter(name -> name.equalsIgnoreCase(RECOMMENDED_BLOCKED_STATE))
                 .findFirst()
                 .orElse(null);
+    }
+
+    private static List<String> withOptionalActiveState(List<String> activeStates, String extraState) {
+        if (blank(extraState) || activeStates.stream().anyMatch(existing -> existing.equalsIgnoreCase(extraState))) {
+            return activeStates;
+        }
+        List<String> combined = new ArrayList<>(activeStates);
+        combined.add(extraState);
+        return List.copyOf(combined);
     }
 
     private static void validateConfiguredLists(String label, List<String> configured, List<String> openListNames) {
@@ -669,11 +727,66 @@ public final class TrelloBoardSetup {
             String boardId,
             List<String> activeStates,
             List<String> terminalStates,
+            String inProgressState,
+            boolean detectInProgressState,
             String blockedState,
             Path workflowPath,
             Path workspaceRoot,
             int maxConcurrentAgents,
             boolean force) {
+        public ImportBoardRequest(
+                URI endpoint,
+                TrelloCredentials credentials,
+                String boardId,
+                List<String> activeStates,
+                List<String> terminalStates,
+                String blockedState,
+                Path workflowPath,
+                Path workspaceRoot,
+                int maxConcurrentAgents,
+                boolean force) {
+            this(
+                    endpoint,
+                    credentials,
+                    boardId,
+                    activeStates,
+                    terminalStates,
+                    null,
+                    true,
+                    blockedState,
+                    workflowPath,
+                    workspaceRoot,
+                    maxConcurrentAgents,
+                    force);
+        }
+
+        public ImportBoardRequest(
+                URI endpoint,
+                TrelloCredentials credentials,
+                String boardId,
+                List<String> activeStates,
+                List<String> terminalStates,
+                String inProgressState,
+                String blockedState,
+                Path workflowPath,
+                Path workspaceRoot,
+                int maxConcurrentAgents,
+                boolean force) {
+            this(
+                    endpoint,
+                    credentials,
+                    boardId,
+                    activeStates,
+                    terminalStates,
+                    inProgressState,
+                    false,
+                    blockedState,
+                    workflowPath,
+                    workspaceRoot,
+                    maxConcurrentAgents,
+                    force);
+        }
+
         private void validate() {
             Objects.requireNonNull(endpoint, "endpoint");
             Objects.requireNonNull(credentials, "credentials").validate();
@@ -709,6 +822,7 @@ public final class TrelloBoardSetup {
             List<String> openColumns,
             List<String> activeStates,
             List<String> terminalStates,
+            String inProgressState,
             String blockedState,
             Path workflowPath) {}
 

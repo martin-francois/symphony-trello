@@ -78,6 +78,7 @@ public final class TrelloBoardSetupMain {
         out.println("Board ID for WORKFLOW.md: " + result.boardKey());
         out.println("Open columns: " + String.join(", ", result.openColumns()));
         out.println("Active columns: " + String.join(", ", result.activeStates()));
+        out.println("In-progress column: " + optionalColumnName(result.inProgressState()));
         out.println("Terminal columns: " + String.join(", ", result.terminalStates()));
         out.println("Blocked column: " + optionalColumnName(result.blockedState()));
         out.println("Wrote workflow: " + result.workflowPath().toAbsolutePath().normalize());
@@ -126,6 +127,8 @@ public final class TrelloBoardSetupMain {
                 import-board options:
                   --board ID            Required Trello board id or short link
                   --active NAME         Repeatable or comma-separated column name. Defaults to Ready for Codex when present.
+                  --in-progress NAME    Optional column Codex moves cards to when it picks them up. Defaults to In Progress when present.
+                  --no-in-progress      Do not configure an in-progress pickup column.
                   --terminal NAME       Repeatable or comma-separated column name. Defaults to Done when present.
                   --blocked NAME        Optional blocked column name. Defaults to Blocked when present.
                 """;
@@ -146,6 +149,8 @@ public final class TrelloBoardSetupMain {
             String boardId,
             List<String> activeStates,
             List<String> terminalStates,
+            String inProgressState,
+            boolean detectInProgressState,
             String blockedState) {
         private NewBoardRequest newBoardRequest() {
             return new NewBoardRequest(
@@ -167,6 +172,8 @@ public final class TrelloBoardSetupMain {
                     boardId,
                     List.copyOf(activeStates),
                     List.copyOf(terminalStates),
+                    inProgressState,
+                    detectInProgressState,
                     blockedState,
                     workflowPath,
                     workspaceRoot,
@@ -199,6 +206,8 @@ public final class TrelloBoardSetupMain {
             String boardId = null;
             List<String> activeStates = new ArrayList<>();
             List<String> terminalStates = new ArrayList<>();
+            String inProgressState = null;
+            boolean detectInProgressState = true;
             String blockedState = null;
 
             for (int i = 0; i < remaining.size(); i++) {
@@ -218,6 +227,14 @@ public final class TrelloBoardSetupMain {
                     case "--workspace-id" -> workspaceId = value(remaining, ++i, option);
                     case "--board" -> boardId = value(remaining, ++i, option);
                     case "--active" -> activeStates.addAll(csv(value(remaining, ++i, option)));
+                    case "--in-progress" -> {
+                        inProgressState = value(remaining, ++i, option).trim();
+                        detectInProgressState = false;
+                    }
+                    case "--no-in-progress" -> {
+                        inProgressState = null;
+                        detectInProgressState = false;
+                    }
                     case "--terminal" -> terminalStates.addAll(csv(value(remaining, ++i, option)));
                     case "--blocked" ->
                         blockedState = value(remaining, ++i, option).trim();
@@ -240,6 +257,8 @@ public final class TrelloBoardSetupMain {
                     boardId,
                     activeStates,
                     terminalStates,
+                    inProgressState,
+                    detectInProgressState,
                     blockedState);
         }
 
