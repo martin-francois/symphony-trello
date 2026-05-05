@@ -1,24 +1,25 @@
 # Symphony Trello Java
 
-Symphony Trello Java is for people who want Codex to work from a visible, shared queue instead of a
-pile of prompts, shell history, and half-remembered task lists. It turns Trello into a lightweight
-control surface for agent-assisted software work: capture tasks, decide what is ready for Codex, see
-what is running, review completed handoffs, and keep context organized across one or many projects.
+Symphony Trello Java lets Codex work from Trello cards. Use it when prompts and terminal history are
+not enough, and you want a clear board that shows what Codex should do, what is running, and what is
+ready for review.
 
 Use it when you want to:
 
-- Track agent work in the same board where you already plan engineering work.
-- Set up a simple Trello board specifically for coordinating multiple Codex tasks.
-- Let Codex pick up ready cards without hand-running a script for every card.
-- Keep every card's work isolated in its own local workspace.
-- Make handoff visible by having Codex comment on the Trello card and move it to review.
-- Resume and debug work from a status page instead of piecing together terminal output.
+- Plan Codex work in Trello.
+- Reuse an existing engineering board.
+- Create a simple board just for Codex tasks.
+- Let Codex pick up ready cards without starting each one by hand.
+- Keep each card in its own local workspace.
+- Have Codex comment on the card and move it to review when it is done.
+- Check running and retrying work from a status page.
 
-Symphony stays deliberately narrow: Trello remains the planning and review surface, Codex does the
-implementation work, and this service connects the two in a repeatable way. A running Symphony
-process follows one `WORKFLOW.md`, and that workflow points to one Trello board. To automate multiple
-boards at the same time, run one Symphony process per board with a separate workflow file and HTTP
-port.
+Trello is still where you plan and review work. Codex still writes the code. Symphony connects them
+so the same workflow can run again and again.
+
+One Symphony process uses one `WORKFLOW.md`, and that workflow points to one Trello board. To run
+multiple boards at the same time, start one Symphony process per board with its own workflow file and
+HTTP port.
 
 ## Table of Contents
 
