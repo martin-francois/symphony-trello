@@ -103,7 +103,7 @@ Workspace and authorize the API token in the browser.
 
 3. Open the [Trello apps administration page](https://trello.com/power-ups/admin).
 4. If Trello asks you to accept or complete a developer agreement before creating an app, complete
-   that browser flow. Symphony cannot automate that part.
+   that browser flow.
 5. Click `New` to create a new app/admin entry for the Workspace.
 6. Fill the required fields with clear, recognizable values:
 
