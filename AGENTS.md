@@ -65,6 +65,8 @@ matters, and easy for another engineer to understand without asking the original
   Recommend concrete names or values only when the choice is semantically important.
 - When suggesting user-visible names for external systems, include the integration or scope when it
   helps the user recognize what the entry is for later.
+- When documenting third-party UI fields, use the current vendor label exactly when known instead of
+  approximating it.
 - Keep setup steps focused on what the reader must do now. Avoid naming external documentation
   terminology or adding fallback-guide chatter unless it solves a likely problem in that step.
 - Avoid repeating limitations already made clear by the surrounding setup context.
