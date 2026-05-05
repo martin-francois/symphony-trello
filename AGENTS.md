@@ -61,6 +61,9 @@ matters, and easy for another engineer to understand without asking the original
   adding a `package.json` solely to run a JavaScript CLI in this Java project.
 - When pinning tool versions outside their native manifest files, ensure Renovate can update them
   through an existing manager or an explicit custom manager.
+- Pin GitHub Actions to full commit SHAs with the tracked version tag in a comment. Renovate may
+  automerge non-major GitHub Actions updates after the configured release-age delay, but major
+  action updates still need human review.
 - When configuring build-tool integrations such as Java agents, prefer the official documented
   Maven pattern over hand-built local repository paths or other brittle shortcuts.
 - Do not use Perl/Python/Ruby/Node one-liners as the documented implementation of a reproducible
