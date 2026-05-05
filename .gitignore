@@ -7,6 +7,9 @@ target/
 .mvn/wrapper/dists/
 workspaces/
 logs/
+WORKFLOW.md
+WORKFLOW.*.md
+!WORKFLOW.example.md
 .secrets/
 .env
 .env.*
