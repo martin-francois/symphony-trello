@@ -102,14 +102,14 @@ public final class TrelloBoardSetupMain {
                   Put TRELLO_API_KEY and TRELLO_API_TOKEN in .env, export them, or pass --key and --token.
 
                 Commands:
-                  new-board     Create the recommended board, create lists, and write WORKFLOW.md.
-                  import-board  Read an existing board and write WORKFLOW.md for it.
+                  new-board     Create the recommended board, create lists, and write a workflow file.
+                  import-board  Read an existing board and write a workflow file for it.
                   list-workspaces  Print workspace ids available to the token.
 
                 Common options:
-                  --workflow PATH       Workflow file to write. Default: WORKFLOW.md
-                  --workspace-root PATH Workspace root to put in the workflow. Default: ./workspaces
-                  --max-agents N        Initial max_concurrent_agents value. Default: 1
+                  --workflow PATH       Exact workflow file to write. Default: WORKFLOW.md, or a board-specific name when WORKFLOW.md exists.
+                  --workspace-root PATH Where Symphony should create one local work directory per Trello card. Default: ./workspaces
+                  --max-agents N        How many cards from this board may run at the same time. Default: 1
                   --force               Overwrite an existing workflow file
                   --endpoint URL        Trello API endpoint. Default: https://api.trello.com/1
                   --help                Show this help
@@ -133,6 +133,7 @@ public final class TrelloBoardSetupMain {
             Path workspaceRoot,
             int maxConcurrentAgents,
             boolean force,
+            boolean workflowPathExplicit,
             boolean help,
             String boardName,
             String workspaceId,
@@ -148,7 +149,8 @@ public final class TrelloBoardSetupMain {
                     workflowPath,
                     workspaceRoot,
                     maxConcurrentAgents,
-                    force);
+                    force,
+                    !workflowPathExplicit);
         }
 
         private ImportBoardRequest importBoardRequest() {
@@ -178,6 +180,7 @@ public final class TrelloBoardSetupMain {
 
             URI endpoint = TrelloBoardSetup.DEFAULT_ENDPOINT;
             Path workflowPath = TrelloBoardSetup.DEFAULT_WORKFLOW_PATH;
+            boolean workflowPathExplicit = false;
             Path workspaceRoot = TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT;
             int maxAgents = TrelloBoardSetup.DEFAULT_MAX_CONCURRENT_AGENTS;
             boolean force = false;
@@ -195,7 +198,10 @@ public final class TrelloBoardSetupMain {
                     case "--key" -> key = value(remaining, ++i, option);
                     case "--token" -> token = value(remaining, ++i, option);
                     case "--endpoint" -> endpoint = URI.create(value(remaining, ++i, option));
-                    case "--workflow" -> workflowPath = Path.of(value(remaining, ++i, option));
+                    case "--workflow" -> {
+                        workflowPath = Path.of(value(remaining, ++i, option));
+                        workflowPathExplicit = true;
+                    }
                     case "--workspace-root" -> workspaceRoot = Path.of(value(remaining, ++i, option));
                     case "--max-agents" -> maxAgents = Integer.parseInt(value(remaining, ++i, option));
                     case "--force" -> force = true;
@@ -216,6 +222,7 @@ public final class TrelloBoardSetupMain {
                     workspaceRoot,
                     maxAgents,
                     force,
+                    workflowPathExplicit,
                     help,
                     boardName,
                     workspaceId,

@@ -64,15 +64,16 @@ class TrelloBoardSetupTest {
             authorization.set(exchange.getRequestHeaders().getFirst("Authorization"));
             Map<String, String> query = query(exchange);
             assertThat(query)
-                    .containsEntry("name", "Symphony Work Queue")
+                    .containsKey("name")
                     .containsEntry("defaultLists", "false")
                     .containsEntry("defaultLabels", "false")
                     .containsEntry("idOrganization", "workspace-1");
             respond(
                     exchange,
                     """
-                    {"id":"board-1","name":"Symphony Work Queue","shortLink":"abc123","url":"https://trello.com/b/abc123/symphony-work-queue"}
-                    """);
+                    {"id":"board-1","name":"%s","shortLink":"abc123","url":"https://trello.com/b/abc123/symphony-work-queue"}
+                    """
+                            .formatted(query.get("name")));
         });
         server.createContext("/1/lists", exchange -> {
             assertThat(exchange.getRequestMethod()).isEqualTo("POST");
@@ -113,6 +114,7 @@ class TrelloBoardSetupTest {
                 workflow,
                 Path.of("./workspaces"),
                 1,
+                false,
                 false));
 
         // then
@@ -160,6 +162,7 @@ class TrelloBoardSetupTest {
                 workflow,
                 Path.of("./workspaces"),
                 1,
+                false,
                 false);
 
         // when
@@ -299,7 +302,7 @@ class TrelloBoardSetupTest {
     }
 
     @Test
-    void refusesToOverwriteExistingWorkflowUnlessForced() throws IOException {
+    void importRefusesToOverwriteExistingWorkflowUnlessForced() throws IOException {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         Files.writeString(workflow, "keep me", StandardCharsets.UTF_8);
@@ -321,6 +324,96 @@ class TrelloBoardSetupTest {
         // then
         assertThatThrownBy(action).isInstanceOf(TrelloBoardSetupException.class).hasMessageContaining("--force");
         assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo("keep me");
+    }
+
+    @Test
+    void newBoardUsesSluggedWorkflowPathWhenDefaultWorkflowAlreadyExists() throws IOException {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Files.writeString(workflow, "keep me", StandardCharsets.UTF_8);
+
+        // when
+        var result = setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "My Project!",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                1,
+                false,
+                true));
+
+        // then
+        Path generatedWorkflow = tempDir.resolve("WORKFLOW.my-project.md");
+        assertThat(result.workflowPath()).isEqualTo(generatedWorkflow);
+        assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo("keep me");
+        assertThat(generatedWorkflow).content(StandardCharsets.UTF_8).contains("board_id: \"abc123\"");
+    }
+
+    @Test
+    void newBoardAddsNumericSuffixWhenSluggedWorkflowPathAlreadyExists() throws IOException {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Path firstGeneratedWorkflow = tempDir.resolve("WORKFLOW.my-project.md");
+        Files.writeString(workflow, "keep me", StandardCharsets.UTF_8);
+        Files.writeString(firstGeneratedWorkflow, "keep me too", StandardCharsets.UTF_8);
+
+        // when
+        var result = setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "My Project",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                1,
+                false,
+                true));
+
+        // then
+        Path generatedWorkflow = tempDir.resolve("WORKFLOW.my-project-2.md");
+        assertThat(result.workflowPath()).isEqualTo(generatedWorkflow);
+        assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo("keep me");
+        assertThat(firstGeneratedWorkflow).content(StandardCharsets.UTF_8).isEqualTo("keep me too");
+        assertThat(generatedWorkflow).content(StandardCharsets.UTF_8).contains("board_id: \"abc123\"");
+    }
+
+    @Test
+    void newBoardRefusesToOverwriteExplicitWorkflowPathUnlessForced() throws IOException {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Files.writeString(workflow, "keep me", StandardCharsets.UTF_8);
+
+        var request = new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "My Project",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                1,
+                false,
+                false);
+
+        // when
+        ThrowingCallable action = () -> setup.createRecommendedBoard(request);
+
+        // then
+        assertThatThrownBy(action).isInstanceOf(TrelloBoardSetupException.class).hasMessageContaining("--force");
+        assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo("keep me");
+    }
+
+    @Test
+    void slugifyUsesReadableFallbackForNamesWithoutAsciiLettersOrDigits() {
+        // given
+        String boardName = "!!!";
+
+        // when
+        String slug = TrelloBoardSetup.slugify(boardName);
+
+        // then
+        assertThat(slug).isEqualTo("board");
     }
 
     private URI endpoint() {

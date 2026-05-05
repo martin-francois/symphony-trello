@@ -12,6 +12,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -47,7 +48,8 @@ public final class TrelloBoardSetup {
 
     public NewBoardResult createRecommendedBoard(NewBoardRequest request) {
         request.validate();
-        ensureWorkflowWritable(request.workflowPath(), request.force());
+        Path workflowPath = resolveNewBoardWorkflowPath(request);
+        ensureWorkflowWritable(workflowPath, request.force());
         String workspaceId = resolveWorkspaceId(request);
         Map<String, Object> board = postMap(
                 request.endpoint(),
@@ -69,7 +71,7 @@ public final class TrelloBoardSetup {
         }
 
         writeWorkflow(
-                request.workflowPath(),
+                workflowPath,
                 request.force(),
                 workflowTemplate(
                         boardKey,
@@ -79,8 +81,7 @@ public final class TrelloBoardSetup {
                         request.workspaceRoot(),
                         request.maxConcurrentAgents()));
 
-        return new NewBoardResult(
-                boardId, boardKey, request.boardName(), boardUrl, createdLists, request.workflowPath());
+        return new NewBoardResult(boardId, boardKey, request.boardName(), boardUrl, createdLists, workflowPath);
     }
 
     private String resolveWorkspaceId(NewBoardRequest request) {
@@ -248,11 +249,41 @@ public final class TrelloBoardSetup {
             if (parent != null) {
                 Files.createDirectories(parent);
             }
-            Files.writeString(absolute, workflow, StandardCharsets.UTF_8);
+            if (force) {
+                Files.writeString(
+                        absolute,
+                        workflow,
+                        StandardCharsets.UTF_8,
+                        StandardOpenOption.CREATE,
+                        StandardOpenOption.TRUNCATE_EXISTING);
+            } else {
+                Files.writeString(absolute, workflow, StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
+            }
         } catch (IOException e) {
             throw new TrelloBoardSetupException(
                     "setup_workflow_write_failed", "Could not write workflow file: " + absolute, e);
         }
+    }
+
+    private static Path resolveNewBoardWorkflowPath(NewBoardRequest request) {
+        Path requested = request.workflowPath();
+        if (request.force()
+                || !request.useBoardNameWorkflowFallback()
+                || !Files.exists(requested.toAbsolutePath().normalize())) {
+            return requested;
+        }
+
+        Path parent = requested.getParent();
+        String slug = slugify(request.boardName());
+        Path candidate = resolveSibling(parent, "WORKFLOW." + slug + ".md");
+        for (int suffix = 2; Files.exists(candidate.toAbsolutePath().normalize()); suffix++) {
+            candidate = resolveSibling(parent, "WORKFLOW." + slug + "-" + suffix + ".md");
+        }
+        return candidate;
+    }
+
+    private static Path resolveSibling(Path parent, String fileName) {
+        return parent == null ? Path.of(fileName) : parent.resolve(fileName);
     }
 
     private static Path ensureWorkflowWritable(Path workflowPath, boolean force) {
@@ -505,6 +536,12 @@ public final class TrelloBoardSetup {
         return value.trim().toLowerCase(Locale.ROOT);
     }
 
+    static String slugify(String value) {
+        String slug =
+                value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-").replaceAll("(^-+|-+$)", "");
+        return slug.isBlank() ? "board" : slug;
+    }
+
     public record TrelloCredentials(String apiKey, String apiToken) {
         private void validate() {
             if (blank(apiKey)) {
@@ -524,7 +561,8 @@ public final class TrelloBoardSetup {
             Path workflowPath,
             Path workspaceRoot,
             int maxConcurrentAgents,
-            boolean force) {
+            boolean force,
+            boolean useBoardNameWorkflowFallback) {
         private void validate() {
             Objects.requireNonNull(endpoint, "endpoint");
             Objects.requireNonNull(credentials, "credentials").validate();
