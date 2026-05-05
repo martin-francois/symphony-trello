@@ -17,6 +17,41 @@ cards before claiming real `codex app-server` coverage.
 The live commands read `.env` automatically. Real environment variables with the same names take
 precedence.
 
+## Automated Fake-Codex Harness
+
+Use the Java harness first when you need to verify real Trello setup, card ordering, imports,
+handoff moves, comments, and multi-board concurrency. It creates disposable Trello boards, runs the
+packaged Symphony service on local ports, uses the deterministic Java fake Codex app-server, and
+archives the created boards during cleanup.
+
+```bash
+SYMPHONY_RUN_LIVE_E2E=1 ./mvnw -q -Dit.test=LiveTrelloE2eIT verify
+```
+
+If the Trello token can access more than one Workspace, choose the Workspace for disposable test
+boards:
+
+```bash
+SYMPHONY_RUN_LIVE_E2E=1 \
+SYMPHONY_LIVE_E2E_TRELLO_WORKSPACE_ID=replace-with-workspace-id \
+./mvnw -q -Dit.test=LiveTrelloE2eIT verify
+```
+
+The harness covers:
+
+1. `.env` / environment credential loading.
+2. Recommended-board creation.
+3. Generated-board import.
+4. Import of a non-default existing board structure.
+5. `max_concurrent_agents: 1` ordering, including a later-created card moved above an older card.
+6. `max_concurrent_agents: 2` on one board.
+7. Two Symphony processes watching two boards at the same time.
+8. Fake app-server Trello comments and handoff moves.
+9. Final `/api/v1/state` drain to zero running and retrying entries.
+
+Use the manual sections below when you need a step-by-step reproduction, strict real-Codex coverage,
+deployment troubleshooting, or a scenario the Java harness does not automate yet.
+
 ## What To Verify
 
 Use a unique run id such as `live-e2e-YYYYMMDD-HHMMSS`.

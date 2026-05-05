@@ -2,6 +2,9 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Matcher;
@@ -78,7 +81,11 @@ public class FakeCodexAppServer {
                 10_002,
                 "trello_move_current_card",
                 "{\"list_name\":\"Review\"}");
-        completeTurn(threadId, turnId, toolError(moveResponse));
+        String moveError = toolError(moveResponse);
+        if (moveError == null) {
+            recordSuccessfulCompletion(turnId);
+        }
+        completeTurn(threadId, turnId, moveError);
     }
 
     private String requestTool(int requestId, String tool, String arguments) throws IOException {
@@ -107,6 +114,19 @@ public class FakeCodexAppServer {
             return response;
         }
         return response.contains("\"success\":false") ? response : null;
+    }
+
+    private static void recordSuccessfulCompletion(String turnId) throws IOException {
+        String completionsFile = System.getenv("SYMPHONY_FAKE_CODEX_COMPLETIONS_FILE");
+        if (completionsFile == null || completionsFile.isBlank()) {
+            return;
+        }
+        Files.writeString(
+                Path.of(completionsFile),
+                turnId + System.lineSeparator(),
+                StandardCharsets.UTF_8,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.APPEND);
     }
 
     private static Optional<Integer> captureInt(Pattern pattern, String value) {
