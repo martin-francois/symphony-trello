@@ -25,11 +25,13 @@ Use a unique run id such as `live-e2e-YYYYMMDD-HHMMSS`.
 2. `new-board` creates a disposable board and writes a workflow.
 3. `import-board` reads both a Symphony-generated board and a custom existing-board structure, then
    writes workflows for them.
-4. A disposable card in `Ready for Codex` is picked up by Symphony.
-5. The app-server calls `trello_add_comment` and `trello_move_current_card`.
-6. The card has a handoff comment and ends in `Review`.
-7. Two Symphony processes can run against two boards at the same time on different ports.
-8. Cleanup archives all disposable boards created by the run.
+4. With `max_concurrent_agents: 1`, two `Ready for Codex` cards run one at a time in Trello position
+   order. This includes a later-created card that was moved above the older card.
+5. With `max_concurrent_agents: 2`, two cards on one board run at the same time while a third waits.
+6. The app-server calls `trello_add_comment` and `trello_move_current_card`.
+7. Processed cards have a handoff comment and end in `Review`.
+8. Two Symphony processes can run against two boards at the same time on different ports.
+9. Cleanup archives all disposable boards created by the run.
 
 ## Reproducible Command Flow
 
@@ -124,9 +126,10 @@ JAVA_HOME=/tmp/jdk25 PATH=/tmp/jdk25/bin:$PATH \
   -Dexec.args="import-board --board $CUSTOM_BOARD_ID --active 'Queue for Codex' --active 'Escalated for Codex' --terminal Released --terminal Parked --max-agents 2 --workflow $RUN_DIR/custom-import-real.WORKFLOW.md"
 ```
 
-Patch the generated workflows to use the deterministic Java app-server and different ports. Board B
-uses two workers and a delay so `/api/v1/state` can prove that two cards run at once while the third
-waits for a refresh.
+Patch the generated workflows to use the deterministic Java app-server and different ports. Board A
+uses one worker and a delay so `/api/v1/state` can prove that one card runs while another waits.
+Board B uses two workers and a delay so `/api/v1/state` can prove that two cards run at once while
+the third waits for a refresh.
 
 ```bash
 RUN_ID="$(cat target/live-e2e-current-run-id)"
@@ -134,7 +137,7 @@ RUN_DIR="target/$RUN_ID"
 FAKE_JAVA="${JAVA_HOME:-/tmp/jdk25}/bin/java"
 FAKE_CODEX="$(pwd)/scripts/FakeCodexAppServer.java"
 
-$FAKE_JAVA --source 25 scripts/PatchLiveE2eWorkflow.java "$RUN_DIR/board-a.WORKFLOW.md" 1 250 "$FAKE_JAVA" "$FAKE_CODEX"
+$FAKE_JAVA --source 25 scripts/PatchLiveE2eWorkflow.java "$RUN_DIR/board-a.WORKFLOW.md" 1 7000 "$FAKE_JAVA" "$FAKE_CODEX"
 $FAKE_JAVA --source 25 scripts/PatchLiveE2eWorkflow.java "$RUN_DIR/imported-a.WORKFLOW.md" 1 250 "$FAKE_JAVA" "$FAKE_CODEX"
 $FAKE_JAVA --source 25 scripts/PatchLiveE2eWorkflow.java "$RUN_DIR/board-b.WORKFLOW.md" 2 7000 "$FAKE_JAVA" "$FAKE_CODEX"
 $FAKE_JAVA --source 25 scripts/PatchLiveE2eWorkflow.java "$RUN_DIR/custom-import.WORKFLOW.md" 2 7000 "$FAKE_JAVA" "$FAKE_CODEX"
@@ -162,9 +165,24 @@ curl -fsS -X POST "https://api.trello.com/1/cards" \
   --data-urlencode "key=$TRELLO_API_KEY" \
   --data-urlencode "token=$TRELLO_API_TOKEN" \
   --data-urlencode "idList=$(cat "$RUN_DIR/ready-list-a.txt")" \
-  --data-urlencode "name=Symphony $RUN_ID single-card handoff" \
-  --data-urlencode "desc=Disposable live E2E card." \
+  --data-urlencode "name=Symphony $RUN_ID sequential older card" \
+  --data-urlencode "desc=Disposable live E2E card that should run second after Trello reordering." \
   > "$RUN_DIR/card-a-1.json"
+
+curl -fsS -X POST "https://api.trello.com/1/cards" \
+  --data-urlencode "key=$TRELLO_API_KEY" \
+  --data-urlencode "token=$TRELLO_API_TOKEN" \
+  --data-urlencode "idList=$(cat "$RUN_DIR/ready-list-a.txt")" \
+  --data-urlencode "name=Symphony $RUN_ID sequential later card moved first" \
+  --data-urlencode "desc=Disposable live E2E card created later, then moved to the top of Ready for Codex." \
+  > "$RUN_DIR/card-a-2.json"
+
+CARD_A_2_ID="$(jq -r .id "$RUN_DIR/card-a-2.json")"
+curl -fsS -X PUT "https://api.trello.com/1/cards/$CARD_A_2_ID" \
+  --data-urlencode "key=$TRELLO_API_KEY" \
+  --data-urlencode "token=$TRELLO_API_TOKEN" \
+  --data-urlencode "pos=top" \
+  > "$RUN_DIR/card-a-2-reordered.json"
 
 for n in 1 2 3; do
   curl -fsS -X POST "https://api.trello.com/1/cards" \
@@ -177,7 +195,10 @@ for n in 1 2 3; do
 done
 ```
 
-Start Board A in one terminal, wait for the card to move to Review, then stop the service:
+Start Board A and Board B in separate terminals. Keep both running at the same time.
+
+Board A proves `max_concurrent_agents: 1` and Trello position ordering. The later-created Board A
+card was moved to the top of `Ready for Codex`, so it should run first while the older card waits.
 
 ```bash
 RUN_ID="$(cat target/live-e2e-current-run-id)"
@@ -187,7 +208,8 @@ JAVA_HOME=/tmp/jdk25 PATH=/tmp/jdk25/bin:$PATH \
   java -jar target/quarkus-app/quarkus-run.jar "$RUN_DIR/board-a.WORKFLOW.md" --port 18181
 ```
 
-Start Board B in another terminal and verify concurrency from a second shell:
+Board B proves `max_concurrent_agents: 2` on a second board at the same time. Two cards should run
+while the third waits.
 
 ```bash
 RUN_ID="$(cat target/live-e2e-current-run-id)"
@@ -197,16 +219,46 @@ JAVA_HOME=/tmp/jdk25 PATH=/tmp/jdk25/bin:$PATH \
   java -jar target/quarkus-app/quarkus-run.jar "$RUN_DIR/board-b.WORKFLOW.md" --port 18182
 ```
 
+Verify both boards from a third shell while the fake app-server is sleeping:
+
 ```bash
+if [ -z "${TRELLO_API_KEY:-}" ] || [ -z "${TRELLO_API_TOKEN:-}" ]; then
+  set -a
+  . ./.env
+  set +a
+fi
+
+RUN_ID="$(cat target/live-e2e-current-run-id)"
+RUN_DIR="target/$RUN_ID"
+CARD_A_1_ID="$(jq -r .id "$RUN_DIR/card-a-1.json")"
+CARD_A_2_ID="$(jq -r .id "$RUN_DIR/card-a-2.json")"
+CARD_B_3_ID="$(jq -r .id "$RUN_DIR/card-b-3.json")"
+
+curl -fsS http://127.0.0.1:18181/api/v1/state \
+  | jq '{counts, running: [.running[].cardId], retrying: [.retrying[].cardId]}'
+
 curl -fsS http://127.0.0.1:18182/api/v1/state \
   | jq '{counts, running: [.running[].cardId], retrying: [.retrying[].cardId]}'
+
+curl -fsS "https://api.trello.com/1/cards/$CARD_A_1_ID?fields=idList&key=$TRELLO_API_KEY&token=$TRELLO_API_TOKEN" \
+  > "$RUN_DIR/status-card-a-1-waiting.json"
+
+curl -fsS "https://api.trello.com/1/cards/$CARD_B_3_ID?fields=idList&key=$TRELLO_API_KEY&token=$TRELLO_API_TOKEN" \
+  > "$RUN_DIR/status-card-b-3-waiting.json"
+
+jq -e --arg ready "$(cat "$RUN_DIR/ready-list-a.txt")" '.idList == $ready' "$RUN_DIR/status-card-a-1-waiting.json"
+jq -e --arg ready "$(cat "$RUN_DIR/ready-list-b.txt")" '.idList == $ready' "$RUN_DIR/status-card-b-3-waiting.json"
 ```
 
-Expected result while the fake app-server is sleeping: `counts.running` is `2`,
-`counts.retrying` is `0`, and the third Board B card is still in `Ready for Codex`. After the first
-two cards move to Review, request a refresh and verify the third card moves too:
+Expected Board A result while the fake app-server is sleeping: `counts.running` is `1`, the running
+card ID is `CARD_A_2_ID`, `counts.retrying` is `0`, and `card-a-1` is still in `Ready for Codex`.
+Expected Board B result while the fake app-server is sleeping: `counts.running` is `2`,
+`counts.retrying` is `0`, and the third Board B card is still in `Ready for Codex`.
+
+After the active cards move to Review, request refreshes and verify the waiting cards move too:
 
 ```bash
+curl -fsS -X POST http://127.0.0.1:18181/api/v1/refresh | jq .
 curl -fsS -X POST http://127.0.0.1:18182/api/v1/refresh | jq .
 ```
 
