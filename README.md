@@ -241,9 +241,10 @@ Use the generated board like this:
    workpad, and linked PR feedback before changing code again. It normally updates the existing PR
    instead of starting over.
 8. If the work is accepted and should be landed by Codex, a human moves the card to `Merging`.
-   Landing automation is implemented separately; until then, use `Merging` as the approval signal
-   for your own landing process.
-9. Move the card to `Done` after the work is accepted and landed.
+   Codex treats `Merging` as the approval signal, runs the landing skill, checks PR feedback and CI,
+   follows the repository's merge policy, and moves successful landed work to `Done`.
+9. If you land outside Codex instead, move the card to `Done` yourself after the work is accepted and
+   landed.
 
 ### Fast Path: Import An Existing Board
 
@@ -276,6 +277,12 @@ reviewable work there. Boards that still use a `Review` column remain supported 
 is absent. If there is no obvious review column, the generated workflow keeps Trello writes disabled
 until you choose one. Do not run a write-disabled workflow with blocked cards left in `Ready for
 Codex` unless you plan to move them manually; they can be picked up again.
+
+When the imported board has a column named `Merging` and a terminal column such as `Done`, the
+starter workflow treats `Merging` as the human approval column for landing and allows Codex to move
+landed work to the terminal column. Boards without `Merging`, or without a terminal column, still
+work for implementation and human review; landing stays a manual step unless you add both columns to
+the workflow.
 
 Common setup command options:
 
@@ -447,8 +454,7 @@ Recommended meaning:
   retry can continue the card.
 - `Blocked`: cards Codex could not safely finish. Symphony ignores this column.
 - `Human Review`: work produced by Codex that needs human review. Symphony ignores this column.
-- `Merging`: human-approved work that is ready for a landing flow. Symphony ignores this column
-  until landing automation is configured.
+- `Merging`: human-approved work that is ready for the landing flow.
 - `Done`: finished cards. Symphony treats this as terminal.
 
 For each task card, use a title that reads like a pull request title, then put the useful details in
@@ -596,8 +602,8 @@ Column routing for the recommended board:
 - `Blocked`: work that needs a human or environment fix. Symphony ignores it until a human moves it
   back to an active column.
 - `Human Review`: work ready for a person. Symphony does not code from this column.
-- `Merging`: human approval for landing. Landing automation must explicitly configure this as
-  active before Codex can act from it.
+- `Merging`: human approval for landing. Codex can land only from this column when it is configured
+  as active.
 - `Done`: terminal work. Symphony treats it as complete and removes matching workspaces during
   terminal cleanup.
 
@@ -672,7 +678,8 @@ The most common skills are:
   merge, and done handoff.
 - `.codex/skills/review-sweep/SKILL.md`: check PR comments, inline review feedback, and checks
   before handoff.
-- `.codex/skills/land/SKILL.md`: land an approved PR only from `Merging`.
+- `.codex/skills/land/SKILL.md`: land an approved PR only from `Merging`, then move successful work
+  to the configured completion column or blocked landing attempts to `Blocked`.
 - `.codex/skills/debug/SKILL.md`: diagnose stuck, retrying, blocked, or failed runs.
 
 These files are instructions for Codex. Symphony does not execute them directly.

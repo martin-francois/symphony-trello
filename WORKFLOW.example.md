@@ -7,9 +7,12 @@ tracker:
   active_states:
     - Todo
     - In Progress
+    - Merging
   blocker_enforced_states:
     - Todo
     - Ready for Codex
+    - In Progress
+    - Merging
   terminal_states:
     - Done
     - Archived
@@ -34,8 +37,10 @@ trello_tools:
   enabled: true
   allow_writes: true
   allowed_move_list_names:
+    - In Progress
     - Human Review
     - Blocked
+    - Done
   allow_comments: true
   allow_checklists: false
   allow_url_attachments: false
@@ -56,7 +61,8 @@ acceptance criteria, progress, validation evidence, blockers, and handoff notes.
 
 ## Trello Column Routing
 
-Symphony only dispatches cards from configured active columns: `Todo` and `In Progress`.
+Symphony only dispatches cards from configured active columns: `Todo`, `In Progress`, and
+`Merging`.
 
 - `Todo`: queued work; move the card to `In Progress` before active implementation.
 - `In Progress`: active work already picked up by Codex; continue the existing execution flow.
@@ -64,8 +70,7 @@ Symphony only dispatches cards from configured active columns: `Todo` and `In Pr
   active.
 - `Human Review`: human review. Do not code from this column unless a human moves the card back to
   an active column.
-- `Merging`: human approval for landing. Do not merge from Human Review, and do not run landing
-  unless this workflow explicitly configures Merging as active.
+- `Merging`: human approval for landing. Run landing only from this column.
 - `Done`: terminal work. Symphony cleans up matching workspaces for terminal cards.
 - Any other column: out of scope for this Symphony process unless it is added to `active_states` or
   `terminal_states`.
@@ -129,6 +134,21 @@ the Trello card or a human explicitly asks for a reset.
 Before returning the card to Human Review, rerun the card-specific validation and PR feedback sweep,
 update the existing workpad with the rework evidence, and add one concise handoff comment. Do not
 create duplicate progress summary comments when the workpad already contains the details.
+
+## Landing From Merging
+
+`Merging` is human approval for landing. Only run landing when the current Trello column is
+`Merging`. Do not merge from Human Review, and do not call `gh pr merge` directly from the workflow
+prompt. Open `.codex/skills/land/SKILL.md` and follow it.
+
+Before landing, identify the PR, run the PR feedback sweep, run current card-specific validation,
+check mergeability, branch state, required reviews, and CI/check status, and follow the repository's
+merge policy. Do not enable auto-merge unless the repository policy explicitly requires it.
+
+If PR discovery, checks, auth, branch state, merge policy, or outstanding review feedback is unclear,
+update the workpad and move the card to `Blocked` with a concise blocker. After successful landing,
+update the workpad with merge evidence, add a concise completion comment when useful, and move the
+card to `Done`.
 
 When the work is ready for human review, update the workpad with the final summary and validation
 evidence, call trello_add_comment with a concise summary and verification notes, then call

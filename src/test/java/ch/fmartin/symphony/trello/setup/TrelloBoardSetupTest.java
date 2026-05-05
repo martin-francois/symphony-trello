@@ -137,9 +137,14 @@ class TrelloBoardSetupTest {
                 .contains("- \"In Progress\"")
                 .contains("- \"Human Review\"")
                 .contains("- \"Blocked\"")
+                .contains("- \"Done\"")
                 .contains("immediately call trello_move_current_card with list_name \"In Progress\"")
                 .contains("list_name \"Human Review\"")
-                .contains("A Merging column, when configured, is a human approval signal")
+                .contains("## Landing From \"Merging\"")
+                .contains("Only run landing when the current Trello column is \"Merging\"")
+                .contains("Do not enable auto-merge")
+                .contains("move the card to \"Blocked\" with a concise blocker")
+                .contains("move the card to \"Done\"")
                 .contains("treat it as rework")
                 .contains("## Description")
                 .contains("{{ card.description }}")
@@ -177,7 +182,7 @@ class TrelloBoardSetupTest {
                 .contains("\"In Progress\": active work already picked up by Codex")
                 .contains("\"Blocked\": blocked work")
                 .contains("\"Human Review\": human review")
-                .contains("`Merging`: human approval for landing")
+                .contains("\"Merging\": human approval for landing")
                 .contains("## Repository Skills")
                 .contains(".codex/skills/trello-workpad/SKILL.md")
                 .contains(".codex/skills/trello-handoff/SKILL.md")
@@ -190,13 +195,13 @@ class TrelloBoardSetupTest {
                 .contains("max_concurrent_agents: 1");
         EffectiveConfig config = resolve(workflow);
         assertThat(config.tracker().boardId()).isEqualTo("abc123");
-        assertThat(config.tracker().activeStates()).containsExactly("Ready for Codex", "In Progress");
+        assertThat(config.tracker().activeStates()).containsExactly("Ready for Codex", "In Progress", "Merging");
         assertThat(config.tracker().terminalStates())
                 .contains("done", "archived", "archivedlist", "archivedboard", "deleted");
         assertThat(config.trelloTools().enabled()).isTrue();
         assertThat(config.trelloTools().allowWrites()).isTrue();
         assertThat(config.trelloTools().allowedMoveListNames())
-                .containsExactly("in progress", "human review", "blocked");
+                .containsExactly("in progress", "human review", "blocked", "done");
         assertThat(config.trelloTools().allowChecklists()).isFalse();
         assertThat(config.trelloTools().allowUrlAttachments()).isFalse();
     }
@@ -259,7 +264,7 @@ class TrelloBoardSetupTest {
         assertThat(result.openColumns())
                 .containsExactly(
                         "Inbox", "Ready for Codex", "In Progress", "Blocked", "Human Review", "Merging", "Done");
-        assertThat(result.activeStates()).containsExactly("Ready for Codex", "In Progress");
+        assertThat(result.activeStates()).containsExactly("Ready for Codex", "In Progress", "Merging");
         assertThat(result.terminalStates()).containsExactly("Done");
         assertThat(result.inProgressState()).isEqualTo("In Progress");
         assertThat(result.blockedState()).isEqualTo("Blocked");
@@ -271,6 +276,7 @@ class TrelloBoardSetupTest {
                 .contains("- \"In Progress\"")
                 .contains("- \"Human Review\"")
                 .contains("- \"Blocked\"")
+                .contains("- \"Done\"")
                 .contains("If the card is in \"Ready for Codex\"")
                 .contains("## Trello Comments")
                 .contains("## Codex Workpad")
@@ -294,7 +300,9 @@ class TrelloBoardSetupTest {
                 .contains(".codex/skills/push-pr/SKILL.md")
                 .contains("list_name \"In Progress\"")
                 .contains("list_name \"Human Review\"")
-                .contains("A Merging column, when configured, is a human approval signal")
+                .contains("## Landing From \"Merging\"")
+                .contains("Only run landing when the current Trello column is \"Merging\"")
+                .contains("move the card to \"Done\"")
                 .contains("max_concurrent_agents: 2");
         EffectiveConfig config = resolve(workflow);
         assertThat(config.tracker().boardId()).isEqualTo("existing");
@@ -323,14 +331,15 @@ class TrelloBoardSetupTest {
 
         // then
         assertThat(result.inProgressState()).isNull();
-        assertThat(result.activeStates()).containsExactly("Ready for Codex");
+        assertThat(result.activeStates()).containsExactly("Ready for Codex", "Merging");
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("This workflow has no in-progress column configured")
+                .contains("If the card is in \"Merging\", follow the landing section instead")
                 .doesNotContain("list_name \"In Progress\"");
         EffectiveConfig config = resolve(workflow);
-        assertThat(config.tracker().activeStates()).containsExactly("Ready for Codex");
-        assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("human review", "blocked");
+        assertThat(config.tracker().activeStates()).containsExactly("Ready for Codex", "Merging");
+        assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("human review", "blocked", "done");
     }
 
     @Test
@@ -388,7 +397,87 @@ class TrelloBoardSetupTest {
                 .content(StandardCharsets.UTF_8)
                 .contains("Do not move the card to \"Review\"")
                 .contains("card to \"Review\" or landing from Merging")
-                .contains("Before returning the card to \"Review\"");
+                .contains("Before returning the card to \"Review\"")
+                .contains("This workflow has no landing approval column configured");
+    }
+
+    @Test
+    void importUsesConfiguredTerminalColumnForLandingWhenMergingExists() {
+        // given
+        boardListsResponse.set(
+                """
+                [
+                  {"id":"list-ready","name":"Ready for Codex","closed":false,"pos":1},
+                  {"id":"list-review","name":"Human Review","closed":false,"pos":2},
+                  {"id":"list-merging","name":"Merging","closed":false,"pos":3},
+                  {"id":"list-blocked","name":"Blocked","closed":false,"pos":4},
+                  {"id":"list-released","name":"Released","closed":false,"pos":5}
+                ]
+                """);
+        Path workflow = tempDir.resolve("imported-custom-landing.md");
+
+        // when
+        var result = setup.importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "input",
+                List.of(),
+                List.of("Released"),
+                null,
+                workflow,
+                Path.of("./agent-workspaces"),
+                2,
+                false));
+
+        // then
+        assertThat(result.activeStates()).containsExactly("Ready for Codex", "Merging");
+        EffectiveConfig config = resolve(workflow);
+        assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("human review", "blocked", "released");
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("## Landing From \"Merging\"")
+                .contains("move the card to \"Released\"")
+                .doesNotContain("move the card to \"Done\"");
+    }
+
+    @Test
+    void importDoesNotActivateLandingWhenMergingExistsWithoutTerminalColumn() {
+        // given
+        boardListsResponse.set(
+                """
+                [
+                  {"id":"list-ready","name":"Ready for Codex","closed":false,"pos":1},
+                  {"id":"list-in-progress","name":"In Progress","closed":false,"pos":2},
+                  {"id":"list-review","name":"Human Review","closed":false,"pos":3},
+                  {"id":"list-merging","name":"Merging","closed":false,"pos":4},
+                  {"id":"list-blocked","name":"Blocked","closed":false,"pos":5}
+                ]
+                """);
+        Path workflow = tempDir.resolve("imported-no-landing-destination.md");
+
+        // when
+        var result = setup.importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "input",
+                List.of(),
+                List.of(),
+                null,
+                workflow,
+                Path.of("./agent-workspaces"),
+                2,
+                false));
+
+        // then
+        assertThat(result.activeStates()).containsExactly("Ready for Codex", "In Progress");
+        EffectiveConfig config = resolve(workflow);
+        assertThat(config.trelloTools().allowedMoveListNames())
+                .containsExactly("in progress", "human review", "blocked");
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("This workflow has no landing approval column configured")
+                .doesNotContain("## Landing From \"Merging\"")
+                .doesNotContain("move the card to \"Done\"");
     }
 
     @Test

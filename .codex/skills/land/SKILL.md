@@ -13,8 +13,10 @@ description: >
 - Refuse to merge while checks, mergeability, review feedback, or auth are
   unclear.
 - Use the repository's merge policy instead of assuming one merge mode.
-- Update the Trello workpad and move the card to `Done` after a successful
-  landing.
+- Do not enable auto-merge unless the repository policy explicitly requires it.
+- Update the Trello workpad and move the card to the configured landing
+  completion column after a successful landing. The recommended workflow uses
+  `Done`.
 
 ## Preconditions
 
@@ -41,6 +43,8 @@ description: >
 6. If merge policy is documented, follow it. If it is not documented, inspect
    repository settings and PR history before choosing. When still unclear,
    block rather than guessing.
+   Do not assume squash, merge, rebase, or auto-merge unless repository policy
+   or recent accepted PRs make that choice clear.
 7. Merge only when:
    - required checks are green,
    - mergeability is clean,
@@ -50,7 +54,7 @@ description: >
 8. After merging:
    - update the workpad with merge evidence,
    - add a short Trello comment if useful,
-   - move the card to `Done`.
+   - move the card to the configured landing completion column.
 
 ## Blocked Landing
 
