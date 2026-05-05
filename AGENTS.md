@@ -91,9 +91,10 @@ matters, and easy for another engineer to understand without asking the original
   contract section instead of the README opening.
 - Write README prose in simple, direct language. Prefer short sentences and plain words over
   polished or elaborate wording.
-- Avoid redundant clarification sentences that restate the obvious scope of the previous sentence.
-  If a sentence already says "any", "all", "never", or names the broad scope, do not add a second
-  sentence explaining that the rule is broad.
+- Avoid redundant clarifications that create false significance. If a sentence already states the
+  rule clearly, do not add a follow-up such as "not only X", "meaning...", or "in other words..."
+  unless it removes a real ambiguity, adds an exception, or changes the action the reader should
+  take.
 - Do not document options or config fields by only restating their names. Explain what the value is
   used for, when the reader should change it, and how to choose a sensible value.
 - For CLI commands, follow the principle of least surprise: avoid silent no-ops, print actionable
