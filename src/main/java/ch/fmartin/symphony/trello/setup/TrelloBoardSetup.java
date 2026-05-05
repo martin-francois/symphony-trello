@@ -408,6 +408,8 @@ public final class TrelloBoardSetup {
 
                 %s
 
+                %s
+
                 Card URL: {{ card.url }}
                 """
                 .formatted(
@@ -420,6 +422,7 @@ public final class TrelloBoardSetup {
                         maxAgents,
                         workpadPrompt(!handoffStates.isEmpty()),
                         routingPrompt(activeStates, terminalStates, inProgressState, reviewState, blockedState),
+                        validationPrompt(!handoffStates.isEmpty(), reviewState),
                         pickupPrompt(activeStates, inProgressState),
                         handoffPrompt(reviewState, blockedState, !handoffStates.isEmpty()));
     }
@@ -459,6 +462,32 @@ public final class TrelloBoardSetup {
                   allow_url_attachments: false
                 """
                 .formatted(yamlList(handoffStates))
+                .stripTrailing();
+    }
+
+    private static String validationPrompt(boolean workpadToolEnabled, String reviewState) {
+        String evidenceDestination = workpadToolEnabled
+                ? "the Codex workpad and final handoff comment"
+                : "the final Codex response or handoff comment";
+        String reviewHandoff = blank(reviewState) ? "a ready-for-review handoff" : quote(reviewState);
+        return """
+                ## Acceptance Criteria And Validation
+
+                Before changing code, extract the card-specific acceptance criteria from the title, description,
+                and Trello comments. Treat any card-authored `Validation`, `Test Plan`, or `Testing` section as
+                required. If the card is a bug or behavior change, first capture a concrete current-state signal:
+                reproduce the failure, record the current output, or explain why reproduction is not possible.
+
+                Track the acceptance criteria, required validation, current-state signal, and final validation
+                evidence in %s. Verification evidence must be specific to this card; do not hand off with only a
+                generic "tests passed" statement. Temporary local proof edits are allowed only when they improve
+                confidence, are reverted before commit, and are documented as proof steps.
+
+                If required validation cannot be performed because auth, files, tools, or environment access are
+                missing, treat the work as blocked. Do not move the card to %s until the blocker is fixed or a human
+                explicitly changes the requirement.
+                """
+                .formatted(evidenceDestination, reviewHandoff)
                 .stripTrailing();
     }
 

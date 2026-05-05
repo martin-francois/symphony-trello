@@ -382,6 +382,15 @@ Use the current workspace by default. If the Trello card names a specific local 
 checkout, inspect that path instead. If that path is inaccessible, treat it as a blocker and follow
 the filesystem access blocker instructions below.
 
+## Acceptance Criteria And Validation
+
+Before changing code, extract card-specific acceptance criteria from the title, description, and
+Trello comments. Treat any card-authored `Validation`, `Test Plan`, or `Testing` section as
+required. For bugs or behavior changes, capture a concrete current-state signal before editing code.
+Track the acceptance criteria, required validation, current-state signal, and final validation
+evidence in the workpad and handoff comment. If required validation cannot be performed, treat the
+work as blocked.
+
 If the card is in "Ready for Codex", immediately call trello_move_current_card with list_name
 "In Progress" before implementation work. If the card is already in "In Progress", continue the
 existing execution flow.
@@ -458,6 +467,11 @@ Notes:
 - Links, constraints, or gotchas.
 ```
 
+Codex treats card-written `Validation`, `Test Plan`, and `Testing` sections as required. For bugs or
+behavior changes, include the current behavior you expect Codex to reproduce or capture before it
+edits code. If a required check needs credentials, files, or tools that are not available to the
+deployed service, Codex should move the card to `Blocked` instead of `Human Review`.
+
 Use this [`WORKFLOW.md`](#workflow-contract) starter for the new board:
 
 ```markdown
@@ -527,6 +541,15 @@ run relevant verification, and leave the workspace in a reviewable state.
 Use the current workspace by default. If the Trello card names a specific local path or project
 checkout, inspect that path instead. If that path is inaccessible, treat it as a blocker and follow
 the filesystem access blocker instructions below.
+
+## Acceptance Criteria And Validation
+
+Before changing code, extract card-specific acceptance criteria from the title, description, and
+Trello comments. Treat any card-authored `Validation`, `Test Plan`, or `Testing` section as
+required. For bugs or behavior changes, capture a concrete current-state signal before editing code.
+Track the acceptance criteria, required validation, current-state signal, and final validation
+evidence in the workpad and handoff comment. If required validation cannot be performed, treat the
+work as blocked.
 
 If the card is in "Ready for Codex", immediately call trello_move_current_card with list_name
 "In Progress" before implementation work. If the card is already in "In Progress", continue the

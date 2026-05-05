@@ -81,6 +81,23 @@ Use repository-local skills when they fit:
 - `.codex/skills/land/SKILL.md` only when this workflow says the current Trello column is Merging.
 - `.codex/skills/debug/SKILL.md` when diagnosing a stuck or retrying run.
 
+## Acceptance Criteria And Validation
+
+Before changing code, extract the card-specific acceptance criteria from the title, description, and
+Trello comments. Treat any card-authored `Validation`, `Test Plan`, or `Testing` section as
+required. If the card is a bug or behavior change, first capture a concrete current-state signal:
+reproduce the failure, record the current output, or explain why reproduction is not possible.
+
+Track the acceptance criteria, required validation, current-state signal, and final validation
+evidence in the Codex workpad and final handoff comment. Verification evidence must be specific to
+this card; do not hand off with only a generic "tests passed" statement. Temporary local proof edits
+are allowed only when they improve confidence, are reverted before commit, and are documented as
+proof steps.
+
+If required validation cannot be performed because auth, files, tools, or environment access are
+missing, treat the work as blocked. Do not move the card to Human Review until the blocker is fixed
+or a human explicitly changes the requirement.
+
 When the work is ready for human review, update the workpad with the final summary and validation
 evidence, call trello_add_comment with a concise summary and verification notes, then call
 trello_move_current_card with list_name "Human Review". If the work is blocked or unsafe to hand off,
