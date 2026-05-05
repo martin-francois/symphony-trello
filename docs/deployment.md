@@ -183,20 +183,105 @@ Check the HTTP state endpoint:
 curl http://127.0.0.1:18081/api/v1/state
 ```
 
-## Update The App
+## Upgrade To A New Version
 
-Build and copy the new package:
+Build the new version from the checkout or release you want to deploy:
 
 ```bash
 ./mvnw -q spotless:check verify
 ./mvnw -q package
-sudo rm -rf /opt/symphony-trello/app
-sudo cp -a target/quarkus-app /opt/symphony-trello/app
-sudo chown -R root:root /opt/symphony-trello/app
 ```
 
-Restart all running workflow services:
+Install the new package next to the old one:
 
 ```bash
-sudo systemctl restart 'symphony-trello@*'
+sudo rm -rf /opt/symphony-trello/app.new
+sudo cp -a target/quarkus-app /opt/symphony-trello/app.new
+sudo chown -R root:root /opt/symphony-trello/app.new
 ```
+
+List the running workflow services so you know what should come back:
+
+```bash
+sudo systemctl list-units 'symphony-trello@*'
+```
+
+Stop the workflows, swap the package directory, and start them again:
+
+```bash
+sudo systemctl stop 'symphony-trello@*'
+sudo rm -rf /opt/symphony-trello/app.previous
+sudo mv /opt/symphony-trello/app /opt/symphony-trello/app.previous
+sudo mv /opt/symphony-trello/app.new /opt/symphony-trello/app
+sudo systemctl start symphony-trello@project-a symphony-trello@project-b
+```
+
+Check each workflow:
+
+```bash
+sudo systemctl status symphony-trello@project-a
+curl http://127.0.0.1:18081/api/v1/state
+```
+
+After the new version is working, remove the previous package:
+
+```bash
+sudo rm -rf /opt/symphony-trello/app.previous
+```
+
+If the new version fails before you remove `app.previous`, roll back:
+
+```bash
+sudo systemctl stop 'symphony-trello@*'
+sudo rm -rf /opt/symphony-trello/app.failed
+sudo mv /opt/symphony-trello/app /opt/symphony-trello/app.failed
+sudo mv /opt/symphony-trello/app.previous /opt/symphony-trello/app
+sudo systemctl start symphony-trello@project-a symphony-trello@project-b
+```
+
+## Remove Everything
+
+List the installed workflow services:
+
+```bash
+sudo systemctl list-unit-files 'symphony-trello@*'
+```
+
+Stop and disable each workflow service:
+
+```bash
+sudo systemctl disable --now symphony-trello@project-a symphony-trello@project-b
+```
+
+Remove the systemd unit template:
+
+```bash
+sudo rm -f /etc/systemd/system/symphony-trello@.service
+sudo systemctl daemon-reload
+sudo systemctl reset-failed 'symphony-trello@*'
+```
+
+Remove the installed application:
+
+```bash
+sudo rm -rf /opt/symphony-trello
+```
+
+Remove configuration, workflow files, and Trello secrets:
+
+```bash
+sudo rm -rf /etc/symphony-trello
+```
+
+Remove workspaces and the service user's home directory:
+
+```bash
+sudo userdel symphony-trello
+sudo rm -rf /var/lib/symphony-trello
+```
+
+If the Trello token was created only for this deployment, revoke it in Trello after the services are
+removed.
+
+Keep a copy of `/etc/symphony-trello` before deleting it when you want to reuse the workflow files or
+credentials later.
