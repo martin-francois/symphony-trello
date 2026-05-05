@@ -135,6 +135,9 @@ matters, and easy for another engineer to understand without asking the original
 - In user-facing docs and CLI text, call visible Trello board lanes "columns". Reserve "list" for
   Trello API terms, configuration keys, Java collection types, and quoted REST fields such as
   `idList`, `list_id`, `list_name`, or `allowed_move_list_names`.
+- When "list" remains in user-facing text because it is a Trello API/config term, make the
+  column-equivalence clear nearby if a reader could otherwise wonder whether it is a different Trello
+  concept.
 - For deployment auth, prefer reusing the existing Codex CLI auth file from `codex login`. Do not
   steer users toward configuring raw OpenAI API keys unless they explicitly ask for that mode.
 - For docs with multiple setup paths, read the flow once from each path's perspective and avoid

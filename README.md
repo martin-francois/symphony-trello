@@ -342,6 +342,9 @@ trello_move_current_card with list_name "Blocked".
 Card URL: {{ card.url }}
 ```
 
+In this workflow config, `allowed_move_list_names` and the tool argument `list_name` use Trello's API
+term for board columns.
+
 Operationally, use the board like this:
 
 1. Put new ideas wherever your team normally triages work.
@@ -445,6 +448,9 @@ trello_move_current_card with list_name "Blocked".
 Card URL: {{ card.url }}
 ```
 
+In this workflow config, `allowed_move_list_names` and the tool argument `list_name` use Trello's API
+term for board columns.
+
 Start with `max_concurrent_agents: 1`. If two cards are in an active column such as `Ready for Codex`,
 that default makes Symphony run one card and leave the other waiting until a slot is free. Raising
 the value to `2` lets two cards from the same configured board run at the same time; raising it to
@@ -514,6 +520,9 @@ The recommended workflow gives Codex two scoped Trello handoff tools:
 - `trello_add_comment`: add a comment to the current card.
 - `trello_move_current_card`: move the current card to a configured board-local handoff column such as
   `Review` or `Blocked`.
+
+The move tool uses argument names such as `list_name` and `list_id` because Trello's API calls board
+columns lists.
 
 Symphony advertises those tools when `trello_tools.enabled=true` and
 `trello_tools.allow_writes=true`. For a read-only scheduler deployment, set
