@@ -98,6 +98,23 @@ If required validation cannot be performed because auth, files, tools, or enviro
 missing, treat the work as blocked. Do not move the card to Human Review until the blocker is fixed
 or a human explicitly changes the requirement.
 
+## Pull Request Feedback Sweep
+
+If the Trello description, Trello comments, current branch, repository context, or open PR list
+identifies an associated pull request, use `.codex/skills/review-sweep/SKILL.md` before moving the
+card to Human Review or landing from Merging. Cards without PR context do not need GitHub review
+checks.
+
+The sweep must check top-level PR comments, inline review comments, review states and summaries,
+CI/check status, and Codex review issue comments when present. Every actionable human, bot, or Codex
+review comment is blocking until it is addressed with code, tests, docs, or PR metadata, or answered
+with a justified response in the right thread. Do not decline correctness feedback without concrete
+validation. Failing, pending, or stale required checks mean the work is not ready for handoff.
+
+After feedback-driven changes, rerun the relevant validation and repeat the sweep until no
+actionable feedback remains. If GitHub auth, PR discovery, required checks, or review data are
+unavailable for a PR-backed card, treat the card as blocked instead of handing it off.
+
 When the work is ready for human review, update the workpad with the final summary and validation
 evidence, call trello_add_comment with a concise summary and verification notes, then call
 trello_move_current_card with list_name "Human Review". If the work is blocked or unsafe to hand off,

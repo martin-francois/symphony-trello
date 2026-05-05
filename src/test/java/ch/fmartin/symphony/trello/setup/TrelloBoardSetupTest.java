@@ -155,6 +155,14 @@ class TrelloBoardSetupTest {
                 .contains("Verification evidence must be specific to this card")
                 .contains("Temporary local proof edits are allowed only")
                 .contains("Do not move the card to \"Human Review\"")
+                .contains("## Pull Request Feedback Sweep")
+                .contains("before moving the")
+                .contains("card to \"Human Review\" or landing from Merging")
+                .contains("top-level PR comments")
+                .contains("inline review comments")
+                .contains("Codex review issue comments")
+                .contains("Failing, pending, or stale required checks")
+                .contains("treat the card as blocked")
                 .contains("## Trello Column Routing")
                 .contains("Symphony only dispatches cards from configured active columns")
                 .contains("\"Ready for Codex\": queued work")
@@ -264,6 +272,9 @@ class TrelloBoardSetupTest {
                 .contains("Validation`, `Test Plan`, or `Testing` section as")
                 .contains("current-state signal")
                 .contains("final validation")
+                .contains("## Pull Request Feedback Sweep")
+                .contains("Cards without PR context do not need GitHub review checks")
+                .contains("Every actionable human, bot, or Codex")
                 .contains("## Trello Column Routing")
                 .contains("\"Ready for Codex\": queued work")
                 .contains("\"In Progress\": active work already picked up by Codex")
@@ -361,7 +372,10 @@ class TrelloBoardSetupTest {
         assertThat(config.trelloTools().enabled()).isTrue();
         assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("review", "needs help");
         assertThat(config.agent().maxConcurrentAgents()).isEqualTo(2);
-        assertThat(workflow).content(StandardCharsets.UTF_8).contains("Do not move the card to \"Review\"");
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("Do not move the card to \"Review\"")
+                .contains("card to \"Review\" or landing from Merging");
     }
 
     @Test

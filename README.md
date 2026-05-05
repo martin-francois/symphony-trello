@@ -472,6 +472,10 @@ behavior changes, include the current behavior you expect Codex to reproduce or 
 edits code. If a required check needs credentials, files, or tools that are not available to the
 deployed service, Codex should move the card to `Blocked` instead of `Human Review`.
 
+If a card already has a pull request or branch, put the PR URL or branch name in the description or a
+Trello comment. Codex will use that link to sweep PR comments, inline review feedback, Codex review
+comments, and checks before it moves the card to `Human Review`.
+
 Use this [`WORKFLOW.md`](#workflow-contract) starter for the new board:
 
 ```markdown
