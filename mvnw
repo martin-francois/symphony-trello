@@ -22,4 +22,7 @@ if [ ! -f "$WRAPPER_JAR" ]; then
   fi
 fi
 
-exec "${JAVA_HOME:+$JAVA_HOME/bin/}java" -classpath "$WRAPPER_JAR" org.apache.maven.wrapper.MavenWrapperMain "$@"
+exec "${JAVA_HOME:+$JAVA_HOME/bin/}java" \
+  -Dmaven.multiModuleProjectDirectory="$BASE_DIR" \
+  -classpath "$WRAPPER_JAR" \
+  org.apache.maven.wrapper.MavenWrapperMain "$@"
