@@ -23,8 +23,25 @@ Symphony for Trello is a variant of [OpenAI's Symphony](https://github.com/opena
 for Trello. The original Symphony spec uses Linear; this project keeps the same orchestration idea
 and maps it to Trello boards, columns, and cards.
 
+Symphony for Trello is preview automation for trusted environments. Start with a disposable board or
+a small low-risk project, then expand once the workflow matches how you review and land work.
+
+## How It Works
+
+1. You put a Trello card in a configured active column such as `Ready for Codex`.
+2. Symphony polls the board, claims the next eligible card, and creates a local workspace for it.
+3. Symphony starts the Codex CLI in app-server mode inside that workspace.
+4. Codex receives the `WORKFLOW.md` prompt with the card title, description, comments, and routing
+   rules.
+5. Codex works in the workspace, keeps one `## Codex Workpad` comment current, and moves the card to
+   `In Progress`, `Human Review`, `Blocked`, `Merging`, or `Done` when the workflow says to.
+6. Symphony keeps the same Codex session going while the card remains active, then stops when the
+   card reaches a review, blocked, terminal, or otherwise inactive column.
+7. You watch running and retrying cards from the status page or JSON API.
+
 ## Table of Contents
 
+- [How It Works](#how-it-works)
 - [Current Capabilities](#current-capabilities)
 - [Quick Start](#quick-start)
 - [Trello Setup](#trello-setup)
@@ -45,8 +62,8 @@ and maps it to Trello boards, columns, and cards.
 - Per-card workspace creation, sanitization, root containment checks, and lifecycle hooks.
 - Codex app-server subprocess integration over newline-delimited JSON-RPC.
 - Same-session Codex continuation turns while a card remains active, capped by `agent.max_turns`.
-- Scoped Trello handoff tools for Codex to add a comment to the current card and move that card to
-  configured board-local review columns.
+- Scoped Trello handoff tools for Codex to update one workpad comment, add a handoff comment, and
+  move the current card to configured board-local handoff columns.
 - Single-authority in-memory orchestration state, claim-before-spawn dispatch, retries, stall checks,
   stale worker identity filtering, and terminal workspace cleanup.
 - JSON and HTML status surfaces at `/api/v1/state`, `/api/v1/{card_identifier}`, `/api/v1/refresh`,
@@ -204,8 +221,9 @@ The command creates this Trello board layout:
 6. `Merging`
 7. `Done`
 
-It also writes a workflow with `Ready for Codex` and `In Progress` as active columns, `Done` as the
-terminal column, `In Progress`, `Human Review`, and `Blocked` as allowed move columns,
+It also writes a workflow with `Ready for Codex`, `In Progress`, and `Merging` as active columns,
+`Done` as the terminal column, `In Progress`, `Human Review`, `Blocked`, and `Done` as allowed move
+columns,
 `./workspaces` as the local workspace directory, and `max_concurrent_agents: 1`. With that default,
 Symphony starts one card at a time from this board.
 
@@ -403,6 +421,10 @@ If the card is in "Ready for Codex", immediately call trello_move_current_card w
 "In Progress" before implementation work. If the card is already in "In Progress", continue the
 existing execution flow.
 
+If a human moves a reviewed card from "Human Review" back to "Ready for Codex" or "In Progress",
+treat the next run as rework. Reread the card, new Trello comments, existing workpad, and linked PR
+feedback before changing code again.
+
 When the work is ready for human review, update the workpad with the final summary and validation
 evidence, call trello_add_comment with a concise summary and verification notes, then call
 trello_move_current_card with list_name "Human Review". If the work is blocked or unsafe to hand off,
@@ -495,9 +517,11 @@ tracker:
   active_states:
     - Ready for Codex
     - In Progress
+    - Merging
   blocker_enforced_states:
     - Ready for Codex
     - In Progress
+    - Merging
   terminal_states:
     - Done
     - Archived
@@ -513,6 +537,7 @@ trello_tools:
     - In Progress
     - Human Review
     - Blocked
+    - Done
   allow_comments: true
   allow_checklists: false
   allow_url_attachments: false
@@ -565,6 +590,14 @@ work as blocked.
 If the card is in "Ready for Codex", immediately call trello_move_current_card with list_name
 "In Progress" before implementation work. If the card is already in "In Progress", continue the
 existing execution flow.
+
+If a human moves a reviewed card from "Human Review" back to "Ready for Codex" or "In Progress",
+treat the next run as rework. Reread the card, new Trello comments, existing workpad, and linked PR
+feedback before changing code again.
+
+Only land work when the card is in "Merging". Before landing, sweep PR comments and checks, run the
+card-specific validation, follow the repository's merge policy, and move successful landed work to
+"Done". If landing cannot safely proceed, move the card to "Blocked" with a concise blocker.
 
 When the work is ready for human review, update the workpad with the final summary and validation
 evidence, call trello_add_comment with a concise summary and verification notes, then call
@@ -723,6 +756,9 @@ Useful endpoints:
   reported by Codex.
 - `GET /api/v1/{card_identifier}` returns card-specific runtime details.
 - `POST /api/v1/refresh` queues an immediate poll/reconciliation cycle.
+
+For field meanings, token totals, logging conventions, and troubleshooting expectations, see
+[docs/operations.md](docs/operations.md).
 
 [`WORKFLOW.md`](#workflow-contract) is watched for changes and also checked defensively on each
 scheduler tick. Invalid reloads are logged and the last known good configuration remains active.
