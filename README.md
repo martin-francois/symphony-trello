@@ -74,6 +74,8 @@ Trello has three concepts that matter for Symphony:
 
 Official Trello references if the UI has moved since this README was written:
 
+- Trello Workspace creation guide: <https://support.atlassian.com/trello/docs/creating-a-new-workspace/>
+- Trello app/Power-Up admin guide: <https://developer.atlassian.com/cloud/trello/guides/power-ups/managing-apps/>
 - Trello REST API introduction: <https://developer.atlassian.com/cloud/trello/guides/rest-api/api-introduction/>
 - Trello board creation API: <https://developer.atlassian.com/cloud/trello/rest/api-group-boards/>
 - Trello list creation API: <https://developer.atlassian.com/cloud/trello/rest/api-group-lists/>
@@ -85,6 +87,55 @@ it can add a comment to the current card and move that same card to `Review` whe
 work is ready for human review. If you want a strictly read-only deployment, set
 `trello_tools.allow_writes: false` and move cards manually.
 
+### One-Time Browser Setup: Workspace, API Key, Token
+
+Do this once before using either fast path. Symphony can create boards and write `WORKFLOW.md`, but
+Trello requires you to create the Workspace and authorize the API token in the browser.
+
+1. Sign in to Trello in your browser.
+2. Create a Workspace if you do not already have one for Symphony.
+   Trello's current guide is
+   <https://support.atlassian.com/trello/docs/creating-a-new-workspace/>. At the time of writing,
+   the path is: profile icon in the Trello header, then `Create Workspace`.
+3. Use a clear Workspace name. `Symphony Automation` is a good default for a personal setup.
+4. Open Trello's app admin portal: <https://trello.com/power-ups/admin>.
+   Trello's developer guide for this page is
+   <https://developer.atlassian.com/cloud/trello/guides/power-ups/managing-apps/>.
+5. If Trello asks you to accept or complete a developer agreement before creating an app, complete
+   that browser flow. Symphony cannot automate that part.
+6. Click `New` to create a new app/admin entry for the Workspace.
+7. Fill the required fields with boring, recognizable values:
+
+   - `Name`: `Symphony Local Automation`
+   - `Workspace`: the Workspace you created or chose above
+   - `Email` / `Support Email`: an email you control
+   - `Author`: your name or your team name
+   - `iframe Connector URL`: leave this blank if Trello allows it. Symphony only needs REST API
+     credentials and does not need a board-enabled Power-Up UI. If Trello changes the form, follow
+     the field help in Trello and the official app admin guide linked above.
+
+8. Create the app/admin entry.
+9. Open its `API Key` tab and choose `Generate a new API Key`.
+10. Copy the API key somewhere temporary. The API key identifies the app, but the token is the
+    sensitive credential.
+11. On the same API key page, click the `Token` link next to the key. Trello's API introduction
+    walks through this flow:
+    <https://developer.atlassian.com/cloud/trello/guides/rest-api/api-introduction/>.
+12. Review the authorization screen. For the generated handoff workflow, the token needs write
+    access because Codex can add comments and move the current card to `Review`.
+13. Click `Allow`.
+14. Copy the generated token. Treat it like a password: it grants access as your Trello account to
+    boards and Workspaces your account can access.
+15. Export both values in the terminal where you will run Symphony:
+
+```bash
+export TRELLO_API_KEY=replace-with-generated-key
+export TRELLO_API_TOKEN=replace-with-generated-token
+```
+
+If your token can access exactly one Workspace, the `new-board` command can select it automatically.
+If it can access multiple Workspaces, use `list-workspaces` first and pass `--workspace-id`.
+
 ### Fast Path: Create The Recommended Board
 
 Use this path when you are new to Trello or want the lowest-friction setup. Symphony cannot create the
@@ -92,17 +143,8 @@ Workspace, API key, or API token for you because Trello requires browser authori
 steps. After that, one command creates the board, creates the recommended lists, and writes
 `WORKFLOW.md`.
 
-1. Create a Trello Workspace. If you are not sure what to choose, name it `Symphony Automation`.
-2. Create a custom Power-Up in that Workspace.
-3. Generate an API key and token from the Power-Up page.
-4. Export the credentials locally:
-
-```bash
-export TRELLO_API_KEY=replace-with-generated-key
-export TRELLO_API_TOKEN=replace-with-generated-token
-```
-
-5. Create the board and workflow:
+1. Complete the one-time browser setup above.
+2. Create the board and workflow:
 
 ```bash
 ./mvnw -q exec:java -Dexec.args='new-board --name "Symphony Work Queue"'
@@ -158,9 +200,9 @@ and the failure will be visible in the Codex session events.
 Use this path when a Trello board already exists but you want Symphony to write the starter workflow
 for you.
 
-1. Copy the board short link from the board URL.
+1. Complete the one-time browser setup above if you have not already generated a key/token.
+2. Copy the board short link from the board URL.
    In `https://trello.com/b/abc123/my-board`, use `abc123`.
-2. Export `TRELLO_API_KEY` and `TRELLO_API_TOKEN`.
 3. Run the import command:
 
 ```bash
@@ -343,35 +385,6 @@ Card URL: {{ card.url }}
 
 Start with `max_concurrent_agents: 1`. Raise it only after one-card-at-a-time runs are boring and
 predictable.
-
-### Create A Trello Workspace
-
-You need a Trello Workspace before creating the Power-Up that provides the API key.
-
-1. Sign in to Trello.
-2. Open the left sidebar and choose the workspace switcher or workspace area.
-3. Create a new Workspace if you do not already have one.
-4. Give it a clear name, for example `Symphony Automation`.
-5. Create or move the Symphony board into that Workspace.
-
-### Create The Trello API Key And Token
-
-Trello API access is created through a custom Power-Up:
-
-1. Open Trello's Power-Ups admin page: `https://trello.com/power-ups/admin`.
-2. Create a new Power-Up in the Workspace that contains your Symphony board.
-3. Name it something explicit, for example `Symphony Local Automation`.
-4. You do not need to enable this Power-Up on the board for Symphony.
-5. Open the Power-Up's API key area and generate an API key.
-6. Generate an API token for your Trello account from that API key page.
-7. Export both values before starting Symphony:
-
-```bash
-export TRELLO_API_KEY=replace-with-generated-key
-export TRELLO_API_TOKEN=replace-with-generated-token
-```
-
-Treat the token like a password. If it is exposed, revoke it in Trello and generate a new one.
 
 ## Workflow Contract
 
