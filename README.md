@@ -122,8 +122,9 @@ Workspace and authorize the API token in the browser.
 10. Copy the API key somewhere temporary. The API key identifies the app, but the token is the
     sensitive credential.
 11. On the same API key page, click the `Token` link below the key.
-12. Review the authorization screen. For the generated handoff workflow, the token needs write
-    access because Codex can add comments and move the current card to `Review`.
+12. Review the authorization screen. Confirm it shows `Symphony Trello Automation`, your Trello
+    account, and permissions to make comments and create or update cards, lists, boards, and
+    Workspaces.
 13. Click `Allow`.
 14. Copy the generated token. Treat it like a password: it grants access as your Trello account to
     boards and Workspaces your account can access.
