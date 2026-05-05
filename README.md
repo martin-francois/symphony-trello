@@ -55,7 +55,8 @@ and maps it to Trello boards, lists, and cards.
 Prerequisites:
 
 - JDK 25 installed.
-- Codex installed and signed in.
+- [Codex CLI installed](https://help.openai.com/en/articles/11096431-openai-codex-ligetting-started)
+  and signed in.
 
 By default, Symphony starts Codex by running `codex app-server`. That works when `codex` is on the
 `PATH` for the user that starts Symphony. If not, set `codex.command` in
@@ -415,6 +416,10 @@ that default makes Symphony run one card and leave the other waiting until a slo
 the value to `2` lets two cards from the same configured board run at the same time; raising it to
 `N` allows up to `N` simultaneous Codex sessions for that process. Raise it only after
 one-card-at-a-time runs are routine and predictable.
+
+Within the available slots, Symphony starts cards in a predictable order. Priority labels run first
+when you use them. Otherwise, it follows the configured active-list order, then the order of cards in
+the Trello list from top to bottom. If there is still a tie, older cards run first.
 
 ## Workflow Contract
 

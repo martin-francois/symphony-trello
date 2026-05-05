@@ -82,6 +82,8 @@ matters, and easy for another engineer to understand without asking the original
   how the service finds them, such as `PATH` lookup or a configurable command path.
 - Keep prerequisite lists simple. Put short install requirements in the list, then add one plain
   explanatory sentence when lookup, authentication, or configuration details matter.
+- When referring to the local `codex` command in user setup docs, call it "Codex CLI" so readers do
+  not confuse it with other Codex surfaces.
 - For docs with multiple setup paths, read the flow once from each path's perspective and avoid
   wording that assumes the reader chose a different path.
 - Put "who this path is for" guidance next to the commands for that path. Do not make readers
