@@ -61,6 +61,9 @@ matters, and easy for another engineer to understand without asking the original
   adding a `package.json` solely to run a JavaScript CLI in this Java project.
 - When pinning tool versions outside their native manifest files, ensure Renovate can update them
   through an existing manager or an explicit custom manager.
+- Prefer ArchUnit for architecture rules that can be checked from compiled classes. Do not add
+  Checkstyle for this repository. Add PMD only for narrow source rules that Spotless and ArchUnit
+  cannot enforce cleanly, and avoid broad PMD rulesets that create noisy or low-value findings.
 - Keep automation config minimal. Do not restate inherited defaults or duplicate global Renovate
   policy in package rules unless the narrower rule changes behavior.
 - Pin GitHub Actions to full commit SHAs with the tracked version tag in a comment. Renovate may
@@ -171,7 +174,8 @@ matters, and easy for another engineer to understand without asking the original
 
 - Let Spotless handle formatting and import cleanup.
 - Use imports instead of inline fully qualified type names. Write `Arrays.stream(...)`, not
-  `java.util.Arrays.stream(...)`. The test suite enforces this.
+  `java.util.Arrays.stream(...)`. PMD enforces this with the narrow
+  `UnnecessaryFullyQualifiedName` rule.
 - Keep code ASCII unless an existing file or domain requirement clearly needs Unicode.
 - Avoid unrelated metadata churn and broad rewrites.
 

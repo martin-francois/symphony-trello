@@ -50,15 +50,15 @@ contract in a test that gives focused failure messages.
 ### Confirmation
 
 Run `pnpm dlx markdownlint-cli2` for Markdown linting and
-`./mvnw -q -Dtest=JavaStyleTest test` for ADR structure enforcement. The full verification command
-`./mvnw -q spotless:check verify` also runs the Java ADR test.
+`./mvnw -q -Dtest=AdrConformanceTest test` for ADR structure enforcement. The full verification
+command `./mvnw -q spotless:check verify` also runs the Java ADR test.
 
 ## Pros and Cons of the Options
 
 ### Use markdownlint for Markdown plus a Java test for MADR ADR shape
 
 Add a CI lint job with `DavidAnson/markdownlint-cli2-action`, keep project Markdown rules in
-`.markdownlint-cli2.yaml`, and enforce ADR shape in `JavaStyleTest`.
+`.markdownlint-cli2.yaml`, and enforce ADR shape in `AdrConformanceTest`.
 
 * Good, because it follows the upstream MADR linting tool.
 * Good, because ADR-specific requirements are enforced directly.
