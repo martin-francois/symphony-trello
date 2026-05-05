@@ -95,6 +95,36 @@ class WorkflowConfigPromptTest {
     }
 
     @Test
+    void rejectsInProgressStateThatIsNotDispatchActive() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: literal-key
+                  api_token: literal-token
+                  board_id: board-1
+                  active_states: [Ready for Codex]
+                  in_progress_state: In Progress
+                codex:
+                  command: fake
+                ---
+                Do the work.
+                """);
+        var config = configs.resolve(loader.load(workflow));
+
+        // when
+        ConfigException error = catchThrowableOfType(ConfigException.class, () -> configs.validateForDispatch(config));
+
+        // then
+        assertThat(error.code()).isEqualTo("invalid_in_progress_state");
+        assertThat(error).hasMessageContaining("tracker.in_progress_state");
+    }
+
+    @Test
     void exampleWorkflowEnforcesBlockersForEveryActiveState() {
         // given
         Path workflow = Path.of("WORKFLOW.example.md");

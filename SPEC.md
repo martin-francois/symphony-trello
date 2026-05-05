@@ -477,6 +477,13 @@ Fields:
   - OPTIONAL Trello list IDs considered dispatch-active.
   - When non-empty, implementations MUST use list ID matching for list-backed open cards instead of
     list-name matching. When empty, active list-name matching uses `active_states`.
+- `in_progress_state` (string)
+  - OPTIONAL Trello list name used as the visible pickup state.
+  - When configured, implementations MAY move a dispatch-eligible card from an earlier active
+    list/state into this list after revalidation and before starting the coding agent.
+  - When `active_list_ids` is empty, this value MUST also appear in `active_states`.
+  - The move is workflow-configured tracker behavior for Trello's visible board state; it does not
+    change the coding agent's responsibility for later handoff comments and state transitions.
 - `blocker_enforced_states` (list of strings)
   - Trello list names or normalized states where non-terminal blockers prevent dispatch.
   - Default: `Todo`, `Ready for Codex`
@@ -961,8 +968,11 @@ Tick sequence:
 2. Run dispatch preflight validation.
 3. Fetch candidate cards from Trello using active states/list IDs.
 4. Sort cards by dispatch priority.
-5. Dispatch eligible cards while slots remain.
-6. Notify observability/status consumers of state changes.
+5. Revalidate a selected card before dispatch. If `tracker.in_progress_state` is configured and the
+   card is in an earlier active state/list, move it to that in-progress list and use the refreshed
+   card snapshot for the prompt.
+6. Dispatch eligible cards while slots remain.
+7. Notify observability/status consumers of state changes.
 
 If per-tick validation fails, dispatch is skipped for that tick, but reconciliation still happens
 first.
@@ -1687,7 +1697,8 @@ Symphony does not require first-class tracker write APIs in the orchestrator.
 
 - Card mutations, such as list moves, comments, checklist updates, labels, attachments, and PR
   metadata, are typically handled by the coding agent using tools defined by the workflow prompt.
-- The service remains a scheduler/runner and Trello reader.
+- The service remains a scheduler/runner and Trello reader, except for workflow-configured pickup
+  transitions such as `tracker.in_progress_state`.
 - This boundary only limits where card mutation decisions live. It does not require operators to
   infer completion from logs or move cards manually when a workflow is configured with scoped Trello
   write tools.
@@ -1695,9 +1706,9 @@ Symphony does not require first-class tracker write APIs in the orchestrator.
   `Human Review`, rather than Trello terminal state `Done`.
 - The handoff signal is normally produced by the agent, because the agent has the semantic context
   to know whether the requested work is reviewable, blocked, or unsafe to hand off.
-- A workflow MAY also ask the agent to perform an initial pickup transition, such as moving a Trello
-  card from `Ready for Codex` to `In Progress`, before implementation work starts. This mirrors the
-  original Symphony workflow pattern while keeping the mutation decision in the agent toolchain.
+- A workflow MAY also configure an initial pickup transition, such as moving a Trello card from
+  `Ready for Codex` to `In Progress`, before implementation work starts. This mirrors the original
+  Symphony workflow pattern while keeping the mutation decision in `WORKFLOW.md`.
 - If the `trello_rest` client-side tool extension is implemented, it is still part of the agent
   toolchain rather than orchestrator business logic.
 - Write-capable Trello operations require a token that was authorized with write permission.
@@ -2910,8 +2921,8 @@ Required when the workflow expects the agent to perform Trello handoff transitio
 - TODO: Make observability settings configurable in workflow front matter without prescribing UI
   implementation details.
 - TODO: Consider additional typed Trello write tools, such as checklist and URL attachment helpers,
-  while keeping workflow-specific mutation decisions in the agent toolchain rather than the
-  orchestrator.
+  while keeping workflow-specific mutation decisions in either the agent toolchain or explicit
+  workflow configuration rather than implicit orchestrator policy.
 - TODO: Add pluggable tracker adapters beyond Trello.
 
 ### 18.4 Operational Validation Before Production (RECOMMENDED)

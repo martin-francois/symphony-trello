@@ -50,8 +50,9 @@ class TrelloClientTest {
                         """
                         [
                           {"id":"list-todo","name":"Todo","closed":false,"pos":1},
-                          {"id":"list-done","name":"Done","closed":false,"pos":2},
-                          {"id":"list-archived","name":"Later","closed":true,"pos":3}
+                          {"id":"list-progress","name":"In Progress","closed":false,"pos":2},
+                          {"id":"list-done","name":"Done","closed":false,"pos":3},
+                          {"id":"list-archived","name":"Later","closed":true,"pos":4}
                         ]
                         """));
         server.createContext("/1/boards/board-1/cards/open", exchange -> {
@@ -158,6 +159,18 @@ class TrelloClientTest {
             respond(
                     exchange,
                     "{\"id\":\"card-malformed\",\"idList\":\"lookup-review\",\"idBoard\":\"lookup-board\",\"closed\":false,\"labels\":[]}");
+        });
+        server.createContext("/1/cards/65df9f76b4a22a1234567896/idList", exchange -> {
+            writeRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
+            respond(exchange, "{\"id\":\"65df9f76b4a22a1234567896\"}");
+        });
+        server.createContext("/1/cards/65df9f76b4a22a1234567896", exchange -> {
+            readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
+            respond(
+                    exchange,
+                    """
+                    {"id":"65df9f76b4a22a1234567896","name":"Picked up","desc":"","idList":"list-progress","idBoard":"board-1","closed":false,"idShort":8,"shortLink":"pickup","shortUrl":"u","url":"u","labels":[],"actions":[],"dateLastActivity":"2026-02-24T20:10:12.000Z","pos":1}
+                    """);
         });
         server.createContext(
                 "/1/boards/closed-input",
@@ -373,6 +386,25 @@ class TrelloClientTest {
                         "POST /1/cards/rate-limited-card/actions/comments?text=Retry+me");
         assertThat(thrown).isInstanceOfSatisfying(TrelloException.class, exception -> assertThat(exception.code())
                 .isEqualTo("trello_api_rate_limited"));
+    }
+
+    @Test
+    void prepareForDispatchMovesQueueCardToConfiguredInProgressColumnAndReturnsRefreshedCard() {
+        // given
+        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var config = config(
+                "input", Map.of("active_states", List.of("Todo", "In Progress"), "in_progress_state", "In Progress"));
+        Card queueCard = card("65df9f76b4a22a1234567896", "TRELLO-pickup", "Todo", "list-todo", null, BigDecimal.ONE);
+
+        // when
+        Card prepared = client.prepareForDispatch(config, queueCard);
+
+        // then
+        assertThat(prepared.state()).isEqualTo("In Progress");
+        assertThat(prepared.listId()).isEqualTo("list-progress");
+        assertThat(writeRequests).containsExactly("PUT /1/cards/65df9f76b4a22a1234567896/idList?value=list-progress");
+        assertThat(readRequests)
+                .anySatisfy(request -> assertThat(request).startsWith("GET /1/cards/65df9f76b4a22a1234567896?"));
     }
 
     @Test

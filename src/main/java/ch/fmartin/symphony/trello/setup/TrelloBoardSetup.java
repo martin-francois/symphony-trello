@@ -358,6 +358,7 @@ public final class TrelloBoardSetup {
                   board_id: %s
                   active_states:
                 %s
+                %s
                   blocker_enforced_states:
                 %s
                   terminal_states:
@@ -429,6 +430,7 @@ public final class TrelloBoardSetup {
                 .formatted(
                         yamlScalar(boardId),
                         yamlList(activeStates),
+                        inProgressStateYaml(inProgressState),
                         yamlList(activeStates),
                         yamlList(withSystemTerminalStates(terminalStates)),
                         yamlScalar(workspaceRoot.toString()),
@@ -458,6 +460,13 @@ public final class TrelloBoardSetup {
                 handoff notes. Do not include private host paths; use sanitized workspace or repository names when
                 context is needed.
                 """;
+    }
+
+    private static String inProgressStateYaml(String inProgressState) {
+        if (blank(inProgressState)) {
+            return "";
+        }
+        return "  in_progress_state: " + yamlScalar(inProgressState);
     }
 
     private static String trelloToolsYaml(List<String> handoffStates) {
@@ -710,8 +719,8 @@ public final class TrelloBoardSetup {
                 .toList();
         String queueText = queueStates.isEmpty() ? "an active queue column" : quotedList(queueStates);
         return """
-                If the card is in %s, immediately call trello_move_current_card with list_name "%s" before
-                implementation work. If the card is already in "%s", continue the existing execution flow."""
+                Symphony moves cards from %s to "%s" before Codex starts when tracker.in_progress_state is configured.
+                If the card is already in "%s", continue the existing execution flow."""
                 .formatted(queueText, inProgressState, inProgressState);
     }
 

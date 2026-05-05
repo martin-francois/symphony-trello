@@ -204,6 +204,9 @@ matters, and easy for another engineer to understand without asking the original
   pass, not only the local state endpoint. Use a fresh timestamp cutoff after each restart so old
   blocker comments do not fail a fixed run, but fail immediately on any new blocker, auth, or sandbox
   comment.
+- Do not manually move a Trello card to prove an automatic workflow transition works. For transition
+  bugs, fix the code or workflow, reproduce with a fresh card or freshly queued card, and verify that
+  Symphony performs the move itself.
 - For live E2E, run the deterministic fake-Codex phase before real Codex. Then run strict real-Codex
   checks against real Trello with fresh cards and wait for both Trello handoff completion and
   `/api/v1/state` returning to zero running/retrying before claiming real-Codex coverage.

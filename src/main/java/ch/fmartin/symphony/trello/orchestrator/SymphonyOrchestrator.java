@@ -390,26 +390,34 @@ public class SymphonyOrchestrator {
         if (retry != null) {
             retry.timer().cancel(false);
         }
-        String workerIdentity = UUID.randomUUID().toString();
-        RunningEntry entry = new RunningEntry(card, workerIdentity, attempt);
-        running.put(card.id(), entry);
-        String prompt;
+        Card dispatchCard;
         try {
-            prompt = prompts.render(workflow.promptTemplate(), card, attempt);
+            dispatchCard = tracker.prepareForDispatch(config, card);
         } catch (RuntimeException e) {
-            running.remove(card.id());
+            claimed.remove(card.id());
             scheduleRetry(card.id(), nextAttempt(attempt), card.identifier(), e.getMessage(), false);
             return;
         }
+        String workerIdentity = UUID.randomUUID().toString();
+        RunningEntry entry = new RunningEntry(dispatchCard, workerIdentity, attempt);
+        running.put(dispatchCard.id(), entry);
+        String prompt;
+        try {
+            prompt = prompts.render(workflow.promptTemplate(), dispatchCard, attempt);
+        } catch (RuntimeException e) {
+            running.remove(dispatchCard.id());
+            scheduleRetry(dispatchCard.id(), nextAttempt(attempt), dispatchCard.identifier(), e.getMessage(), false);
+            return;
+        }
         Future<?> future = workers.submit(() -> {
-            AgentRunResult result = agentRunner.run(
-                    new AgentRunner.AgentRunRequest(card, attempt, prompt, config, workerIdentity, this::onAgentEvent));
-            onWorkerExit(card.id(), workerIdentity, result);
+            AgentRunResult result = agentRunner.run(new AgentRunner.AgentRunRequest(
+                    dispatchCard, attempt, prompt, config, workerIdentity, this::onAgentEvent));
+            onWorkerExit(dispatchCard.id(), workerIdentity, result);
         });
         entry.workerHandle = future;
         LOG.infof(
                 "card_id=%s card_identifier=%s worker_identity=%s outcome=dispatched",
-                card.id(), card.identifier(), workerIdentity);
+                dispatchCard.id(), dispatchCard.identifier(), workerIdentity);
     }
 
     private Optional<Card> refreshForDispatch(Card card) {
