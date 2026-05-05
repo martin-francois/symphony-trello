@@ -52,6 +52,8 @@ matters, and easy for another engineer to understand without asking the original
   task can be handled cleanly in Java. Short shell snippets in documentation are fine for command
   orchestration, but committed reusable helpers should fit the repository's Java-first maintenance
   model unless there is a concrete reason not to.
+- Do not use Perl/Python/Ruby/Node one-liners as the documented implementation of a reproducible
+  project workflow when a small Java helper would keep the workflow easier to maintain in this repo.
 - Keep the project open-source-ready even while private: clear README, usable CONTRIBUTING, useful
   ADRs, no committed secrets, and reviewable history.
 - For local Trello credentials, use ignored project-root `.env` files created from `.env.example`.

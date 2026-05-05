@@ -88,12 +88,9 @@ RUN_DIR="target/$RUN_ID"
 FAKE_JAVA="${JAVA_HOME:-/tmp/jdk25}/bin/java"
 FAKE_CODEX="$(pwd)/scripts/FakeCodexAppServer.java"
 
-perl -0pi -e "s|command: codex app-server|command: \"SYMPHONY_FAKE_CODEX_SLEEP_MS=250 $FAKE_JAVA --source 25 $FAKE_CODEX\"|" \
-  "$RUN_DIR/board-a.WORKFLOW.md" "$RUN_DIR/imported-a.WORKFLOW.md"
-
-perl -0pi -e "s/max_concurrent_agents: 1/max_concurrent_agents: 2/;
-  s|command: codex app-server|command: \"SYMPHONY_FAKE_CODEX_SLEEP_MS=7000 $FAKE_JAVA --source 25 $FAKE_CODEX\"|" \
-  "$RUN_DIR/board-b.WORKFLOW.md"
+$FAKE_JAVA --source 25 scripts/PatchLiveE2eWorkflow.java "$RUN_DIR/board-a.WORKFLOW.md" 1 250 "$FAKE_JAVA" "$FAKE_CODEX"
+$FAKE_JAVA --source 25 scripts/PatchLiveE2eWorkflow.java "$RUN_DIR/imported-a.WORKFLOW.md" 1 250 "$FAKE_JAVA" "$FAKE_CODEX"
+$FAKE_JAVA --source 25 scripts/PatchLiveE2eWorkflow.java "$RUN_DIR/board-b.WORKFLOW.md" 2 7000 "$FAKE_JAVA" "$FAKE_CODEX"
 ```
 
 Create disposable cards in the active lists. Use Trello's REST API directly so the live test is
