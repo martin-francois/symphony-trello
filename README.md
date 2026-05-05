@@ -101,10 +101,7 @@ Workspace and authorize the API token in the browser.
    separate Workspace when you want cleaner separation of automation credentials, collaborators, or
    boards.
 
-3. Open the [Trello apps administration page](https://trello.com/power-ups/admin). Atlassian calls
-   this the App Admin Portal; use its
-   [Managing Apps](https://developer.atlassian.com/cloud/trello/guides/power-ups/managing-apps/)
-   guide if the page layout has changed.
+3. Open the [Trello apps administration page](https://trello.com/power-ups/admin).
 4. If Trello asks you to accept or complete a developer agreement before creating an app, complete
    that browser flow. Symphony cannot automate that part.
 5. Click `New` to create a new app/admin entry for the Workspace.
