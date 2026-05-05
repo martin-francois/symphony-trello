@@ -163,6 +163,14 @@ class TrelloBoardSetupTest {
                 .contains("Codex review issue comments")
                 .contains("Failing, pending, or stale required checks")
                 .contains("treat the card as blocked")
+                .contains("## Rework From Human Review")
+                .contains("from \"Human Review\" back to \"Ready for Codex\", \"In Progress\"")
+                .contains("reread the full card description")
+                .contains("existing workpad")
+                .contains("what changed since the last handoff")
+                .contains("do not restart from scratch")
+                .contains("close the existing PR")
+                .contains("add one concise handoff comment")
                 .contains("## Trello Column Routing")
                 .contains("Symphony only dispatches cards from configured active columns")
                 .contains("\"Ready for Codex\": queued work")
@@ -275,6 +283,10 @@ class TrelloBoardSetupTest {
                 .contains("## Pull Request Feedback Sweep")
                 .contains("Cards without PR context do not need GitHub review checks")
                 .contains("Every actionable human, bot, or Codex")
+                .contains("## Rework From Human Review")
+                .contains("treat the next run as rework")
+                .contains("linked PR comments")
+                .contains("current PR/check state")
                 .contains("## Trello Column Routing")
                 .contains("\"Ready for Codex\": queued work")
                 .contains("\"In Progress\": active work already picked up by Codex")
@@ -375,7 +387,8 @@ class TrelloBoardSetupTest {
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("Do not move the card to \"Review\"")
-                .contains("card to \"Review\" or landing from Merging");
+                .contains("card to \"Review\" or landing from Merging")
+                .contains("Before returning the card to \"Review\"");
     }
 
     @Test

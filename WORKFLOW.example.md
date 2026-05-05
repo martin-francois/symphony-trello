@@ -115,6 +115,21 @@ After feedback-driven changes, rerun the relevant validation and repeat the swee
 actionable feedback remains. If GitHub auth, PR discovery, required checks, or review data are
 unavailable for a PR-backed card, treat the card as blocked instead of handing it off.
 
+## Rework From Human Review
+
+If a human moves a reviewed card from Human Review back to `Todo` or `In Progress`, treat the next
+run as rework. Before changing code, reread the full card description, new Trello comments, existing
+workpad, linked PR comments, inline PR review comments, and current PR/check state.
+
+Identify what changed since the last handoff and update the workpad with a short rework plan that
+says what will be done differently. Preserve completed work that still satisfies the current card; do
+not restart from scratch, close the existing PR, delete the workpad, or create a new branch unless
+the Trello card or a human explicitly asks for a reset.
+
+Before returning the card to Human Review, rerun the card-specific validation and PR feedback sweep,
+update the existing workpad with the rework evidence, and add one concise handoff comment. Do not
+create duplicate progress summary comments when the workpad already contains the details.
+
 When the work is ready for human review, update the workpad with the final summary and validation
 evidence, call trello_add_comment with a concise summary and verification notes, then call
 trello_move_current_card with list_name "Human Review". If the work is blocked or unsafe to hand off,

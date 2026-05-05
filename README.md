@@ -237,8 +237,9 @@ Use the generated board like this:
 6. If Codex cannot safely finish the work, it adds a blocker comment and moves the card to
    `Blocked` so the problem is visible from the board.
 7. If changes are needed, a human moves the card from `Human Review` back to `Ready for Codex`.
-   Codex treats that as rework and reads the Trello comments rendered into the prompt, plus linked
-   PR feedback when available, before changing code again.
+   Codex treats that as rework: it rereads the updated card, new Trello comments, the existing
+   workpad, and linked PR feedback before changing code again. It normally updates the existing PR
+   instead of starting over.
 8. If the work is accepted and should be landed by Codex, a human moves the card to `Merging`.
    Landing automation is implemented separately; until then, use `Merging` as the approval signal
    for your own landing process.

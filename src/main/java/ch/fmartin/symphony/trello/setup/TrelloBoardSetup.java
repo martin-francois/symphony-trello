@@ -412,6 +412,8 @@ public final class TrelloBoardSetup {
 
                 %s
 
+                %s
+
                 Card URL: {{ card.url }}
                 """
                 .formatted(
@@ -426,6 +428,7 @@ public final class TrelloBoardSetup {
                         routingPrompt(activeStates, terminalStates, inProgressState, reviewState, blockedState),
                         validationPrompt(!handoffStates.isEmpty(), reviewState),
                         prFeedbackPrompt(reviewState),
+                        reworkPrompt(activeStates, reviewState),
                         pickupPrompt(activeStates, inProgressState),
                         handoffPrompt(reviewState, blockedState, !handoffStates.isEmpty()));
     }
@@ -514,6 +517,29 @@ public final class TrelloBoardSetup {
                 unavailable for a PR-backed card, treat the card as blocked instead of handing it off.
                 """
                 .formatted(reviewHandoff)
+                .stripTrailing();
+    }
+
+    private static String reworkPrompt(List<String> activeStates, String reviewState) {
+        String reviewHandoff = blank(reviewState) ? "human review" : quote(reviewState);
+        String activeText = activeStates.isEmpty() ? "an active column" : quotedList(activeStates);
+        return """
+                ## Rework From Human Review
+
+                If a human moves a reviewed card from %s back to %s, treat the next run as rework. Before changing
+                code, reread the full card description, new Trello comments, existing workpad, linked PR comments,
+                inline PR review comments, and current PR/check state.
+
+                Identify what changed since the last handoff and update the workpad with a short rework plan that
+                says what will be done differently. Preserve completed work that still satisfies the current card;
+                do not restart from scratch, close the existing PR, delete the workpad, or create a new branch unless
+                the Trello card or a human explicitly asks for a reset.
+
+                Before returning the card to %s, rerun the card-specific validation and PR feedback sweep, update the
+                existing workpad with the rework evidence, and add one concise handoff comment. Do not create
+                duplicate progress summary comments when the workpad already contains the details.
+                """
+                .formatted(reviewHandoff, activeText, reviewHandoff)
                 .stripTrailing();
     }
 
