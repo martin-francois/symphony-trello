@@ -18,6 +18,7 @@
     <quarkus.platform.version>3.35.2</quarkus.platform.version>
     <assertj.version>3.27.7</assertj.version>
     <pebble.version>4.1.1</pebble.version>
+    <maven-compiler-plugin.version>3.14.1</maven-compiler-plugin.version>
     <exec-maven-plugin.version>3.6.3</exec-maven-plugin.version>
     <jacoco.version>0.8.14</jacoco.version>
     <mockito.version>5.23.0</mockito.version>
@@ -111,7 +112,7 @@
       </plugin>
       <plugin>
         <artifactId>maven-compiler-plugin</artifactId>
-        <version>4.0.0-beta-3</version>
+        <version>${maven-compiler-plugin.version}</version>
         <configuration>
           <release>${maven.compiler.release}</release>
           <parameters>true</parameters>

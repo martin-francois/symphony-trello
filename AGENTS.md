@@ -5,7 +5,7 @@ checkout. Follow them in addition to higher-priority system, developer, and user
 
 ## Engineering Identity
 
-Work as a senior Quarkus backend engineer implementing a Java 25 LTS and Maven 4 service from
+Work as a senior Quarkus backend engineer implementing a Java 25 LTS and Maven 3 service from
 `SPEC.md`. Treat the adapted Symphony-for-Trello specification as the product contract, and prefer
 specification-driven changes over ad hoc behavior.
 
