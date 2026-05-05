@@ -1,0 +1,260 @@
+package ch.fmartin.symphony.trello.config;
+
+import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
+import jakarta.enterprise.context.ApplicationScoped;
+import java.nio.file.Path;
+import java.time.Duration;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.OptionalInt;
+
+@ApplicationScoped
+public class ConfigResolver {
+    private static final Map<String, Integer> DEFAULT_PRIORITIES = Map.of(
+            "p1", 1,
+            "p2", 2,
+            "p3", 3,
+            "p4", 4,
+            "priority: critical", 1,
+            "priority: high", 2,
+            "priority: medium", 3,
+            "priority: low", 4);
+
+    public EffectiveConfig resolve(WorkflowDefinition workflow) {
+        Map<String, Object> root = workflow.config();
+        Map<String, Object> tracker = object(root, "tracker");
+        Map<String, Object> polling = object(root, "polling");
+        Map<String, Object> workspace = object(root, "workspace");
+        Map<String, Object> hooks = object(root, "hooks");
+        Map<String, Object> agent = object(root, "agent");
+        Map<String, Object> codex = object(root, "codex");
+        Map<String, Object> trelloTools = object(root, "trello_tools");
+        Map<String, Object> server = object(root, "server");
+
+        String trackerKind = string(tracker, "kind", null);
+        String endpoint = string(tracker, "endpoint", "https://api.trello.com/1");
+        String apiKey = secret(tracker, "api_key", "TRELLO_API_KEY");
+        String apiToken = secret(tracker, "api_token", "TRELLO_API_TOKEN");
+        String boardId = string(tracker, "board_id", null);
+        String resolvedBoardId = string(tracker, "resolved_board_id", boardId);
+
+        boolean writes = bool(trelloTools, "allow_writes", false);
+        return new EffectiveConfig(
+                workflow.path(),
+                new EffectiveConfig.TrackerConfig(
+                        trackerKind,
+                        endpoint,
+                        apiKey,
+                        apiToken,
+                        boardId,
+                        resolvedBoardId,
+                        list(tracker, "active_states", List.of("Todo", "In Progress")),
+                        list(tracker, "active_list_ids", List.of()),
+                        normalizedList(tracker, "blocker_enforced_states", List.of("Todo", "Ready for Codex")),
+                        normalizedList(
+                                tracker,
+                                "terminal_states",
+                                List.of("Done", "Archived", "ArchivedList", "ArchivedBoard", "Deleted")),
+                        list(tracker, "terminal_list_ids", List.of()),
+                        priorityLabels(object(tracker, "priority_labels")),
+                        string(tracker, "card_identifier_prefix", "TRELLO"),
+                        millis(tracker, "request_timeout_ms", 30_000),
+                        integer(tracker, "max_api_retries", 3),
+                        millis(tracker, "api_retry_base_delay_ms", 1_000)),
+                new EffectiveConfig.PollingConfig(millis(polling, "interval_ms", 30_000)),
+                new EffectiveConfig.WorkspaceConfig(
+                        path(workflow.path().getParent(), string(workspace, "root", systemTempRoot()))),
+                new EffectiveConfig.HooksConfig(
+                        string(hooks, "after_create", null),
+                        string(hooks, "before_run", null),
+                        string(hooks, "after_run", null),
+                        string(hooks, "before_remove", null),
+                        millis(hooks, "timeout_ms", 60_000)),
+                new EffectiveConfig.AgentConfig(
+                        positive(agent, "max_concurrent_agents", 10),
+                        positive(agent, "max_turns", 20),
+                        millis(agent, "max_retry_backoff_ms", 300_000),
+                        positiveStateMap(object(agent, "max_concurrent_agents_by_state"))),
+                new EffectiveConfig.CodexConfig(
+                        string(codex, "command", "codex app-server"),
+                        codex.get("approval_policy"),
+                        codex.get("thread_sandbox"),
+                        codex.get("turn_sandbox_policy"),
+                        millis(codex, "turn_timeout_ms", 3_600_000),
+                        millis(codex, "read_timeout_ms", 5_000),
+                        millis(codex, "stall_timeout_ms", 300_000)),
+                new EffectiveConfig.TrelloToolsConfig(
+                        bool(trelloTools, "enabled", false),
+                        writes,
+                        list(trelloTools, "allowed_move_list_ids", List.of()),
+                        normalizedList(trelloTools, "allowed_move_list_names", List.of()),
+                        bool(trelloTools, "allow_comments", writes),
+                        bool(trelloTools, "allow_checklists", writes),
+                        bool(trelloTools, "allow_url_attachments", writes),
+                        bool(trelloTools, "allow_destructive_operations", false),
+                        bool(trelloTools, "assume_write_scope", false)),
+                new EffectiveConfig.ServerConfig(optionalInt(server, "port")));
+    }
+
+    public void validateForDispatch(EffectiveConfig config) {
+        if (!"trello".equals(config.tracker().kind())) {
+            throw new ConfigException("unsupported_tracker_kind", "tracker.kind must be trello");
+        }
+        if (blank(config.tracker().apiKey())) {
+            throw new ConfigException("missing_tracker_api_key", "tracker.api_key is required");
+        }
+        if (blank(config.tracker().apiToken())) {
+            throw new ConfigException("missing_tracker_api_token", "tracker.api_token is required");
+        }
+        if (blank(config.tracker().boardId())) {
+            throw new ConfigException("missing_tracker_board_id", "tracker.board_id is required");
+        }
+        if (blank(config.codex().command())) {
+            throw new ConfigException("missing_codex_command", "codex.command is required");
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> object(Map<String, Object> root, String key) {
+        Object value = root.get(key);
+        if (value == null) {
+            return Map.of();
+        }
+        if (value instanceof Map<?, ?> map) {
+            return (Map<String, Object>) map;
+        }
+        throw new ConfigException("config_type_error", key + " must be an object");
+    }
+
+    private static String string(Map<String, Object> root, String key, String defaultValue) {
+        Object value = root.get(key);
+        if (value == null) {
+            return defaultValue;
+        }
+        return value.toString();
+    }
+
+    private static String secret(Map<String, Object> root, String key, String defaultEnv) {
+        String configured = string(root, key, "$" + defaultEnv);
+        if (configured != null && configured.startsWith("$") && configured.length() > 1) {
+            return LocalEnvironment.get(configured.substring(1)).orElse(null);
+        }
+        return configured;
+    }
+
+    private static Duration millis(Map<String, Object> root, String key, long defaultValue) {
+        int value = integer(root, key, (int) defaultValue);
+        if (value < 0) {
+            throw new ConfigException("config_value_error", key + " must be non-negative");
+        }
+        return Duration.ofMillis(value);
+    }
+
+    private static int positive(Map<String, Object> root, String key, int defaultValue) {
+        int value = integer(root, key, defaultValue);
+        if (value <= 0) {
+            throw new ConfigException("config_value_error", key + " must be positive");
+        }
+        return value;
+    }
+
+    private static int integer(Map<String, Object> root, String key, int defaultValue) {
+        Object value = root.get(key);
+        if (value == null) {
+            return defaultValue;
+        }
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        return Integer.parseInt(value.toString());
+    }
+
+    private static OptionalInt optionalInt(Map<String, Object> root, String key) {
+        Object value = root.get(key);
+        if (value == null) {
+            return OptionalInt.empty();
+        }
+        return OptionalInt.of(value instanceof Number number ? number.intValue() : Integer.parseInt(value.toString()));
+    }
+
+    private static boolean bool(Map<String, Object> root, String key, boolean defaultValue) {
+        Object value = root.get(key);
+        return value == null ? defaultValue : Boolean.parseBoolean(value.toString());
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<String> list(Map<String, Object> root, String key, List<String> defaultValue) {
+        Object value = root.get(key);
+        if (value == null) {
+            return defaultValue;
+        }
+        if (value instanceof List<?> list) {
+            return list.stream().map(Object::toString).toList();
+        }
+        return List.of(value.toString());
+    }
+
+    private static List<String> normalizedList(Map<String, Object> root, String key, List<String> defaultValue) {
+        return list(root, key, defaultValue).stream().map(StateNames::normalize).toList();
+    }
+
+    private static Map<String, Integer> priorityLabels(Map<String, Object> configured) {
+        Map<String, Integer> values = new LinkedHashMap<>(DEFAULT_PRIORITIES);
+        configured.forEach((key, value) -> {
+            try {
+                int priority = value instanceof Number number ? number.intValue() : Integer.parseInt(value.toString());
+                if (priority > 0) {
+                    values.put(StateNames.normalize(key), priority);
+                }
+            } catch (NumberFormatException ignored) {
+                // Invalid priority labels are ignored by specification.
+            }
+        });
+        return Map.copyOf(values);
+    }
+
+    private static Map<String, Integer> positiveStateMap(Map<String, Object> configured) {
+        Map<String, Integer> values = new LinkedHashMap<>();
+        configured.forEach((key, value) -> {
+            try {
+                int limit = value instanceof Number number ? number.intValue() : Integer.parseInt(value.toString());
+                if (limit > 0) {
+                    values.put(StateNames.normalize(key), limit);
+                }
+            } catch (NumberFormatException ignored) {
+                // Invalid entries are ignored by specification.
+            }
+        });
+        return Map.copyOf(values);
+    }
+
+    private static Path path(Path workflowDirectory, String value) {
+        String expanded = expandPath(value);
+        Path path = Path.of(expanded);
+        if (!path.isAbsolute()) {
+            path = workflowDirectory.resolve(path);
+        }
+        return path.toAbsolutePath().normalize();
+    }
+
+    private static String expandPath(String value) {
+        String expanded = value;
+        if (expanded.startsWith("~/")) {
+            expanded = System.getProperty("user.home") + expanded.substring(1);
+        }
+        if (expanded.startsWith("$") && expanded.indexOf('/') < 0) {
+            expanded = LocalEnvironment.get(expanded.substring(1)).orElse(expanded);
+        }
+        return expanded;
+    }
+
+    private static String systemTempRoot() {
+        return Path.of(System.getProperty("java.io.tmpdir"), "symphony_workspaces")
+                .toString();
+    }
+
+    private static boolean blank(String value) {
+        return value == null || value.isBlank();
+    }
+}
