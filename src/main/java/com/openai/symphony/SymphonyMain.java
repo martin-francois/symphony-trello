@@ -3,6 +3,7 @@ package com.openai.symphony;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.openai.symphony.config.LocalEnvironment;
 import com.openai.symphony.orchestrator.SymphonyOrchestrator;
 import io.quarkus.runtime.Quarkus;
 import io.quarkus.runtime.QuarkusApplication;
@@ -39,9 +40,9 @@ public class SymphonyMain {
         if (systemProperty != null && !systemProperty.isBlank()) {
             return systemProperty;
         }
-        String env = System.getenv("SYMPHONY_WORKFLOW_PATH");
-        if (env != null && !env.isBlank()) {
-            return env;
+        Optional<String> env = LocalEnvironment.get("SYMPHONY_WORKFLOW_PATH");
+        if (env.isPresent()) {
+            return env.get();
         }
         return "WORKFLOW.md";
     }
@@ -60,7 +61,8 @@ public class SymphonyMain {
         if (hasText(System.getProperty("quarkus.http.port"))) {
             return true;
         }
-        return hasText(System.getenv("SYMPHONY_HTTP_PORT")) || hasText(System.getenv("QUARKUS_HTTP_PORT"));
+        return LocalEnvironment.get("SYMPHONY_HTTP_PORT").isPresent()
+                || LocalEnvironment.get("QUARKUS_HTTP_PORT").isPresent();
     }
 
     private static boolean hasText(String value) {

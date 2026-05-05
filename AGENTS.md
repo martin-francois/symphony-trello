@@ -20,8 +20,10 @@ matters, and easy for another engineer to understand without asking the original
    would have failed for the bug or missing behavior.
 3. Keep changes narrowly scoped. Separate pure refactors from behavior changes when practical.
 4. Update documentation and ADRs when behavior, setup, architecture, or tradeoffs change.
-5. When the user corrects an agent mistake or clarifies a durable preference, update this file in
-   the same change when reasonable so future sessions do not repeat the issue.
+5. When the user corrects an agent mistake, says something was not done the way they wanted, or
+   explicitly asks for a durable preference to persist, update this file in the same change when
+   reasonable so future sessions do not repeat the issue. Do not add new rules only because the agent
+   independently chose a reasonable improvement.
 6. When fixing a documentation pattern, search the relevant file or docs set for similar instances
    before committing instead of correcting only the one sentence the user pointed out.
 7. Run the relevant verification before finishing. For normal code changes, use:
@@ -46,10 +48,11 @@ matters, and easy for another engineer to understand without asking the original
   for its own sake.
 - Keep the project open-source-ready even while private: clear README, usable CONTRIBUTING, useful
   ADRs, no committed secrets, and reviewable history.
-- Never ask the user to paste secrets into chat. Treat environment variables as the canonical
-  runtime interface for secrets; present ignored `.env.local` files created from `.env.example` as a
-  local convenience, especially in contributor/developer setup docs. Avoid printing secret values in
-  command output. `.secrets/` is also ignored for ad hoc local secret files.
+- Never ask the user to paste secrets into chat. Treat environment variable names as the canonical
+  secret keys, and present ignored project-root `.env` files created from `.env.example` as the
+  normal local storage option. Real environment variables still take precedence over `.env`. Avoid
+  printing secret values in command output. `.secrets/` is also ignored for ad hoc local secret
+  files.
 - Write user-facing docs so they can be read from top to bottom without confusion. Do not refer to a
   concept, path, command, or setup mode before introducing it.
 - Use progressive disclosure in README setup flows: explain the simplest successful path first, and
@@ -80,8 +83,6 @@ matters, and easy for another engineer to understand without asking the original
 - Keep setup steps focused on what the reader must do now. Avoid naming external documentation
   terminology or adding fallback-guide chatter unless it solves a likely problem in that step.
 - Avoid repeating limitations already made clear by the surrounding setup context.
-- If a user hits a vendor warning during setup, document the expected action and the condition where
-  it would be unsafe, close to the triggering step.
 - For optional external docs in setup steps, prefer omitting the link over adding "if the page
   changed" text. Use a precise official link when it materially reduces ambiguity for the current
   action or replaces duplicated vendor-owned setup instructions that are better kept up to date by
@@ -111,6 +112,9 @@ matters, and easy for another engineer to understand without asking the original
 
 ## Specification And ADR Discipline
 
+- Before making code changes, check the relevant `SPEC.md` contract. If the requested change would
+  break or narrow conformance to the adapted Symphony-for-Trello spec or the original upstream
+  Symphony intent, stop and ask the user for explicit confirmation before implementing it.
 - When the spec is ambiguous, compare plausible options and choose the least surprising option that
   preserves conformance.
 - If a decision explains why an obvious alternative was not chosen, record it in `docs/adr/` using
