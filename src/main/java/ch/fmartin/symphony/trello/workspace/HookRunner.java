@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.workspace;
 
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
+import ch.fmartin.symphony.trello.process.ProcessEnvironment;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -39,10 +40,11 @@ public class HookRunner {
         LOG.infof("hook=%s cwd=%s outcome=started", name, cwd);
         Process process;
         try {
-            process = new ProcessBuilder(List.of("bash", "-lc", script))
+            ProcessBuilder processBuilder = new ProcessBuilder(List.of("bash", "-lc", script))
                     .directory(cwd.toFile())
-                    .redirectErrorStream(true)
-                    .start();
+                    .redirectErrorStream(true);
+            ProcessEnvironment.removeDefaultSecrets(processBuilder);
+            process = processBuilder.start();
         } catch (IOException e) {
             return HookResult.failure("start_failed: " + e.getMessage());
         }
