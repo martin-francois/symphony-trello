@@ -107,7 +107,7 @@ Workspace and authorize the API token in the browser.
 5. Click `New` to create a new app/admin entry for the Workspace.
 6. Fill the required fields with clear, recognizable values:
 
-   - `Name`: `Symphony Local Automation`
+   - `Name`: `Symphony Trello Automation`
    - `Workspace`: the Workspace you created or chose above
    - `Email` / `Support Email`: an email you control
    - `Author`: your name or your team name
