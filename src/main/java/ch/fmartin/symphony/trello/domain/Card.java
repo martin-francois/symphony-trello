@@ -29,6 +29,7 @@ public record Card(
         List<String> labelIds,
         List<String> members,
         List<BlockerRef> blockedBy,
+        List<Comment> comments,
         Instant createdAt,
         Instant updatedAt,
         Instant dueAt,
@@ -40,6 +41,7 @@ public record Card(
         labelIds = List.copyOf(labelIds == null ? List.of() : labelIds);
         members = List.copyOf(members == null ? List.of() : members);
         blockedBy = List.copyOf(blockedBy == null ? List.of() : blockedBy);
+        comments = List.copyOf(comments == null ? List.of() : comments);
     }
 
     public Map<String, Object> toTemplateMap() {
@@ -66,6 +68,7 @@ public record Card(
         values.put("label_ids", labelIds);
         values.put("members", members);
         values.put("blocked_by", blockedBy.stream().map(Card::blockerMap).toList());
+        values.put("comments", comments.stream().map(Card::commentMap).toList());
         values.put("created_at", createdAt);
         values.put("updated_at", updatedAt);
         values.put("due_at", dueAt);
@@ -90,4 +93,15 @@ public record Card(
         values.put("url", blocker.url());
         return values;
     }
+
+    private static Map<String, Object> commentMap(Comment comment) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("id", comment.id());
+        values.put("text", comment.text());
+        values.put("author", comment.author());
+        values.put("created_at", comment.createdAt());
+        return values;
+    }
+
+    public record Comment(String id, String text, String author, Instant createdAt) {}
 }

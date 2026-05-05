@@ -64,7 +64,7 @@ Use a unique run id such as `live-e2e-YYYYMMDD-HHMMSS`.
    order. This includes a later-created card that was moved above the older card.
 5. With `max_concurrent_agents: 2`, two cards on one board run at the same time while a third waits.
 6. The app-server calls `trello_add_comment` and `trello_move_current_card`.
-7. Processed cards have a handoff comment and end in `Review`.
+7. Processed cards have a handoff comment and end in `Human Review` on recommended boards.
 8. Two Symphony processes can run against two boards at the same time on different ports.
 9. Cleanup archives all disposable boards created by the run.
 
@@ -169,10 +169,10 @@ RUN_DIR="target/$RUN_ID"
 FAKE_JAVA="$(command -v java)"
 FAKE_CODEX="$(pwd)/scripts/FakeCodexAppServer.java"
 
-$FAKE_JAVA --source 25 scripts/PatchLiveE2eWorkflow.java "$RUN_DIR/board-a.WORKFLOW.md" 1 7000 "$FAKE_JAVA" "$FAKE_CODEX"
-$FAKE_JAVA --source 25 scripts/PatchLiveE2eWorkflow.java "$RUN_DIR/imported-a.WORKFLOW.md" 1 250 "$FAKE_JAVA" "$FAKE_CODEX"
-$FAKE_JAVA --source 25 scripts/PatchLiveE2eWorkflow.java "$RUN_DIR/board-b.WORKFLOW.md" 2 7000 "$FAKE_JAVA" "$FAKE_CODEX"
-$FAKE_JAVA --source 25 scripts/PatchLiveE2eWorkflow.java "$RUN_DIR/custom-import.WORKFLOW.md" 2 7000 "$FAKE_JAVA" "$FAKE_CODEX"
+$FAKE_JAVA --source 25 scripts/PatchLiveE2eWorkflow.java "$RUN_DIR/board-a.WORKFLOW.md" 1 7000 "$FAKE_JAVA" "$FAKE_CODEX" "Human Review"
+$FAKE_JAVA --source 25 scripts/PatchLiveE2eWorkflow.java "$RUN_DIR/imported-a.WORKFLOW.md" 1 250 "$FAKE_JAVA" "$FAKE_CODEX" "Human Review"
+$FAKE_JAVA --source 25 scripts/PatchLiveE2eWorkflow.java "$RUN_DIR/board-b.WORKFLOW.md" 2 7000 "$FAKE_JAVA" "$FAKE_CODEX" "Human Review"
+$FAKE_JAVA --source 25 scripts/PatchLiveE2eWorkflow.java "$RUN_DIR/custom-import.WORKFLOW.md" 2 7000 "$FAKE_JAVA" "$FAKE_CODEX" "Review"
 ```
 
 Create disposable cards in the active columns. Use Trello's REST API directly so the live test is
@@ -190,7 +190,7 @@ for board in a b; do
   curl -fsS "https://api.trello.com/1/boards/$board_id/lists?fields=name,closed&key=$TRELLO_API_KEY&token=$TRELLO_API_TOKEN" \
     > "$RUN_DIR/lists-$board.json"
   jq -r '.[] | select(.name == "Ready for Codex") | .id' "$RUN_DIR/lists-$board.json" > "$RUN_DIR/ready-list-$board.txt"
-  jq -r '.[] | select(.name == "Review") | .id' "$RUN_DIR/lists-$board.json" > "$RUN_DIR/review-list-$board.txt"
+  jq -r '.[] | select(.name == "Human Review") | .id' "$RUN_DIR/lists-$board.json" > "$RUN_DIR/review-list-$board.txt"
 done
 
 curl -fsS -X POST "https://api.trello.com/1/cards" \
@@ -285,7 +285,7 @@ card ID is `CARD_A_2_ID`, `counts.retrying` is `0`, and `card-a-1` is still in `
 Expected Board B result while the fake app-server is sleeping: `counts.running` is `2`,
 `counts.retrying` is `0`, and the third Board B card is still in `Ready for Codex`.
 
-After the active cards move to Review, request refreshes and verify the waiting cards move too:
+After the active cards move to Human Review, request refreshes and verify the waiting cards move too:
 
 ```bash
 curl -fsS -X POST http://127.0.0.1:18181/api/v1/refresh | jq .
@@ -293,7 +293,7 @@ curl -fsS -X POST http://127.0.0.1:18182/api/v1/refresh | jq .
 ```
 
 Create a fresh Board A card for the imported workflow, because the first Board A card should already
-be in `Review`:
+be in `Human Review`:
 
 ```bash
 if [ -z "${TRELLO_API_KEY:-}" ] || [ -z "${TRELLO_API_TOKEN:-}" ]; then
@@ -356,8 +356,8 @@ curl -fsS "https://api.trello.com/1/cards/$card_id?fields=name,idList&actions=co
 jq -r '[.id, .name, .idList, (.actions | length)] | @tsv' "$RUN_DIR/status-$card_id.json"
 ```
 
-The final `idList` must match the Trello list id for the board's Review column, and the comment count
-must be at least `1`.
+The final `idList` must match the Trello list id for the board's review handoff column, and the
+comment count must be at least `1`.
 
 ## Strict Real-Codex Phase
 
@@ -400,7 +400,7 @@ Create fresh cards in `Ready for Codex` for each strict workflow. Start the stri
 separate unused ports the same way as the deterministic phase, but do not stop the service at the
 first Trello move. Wait until both conditions are true:
 
-1. Each target card has at least one Trello comment and its `idList` matches the board's Review
+1. Each target card has at least one Trello comment and its `idList` matches the board's Human Review
    column.
 2. `/api/v1/state` reports `counts.running == 0` and `counts.retrying == 0`.
 
@@ -424,7 +424,7 @@ deployment is healthy. Checking only `systemctl` or `/api/v1/state` is not enoug
 Trello blocker comment while the service still looks active.
 
 Set `CARD_ID` to the card currently being processed and `EXPECTED_COLUMN` to the handoff column for
-that workflow, usually `Review`.
+that workflow, usually `Human Review` on recommended boards.
 
 ```bash
 if [ -z "${TRELLO_API_KEY:-}" ] || [ -z "${TRELLO_API_TOKEN:-}" ]; then
@@ -433,7 +433,7 @@ if [ -z "${TRELLO_API_KEY:-}" ] || [ -z "${TRELLO_API_TOKEN:-}" ]; then
 fi
 
 CARD_ID="replace-with-card-id"
-EXPECTED_COLUMN="Review"
+EXPECTED_COLUMN="Human Review"
 STATE_URL="http://127.0.0.1:8080/api/v1/state"
 CUTOFF="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
@@ -517,13 +517,15 @@ Use this when changing systemd hardening or Ansible deployment access.
 
 Use this when changing generated workflows, Trello move tools, or the recommended board layout.
 
-1. Deploy a workflow whose board has `Ready for Codex`, `In Progress`, `Review`, and `Blocked`.
+1. Deploy a workflow whose board has `Ready for Codex`, `In Progress`, `Human Review`, and
+   `Blocked`.
 2. Ensure `tracker.active_states` includes both `Ready for Codex` and `In Progress`.
-3. Ensure `trello_tools.allowed_move_list_names` includes `In Progress`, `Review`, and `Blocked`.
+3. Ensure `trello_tools.allowed_move_list_names` includes `In Progress`, `Human Review`, and
+   `Blocked`.
 4. Create a fresh card in `Ready for Codex`.
 5. Verify Trello card actions include a move from `Ready for Codex` to `In Progress` after the card is
    picked up.
-6. Wait for the normal handoff. The card should then move to `Review` or `Blocked`, and
+6. Wait for the normal handoff. The card should then move to `Human Review` or `Blocked`, and
    `/api/v1/state` should drain to zero running and retrying entries.
 7. Deploy a second workflow for the same board shape without an in-progress column configured in the
    workflow.

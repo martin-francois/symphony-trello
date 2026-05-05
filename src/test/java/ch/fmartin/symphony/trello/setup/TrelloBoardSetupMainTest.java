@@ -147,7 +147,8 @@ class TrelloBoardSetupMainTest {
         assertThat(exitCode).isZero();
         assertThat(createdBoardName).hasValue("Symphony Work Queue");
         assertThat(createdColumns)
-                .containsExactly("Inbox", "Ready for Codex", "In Progress", "Blocked", "Review", "Done");
+                .containsExactly(
+                        "Inbox", "Ready for Codex", "In Progress", "Blocked", "Human Review", "Merging", "Done");
         assertThat(workflow).content(StandardCharsets.UTF_8).contains("board_id: \"abc123\"");
         assertThat(stdout.toString(StandardCharsets.UTF_8))
                 .contains("Created Trello board: Symphony Work Queue")

@@ -55,7 +55,7 @@ public class TrelloHandoffToolHandler {
                     objectSchema(
                             Map.of(
                                     "list_name",
-                                    stringSchema("Allowed destination column name, for example Review."),
+                                    stringSchema("Allowed destination column name, for example Human Review."),
                                     "list_id",
                                     stringSchema("Allowed destination Trello list id for a board column.")),
                             List.of())));

@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -66,6 +67,52 @@ class SymphonyOrchestratorTest {
             assertThat(row.cardIdentifier()).isEqualTo("TRELLO-abc");
             assertThat(row.attempt()).isEqualTo(1);
         });
+    }
+
+    @Test
+    void refreshesSelectedCardBeforeRenderingPrompt() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        writeWorkflow(
+                workflow,
+                "60000",
+                "",
+                """
+                {% for comment in card.comments %}{{ comment.text }}{% endfor %}
+                """);
+        Card listedCard = TestCards.card("card-1", "TRELLO-abc", "Todo");
+        Card refreshedCard = TestCards.cardWithComments(
+                "card-1",
+                "TRELLO-abc",
+                "Todo",
+                List.of(new Card.Comment("comment-1", "Review the edge case.", "Reviewer", Instant.now())));
+        FakeTracker tracker = new FakeTracker(List.of(listedCard));
+        tracker.setCardState(refreshedCard);
+        AtomicReference<String> prompt = new AtomicReference<>();
+        AgentRunner runner = mock(AgentRunner.class);
+        doAnswer(invocation -> {
+                    AgentRunner.AgentRunRequest request = invocation.getArgument(0);
+                    prompt.set(request.prompt());
+                    return AgentRunResult.ok();
+                })
+                .when(runner)
+                .run(any());
+        SymphonyOrchestrator orchestrator = new SymphonyOrchestrator(
+                new WorkflowLoader(),
+                new ConfigResolver(),
+                tracker,
+                runner,
+                new PromptRenderer(),
+                new WorkspaceManager(new HookRunner()));
+        orchestrator.workflowPath = workflow;
+
+        // when
+        orchestrator.start();
+        waitUntil(() -> prompt.get() != null);
+        orchestrator.stop();
+
+        // then
+        assertThat(prompt.get()).contains("Review the edge case.");
     }
 
     @Test
@@ -318,6 +365,11 @@ class SymphonyOrchestratorTest {
     }
 
     private static void writeWorkflow(Path workflow, String pollIntervalMs, String extraConfig) throws Exception {
+        writeWorkflow(workflow, pollIntervalMs, extraConfig, "{{ card.title }}");
+    }
+
+    private static void writeWorkflow(Path workflow, String pollIntervalMs, String extraConfig, String prompt)
+            throws Exception {
         Files.writeString(
                 workflow,
                 """
@@ -336,9 +388,9 @@ class SymphonyOrchestratorTest {
                 codex:
                   command: fake
                 ---
-                {{ card.title }}
+                %s
                 """
-                        .formatted(pollIntervalMs, extraConfig));
+                        .formatted(pollIntervalMs, extraConfig, prompt));
     }
 
     private static void waitUntil(Condition condition) throws Exception {

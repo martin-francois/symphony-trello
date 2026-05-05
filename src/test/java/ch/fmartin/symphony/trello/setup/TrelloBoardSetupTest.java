@@ -55,9 +55,10 @@ class TrelloBoardSetupTest {
                   {"id":"list-ready","name":"Ready for Codex","closed":false,"pos":2},
                   {"id":"list-in-progress","name":"In Progress","closed":false,"pos":3},
                   {"id":"list-blocked","name":"Blocked","closed":false,"pos":4},
-                  {"id":"list-review","name":"Review","closed":false,"pos":5},
-                  {"id":"list-done","name":"Done","closed":false,"pos":6},
-                  {"id":"list-archive","name":"Archived old work","closed":true,"pos":7}
+                  {"id":"list-review","name":"Human Review","closed":false,"pos":5},
+                  {"id":"list-merging","name":"Merging","closed":false,"pos":6},
+                  {"id":"list-done","name":"Done","closed":false,"pos":7},
+                  {"id":"list-archive","name":"Archived old work","closed":true,"pos":8}
                 ]
                 """);
 
@@ -122,7 +123,8 @@ class TrelloBoardSetupTest {
         // then
         assertThat(result.boardKey()).isEqualTo("abc123");
         assertThat(createdColumns)
-                .containsExactly("Inbox", "Ready for Codex", "In Progress", "Blocked", "Review", "Done");
+                .containsExactly(
+                        "Inbox", "Ready for Codex", "In Progress", "Blocked", "Human Review", "Merging", "Done");
         assertThat(authorization.get()).contains("oauth_consumer_key=\"key\"").contains("oauth_token=\"token\"");
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
@@ -133,11 +135,16 @@ class TrelloBoardSetupTest {
                 .contains("trello_tools:")
                 .contains("allowed_move_list_names:")
                 .contains("- \"In Progress\"")
-                .contains("- \"Review\"")
+                .contains("- \"Human Review\"")
                 .contains("- \"Blocked\"")
                 .contains("immediately call trello_move_current_card with list_name \"In Progress\"")
+                .contains("list_name \"Human Review\"")
+                .contains("A Merging column, when configured, is a human approval signal")
+                .contains("treat it as rework")
                 .contains("## Description")
                 .contains("{{ card.description }}")
+                .contains("## Trello Comments")
+                .contains("{% for comment in card.comments %}")
                 .contains("If the Trello card names a specific local path or project")
                 .contains("Filesystem access blocker details")
                 .contains("inaccessible path")
@@ -150,7 +157,8 @@ class TrelloBoardSetupTest {
                 .contains("done", "archived", "archivedlist", "archivedboard", "deleted");
         assertThat(config.trelloTools().enabled()).isTrue();
         assertThat(config.trelloTools().allowWrites()).isTrue();
-        assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("in progress", "review", "blocked");
+        assertThat(config.trelloTools().allowedMoveListNames())
+                .containsExactly("in progress", "human review", "blocked");
         assertThat(config.trelloTools().allowChecklists()).isFalse();
         assertThat(config.trelloTools().allowUrlAttachments()).isFalse();
     }
@@ -211,7 +219,8 @@ class TrelloBoardSetupTest {
 
         // then
         assertThat(result.openColumns())
-                .containsExactly("Inbox", "Ready for Codex", "In Progress", "Blocked", "Review", "Done");
+                .containsExactly(
+                        "Inbox", "Ready for Codex", "In Progress", "Blocked", "Human Review", "Merging", "Done");
         assertThat(result.activeStates()).containsExactly("Ready for Codex", "In Progress");
         assertThat(result.terminalStates()).containsExactly("Done");
         assertThat(result.inProgressState()).isEqualTo("In Progress");
@@ -222,10 +231,13 @@ class TrelloBoardSetupTest {
                 .contains("root: \"./agent-workspaces\"")
                 .contains("allowed_move_list_names:")
                 .contains("- \"In Progress\"")
-                .contains("- \"Review\"")
+                .contains("- \"Human Review\"")
                 .contains("- \"Blocked\"")
                 .contains("If the card is in \"Ready for Codex\"")
+                .contains("## Trello Comments")
                 .contains("list_name \"In Progress\"")
+                .contains("list_name \"Human Review\"")
+                .contains("A Merging column, when configured, is a human approval signal")
                 .contains("max_concurrent_agents: 2");
         EffectiveConfig config = resolve(workflow);
         assertThat(config.tracker().boardId()).isEqualTo("existing");
@@ -261,7 +273,7 @@ class TrelloBoardSetupTest {
                 .doesNotContain("list_name \"In Progress\"");
         EffectiveConfig config = resolve(workflow);
         assertThat(config.tracker().activeStates()).containsExactly("Ready for Codex");
-        assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("review", "blocked");
+        assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("human review", "blocked");
     }
 
     @Test
@@ -315,6 +327,43 @@ class TrelloBoardSetupTest {
         assertThat(config.trelloTools().enabled()).isTrue();
         assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("review", "needs help");
         assertThat(config.agent().maxConcurrentAgents()).isEqualTo(2);
+    }
+
+    @Test
+    void importPrefersHumanReviewWhenLegacyReviewAlsoExists() {
+        // given
+        boardListsResponse.set(
+                """
+                [
+                  {"id":"list-ready","name":"Ready for Codex","closed":false,"pos":1},
+                  {"id":"list-legacy-review","name":"Review","closed":false,"pos":2},
+                  {"id":"list-human-review","name":"Human Review","closed":false,"pos":3},
+                  {"id":"list-blocked","name":"Blocked","closed":false,"pos":4},
+                  {"id":"list-done","name":"Done","closed":false,"pos":5}
+                ]
+                """);
+        Path workflow = tempDir.resolve("imported-human-review.md");
+
+        // when
+        setup.importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "input",
+                List.of(),
+                List.of(),
+                null,
+                workflow,
+                Path.of("./agent-workspaces"),
+                2,
+                false));
+
+        // then
+        EffectiveConfig config = resolve(workflow);
+        assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("human review", "blocked");
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("list_name \"Human Review\"")
+                .doesNotContain("list_name \"Review\"");
     }
 
     @Test

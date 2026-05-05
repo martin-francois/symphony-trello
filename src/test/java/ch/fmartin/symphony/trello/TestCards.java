@@ -9,6 +9,10 @@ public final class TestCards {
     private TestCards() {}
 
     public static Card card(String id, String identifier, String state) {
+        return cardWithComments(id, identifier, state, List.of());
+    }
+
+    public static Card cardWithComments(String id, String identifier, String state, List<Card.Comment> comments) {
         return new Card(
                 id,
                 identifier,
@@ -32,6 +36,7 @@ public final class TestCards {
                 List.of(),
                 List.of(),
                 List.of(),
+                comments,
                 Instant.parse("2026-01-01T00:00:00Z"),
                 Instant.parse("2026-01-02T00:00:00Z"),
                 null,

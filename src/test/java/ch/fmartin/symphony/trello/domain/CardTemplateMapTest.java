@@ -3,6 +3,7 @@ package ch.fmartin.symphony.trello.domain;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.fmartin.symphony.trello.TestCards;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.assertj.core.api.InstanceOfAssertFactories;
@@ -35,6 +36,11 @@ class CardTemplateMapTest {
                 List.of("label-1"),
                 List.of("member-1"),
                 List.of(new BlockerRef("blocker-1", "TRELLO-blocker", "Done", "https://trello.com/c/blocker")),
+                List.of(new Card.Comment(
+                        "comment-1",
+                        "Please handle the review note.",
+                        "Reviewer",
+                        Instant.parse("2026-01-03T00:00:00Z"))),
                 null,
                 null,
                 null,
@@ -53,5 +59,13 @@ class CardTemplateMapTest {
                 .containsEntry("identifier", "TRELLO-blocker")
                 .containsEntry("state", "Done")
                 .containsEntry("url", "https://trello.com/c/blocker");
+        assertThat(template.get("comments"))
+                .asList()
+                .singleElement()
+                .asInstanceOf(InstanceOfAssertFactories.MAP)
+                .containsEntry("id", "comment-1")
+                .containsEntry("text", "Please handle the review note.")
+                .containsEntry("author", "Reviewer")
+                .containsEntry("created_at", Instant.parse("2026-01-03T00:00:00Z"));
     }
 }
