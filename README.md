@@ -38,8 +38,8 @@ and maps it to Trello boards, columns, and cards.
 ## Current Capabilities
 
 - Trello REST polling for active cards, terminal cards, and per-card reconciliation.
-- Trello normalization for open cards, archived cards, archived Trello lists (closed columns),
-  archived boards, labels, priority labels, due dates, positions, and ObjectId-derived creation time.
+- Trello normalization for open cards, archived cards, archived Trello lists/columns, archived
+  boards, labels, priority labels, due dates, positions, and ObjectId-derived creation time.
 - Dynamic `WORKFLOW.md` reload with last-known-good behavior after invalid edits.
 - Strict prompt rendering with `card`, `issue`, and `attempt` variables.
 - Per-card workspace creation, sanitization, root containment checks, and lifecycle hooks.
