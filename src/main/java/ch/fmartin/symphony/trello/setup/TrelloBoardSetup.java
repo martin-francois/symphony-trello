@@ -340,6 +340,7 @@ public final class TrelloBoardSetup {
             String blockedState,
             Path workspaceRoot,
             int maxAgents) {
+        List<String> handoffStates = allowedMoveStates(inProgressState, reviewState, blockedState);
         return """
                 ---
                 tracker:
@@ -389,6 +390,8 @@ public final class TrelloBoardSetup {
 
                 %s
 
+                %s
+
                 Card URL: {{ card.url }}
                 """
                 .formatted(
@@ -397,10 +400,26 @@ public final class TrelloBoardSetup {
                         yamlList(activeStates),
                         yamlList(withSystemTerminalStates(terminalStates)),
                         yamlScalar(workspaceRoot.toString()),
-                        trelloToolsYaml(allowedMoveStates(inProgressState, reviewState, blockedState)),
+                        trelloToolsYaml(handoffStates),
                         maxAgents,
+                        workpadPrompt(!handoffStates.isEmpty()),
                         pickupPrompt(activeStates, inProgressState),
-                        handoffPrompt(reviewState, blockedState));
+                        handoffPrompt(reviewState, blockedState, !handoffStates.isEmpty()));
+    }
+
+    private static String workpadPrompt(boolean workpadToolEnabled) {
+        if (!workpadToolEnabled) {
+            return "";
+        }
+        return """
+                ## Codex Workpad
+
+                Maintain one Trello workpad comment for this card by calling trello_upsert_workpad. Reuse the
+                existing comment that starts with "## Codex Workpad"; do not create separate progress comments.
+                Keep it current with the plan, acceptance criteria, progress, validation evidence, blockers, and
+                handoff notes. Do not include private host paths; use sanitized workspace or repository names when
+                context is needed.
+                """;
     }
 
     private static String trelloToolsYaml(List<String> handoffStates) {
@@ -426,12 +445,22 @@ public final class TrelloBoardSetup {
                 .stripTrailing();
     }
 
-    private static String handoffPrompt(String reviewState, String blockedState) {
+    private static String handoffPrompt(String reviewState, String blockedState, boolean workpadToolEnabled) {
         String blockedDestination = blockedDestination(reviewState, blockedState);
         if (blank(reviewState) && blank(blockedDestination)) {
+            if (!workpadToolEnabled) {
+                return """
+                        When the work is ready for human review, leave the workspace in a reviewable state and summarize the status in the Codex response. Trello handoff tools are disabled in this starter workflow until you configure trello_tools.allowed_move_list_names.
+                        If the work is blocked, summarize the blocker in the Codex response; an operator must move the card out of the active column manually. Leaving blocked work active can make Symphony run it again.
+                        If a human returns a reviewed card to an active column, reread the card, the Trello comments rendered above, and linked PR feedback when available before changing code again.
+                        A Merging column, when configured, is a human approval signal for a landing flow; do not merge from human review.
+                        %s"""
+                        .formatted(FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION)
+                        .stripTrailing();
+            }
             return """
-                    When the work is ready for human review, leave the workspace in a reviewable state and summarize the status in the Codex response. Trello handoff tools are disabled in this starter workflow until you configure trello_tools.allowed_move_list_names.
-                    If the work is blocked, summarize the blocker in the Codex response; an operator must move the card out of the active column manually. Leaving blocked work active can make Symphony run it again.
+                    When the work is ready for human review, update the workpad with the final summary and validation evidence, leave the workspace in a reviewable state, and summarize the status in the Codex response. No review or blocked destination column is configured, so do not move the card for handoff.
+                    If the work is blocked, update the workpad with the blocker and summarize the blocker in the Codex response; an operator must move the card out of the active column manually. Leaving blocked work active can make Symphony run it again.
                     If a human returns a reviewed card to an active column, reread the card, the Trello comments rendered above, and linked PR feedback when available before changing code again.
                     A Merging column, when configured, is a human approval signal for a landing flow; do not merge from human review.
                     %s"""
@@ -440,8 +469,8 @@ public final class TrelloBoardSetup {
         }
         if (blank(reviewState)) {
             return """
-                    When the work is ready for human review, leave the workspace in a reviewable state and summarize the status in the Codex response.
-                    If the work is blocked or unsafe to hand off, call trello_add_comment with the blocker, then call
+                    When the work is ready for human review, update the workpad with the final summary and validation evidence, leave the workspace in a reviewable state, and summarize the status in the Codex response.
+                    If the work is blocked or unsafe to hand off, update the workpad with the blocker, call trello_add_comment with the blocker, then call
                     trello_move_current_card with list_name "%s".
                     If a human returns a reviewed card to an active column, reread the card, the Trello comments rendered above, and linked PR feedback when available before changing code again.
                     A Merging column, when configured, is a human approval signal for a landing flow; do not merge from human review. %s"""
@@ -449,9 +478,9 @@ public final class TrelloBoardSetup {
         }
         if (blank(blockedState)) {
             return """
-                    When the work is ready for human review, call trello_add_comment with a concise summary and
+                    When the work is ready for human review, update the workpad with the final summary and validation evidence, call trello_add_comment with a concise summary and
                     verification notes, then call trello_move_current_card with list_name "%s". If the work is
-                    blocked or unsafe to hand off, add a Trello comment explaining the blocker, then call
+                    blocked or unsafe to hand off, update the workpad with the blocker, add a Trello comment explaining the blocker, then call
                     trello_move_current_card with list_name "%s" so the card leaves the active column. Do not leave
                     blocked work in an active column; Symphony may run it again.
                     If a human returns a reviewed card to an active column, treat it as rework: reread the card, the Trello comments rendered above, and linked PR feedback when available before changing code again.
@@ -459,9 +488,9 @@ public final class TrelloBoardSetup {
                     .formatted(reviewState, blockedDestination, FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION);
         }
         return """
-                When the work is ready for human review, call trello_add_comment with a concise summary and
+                When the work is ready for human review, update the workpad with the final summary and validation evidence, call trello_add_comment with a concise summary and
                 verification notes, then call trello_move_current_card with list_name "%s". If the work is
-                blocked or unsafe to hand off, add a Trello comment explaining the blocker, then call
+                blocked or unsafe to hand off, update the workpad with the blocker, add a Trello comment explaining the blocker, then call
                 trello_move_current_card with list_name "%s".
                 If a human returns a reviewed card to an active column, treat it as rework: reread the card, the Trello comments rendered above, and linked PR feedback when available before changing code again.
                 A Merging column, when configured, is a human approval signal for a landing flow; do not merge from human review. %s"""

@@ -21,6 +21,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -120,18 +122,43 @@ class TrelloClientTest {
                           {"id":"lookup-review","name":"Review","closed":false,"pos":2}
                         ]
                         """));
-        server.createContext(
-                "/1/cards/card-found",
-                exchange -> respond(
-                        exchange,
-                        "{\"id\":\"card-found\",\"name\":\"Found\",\"idList\":\"lookup-review\",\"idBoard\":\"lookup-board\",\"closed\":false,\"shortLink\":\"found\",\"labels\":[],\"actions\":[{\"id\":\"comment-2\",\"date\":\"2026-02-25T20:11:12.000Z\",\"data\":{\"text\":\"Follow-up review note.\"},\"memberCreator\":{\"username\":\"reviewer\"}}]}"));
-        server.createContext("/1/cards/card-missing", exchange -> respond(exchange, 404, "{}"));
-        server.createContext("/1/cards/card-failed", exchange -> respond(exchange, 500, "{}"));
-        server.createContext(
-                "/1/cards/card-malformed",
-                exchange -> respond(
-                        exchange,
-                        "{\"id\":\"card-malformed\",\"idList\":\"lookup-review\",\"idBoard\":\"lookup-board\",\"closed\":false,\"labels\":[]}"));
+        server.createContext("/1/cards/card-found", exchange -> {
+            readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
+            respond(
+                    exchange,
+                    "{\"id\":\"card-found\",\"name\":\"Found\",\"idList\":\"lookup-review\",\"idBoard\":\"lookup-board\",\"closed\":false,\"shortLink\":\"found\",\"labels\":[],\"actions\":[{\"id\":\"comment-2\",\"date\":\"2026-02-25T20:11:12.000Z\",\"data\":{\"text\":\"Follow-up review note.\"},\"memberCreator\":{\"username\":\"reviewer\"}}]}");
+        });
+        server.createContext("/1/cards/card-workpad-old", exchange -> {
+            readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
+            String rawQuery = exchange.getRequestURI().getRawQuery();
+            boolean deepLookup = rawQuery != null && rawQuery.contains("actions_limit=1000");
+            respond(
+                    exchange,
+                    cardWithActions("card-workpad-old", deepLookup ? oldWorkpadActions() : regularActions(20)));
+        });
+        server.createContext("/1/cards/card-workpad-deep-failed", exchange -> {
+            readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
+            String rawQuery = exchange.getRequestURI().getRawQuery();
+            if (rawQuery != null && rawQuery.contains("actions_limit=1000")) {
+                respond(exchange, 429, "{}");
+                return;
+            }
+            respond(exchange, cardWithActions("card-workpad-deep-failed", regularActions(20)));
+        });
+        server.createContext("/1/cards/card-missing", exchange -> {
+            readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
+            respond(exchange, 404, "{}");
+        });
+        server.createContext("/1/cards/card-failed", exchange -> {
+            readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
+            respond(exchange, 500, "{}");
+        });
+        server.createContext("/1/cards/card-malformed", exchange -> {
+            readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
+            respond(
+                    exchange,
+                    "{\"id\":\"card-malformed\",\"idList\":\"lookup-review\",\"idBoard\":\"lookup-board\",\"closed\":false,\"labels\":[]}");
+        });
         server.createContext(
                 "/1/boards/closed-input",
                 exchange -> respond(exchange, "{\"id\":\"closed-board\",\"name\":\"Board\",\"closed\":true}"));
@@ -142,6 +169,10 @@ class TrelloClientTest {
         server.createContext("/1/cards/write-card/idList", exchange -> {
             writeRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
             respond(exchange, "{\"id\":\"write-card\"}");
+        });
+        server.createContext("/1/actions/comment-1/text", exchange -> {
+            writeRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
+            respond(exchange, "{\"id\":\"comment-1\"}");
         });
         server.createContext("/1/cards/rate-limited-card/actions/comments", exchange -> {
             writeRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
@@ -224,6 +255,101 @@ class TrelloClientTest {
         assertThat(results.get("card-malformed"))
                 .isInstanceOfSatisfying(CardLookupResult.Failed.class, failed -> assertThat(failed.code())
                         .isEqualTo("trello_unknown_payload"));
+        assertThat(readRequests).anySatisfy(request -> assertThat(request)
+                .startsWith("GET /1/cards/card-found?")
+                .contains("actions_limit=20")
+                .contains("action_fields=data%2Cdate%2CmemberCreator"));
+    }
+
+    @Test
+    void fetchCardStateForWorkpadRequestsDeepCommentWindowAndActionIds() {
+        // given
+        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var config = config("lookup-input", Map.of());
+
+        // when
+        var result = client.fetchCardStateForWorkpad(config, "card-found");
+
+        // then
+        assertThat(result).isInstanceOfSatisfying(CardLookupResult.Found.class, found -> assertThat(found.card())
+                .satisfies(card -> assertThat(card.comments())
+                        .singleElement()
+                        .satisfies(comment -> assertThat(comment.id()).isEqualTo("comment-2"))));
+        assertThat(readRequests).anySatisfy(request -> assertThat(request)
+                .startsWith("GET /1/cards/card-found?")
+                .contains("actions_limit=1000")
+                .contains("action_fields=id%2Cdata%2Cdate%2CmemberCreator"));
+    }
+
+    @Test
+    void fetchCardStatesByIdsDoesNotFetchOlderWorkpadDuringStateRefresh() {
+        // given
+        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var config = config("lookup-input", Map.of());
+
+        // when
+        var results = client.fetchCardStatesByIds(config, List.of("card-workpad-old"));
+
+        // then
+        assertThat(results.get("card-workpad-old"))
+                .isInstanceOfSatisfying(CardLookupResult.Found.class, found -> assertThat(
+                                found.card().comments())
+                        .hasSize(20)
+                        .extracting(Card.Comment::text)
+                        .doesNotContain(TrelloClient.WORKPAD_MARKER + "\n\nOlder plan")
+                        .contains("Regular comment 19"));
+        assertThat(readRequests)
+                .filteredOn(request -> request.startsWith("GET /1/cards/card-workpad-old?"))
+                .singleElement()
+                .satisfies(request -> assertThat(request).contains("actions_limit=20"));
+    }
+
+    @Test
+    void fetchCardStatesForPromptByIdsIncludesOlderWorkpadWithoutExpandingRecentComments() {
+        // given
+        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var config = config("lookup-input", Map.of());
+
+        // when
+        var results = client.fetchCardStatesForPromptByIds(config, List.of("card-workpad-old"));
+
+        // then
+        assertThat(results.get("card-workpad-old"))
+                .isInstanceOfSatisfying(CardLookupResult.Found.class, found -> assertThat(
+                                found.card().comments())
+                        .hasSize(21)
+                        .extracting(Card.Comment::text)
+                        .startsWith(TrelloClient.WORKPAD_MARKER + "\n\nOlder plan")
+                        .contains("Regular comment 19"));
+        assertThat(readRequests)
+                .filteredOn(request -> request.startsWith("GET /1/cards/card-workpad-old?"))
+                .satisfiesExactly(
+                        request -> assertThat(request).contains("actions_limit=20"),
+                        request -> assertThat(request).contains("actions_limit=1000"));
+    }
+
+    @Test
+    void fetchCardStatesForPromptByIdsKeepsReadableCardWhenOlderWorkpadLookupFails() {
+        // given
+        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var config = config("lookup-input", Map.of("max_api_retries", 0));
+
+        // when
+        var results = client.fetchCardStatesForPromptByIds(config, List.of("card-workpad-deep-failed"));
+
+        // then
+        assertThat(results.get("card-workpad-deep-failed"))
+                .isInstanceOfSatisfying(CardLookupResult.Found.class, found -> assertThat(
+                                found.card().comments())
+                        .hasSize(20)
+                        .extracting(Card.Comment::text)
+                        .contains("Regular comment 19")
+                        .doesNotContain(TrelloClient.WORKPAD_MARKER + "\n\nOlder plan"));
+        assertThat(readRequests)
+                .filteredOn(request -> request.startsWith("GET /1/cards/card-workpad-deep-failed?"))
+                .satisfiesExactly(
+                        request -> assertThat(request).contains("actions_limit=20"),
+                        request -> assertThat(request).contains("actions_limit=1000"));
     }
 
     @Test
@@ -234,6 +360,7 @@ class TrelloClientTest {
 
         // when
         client.addComment(config, "write-card", "Ready for review");
+        client.updateComment(config, "comment-1", "Updated workpad");
         client.moveCardToList(config, "write-card", "review-list");
         Throwable thrown = catchThrowable(() -> client.addComment(config, "rate-limited-card", "Retry me"));
 
@@ -241,6 +368,7 @@ class TrelloClientTest {
         assertThat(writeRequests)
                 .containsExactly(
                         "POST /1/cards/write-card/actions/comments?text=Ready+for+review",
+                        "PUT /1/actions/comment-1/text?value=Updated+workpad",
                         "PUT /1/cards/write-card/idList?value=review-list",
                         "POST /1/cards/rate-limited-card/actions/comments?text=Retry+me");
         assertThat(thrown).isInstanceOfSatisfying(TrelloException.class, exception -> assertThat(exception.code())
@@ -373,5 +501,32 @@ class TrelloClientTest {
         try (var output = exchange.getResponseBody()) {
             output.write(bytes);
         }
+    }
+
+    private static String cardWithActions(String cardId, String actionsJson) {
+        return """
+                {"id":"%s","name":"Found","idList":"lookup-review","idBoard":"lookup-board","closed":false,"shortLink":"found","labels":[],"actions":%s}
+                """
+                .formatted(cardId, actionsJson);
+    }
+
+    private static String oldWorkpadActions() {
+        return "[" + workpadAction() + "," + regularActions(20).substring(1);
+    }
+
+    private static String workpadAction() {
+        return """
+                {"id":"comment-workpad","date":"2026-02-25T20:00:00.000Z","data":{"text":"## Codex Workpad\\n\\nOlder plan"},"memberCreator":{"username":"codex"}}
+                """;
+    }
+
+    private static String regularActions(int count) {
+        return IntStream.range(0, count)
+                .mapToObj(index ->
+                        """
+                        {"id":"regular-%d","date":"2026-02-25T20:11:12.000Z","data":{"text":"Regular comment %d"},"memberCreator":{"username":"reviewer"}}
+                        """
+                                .formatted(index, index))
+                .collect(Collectors.joining(",", "[", "]"));
     }
 }

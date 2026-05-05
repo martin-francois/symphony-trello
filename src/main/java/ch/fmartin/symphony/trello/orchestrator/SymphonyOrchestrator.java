@@ -414,8 +414,8 @@ public class SymphonyOrchestrator {
 
     private Optional<Card> refreshForDispatch(Card card) {
         try {
-            CardLookupResult result =
-                    tracker.fetchCardStatesByIds(config, List.of(card.id())).get(card.id());
+            CardLookupResult result = tracker.fetchCardStatesForPromptByIds(config, List.of(card.id()))
+                    .get(card.id());
             if (result instanceof CardLookupResult.Found found && shouldDispatch(found.card(), false)) {
                 return Optional.of(found.card());
             }
@@ -565,7 +565,7 @@ public class SymphonyOrchestrator {
                 scheduleRetry(cardId, retry.attempt() + 1, card.identifier(), "no available orchestrator slots", false);
             } else {
                 claimed.remove(cardId);
-                dispatch(card, retry.attempt());
+                refreshForDispatch(card).ifPresent(promptCard -> dispatch(promptCard, retry.attempt()));
             }
         }
     }

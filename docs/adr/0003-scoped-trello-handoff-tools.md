@@ -55,10 +55,10 @@ comment permission checks, and allowed destination-column validation.
 
 ## Pros and Cons of the Options
 
-### Scoped typed tools for current-card comments and moves
+### Scoped typed tools for current-card comments, workpads, and moves
 
-Expose `trello_add_comment` and `trello_move_current_card` only when write-capable Trello tools are
-enabled in `WORKFLOW.md`.
+Expose current-card typed tools such as `trello_add_comment`, `trello_upsert_workpad`, and
+`trello_move_current_card` only when write-capable Trello tools are enabled in `WORKFLOW.md`.
 
 * Good, because each tool has one clear purpose.
 * Good, because scoping rules are simple enough to test exhaustively.
@@ -95,6 +95,7 @@ Move cards from active to review automatically when the worker process exits suc
 The initial typed tools are:
 
 * `trello_add_comment`
+* `trello_upsert_workpad`
 * `trello_move_current_card`
 
 The tools are advertised only when `trello_tools.enabled=true` and

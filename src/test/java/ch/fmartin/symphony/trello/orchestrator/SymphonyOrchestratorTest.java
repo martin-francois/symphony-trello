@@ -113,6 +113,7 @@ class SymphonyOrchestratorTest {
 
         // then
         assertThat(prompt.get()).contains("Review the edge case.");
+        assertThat(tracker.promptStateFetches.get()).isGreaterThanOrEqualTo(1);
     }
 
     @Test
@@ -421,6 +422,7 @@ class SymphonyOrchestratorTest {
 
         // then
         assertThat(runs.get()).isGreaterThanOrEqualTo(2);
+        assertThat(tracker.promptStateFetches.get()).isGreaterThanOrEqualTo(2);
         assertThat(snapshot.retrying())
                 .anySatisfy(row -> assertThat(row.cardIdentifier()).isEqualTo("TRELLO-abc"));
     }
@@ -529,6 +531,7 @@ class SymphonyOrchestratorTest {
         private volatile List<Card> candidates;
         private volatile Map<String, CardLookupResult> cardStates;
         private final AtomicInteger candidateFetches = new AtomicInteger();
+        private final AtomicInteger promptStateFetches = new AtomicInteger();
 
         private FakeTracker(List<Card> candidates) {
             setCandidates(candidates);
@@ -564,6 +567,13 @@ class SymphonyOrchestratorTest {
             return cardStates.entrySet().stream()
                     .filter(entry -> cardIds.contains(entry.getKey()))
                     .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        }
+
+        @Override
+        public Map<String, CardLookupResult> fetchCardStatesForPromptByIds(
+                EffectiveConfig config, List<String> cardIds) {
+            promptStateFetches.incrementAndGet();
+            return fetchCardStatesByIds(config, cardIds);
         }
     }
 

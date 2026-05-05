@@ -1463,8 +1463,11 @@ Optional client-side tool extension:
 - Comment, checklist, and URL attachment writes MUST respect the corresponding `trello_tools`
   allow flags.
 - For write-capable operations, implementations SHOULD prefer typed high-level tools, for example
-  `trello_add_comment`, `trello_move_current_card`, `trello_upsert_checklist_item`, and
-  `trello_add_url_attachment`.
+  `trello_add_comment`, `trello_upsert_workpad`, `trello_move_current_card`,
+  `trello_upsert_checklist_item`, and `trello_add_url_attachment`.
+- A Trello workpad tool, when implemented, SHOULD maintain one current-card comment whose text starts
+  with `## Codex Workpad`, update that comment instead of creating duplicate progress comments, and
+  fail visibly if the existing workpad cannot be updated.
 - If writes are exposed through generic `trello_rest`, the implementation MUST classify each write
   request before execution and enforce the same policy as the corresponding high-level operation. If
   a write request cannot be safely classified, it MUST fail with a structured policy error.

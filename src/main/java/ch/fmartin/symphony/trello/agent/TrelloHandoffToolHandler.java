@@ -3,6 +3,7 @@ package ch.fmartin.symphony.trello.agent;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.config.StateNames;
 import ch.fmartin.symphony.trello.domain.Card;
+import ch.fmartin.symphony.trello.tracker.CardLookupResult;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
 import ch.fmartin.symphony.trello.tracker.TrelloException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -18,7 +19,9 @@ import java.util.Optional;
 @ApplicationScoped
 public class TrelloHandoffToolHandler {
     static final String ADD_COMMENT = "trello_add_comment";
+    static final String UPSERT_WORKPAD = "trello_upsert_workpad";
     static final String MOVE_CURRENT_CARD = "trello_move_current_card";
+    static final String WORKPAD_MARKER = TrelloClient.WORKPAD_MARKER;
 
     private final ObjectMapper json;
     private final TrelloClient trello;
@@ -47,6 +50,15 @@ public class TrelloHandoffToolHandler {
                                     stringSchema(
                                             "Concise human-readable comment text to add to the current Trello card.")),
                             List.of("text"))));
+            tools.add(tool(
+                    UPSERT_WORKPAD,
+                    "Create or update the single Codex workpad comment on the current Trello card. The text is Markdown and must summarize current plan, acceptance criteria, progress, validation, blockers, and handoff notes.",
+                    objectSchema(
+                            Map.of(
+                                    "text",
+                                    stringSchema(
+                                            "Full Markdown workpad body. Symphony ensures it starts with ## Codex Workpad.")),
+                            List.of("text"))));
         }
         if (moveAllowlistConfigured(config)) {
             tools.add(tool(
@@ -65,7 +77,7 @@ public class TrelloHandoffToolHandler {
 
     public ObjectNode handle(EffectiveConfig config, Card card, JsonNode params) {
         String tool = params.path("tool").asText("");
-        if (!ADD_COMMENT.equals(tool) && !MOVE_CURRENT_CARD.equals(tool)) {
+        if (!ADD_COMMENT.equals(tool) && !UPSERT_WORKPAD.equals(tool) && !MOVE_CURRENT_CARD.equals(tool)) {
             return failure("unsupported_tool", "Unsupported Trello handoff tool: " + tool);
         }
         if (!config.trelloTools().enabled()) {
@@ -81,6 +93,7 @@ public class TrelloHandoffToolHandler {
         try {
             return switch (tool) {
                 case ADD_COMMENT -> addComment(config, card, params.path("arguments"));
+                case UPSERT_WORKPAD -> upsertWorkpad(config, card, params.path("arguments"));
                 case MOVE_CURRENT_CARD -> moveCurrentCard(config, card, params.path("arguments"));
                 default -> throw new IllegalStateException("unreachable");
             };
@@ -98,6 +111,51 @@ public class TrelloHandoffToolHandler {
         String text = requiredText(arguments, "text");
         trello.addComment(config, card.id(), text);
         return success(Map.of("status", "comment_added", "card_id", card.id()));
+    }
+
+    private ObjectNode upsertWorkpad(EffectiveConfig config, Card card, JsonNode arguments) {
+        if (!config.trelloTools().allowComments()) {
+            return failure("trello_comments_disabled", "Trello comments are disabled by trello_tools.allow_comments.");
+        }
+        String text = workpadText(requiredText(arguments, "text"));
+        CardLookupResult lookup = trello.fetchCardStateForWorkpad(config, card.id());
+        if (lookup instanceof CardLookupResult.Missing) {
+            return failure("trello_workpad_card_missing", "Cannot update workpad because the Trello card is missing.");
+        }
+        if (lookup instanceof CardLookupResult.Failed failed) {
+            return failure("trello_workpad_refresh_failed", failed.message());
+        }
+        if (!(lookup instanceof CardLookupResult.Found found)) {
+            return failure("trello_workpad_refresh_failed", "Could not refresh the current Trello card.");
+        }
+        Card currentCard = found.card();
+        Optional<Card.Comment> existing = currentCard.comments().stream()
+                .filter(comment -> comment.text() != null && comment.text().startsWith(WORKPAD_MARKER))
+                .findFirst();
+        if (existing.isPresent()) {
+            Card.Comment workpad = existing.get();
+            if (blank(workpad.id())) {
+                return failure("trello_workpad_missing_action_id", "Existing workpad comment has no Trello action id.");
+            }
+            trello.updateComment(config, workpad.id(), text);
+            return success(Map.of("status", "workpad_updated", "card_id", card.id(), "action_id", workpad.id()));
+        }
+        if (currentCard.comments().size() >= TrelloClient.WORKPAD_COMMENT_ACTION_LIMIT) {
+            return failure(
+                    "trello_workpad_comment_window_incomplete",
+                    "Cannot safely create a workpad because the fetched Trello comment window is full and an older workpad may exist.");
+        }
+        Map<String, Object> created = trello.addComment(config, card.id(), text);
+        return success(
+                Map.of("status", "workpad_created", "card_id", card.id(), "action_id", string(created.get("id"))));
+    }
+
+    private static String workpadText(String text) {
+        String trimmed = text.strip();
+        if (trimmed.startsWith(WORKPAD_MARKER)) {
+            return trimmed;
+        }
+        return WORKPAD_MARKER + System.lineSeparator() + System.lineSeparator() + trimmed;
     }
 
     private ObjectNode moveCurrentCard(EffectiveConfig config, Card card, JsonNode arguments) {
@@ -212,6 +270,10 @@ public class TrelloHandoffToolHandler {
         } catch (Exception e) {
             return payload.toString();
         }
+    }
+
+    private static String string(Object value) {
+        return value == null ? "" : value.toString();
     }
 
     private ObjectNode object(Object... keyValues) {

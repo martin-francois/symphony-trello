@@ -13,4 +13,8 @@ public interface TrackerClient {
     List<Card> fetchTerminalCards(EffectiveConfig config);
 
     Map<String, CardLookupResult> fetchCardStatesByIds(EffectiveConfig config, List<String> cardIds);
+
+    default Map<String, CardLookupResult> fetchCardStatesForPromptByIds(EffectiveConfig config, List<String> cardIds) {
+        return fetchCardStatesByIds(config, cardIds);
+    }
 }

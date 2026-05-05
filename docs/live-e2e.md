@@ -63,8 +63,10 @@ Use a unique run id such as `live-e2e-YYYYMMDD-HHMMSS`.
 4. With `max_concurrent_agents: 1`, two `Ready for Codex` cards run one at a time in Trello position
    order. This includes a later-created card that was moved above the older card.
 5. With `max_concurrent_agents: 2`, two cards on one board run at the same time while a third waits.
-6. The app-server calls `trello_add_comment` and `trello_move_current_card`.
-7. Processed cards have a handoff comment and end in `Human Review` on recommended boards.
+6. The app-server calls `trello_upsert_workpad`, `trello_add_comment`, and
+   `trello_move_current_card`.
+7. Processed cards have one workpad comment, a handoff comment, and end in `Human Review` on
+   recommended boards.
 8. Two Symphony processes can run against two boards at the same time on different ports.
 9. Cleanup archives all disposable boards created by the run.
 
@@ -561,8 +563,8 @@ java --source 25 /absolute/path/to/scripts/FakeCodexAppServer.java
 
 The fake app-server is a single-file Java program that speaks the same stdin/stdout app-server
 protocol Symphony uses for Codex, then calls the scoped Trello tools exposed by Symphony. This
-verifies the scheduler, workspace creation, app-server protocol, Trello comments, Trello moves, and
-handoff allowlist without relying on model behavior.
+verifies the scheduler, workspace creation, app-server protocol, Trello workpads, Trello comments,
+Trello moves, and handoff allowlist without relying on model behavior.
 
 Optional environment variables:
 

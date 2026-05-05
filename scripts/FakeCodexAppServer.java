@@ -67,6 +67,16 @@ public class FakeCodexAppServer {
         }
 
         String comment = System.getenv().getOrDefault("SYMPHONY_FAKE_CODEX_COMMENT", DEFAULT_COMMENT);
+        String workpadResponse = requestTool(
+                10_000,
+                "trello_upsert_workpad",
+                "{\"text\":\"## Codex Workpad\\n\\n- Plan: live E2E fake Codex executed.\\n- Validation: tool handoff completed.\"}");
+        String workpadError = toolError(workpadResponse);
+        if (workpadError != null) {
+            completeTurn(threadId, turnId, workpadError);
+            return;
+        }
+
         String commentResponse = requestTool(
                 10_001,
                 "trello_add_comment",
