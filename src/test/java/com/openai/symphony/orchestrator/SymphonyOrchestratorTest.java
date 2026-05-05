@@ -8,6 +8,7 @@ import com.openai.symphony.agent.AgentEvent;
 import com.openai.symphony.agent.AgentRunResult;
 import com.openai.symphony.agent.AgentRunner;
 import com.openai.symphony.config.ConfigResolver;
+import com.openai.symphony.config.EffectiveConfig;
 import com.openai.symphony.domain.Card;
 import com.openai.symphony.prompt.PromptRenderer;
 import com.openai.symphony.tracker.CardLookupResult;
@@ -24,6 +25,7 @@ import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -172,7 +174,7 @@ class SymphonyOrchestratorTest {
     }
 
     private static void waitUntil(Condition condition) throws Exception {
-        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
         while (System.nanoTime() < deadline) {
             if (condition.matches()) {
                 return;
@@ -206,27 +208,26 @@ class SymphonyOrchestratorTest {
         }
 
         @Override
-        public String resolveCanonicalBoardId(com.openai.symphony.config.EffectiveConfig config) {
+        public String resolveCanonicalBoardId(EffectiveConfig config) {
             return "board-1";
         }
 
         @Override
-        public List<Card> fetchCandidateCards(com.openai.symphony.config.EffectiveConfig config) {
+        public List<Card> fetchCandidateCards(EffectiveConfig config) {
             candidateFetches.incrementAndGet();
             return candidates;
         }
 
         @Override
-        public List<Card> fetchTerminalCards(com.openai.symphony.config.EffectiveConfig config) {
+        public List<Card> fetchTerminalCards(EffectiveConfig config) {
             return List.of();
         }
 
         @Override
-        public Map<String, CardLookupResult> fetchCardStatesByIds(
-                com.openai.symphony.config.EffectiveConfig config, List<String> cardIds) {
+        public Map<String, CardLookupResult> fetchCardStatesByIds(EffectiveConfig config, List<String> cardIds) {
             return candidates.stream()
                     .filter(card -> cardIds.contains(card.id()))
-                    .collect(java.util.stream.Collectors.toMap(Card::id, CardLookupResult.Found::new));
+                    .collect(Collectors.toMap(Card::id, CardLookupResult.Found::new));
         }
     }
 
@@ -236,12 +237,12 @@ class SymphonyOrchestratorTest {
         private final CountDownLatch releaseFirstFetch = new CountDownLatch(1);
 
         @Override
-        public String resolveCanonicalBoardId(com.openai.symphony.config.EffectiveConfig config) {
+        public String resolveCanonicalBoardId(EffectiveConfig config) {
             return "board-1";
         }
 
         @Override
-        public List<Card> fetchCandidateCards(com.openai.symphony.config.EffectiveConfig config) {
+        public List<Card> fetchCandidateCards(EffectiveConfig config) {
             if (candidateFetches.incrementAndGet() == 1) {
                 firstFetchStarted.countDown();
                 try {
@@ -255,13 +256,12 @@ class SymphonyOrchestratorTest {
         }
 
         @Override
-        public List<Card> fetchTerminalCards(com.openai.symphony.config.EffectiveConfig config) {
+        public List<Card> fetchTerminalCards(EffectiveConfig config) {
             return List.of();
         }
 
         @Override
-        public Map<String, CardLookupResult> fetchCardStatesByIds(
-                com.openai.symphony.config.EffectiveConfig config, List<String> cardIds) {
+        public Map<String, CardLookupResult> fetchCardStatesByIds(EffectiveConfig config, List<String> cardIds) {
             return Map.of();
         }
     }

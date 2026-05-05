@@ -5,8 +5,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openai.symphony.config.ConfigResolver;
 import com.openai.symphony.workflow.WorkflowDefinition;
+import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -97,8 +100,8 @@ class TrelloClientTest {
         assertThat(authorization.get()).contains("oauth_consumer_key=\"key\"").contains("oauth_token=\"token\"");
     }
 
-    private static void respond(com.sun.net.httpserver.HttpExchange exchange, String body) throws java.io.IOException {
-        byte[] bytes = body.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    private static void respond(HttpExchange exchange, String body) throws IOException {
+        byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json");
         exchange.sendResponseHeaders(200, bytes.length);
         try (var output = exchange.getResponseBody()) {

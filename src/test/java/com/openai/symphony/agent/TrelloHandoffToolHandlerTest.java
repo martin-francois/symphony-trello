@@ -10,13 +10,16 @@ import com.openai.symphony.tracker.TrelloClient;
 import com.openai.symphony.workflow.WorkflowDefinition;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -192,9 +195,9 @@ class TrelloHandoffToolHandlerTest {
         if (query == null || query.isBlank()) {
             return Map.of();
         }
-        return java.util.Arrays.stream(query.split("&"))
+        return Arrays.stream(query.split("&"))
                 .map(pair -> pair.split("=", 2))
-                .collect(java.util.stream.Collectors.toMap(
+                .collect(Collectors.toMap(
                         pair -> decode(pair[0]),
                         pair -> pair.length == 1 ? "" : decode(pair[1]),
                         (left, right) -> right));
@@ -204,7 +207,7 @@ class TrelloHandoffToolHandlerTest {
         return URLDecoder.decode(value, StandardCharsets.UTF_8);
     }
 
-    private static void respond(HttpExchange exchange, String body) throws java.io.IOException {
+    private static void respond(HttpExchange exchange, String body) throws IOException {
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json");
         exchange.sendResponseHeaders(200, bytes.length);
