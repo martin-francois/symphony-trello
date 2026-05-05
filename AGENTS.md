@@ -44,6 +44,8 @@ matters, and easy for another engineer to understand without asking the original
   ADRs, no committed secrets, and reviewable history.
 - Write user-facing docs so they can be read from top to bottom without confusion. Do not refer to a
   concept, path, command, or setup mode before introducing it.
+- For docs with multiple setup paths, read the flow once from each path's perspective and avoid
+  wording that assumes the reader chose a different path.
 - Do not add convenience links that encourage readers to skip required earlier steps. If a section
   depends on previous setup, structure the document as a linear flow instead of linking directly past
   the prerequisite.
