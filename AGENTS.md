@@ -50,6 +50,9 @@ matters, and easy for another engineer to understand without asking the original
    deploy it with the Ansible workflow before finishing when the deployment inputs are available.
    If unsure, ask at the end whether to deploy with Ansible next. Do not deploy or suggest
    deployment for docs-only changes.
+14. When fixing a bug that was observed during live deployed execution, and live verification is
+   reasonably possible from the current environment, deploy with Ansible and perform the relevant
+   live deployed verification before claiming the fix is complete.
 
 ## Design Preferences
 
