@@ -37,6 +37,8 @@ matters, and easy for another engineer to understand without asking the original
    Use `spotless:apply` before that when formatting changed.
 9. Commit with Conventional Commits when asked to commit, and keep the working tree clean before
    claiming the work is done.
+10. When the user asks for a concrete repo change, commit and push the completed change unless they
+   explicitly ask not to.
 
 ## Design Preferences
 
@@ -59,6 +61,8 @@ matters, and easy for another engineer to understand without asking the original
 - Lead the README with who the project is for, why they should use it, and the practical benefits
   before implementation details. Move technical mechanics into supporting sections once the value is
   clear.
+- Write README prose in simple, direct language. Prefer short sentences and plain words over
+  polished or elaborate wording.
 - For local Trello credentials, use ignored project-root `.env` files created from `.env.example`.
   Real environment variables still take precedence over `.env`. Do not print secret values in
   command output.
