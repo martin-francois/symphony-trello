@@ -382,6 +382,20 @@ public final class TrelloBoardSetup {
 
                 %s
 
+                ## Repository Skills
+
+                Use repository-local skills when they fit:
+
+                - `.codex/skills/trello-workpad/SKILL.md` for workpad updates.
+                - `.codex/skills/trello-handoff/SKILL.md` for Trello pickup, review, blocked, merge,
+                  and done handoff.
+                - `.codex/skills/review-sweep/SKILL.md` when a pull request or branch is involved.
+                - `.codex/skills/repo-sync/SKILL.md`, `.codex/skills/commit/SKILL.md`, and
+                  `.codex/skills/push-pr/SKILL.md` for branch, commit, and PR hygiene.
+                - `.codex/skills/land/SKILL.md` only when this workflow says the current Trello
+                  column is Merging.
+                - `.codex/skills/debug/SKILL.md` when diagnosing a stuck or retrying run.
+
                 Read the Trello description carefully, inspect the repository, make the smallest maintainable change,
                 run relevant verification, and leave the workspace in a reviewable state.
                 Use the current workspace by default. If the Trello card names a specific local path or project

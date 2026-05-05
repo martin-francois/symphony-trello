@@ -54,6 +54,17 @@ Maintain one Trello workpad comment by calling trello_upsert_workpad. Reuse the 
 with `## Codex Workpad`; do not create separate progress comments. Keep it current with the plan,
 acceptance criteria, progress, validation evidence, blockers, and handoff notes.
 
+Use repository-local skills when they fit:
+
+- `.codex/skills/trello-workpad/SKILL.md` for workpad updates.
+- `.codex/skills/trello-handoff/SKILL.md` for Trello pickup, review, blocked, merge, and done
+  handoff.
+- `.codex/skills/review-sweep/SKILL.md` when a pull request or branch is involved.
+- `.codex/skills/repo-sync/SKILL.md`, `.codex/skills/commit/SKILL.md`, and
+  `.codex/skills/push-pr/SKILL.md` for branch, commit, and PR hygiene.
+- `.codex/skills/land/SKILL.md` only when this workflow says the current Trello column is Merging.
+- `.codex/skills/debug/SKILL.md` when diagnosing a stuck or retrying run.
+
 When the work is ready for human review, update the workpad with the final summary and validation
 evidence, call trello_add_comment with a concise summary and verification notes, then call
 trello_move_current_card with list_name "Human Review". If the work is blocked or unsafe to hand off,
