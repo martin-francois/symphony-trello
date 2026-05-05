@@ -9,7 +9,19 @@ symphony_trello_secret_dir: /etc/symphony-trello/secrets
 symphony_trello_workflow_dir: /etc/symphony-trello/workflows
 symphony_trello_state_dir: /var/lib/symphony-trello
 
-symphony_trello_app_src: "{{ playbook_dir }}/../../target/quarkus-app/"
+symphony_trello_project_root: "{{ playbook_dir }}/../.."
+symphony_trello_app_src: "{{ symphony_trello_project_root }}/target/quarkus-app"
+symphony_trello_build_fingerprint_path: "{{ symphony_trello_project_root }}/target/.symphony-trello-ansible-build.sha256"
+symphony_trello_build_input_paths:
+  - pom.xml
+  - mvnw
+  - .mvn
+  - src/main
+  - src/test
+symphony_trello_maven_executable: "{{ symphony_trello_project_root }}/mvnw"
+symphony_trello_maven_arguments:
+  - "-q"
+  - package
 symphony_trello_unit_src: "{{ playbook_dir }}/../systemd/symphony-trello@.service"
 symphony_trello_workflows: []
 symphony_trello_remove_unmanaged_workflows: true

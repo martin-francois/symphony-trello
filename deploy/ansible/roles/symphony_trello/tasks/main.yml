@@ -11,18 +11,107 @@
       Define symphony_trello_trello_api_key and symphony_trello_trello_api_token in an Ansible Vault
       file, and define symphony_trello_workflows in group_vars.
 
-- name: Validate local packaged app exists
+- name: Calculate local build input fingerprint
+  ansible.builtin.command:
+    argv:
+      - "{{ ansible_playbook_python }}"
+      - -c
+      - |
+        import hashlib
+        import json
+        import pathlib
+        import sys
+
+        root = pathlib.Path(sys.argv[1]).resolve()
+        input_paths = json.loads(sys.argv[2])
+        files = []
+
+        for input_path in input_paths:
+            path = root / input_path
+            if path.is_file():
+                files.append(path)
+            elif path.is_dir():
+                files.extend(candidate for candidate in path.rglob("*") if candidate.is_file())
+
+        digest = hashlib.sha256()
+        for path in sorted(files, key=lambda candidate: candidate.relative_to(root).as_posix()):
+            relative_path = path.relative_to(root).as_posix()
+            mode = path.stat().st_mode & 0o777
+            digest.update(relative_path.encode())
+            digest.update(b"\0")
+            digest.update(oct(mode).encode())
+            digest.update(b"\0")
+            digest.update(path.read_bytes())
+            digest.update(b"\0")
+
+        print(digest.hexdigest())
+      - "{{ symphony_trello_project_root }}"
+      - "{{ symphony_trello_build_input_paths | to_json }}"
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  register: symphony_trello_build_input_fingerprint
+
+- name: Check local packaged app
   ansible.builtin.stat:
     path: "{{ symphony_trello_app_src }}/quarkus-run.jar"
   delegate_to: localhost
   become: false
   register: symphony_trello_local_runner
 
-- name: Stop when the packaged app is missing
+- name: Check local build fingerprint stamp
+  ansible.builtin.stat:
+    path: "{{ symphony_trello_build_fingerprint_path }}"
+  delegate_to: localhost
+  become: false
+  register: symphony_trello_build_fingerprint_stamp_file
+
+- name: Read local build fingerprint stamp
+  ansible.builtin.slurp:
+    src: "{{ symphony_trello_build_fingerprint_path }}"
+  delegate_to: localhost
+  become: false
+  when: symphony_trello_build_fingerprint_stamp_file.stat.exists
+  register: symphony_trello_build_fingerprint_stamp
+
+- name: Calculate whether local package is stale
+  ansible.builtin.set_fact:
+    symphony_trello_should_package_app: >-
+      {{ (not symphony_trello_local_runner.stat.exists)
+          or (not symphony_trello_build_fingerprint_stamp_file.stat.exists)
+          or ((symphony_trello_build_fingerprint_stamp.content | default('') | b64decode | trim)
+              != symphony_trello_build_input_fingerprint.stdout) }}
+
+- name: Package app when build inputs changed
+  ansible.builtin.command:
+    argv: "{{ [symphony_trello_maven_executable] + symphony_trello_maven_arguments }}"
+    chdir: "{{ symphony_trello_project_root }}"
+  delegate_to: localhost
+  become: false
+  when: symphony_trello_should_package_app
+  changed_when: true
+
+- name: Store local build fingerprint stamp
+  ansible.builtin.copy:
+    dest: "{{ symphony_trello_build_fingerprint_path }}"
+    content: "{{ symphony_trello_build_input_fingerprint.stdout }}\n"
+    mode: "0644"
+  delegate_to: localhost
+  become: false
+  when: symphony_trello_should_package_app
+
+- name: Validate local packaged app exists
+  ansible.builtin.stat:
+    path: "{{ symphony_trello_app_src }}/quarkus-run.jar"
+  delegate_to: localhost
+  become: false
+  register: symphony_trello_packaged_runner
+
+- name: Stop when packaging did not produce the app
   ansible.builtin.assert:
     that:
-      - symphony_trello_local_runner.stat.exists
-    fail_msg: "Run ./mvnw -q package before the Ansible deployment."
+      - symphony_trello_packaged_runner.stat.exists
+    fail_msg: "Maven packaging did not produce {{ symphony_trello_app_src }}/quarkus-run.jar."
 
 - name: Validate local workflow files exist
   ansible.builtin.stat:
