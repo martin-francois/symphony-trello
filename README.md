@@ -547,8 +547,8 @@ without waiting indefinitely.
 ## Production Deployment
 
 For a server deployment with one or more workflow files, use the systemd guide in
-[docs/deployment.md](docs/deployment.md). It shows the recommended Linux layout, shared secret file,
-one service instance per workflow, and the included `symphony-trello@.service` template.
+[docs/deployment.md](docs/deployment.md). For repeatable server setup with Ansible Vault secrets and
+declared workflow files, use [docs/ansible-deployment.md](docs/ansible-deployment.md).
 
 ## Build and Test
 

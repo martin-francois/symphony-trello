@@ -1,0 +1,6 @@
+---
+- name: Deploy Symphony for Trello
+  hosts: symphony_trello
+  become: true
+  roles:
+    - role: symphony_trello
