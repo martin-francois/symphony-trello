@@ -228,7 +228,10 @@ class TrelloBoardSetupTest {
                 .contains("inaccessible path")
                 .contains("allowed host paths")
                 .contains("symphony_trello_allowed_project_roots")
+                .contains("server:")
+                .contains("port: 8080")
                 .contains("max_concurrent_agents: 1");
+        assertThat(result.serverPort()).isEqualTo(8080);
         EffectiveConfig config = resolve(workflow);
         assertThat(config.tracker().boardId()).isEqualTo("abc123");
         assertThat(config.tracker().activeStates()).containsExactly("Ready for Codex", "In Progress", "Merging");
@@ -308,6 +311,7 @@ class TrelloBoardSetupTest {
                 .content(StandardCharsets.UTF_8)
                 .contains("board_id: \"existing\"")
                 .contains("root: \"./agent-workspaces\"")
+                .contains("port: 8080")
                 .contains("allowed_move_list_names:")
                 .contains("- \"In Progress\"")
                 .contains("- \"Human Review\"")
@@ -351,6 +355,7 @@ class TrelloBoardSetupTest {
                 .contains("## Completion Bar Before \"Human Review\"")
                 .contains("move the card to \"Done\"")
                 .contains("max_concurrent_agents: 2");
+        assertThat(result.serverPort()).isEqualTo(8080);
         EffectiveConfig config = resolve(workflow);
         assertThat(config.tracker().boardId()).isEqualTo("existing");
         assertThat(config.workspace().root()).isEqualTo(workflow.getParent().resolve("agent-workspaces"));
@@ -718,6 +723,222 @@ class TrelloBoardSetupTest {
         assertThat(result.workflowPath()).isEqualTo(generatedWorkflow);
         assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo("keep me");
         assertThat(generatedWorkflow).content(StandardCharsets.UTF_8).contains("board_id: \"abc123\"");
+    }
+
+    @Test
+    void newBoardUsesNextServerPortWhenExistingWorkflowUsesDefaultPort() throws IOException {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: $TRELLO_API_KEY
+                  api_token: $TRELLO_API_TOKEN
+                  board_id: "existing"
+                ---
+                # Existing
+                """,
+                StandardCharsets.UTF_8);
+
+        // when
+        var result = setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "My Project!",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                1,
+                false,
+                true));
+
+        // then
+        Path generatedWorkflow = tempDir.resolve("WORKFLOW.my-project.md");
+        assertThat(result.serverPort()).isEqualTo(8081);
+        assertThat(generatedWorkflow).content(StandardCharsets.UTF_8).contains("port: 8081");
+    }
+
+    @Test
+    void newBoardUsesRequestedServerPortWhenItDoesNotConflict() {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+
+        // when
+        var result = setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "My Project",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                18081,
+                1,
+                false,
+                true));
+
+        // then
+        assertThat(result.serverPort()).isEqualTo(18081);
+        assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: 18081");
+    }
+
+    @Test
+    void newBoardRejectsRequestedServerPortReservedByExistingWorkflow() throws IOException {
+        // given
+        Path existingWorkflow = tempDir.resolve("project-a.WORKFLOW.md");
+        Files.writeString(
+                existingWorkflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: $TRELLO_API_KEY
+                  api_token: $TRELLO_API_TOKEN
+                  board_id: "existing"
+                server:
+                  port: 18081
+                ---
+                # Existing
+                """,
+                StandardCharsets.UTF_8);
+
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        var request = new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "My Project",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                18081,
+                1,
+                false,
+                true);
+
+        // when
+        ThrowingCallable action = () -> setup.createRecommendedBoard(request);
+
+        // then
+        assertThatThrownBy(action).isInstanceOf(TrelloBoardSetupException.class).hasMessageContaining("already used");
+    }
+
+    @Test
+    void forceNewBoardPreservesExistingServerPortWhenItDoesNotConflict() throws IOException {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: "existing"
+                server:
+                  port: 18081
+                ---
+                # Existing
+                """,
+                StandardCharsets.UTF_8);
+
+        // when
+        var result = setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "My Project",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                1,
+                true,
+                true));
+
+        // then
+        assertThat(result.serverPort()).isEqualTo(18081);
+        assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: 18081");
+    }
+
+    @Test
+    void forceNewBoardDoesNotPreserveExistingServerPortWhenSiblingAlreadyUsesIt() throws IOException {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: "old"
+                server:
+                  port: 18081
+                ---
+                # Existing
+                """,
+                StandardCharsets.UTF_8);
+        Path siblingWorkflow = tempDir.resolve("project-a.WORKFLOW.md");
+        Files.writeString(
+                siblingWorkflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: "sibling"
+                server:
+                  port: 18081
+                ---
+                # Sibling
+                """,
+                StandardCharsets.UTF_8);
+
+        // when
+        var result = setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "My Project",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                1,
+                true,
+                true));
+
+        // then
+        assertThat(result.serverPort()).isEqualTo(8080);
+        assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: 8080");
+    }
+
+    @Test
+    void forceNewBoardCanReplaceMalformedExistingWorkflow() throws IOException {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                server: [
+                ---
+                # Broken
+                """,
+                StandardCharsets.UTF_8);
+
+        // when
+        var result = setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "My Project",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                1,
+                true,
+                true));
+
+        // then
+        assertThat(result.serverPort()).isEqualTo(8080);
+        assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: 8080");
     }
 
     @Test

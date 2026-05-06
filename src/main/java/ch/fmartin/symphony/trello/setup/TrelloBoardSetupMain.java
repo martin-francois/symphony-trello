@@ -54,6 +54,7 @@ public final class TrelloBoardSetupMain {
         out.println("Board ID for WORKFLOW.md: " + result.boardKey());
         out.println("Created lists: " + String.join(", ", result.lists()));
         out.println("Wrote workflow: " + result.workflowPath().toAbsolutePath().normalize());
+        out.println("HTTP status port: " + result.serverPort());
         out.println();
         out.println("Next:");
         out.println("  ./mvnw quarkus:dev");
@@ -82,6 +83,7 @@ public final class TrelloBoardSetupMain {
         out.println("Terminal lists: " + String.join(", ", result.terminalStates()));
         out.println("Blocked list: " + optionalListName(result.blockedState()));
         out.println("Wrote workflow: " + result.workflowPath().toAbsolutePath().normalize());
+        out.println("HTTP status port: " + result.serverPort());
         out.println();
         out.println("Next:");
         out.println("  ./mvnw quarkus:dev");
@@ -115,6 +117,7 @@ public final class TrelloBoardSetupMain {
                 Common options:
                   --workflow PATH       Exact workflow file to write. Default: WORKFLOW.md, or a board-specific name when WORKFLOW.md exists.
                   --workspace-root PATH Where Symphony should create one local work directory per Trello card. Default: ./workspaces
+                  --server-port PORT    HTTP status port for the generated workflow. Default: first available port from 8080.
                   --max-agents N        How many cards from this board may run at the same time. Default: 1
                   --force               Overwrite an existing workflow file
                   --endpoint URL        Trello API endpoint. Default: https://api.trello.com/1
@@ -140,6 +143,7 @@ public final class TrelloBoardSetupMain {
             TrelloCredentials credentials,
             Path workflowPath,
             Path workspaceRoot,
+            Integer serverPort,
             int maxConcurrentAgents,
             boolean force,
             boolean workflowPathExplicit,
@@ -160,6 +164,7 @@ public final class TrelloBoardSetupMain {
                     workspaceId,
                     workflowPath,
                     workspaceRoot,
+                    serverPort,
                     maxConcurrentAgents,
                     force,
                     !workflowPathExplicit);
@@ -177,6 +182,7 @@ public final class TrelloBoardSetupMain {
                     blockedState,
                     workflowPath,
                     workspaceRoot,
+                    serverPort,
                     maxConcurrentAgents,
                     force);
         }
@@ -197,6 +203,7 @@ public final class TrelloBoardSetupMain {
             Path workflowPath = TrelloBoardSetup.DEFAULT_WORKFLOW_PATH;
             boolean workflowPathExplicit = false;
             Path workspaceRoot = TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT;
+            Integer serverPort = null;
             int maxAgents = TrelloBoardSetup.DEFAULT_MAX_CONCURRENT_AGENTS;
             boolean force = false;
             String key = env("TRELLO_API_KEY").orElse(null);
@@ -221,6 +228,7 @@ public final class TrelloBoardSetupMain {
                         workflowPathExplicit = true;
                     }
                     case "--workspace-root" -> workspaceRoot = Path.of(value(remaining, ++i, option));
+                    case "--server-port" -> serverPort = Integer.parseInt(value(remaining, ++i, option));
                     case "--max-agents" -> maxAgents = Integer.parseInt(value(remaining, ++i, option));
                     case "--force" -> force = true;
                     case "--name" -> boardName = value(remaining, ++i, option);
@@ -248,6 +256,7 @@ public final class TrelloBoardSetupMain {
                     new TrelloCredentials(key, token),
                     workflowPath,
                     workspaceRoot,
+                    serverPort,
                     maxAgents,
                     force,
                     workflowPathExplicit,

@@ -96,6 +96,8 @@ Each `name` becomes a systemd service instance. For example, `project-a` becomes
 `symphony-trello@project-a` and reads `/etc/symphony-trello/workflows/project-a.WORKFLOW.md`.
 
 Each `src` points to the local workflow file that should be deployed for that service.
+Generated workflow files already include a stable `server.port`. When you deploy several workflows,
+keep each port different so every service has its own `/api/v1/state` endpoint.
 
 For deployed workflow files, set Trello credentials to the systemd credential files:
 
