@@ -21,22 +21,27 @@ On the machine where you run Ansible, install:
 - Ansible
 - Java 25 LTS
 - Codex CLI
+- GitHub CLI
 
 The playbook uses the Maven wrapper in this repository, so you do not need to install Maven
 separately.
 
-Log in with the Codex CLI on the machine where you run Ansible:
+Log in with the Codex CLI and GitHub CLI on the machine where you run Ansible:
 
 ```bash
 codex login
+gh auth login
 ```
 
-The playbook copies that existing Codex CLI auth file to the service user on the target server.
+The playbook copies those existing auth files to the service user on the target server. Codex uses
+the Codex CLI auth for agent runs; git uses the GitHub CLI auth to push branches and create PRs.
 
 Make sure the target server has:
 
 - Java 25 LTS
 - Codex CLI available to the service, or a workflow-specific `codex.command`
+- Git
+- GitHub CLI
 - `rsync`
 - passwordless `sudo` for the Ansible user
 
@@ -184,6 +189,26 @@ The target server receives that file as `/var/lib/symphony-trello/.codex/auth.js
 
 Set `symphony_trello_manage_codex_auth: false` only when you already created that auth file for the
 service user on the target server.
+
+By default, the playbook also reuses the GitHub CLI auth file from the user running Ansible:
+
+```text
+~/.config/gh/hosts.yml
+```
+
+If your existing GitHub CLI auth file is somewhere else, add:
+
+```yaml
+symphony_trello_github_hosts_src: /path/to/existing/.config/gh/hosts.yml
+```
+
+The target server receives that file as `/var/lib/symphony-trello/.config/gh/hosts.yml`, owned by
+the `symphony-trello` service user with mode `0600`. The playbook also configures that service
+user's global git credential helper to use `gh auth git-credential`, so PR publication can push
+branches over HTTPS from deployed Codex runs.
+
+Set `symphony_trello_manage_github_auth: false` only when the service user is already authenticated
+for GitHub push operations on the target server.
 
 `vars.yml` is ignored because workflow paths and host-specific choices differ per deployment.
 

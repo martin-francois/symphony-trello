@@ -33,3 +33,8 @@ symphony_trello_workflows:
 # ~/.codex/auth.json
 # Set this only when your existing Codex auth file is somewhere else.
 # symphony_trello_codex_auth_src: /path/to/existing/.codex/auth.json
+
+# By default, the playbook copies the GitHub CLI auth from the user running Ansible:
+# ~/.config/gh/hosts.yml
+# Set this only when your existing GitHub CLI auth file is somewhere else.
+# symphony_trello_github_hosts_src: /path/to/existing/.config/gh/hosts.yml

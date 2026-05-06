@@ -260,6 +260,12 @@ matters, and easy for another engineer to understand without asking the original
   append the extension contract to `SPEC.md` in the same change. Keep implementation-specific
   extensions clearly labeled as optional or Java implementation extensions so the core adapted
   Symphony contract stays readable.
+- When asked to audit specification alignment, compare `SPEC.md` with the current conversation,
+  ADRs, README, generated workflow, skills, deployment docs, and implementation in cycles. In each
+  cycle, update `SPEC.md` for any supported behavior or optional extension that is missing from the
+  contract. Stop only after a full pass finds nothing else to add. If the implementation violates
+  the updated spec, create or update a GitHub issue with the exact mismatch, affected behavior, and
+  acceptance criteria instead of silently changing the contract to fit the code.
 
 ## Autonomy And Escalation
 

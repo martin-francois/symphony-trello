@@ -12,6 +12,9 @@ symphony_trello_state_dir: /var/lib/symphony-trello
 symphony_trello_codex_config_dir: "{{ symphony_trello_state_dir }}/.codex"
 symphony_trello_manage_codex_auth: true
 symphony_trello_codex_auth_src: "{{ lookup('env', 'HOME') }}/.codex/auth.json"
+symphony_trello_github_config_dir: "{{ symphony_trello_state_dir }}/.config/gh"
+symphony_trello_manage_github_auth: true
+symphony_trello_github_hosts_src: "{{ lookup('env', 'HOME') }}/.config/gh/hosts.yml"
 
 symphony_trello_project_root: "{{ playbook_dir }}/../.."
 symphony_trello_app_src: "{{ symphony_trello_project_root }}/target/quarkus-app"
