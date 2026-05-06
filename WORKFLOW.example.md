@@ -60,6 +60,21 @@ Maintain one Trello workpad comment by calling trello_upsert_workpad. Reuse the 
 with `## Codex Workpad`; do not create separate progress comments. Keep it current with the plan,
 acceptance criteria, progress, validation evidence, blockers, and handoff notes.
 
+## Operating Posture
+
+This is an unattended orchestration run. Do not ask a human to perform routine follow-up actions.
+Work autonomously end to end unless the card is blocked by missing requirements, permissions,
+credentials, tools, or unsafe repository state.
+
+Start by determining the current Trello list and route from that list. Start every run by opening or
+creating the workpad, then keep it current as the single detailed progress record. Spend extra effort
+up front on planning and validation design before implementation. Reproduce bugs or capture a
+concrete current-state signal before changing behavior. When meaningful out-of-scope improvements
+are discovered, record them as separate follow-up work instead of expanding this card.
+
+Work only in the provided per-card workspace or a writable checkout under it unless the repository
+checkout policy below allows read-only source context from another path.
+
 ## Trello List Routing
 
 Symphony only dispatches cards from configured active lists: `Todo`, `In Progress`, and
@@ -109,6 +124,23 @@ After cloning from a local checkout, do not inherit the source checkout's curren
 base. Start the task branch from the repository's default branch when it is discoverable, usually
 `origin/main`, unless the Trello card explicitly asks for a different base.
 
+## Execution Flow
+
+1. Determine the current list, repository state, branch, working tree status, and HEAD.
+2. Read the full Trello card description and all rendered Trello comments before editing.
+3. Update the workpad with the plan, acceptance criteria, validation plan, and current-state signal.
+4. Sync with the repository default branch before implementation when a Git repository is involved.
+5. Implement the smallest maintainable change that satisfies the card.
+6. Keep the workpad checklist current when scope, risks, validation, or blockers change.
+7. Run the validation required by the card and the repository.
+8. Commit logical changes with a clear message when repository files changed.
+9. Publish or update a pull request when repository changes should be reviewed.
+10. Only move to Human Review after the completion bar below is met. Move to `Blocked` when the work
+    cannot safely reach the completion bar.
+
+Do not leave completed work unchecked in the workpad. Do not create duplicate progress comments when
+the workpad contains the details.
+
 ## Acceptance Criteria And Validation
 
 Before changing code, extract the card-specific acceptance criteria from the title, description, and
@@ -130,6 +162,24 @@ If required validation cannot be performed because auth, files, tools, or enviro
 missing, treat the work as blocked. Do not move the card to Human Review until the blocker is fixed
 or a human explicitly changes the requirement.
 
+## Pull Request Publication
+
+For repository-changing work, Human Review means a human can review a pull request. Before moving
+the card there, use `.codex/skills/commit/SKILL.md` and `.codex/skills/push-pr/SKILL.md` to commit,
+push, and create or update the PR for the current branch. Add the PR URL to the workpad and the
+visible handoff comment.
+
+This PR requirement applies when the card asks for code, documentation, configuration, tests, or
+other version-controlled repository changes. It does not apply when the card explicitly asks for a
+local-only investigation, says not to push, or requires no repository change. In those cases,
+explain the local-only result and the workspace/branch/commit evidence in the workpad and handoff
+comment.
+
+If GitHub auth, push permission, branch protection, or repository policy prevents a required PR, try
+the fallback strategies in `.codex/skills/push-pr/SKILL.md`. If a PR is still required and cannot be
+created or updated, move the card to `Blocked` with the exact blocker instead of moving to Human
+Review.
+
 ## Pull Request Feedback Sweep
 
 If the Trello description, Trello comments, current branch, repository context, or open PR list
@@ -147,9 +197,6 @@ pull request is already part of the card.
 After feedback-driven changes, rerun the relevant validation and repeat the sweep until no
 actionable feedback remains. If GitHub auth, PR discovery, required checks, or review data are
 unavailable for a PR-backed card, treat the card as blocked instead of handing it off.
-Do not create or push a pull request unless the card, repository policy, or a human explicitly asks
-for one. When the card asks only for local commits, hand off with the workspace checkout path, branch
-name, commit list, and validation evidence instead of blocking on missing push credentials.
 
 ## Rework From Human Review
 
@@ -181,11 +228,27 @@ update the workpad and move the card to `Blocked` with a concise blocker. After 
 update the workpad with merge evidence, add a concise completion comment when useful, and move the
 card to `Done`.
 
+## Completion Bar Before Human Review
+
+Do not move the card to Human Review until all applicable items are true:
+
+- The workpad plan, acceptance criteria, and validation sections match the work actually completed.
+- Card-provided validation or testing requirements are complete, or a specific blocker is recorded.
+- Repository changes are committed on a branch based on the repository default branch unless the
+  card requested another base.
+- A pull request exists and is linked in the workpad and handoff comment for repository-changing work
+  unless the card explicitly requested local-only/no-push work.
+- PR feedback sweep is complete for any existing or newly created PR.
+- Relevant local validation is current after the latest commit.
+- The working tree does not contain unrelated uncommitted changes.
+
+If any required item cannot be satisfied, move to `Blocked` with the exact blocker.
+
 When the work is ready for human review, update the workpad with the final summary and validation
-evidence, call trello_add_comment with a concise summary and verification notes, then call
-trello_move_current_card with list_name "Human Review". If the work is blocked or unsafe to hand off,
-update the workpad with the blocker, add a Trello comment explaining the blocker, then call
-trello_move_current_card with list_name "Blocked".
+evidence, and PR URL when applicable, call trello_add_comment with a concise summary and verification
+notes, then call trello_move_current_card with list_name "Human Review". If the work is blocked or
+unsafe to hand off, update the workpad with the blocker, add a Trello comment explaining the blocker,
+then call trello_move_current_card with list_name "Blocked".
 
 Card URL: {{ card.url }}
 

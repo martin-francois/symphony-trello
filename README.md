@@ -133,9 +133,9 @@ Trello has three concepts that matter for Symphony:
 - **Lists** are the lanes on the board that contain cards. `WORKFLOW.md` and tool fields use names
   like `active_list_ids`, `allowed_move_list_names`, `list_id`, and `list_name`.
 
-Symphony reads cards, creates local Codex workspaces, and runs Codex. The generated workflow lets
-Codex leave a Trello comment and move the card to `Human Review` when the prompt-defined work is
-ready for a person to review.
+Symphony reads cards, creates local Codex workspaces, and runs Codex. For repository-changing work,
+the generated workflow tells Codex to commit the change, create or update a pull request, leave a
+Trello handoff comment, and move the card to `Human Review` when the PR is ready for a person.
 
 Start with the browser setup below. Those steps create the Trello credentials used by both board
 setup paths.
@@ -251,8 +251,9 @@ Use the generated board like this:
 2. Move only cards that are ready for agent work into `Ready for Codex`.
 3. Symphony starts Codex for cards in `Ready for Codex`.
 4. Codex moves the card to `In Progress` first, so the board shows that the card was picked up.
-5. Codex works in a local workspace, adds a Trello comment with its summary and verification notes,
-   and moves the card to `Human Review` when the prompt-defined work is ready for human review.
+5. Codex works in a local workspace, creates or updates a pull request for repository-changing work,
+   adds a Trello comment with its summary and verification notes, and moves the card to
+   `Human Review` when the PR is ready for human review.
 6. If Codex cannot safely finish the work, it adds a blocker comment and moves the card to
    `Blocked` so the problem is visible from the board.
 7. If changes are needed, a human moves the card from `Human Review` back to `Ready for Codex`.
@@ -292,10 +293,11 @@ for Codex work. A conservative import starts with a new list named `Ready for Co
 cards there after they have a clear title, useful description, and acceptance criteria.
 
 When the imported board has a list named `Human Review`, the starter workflow allows Codex to move
-reviewable work there. Boards that still use a `Review` list remain supported when `Human Review`
-is absent. If there is no obvious review list, the generated workflow keeps Trello writes disabled
-until you choose one. Do not run a write-disabled workflow with blocked cards left in `Ready for
-Codex` unless you plan to move them manually; they can be picked up again.
+reviewable work there after it has created or updated a PR for repository-changing work. Boards that
+still use a `Review` list remain supported when `Human Review` is absent. If there is no obvious
+review list, the generated workflow keeps Trello writes disabled until you choose one. Do not run a
+write-disabled workflow with blocked cards left in `Ready for Codex` unless you plan to move them
+manually; they can be picked up again.
 
 When the imported board has a list named `Merging` and a terminal list such as `Done`, the
 starter workflow treats `Merging` as the human approval list for landing and allows Codex to move
@@ -447,11 +449,16 @@ If a human moves a reviewed card from "Human Review" back to "Ready for Codex" o
 treat the next run as rework. Reread the card, new Trello comments, existing workpad, and linked PR
 feedback before changing code again.
 
-When the work is ready for human review, update the workpad with the final summary and validation
-evidence, call trello_add_comment with a concise summary and verification notes, then call
-trello_move_current_card with list_name "Human Review". If the work is blocked or unsafe to hand off,
-update the workpad with the blocker, add a Trello comment explaining the blocker, then call
-trello_move_current_card with list_name "Blocked". If the blocker is a local filesystem access
+For repository-changing work, "Human Review" means there is a pull request ready for a person.
+Commit the change, push the branch, create or update the PR, and include the PR URL in the workpad
+and handoff comment before moving the card. This does not apply when the card explicitly asks for
+local-only or no-push work.
+
+When the work is ready for human review, update the workpad with the final summary, validation
+evidence, and PR URL when applicable, call trello_add_comment with a concise summary and verification
+notes, then call trello_move_current_card with list_name "Human Review". If the work is blocked or
+unsafe to hand off, update the workpad with the blocker, add a Trello comment explaining the blocker,
+then call trello_move_current_card with list_name "Blocked". If the blocker is a local filesystem access
 problem, the Trello comment must include the inaccessible path, why it is inaccessible, that deployed
 Symphony allows only managed workspaces and explicitly allowed host paths by default for security
 reasons so Trello cards cannot make Codex read or edit unrelated host files, that accessible files
@@ -646,11 +653,16 @@ Only land work when the card is in "Merging". Before landing, sweep PR comments 
 card-specific validation, follow the repository's merge policy, and move successful landed work to
 "Done". If landing cannot safely proceed, move the card to "Blocked" with a concise blocker.
 
-When the work is ready for human review, update the workpad with the final summary and validation
-evidence, call trello_add_comment with a concise summary and verification notes, then call
-trello_move_current_card with list_name "Human Review". If the work is blocked or unsafe to hand off,
-update the workpad with the blocker, add a Trello comment explaining the blocker, then call
-trello_move_current_card with list_name "Blocked". If the blocker is a local filesystem access
+For repository-changing work, "Human Review" means there is a pull request ready for a person.
+Commit the change, push the branch, create or update the PR, and include the PR URL in the workpad
+and handoff comment before moving the card. This does not apply when the card explicitly asks for
+local-only or no-push work.
+
+When the work is ready for human review, update the workpad with the final summary, validation
+evidence, and PR URL when applicable, call trello_add_comment with a concise summary and verification
+notes, then call trello_move_current_card with list_name "Human Review". If the work is blocked or
+unsafe to hand off, update the workpad with the blocker, add a Trello comment explaining the blocker,
+then call trello_move_current_card with list_name "Blocked". If the blocker is a local filesystem access
 problem, the Trello comment must include the inaccessible path, why it is inaccessible, that deployed
 Symphony allows only managed workspaces and explicitly allowed host paths by default for security
 reasons so Trello cards cannot make Codex read or edit unrelated host files, that accessible files

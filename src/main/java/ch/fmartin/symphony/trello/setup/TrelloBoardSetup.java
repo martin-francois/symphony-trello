@@ -448,6 +448,14 @@ public final class TrelloBoardSetup {
 
                 %s
 
+                %s
+
+                %s
+
+                %s
+
+                %s
+
                 Card URL: {{ card.url }}
                 """
                 .formatted(
@@ -460,13 +468,20 @@ public final class TrelloBoardSetup {
                         trelloToolsYaml(handoffStates),
                         maxAgents,
                         workpadPrompt(!handoffStates.isEmpty()),
+                        operatingPosturePrompt(!handoffStates.isEmpty()),
                         routingPrompt(
                                 activeStates, terminalStates, inProgressState, reviewState, blockedState, mergingState),
+                        executionPrompt(
+                                reviewState, blockedDestination(reviewState, blockedState), !handoffStates.isEmpty()),
                         validationPrompt(!handoffStates.isEmpty(), reviewState),
-                        prFeedbackPrompt(reviewState),
-                        reworkPrompt(activeStates, reviewState, mergingState),
+                        prPublicationPrompt(
+                                reviewState, blockedDestination(reviewState, blockedState), !handoffStates.isEmpty()),
+                        prFeedbackPrompt(reviewState, blockedDestination(reviewState, blockedState)),
+                        reworkPrompt(activeStates, reviewState, mergingState, !handoffStates.isEmpty()),
                         landingPrompt(mergingState, doneState, blockedDestination(reviewState, blockedState)),
                         pickupPrompt(activeStates, inProgressState, mergingState),
+                        completionBarPrompt(
+                                reviewState, blockedDestination(reviewState, blockedState), !handoffStates.isEmpty()),
                         handoffPrompt(reviewState, blockedState, !handoffStates.isEmpty()));
     }
 
@@ -483,6 +498,71 @@ public final class TrelloBoardSetup {
                 handoff notes. Do not include private host paths; use sanitized workspace or repository names when
                 context is needed.
                 """;
+    }
+
+    private static String operatingPosturePrompt(boolean workpadToolEnabled) {
+        String workpadText = workpadToolEnabled
+                ? "Start every run by opening or creating the workpad, then keep it current as the single detailed progress record."
+                : "Keep progress notes in the final response because Trello workpad tools are disabled.";
+        return """
+                ## Operating Posture
+
+                This is an unattended orchestration run. Do not ask a human to perform routine follow-up actions.
+                Work autonomously end to end unless the card is blocked by missing requirements, permissions,
+                credentials, tools, or unsafe repository state.
+
+                Start by determining the current Trello list and route from that list. %s
+                Spend extra effort up front on planning and validation design before implementation. Reproduce bugs
+                or capture a concrete current-state signal before changing behavior. When meaningful out-of-scope
+                improvements are discovered, record them as separate follow-up work instead of expanding this card.
+
+                Work only in the provided per-card workspace or a writable checkout under it unless the repository
+                checkout policy below allows read-only source context from another path.
+                """
+                .formatted(workpadText)
+                .stripTrailing();
+    }
+
+    private static String executionPrompt(String reviewState, String blockedDestination, boolean workpadToolEnabled) {
+        String reviewHandoff = blank(reviewState) ? "human review" : quote(reviewState);
+        String blockedText = blank(blockedDestination)
+                ? "record a blocker in the final response"
+                : "move the card to " + quote(blockedDestination);
+        String planningRecord = workpadToolEnabled
+                ? "Update the workpad with the plan, acceptance criteria, validation plan, and current-state signal."
+                : "Record the plan, acceptance criteria, validation plan, and current-state signal for the final response.";
+        String progressRecord = workpadToolEnabled
+                ? "Keep the workpad checklist current when scope, risks, validation, or blockers change."
+                : "Keep final-response notes current when scope, risks, validation, or blockers change.";
+        String duplicateProgress = workpadToolEnabled
+                ? """
+
+                Do not leave completed work unchecked in the workpad. Do not create duplicate progress comments when
+                the workpad contains the details.
+                """
+                : """
+
+                Do not report completed work as ready until the final response contains the implementation, validation,
+                PR, and blocker details that apply to the card.
+                """;
+        return """
+                ## Execution Flow
+
+                1. Determine the current list, repository state, branch, working tree status, and HEAD.
+                2. Read the full Trello card description and all rendered Trello comments before editing.
+                3. %s
+                4. Sync with the repository default branch before implementation when a Git repository is involved.
+                5. Implement the smallest maintainable change that satisfies the card.
+                6. %s
+                7. Run the validation required by the card and the repository.
+                8. Commit logical changes with a clear message when repository files changed.
+                9. Publish or update a pull request when repository changes should be reviewed.
+                10. Only move to %s after the completion bar below is met. If the work cannot safely reach the
+                    completion bar, %s.
+                %s
+                """
+                .formatted(planningRecord, progressRecord, reviewHandoff, blockedText, duplicateProgress)
+                .stripTrailing();
     }
 
     private static String inProgressStateYaml(String inProgressState) {
@@ -545,8 +625,39 @@ public final class TrelloBoardSetup {
                 .stripTrailing();
     }
 
-    private static String prFeedbackPrompt(String reviewState) {
+    private static String prPublicationPrompt(
+            String reviewState, String blockedDestination, boolean workpadToolEnabled) {
+        String reviewHandoff = blank(reviewState) ? "human review" : quote(reviewState);
+        String blockedText = blank(blockedDestination)
+                ? "record a blocker in the final response"
+                : "move the card to " + quote(blockedDestination);
+        String prEvidence = workpadToolEnabled ? "the workpad and the visible handoff comment" : "the final response";
+        String localEvidence = workpadToolEnabled ? "the workpad and handoff comment" : "the final response";
+        return """
+                ## Pull Request Publication
+
+                For repository-changing work, %s means a human can review a pull request. Before moving the card
+                there, use `.codex/skills/commit/SKILL.md` and `.codex/skills/push-pr/SKILL.md` to commit, push,
+                and create or update the PR for the current branch. Add the PR URL to %s.
+
+                This PR requirement applies when the card asks for code, documentation, configuration, tests, or
+                other version-controlled repository changes. It does not apply when the card explicitly asks for a
+                local-only investigation, says not to push, or requires no repository change. In those cases, explain
+                the local-only result and the workspace/branch/commit evidence in %s.
+
+                If GitHub auth, push permission, branch protection, or repository policy prevents a required PR, try
+                the fallback strategies in `.codex/skills/push-pr/SKILL.md`. If a PR is still required and cannot be
+                created or updated, %s with the exact blocker instead of moving to %s.
+                """
+                .formatted(reviewHandoff, prEvidence, localEvidence, blockedText, reviewHandoff)
+                .stripTrailing();
+    }
+
+    private static String prFeedbackPrompt(String reviewState, String blockedDestination) {
         String reviewHandoff = blank(reviewState) ? "ready-for-review handoff" : quote(reviewState);
+        String blockedText = blank(blockedDestination)
+                ? "treat the card as blocked"
+                : "move the card to " + quote(blockedDestination);
         return """
                 ## Pull Request Feedback Sweep
 
@@ -563,37 +674,51 @@ public final class TrelloBoardSetup {
 
                 After feedback-driven changes, rerun the relevant validation and repeat the sweep until no
                 actionable feedback remains. If GitHub auth, PR discovery, required checks, or review data are
-                unavailable for a PR-backed card, treat the card as blocked instead of handing it off.
-                Do not create or push a pull request unless the card, repository policy, or a human explicitly asks
-                for one. When the card asks only for local commits, hand off with the workspace checkout path, branch
-                name, commit list, and validation evidence instead of blocking on missing push credentials.
+                unavailable for a PR-backed card, %s instead of handing it off.
                 """
-                .formatted(reviewHandoff)
+                .formatted(reviewHandoff, blockedText)
                 .stripTrailing();
     }
 
-    private static String reworkPrompt(List<String> activeStates, String reviewState, String mergingState) {
+    private static String reworkPrompt(
+            List<String> activeStates, String reviewState, String mergingState, boolean workpadToolEnabled) {
         String reviewHandoff = blank(reviewState) ? "human review" : quote(reviewState);
         List<String> implementationStates = implementationActiveStates(activeStates, mergingState);
         String activeText =
                 implementationStates.isEmpty() ? "an active implementation list" : quotedList(implementationStates);
+        String contextSources = workpadToolEnabled
+                ? "new Trello comments, existing workpad, linked PR comments,"
+                : "new Trello comments, linked PR comments,";
+        String reworkPlan = workpadToolEnabled
+                ? "update the workpad with a short rework plan"
+                : "record a short rework plan for the final response";
+        String reworkEvidence = workpadToolEnabled
+                ? "update the existing workpad with the rework evidence, and add one concise handoff comment. Do not create\n"
+                        + "duplicate progress summary comments when the workpad already contains the details."
+                : "include the rework evidence in the final response.";
+        String resetRestrictions = workpadToolEnabled
+                ? "close the existing PR, delete the workpad, or create a new branch"
+                : "close the existing PR or create a new branch";
         return """
                 ## Rework From Human Review
 
                 If a human moves a reviewed card from %s back to %s, treat the next run as rework. Before changing
-                code, reread the full card description, new Trello comments, existing workpad, linked PR comments,
-                inline PR review comments, and current PR/check state.
+                code, reread the full card description, %s inline PR review comments, and current PR/check state.
 
-                Identify what changed since the last handoff and update the workpad with a short rework plan that
-                says what will be done differently. Preserve completed work that still satisfies the current card;
-                do not restart from scratch, close the existing PR, delete the workpad, or create a new branch unless
-                the Trello card or a human explicitly asks for a reset.
+                Identify what changed since the last handoff and %s that says what will be done differently.
+                Preserve completed work that still satisfies the current card;
+                do not restart from scratch, %s unless the Trello card or a human explicitly asks for a reset.
 
-                Before returning the card to %s, rerun the card-specific validation and PR feedback sweep, update the
-                existing workpad with the rework evidence, and add one concise handoff comment. Do not create
-                duplicate progress summary comments when the workpad already contains the details.
+                Before returning the card to %s, rerun the card-specific validation and PR feedback sweep, %s
                 """
-                .formatted(reviewHandoff, activeText, reviewHandoff)
+                .formatted(
+                        reviewHandoff,
+                        activeText,
+                        contextSources,
+                        reworkPlan,
+                        resetRestrictions,
+                        reviewHandoff,
+                        reworkEvidence)
                 .stripTrailing();
     }
 
@@ -753,6 +878,45 @@ public final class TrelloBoardSetup {
                 Symphony moves cards from %s to "%s" before Codex starts when tracker.in_progress_state is configured.
                 If the card is already in "%s", continue the existing execution flow."""
                 .formatted(queueText, inProgressState, inProgressState);
+    }
+
+    private static String completionBarPrompt(
+            String reviewState, String blockedDestination, boolean workpadToolEnabled) {
+        String planRecord = workpadToolEnabled ? "workpad plan" : "final-response plan";
+        String prRecord = workpadToolEnabled ? "the workpad and handoff comment" : "the final response";
+        if (blank(reviewState)) {
+            return """
+                    ## Completion Bar
+
+                    This workflow has no human review list configured. Before reporting ready-for-review status,
+                    finish the %s, validation, commit, and PR publication requirements that
+                    apply to this card. If the work is blocked, report the blocker clearly and keep the card out of
+                    any active list manually.
+                    """
+                    .formatted(planRecord)
+                    .stripTrailing();
+        }
+        String blockedText =
+                blank(blockedDestination) ? "block in the final response" : "move to " + quote(blockedDestination);
+        return """
+                ## Completion Bar Before %s
+
+                Do not move the card to %s until all applicable items are true:
+
+                - The %s, acceptance criteria, and validation sections match the work actually completed.
+                - Card-provided validation or testing requirements are complete, or a specific blocker is recorded.
+                - Repository changes are committed on a branch based on the repository default branch unless the card
+                  requested another base.
+                - A pull request exists and is linked in %s for repository-changing work
+                  unless the card explicitly requested local-only/no-push work.
+                - PR feedback sweep is complete for any existing or newly created PR.
+                - Relevant local validation is current after the latest commit.
+                - The working tree does not contain unrelated uncommitted changes.
+
+                If any required item cannot be satisfied, %s with the exact blocker.
+                """
+                .formatted(quote(reviewState), quote(reviewState), planRecord, prRecord, blockedText)
+                .stripTrailing();
     }
 
     private static List<String> allowedMoveStates(

@@ -756,8 +756,10 @@ Codex to add only that source checkout to the current user's Git safe directorie
 read-only clone. It also tells Codex to start task branches from the repository's default branch when
 that branch is discoverable, instead of inheriting the source checkout's current branch.
 The generated workflow treats unavailable push credentials as blocking only when a card, repository
-policy, or human explicitly requires a push or pull request. It also allows handoff with documented,
-clearly unrelated broad validation failures when card-specific validation passed.
+policy, or human requires a push or pull request. For repository-changing work in the recommended
+workflow, `Human Review` means a pull request is available for review unless the card explicitly asks
+for local-only or no-push work. It also allows handoff with documented, clearly unrelated broad
+validation failures when card-specific validation passed.
 
 When `new-board` would otherwise write `WORKFLOW.md` and that file already exists, the Java
 implementation writes a board-specific file named `WORKFLOW.<slugified-board-name>.md`. If that file
