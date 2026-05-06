@@ -119,6 +119,26 @@ class TrelloHandoffToolHandlerTest {
     }
 
     @Test
+    void escapesLeadingHashtagsBeforeAddingCommentToCurrentCard() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+
+        // when
+        var result = handler.handle(
+                config(List.of("Review"), List.of()),
+                TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
+                json.createObjectNode()
+                        .put("tool", TrelloHandoffToolHandler.ADD_COMMENT)
+                        .set(
+                                "arguments",
+                                json.createObjectNode().put("text", "- #2076: Fixed\nSee #2077 for follow-up")));
+
+        // then
+        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(commentText.get()).isEqualTo("- \\#2076: Fixed\nSee #2077 for follow-up");
+    }
+
+    @Test
     void createsWorkpadCommentWhenNoMarkerCommentExists() {
         // given
         TrelloHandoffToolHandler handler = handler();
@@ -137,6 +157,28 @@ class TrelloHandoffToolHandlerTest {
         assertThat(result.path("contentItems").get(0).path("text").asText()).contains("workpad_created");
         assertThat(commentText.get()).startsWith(TrelloHandoffToolHandler.WORKPAD_MARKER);
         assertThat(updatedCommentText.get()).isNull();
+    }
+
+    @Test
+    void preservesWorkpadMarkerWhileEscapingLeadingHashtagsInWorkpadBody() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson("[]"));
+
+        // when
+        var result = handler.handle(
+                config(List.of("Review"), List.of()),
+                TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
+                json.createObjectNode()
+                        .put("tool", TrelloHandoffToolHandler.UPSERT_WORKPAD)
+                        .set(
+                                "arguments",
+                                json.createObjectNode()
+                                        .put("text", "## Codex Workpad\n\n#2076: Fixed\n- #2077: Follow-up")));
+
+        // then
+        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(commentText.get()).isEqualTo("## Codex Workpad\n\n\\#2076: Fixed\n- \\#2077: Follow-up");
     }
 
     @Test
