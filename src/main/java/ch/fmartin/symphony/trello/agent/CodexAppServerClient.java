@@ -24,6 +24,7 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -127,11 +128,25 @@ public class CodexAppServerClient {
                         Map.of(),
                         turn));
 
-                JsonNode completed =
-                        session.awaitTurnCompleted(turnId, config.codex().turnTimeout());
-                JsonNode error = completed.at("/turn/error");
+                JsonNode completed;
+                try {
+                    completed =
+                            session.awaitTurnCompleted(turnId, config.codex().turnTimeout());
+                } catch (TimeoutException e) {
+                    process.destroyForcibly();
+                    return AgentRunResult.fail("turn_timeout: " + e.getMessage());
+                }
+                JsonNode completedTurn = completed.path("turn");
+                JsonNode error = completedTurn.path("error");
+                String status = completedTurn.path("status").asText("");
+                if ("interrupted".equals(status)) {
+                    return AgentRunResult.fail("turn_interrupted: " + turnFailureSummary(completedTurn, completed));
+                }
                 if (!error.isMissingNode() && !error.isNull()) {
                     return AgentRunResult.fail("turn_failed: " + summarize(error));
+                }
+                if ("failed".equals(status)) {
+                    return AgentRunResult.fail("turn_failed: " + turnFailureSummary(completedTurn, completed));
                 }
                 TurnDecision decision = controller.afterSuccessfulTurn(turnNumber);
                 if (decision.failureReason() != null) {
@@ -140,6 +155,9 @@ public class CodexAppServerClient {
                 nextPrompt = decision.nextPrompt();
             }
             return AgentRunResult.ok();
+        } catch (CodexAppServerTerminalException e) {
+            process.destroyForcibly();
+            return AgentRunResult.fail(e.code() + ": " + e.getMessage());
         } catch (TimeoutException e) {
             process.destroyForcibly();
             return AgentRunResult.fail("response_timeout: " + e.getMessage());
@@ -274,6 +292,28 @@ public class CodexAppServerClient {
         return message == null ? node.toString() : message;
     }
 
+    private static String turnFailureSummary(JsonNode turn, JsonNode completed) {
+        JsonNode error = turn.path("error");
+        if (!error.isMissingNode() && !error.isNull()) {
+            return summarize(error);
+        }
+        String status = turn.path("status").asText(null);
+        return status == null ? summarize(completed) : "turn status " + status;
+    }
+
+    private static final class CodexAppServerTerminalException extends IOException {
+        private final String code;
+
+        private CodexAppServerTerminalException(String code, String message) {
+            super(message);
+            this.code = code;
+        }
+
+        private String code() {
+            return code;
+        }
+    }
+
     private final class AppServerSession implements AutoCloseable {
         private final Process process;
         private final EffectiveConfig config;
@@ -284,6 +324,7 @@ public class CodexAppServerClient {
         private final Map<Integer, CompletableFuture<JsonNode>> responses = new ConcurrentHashMap<>();
         private final Map<String, CompletableFuture<JsonNode>> turnCompletions = new ConcurrentHashMap<>();
         private final Map<String, JsonNode> completedTurns = new ConcurrentHashMap<>();
+        private final Map<String, Throwable> terminalTurnFailures = new ConcurrentHashMap<>();
         private final Object turnCompletionLock = new Object();
         private final AtomicReference<Throwable> readerFailure = new AtomicReference<>();
         private final CountDownLatch readerStarted = new CountDownLatch(1);
@@ -314,14 +355,25 @@ public class CodexAppServerClient {
         JsonNode request(String method, ObjectNode params, Duration timeout) throws Exception {
             Throwable failure = readerFailure.get();
             if (failure != null) {
-                throw new IOException("app-server reader failed", failure);
+                throw unwrapReaderFailure(failure);
             }
             int id = ids.incrementAndGet();
             CompletableFuture<JsonNode> future = new CompletableFuture<>();
             responses.put(id, future);
             ObjectNode request = object("id", id, "method", method, "params", params);
             write(request);
-            return future.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+            failure = readerFailure.get();
+            if (failure != null && !future.isDone()) {
+                responses.remove(id);
+                throw unwrapReaderFailure(failure);
+            }
+            try {
+                return future.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+            } catch (ExecutionException e) {
+                throw unwrapResponseFailure(e.getCause());
+            } finally {
+                responses.remove(id);
+            }
         }
 
         void notify(String method) throws IOException {
@@ -331,14 +383,30 @@ public class CodexAppServerClient {
         JsonNode awaitTurnCompleted(String turnId, Duration timeout) throws Exception {
             CompletableFuture<JsonNode> future;
             synchronized (turnCompletionLock) {
+                Throwable terminalFailure = terminalTurnFailures.remove(turnId);
+                if (terminalFailure != null) {
+                    throw unwrapReaderFailure(terminalFailure);
+                }
                 JsonNode completed = completedTurns.remove(turnId);
                 if (completed != null) {
                     return completed;
                 }
+                Throwable failure = readerFailure.get();
+                if (failure != null) {
+                    throw unwrapReaderFailure(failure);
+                }
                 future = new CompletableFuture<>();
                 turnCompletions.put(turnId, future);
             }
-            return future.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+            try {
+                return future.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+            } catch (ExecutionException e) {
+                throw unwrapReaderFailure(e.getCause());
+            } finally {
+                synchronized (turnCompletionLock) {
+                    turnCompletions.remove(turnId);
+                }
+            }
         }
 
         private synchronized void write(ObjectNode message) throws IOException {
@@ -355,9 +423,10 @@ public class CodexAppServerClient {
                 while ((line = reader.readLine()) != null) {
                     handleMessage(json.readTree(line));
                 }
+                failPending(new CodexAppServerTerminalException(
+                        "process_exit", "codex app-server stdout closed before active turn completed"));
             } catch (Throwable e) {
-                readerFailure.set(e);
-                responses.values().forEach(future -> future.completeExceptionally(e));
+                failPending(e);
             }
         }
 
@@ -421,7 +490,7 @@ public class CodexAppServerClient {
             String method = message.path("method").asText();
             JsonNode params = message.path("params");
             String threadId = params.path("threadId").asText(null);
-            String turnId = params.at("/turn/id").asText(null);
+            String turnId = turnId(params);
             Map<String, Long> usage = extractUsage(method, params);
             listener.onEvent(
                     event(method, workerIdentity, process.pid(), threadId, turnId, summarize(params), usage, params));
@@ -435,7 +504,71 @@ public class CodexAppServerClient {
                     }
                 }
                 future.complete(params);
+            } else if (isTurnFailure(method) && turnId != null) {
+                completeTurnExceptionally(
+                        turnId, new CodexAppServerTerminalException("turn_failed", summarize(params)));
+            } else if (isTurnCancellation(method) && turnId != null) {
+                completeTurnExceptionally(
+                        turnId, new CodexAppServerTerminalException("turn_cancelled", summarize(params)));
+            } else if (isTerminalError(method, params) && turnId != null) {
+                completeTurnExceptionally(
+                        turnId, new CodexAppServerTerminalException("turn_failed", summarize(params.path("error"))));
             }
+        }
+
+        private boolean isTurnFailure(String method) {
+            return Objects.equals(method, "turn/failed");
+        }
+
+        private boolean isTurnCancellation(String method) {
+            return Objects.equals(method, "turn/cancelled") || Objects.equals(method, "turn/canceled");
+        }
+
+        private boolean isTerminalError(String method, JsonNode params) {
+            return Objects.equals(method, "error") && !params.path("willRetry").asBoolean(false);
+        }
+
+        private void completeTurnExceptionally(String turnId, Throwable failure) {
+            CompletableFuture<JsonNode> future;
+            synchronized (turnCompletionLock) {
+                future = turnCompletions.remove(turnId);
+                if (future == null) {
+                    terminalTurnFailures.put(turnId, failure);
+                    return;
+                }
+            }
+            future.completeExceptionally(failure);
+        }
+
+        private void failPending(Throwable failure) {
+            readerFailure.compareAndSet(null, failure);
+            responses.values().forEach(future -> future.completeExceptionally(failure));
+            synchronized (turnCompletionLock) {
+                turnCompletions.values().forEach(future -> future.completeExceptionally(failure));
+                turnCompletions.clear();
+            }
+        }
+
+        private String turnId(JsonNode params) {
+            String nestedTurnId = params.at("/turn/id").asText(null);
+            return nestedTurnId == null ? params.path("turnId").asText(null) : nestedTurnId;
+        }
+
+        private Exception unwrapReaderFailure(Throwable failure) {
+            if (failure instanceof CodexAppServerTerminalException terminalFailure) {
+                return terminalFailure;
+            }
+            return new IOException("app-server reader failed", failure);
+        }
+
+        private Exception unwrapResponseFailure(Throwable failure) {
+            if (failure instanceof CodexAppServerTerminalException terminalFailure) {
+                return terminalFailure;
+            }
+            if (failure instanceof Exception exception) {
+                return exception;
+            }
+            return new IOException("app-server request failed", failure);
         }
 
         private Map<String, Long> extractUsage(String method, JsonNode params) {

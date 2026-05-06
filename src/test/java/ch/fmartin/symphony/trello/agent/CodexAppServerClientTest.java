@@ -62,6 +62,88 @@ class CodexAppServerClientTest {
     }
 
     @Test
+    void keepsQueuedTurnCompletionWhenAppServerExitsBeforeAwaiterIsRegistered() throws Exception {
+        // given
+        Path appServer = tempDir.resolve("completed-then-exit-app-server.sh");
+        Files.writeString(
+                appServer,
+                """
+                #!/usr/bin/env bash
+                while IFS= read -r line; do
+                  [[ "$line" =~ \\"id\\":([0-9]+) ]] && id="${BASH_REMATCH[1]}"
+                  case "$line" in
+                    *\\"method\\":\\"initialize\\"*) echo "{\\"id\\":$id,\\"result\\":{\\"userAgent\\":\\"completed-exit-test\\"}}" ;;
+                    *\\"method\\":\\"thread/start\\"*) echo "{\\"id\\":$id,\\"result\\":{\\"thread\\":{\\"id\\":\\"thread-completed-exit\\"}}}" ;;
+                    *\\"method\\":\\"turn/start\\"*)
+                      echo "{\\"id\\":$id,\\"result\\":{\\"turn\\":{\\"id\\":\\"turn-completed-exit\\"}}}"
+                      echo "{\\"method\\":\\"turn/completed\\",\\"params\\":{\\"threadId\\":\\"thread-completed-exit\\",\\"turn\\":{\\"id\\":\\"turn-completed-exit\\",\\"error\\":null}}}"
+                      exit 0
+                      ;;
+                  esac
+                done
+                """);
+        appServer.toFile().setExecutable(true);
+        EffectiveConfig config =
+                config(Map.of("command", appServer.toString(), "read_timeout_ms", 1000, "turn_timeout_ms", 10000));
+        Path workspace = config.workspace().root().resolve("TRELLO-completed-exit");
+        Files.createDirectories(workspace);
+        CodexAppServerClient client =
+                new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
+
+        // when
+        AgentRunResult result = client.runTurn(
+                config,
+                TestCards.card("card-1", "TRELLO-completed-exit", "Ready for Codex"),
+                workspace,
+                "Do a completed exit no-op turn.",
+                "worker-completed-exit",
+                event -> {});
+
+        // then
+        assertThat(result).isEqualTo(AgentRunResult.ok());
+    }
+
+    @Test
+    void preservesAppServerErrorResponseMessage() throws Exception {
+        // given
+        Path appServer = tempDir.resolve("error-response-app-server.sh");
+        Files.writeString(
+                appServer,
+                """
+                #!/usr/bin/env bash
+                while IFS= read -r line; do
+                  [[ "$line" =~ \\"id\\":([0-9]+) ]] && id="${BASH_REMATCH[1]}"
+                  case "$line" in
+                    *\\"method\\":\\"initialize\\"*)
+                      echo "{\\"id\\":$id,\\"error\\":{\\"code\\":-32000,\\"message\\":\\"bad initialize\\"}}"
+                      exit 0
+                      ;;
+                  esac
+                done
+                """);
+        appServer.toFile().setExecutable(true);
+        EffectiveConfig config = config(appServer);
+        Path workspace = config.workspace().root().resolve("TRELLO-error-response");
+        Files.createDirectories(workspace);
+        CodexAppServerClient client =
+                new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
+
+        // when
+        AgentRunResult result = client.runTurn(
+                config,
+                TestCards.card("card-1", "TRELLO-error-response", "Ready for Codex"),
+                workspace,
+                "Do an error-response turn.",
+                "worker-error-response",
+                event -> {});
+
+        // then
+        assertThat(result.success()).isFalse();
+        assertThat(result.reason()).startsWith("codex_protocol_error:").contains("bad initialize");
+        assertThat(result.reason()).doesNotContain("app-server reader failed");
+    }
+
+    @Test
     void sendsAdditionalWritableRootsAsWorkspaceWriteSandboxPolicy() throws Exception {
         // given
         Path capture = tempDir.resolve("turn-start.jsonl");
@@ -181,6 +263,252 @@ class CodexAppServerClientTest {
         assertThat(turns)
                 .extracting(turn -> turn.at("/params/input/0/text").asText())
                 .containsExactly("first turn", "second turn");
+    }
+
+    @Test
+    void failsPromptlyWhenAppServerExitsBeforeTurnCompletion() throws Exception {
+        // given
+        Path appServer = tempDir.resolve("exiting-app-server.sh");
+        Files.writeString(
+                appServer,
+                """
+                #!/usr/bin/env bash
+                while IFS= read -r line; do
+                  [[ "$line" =~ \\"id\\":([0-9]+) ]] && id="${BASH_REMATCH[1]}"
+                  case "$line" in
+                    *\\"method\\":\\"initialize\\"*) echo "{\\"id\\":$id,\\"result\\":{\\"userAgent\\":\\"exit-test\\"}}" ;;
+                    *\\"method\\":\\"thread/start\\"*) echo "{\\"id\\":$id,\\"result\\":{\\"thread\\":{\\"id\\":\\"thread-exit\\"}}}" ;;
+                    *\\"method\\":\\"turn/start\\"*)
+                      echo "{\\"id\\":$id,\\"result\\":{\\"turn\\":{\\"id\\":\\"turn-exit\\"}}}"
+                      exit 0
+                      ;;
+                  esac
+                done
+                """);
+        appServer.toFile().setExecutable(true);
+        EffectiveConfig config =
+                config(Map.of("command", appServer.toString(), "read_timeout_ms", 1000, "turn_timeout_ms", 10000));
+        Path workspace = config.workspace().root().resolve("TRELLO-exit");
+        Files.createDirectories(workspace);
+        CodexAppServerClient client =
+                new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
+
+        // when
+        AgentRunResult result = client.runTurn(
+                config,
+                TestCards.card("card-1", "TRELLO-exit", "Ready for Codex"),
+                workspace,
+                "Do an exit no-op turn.",
+                "worker-exit",
+                event -> {});
+
+        // then
+        assertThat(result.success()).isFalse();
+        assertThat(result.reason())
+                .startsWith("process_exit:")
+                .doesNotStartWith("response_timeout:")
+                .doesNotStartWith("turn_timeout:");
+    }
+
+    @Test
+    void failsPromptlyWhenAppServerExitsBeforeRequestResponse() throws Exception {
+        // given
+        Path appServer = tempDir.resolve("exiting-before-request-response-app-server.sh");
+        Files.writeString(
+                appServer,
+                """
+                #!/usr/bin/env bash
+                while IFS= read -r line; do
+                  [[ "$line" =~ \\"id\\":([0-9]+) ]] && id="${BASH_REMATCH[1]}"
+                  case "$line" in
+                    *\\"method\\":\\"initialize\\"*) echo "{\\"id\\":$id,\\"result\\":{\\"userAgent\\":\\"exit-before-response-test\\"}}" ;;
+                    *\\"method\\":\\"thread/start\\"*) exit 0 ;;
+                  esac
+                done
+                """);
+        appServer.toFile().setExecutable(true);
+        EffectiveConfig config =
+                config(Map.of("command", appServer.toString(), "read_timeout_ms", 1000, "turn_timeout_ms", 10000));
+        Path workspace = config.workspace().root().resolve("TRELLO-exit-request");
+        Files.createDirectories(workspace);
+        CodexAppServerClient client =
+                new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
+
+        // when
+        AgentRunResult result = client.runTurn(
+                config,
+                TestCards.card("card-1", "TRELLO-exit-request", "Ready for Codex"),
+                workspace,
+                "Do an exit before response turn.",
+                "worker-exit-request",
+                event -> {});
+
+        // then
+        assertThat(result.success()).isFalse();
+        assertThat(result.reason())
+                .startsWith("process_exit:")
+                .doesNotStartWith("response_timeout:")
+                .doesNotStartWith("turn_timeout:");
+    }
+
+    @Test
+    void failsTurnWhenAppServerEmitsTurnFailureNotification() throws Exception {
+        // given
+        Path appServer = tempDir.resolve("failed-turn-app-server.sh");
+        Files.writeString(
+                appServer,
+                """
+                #!/usr/bin/env bash
+                while IFS= read -r line; do
+                  [[ "$line" =~ \\"id\\":([0-9]+) ]] && id="${BASH_REMATCH[1]}"
+                  case "$line" in
+                    *\\"method\\":\\"initialize\\"*) echo "{\\"id\\":$id,\\"result\\":{\\"userAgent\\":\\"failed-turn-test\\"}}" ;;
+                    *\\"method\\":\\"thread/start\\"*) echo "{\\"id\\":$id,\\"result\\":{\\"thread\\":{\\"id\\":\\"thread-failed\\"}}}" ;;
+                    *\\"method\\":\\"turn/start\\"*)
+                      echo "{\\"id\\":$id,\\"result\\":{\\"turn\\":{\\"id\\":\\"turn-failed\\"}}}"
+                      echo "{\\"method\\":\\"turn/failed\\",\\"params\\":{\\"threadId\\":\\"thread-failed\\",\\"turn\\":{\\"id\\":\\"turn-failed\\"},\\"message\\":\\"tool failed\\"}}"
+                      ;;
+                  esac
+                done
+                """);
+        appServer.toFile().setExecutable(true);
+        EffectiveConfig config = config(appServer);
+        Path workspace = config.workspace().root().resolve("TRELLO-failed");
+        Files.createDirectories(workspace);
+        CodexAppServerClient client =
+                new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
+
+        // when
+        AgentRunResult result = client.runTurn(
+                config,
+                TestCards.card("card-1", "TRELLO-failed", "Ready for Codex"),
+                workspace,
+                "Do a failed turn.",
+                "worker-failed",
+                event -> {});
+
+        // then
+        assertThat(result).isEqualTo(AgentRunResult.fail("turn_failed: tool failed"));
+    }
+
+    @Test
+    void failsTurnWhenAppServerEmitsTerminalErrorNotification() throws Exception {
+        // given
+        Path appServer = tempDir.resolve("terminal-error-app-server.sh");
+        Files.writeString(
+                appServer,
+                """
+                #!/usr/bin/env bash
+                while IFS= read -r line; do
+                  [[ "$line" =~ \\"id\\":([0-9]+) ]] && id="${BASH_REMATCH[1]}"
+                  case "$line" in
+                    *\\"method\\":\\"initialize\\"*) echo "{\\"id\\":$id,\\"result\\":{\\"userAgent\\":\\"terminal-error-test\\"}}" ;;
+                    *\\"method\\":\\"thread/start\\"*) echo "{\\"id\\":$id,\\"result\\":{\\"thread\\":{\\"id\\":\\"thread-error\\"}}}" ;;
+                    *\\"method\\":\\"turn/start\\"*)
+                      echo "{\\"id\\":$id,\\"result\\":{\\"turn\\":{\\"id\\":\\"turn-error\\"}}}"
+                      echo "{\\"method\\":\\"error\\",\\"params\\":{\\"threadId\\":\\"thread-error\\",\\"turnId\\":\\"turn-error\\",\\"willRetry\\":false,\\"error\\":{\\"message\\":\\"model request failed\\"}}}"
+                      ;;
+                  esac
+                done
+                """);
+        appServer.toFile().setExecutable(true);
+        EffectiveConfig config = config(appServer);
+        Path workspace = config.workspace().root().resolve("TRELLO-error");
+        Files.createDirectories(workspace);
+        CodexAppServerClient client =
+                new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
+
+        // when
+        AgentRunResult result = client.runTurn(
+                config,
+                TestCards.card("card-1", "TRELLO-error", "Ready for Codex"),
+                workspace,
+                "Do a terminal error turn.",
+                "worker-error",
+                event -> {});
+
+        // then
+        assertThat(result).isEqualTo(AgentRunResult.fail("turn_failed: model request failed"));
+    }
+
+    @Test
+    void failsTurnWhenAppServerEmitsTurnCancellationNotification() throws Exception {
+        // given
+        Path appServer = tempDir.resolve("cancelled-turn-app-server.sh");
+        Files.writeString(
+                appServer,
+                """
+                #!/usr/bin/env bash
+                while IFS= read -r line; do
+                  [[ "$line" =~ \\"id\\":([0-9]+) ]] && id="${BASH_REMATCH[1]}"
+                  case "$line" in
+                    *\\"method\\":\\"initialize\\"*) echo "{\\"id\\":$id,\\"result\\":{\\"userAgent\\":\\"cancelled-turn-test\\"}}" ;;
+                    *\\"method\\":\\"thread/start\\"*) echo "{\\"id\\":$id,\\"result\\":{\\"thread\\":{\\"id\\":\\"thread-cancelled\\"}}}" ;;
+                    *\\"method\\":\\"turn/start\\"*)
+                      echo "{\\"id\\":$id,\\"result\\":{\\"turn\\":{\\"id\\":\\"turn-cancelled\\"}}}"
+                      echo "{\\"method\\":\\"turn/cancelled\\",\\"params\\":{\\"threadId\\":\\"thread-cancelled\\",\\"turnId\\":\\"turn-cancelled\\",\\"message\\":\\"operator cancelled\\"}}"
+                      ;;
+                  esac
+                done
+                """);
+        appServer.toFile().setExecutable(true);
+        EffectiveConfig config = config(appServer);
+        Path workspace = config.workspace().root().resolve("TRELLO-cancelled");
+        Files.createDirectories(workspace);
+        CodexAppServerClient client =
+                new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
+
+        // when
+        AgentRunResult result = client.runTurn(
+                config,
+                TestCards.card("card-1", "TRELLO-cancelled", "Ready for Codex"),
+                workspace,
+                "Do a cancelled turn.",
+                "worker-cancelled",
+                event -> {});
+
+        // then
+        assertThat(result).isEqualTo(AgentRunResult.fail("turn_cancelled: operator cancelled"));
+    }
+
+    @Test
+    void failsTurnWhenAppServerCompletesTurnAsInterrupted() throws Exception {
+        // given
+        Path appServer = tempDir.resolve("interrupted-turn-app-server.sh");
+        Files.writeString(
+                appServer,
+                """
+                #!/usr/bin/env bash
+                while IFS= read -r line; do
+                  [[ "$line" =~ \\"id\\":([0-9]+) ]] && id="${BASH_REMATCH[1]}"
+                  case "$line" in
+                    *\\"method\\":\\"initialize\\"*) echo "{\\"id\\":$id,\\"result\\":{\\"userAgent\\":\\"interrupted-turn-test\\"}}" ;;
+                    *\\"method\\":\\"thread/start\\"*) echo "{\\"id\\":$id,\\"result\\":{\\"thread\\":{\\"id\\":\\"thread-interrupted\\"}}}" ;;
+                    *\\"method\\":\\"turn/start\\"*)
+                      echo "{\\"id\\":$id,\\"result\\":{\\"turn\\":{\\"id\\":\\"turn-interrupted\\"}}}"
+                      echo "{\\"method\\":\\"turn/completed\\",\\"params\\":{\\"threadId\\":\\"thread-interrupted\\",\\"turn\\":{\\"id\\":\\"turn-interrupted\\",\\"items\\":[],\\"status\\":\\"interrupted\\",\\"error\\":null}}}"
+                      ;;
+                  esac
+                done
+                """);
+        appServer.toFile().setExecutable(true);
+        EffectiveConfig config = config(appServer);
+        Path workspace = config.workspace().root().resolve("TRELLO-interrupted");
+        Files.createDirectories(workspace);
+        CodexAppServerClient client =
+                new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
+
+        // when
+        AgentRunResult result = client.runTurn(
+                config,
+                TestCards.card("card-1", "TRELLO-interrupted", "Ready for Codex"),
+                workspace,
+                "Do an interrupted turn.",
+                "worker-interrupted",
+                event -> {});
+
+        // then
+        assertThat(result).isEqualTo(AgentRunResult.fail("turn_interrupted: turn status interrupted"));
     }
 
     private EffectiveConfig config(Path appServer) {
