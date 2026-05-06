@@ -7,13 +7,13 @@ ReadWritePaths=
 ReadWritePaths=/
 {% else %}
 # Hide undeclared home-directory contents behind read-only empty filesystems, then bind only the
-# declared roots back into the service namespace and make them writable despite ProtectSystem=strict.
+# declared paths back into the service namespace and make them writable despite ProtectSystem=strict.
 ProtectHome=false
 TemporaryFileSystem=
 TemporaryFileSystem=/home:ro /root:ro /run/user:ro
 BindPaths=
-{% for project_root in symphony_trello_allowed_project_roots %}
-BindPaths={{ project_root }}
+{% for allowed_path in symphony_trello_allowed_project_roots %}
+BindPaths={{ allowed_path }}
 {% endfor %}
 ReadWritePaths=
 ReadWritePaths={{ ([symphony_trello_state_dir] + symphony_trello_allowed_project_roots) | join(' ') }}

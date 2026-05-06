@@ -92,8 +92,8 @@ Typical troubleshooting flow:
    columns and ignores review, blocked, terminal, archived, and out-of-scope columns.
 5. If a workflow edit did not take effect, search logs for `workflow` and `reload`. Invalid reloads
    keep the last known good workflow active until the file is fixed.
-6. If Codex cannot read a project path, check the Trello blocked comment and the deployment's
-   allowed project roots.
+6. If Codex cannot read a host path, check the Trello blocked comment and the deployment's allowed
+   host path settings.
 
 ## Token Totals
 

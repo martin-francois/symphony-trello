@@ -112,25 +112,29 @@ symphony_trello_service_path: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:
 Use paths the `symphony-trello` service user can read. The systemd unit protects home directories, so
 do not point this at tools installed below `/root` or a personal home directory.
 
+## Host Path Access
+
 By default, the deployed service lets Codex read and write only Symphony-managed paths such as
 `/var/lib/symphony-trello`. This is safer for production because Trello cards cannot make Codex edit
 unrelated host files.
 
-If cards should work in an existing project checkout, explicitly allow that project root:
+If cards should work with files or folders outside the managed workspace, explicitly allow those host
+paths. The setting is a list, so you can provide more than one path:
 
 ```yaml
 symphony_trello_allowed_project_roots:
   - /srv/projects/example
+  - /srv/shared/input.txt
 ```
 
 The playbook installs a systemd drop-in that hides undeclared home-directory contents behind
-read-only empty filesystems and makes the declared roots visible and writable for the service. It
-also updates the service environment so Codex's own sandbox treats those roots as additional
-writable roots. Keep the entries concrete project roots without whitespace, double quotes, or
+read-only empty filesystems and makes the declared paths visible and writable for the service. It
+also updates the service environment so Codex's own sandbox treats those paths as additional
+writable roots. Keep the entries concrete absolute paths without whitespace, double quotes, or
 colons. Do not use `/` here.
 
-If you expose a parent directory that contains several project checkouts and Codex still reports a
-sandbox error for that parent, keep the systemd roots narrow and relax only Codex's inner sandbox:
+If you expose a parent directory and Codex still reports a sandbox error for that parent, keep the
+systemd paths narrow and relax only Codex's inner sandbox:
 
 ```yaml
 symphony_trello_allowed_project_roots:
@@ -138,9 +142,9 @@ symphony_trello_allowed_project_roots:
 symphony_trello_codex_danger_full_access: true
 ```
 
-This is less strict than adding exact checkout roots. The systemd namespace still limits writable
-host paths to the declared roots, but Codex no longer applies its own workspace-write root list inside
-that namespace.
+This is less strict than adding exact paths. The systemd namespace still limits writable host paths
+to the declared paths, but Codex no longer applies its own workspace-write root list inside that
+namespace.
 
 A broader mode is available but less secure:
 
