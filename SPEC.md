@@ -248,6 +248,18 @@ Fields:
     - `identifier` (string or null)
     - `state` (string or null)
     - `url` (string or null)
+- `comments` (list of comment records)
+  - Recent Trello card comments rendered for the coding agent.
+  - Default: empty list.
+  - Implementations SHOULD include enough recent comments for rework and review context when
+    fetching a card for prompt rendering.
+  - Implementations MAY include an older durable workpad comment even when it falls outside the
+    normal recent-comment window.
+  - Each comment record contains:
+    - `id` (string or null)
+    - `text` (string)
+    - `author` (string or null)
+    - `created_at` (timestamp or null)
 - `created_at` (timestamp or null)
   - Trello does not expose a simple first-class creation timestamp on all card payloads.
   - Implementations MAY derive this from the Trello card ObjectId timestamp when available.
@@ -3092,6 +3104,8 @@ When this profile is used:
   config with `file:$CREDENTIALS_DIRECTORY/...`
 - Trello credential environment variables SHOULD be removed before launching Codex or workflow hooks
 - Codex CLI authentication SHOULD reuse the existing Codex auth file created by `codex login`
+- when generated workflows publish pull requests, Git and GitHub CLI authentication SHOULD be
+  available to the service user without putting raw tokens in workflow files
 - the unit SHOULD run as a dedicated `symphony-trello` user
 - the unit SHOULD bind the HTTP server to loopback by default unless an operator intentionally
   exposes it
@@ -3122,6 +3136,10 @@ When this profile is used:
   ignored and uncommitted
 - the playbook SHOULD validate systemd units and lint Ansible files in CI without requiring real
   deployment secrets
+- when generated workflows publish pull requests, the deployment SHOULD make Git and GitHub CLI
+  authentication available to the service user without putting raw tokens in workflow files
+- the Java Ansible role MAY copy an existing GitHub CLI `hosts.yml` file to the service user's home
+  directory and configure Git's HTTPS credential helper to use `gh auth git-credential`
 
 This profile uses the same one-process-per-workflow model as the manual systemd profile. It adds
 repeatable installation, update, restart, and removal behavior for operators who manage more than one

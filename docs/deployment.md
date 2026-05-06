@@ -42,8 +42,8 @@ The part after `@` must match the workflow file name before `.WORKFLOW.md`.
 
 ## Prepare The Server
 
-Install Java 25 LTS and the Codex CLI on the server. The systemd unit starts Java through
-`/usr/bin/env java`, so make sure `java` resolves to Java 25 for the service:
+Install Java 25 LTS, Codex CLI, Git, and GitHub CLI on the server. The systemd unit starts Java
+through `/usr/bin/env java`, so make sure `java` resolves to Java 25 for the service:
 
 ```bash
 java -version
@@ -80,6 +80,21 @@ sudo install -o symphony-trello -g symphony-trello -m 0600 ~/.codex/auth.json /v
 ```
 
 Do not put Codex auth in workflow files or `/etc/symphony-trello/service.env`.
+
+Authenticate GitHub for the service user when generated workflows should publish pull requests.
+Either run `gh auth login` as the service user or copy an existing GitHub CLI hosts file:
+
+```bash
+sudo -u symphony-trello -H gh auth login
+```
+
+```bash
+sudo install -d -o symphony-trello -g symphony-trello -m 0700 /var/lib/symphony-trello/.config/gh
+sudo install -o symphony-trello -g symphony-trello -m 0600 ~/.config/gh/hosts.yml /var/lib/symphony-trello/.config/gh/hosts.yml
+sudo -u symphony-trello -H git config --global credential.https://github.com.helper '!gh auth git-credential'
+```
+
+Do not put GitHub tokens in workflow files or `/etc/symphony-trello/service.env`.
 
 ## Build And Install The App
 

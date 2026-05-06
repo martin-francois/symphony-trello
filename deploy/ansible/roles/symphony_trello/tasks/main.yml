@@ -237,6 +237,107 @@
   when: symphony_trello_manage_codex_auth
   register: symphony_trello_codex_auth_file
 
+- name: Check controller GitHub CLI auth file
+  ansible.builtin.stat:
+    path: "{{ symphony_trello_github_hosts_src }}"
+  delegate_to: localhost
+  become: false
+  when: symphony_trello_manage_github_auth
+  register: symphony_trello_controller_github_auth
+
+- name: Stop when controller GitHub CLI auth is missing
+  ansible.builtin.assert:
+    that:
+      - symphony_trello_controller_github_auth.stat.exists
+      - symphony_trello_controller_github_auth.stat.size > 0
+    fail_msg: >
+      GitHub CLI auth file {{ symphony_trello_github_hosts_src }} is missing or empty. Run gh auth
+      login on the machine where you run Ansible, set symphony_trello_github_hosts_src to the
+      existing GitHub CLI hosts.yml, or set symphony_trello_manage_github_auth to false when the
+      service user is already authenticated on the target server.
+  when: symphony_trello_manage_github_auth
+
+- name: Create GitHub CLI config directory
+  ansible.builtin.file:
+    path: "{{ symphony_trello_github_config_dir }}"
+    state: directory
+    owner: "{{ symphony_trello_user }}"
+    group: "{{ symphony_trello_group }}"
+    mode: "0700"
+  when: symphony_trello_manage_github_auth
+
+- name: Deploy GitHub CLI auth file
+  ansible.builtin.copy:
+    src: "{{ symphony_trello_github_hosts_src }}"
+    dest: "{{ symphony_trello_github_config_dir }}/hosts.yml"
+    owner: "{{ symphony_trello_user }}"
+    group: "{{ symphony_trello_group }}"
+    mode: "0600"
+  no_log: true
+  when: symphony_trello_manage_github_auth
+  register: symphony_trello_github_auth_file
+
+- name: Validate git is available to the service user
+  ansible.builtin.command:
+    argv:
+      - git
+      - --version
+  become: true
+  become_user: "{{ symphony_trello_user }}"
+  environment:
+    HOME: "{{ symphony_trello_state_dir }}"
+    PATH: "{{ symphony_trello_service_path | default(ansible_env.PATH) }}"
+  changed_when: false
+  when: symphony_trello_manage_github_auth
+
+- name: Validate GitHub CLI is available to the service user
+  ansible.builtin.command:
+    argv:
+      - gh
+      - --version
+  become: true
+  become_user: "{{ symphony_trello_user }}"
+  environment:
+    HOME: "{{ symphony_trello_state_dir }}"
+    PATH: "{{ symphony_trello_service_path | default(ansible_env.PATH) }}"
+  changed_when: false
+  when: symphony_trello_manage_github_auth
+
+- name: Read GitHub credential helper for service user
+  ansible.builtin.command:
+    argv:
+      - git
+      - config
+      - --global
+      - --get
+      - credential.https://github.com.helper
+  become: true
+  become_user: "{{ symphony_trello_user }}"
+  environment:
+    HOME: "{{ symphony_trello_state_dir }}"
+    PATH: "{{ symphony_trello_service_path | default(ansible_env.PATH) }}"
+  register: symphony_trello_github_credential_helper
+  changed_when: false
+  failed_when: false
+  when: symphony_trello_manage_github_auth
+
+- name: Configure GitHub CLI as git credential helper
+  ansible.builtin.command:
+    argv:
+      - git
+      - config
+      - --global
+      - credential.https://github.com.helper
+      - "!gh auth git-credential"
+  become: true
+  become_user: "{{ symphony_trello_user }}"
+  environment:
+    HOME: "{{ symphony_trello_state_dir }}"
+    PATH: "{{ symphony_trello_service_path | default(ansible_env.PATH) }}"
+  when:
+    - symphony_trello_manage_github_auth
+    - symphony_trello_github_credential_helper.stdout != "!gh auth git-credential"
+
 - name: Deploy Trello credential files
   ansible.builtin.copy:
     dest: "{{ item.dest }}"
