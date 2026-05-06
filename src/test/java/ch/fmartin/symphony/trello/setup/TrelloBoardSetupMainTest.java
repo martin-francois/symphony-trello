@@ -141,7 +141,9 @@ class TrelloBoardSetupMainTest {
                 "--name",
                 "Symphony Work Queue",
                 "--workflow",
-                workflow.toString());
+                workflow.toString(),
+                "--server-port",
+                "18081");
 
         // then
         assertThat(exitCode).isZero();
@@ -149,10 +151,14 @@ class TrelloBoardSetupMainTest {
         assertThat(createdLists)
                 .containsExactly(
                         "Inbox", "Ready for Codex", "In Progress", "Blocked", "Human Review", "Merging", "Done");
-        assertThat(workflow).content(StandardCharsets.UTF_8).contains("board_id: \"abc123\"");
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("board_id: \"abc123\"")
+                .contains("port: 18081");
         assertThat(stdout.toString(StandardCharsets.UTF_8))
                 .contains("Created Trello board: Symphony Work Queue")
                 .contains("Wrote workflow:")
+                .contains("HTTP status port: 18081")
                 .contains("./mvnw quarkus:dev");
         assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
     }

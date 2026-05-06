@@ -3,6 +3,7 @@ package ch.fmartin.symphony.trello.setup;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
@@ -15,11 +16,13 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -28,6 +31,7 @@ public final class TrelloBoardSetup {
     public static final Path DEFAULT_WORKFLOW_PATH = Path.of("WORKFLOW.md");
     public static final Path DEFAULT_WORKSPACE_ROOT = Path.of("./workspaces");
     public static final int DEFAULT_MAX_CONCURRENT_AGENTS = 1;
+    public static final int DEFAULT_SERVER_PORT = 8080;
     public static final String RECOMMENDED_ACTIVE_STATE = "Ready for Codex";
     public static final String RECOMMENDED_IN_PROGRESS_STATE = "In Progress";
     public static final String RECOMMENDED_BLOCKED_STATE = "Blocked";
@@ -63,10 +67,12 @@ public final class TrelloBoardSetup {
     private static final TypeReference<List<Map<String, Object>>> LIST_MAP_TYPE = new TypeReference<>() {};
 
     private final ObjectMapper json;
+    private final ObjectMapper yaml;
     private final HttpClient httpClient;
 
     public TrelloBoardSetup(ObjectMapper json) {
         this.json = json;
+        this.yaml = new ObjectMapper(new YAMLFactory());
         this.httpClient =
                 HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
     }
@@ -75,6 +81,7 @@ public final class TrelloBoardSetup {
         request.validate();
         Path workflowPath = resolveNewBoardWorkflowPath(request);
         ensureWorkflowWritable(workflowPath, request.force());
+        int serverPort = resolveServerPort(workflowPath, request.serverPort(), request.force());
         String workspaceId = resolveWorkspaceId(request);
         Map<String, Object> board = postMap(
                 request.endpoint(),
@@ -107,9 +114,11 @@ public final class TrelloBoardSetup {
                         RECOMMENDED_BLOCKED_STATE,
                         RECOMMENDED_MERGING_STATE,
                         request.workspaceRoot(),
+                        serverPort,
                         request.maxConcurrentAgents()));
 
-        return new NewBoardResult(boardId, boardKey, request.boardName(), boardUrl, createdLists, workflowPath);
+        return new NewBoardResult(
+                boardId, boardKey, request.boardName(), boardUrl, createdLists, workflowPath, serverPort);
     }
 
     private String resolveWorkspaceId(NewBoardRequest request) {
@@ -200,6 +209,7 @@ public final class TrelloBoardSetup {
         validateConfiguredList("merging", mergingState, openListNames);
 
         String boardKey = boardKey(board);
+        int serverPort = resolveServerPort(request.workflowPath(), request.serverPort(), request.force());
         writeWorkflow(
                 request.workflowPath(),
                 request.force(),
@@ -212,6 +222,7 @@ public final class TrelloBoardSetup {
                         blockedState,
                         mergingState,
                         request.workspaceRoot(),
+                        serverPort,
                         request.maxConcurrentAgents()));
 
         return new ImportBoardResult(
@@ -224,7 +235,8 @@ public final class TrelloBoardSetup {
                 terminalStates,
                 inProgressState,
                 blockedState,
-                request.workflowPath());
+                request.workflowPath(),
+                serverPort);
     }
 
     private Map<String, Object> getMap(
@@ -330,6 +342,178 @@ public final class TrelloBoardSetup {
         return parent == null ? Path.of(fileName) : parent.resolve(fileName);
     }
 
+    private int resolveServerPort(Path workflowPath, Integer requestedPort, boolean force) {
+        if (requestedPort != null) {
+            ensureServerPortAvailable(workflowPath, requestedPort);
+            return requestedPort;
+        }
+
+        Path absolute = workflowPath.toAbsolutePath().normalize();
+        if (force) {
+            Optional<Integer> existingPort = replaceableWorkflowServerPortReservation(absolute);
+            if (existingPort.isPresent()
+                    && workflowServerPortConflict(absolute, existingPort.get()).isEmpty()) {
+                return existingPort.get();
+            }
+        }
+        return nextAvailableWorkflowServerPort(absolute);
+    }
+
+    private void ensureServerPortAvailable(Path workflowPath, int requestedPort) {
+        if (requestedPort == 0) {
+            return;
+        }
+
+        Path target = workflowPath.toAbsolutePath().normalize();
+        Optional<Path> conflictingWorkflow = workflowServerPortConflict(target, requestedPort);
+        if (conflictingWorkflow.isPresent()) {
+            throw new TrelloBoardSetupException(
+                    "setup_server_port_conflict",
+                    "--server-port %d is already used by %s".formatted(requestedPort, conflictingWorkflow.get()));
+        }
+    }
+
+    private Optional<Path> workflowServerPortConflict(Path target, int requestedPort) {
+        for (Path candidate : siblingWorkflowFiles(target)) {
+            Optional<Integer> reservedPort = workflowServerPortReservation(candidate);
+            if (reservedPort.isPresent() && reservedPort.get() == requestedPort) {
+                return Optional.of(candidate);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private int nextAvailableWorkflowServerPort(Path workflowPath) {
+        Set<Integer> reservedPorts = new HashSet<>();
+        for (Path candidate : siblingWorkflowFiles(workflowPath)) {
+            workflowServerPortReservation(candidate).ifPresent(reservedPorts::add);
+        }
+
+        for (int port = DEFAULT_SERVER_PORT; port <= 65535; port++) {
+            if (!reservedPorts.contains(port)) {
+                return port;
+            }
+        }
+        throw new TrelloBoardSetupException(
+                "setup_server_port_unavailable",
+                "No workflow HTTP port is available between %d and 65535".formatted(DEFAULT_SERVER_PORT));
+    }
+
+    private static List<Path> siblingWorkflowFiles(Path workflowPath) {
+        Path absolute = workflowPath.toAbsolutePath().normalize();
+        Path parent = absolute.getParent();
+        if (parent == null || !Files.isDirectory(parent)) {
+            return List.of();
+        }
+        try (var paths = Files.list(parent)) {
+            return paths.map(Path::toAbsolutePath)
+                    .map(Path::normalize)
+                    .filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().endsWith(".md"))
+                    .filter(path -> !path.equals(absolute))
+                    .toList();
+        } catch (IOException e) {
+            throw new TrelloBoardSetupException(
+                    "setup_workflow_scan_failed", "Could not scan workflow directory: " + parent, e);
+        }
+    }
+
+    private Optional<Integer> workflowServerPortReservation(Path workflowPath) {
+        Optional<Map<String, Object>> frontMatter = readWorkflowFrontMatter(workflowPath);
+        if (frontMatter.isEmpty() || !hasRealTrelloBoardId(frontMatter.get())) {
+            return Optional.empty();
+        }
+
+        Object server = frontMatter.get().get("server");
+        if (server instanceof Map<?, ?> serverMap && serverMap.containsKey("port")) {
+            int port = parseServerPort(serverMap.get("port"), workflowPath);
+            return port == 0 ? Optional.empty() : Optional.of(port);
+        }
+        return Optional.of(DEFAULT_SERVER_PORT);
+    }
+
+    private Optional<Integer> replaceableWorkflowServerPortReservation(Path workflowPath) {
+        try {
+            return workflowServerPortReservation(workflowPath);
+        } catch (TrelloBoardSetupException e) {
+            return Optional.empty();
+        }
+    }
+
+    private Optional<Map<String, Object>> readWorkflowFrontMatter(Path workflowPath) {
+        if (!Files.isRegularFile(workflowPath)) {
+            return Optional.empty();
+        }
+        try {
+            String text = Files.readString(workflowPath, StandardCharsets.UTF_8);
+            Optional<String> frontMatter = frontMatter(text);
+            if (frontMatter.isEmpty()) {
+                return Optional.empty();
+            }
+            return Optional.of(yaml.readValue(frontMatter.get(), MAP_TYPE));
+        } catch (IOException e) {
+            throw new TrelloBoardSetupException(
+                    "setup_workflow_scan_failed", "Could not read workflow file: " + workflowPath, e);
+        }
+    }
+
+    private static Optional<String> frontMatter(String text) {
+        if (!text.startsWith("---")) {
+            return Optional.empty();
+        }
+        int firstLineEnd = text.indexOf('\n');
+        if (firstLineEnd < 0) {
+            return Optional.empty();
+        }
+        int end = text.indexOf("\n---", firstLineEnd + 1);
+        if (end < 0) {
+            return Optional.empty();
+        }
+        return Optional.of(text.substring(firstLineEnd + 1, end));
+    }
+
+    private static boolean hasRealTrelloBoardId(Map<String, Object> frontMatter) {
+        Object tracker = frontMatter.get("tracker");
+        if (!(tracker instanceof Map<?, ?> trackerMap)) {
+            return false;
+        }
+        Object kind = trackerMap.get("kind");
+        Object boardId = trackerMap.get("board_id");
+        return "trello".equals(string(kind))
+                && !blank(string(boardId))
+                && !"your-board-id-or-shortlink".equals(string(boardId));
+    }
+
+    private static int parseServerPort(Object value, Path workflowPath) {
+        int port;
+        try {
+            port = switch (value) {
+                case Number number -> number.intValue();
+                case String text -> Integer.parseInt(text.trim());
+                default ->
+                    throw new TrelloBoardSetupException(
+                            "setup_invalid_server_port", "Workflow file has an invalid server.port: " + workflowPath);
+            };
+        } catch (NumberFormatException e) {
+            throw new TrelloBoardSetupException(
+                    "setup_invalid_server_port", "Workflow file has an invalid server.port: " + workflowPath, e);
+        }
+        validateServerPort(port, "server.port in " + workflowPath);
+        return port;
+    }
+
+    private static void validateOptionalServerPort(Integer port, String label) {
+        if (port != null) {
+            validateServerPort(port, label);
+        }
+    }
+
+    private static void validateServerPort(int port, String label) {
+        if (port < 0 || port > 65535) {
+            throw new TrelloBoardSetupException("setup_invalid_server_port", label + " must be between 0 and 65535");
+        }
+    }
+
     private static Path ensureWorkflowWritable(Path workflowPath, boolean force) {
         Path absolute = workflowPath.toAbsolutePath().normalize();
         if (Files.exists(absolute) && !force) {
@@ -349,6 +533,7 @@ public final class TrelloBoardSetup {
             String blockedState,
             String mergingState,
             Path workspaceRoot,
+            int serverPort,
             int maxAgents) {
         String doneState = landingDoneState(terminalStates);
         List<String> handoffStates =
@@ -369,6 +554,8 @@ public final class TrelloBoardSetup {
                 %s
                 workspace:
                   root: %s
+                server:
+                  port: %d
                 %s
                 agent:
                   max_concurrent_agents: %d
@@ -465,6 +652,7 @@ public final class TrelloBoardSetup {
                         yamlList(activeStates),
                         yamlList(withSystemTerminalStates(terminalStates)),
                         yamlScalar(workspaceRoot.toString()),
+                        serverPort,
                         trelloToolsYaml(handoffStates),
                         maxAgents,
                         workpadPrompt(!handoffStates.isEmpty()),
@@ -1213,14 +1401,39 @@ public final class TrelloBoardSetup {
             String workspaceId,
             Path workflowPath,
             Path workspaceRoot,
+            Integer serverPort,
             int maxConcurrentAgents,
             boolean force,
             boolean useBoardNameWorkflowFallback) {
+        public NewBoardRequest(
+                URI endpoint,
+                TrelloCredentials credentials,
+                String boardName,
+                String workspaceId,
+                Path workflowPath,
+                Path workspaceRoot,
+                int maxConcurrentAgents,
+                boolean force,
+                boolean useBoardNameWorkflowFallback) {
+            this(
+                    endpoint,
+                    credentials,
+                    boardName,
+                    workspaceId,
+                    workflowPath,
+                    workspaceRoot,
+                    null,
+                    maxConcurrentAgents,
+                    force,
+                    useBoardNameWorkflowFallback);
+        }
+
         private void validate() {
             Objects.requireNonNull(endpoint, "endpoint");
             Objects.requireNonNull(credentials, "credentials").validate();
             Objects.requireNonNull(workflowPath, "workflowPath");
             Objects.requireNonNull(workspaceRoot, "workspaceRoot");
+            validateOptionalServerPort(serverPort, "--server-port");
             if (blank(boardName)) {
                 throw new TrelloBoardSetupException("setup_missing_board_name", "Missing board name");
             }
@@ -1249,8 +1462,38 @@ public final class TrelloBoardSetup {
             String blockedState,
             Path workflowPath,
             Path workspaceRoot,
+            Integer serverPort,
             int maxConcurrentAgents,
             boolean force) {
+        public ImportBoardRequest(
+                URI endpoint,
+                TrelloCredentials credentials,
+                String boardId,
+                List<String> activeStates,
+                List<String> terminalStates,
+                String inProgressState,
+                boolean detectInProgressState,
+                String blockedState,
+                Path workflowPath,
+                Path workspaceRoot,
+                int maxConcurrentAgents,
+                boolean force) {
+            this(
+                    endpoint,
+                    credentials,
+                    boardId,
+                    activeStates,
+                    terminalStates,
+                    inProgressState,
+                    detectInProgressState,
+                    blockedState,
+                    workflowPath,
+                    workspaceRoot,
+                    null,
+                    maxConcurrentAgents,
+                    force);
+        }
+
         public ImportBoardRequest(
                 URI endpoint,
                 TrelloCredentials credentials,
@@ -1273,6 +1516,7 @@ public final class TrelloBoardSetup {
                     blockedState,
                     workflowPath,
                     workspaceRoot,
+                    null,
                     maxConcurrentAgents,
                     force);
         }
@@ -1300,6 +1544,7 @@ public final class TrelloBoardSetup {
                     blockedState,
                     workflowPath,
                     workspaceRoot,
+                    null,
                     maxConcurrentAgents,
                     force);
         }
@@ -1311,6 +1556,7 @@ public final class TrelloBoardSetup {
             Objects.requireNonNull(terminalStates, "terminalStates");
             Objects.requireNonNull(workflowPath, "workflowPath");
             Objects.requireNonNull(workspaceRoot, "workspaceRoot");
+            validateOptionalServerPort(serverPort, "--server-port");
             if (blank(boardId)) {
                 throw new TrelloBoardSetupException("setup_missing_board_id", "Missing board id");
             }
@@ -1327,7 +1573,8 @@ public final class TrelloBoardSetup {
             String boardName,
             String boardUrl,
             List<String> lists,
-            Path workflowPath) {}
+            Path workflowPath,
+            int serverPort) {}
 
     public record WorkspaceInfo(String id, String name, String displayName, String url) {}
 
@@ -1341,7 +1588,8 @@ public final class TrelloBoardSetup {
             List<String> terminalStates,
             String inProgressState,
             String blockedState,
-            Path workflowPath) {}
+            Path workflowPath,
+            int serverPort) {}
 
     private record BoardList(String id, String name, boolean closed) {}
 }

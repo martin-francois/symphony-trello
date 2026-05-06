@@ -22,6 +22,8 @@ tracker:
     - Deleted
 workspace:
   root: ./workspaces
+server:
+  port: 8080
 hooks:
   timeout_ms: 60000
 agent:

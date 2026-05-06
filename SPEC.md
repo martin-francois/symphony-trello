@@ -799,6 +799,12 @@ implementation writes a board-specific file named `WORKFLOW.<slugified-board-nam
 also exists, it appends a numeric suffix. Passing `--force` intentionally overwrites the selected
 workflow file.
 
+Generated workflows include `server.port` for the optional HTTP status server. Unless the operator
+passes an explicit setup port option, the Java setup commands choose the first unused workflow port
+starting at `8080` by inspecting other workflow files in the same folder. Existing Trello workflow
+files without `server.port` reserve `8080`, matching the Java runtime's historic default. Operators
+MAY pass `0` for temporary local runs that should use an ephemeral port.
+
 When `import-board` reads an existing board, the Java implementation detects common list names:
 `Ready for Codex` for queued work, `In Progress` for visible pickup, `Blocked` for blocked handoff,
 `Human Review` or legacy `Review` for review handoff, `Merging` for landing approval when a terminal
@@ -2018,6 +2024,8 @@ Extension config:
 - `server.port` (integer, OPTIONAL)
   - Enables the HTTP server extension.
   - `0` requests an ephemeral port for local development and tests.
+  - Java-generated workflows use stable positive ports by default so several deployed workflow
+    processes can expose predictable status endpoints.
   - CLI `--port` overrides `server.port` when both are present.
 - `SYMPHONY_HTTP_PORT` / `QUARKUS_HTTP_PORT` (Java implementation environment extension)
   - Uses Quarkus's normal HTTP port override path.

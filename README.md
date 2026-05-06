@@ -224,14 +224,15 @@ The command creates this Trello board layout:
 
 It also writes a workflow with `Ready for Codex`, `In Progress`, and `Merging` as active lists,
 `Done` as the terminal list, `In Progress`, `Human Review`, `Blocked`, and `Done` as allowed move
-lists,
-`./workspaces` as the local workspace directory, and `max_concurrent_agents: 1`. With that default,
-Symphony starts one card at a time from this board.
+lists, `./workspaces` as the local workspace directory, a stable HTTP status port, and
+`max_concurrent_agents: 1`. With that default, Symphony starts one card at a time from this board.
 
 The first run writes `WORKFLOW.md`. If that file already exists and you did not pass `--workflow`,
 Symphony keeps the existing file and writes a board-specific file instead. For a board named
 `My Project`, the next file is `WORKFLOW.my-project.md`. If that file also exists, Symphony adds a
-number, such as `WORKFLOW.my-project-2.md`.
+number, such as `WORKFLOW.my-project-2.md`. Symphony also chooses the first unused status port from
+`8080`, `8081`, `8082`, and so on by checking other workflow files in the same folder. Use
+`--server-port` when you want to choose the port yourself.
 
 Pass `--force` only when you intentionally want to replace the selected workflow file:
 
@@ -320,6 +321,9 @@ Common setup command options:
 - `--workspace-root PATH`: choose where Symphony creates the local work directory for each Trello
   card. The generated workflow uses `./workspaces`; choose another path when you want those
   checkouts on a different disk or clearly separated from the repository.
+- `--server-port PORT`: choose the HTTP status port written into the generated workflow. If you omit
+  it, Symphony uses the first unused workflow port starting at `8080`. Use `0` only for a
+  temporary local run where you do not need a predictable status URL.
 - `--max-agents N`: choose how many cards from this board may run at the same time. Start with `1`
   if you want one-at-a-time review, or raise it when your machine and workflow can handle parallel
   Codex sessions.
@@ -724,7 +728,9 @@ different file. Each running process uses one workflow file. For Trello, that wo
 `tracker.board_id`, so one process polls one Trello board.
 
 For multiple boards or projects, create one workflow per board and start one process per workflow.
-Give each process its own workflow path and HTTP port.
+Give each process its own workflow path and HTTP port. The setup commands write a stable
+`server.port` for generated workflows and choose the next port automatically when other workflow
+files in the same folder already use earlier ports.
 
 [`WORKFLOW.example.md`](WORKFLOW.example.md) contains a complete starter. YAML front matter
 configures runtime behavior. The Markdown body becomes the prompt template for the card.
@@ -743,6 +749,8 @@ tracker:
   terminal_states: [Done, Archived, ArchivedList, ArchivedBoard, Deleted]
 workspace:
   root: ./workspaces
+server:
+  port: 8080
 codex:
   command: codex app-server
 ---
