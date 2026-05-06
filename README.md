@@ -783,8 +783,9 @@ The most common skills are:
   merge, and done handoff.
 - `.codex/skills/review-sweep/SKILL.md`: check PR comments, inline review feedback, and checks
   before handoff.
-- `.codex/skills/commit/SKILL.md`: commit focused changes and, for PR-bound work, configure the
-  commit author from the authenticated GitHub account before committing.
+- `.codex/skills/commit/SKILL.md`: commit focused changes, follow the target repository's commit
+  message convention, and, for PR-bound work, configure the commit author from the authenticated
+  GitHub account before committing.
 - `.codex/skills/push-pr/SKILL.md`: push the branch, check PR-bound commit authors, and create or
   update the pull request.
 - `.codex/skills/land/SKILL.md`: land an approved PR only from `Merging`, then move successful work

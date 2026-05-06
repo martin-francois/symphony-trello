@@ -42,8 +42,12 @@ matters, and easy for another engineer to understand without asking the original
    ```
 
    Use `spotless:apply` before that when formatting changed.
-11. Commit with Conventional Commits when asked to commit, and keep the working tree clean before
-   claiming the work is done.
+11. Commit with Conventional Commits for this repository when asked to commit, and keep the working
+   tree clean before claiming the work is done. When an agent creates commits inside another target
+   repository for a Trello card, follow that repository's documented commit convention first. If it
+   has no documented convention, infer from the last 20 to 50 commits on the default branch. If the
+   repository has no commits, only one commit, no reachable default-branch history, or mixed recent
+   styles, default to Conventional Commits.
 12. When the user asks for a concrete repo change, commit and push the completed change unless they
    explicitly ask not to.
 13. When a change affects runtime behavior and the user is likely to verify it manually afterward,

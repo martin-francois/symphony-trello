@@ -3133,6 +3133,12 @@ GitHub commit authoring extension:
   workflow policy explicitly allows a safe force-push
 - local-only or no-push work MAY use the existing local Git identity because no GitHub PR author
   identity is needed
+- commit messages SHOULD follow the target repository's documented convention, such as
+  `CONTRIBUTING.md`, before applying this repository's preferences
+- when no documented convention exists, the workflow SHOULD inspect recent default-branch commit
+  subjects and infer a clear existing style; histories with no commits, one commit, no reachable
+  default branch, or mixed styles SHOULD be treated as inconclusive and fall back to Conventional
+  Commits
 
 ### 19.2 Manual systemd Deployment Profile
 

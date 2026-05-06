@@ -128,6 +128,11 @@ class CodexSkillStructureTest {
 
         // then
         assertThat(commitBody)
+                .contains("Match the target repository's commit-message convention")
+                .contains("CONTRIBUTING.md")
+                .contains("last 20 to 50")
+                .contains("only one commit")
+                .contains("default to Conventional Commits")
                 .contains("make the commit author")
                 .contains("authenticated GitHub user")
                 .contains("gh api user")
