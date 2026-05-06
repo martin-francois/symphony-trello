@@ -20,7 +20,7 @@ state or making the workflow contract harder to reason about?
 
 ## Decision Drivers
 
-* Keep `WORKFLOW.md` as the complete contract for one board's prompt, Trello columns, and runtime
+* Keep `WORKFLOW.md` as the complete contract for one board's prompt, Trello lists, and runtime
   policy.
 * Preserve the adapted Symphony spec's assumption of one active orchestrator process per configured
   Trello board.
@@ -48,7 +48,7 @@ processes.
   different HTTP ports.
 * Good, because per-board `max_concurrent_agents` is easy to explain and test.
 * Good, because cards dispatch in the board-local order defined by the spec: priority, configured
-  active-column order, Trello card position, creation time, and stable identifiers.
+  active-list order, Trello card position, creation time, and stable identifiers.
 * Bad, because operators must start one process per board instead of registering every board in one
   service instance.
 * Bad, because two processes pointed at the same board remain unsupported without an external claim
@@ -68,7 +68,7 @@ Start one Symphony process for each `WORKFLOW.md`. Each workflow resolves one Tr
 that board's scheduling state.
 
 * Good, because process boundaries match the workflow contract.
-* Good, because board-specific prompts, Trello column mappings, credentials, and Codex settings do not
+* Good, because board-specific prompts, Trello list mappings, credentials, and Codex settings do not
   bleed into other boards.
 * Good, because live E2E can verify concurrency by starting independent processes.
 * Neutral, because deployment automation can still manage several processes as a group.

@@ -15,13 +15,13 @@ description: >
 - Use the repository's merge policy instead of assuming one merge mode.
 - Do not enable auto-merge unless the repository policy explicitly requires it.
 - Update the Trello workpad and move the card to the configured landing
-  completion column after a successful landing. The recommended workflow uses
+  completion list after a successful landing. The recommended workflow uses
   `Done`.
 
 ## Preconditions
 
-- The current Trello column is `Merging` or the workflow explicitly names the
-  current column as the landing column.
+- The current Trello list is `Merging` or the workflow explicitly names the
+  current list as the landing list.
 - `gh` is installed and authenticated.
 - The working tree is clean or changes are intentionally committed.
 - A PR can be identified for the current branch or Trello card.
@@ -54,7 +54,7 @@ description: >
 8. After merging:
    - update the workpad with merge evidence,
    - add a short Trello comment if useful,
-   - move the card to the configured landing completion column.
+   - move the card to the configured landing completion list.
 
 ## Blocked Landing
 

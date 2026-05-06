@@ -60,20 +60,20 @@ Maintain one Trello workpad comment by calling trello_upsert_workpad. Reuse the 
 with `## Codex Workpad`; do not create separate progress comments. Keep it current with the plan,
 acceptance criteria, progress, validation evidence, blockers, and handoff notes.
 
-## Trello Column Routing
+## Trello List Routing
 
-Symphony only dispatches cards from configured active columns: `Todo`, `In Progress`, and
+Symphony only dispatches cards from configured active lists: `Todo`, `In Progress`, and
 `Merging`.
 
 - `Todo`: queued work; Symphony moves the card to `In Progress` before Codex starts.
 - `In Progress`: active work already picked up by Codex; continue the existing execution flow.
-- `Blocked`: blocked work. Symphony does not dispatch it while this column is not configured as
+- `Blocked`: blocked work. Symphony does not dispatch it while this list is not configured as
   active.
-- `Human Review`: human review. Do not code from this column unless a human moves the card back to
-  an active column.
-- `Merging`: human approval for landing. Run landing only from this column.
+- `Human Review`: human review. Do not code from this list unless a human moves the card back to
+  an active list.
+- `Merging`: human approval for landing. Run landing only from this list.
 - `Done`: terminal work. Symphony cleans up matching workspaces for terminal cards.
-- Any other column: out of scope for this Symphony process unless it is added to `active_states` or
+- Any other list: out of scope for this Symphony process unless it is added to `active_states` or
   `terminal_states`.
 
 Use repository-local skills when they fit:
@@ -84,8 +84,30 @@ Use repository-local skills when they fit:
 - `.codex/skills/review-sweep/SKILL.md` when a pull request or branch is involved.
 - `.codex/skills/repo-sync/SKILL.md`, `.codex/skills/commit/SKILL.md`, and
   `.codex/skills/push-pr/SKILL.md` for branch, commit, and PR hygiene.
-- `.codex/skills/land/SKILL.md` only when this workflow says the current Trello column is Merging.
+- `.codex/skills/land/SKILL.md` only when this workflow says the current Trello list is Merging.
 - `.codex/skills/debug/SKILL.md` when diagnosing a stuck or retrying run.
+
+## Repository Checkout Policy
+
+Do implementation work inside the current per-card workspace or a writable checkout under it.
+Do not edit a shared host checkout directly unless the card explicitly asks you to work there and
+that checkout is writable.
+
+If the Trello card names only a repository URL, create or reuse a writable checkout in the current
+workspace. Prefer cloning from a readable matching local checkout under an allowed host path, then
+set the checkout's `origin` remote to the repository URL when needed. If no matching local checkout
+is readable, clone the repository URL directly into the workspace.
+
+If the Trello card names a specific local path or checkout, inspect it as source context. When it is
+not writable, clone from that readable local path into the current workspace and work in the clone
+instead of blocking. Block only when the path is not readable, the repository cannot be cloned into a
+writable workspace, or required repository/auth context is unavailable. If Git rejects a readable
+local checkout because of safe-directory ownership checks, add only that source checkout to the
+current user's Git safe directories with `git config --global --add safe.directory <source-checkout>`,
+then retry a read-only clone with `git clone --no-hardlinks <source-checkout> <workspace-checkout>`.
+After cloning from a local checkout, do not inherit the source checkout's current branch as the task
+base. Start the task branch from the repository's default branch when it is discoverable, usually
+`origin/main`, unless the Trello card explicitly asks for a different base.
 
 ## Acceptance Criteria And Validation
 
@@ -99,6 +121,10 @@ evidence in the Codex workpad and final handoff comment. Verification evidence m
 this card; do not hand off with only a generic "tests passed" statement. Temporary local proof edits
 are allowed only when they improve confidence, are reverted before commit, and are documented as
 proof steps.
+
+Broad validation failures that are clearly unrelated to the card do not automatically block handoff
+when card-specific validation passed. Record the failing command, why the failure is unrelated, and
+the narrower passing validation that still gives confidence in the change.
 
 If required validation cannot be performed because auth, files, tools, or environment access are
 missing, treat the work as blocked. Do not move the card to Human Review until the blocker is fixed
@@ -115,11 +141,15 @@ The sweep must check top-level PR comments, inline review comments, review state
 CI/check status, and Codex review issue comments when present. Every actionable human, bot, or Codex
 review comment is blocking until it is addressed with code, tests, docs, or PR metadata, or answered
 with a justified response in the right thread. Do not decline correctness feedback without concrete
-validation. Failing, pending, or stale required checks mean the work is not ready for handoff.
+validation. Failing, pending, or stale required checks mean the work is not ready for handoff when a
+pull request is already part of the card.
 
 After feedback-driven changes, rerun the relevant validation and repeat the sweep until no
 actionable feedback remains. If GitHub auth, PR discovery, required checks, or review data are
 unavailable for a PR-backed card, treat the card as blocked instead of handing it off.
+Do not create or push a pull request unless the card, repository policy, or a human explicitly asks
+for one. When the card asks only for local commits, hand off with the workspace checkout path, branch
+name, commit list, and validation evidence instead of blocking on missing push credentials.
 
 ## Rework From Human Review
 
@@ -138,7 +168,7 @@ create duplicate progress summary comments when the workpad already contains the
 
 ## Landing From Merging
 
-`Merging` is human approval for landing. Only run landing when the current Trello column is
+`Merging` is human approval for landing. Only run landing when the current Trello list is
 `Merging`. Do not merge from Human Review, and do not call `gh pr merge` directly from the workflow
 prompt. Open `.codex/skills/land/SKILL.md` and follow it.
 

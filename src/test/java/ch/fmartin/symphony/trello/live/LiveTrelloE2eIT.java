@@ -134,7 +134,7 @@ class LiveTrelloE2eIT {
             CardRef boardALater = trello.createCard(
                     boardALists.get(TrelloBoardSetup.RECOMMENDED_ACTIVE_STATE),
                     runId + " sequential later moved first",
-                    "Disposable live E2E card created later, then moved to the top of the active column.");
+                    "Disposable live E2E card created later, then moved to the top of the active list.");
             trello.moveCardToTop(boardALater.id());
 
             CardRef boardBFirst = trello.createCard(
@@ -162,8 +162,8 @@ class LiveTrelloE2eIT {
                 waitForRunningCards(processB, 2, List.of(boardBFirst.id(), boardBSecond.id()));
 
                 // then
-                assertCardColumn(trello, boardAOlder, boardALists.get(TrelloBoardSetup.RECOMMENDED_ACTIVE_STATE));
-                assertCardColumn(trello, boardBThird, boardBLists.get(TrelloBoardSetup.RECOMMENDED_ACTIVE_STATE));
+                assertCardList(trello, boardAOlder, boardALists.get(TrelloBoardSetup.RECOMMENDED_ACTIVE_STATE));
+                assertCardList(trello, boardBThird, boardBLists.get(TrelloBoardSetup.RECOMMENDED_ACTIVE_STATE));
 
                 waitForHandoff(trello, boardALater, boardALists.get(TrelloBoardSetup.RECOMMENDED_REVIEW_STATE));
                 waitForHandoff(trello, boardBFirst, boardBLists.get(TrelloBoardSetup.RECOMMENDED_REVIEW_STATE));
@@ -198,11 +198,11 @@ class LiveTrelloE2eIT {
             CardRef customQueue = trello.createCard(
                     customLists.get("Queue for Codex"),
                     runId + " custom queue",
-                    "Disposable live E2E card for custom active column one.");
+                    "Disposable live E2E card for custom active list one.");
             CardRef customEscalated = trello.createCard(
                     customLists.get("Escalated for Codex"),
                     runId + " custom escalated",
-                    "Disposable live E2E card for custom active column two.");
+                    "Disposable live E2E card for custom active list two.");
             try (SymphonyProcess customProcess = startProcess(runDir, customWorkflow, freePort())) {
                 waitForStateEndpoint(customProcess);
                 refresh(customProcess);
@@ -281,7 +281,7 @@ class LiveTrelloE2eIT {
                 waitForRunningCards(process, 1, List.of(card.id()));
 
                 // then
-                assertCardColumn(trello, card, lists.get(TrelloBoardSetup.RECOMMENDED_IN_PROGRESS_STATE));
+                assertCardList(trello, card, lists.get(TrelloBoardSetup.RECOMMENDED_IN_PROGRESS_STATE));
                 waitForHandoff(trello, card, lists.get(TrelloBoardSetup.RECOMMENDED_REVIEW_STATE));
                 waitForSuccessfulFakeCodexTurns(completions, 1);
                 assertStateDrained(process);
@@ -359,7 +359,7 @@ class LiveTrelloE2eIT {
                 waitForRunningCards(process, 1, List.of(card.id()));
 
                 // then
-                assertCardColumn(trello, card, lists.get(TrelloBoardSetup.RECOMMENDED_IN_PROGRESS_STATE));
+                assertCardList(trello, card, lists.get(TrelloBoardSetup.RECOMMENDED_IN_PROGRESS_STATE));
                 waitForHandoff(trello, card, lists.get(TrelloBoardSetup.RECOMMENDED_REVIEW_STATE));
                 assertStateDrained(process);
                 assertThat(Files.readString(expectedOutput)).contains(runId);
@@ -625,7 +625,7 @@ class LiveTrelloE2eIT {
                             && state.workpadCount() == 1
                             && expectedListId.equals(state.listId());
                 },
-                "card reaches expected handoff column with one workpad and one handoff comment");
+                "card reaches expected handoff list with one workpad and one handoff comment");
     }
 
     private void waitForSuccessfulFakeCodexTurns(Path completions, int expectedCount) {
@@ -671,7 +671,7 @@ class LiveTrelloE2eIT {
                 "state drains to zero running and retrying entries");
     }
 
-    private void assertCardColumn(LiveTrelloClient trello, CardRef card, String expectedListId) {
+    private void assertCardList(LiveTrelloClient trello, CardRef card, String expectedListId) {
         assertThat(trello.cardState(card.id()).listId()).isEqualTo(expectedListId);
     }
 

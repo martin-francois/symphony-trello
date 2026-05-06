@@ -34,7 +34,7 @@ public final class TrelloBoardSetup {
     public static final String RECOMMENDED_REVIEW_STATE = "Human Review";
     public static final String RECOMMENDED_MERGING_STATE = "Merging";
     public static final String LEGACY_REVIEW_STATE = "Review";
-    public static final List<String> RECOMMENDED_COLUMNS = List.of(
+    public static final List<String> RECOMMENDED_LISTS = List.of(
             "Inbox",
             RECOMMENDED_ACTIVE_STATE,
             RECOMMENDED_IN_PROGRESS_STATE,
@@ -85,14 +85,14 @@ public final class TrelloBoardSetup {
         String boardKey = boardKey(board);
         String boardUrl = string(board.get("url"));
 
-        List<String> createdColumns = new ArrayList<>();
-        for (String columnName : RECOMMENDED_COLUMNS) {
+        List<String> createdLists = new ArrayList<>();
+        for (String listName : RECOMMENDED_LISTS) {
             postMap(
                     request.endpoint(),
                     "lists",
-                    orderedMap("name", columnName, "idBoard", boardId, "pos", "bottom"),
+                    orderedMap("name", listName, "idBoard", boardId, "pos", "bottom"),
                     request.credentials());
-            createdColumns.add(columnName);
+            createdLists.add(listName);
         }
 
         writeWorkflow(
@@ -109,7 +109,7 @@ public final class TrelloBoardSetup {
                         request.workspaceRoot(),
                         request.maxConcurrentAgents()));
 
-        return new NewBoardResult(boardId, boardKey, request.boardName(), boardUrl, createdColumns, workflowPath);
+        return new NewBoardResult(boardId, boardKey, request.boardName(), boardUrl, createdLists, workflowPath);
     }
 
     private String resolveWorkspaceId(NewBoardRequest request) {
@@ -179,7 +179,7 @@ public final class TrelloBoardSetup {
         if (activeStates.isEmpty()) {
             throw new TrelloBoardSetupException(
                     "setup_active_state_required",
-                    "No active column was provided and the board has no 'Ready for Codex' column. Pass --active with the column Codex should poll. Open columns: "
+                    "No active list was provided and the board has no 'Ready for Codex' list. Pass --active with the list Codex should poll. Open lists: "
                             + String.join(", ", openListNames));
         }
 
@@ -406,14 +406,33 @@ public final class TrelloBoardSetup {
                 - `.codex/skills/repo-sync/SKILL.md`, `.codex/skills/commit/SKILL.md`, and
                   `.codex/skills/push-pr/SKILL.md` for branch, commit, and PR hygiene.
                 - `.codex/skills/land/SKILL.md` only when this workflow says the current Trello
-                  column is Merging.
+                  list is Merging.
                 - `.codex/skills/debug/SKILL.md` when diagnosing a stuck or retrying run.
 
                 Read the Trello description carefully, inspect the repository, make the smallest maintainable change,
                 run relevant verification, and leave the workspace in a reviewable state.
-                Use the current workspace by default. If the Trello card names a specific local path or project
-                checkout, inspect that path instead. If that path is inaccessible, treat it as a blocker and follow
-                the filesystem access blocker instructions below.
+
+                ## Repository Checkout Policy
+
+                Do implementation work inside the current per-card workspace or a writable checkout under it.
+                Do not edit a shared host checkout directly unless the card explicitly asks you to work there and
+                that checkout is writable.
+
+                If the Trello card names only a repository URL, create or reuse a writable checkout in the current
+                workspace. Prefer cloning from a readable matching local checkout under an allowed host path, then
+                set the checkout's `origin` remote to the repository URL when needed. If no matching local checkout
+                is readable, clone the repository URL directly into the workspace.
+
+                If the Trello card names a specific local path or checkout, inspect it as source context. When it is
+                not writable, clone from that readable local path into the current workspace and work in the clone
+                instead of blocking. Block only when the path is not readable, the repository cannot be cloned into a
+                writable workspace, or required repository/auth context is unavailable. If Git rejects a readable
+                local checkout because of safe-directory ownership checks, add only that source checkout to the
+                current user's Git safe directories with `git config --global --add safe.directory <source-checkout>`,
+                then retry a read-only clone with `git clone --no-hardlinks <source-checkout> <workspace-checkout>`.
+                After cloning from a local checkout, do not inherit the source checkout's current branch as the task
+                base. Start the task branch from the repository's default branch when it is discoverable, usually
+                `origin/main`, unless the Trello card explicitly asks for a different base.
 
                 %s
 
@@ -514,6 +533,10 @@ public final class TrelloBoardSetup {
                 generic "tests passed" statement. Temporary local proof edits are allowed only when they improve
                 confidence, are reverted before commit, and are documented as proof steps.
 
+                Broad validation failures that are clearly unrelated to the card do not automatically block handoff
+                when card-specific validation passed. Record the failing command, why the failure is unrelated, and
+                the narrower passing validation that still gives confidence in the change.
+
                 If required validation cannot be performed because auth, files, tools, or environment access are
                 missing, treat the work as blocked. Do not move the card to %s until the blocker is fixed or a human
                 explicitly changes the requirement.
@@ -535,11 +558,15 @@ public final class TrelloBoardSetup {
                 CI/check status, and Codex review issue comments when present. Every actionable human, bot, or Codex
                 review comment is blocking until it is addressed with code, tests, docs, or PR metadata, or answered
                 with a justified response in the right thread. Do not decline correctness feedback without concrete
-                validation. Failing, pending, or stale required checks mean the work is not ready for handoff.
+                validation. Failing, pending, or stale required checks mean the work is not ready for handoff when a
+                pull request is already part of the card.
 
                 After feedback-driven changes, rerun the relevant validation and repeat the sweep until no
                 actionable feedback remains. If GitHub auth, PR discovery, required checks, or review data are
                 unavailable for a PR-backed card, treat the card as blocked instead of handing it off.
+                Do not create or push a pull request unless the card, repository policy, or a human explicitly asks
+                for one. When the card asks only for local commits, hand off with the workspace checkout path, branch
+                name, commit list, and validation evidence instead of blocking on missing push credentials.
                 """
                 .formatted(reviewHandoff)
                 .stripTrailing();
@@ -549,7 +576,7 @@ public final class TrelloBoardSetup {
         String reviewHandoff = blank(reviewState) ? "human review" : quote(reviewState);
         List<String> implementationStates = implementationActiveStates(activeStates, mergingState);
         String activeText =
-                implementationStates.isEmpty() ? "an active implementation column" : quotedList(implementationStates);
+                implementationStates.isEmpty() ? "an active implementation list" : quotedList(implementationStates);
         return """
                 ## Rework From Human Review
 
@@ -575,20 +602,20 @@ public final class TrelloBoardSetup {
             return """
                     ## Landing
 
-                    This workflow has no landing approval column configured. Do not merge or land from Human Review.
-                    A human must land outside Symphony or add a Merging-style column to the workflow active columns
+                    This workflow has no landing approval list configured. Do not merge or land from Human Review.
+                    A human must land outside Symphony or add a Merging-style list to the workflow active lists
                     and Trello move allowlist.
                     """
                     .stripTrailing();
         }
-        String doneDestination = blank(doneState) ? "the configured done column" : quote(doneState);
+        String doneDestination = blank(doneState) ? "the configured done list" : quote(doneState);
         String blockedText = blank(blockedDestination)
                 ? "block with a visible Codex response because no blocked destination is configured"
                 : "move the card to " + quote(blockedDestination) + " with a concise blocker";
         return """
                 ## Landing From %s
 
-                %s is human approval for landing. Only run landing when the current Trello column is %s. Do not
+                %s is human approval for landing. Only run landing when the current Trello list is %s. Do not
                 merge from Human Review, and do not call `gh pr merge` directly from the workflow prompt. Open
                 `.codex/skills/land/SKILL.md` and follow it.
 
@@ -615,31 +642,31 @@ public final class TrelloBoardSetup {
                 .filter(state -> blank(inProgressState) || !state.equalsIgnoreCase(inProgressState))
                 .filter(state -> blank(mergingState) || !state.equalsIgnoreCase(mergingState))
                 .toList();
-        String activeText = activeStates.isEmpty() ? "no active columns" : quotedList(activeStates);
-        String queueText = queueStates.isEmpty() ? "active queue columns" : quotedList(queueStates);
+        String activeText = activeStates.isEmpty() ? "no active lists" : quotedList(activeStates);
+        String queueText = queueStates.isEmpty() ? "active queue lists" : quotedList(queueStates);
         String pickupText = blank(inProgressState)
-                ? "work from the current active column because no in-progress column is configured"
+                ? "work from the current active list because no in-progress list is configured"
                 : "move the card to " + quote(inProgressState) + " before active implementation";
-        String inProgressText = blank(inProgressState) ? "No in-progress column" : quote(inProgressState);
-        String blockedText = blank(blockedState) ? "no configured blocked column" : quote(blockedState);
-        String reviewText = blank(reviewState) ? "no configured human review column" : quote(reviewState);
-        String mergingText = blank(mergingState) ? "No landing approval column" : quote(mergingState);
+        String inProgressText = blank(inProgressState) ? "No in-progress list" : quote(inProgressState);
+        String blockedText = blank(blockedState) ? "no configured blocked list" : quote(blockedState);
+        String reviewText = blank(reviewState) ? "no configured human review list" : quote(reviewState);
+        String mergingText = blank(mergingState) ? "No landing approval list" : quote(mergingState);
         String landingText = blank(mergingState)
                 ? "landing automation is disabled until one is configured"
-                : "human approval for landing. Run landing only from this column";
-        String terminalText = terminalStates.isEmpty() ? "configured terminal columns" : quotedList(terminalStates);
+                : "human approval for landing. Run landing only from this list";
+        String terminalText = terminalStates.isEmpty() ? "configured terminal lists" : quotedList(terminalStates);
         return """
-                ## Trello Column Routing
+                ## Trello List Routing
 
-                Symphony only dispatches cards from configured active columns: %s.
+                Symphony only dispatches cards from configured active lists: %s.
 
                 - %s: queued work; %s.
                 - %s: active work already picked up by Codex; continue the existing execution flow.
-                - %s: blocked work. Symphony does not dispatch it while this column is not configured as active.
-                - %s: human review. Do not code from this column unless a human moves the card back to an active column.
+                - %s: blocked work. Symphony does not dispatch it while this list is not configured as active.
+                - %s: human review. Do not code from this list unless a human moves the card back to an active list.
                 - %s: %s.
                 - %s: terminal work. Symphony cleans up matching workspaces for terminal cards.
-                - Any other column: out of scope for this Symphony process unless it is added to active_states or terminal_states.
+                - Any other list: out of scope for this Symphony process unless it is added to active_states or terminal_states.
                 """
                 .formatted(
                         activeText,
@@ -660,18 +687,18 @@ public final class TrelloBoardSetup {
             if (!workpadToolEnabled) {
                 return """
                         When the work is ready for human review, leave the workspace in a reviewable state and summarize the status in the Codex response. Trello handoff tools are disabled in this starter workflow until you configure trello_tools.allowed_move_list_names.
-                        If the work is blocked, summarize the blocker in the Codex response; an operator must move the card out of the active column manually. Leaving blocked work active can make Symphony run it again.
-                        If a human returns a reviewed card to an active column, reread the card, the Trello comments rendered above, and linked PR feedback when available before changing code again.
-                        A Merging column, when configured, is a human approval signal for a landing flow; do not merge from human review.
+                        If the work is blocked, summarize the blocker in the Codex response; an operator must move the card out of the active list manually. Leaving blocked work active can make Symphony run it again.
+                        If a human returns a reviewed card to an active list, reread the card, the Trello comments rendered above, and linked PR feedback when available before changing code again.
+                        A Merging list, when configured, is a human approval signal for a landing flow; do not merge from human review.
                         %s"""
                         .formatted(FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION)
                         .stripTrailing();
             }
             return """
-                    When the work is ready for human review, update the workpad with the final summary and validation evidence, leave the workspace in a reviewable state, and summarize the status in the Codex response. No review or blocked destination column is configured, so do not move the card for handoff.
-                    If the work is blocked, update the workpad with the blocker and summarize the blocker in the Codex response; an operator must move the card out of the active column manually. Leaving blocked work active can make Symphony run it again.
-                    If a human returns a reviewed card to an active column, reread the card, the Trello comments rendered above, and linked PR feedback when available before changing code again.
-                    A Merging column, when configured, is a human approval signal for a landing flow; do not merge from human review.
+                    When the work is ready for human review, update the workpad with the final summary and validation evidence, leave the workspace in a reviewable state, and summarize the status in the Codex response. No review or blocked destination list is configured, so do not move the card for handoff.
+                    If the work is blocked, update the workpad with the blocker and summarize the blocker in the Codex response; an operator must move the card out of the active list manually. Leaving blocked work active can make Symphony run it again.
+                    If a human returns a reviewed card to an active list, reread the card, the Trello comments rendered above, and linked PR feedback when available before changing code again.
+                    A Merging list, when configured, is a human approval signal for a landing flow; do not merge from human review.
                     %s"""
                     .formatted(FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION)
                     .stripTrailing();
@@ -681,8 +708,8 @@ public final class TrelloBoardSetup {
                     When the work is ready for human review, update the workpad with the final summary and validation evidence, leave the workspace in a reviewable state, and summarize the status in the Codex response.
                     If the work is blocked or unsafe to hand off, update the workpad with the blocker, call trello_add_comment with the blocker, then call
                     trello_move_current_card with list_name "%s".
-                    If a human returns a reviewed card to an active column, reread the card, the Trello comments rendered above, and linked PR feedback when available before changing code again.
-                    A Merging column, when configured, is a human approval signal for a landing flow; do not merge from human review. %s"""
+                    If a human returns a reviewed card to an active list, reread the card, the Trello comments rendered above, and linked PR feedback when available before changing code again.
+                    A Merging list, when configured, is a human approval signal for a landing flow; do not merge from human review. %s"""
                     .formatted(blockedDestination, FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION);
         }
         if (blank(blockedState)) {
@@ -690,10 +717,10 @@ public final class TrelloBoardSetup {
                     When the work is ready for human review, update the workpad with the final summary and validation evidence, call trello_add_comment with a concise summary and
                     verification notes, then call trello_move_current_card with list_name "%s". If the work is
                     blocked or unsafe to hand off, update the workpad with the blocker, add a Trello comment explaining the blocker, then call
-                    trello_move_current_card with list_name "%s" so the card leaves the active column. Do not leave
-                    blocked work in an active column; Symphony may run it again.
-                    If a human returns a reviewed card to an active column, treat it as rework: reread the card, the Trello comments rendered above, and linked PR feedback when available before changing code again.
-                    A Merging column, when configured, is a human approval signal for a landing flow; do not merge from human review. %s"""
+                    trello_move_current_card with list_name "%s" so the card leaves the active list. Do not leave
+                    blocked work in an active list; Symphony may run it again.
+                    If a human returns a reviewed card to an active list, treat it as rework: reread the card, the Trello comments rendered above, and linked PR feedback when available before changing code again.
+                    A Merging list, when configured, is a human approval signal for a landing flow; do not merge from human review. %s"""
                     .formatted(reviewState, blockedDestination, FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION);
         }
         return """
@@ -701,8 +728,8 @@ public final class TrelloBoardSetup {
                 verification notes, then call trello_move_current_card with list_name "%s". If the work is
                 blocked or unsafe to hand off, update the workpad with the blocker, add a Trello comment explaining the blocker, then call
                 trello_move_current_card with list_name "%s".
-                If a human returns a reviewed card to an active column, treat it as rework: reread the card, the Trello comments rendered above, and linked PR feedback when available before changing code again.
-                A Merging column, when configured, is a human approval signal for a landing flow; do not merge from human review. %s"""
+                If a human returns a reviewed card to an active list, treat it as rework: reread the card, the Trello comments rendered above, and linked PR feedback when available before changing code again.
+                A Merging list, when configured, is a human approval signal for a landing flow; do not merge from human review. %s"""
                 .formatted(reviewState, blockedDestination, FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION);
     }
 
@@ -712,8 +739,8 @@ public final class TrelloBoardSetup {
                     ? ""
                     : " If the card is in " + quote(mergingState) + ", follow the landing section instead.";
             return ("""
-                    This workflow has no in-progress column configured. Leave the card in its current active column
-                    while working, then move it to the configured handoff column when the work is ready or blocked."""
+                    This workflow has no in-progress list configured. Leave the card in its current active list
+                    while working, then move it to the configured handoff list when the work is ready or blocked."""
                             + landingException)
                     .stripTrailing();
         }
@@ -721,7 +748,7 @@ public final class TrelloBoardSetup {
                 .filter(state -> !state.equalsIgnoreCase(inProgressState))
                 .filter(state -> blank(mergingState) || !state.equalsIgnoreCase(mergingState))
                 .toList();
-        String queueText = queueStates.isEmpty() ? "an active queue column" : quotedList(queueStates);
+        String queueText = queueStates.isEmpty() ? "an active queue list" : quotedList(queueStates);
         return """
                 Symphony moves cards from %s to "%s" before Codex starts when tracker.in_progress_state is configured.
                 If the card is already in "%s", continue the existing execution flow."""
@@ -866,7 +893,7 @@ public final class TrelloBoardSetup {
         if (!missing.isEmpty()) {
             throw new TrelloBoardSetupException(
                     "setup_unknown_" + label + "_state",
-                    "Unknown " + label + " column(s): " + String.join(", ", missing) + ". Open columns: "
+                    "Unknown " + label + " list(s): " + String.join(", ", missing) + ". Open lists: "
                             + String.join(", ", openListNames));
         }
     }
@@ -1109,7 +1136,7 @@ public final class TrelloBoardSetup {
             String boardKey,
             String boardName,
             String boardUrl,
-            List<String> columns,
+            List<String> lists,
             Path workflowPath) {}
 
     public record WorkspaceInfo(String id, String name, String displayName, String url) {}
@@ -1119,7 +1146,7 @@ public final class TrelloBoardSetup {
             String boardKey,
             String boardName,
             String boardUrl,
-            List<String> openColumns,
+            List<String> openLists,
             List<String> activeStates,
             List<String> terminalStates,
             String inProgressState,

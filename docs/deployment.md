@@ -197,9 +197,9 @@ codex:
 ```
 
 Use a different `server.port` and `workspace.root` for each workflow. Keeping separate workspace
-directories makes cleanup and debugging easier. Include a non-active blocked handoff column such as
+directories makes cleanup and debugging easier. Include a non-active blocked handoff list such as
 `Blocked` when the board has one, so blocked cards do not stay eligible for another run.
-The `allowed_move_list_names` key uses Trello's API term for board columns.
+The `allowed_move_list_names` key uses Trello's term for board lists.
 
 ## Allow Host Path Access
 

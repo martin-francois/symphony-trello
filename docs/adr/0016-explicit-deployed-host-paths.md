@@ -54,6 +54,23 @@ inaccessible path, that deployed Symphony blocks undeclared host paths by defaul
 reasons, where accessible workspace files are, and which deployment settings allow one or more host
 paths.
 
+Generated workflow prompts also tell Codex not to edit shared host checkouts directly when a writable
+per-card checkout can be created. If a card names only a repository URL, Codex should create or reuse
+a writable checkout under the current per-card workspace, preferring a readable matching local
+checkout as the clone source when available. If a card names a read-only local checkout, Codex should
+inspect it as source context and clone it into the current workspace before implementing the task.
+The workflow also tells Codex to add only the source checkout to the current user's Git
+`safe.directory` list when Git refuses a read-only local clone because the source checkout is owned
+by another user. It tells Codex to start task branches from the repository's default branch when that
+branch is discoverable so local clones do not inherit a shared checkout's current feature branch.
+This keeps shared checkouts clean while avoiding blockers when the source is readable but not
+writable.
+
+The generated workflow does not treat missing push credentials as a blocker when a Trello card only
+asks for local commits. It also allows handoff when broad validation has clearly unrelated failures
+and card-specific validation passed, as long as the handoff records the failing command and the
+reason it is unrelated.
+
 ### Consequences
 
 * Good, because unrelated host paths stay unavailable unless the operator opts in.
@@ -65,6 +82,8 @@ paths.
   inside the still-restricted systemd namespace.
 * Neutral, because existing workflow files need their prompt text updated to get the improved
   blocker-comment wording.
+* Neutral, because URL-only or read-only-checkout cards rely on the generated workflow prompt and
+  Codex behavior rather than a built-in checkout manager.
 * Bad, because operators still need to decide which host paths are safe to expose.
 
 ### Confirmation

@@ -30,7 +30,7 @@ import org.junit.jupiter.api.io.TempDir;
 class TrelloBoardSetupTest {
     private HttpServer server;
     private TrelloBoardSetup setup;
-    private final List<String> createdColumns = new ArrayList<>();
+    private final List<String> createdLists = new ArrayList<>();
     private final AtomicReference<String> authorization = new AtomicReference<>();
     private final AtomicReference<String> workspaceResponse = new AtomicReference<>();
     private final AtomicReference<String> boardListsResponse = new AtomicReference<>();
@@ -82,8 +82,8 @@ class TrelloBoardSetupTest {
             assertThat(exchange.getRequestMethod()).isEqualTo("POST");
             Map<String, String> query = query(exchange);
             assertThat(query).containsEntry("idBoard", "board-1").containsEntry("pos", "bottom");
-            createdColumns.add(query.get("name"));
-            respond(exchange, "{\"id\":\"list-" + createdColumns.size() + "\",\"name\":\"" + query.get("name") + "\"}");
+            createdLists.add(query.get("name"));
+            respond(exchange, "{\"id\":\"list-" + createdLists.size() + "\",\"name\":\"" + query.get("name") + "\"}");
         });
         server.createContext("/1/boards/input", exchange -> {
             assertThat(exchange.getRequestMethod()).isEqualTo("GET");
@@ -122,7 +122,7 @@ class TrelloBoardSetupTest {
 
         // then
         assertThat(result.boardKey()).isEqualTo("abc123");
-        assertThat(createdColumns)
+        assertThat(createdLists)
                 .containsExactly(
                         "Inbox", "Ready for Codex", "In Progress", "Blocked", "Human Review", "Merging", "Done");
         assertThat(authorization.get()).contains("oauth_consumer_key=\"key\"").contains("oauth_token=\"token\"");
@@ -142,7 +142,7 @@ class TrelloBoardSetupTest {
                 .contains("Symphony moves cards from \"Ready for Codex\" to \"In Progress\" before Codex starts")
                 .contains("list_name \"Human Review\"")
                 .contains("## Landing From \"Merging\"")
-                .contains("Only run landing when the current Trello column is \"Merging\"")
+                .contains("Only run landing when the current Trello list is \"Merging\"")
                 .contains("Do not enable auto-merge")
                 .contains("move the card to \"Blocked\" with a concise blocker")
                 .contains("move the card to \"Done\"")
@@ -159,6 +159,7 @@ class TrelloBoardSetupTest {
                 .contains("Validation`, `Test Plan`, or `Testing` section as")
                 .contains("capture a concrete current-state signal")
                 .contains("Verification evidence must be specific to this card")
+                .contains("Broad validation failures that are clearly unrelated")
                 .contains("Temporary local proof edits are allowed only")
                 .contains("Do not move the card to \"Human Review\"")
                 .contains("## Pull Request Feedback Sweep")
@@ -168,6 +169,8 @@ class TrelloBoardSetupTest {
                 .contains("inline review comments")
                 .contains("Codex review issue comments")
                 .contains("Failing, pending, or stale required checks")
+                .contains("Do not create or push a pull request")
+                .contains("blocking on missing push credentials")
                 .contains("treat the card as blocked")
                 .contains("## Rework From Human Review")
                 .contains("from \"Human Review\" back to \"Ready for Codex\", \"In Progress\"")
@@ -177,8 +180,8 @@ class TrelloBoardSetupTest {
                 .contains("do not restart from scratch")
                 .contains("close the existing PR")
                 .contains("add one concise handoff comment")
-                .contains("## Trello Column Routing")
-                .contains("Symphony only dispatches cards from configured active columns")
+                .contains("## Trello List Routing")
+                .contains("Symphony only dispatches cards from configured active lists")
                 .contains("\"Ready for Codex\": queued work")
                 .contains("\"In Progress\": active work already picked up by Codex")
                 .contains("\"Blocked\": blocked work")
@@ -189,7 +192,14 @@ class TrelloBoardSetupTest {
                 .contains(".codex/skills/trello-handoff/SKILL.md")
                 .contains(".codex/skills/review-sweep/SKILL.md")
                 .contains(".codex/skills/land/SKILL.md")
-                .contains("If the Trello card names a specific local path or project")
+                .contains("## Repository Checkout Policy")
+                .contains("Do implementation work inside the current per-card workspace")
+                .contains("names only a repository URL")
+                .contains("cloning from a readable matching local checkout")
+                .contains("clone from that readable local path into the current workspace")
+                .contains("git config --global --add safe.directory <source-checkout>")
+                .contains("git clone --no-hardlinks <source-checkout> <workspace-checkout>")
+                .contains("Start the task branch from the repository's default branch")
                 .contains("Filesystem access blocker details")
                 .contains("inaccessible path")
                 .contains("allowed host paths")
@@ -241,7 +251,7 @@ class TrelloBoardSetupTest {
                 .hasMessageContaining("workspace-1")
                 .hasMessageContaining("workspace-2");
         assertThat(workflow).doesNotExist();
-        assertThat(createdColumns).isEmpty();
+        assertThat(createdLists).isEmpty();
     }
 
     @Test
@@ -263,7 +273,7 @@ class TrelloBoardSetupTest {
                 false));
 
         // then
-        assertThat(result.openColumns())
+        assertThat(result.openLists())
                 .containsExactly(
                         "Inbox", "Ready for Codex", "In Progress", "Blocked", "Human Review", "Merging", "Done");
         assertThat(result.activeStates()).containsExactly("Ready for Codex", "In Progress", "Merging");
@@ -296,7 +306,7 @@ class TrelloBoardSetupTest {
                 .contains("treat the next run as rework")
                 .contains("linked PR comments")
                 .contains("current PR/check state")
-                .contains("## Trello Column Routing")
+                .contains("## Trello List Routing")
                 .contains("\"Ready for Codex\": queued work")
                 .contains("\"In Progress\": active work already picked up by Codex")
                 .contains(".codex/skills/commit/SKILL.md")
@@ -304,7 +314,7 @@ class TrelloBoardSetupTest {
                 .contains("tracker.in_progress_state is configured")
                 .contains("list_name \"Human Review\"")
                 .contains("## Landing From \"Merging\"")
-                .contains("Only run landing when the current Trello column is \"Merging\"")
+                .contains("Only run landing when the current Trello list is \"Merging\"")
                 .contains("move the card to \"Done\"")
                 .contains("max_concurrent_agents: 2");
         EffectiveConfig config = resolve(workflow);
@@ -313,7 +323,7 @@ class TrelloBoardSetupTest {
     }
 
     @Test
-    void importCanDisableDetectedInProgressColumn() {
+    void importCanDisableDetectedInProgressList() {
         // given
         Path workflow = tempDir.resolve("imported-without-in-progress.md");
 
@@ -337,7 +347,7 @@ class TrelloBoardSetupTest {
         assertThat(result.activeStates()).containsExactly("Ready for Codex", "Merging");
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
-                .contains("This workflow has no in-progress column configured")
+                .contains("This workflow has no in-progress list configured")
                 .contains("If the card is in \"Merging\", follow the landing section instead")
                 .doesNotContain("list_name \"In Progress\"");
         EffectiveConfig config = resolve(workflow);
@@ -377,7 +387,7 @@ class TrelloBoardSetupTest {
                 false));
 
         // then
-        assertThat(result.openColumns())
+        assertThat(result.openLists())
                 .containsExactly(
                         "Intake",
                         "Queue for Codex",
@@ -401,11 +411,11 @@ class TrelloBoardSetupTest {
                 .contains("Do not move the card to \"Review\"")
                 .contains("card to \"Review\" or landing from Merging")
                 .contains("Before returning the card to \"Review\"")
-                .contains("This workflow has no landing approval column configured");
+                .contains("This workflow has no landing approval list configured");
     }
 
     @Test
-    void importUsesConfiguredTerminalColumnForLandingWhenMergingExists() {
+    void importUsesConfiguredTerminalListForLandingWhenMergingExists() {
         // given
         boardListsResponse.set(
                 """
@@ -444,7 +454,7 @@ class TrelloBoardSetupTest {
     }
 
     @Test
-    void importDoesNotActivateLandingWhenMergingExistsWithoutTerminalColumn() {
+    void importDoesNotActivateLandingWhenMergingExistsWithoutTerminalList() {
         // given
         boardListsResponse.set(
                 """
@@ -478,7 +488,7 @@ class TrelloBoardSetupTest {
                 .containsExactly("in progress", "human review", "blocked");
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
-                .contains("This workflow has no landing approval column configured")
+                .contains("This workflow has no landing approval list configured")
                 .doesNotContain("## Landing From \"Merging\"")
                 .doesNotContain("move the card to \"Done\"");
     }
@@ -591,9 +601,9 @@ class TrelloBoardSetupTest {
                 .contains("allowed_move_list_names:")
                 .contains("- \"Review\"")
                 .contains("blocked or unsafe to hand off")
-                .contains("list_name \"Review\" so the card leaves the active column")
+                .contains("list_name \"Review\" so the card leaves the active list")
                 .contains("Do not leave")
-                .contains("blocked work in an active column")
+                .contains("blocked work in an active list")
                 .contains("Filesystem access blocker details")
                 .contains("accessible files are available")
                 .contains("per-card workspace")

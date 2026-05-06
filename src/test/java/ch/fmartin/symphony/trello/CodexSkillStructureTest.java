@@ -99,7 +99,7 @@ class CodexSkillStructureTest {
         // then
         assertThat(body)
                 .contains("## Rework")
-                .contains("moves a card from `Human Review` back to an active column")
+                .contains("moves a card from `Human Review` back to an active list")
                 .contains("Read the existing `## Codex Workpad` comment")
                 .contains("Run `review-sweep` when a PR or branch exists")
                 .contains("Preserve completed work")
@@ -125,7 +125,7 @@ class CodexSkillStructureTest {
                 .contains("mergeability")
                 .contains("review feedback")
                 .contains("required checks are green")
-                .contains("move the card to the configured landing completion column")
+                .contains("move the card to the configured landing completion list")
                 .contains("move the card to `Blocked`")
                 .contains("The card is in `Human Review` rather than `Merging`");
     }
