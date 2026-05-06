@@ -87,17 +87,22 @@ Do not move to `Blocked` only because PR checks are pending or stale. Keep the
 card active, wait, refresh, or rerun the checks unless a true external blocker
 appears.
 
-Do not move to `Blocked` only because checks are unavailable due to external
-quota or infrastructure limits, or failing for a reason clearly unrelated to the
-current card. When equivalent local validation passed, move to `Human Review`
-with the PR link, the local validation evidence, and a concise caveat about the
-unavailable or unrelated check.
+Do not move to `Blocked` only because CI is unavailable due to external quota or
+infrastructure limits. Run equivalent local CI checks and move to `Human Review`
+when those checks pass or only have failures clearly unrelated to the card.
+
+Do not move to `Blocked` only because CI fails for a reason clearly unrelated to
+the current card. Do not spend time reproducing that unrelated failure locally.
+Move to `Human Review` when the card-specific validation and related checks are
+clean, with the PR link and a concise caveat explaining why the CI failure is
+unrelated.
 
 If CI fails because of the card's changes or current branch, keep the card
-active, fix the failure, and only hand off after the failure is addressed. When
-equivalent local validation also fails or reproduces the same problem, use that
-local failure as the first repair signal before pushing again. Use `Blocked`
-only when the failure cannot be fixed in-session and the exact blocker is clear.
+active. Rerun the failing check or closest local equivalent first. If it fails
+locally, fix it before handoff. If it passes locally and the failure looks flaky
+after a reasonable refresh or rerun, move to `Human Review` with the local
+evidence and flaky-check caveat. Use `Blocked` only when the failure cannot be
+fixed in-session and the exact blocker is clear.
 
 If no `Blocked` list exists but the workflow configured a review list as
 the blocked destination, move there so the card leaves the active queue. In the

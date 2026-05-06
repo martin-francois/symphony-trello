@@ -677,12 +677,18 @@ public final class TrelloBoardSetup {
                 - If a failing check is related to the card's changes, the current branch, or can be reproduced by
                   equivalent local validation, keep the card active, fix the failure, push again, and repeat the
                   sweep.
+                - If a related CI check fails, rerun that check or the closest local equivalent. If it fails locally,
+                  fix it before handoff. If it passes locally and the failure looks flaky after a reasonable refresh
+                  or rerun, hand off with the local evidence and flaky-check caveat.
                 - If checks are pending or stale, wait, refresh, or rerun them while the card remains active unless
                   the workflow reaches a true external blocker.
-                - If checks cannot run because of external quota or infrastructure limits, or the failing checks are
-                  clearly unrelated to the current card, do not block handoff when equivalent local validation passed.
-                  Record the check caveat, the local commands used as evidence, and why the failure is unrelated or
-                  unavailable in %s.
+                - If CI cannot run because of external quota or infrastructure limits, run equivalent local CI checks.
+                  Hand off only when those checks pass or only have failures clearly unrelated to the card.
+                - If CI fails for a reason clearly unrelated to the current card, do not spend time reproducing that
+                  unrelated failure locally. Record why it is unrelated and hand off when the card-specific validation
+                  and related checks are clean.
+                - Record the check state, local commands used when local validation was required, and any unavailable,
+                  flaky, or unrelated check caveat in %s.
 
                 After feedback-driven changes, rerun the relevant validation and repeat the sweep until no
                 actionable feedback remains. If GitHub auth, PR discovery, or review data are unavailable for a

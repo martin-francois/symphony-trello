@@ -254,12 +254,13 @@ Use the generated board like this:
 5. Codex works in a local workspace, creates or updates a pull request for repository-changing work,
    adds a Trello comment with its summary and verification notes, and moves the card to
    `Human Review` when the PR is ready for human review.
-6. If PR checks fail because of the card's changes, the current branch, or equivalent local checks
-   also fail, Codex keeps the card in `In Progress`, fixes the failure, pushes again, and repeats the
-   review sweep. If checks are pending or stale, Codex waits, refreshes, or reruns them. If checks
-   cannot run because of external quota or infrastructure limits, or the failures are clearly
-   unrelated to the card, Codex can move the card to `Human Review` when equivalent local validation
-   passed and the Trello comment explains the caveat.
+6. If PR checks fail because of the card's changes or current branch, Codex keeps the card in
+   `In Progress`, reruns the failing check or closest local equivalent, fixes reproducible failures,
+   pushes again, and repeats the review sweep. If the related CI failure passes locally and looks
+   flaky, Codex can move the card to `Human Review` with that caveat. If CI cannot run, Codex runs
+   equivalent local CI checks. If CI fails for a clearly unrelated reason, Codex does not try to
+   reproduce that unrelated failure locally; it explains why the failure is unrelated in the Trello
+   comment.
 7. If Codex cannot safely finish the work, it adds a blocker comment and moves the card to
    `Blocked` so the problem is visible from the board.
 8. If changes are needed, a human moves the card from `Human Review` back to `Ready for Codex`.
