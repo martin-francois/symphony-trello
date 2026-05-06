@@ -23,10 +23,14 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 class TrelloClientTest {
     private HttpServer server;
@@ -473,6 +477,19 @@ class TrelloClientTest {
         assertThat(sorted).extracting(Card::identifier).containsExactly("TRELLO-a", "TRELLO-c", "TRELLO-b");
     }
 
+    @ParameterizedTest(name = "{0} remains terminal even with terminal list IDs configured")
+    @MethodSource("specialTerminalCards")
+    void terminalListIdsDoNotOverrideSpecialTerminalStates(String displayName, Card card) {
+        // given
+        var config = config("board-1", Map.of("terminal_list_ids", List.of("done")));
+
+        // when
+        boolean terminal = TrelloClient.isTerminal(card, config);
+
+        // then
+        assertThat(terminal).as(displayName).isTrue();
+    }
+
     private EffectiveConfig config(String boardId, Map<String, Object> trackerOverrides) {
         Map<String, Object> tracker = new LinkedHashMap<>();
         tracker.put("kind", "trello");
@@ -520,6 +537,90 @@ class TrelloClientTest {
                 null,
                 null,
                 position);
+    }
+
+    private static Stream<Arguments> specialTerminalCards() {
+        return Stream.of(
+                Arguments.of(
+                        "archived card",
+                        card(
+                                "card-6",
+                                "TRELLO-archived",
+                                "Archived",
+                                "card_closed",
+                                "todo",
+                                "Todo",
+                                false,
+                                false,
+                                true)),
+                Arguments.of(
+                        "card in archived list",
+                        card(
+                                "card-7",
+                                "TRELLO-archived-list",
+                                "ArchivedList",
+                                "list_closed",
+                                "todo",
+                                "Todo",
+                                true,
+                                false,
+                                false)),
+                Arguments.of(
+                        "card in archived board",
+                        card(
+                                "card-8",
+                                "TRELLO-archived-board",
+                                "ArchivedBoard",
+                                "board_closed",
+                                "todo",
+                                "Todo",
+                                false,
+                                true,
+                                false)),
+                Arguments.of(
+                        "deleted card snapshot",
+                        card("card-9", "TRELLO-deleted", "Deleted", "deleted", "todo", "Todo", false, false, false)));
+    }
+
+    private static Card card(
+            String id,
+            String identifier,
+            String state,
+            String stateSource,
+            String listId,
+            String listName,
+            Boolean listClosed,
+            Boolean boardClosed,
+            boolean closed) {
+        return new Card(
+                id,
+                identifier,
+                identifier,
+                "",
+                null,
+                state,
+                stateSource,
+                listId,
+                listName,
+                listClosed,
+                "board-1",
+                boardClosed,
+                closed,
+                null,
+                identifier,
+                null,
+                null,
+                null,
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                Instant.parse("2026-01-01T00:00:00Z"),
+                Instant.parse("2026-01-01T00:00:00Z"),
+                null,
+                null,
+                BigDecimal.ONE);
     }
 
     private static void respond(HttpExchange exchange, String body) throws IOException {
