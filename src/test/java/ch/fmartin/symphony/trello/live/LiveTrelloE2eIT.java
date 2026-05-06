@@ -235,6 +235,156 @@ class LiveTrelloE2eIT {
         }
     }
 
+    @Test
+    void deterministicFakeCodexCoversLongExternalDockerProjectLifecycle() throws Exception {
+        // given
+        assumeTrue(liveE2eEnabled(), "Set SYMPHONY_RUN_LIVE_E2E=1 to run live Trello E2E checks.");
+        TrelloCredentials credentials = credentialsOrFail();
+        assertThat(Files.isRegularFile(QUARKUS_RUNNER))
+                .as("Run this through Maven verify so the Quarkus runner exists.")
+                .isTrue();
+
+        String runId = "live-e2e-external-" + RUN_ID_FORMAT.format(Instant.now()) + "-"
+                + UUID.randomUUID().toString().substring(0, 8);
+        Path runDir = Path.of("target/live-e2e-it", runId);
+        Path workspaceRoot = runDir.resolve("workspaces");
+        Path externalProject = runDir.resolve("external-docker-project");
+        Files.createDirectories(runDir);
+        createExternalDockerProject(externalProject, runId);
+        LiveTrelloClient trello = new LiveTrelloClient(credentials);
+        String workspaceId = workspaceIdOrFail(credentials);
+        List<String> disposableBoardIds = new ArrayList<>();
+        Exception bodyException = null;
+        AssertionError bodyAssertion = null;
+
+        try {
+            TrelloBoardSetup setup = new TrelloBoardSetup(json);
+            Path workflow = runDir.resolve("external-docker.WORKFLOW.md");
+            Path completions = runDir.resolve("fake-codex-external-completions.log");
+
+            var board = setup.createRecommendedBoard(
+                    newBoard(runId + " external docker", credentials, workspaceId, workflow, workspaceRoot, 1));
+            disposableBoardIds.add(board.boardId());
+            patchWorkflow(workflow, completions, TrelloBoardSetup.RECOMMENDED_REVIEW_STATE, 1, 30_000);
+
+            Map<String, String> lists = trello.listIdsByName(board.boardId());
+            CardRef card = trello.createCard(
+                    lists.get(TrelloBoardSetup.RECOMMENDED_ACTIVE_STATE),
+                    runId + " long external docker task",
+                    externalDockerDescription(externalProject, runId));
+
+            // when
+            try (SymphonyProcess process = startProcess(runDir, workflow, freePort())) {
+                waitForStateEndpoint(process);
+                refresh(process);
+
+                waitForRunningCards(process, 1, List.of(card.id()));
+
+                // then
+                assertCardColumn(trello, card, lists.get(TrelloBoardSetup.RECOMMENDED_IN_PROGRESS_STATE));
+                waitForHandoff(trello, card, lists.get(TrelloBoardSetup.RECOMMENDED_REVIEW_STATE));
+                waitForSuccessfulFakeCodexTurns(completions, 1);
+                assertStateDrained(process);
+                assertSuccessfulFakeCodexTurns(completions, 1);
+            }
+        } catch (Exception e) {
+            bodyException = e;
+            throw e;
+        } catch (AssertionError e) {
+            bodyAssertion = e;
+            throw e;
+        } finally {
+            try {
+                cleanupDisposableBoards(trello, workspaceId, runId, disposableBoardIds);
+            } catch (AssertionError e) {
+                if (bodyException != null) {
+                    bodyException.addSuppressed(e);
+                } else if (bodyAssertion != null) {
+                    bodyAssertion.addSuppressed(e);
+                } else {
+                    throw e;
+                }
+            }
+        }
+    }
+
+    @Test
+    void realCodexCanRunLongExternalDockerProjectWhenExplicitlyEnabled() throws Exception {
+        // given
+        assumeTrue(
+                realCodexDockerE2eEnabled(),
+                "Set SYMPHONY_RUN_REAL_CODEX_DOCKER_E2E=1 to run the real Codex/Docker live E2E check.");
+        assumeTrue(commandSucceeds("codex", "--version"), "Codex CLI must be available on PATH.");
+        assumeTrue(commandSucceeds("docker", "version"), "Docker must be installed and usable by this user.");
+        TrelloCredentials credentials = credentialsOrFail();
+        assertThat(Files.isRegularFile(QUARKUS_RUNNER))
+                .as("Run this through Maven verify so the Quarkus runner exists.")
+                .isTrue();
+
+        String runId = "real-codex-docker-" + RUN_ID_FORMAT.format(Instant.now()) + "-"
+                + UUID.randomUUID().toString().substring(0, 8);
+        Path runDir = Path.of("target/live-e2e-it", runId);
+        Path workspaceRoot = runDir.resolve("workspaces");
+        Path externalProject = runDir.resolve("external-docker-project");
+        Path expectedOutput = externalProject.resolve("docker-output.txt");
+        Files.createDirectories(runDir);
+        createExternalDockerProject(externalProject, runId);
+        LiveTrelloClient trello = new LiveTrelloClient(credentials);
+        String workspaceId = workspaceIdOrFail(credentials);
+        List<String> disposableBoardIds = new ArrayList<>();
+        Exception bodyException = null;
+        AssertionError bodyAssertion = null;
+
+        try {
+            TrelloBoardSetup setup = new TrelloBoardSetup(json);
+            Path workflow = runDir.resolve("real-codex-docker.WORKFLOW.md");
+
+            var board = setup.createRecommendedBoard(
+                    newBoard(runId + " real codex docker", credentials, workspaceId, workflow, workspaceRoot, 1));
+            disposableBoardIds.add(board.boardId());
+            patchWorkflowForRealCodexDocker(workflow, externalProject);
+
+            Map<String, String> lists = trello.listIdsByName(board.boardId());
+            CardRef card = trello.createCard(
+                    lists.get(TrelloBoardSetup.RECOMMENDED_ACTIVE_STATE),
+                    runId + " real codex docker task",
+                    realCodexDockerDescription(externalProject, runId));
+
+            // when
+            try (SymphonyProcess process =
+                    startProcess(runDir, workflow, freePort(), Map.of("SYMPHONY_CODEX_DANGER_FULL_ACCESS", "true"))) {
+                waitForStateEndpoint(process);
+                refresh(process);
+
+                waitForRunningCards(process, 1, List.of(card.id()));
+
+                // then
+                assertCardColumn(trello, card, lists.get(TrelloBoardSetup.RECOMMENDED_IN_PROGRESS_STATE));
+                waitForHandoff(trello, card, lists.get(TrelloBoardSetup.RECOMMENDED_REVIEW_STATE));
+                assertStateDrained(process);
+                assertThat(Files.readString(expectedOutput)).contains(runId);
+            }
+        } catch (Exception e) {
+            bodyException = e;
+            throw e;
+        } catch (AssertionError e) {
+            bodyAssertion = e;
+            throw e;
+        } finally {
+            try {
+                cleanupDisposableBoards(trello, workspaceId, runId, disposableBoardIds);
+            } catch (AssertionError e) {
+                if (bodyException != null) {
+                    bodyException.addSuppressed(e);
+                } else if (bodyAssertion != null) {
+                    bodyAssertion.addSuppressed(e);
+                } else {
+                    throw e;
+                }
+            }
+        }
+    }
+
     private TrelloCredentials credentialsOrFail() {
         String apiKey = LocalEnvironment.get("TRELLO_API_KEY").orElse(null);
         String apiToken = LocalEnvironment.get("TRELLO_API_TOKEN").orElse(null);
@@ -247,6 +397,12 @@ class LiveTrelloE2eIT {
 
     private static boolean liveE2eEnabled() {
         return LocalEnvironment.get("SYMPHONY_RUN_LIVE_E2E")
+                .map(value -> value.equals("1") || Boolean.parseBoolean(value))
+                .orElse(false);
+    }
+
+    private static boolean realCodexDockerE2eEnabled() {
+        return LocalEnvironment.get("SYMPHONY_RUN_REAL_CODEX_DOCKER_E2E")
                 .map(value -> value.equals("1") || Boolean.parseBoolean(value))
                 .orElse(false);
     }
@@ -328,6 +484,101 @@ class LiveTrelloE2eIT {
                 .replaceFirst("(?m)^  max_concurrent_agents: \\d+$", "  max_concurrent_agents: " + maxConcurrentAgents)
                 .replaceFirst("(?m)^  command: codex app-server$", "  command: " + yamlScalar(command));
         Files.writeString(workflow, patched);
+    }
+
+    private static void patchWorkflowForRealCodexDocker(Path workflow, Path externalProject) throws IOException {
+        String patched = Files.readString(workflow)
+                .replaceFirst("(?m)^  max_concurrent_agents: \\d+$", "  max_concurrent_agents: 1")
+                .replaceFirst(
+                        "(?m)^  command: codex app-server$",
+                        "  command: codex app-server\n  additional_writable_roots:\n    - "
+                                + yamlScalar(externalProject
+                                        .toAbsolutePath()
+                                        .normalize()
+                                        .toString()))
+                .replaceFirst("(?m)^  read_timeout_ms: 5000$", "  read_timeout_ms: 60000")
+                .replaceFirst("(?m)^  stall_timeout_ms: 300000$", "  stall_timeout_ms: 900000");
+        Files.writeString(workflow, patched);
+    }
+
+    private static void createExternalDockerProject(Path project, String runId) throws IOException {
+        Files.createDirectories(project);
+        Files.writeString(
+                project.resolve("Dockerfile"),
+                """
+                FROM alpine:3.22
+                RUN sleep 30
+                COPY expected.txt /expected.txt
+                CMD ["cat", "/expected.txt"]
+                """);
+        Files.writeString(project.resolve("expected.txt"), runId + System.lineSeparator());
+        Files.writeString(
+                project.resolve("README.md"),
+                """
+                # Disposable Symphony Trello Live E2E Fixture
+
+                This directory is generated by the live E2E test. It intentionally lives outside the
+                Symphony workspace root so the test exercises external-project instructions without
+                depending on any private repository.
+                """);
+    }
+
+    private static String externalDockerDescription(Path externalProject, String runId) {
+        return """
+                Disposable live E2E task.
+
+                External project path:
+                `%s`
+
+                This fixture contains a minimal Dockerfile whose build includes a 30-second operation.
+                The deterministic fake Codex server will not run Docker, but Symphony must still move
+                this card from Ready for Codex to In Progress while the long operation is simulated,
+                then move it to Human Review.
+
+                Run id: `%s`
+                """
+                .formatted(externalProject.toAbsolutePath().normalize(), runId);
+    }
+
+    private static String realCodexDockerDescription(Path externalProject, String runId) {
+        return """
+                Goal:
+                - Work only in this disposable external project path: `%s`
+                - From that directory, run: `docker build -t symphony-trello-live-e2e-%s .`
+                - Then run: `docker run --rm symphony-trello-live-e2e-%s > docker-output.txt`
+                - Verify that `docker-output.txt` contains `%s`.
+                - Do not use or mention any private repositories or host-specific project names.
+                - Add/update the Trello workpad with the commands and verification.
+                - Add a concise Trello handoff comment.
+                - Move this card to Human Review only after the Docker command and file verification succeed.
+
+                The Dockerfile intentionally contains `RUN sleep 30` so the card should be visible in
+                In Progress while the run is underway.
+                """
+                .formatted(
+                        externalProject.toAbsolutePath().normalize(),
+                        dockerTagSuffix(runId),
+                        dockerTagSuffix(runId),
+                        runId);
+    }
+
+    private static String dockerTagSuffix(String runId) {
+        return runId.toLowerCase().replaceAll("[^a-z0-9_.-]", "-");
+    }
+
+    private static boolean commandSucceeds(String... command) {
+        try {
+            Process process = new ProcessBuilder(command)
+                    .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                    .redirectError(ProcessBuilder.Redirect.DISCARD)
+                    .start();
+            return process.waitFor(30, TimeUnit.SECONDS) && process.exitValue() == 0;
+        } catch (IOException e) {
+            return false;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
     }
 
     private static String executable(String name) {
@@ -501,9 +752,14 @@ class LiveTrelloE2eIT {
     }
 
     private SymphonyProcess startProcess(Path runDir, Path workflow, int port) throws IOException {
+        return startProcess(runDir, workflow, port, Map.of());
+    }
+
+    private SymphonyProcess startProcess(Path runDir, Path workflow, int port, Map<String, String> environment)
+            throws IOException {
         Path stdout = runDir.resolve("symphony-" + port + ".out.log");
         Path stderr = runDir.resolve("symphony-" + port + ".err.log");
-        Process process = new ProcessBuilder(List.of(
+        ProcessBuilder builder = new ProcessBuilder(List.of(
                         Path.of(System.getProperty("java.home"), "bin", executable("java"))
                                 .toString(),
                         "-jar",
@@ -513,8 +769,9 @@ class LiveTrelloE2eIT {
                         Integer.toString(port)))
                 .directory(Path.of("").toAbsolutePath().toFile())
                 .redirectOutput(stdout.toFile())
-                .redirectError(stderr.toFile())
-                .start();
+                .redirectError(stderr.toFile());
+        builder.environment().putAll(environment);
+        Process process = builder.start();
         return new SymphonyProcess(process, port);
     }
 
