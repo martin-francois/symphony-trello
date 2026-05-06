@@ -256,6 +256,10 @@ matters, and easy for another engineer to understand without asking the original
   exception is narrow and justified.
 - Do not silently reinterpret `SPEC.md`. If the implementation needs a clarified adaptation, update
   the spec wording carefully without breaking conformance to the original Symphony intent.
+- When adding or changing behavior that extends beyond `SPEC.md` but does not conflict with it,
+  append the extension contract to `SPEC.md` in the same change. Keep implementation-specific
+  extensions clearly labeled as optional or Java implementation extensions so the core adapted
+  Symphony contract stays readable.
 
 ## Autonomy And Escalation
 
