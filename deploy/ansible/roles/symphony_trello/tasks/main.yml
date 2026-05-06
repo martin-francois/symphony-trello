@@ -334,6 +334,7 @@
   environment:
     HOME: "{{ symphony_trello_state_dir }}"
     PATH: "{{ symphony_trello_service_path | default(ansible_env.PATH) }}"
+  changed_when: true
   when:
     - symphony_trello_manage_github_auth
     - symphony_trello_github_credential_helper.stdout != "!gh auth git-credential"
