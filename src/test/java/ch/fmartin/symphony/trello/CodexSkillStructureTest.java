@@ -117,6 +117,47 @@ class CodexSkillStructureTest {
     }
 
     @Test
+    void commitAndPushPrSkillsCoverGithubAuthorIdentityPolicy() throws IOException {
+        // given
+        Path commitSkill = SKILLS_ROOT.resolve("commit").resolve("SKILL.md");
+        Path pushPrSkill = SKILLS_ROOT.resolve("push-pr").resolve("SKILL.md");
+
+        // when
+        String commitBody = readSkillMetadata(commitSkill).body();
+        String pushPrBody = readSkillMetadata(pushPrSkill).body();
+
+        // then
+        assertThat(commitBody)
+                .contains("make the commit author")
+                .contains("authenticated GitHub user")
+                .contains("gh api user")
+                .contains("gh api user/emails")
+                .contains("users.noreply.github.com")
+                .contains("could not resolve user name")
+                .contains("could not resolve user email metadata")
+                .contains("user:email scope")
+                .contains("gh auth refresh -s user:email")
+                .contains("configure a public email or accessible GitHub noreply email")
+                .contains("generic fallback author")
+                .contains("has not been pushed")
+                .contains("do not rewrite history");
+        assertThat(pushPrBody)
+                .contains("verify that commits intended for the PR are authored")
+                .contains("authenticated GitHub user")
+                .contains("gh api user")
+                .contains("gh api user/emails")
+                .contains("users.noreply.github.com")
+                .contains("cannot verify PR commit author name")
+                .contains("user:email scope")
+                .contains("could not resolve origin default branch")
+                .contains("git fetch origin")
+                .contains("git merge-base HEAD")
+                .contains("configure a public email or accessible GitHub noreply email")
+                .contains("branch was already")
+                .contains("force-push is safe");
+    }
+
+    @Test
     void landSkillFailsClosedAndAvoidsAutoMergeByDefault() throws IOException {
         // given
         Path skill = SKILLS_ROOT.resolve("land").resolve("SKILL.md");

@@ -3112,6 +3112,28 @@ repository sync, commits, push/PR preparation, landing from `Merging`, and live-
 recommended generated workflow references those skills only as supporting instructions. The workflow
 front matter and scoped tools remain the authoritative runtime controls.
 
+GitHub commit authoring extension:
+
+- when generated workflows create commits for work that may be published as a GitHub pull request,
+  the commit skill SHOULD resolve the authenticated GitHub user with the same GitHub CLI
+  authentication context used for PR publication
+- the task checkout's Git author SHOULD be configured from that GitHub identity before the first
+  commit is created
+- the preferred author email is the user's public GitHub email when available, otherwise an actual
+  GitHub noreply address returned by the authenticated account's email API
+- GitHub CLI auth used for PR-bound work SHOULD have the email-read scope required by the account
+  email API when the public email may be absent
+- the workflow SHOULD NOT guess a noreply address format when the account email API does not return
+  one
+- push-time author verification SHOULD fail closed when the default branch or merge-base range
+  cannot be resolved
+- if identity lookup fails before PR-bound commits are created, the workflow SHOULD block visibly
+  instead of using a generic fallback author
+- already-pushed commits SHOULD NOT be rewritten only to fix author metadata unless a human or
+  workflow policy explicitly allows a safe force-push
+- local-only or no-push work MAY use the existing local Git identity because no GitHub PR author
+  identity is needed
+
 ### 19.2 Manual systemd Deployment Profile
 
 The manual systemd deployment profile lets one installed application run one or more workflow

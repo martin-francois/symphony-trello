@@ -641,6 +641,13 @@ public final class TrelloBoardSetup {
                 there, use `.codex/skills/commit/SKILL.md` and `.codex/skills/push-pr/SKILL.md` to commit, push,
                 and create or update the PR for the current branch. Add the PR URL to %s.
 
+                Before creating commits for PR-bound work, resolve the authenticated GitHub identity with `gh api
+                user` and configure the task checkout's Git author from that identity. Use the public GitHub email
+                when available, otherwise fetch the account's actual GitHub noreply email with `gh api
+                user/emails`. The noreply lookup needs GitHub CLI auth with the `user:email` scope. Do not guess a
+                noreply address format. If the identity cannot be resolved, treat PR-bound work as blocked before
+                committing instead of using a generic fallback author.
+
                 This PR requirement applies when the card asks for code, documentation, configuration, tests, or
                 other version-controlled repository changes. It does not apply when the card explicitly asks for a
                 local-only investigation, says not to push, or requires no repository change. In those cases, explain

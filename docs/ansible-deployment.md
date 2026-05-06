@@ -207,6 +207,14 @@ the `symphony-trello` service user with mode `0600`. The playbook also configure
 user's global git credential helper to use `gh auth git-credential`, so PR publication can push
 branches over HTTPS from deployed Codex runs.
 
+Make sure the copied GitHub CLI auth has the `user:email` scope. Run `gh auth refresh -s user:email`
+before the playbook if the account has no public email and generated workflows need to fetch the
+account's actual noreply email.
+
+Generated workflows also use that GitHub CLI account for PR-bound commit author metadata. If commits
+show the wrong author, check `gh auth status`, `gh api user`, `gh api user/emails`, and the service
+user's Git config in the task checkout.
+
 Set `symphony_trello_manage_github_auth: false` only when the service user is already authenticated
 for GitHub push operations on the target server.
 

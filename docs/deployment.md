@@ -86,6 +86,7 @@ Either run `gh auth login` as the service user or copy an existing GitHub CLI ho
 
 ```bash
 sudo -u symphony-trello -H gh auth login
+sudo -u symphony-trello -H gh auth refresh -s user:email
 ```
 
 ```bash
@@ -94,7 +95,15 @@ sudo install -o symphony-trello -g symphony-trello -m 0600 ~/.config/gh/hosts.ym
 sudo -u symphony-trello -H git config --global credential.https://github.com.helper '!gh auth git-credential'
 ```
 
+Make sure the copied GitHub CLI auth has the `user:email` scope. Codex needs that scope only when
+the GitHub account has no public email and the workflow must fetch the account's actual noreply
+email.
+
 Do not put GitHub tokens in workflow files or `/etc/symphony-trello/service.env`.
+
+Generated workflows use that same GitHub CLI account for PR publication and PR-bound commit author
+metadata. If commits are authored as the wrong user, check `gh auth status`, `gh api user`,
+`gh api user/emails`, and the service user's Git config in the task checkout.
 
 ## Build And Install The App
 
