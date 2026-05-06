@@ -254,16 +254,21 @@ Use the generated board like this:
 5. Codex works in a local workspace, creates or updates a pull request for repository-changing work,
    adds a Trello comment with its summary and verification notes, and moves the card to
    `Human Review` when the PR is ready for human review.
-6. If Codex cannot safely finish the work, it adds a blocker comment and moves the card to
+6. If PR checks fail because of the current branch, Codex keeps the card in `In Progress`, fixes the
+   failure, pushes again, and repeats the review sweep. If checks are pending or stale, Codex waits,
+   refreshes, or reruns them. If checks cannot run because of external quota or infrastructure
+   limits, or the failures are clearly unrelated to the card, Codex can move the card to
+   `Human Review` when equivalent local validation passed and the Trello comment explains the caveat.
+7. If Codex cannot safely finish the work, it adds a blocker comment and moves the card to
    `Blocked` so the problem is visible from the board.
-7. If changes are needed, a human moves the card from `Human Review` back to `Ready for Codex`.
+8. If changes are needed, a human moves the card from `Human Review` back to `Ready for Codex`.
    Codex treats that as rework: it rereads the updated card, new Trello comments, the existing
    workpad, and linked PR feedback before changing code again. It normally updates the existing PR
    instead of starting over.
-8. If the work is accepted and should be landed by Codex, a human moves the card to `Merging`.
+9. If the work is accepted and should be landed by Codex, a human moves the card to `Merging`.
    Codex treats `Merging` as the approval signal, runs the landing skill, checks PR feedback and CI,
    follows the repository's merge policy, and moves successful landed work to `Done`.
-9. If you land outside Codex instead, move the card to `Done` yourself after the work is accepted and
+10. If you land outside Codex instead, move the card to `Done` yourself after the work is accepted and
    landed.
 
 ### Fast Path: Import An Existing Board

@@ -81,8 +81,22 @@ workpad already contains the details.
 ## Blocked
 
 Move to `Blocked` when the card cannot proceed safely because of missing auth,
-inaccessible files, unclear requirements, failing external systems, or unsafe
-merge conditions.
+inaccessible files, unclear requirements, or unsafe merge conditions.
+
+Do not move to `Blocked` only because PR checks are pending or stale. Keep the
+card active, wait, refresh, or rerun the checks unless a true external blocker
+appears.
+
+Do not move to `Blocked` only because checks are unavailable due to external
+quota or infrastructure limits, or failing for a reason clearly unrelated to the
+current card. When equivalent local validation passed, move to `Human Review`
+with the PR link, the local validation evidence, and a concise caveat about the
+unavailable or unrelated check.
+
+If CI or equivalent local validation fails because of the current branch, keep
+the card active, fix the failure, and only hand off after the failure is
+addressed. Use `Blocked` only when the failure cannot be fixed in-session and
+the exact blocker is clear.
 
 If no `Blocked` list exists but the workflow configured a review list as
 the blocked destination, move there so the card leaves the active queue. In the
@@ -98,4 +112,5 @@ completion comment when useful, and move to `Done`.
 
 - The destination list is not in the configured move allowlist.
 - The handoff comment would expose secrets or unrelated local details.
-- Required validation, review sweep, or landing checks are incomplete.
+- Required validation or review sweep is incomplete for a reason that Codex can
+  still address in-session.

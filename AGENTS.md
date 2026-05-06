@@ -209,6 +209,12 @@ matters, and easy for another engineer to understand without asking the original
 - Do not manually move a Trello card to prove an automatic workflow transition works. For transition
   bugs, fix the code or workflow, reproduce with a fresh card or freshly queued card, and verify that
   Symphony performs the move itself.
+- For PR handoff behavior, do not treat every non-green CI state as blocked. If CI fails because of
+  the current branch or equivalent local checks fail, the card should stay active while Codex fixes
+  it. If CI is pending or stale, the card should stay active while Codex waits, refreshes, or reruns
+  checks. If CI is unavailable because of external quota/infrastructure limits, or failures are
+  clearly unrelated to the card, handoff to human review is acceptable when equivalent local
+  validation passed and the Trello comment records the caveat.
 - For live E2E, run the deterministic fake-Codex phase before real Codex. Then run strict real-Codex
   checks against real Trello with fresh cards and wait for both Trello handoff completion and
   `/api/v1/state` returning to zero running/retrying before claiming real-Codex coverage.

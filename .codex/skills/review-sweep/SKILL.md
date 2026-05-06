@@ -84,9 +84,20 @@ match the work actually completed, update the PR metadata before handoff.
 
 ## Checks
 
-- Failing or stale required checks mean the PR is not ready for handoff.
+- If a failing check is caused by the current branch or can be reproduced by
+  equivalent local validation, keep the card active, fix the failure, push
+  again, and repeat the sweep.
+- If checks are pending or stale, wait, refresh, or rerun them while the card
+  remains active unless a true external blocker appears.
+- If checks cannot run because of external quota or infrastructure limits, or
+  the failing checks are clearly unrelated to the current card, do not block
+  handoff when equivalent local validation passed.
+- For unavailable or unrelated checks, record the check caveat, the local
+  commands used as evidence, and why the failure is unrelated or unavailable in
+  the workpad and handoff comment.
 - After feedback-driven changes, rerun local validation and refresh PR checks.
-- Repeat the sweep until no actionable comments remain or the card is blocked.
+- Repeat the sweep until no actionable comments remain and local-reproducible
+  check failures are fixed, or the card reaches a true blocker.
 
 ## Trello Handoff
 
@@ -103,4 +114,6 @@ workpad with:
 
 - The associated PR cannot be identified but the card clearly requires one.
 - GitHub auth is missing for a required PR sweep.
-- There are unresolved correctness comments or failing checks.
+- There are unresolved correctness comments.
+- Checks fail in a way that is caused by the current branch and cannot be fixed
+  in-session.

@@ -84,7 +84,10 @@ class CodexSkillStructureTest {
                 .contains("scope")
                 .contains("inline replies for inline review comments")
                 .contains("PR title, body, branch, labels, or linked card references")
-                .contains("Failing or stale required checks")
+                .contains("If a failing check is caused by the current branch")
+                .contains("If checks are pending or stale")
+                .contains("external quota or infrastructure limits")
+                .contains("equivalent local validation passed")
                 .contains("Repeat the sweep until no actionable comments remain");
     }
 
