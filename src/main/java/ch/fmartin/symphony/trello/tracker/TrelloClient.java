@@ -289,10 +289,19 @@ public class TrelloClient implements TrackerClient {
     }
 
     public static boolean isTerminal(Card card, EffectiveConfig config) {
-        if (card.listId() != null && !config.tracker().terminalListIds().isEmpty()) {
+        if (isOpenListBacked(card)
+                && card.listId() != null
+                && !config.tracker().terminalListIds().isEmpty()) {
             return config.tracker().terminalListIds().contains(card.listId());
         }
         return config.tracker().terminalStates().contains(StateNames.normalize(card.state()));
+    }
+
+    private static boolean isOpenListBacked(Card card) {
+        return "list".equals(card.stateSource())
+                && !card.closed()
+                && !Boolean.TRUE.equals(card.listClosed())
+                && !Boolean.TRUE.equals(card.boardClosed());
     }
 
     public static Comparator<Card> dispatchComparator(EffectiveConfig config) {
