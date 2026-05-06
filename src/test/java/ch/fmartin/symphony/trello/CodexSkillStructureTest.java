@@ -85,9 +85,12 @@ class CodexSkillStructureTest {
                 .contains("inline replies for inline review comments")
                 .contains("PR title, body, branch, labels, or linked card references")
                 .contains("If a failing check is related to the card's changes")
+                .contains("If a related CI check fails")
                 .contains("If checks are pending or stale")
                 .contains("external quota or infrastructure limits")
-                .contains("equivalent local validation passed")
+                .contains("do not spend")
+                .contains("time reproducing that unrelated failure locally")
+                .contains("flaky-check caveat")
                 .contains("Repeat the sweep until no actionable comments remain");
     }
 

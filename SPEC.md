@@ -779,12 +779,20 @@ blocking on any non-green check:
 - If a failing check is related to the card's changes, the current branch, or can be reproduced by
   equivalent local validation, Codex keeps the card active, fixes the failure, pushes again, and
   repeats the review sweep.
+- If a related CI check fails, Codex reruns that check or the closest local equivalent. If it fails
+  locally, Codex fixes it before handoff. If it passes locally and the failure looks flaky after a
+  reasonable refresh or rerun, Codex can move the card to `Human Review` with local evidence and a
+  flaky-check caveat.
 - If checks are pending or stale, Codex waits, refreshes, or reruns them while the card remains
   active unless a true external blocker appears.
-- If checks cannot run because of external quota or infrastructure limits, or the failing checks are
-  clearly unrelated to the current card, Codex can move the card to `Human Review` when equivalent
-  local validation passed. The workpad and visible Trello handoff comment MUST record the check
-  caveat, the local commands used as evidence, and why the check failure is unrelated or unavailable.
+- If CI cannot run because of external quota or infrastructure limits, Codex runs equivalent local CI
+  checks and can move the card to `Human Review` only when those checks pass or only have failures
+  clearly unrelated to the card.
+- If CI fails for a reason clearly unrelated to the current card, Codex does not need to reproduce
+  that unrelated failure locally. Codex records why it is unrelated and can move the card to
+  `Human Review` when card-specific validation and related checks are clean.
+- The workpad and visible Trello handoff comment MUST record the check state, local commands used
+  when local validation was required, and any unavailable, flaky, or unrelated check caveat.
 
 When `new-board` would otherwise write `WORKFLOW.md` and that file already exists, the Java
 implementation writes a board-specific file named `WORKFLOW.<slugified-board-name>.md`. If that file
