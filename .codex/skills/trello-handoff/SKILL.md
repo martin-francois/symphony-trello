@@ -93,10 +93,11 @@ current card. When equivalent local validation passed, move to `Human Review`
 with the PR link, the local validation evidence, and a concise caveat about the
 unavailable or unrelated check.
 
-If CI or equivalent local validation fails because of the current branch, keep
-the card active, fix the failure, and only hand off after the failure is
-addressed. Use `Blocked` only when the failure cannot be fixed in-session and
-the exact blocker is clear.
+If CI fails because of the card's changes or current branch, keep the card
+active, fix the failure, and only hand off after the failure is addressed. When
+equivalent local validation also fails or reproduces the same problem, use that
+local failure as the first repair signal before pushing again. Use `Blocked`
+only when the failure cannot be fixed in-session and the exact blocker is clear.
 
 If no `Blocked` list exists but the workflow configured a review list as
 the blocked destination, move there so the card leaves the active queue. In the

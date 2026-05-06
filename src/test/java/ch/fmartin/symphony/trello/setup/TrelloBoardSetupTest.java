@@ -181,7 +181,7 @@ class TrelloBoardSetupTest {
                 .contains("inline review comments")
                 .contains("Codex review issue comments")
                 .contains("Classify PR checks before deciding handoff")
-                .contains("If a failing check is caused by the current branch")
+                .contains("If a failing check is related to the card's changes")
                 .contains("If checks are pending or stale, wait, refresh, or rerun them")
                 .contains("external quota or infrastructure limits")
                 .contains("equivalent local validation passed")

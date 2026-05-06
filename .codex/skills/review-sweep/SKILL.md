@@ -84,9 +84,9 @@ match the work actually completed, update the PR metadata before handoff.
 
 ## Checks
 
-- If a failing check is caused by the current branch or can be reproduced by
-  equivalent local validation, keep the card active, fix the failure, push
-  again, and repeat the sweep.
+- If a failing check is related to the card's changes, the current branch, or
+  can be reproduced by equivalent local validation, keep the card active, fix
+  the failure, push again, and repeat the sweep.
 - If checks are pending or stale, wait, refresh, or rerun them while the card
   remains active unless a true external blocker appears.
 - If checks cannot run because of external quota or infrastructure limits, or
@@ -115,5 +115,5 @@ workpad with:
 - The associated PR cannot be identified but the card clearly requires one.
 - GitHub auth is missing for a required PR sweep.
 - There are unresolved correctness comments.
-- Checks fail in a way that is caused by the current branch and cannot be fixed
-  in-session.
+- Checks fail in a way that is related to the card's changes or current branch
+  and cannot be fixed in-session.

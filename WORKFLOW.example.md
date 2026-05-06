@@ -195,8 +195,9 @@ validation.
 
 Classify PR checks before deciding handoff:
 
-- If a failing check is caused by the current branch or can be reproduced by equivalent local
-  validation, keep the card active, fix the failure, push again, and repeat the sweep.
+- If a failing check is related to the card's changes, the current branch, or can be reproduced by
+  equivalent local validation, keep the card active, fix the failure, push again, and repeat the
+  sweep.
 - If checks are pending or stale, wait, refresh, or rerun them while the card remains active unless
   the workflow reaches a true external blocker.
 - If checks cannot run because of external quota or infrastructure limits, or the failing checks are
