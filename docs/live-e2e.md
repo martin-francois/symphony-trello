@@ -583,6 +583,37 @@ Use a disposable repository, not a private project checkout.
 6. Verify the shared checkout remains unchanged, `/api/v1/state` drains to zero running and retrying
    entries, and the latest Trello comments are handoff comments rather than filesystem blockers.
 
+### Regression Scenario: PR Handoff With Unavailable Or Stale CI
+
+Use this when changing generated workflow PR feedback instructions, review-sweep behavior, handoff
+skills, or live deployment auth. Use a disposable repository or a private test repository whose PRs
+can be left open temporarily.
+
+The problem this protects against is moving cards to `Blocked` only because CI did not provide a
+useful signal, or trying to reproduce clearly unrelated CI failures locally. Symphony should keep
+the card in `In Progress` while related failures are being fixed, but it should still hand off when
+CI is unavailable or clearly unrelated and the appropriate local or card-specific evidence is clean.
+
+1. Create a fresh Trello card for repository-changing work that must create a pull request.
+2. Let the deployed workflow move the card from `Ready for Codex` to `In Progress`.
+3. For a related CI failure, make the PR fail a check that is tied to the card's change. Verify
+   Codex reruns that check or the closest local equivalent. If it fails locally, the card must remain
+   in `In Progress` while Codex fixes and pushes again. If it passes locally and the CI result looks
+   flaky after a reasonable refresh or rerun, Codex may move the card to `Human Review` with a clear
+   flaky-check caveat.
+4. For unavailable CI, use a repository workflow that skips CI for PRs unless a command is posted, or
+   otherwise produces no usable CI result. Verify Codex runs equivalent local CI checks before
+   handoff. The card may move to `Human Review` only when those local checks pass or only have
+   failures clearly unrelated to the card.
+5. For clearly unrelated CI failure, make an independent check fail for a reason unrelated to the
+   card, such as a fixture-only job or a known external service failure. Verify Codex does not spend
+   time reproducing that unrelated failure locally. It should explain why the failure is unrelated
+   and move to `Human Review` when card-specific validation and related checks are clean.
+6. In every case, verify the Trello workpad and handoff comment record the PR URL, the check state,
+   local commands used when local validation was required, and any unavailable, flaky, or unrelated
+   check caveat.
+7. Verify `/api/v1/state` reaches zero running and retrying entries after the handoff.
+
 ### Regression Scenario: In-Progress Pickup Visibility
 
 Use this when changing generated workflows, Trello move tools, or the recommended board layout.
