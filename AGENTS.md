@@ -266,6 +266,10 @@ matters, and easy for another engineer to understand without asking the original
   exception is narrow and justified.
 - Do not silently reinterpret `SPEC.md`. If the implementation needs a clarified adaptation, update
   the spec wording carefully without breaking conformance to the original Symphony intent.
+- When drafting or refining GitHub issues for behavior that `SPEC.md` leaves implementation-defined,
+  describe the desired outcome and explicitly compare plausible implementation layers. Do not assume
+  the Java scheduler/service must own behavior that may fit better in generated workflow text,
+  repository-local skills, or scoped agent tools.
 - When adding or changing behavior that extends beyond `SPEC.md` but does not conflict with it,
   append the extension contract to `SPEC.md` in the same change. Keep implementation-specific
   extensions clearly labeled as optional or Java implementation extensions so the core adapted
