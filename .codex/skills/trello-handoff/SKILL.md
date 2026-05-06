@@ -47,10 +47,12 @@ continue work.
 
 Before moving to `Human Review`:
 
-1. Update the workpad with final summary, acceptance criteria status, validation
-   evidence, PR URL, and known limitations.
-2. Add one concise visible handoff comment.
-3. Move the card to `Human Review`.
+1. For repository-changing work, create or update the PR unless the card
+   explicitly asks for local-only/no-push work.
+2. Update the workpad with final summary, acceptance criteria status,
+   validation evidence, PR URL when applicable, and known limitations.
+3. Add one concise visible handoff comment.
+4. Move the card to `Human Review`.
 
 Do not attempt landing from `Human Review`; that list is for a person.
 
