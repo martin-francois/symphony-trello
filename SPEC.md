@@ -776,9 +776,9 @@ validation failures when card-specific validation passed.
 Before `Human Review`, the generated workflow tells Codex to classify PR check state rather than
 blocking on any non-green check:
 
-- If a failing check is caused by the current branch or can be reproduced by equivalent local
-  validation, Codex keeps the card active, fixes the failure, pushes again, and repeats the review
-  sweep.
+- If a failing check is related to the card's changes, the current branch, or can be reproduced by
+  equivalent local validation, Codex keeps the card active, fixes the failure, pushes again, and
+  repeats the review sweep.
 - If checks are pending or stale, Codex waits, refreshes, or reruns them while the card remains
   active unless a true external blocker appears.
 - If checks cannot run because of external quota or infrastructure limits, or the failing checks are
