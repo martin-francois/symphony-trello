@@ -23,9 +23,9 @@ single poll/reconcile cycle is enough to observe the latest Trello state.
 - `generatedAt`: when the snapshot was created.
 - `counts.running`: number of cards with active Codex workers.
 - `counts.retrying`: number of cards waiting for a retry timer.
-- `routing.activeColumns`: Trello columns this process dispatches from.
-- `routing.terminalColumns`: Trello columns treated as complete.
-- `routing.handoffColumns`: columns Codex may move cards to with the scoped Trello move tool.
+- `routing.activeLists`: Trello lists this process dispatches from.
+- `routing.terminalLists`: Trello lists treated as complete.
+- `routing.handoffLists`: lists Codex may move cards to with the scoped Trello move tool.
 - `running`: active worker rows.
 - `retrying`: retry timer rows.
 - `codexTotals`: token and runtime totals observed from Codex app-server events.
@@ -35,7 +35,7 @@ Each `running` row includes:
 
 - `cardId`: Trello's internal card id. Use this for debugging only.
 - `cardIdentifier`: the stable human-facing identifier, such as `TRELLO-abc123`.
-- `state`: current Trello column name from the last dispatch refresh.
+- `state`: current Trello list name from the last dispatch refresh.
 - `sessionId`: combined Codex thread and turn id when both are known.
 - `turnCount`: number of started or continued Codex turns in this worker session.
 - `lastEvent` and `lastMessage`: latest Codex app-server event summary Symphony observed.
@@ -63,7 +63,7 @@ The card detail response includes:
 - tracked card fields rendered from Trello.
 
 The endpoint only returns cards that are currently running or retrying. A `404` usually means the
-card is no longer active in this process, reached a terminal column, or belongs to a different
+card is no longer active in this process, reached a terminal list, or belongs to a different
 workflow file.
 
 ## Logs
@@ -88,8 +88,8 @@ Typical troubleshooting flow:
 2. If it is running or retrying, open `/api/v1/{card_identifier}` and read `lastEvent`,
    `lastMessage`, `recentEvents`, and `lastError`.
 3. Search logs by `card_identifier`.
-4. If the card is absent, check the Trello column. Symphony only dispatches configured active
-   columns and ignores review, blocked, terminal, archived, and out-of-scope columns.
+4. If the card is absent, check the Trello list. Symphony only dispatches configured active lists and
+   ignores review, blocked, terminal, archived, and out-of-scope lists.
 5. If a workflow edit did not take effect, search logs for `workflow` and `reload`. Invalid reloads
    keep the last known good workflow active until the file is fixed.
 6. If Codex cannot read a host path, check the Trello blocked comment and the deployment's allowed
@@ -131,5 +131,5 @@ rate-limit data to this process yet.
 - A card in `Merging` is approved for landing when the workflow configures landing.
 - A card in `Done` is terminal and eligible for workspace cleanup.
 
-If your workflow uses different column names, read `routing` in `/api/v1/state`; it is the runtime
+If your workflow uses different list names, read `routing` in `/api/v1/state`; it is the runtime
 source for what this process considers active, terminal, and allowed handoff destinations.

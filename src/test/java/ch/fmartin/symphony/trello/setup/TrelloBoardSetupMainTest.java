@@ -23,7 +23,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 class TrelloBoardSetupMainTest {
     private HttpServer server;
-    private final List<String> createdColumns = new ArrayList<>();
+    private final List<String> createdLists = new ArrayList<>();
     private final AtomicReference<String> createdBoardName = new AtomicReference<>();
 
     @TempDir
@@ -53,8 +53,8 @@ class TrelloBoardSetupMainTest {
         });
         server.createContext("/1/lists", exchange -> {
             Map<String, String> query = query(exchange);
-            createdColumns.add(query.get("name"));
-            respond(exchange, "{\"id\":\"list-" + createdColumns.size() + "\",\"name\":\"" + query.get("name") + "\"}");
+            createdLists.add(query.get("name"));
+            respond(exchange, "{\"id\":\"list-" + createdLists.size() + "\",\"name\":\"" + query.get("name") + "\"}");
         });
         server.createContext(
                 "/1/boards/input",
@@ -146,7 +146,7 @@ class TrelloBoardSetupMainTest {
         // then
         assertThat(exitCode).isZero();
         assertThat(createdBoardName).hasValue("Symphony Work Queue");
-        assertThat(createdColumns)
+        assertThat(createdLists)
                 .containsExactly(
                         "Inbox", "Ready for Codex", "In Progress", "Blocked", "Human Review", "Merging", "Done");
         assertThat(workflow).content(StandardCharsets.UTF_8).contains("board_id: \"abc123\"");
@@ -195,10 +195,10 @@ class TrelloBoardSetupMainTest {
                 .contains("- \"Released\"");
         assertThat(stdout.toString(StandardCharsets.UTF_8))
                 .contains("Imported Trello board: Existing Board")
-                .contains("Active columns: Queue for Codex, Doing")
-                .contains("In-progress column: Doing")
-                .contains("Terminal columns: Released")
-                .contains("Blocked column: Blocked");
+                .contains("Active lists: Queue for Codex, Doing")
+                .contains("In-progress list: Doing")
+                .contains("Terminal lists: Released")
+                .contains("Blocked list: Blocked");
         assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
     }
 

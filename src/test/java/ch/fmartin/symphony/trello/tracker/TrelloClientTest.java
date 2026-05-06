@@ -389,7 +389,7 @@ class TrelloClientTest {
     }
 
     @Test
-    void prepareForDispatchMovesQueueCardToConfiguredInProgressColumnAndReturnsRefreshedCard() {
+    void prepareForDispatchMovesQueueCardToConfiguredInProgressListAndReturnsRefreshedCard() {
         // given
         TrelloClient client = new TrelloClient(new ObjectMapper());
         var config = config(

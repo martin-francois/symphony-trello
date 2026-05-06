@@ -140,7 +140,7 @@ public class TrelloClient implements TrackerClient {
         if (target.isEmpty()) {
             throw new TrelloException(
                     "trello_in_progress_list_not_found",
-                    "Configured in-progress column was not found on the Trello board");
+                    "Configured in-progress list was not found on the Trello board");
         }
         if (!shouldMoveBeforeDispatch(config, card, target.get())) {
             return card;
@@ -153,14 +153,14 @@ public class TrelloClient implements TrackerClient {
             if (!target.get().id().equals(found.card().listId())) {
                 throw new TrelloException(
                         "trello_in_progress_move_not_visible",
-                        "Card was not visible in the configured in-progress column after Trello accepted the move");
+                        "Card was not visible in the configured in-progress list after Trello accepted the move");
             }
             return found.card();
         }
         if (refreshed instanceof CardLookupResult.Failed failed) {
             throw new TrelloException(failed.code(), failed.message());
         }
-        throw new TrelloException("trello_card_missing", "Card disappeared after moving to in-progress column");
+        throw new TrelloException("trello_card_missing", "Card disappeared after moving to in-progress list");
     }
 
     private Map<String, CardLookupResult> fetchCardStatesByIds(

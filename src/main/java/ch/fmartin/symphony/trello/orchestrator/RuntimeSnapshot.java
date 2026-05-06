@@ -15,7 +15,7 @@ public record RuntimeSnapshot(
 
     public record Counts(int running, int retrying) {}
 
-    public record Routing(List<String> activeColumns, List<String> terminalColumns, List<String> handoffColumns) {}
+    public record Routing(List<String> activeLists, List<String> terminalLists, List<String> handoffLists) {}
 
     public record RunningRow(
             String cardId,

@@ -132,13 +132,10 @@ matters, and easy for another engineer to understand without asking the original
   explanatory sentence when lookup, authentication, or configuration details matter.
 - When referring to the local `codex` command in user setup docs, call it "Codex CLI" so readers do
   not confuse it with other Codex surfaces.
-- In user-facing docs and CLI text, call visible Trello board lanes "columns". Reserve "list" for
-  Trello API terms, configuration keys, Java collection types, and quoted REST fields such as
-  `idList`, `list_id`, `list_name`, or `allowed_move_list_names`.
-- When "list" remains in user-facing text because it is a Trello API/config term, make the
-  column-equivalence clear nearby if a reader could otherwise wonder whether it is a different Trello
-  concept.
-- Use Trello's UI term "archived" in prose for archived cards, columns/lists, and boards. Use
+- In user-facing docs, CLI text, and generated workflow prompts, call visible Trello board lanes
+  "lists". On first use in the README, briefly explain that a Trello list is the board column that
+  contains cards, for example `Ready for Codex` or `In Progress`.
+- Use Trello's UI term "archived" in prose for archived cards, lists, and boards. Use
   `closed` only when naming Trello REST API fields or parameters, and explain nearby that Trello's
   API uses `closed` for archived resources. Distinguish archived lists from deleted lists; Trello
   requires a list to be archived before it can be permanently deleted.
@@ -205,7 +202,7 @@ matters, and easy for another engineer to understand without asking the original
   workflow has active work, verify that Codex can authenticate, the work finishes or reaches an
   expected terminal state, Trello handoff happens when required, and `/api/v1/state` has no
   unexpected running or retrying entries.
-- Live deployment verification loops must poll Trello comments and the card's current column on every
+- Live deployment verification loops must poll Trello comments and the card's current list on every
   pass, not only the local state endpoint. Use a fresh timestamp cutoff after each restart so old
   blocker comments do not fail a fixed run, but fail immediately on any new blocker, auth, or sandbox
   comment.
@@ -217,7 +214,7 @@ matters, and easy for another engineer to understand without asking the original
   `/api/v1/state` returning to zero running/retrying before claiming real-Codex coverage.
 - Live import-board coverage must include at least one genuinely non-default existing board
   structure, not only a Symphony-generated board imported back again. Use explicit non-default
-  active and terminal column names, then verify fake-Codex first and strict real-Codex after.
+  active and terminal list names, then verify fake-Codex first and strict real-Codex after.
 - When a live run uncovers a broken scenario after an earlier health claim, record the reproducible
   scenario in `docs/live-e2e.md` and create or update GitHub issues before fixing behavior. Capture
   both the user-visible symptoms and the underlying cause when they are distinct. Keep the broken

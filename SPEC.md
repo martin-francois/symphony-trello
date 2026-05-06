@@ -64,8 +64,7 @@ Important boundary:
   labels, comments, normal card checklists, card due dates, and normal card attachments within
   Free-plan limits.
 
-Note: this specification uses Trello's API term "list". User-facing documentation and CLI text may
-call the same visible board lane a "column" when that is clearer for Trello users.
+Note: this specification uses Trello's term "list" for the visible board lane that contains cards.
 
 ### 2.2 Non-Goals
 
@@ -385,7 +384,8 @@ Fields:
 Workflow file path precedence:
 
 1. Explicit application/runtime setting, set by CLI startup path.
-2. Default: `WORKFLOW.md` in the current process working directory.
+2. Java implementation extension: `SYMPHONY_WORKFLOW_PATH`, when set.
+3. Default: `WORKFLOW.md` in the current process working directory.
 
 Loader behavior:
 
@@ -452,12 +452,16 @@ Fields:
   - Default for `tracker.kind == "trello"`: `https://api.trello.com/1`
 - `api_key` (string)
   - MAY be a literal token, `$VAR_NAME`, or an implementation-defined file reference.
-  - This Java implementation supports `file:/path` for file-backed secrets.
+  - This Java implementation supports `file:/path` for file-backed secrets, resolves relative file
+    paths relative to the directory containing `WORKFLOW.md`, strips trailing line breaks, and
+    rejects files larger than 64 KiB.
   - Default environment variable for `tracker.kind == "trello"`: `TRELLO_API_KEY`.
   - If `$VAR_NAME` resolves to an empty string, treat the key as missing.
 - `api_token` (string)
   - MAY be a literal token, `$VAR_NAME`, or an implementation-defined file reference.
-  - This Java implementation supports `file:/path` for file-backed secrets.
+  - This Java implementation supports `file:/path` for file-backed secrets, resolves relative file
+    paths relative to the directory containing `WORKFLOW.md`, strips trailing line breaks, and
+    rejects files larger than 64 KiB.
   - Default environment variable for `tracker.kind == "trello"`: `TRELLO_API_TOKEN`.
   - If `$VAR_NAME` resolves to an empty string, treat the token as missing.
 - `board_id` (string)
@@ -702,6 +706,69 @@ Dispatch gating behavior:
 - Workflow file read/YAML errors block new dispatches until fixed.
 - Template errors fail only the affected run attempt.
 
+### 5.6 Trello Board Setup Command Extension (OPTIONAL)
+
+Implementations MAY provide setup commands that create Trello boards, inspect existing Trello boards,
+and write starter `WORKFLOW.md` files. These commands are onboarding helpers, not a runtime
+conformance requirement.
+
+If implemented, setup commands SHOULD:
+
+- use the same Trello credential resolution contract as runtime config, including `.env` when the
+  implementation supports it
+- avoid printing Trello API keys or tokens
+- create or import only Trello Free-plan-compatible boards and lists
+- write workflow files that satisfy this specification's runtime schema
+- refuse to overwrite an existing workflow file unless the operator explicitly asks for overwrite,
+  or select a predictable alternate workflow file when that behavior is documented
+- emit enough output for the operator to know which board and workflow file were created or imported
+
+This Java implementation provides:
+
+- `list-workspaces`: prints Workspaces accessible to the configured Trello token
+- `new-board`: creates the recommended Trello board and starter workflow
+- `import-board`: writes a starter workflow for an existing board
+
+When `new-board` is used without an explicit Workspace and the token can access exactly one Trello
+Workspace, the Java implementation uses that Workspace automatically. If the token can access
+multiple Workspaces, setup fails with an operator-visible message that lists the available choices
+and asks for `--workspace-id`.
+
+The recommended board created by `new-board` uses these lists, in order:
+
+1. `Inbox`
+2. `Ready for Codex`
+3. `In Progress`
+4. `Blocked`
+5. `Human Review`
+6. `Merging`
+7. `Done`
+
+The generated workflow treats `Ready for Codex`, `In Progress`, and `Merging` as active lists,
+`Done` as terminal, `In Progress` as the visible pickup list, `Blocked` as the blocked handoff list,
+`Human Review` as the review handoff list, and `Merging` as the human approval list for landing.
+When the generated workflow receives repository work, it tells Codex to use a writable checkout under
+the per-card workspace by default, to clone from a readable matching local checkout or repository URL
+when the card names only a repository URL, and to clone from a readable but non-writable local
+checkout into the workspace instead of editing that shared checkout directly. If Git rejects a
+readable local checkout because of safe-directory ownership checks, the generated workflow tells
+Codex to add only that source checkout to the current user's Git safe directories before retrying the
+read-only clone. It also tells Codex to start task branches from the repository's default branch when
+that branch is discoverable, instead of inheriting the source checkout's current branch.
+The generated workflow treats unavailable push credentials as blocking only when a card, repository
+policy, or human explicitly requires a push or pull request. It also allows handoff with documented,
+clearly unrelated broad validation failures when card-specific validation passed.
+
+When `new-board` would otherwise write `WORKFLOW.md` and that file already exists, the Java
+implementation writes a board-specific file named `WORKFLOW.<slugified-board-name>.md`. If that file
+also exists, it appends a numeric suffix. Passing `--force` intentionally overwrites the selected
+workflow file.
+
+When `import-board` reads an existing board, the Java implementation detects common list names:
+`Ready for Codex` for queued work, `In Progress` for visible pickup, `Blocked` for blocked handoff,
+`Human Review` or legacy `Review` for review handoff, `Merging` for landing approval when a terminal
+list exists, and `Done` for terminal work. Explicit command options override detected list names.
+
 ## 6. Configuration Specification
 
 ### 6.1 Configuration Resolution Pipeline
@@ -716,6 +783,11 @@ Configuration is resolved in this order:
 
 Environment variables do not globally override YAML values. They are used only when a config value
 explicitly references them.
+
+This Java implementation also loads an ignored project-root `.env` file as a local development
+convenience. Real environment variables take precedence over `.env` entries. `.env` loading is not a
+portable core Symphony requirement, and production deployments SHOULD use the host secret mechanism
+documented for that deployment rather than relying on project-local files.
 
 Value coercion semantics:
 
@@ -817,6 +889,11 @@ implemented.
 - `codex.approval_policy`: Codex `AskForApproval` value, default implementation-defined
 - `codex.thread_sandbox`: Codex `SandboxMode` value, default implementation-defined
 - `codex.turn_sandbox_policy`: Codex `SandboxPolicy` value, default implementation-defined
+- `codex.additional_writable_roots`: list of path strings, default `[]`
+- `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS`: implementation environment extension that appends
+  host-managed allowed roots to `codex.additional_writable_roots`
+- `SYMPHONY_CODEX_DANGER_FULL_ACCESS`: implementation environment extension that forces the Codex
+  turn sandbox policy to `dangerFullAccess`
 - `codex.turn_timeout_ms`: integer, default `3600000`
 - `codex.read_timeout_ms`: integer, default `5000`
 - `codex.stall_timeout_ms`: integer, default `300000`
@@ -1475,6 +1552,9 @@ Optional client-side tool extension:
 - For write-capable operations, implementations SHOULD prefer typed high-level tools, for example
   `trello_add_comment`, `trello_upsert_workpad`, `trello_move_current_card`,
   `trello_upsert_checklist_item`, and `trello_add_url_attachment`.
+- Implementations MAY ship only a subset of typed high-level tools when generated or documented
+  workflows need only that subset. Unsupported tool names still MUST return a structured tool
+  failure instead of stalling the session.
 - A Trello workpad tool, when implemented, SHOULD maintain one current-card comment whose text starts
   with `## Codex Workpad`, update that comment instead of creating duplicate progress comments, and
   fail visibly if the existing workpad cannot be updated.
@@ -1719,11 +1799,13 @@ Trello Workflow Conformance:
 - Workflows that expect the agent to perform Trello handoff transitions MUST provide a scoped
   Trello client-side tool, MCP tool, or documented equivalent that supports the required writes.
 - The configured Trello tool MUST enforce `trello_tools` or a documented equivalent local policy.
-- At minimum, write-capable workflows MUST support:
-  - adding a comment to the current card
-  - moving the current card to an allowed board-local list
-  - adding or updating checklist items on the current card
-  - adding a URL attachment, such as a GitHub PR link, when enabled by policy
+- Write-capable workflows MUST support the specific Trello writes they instruct the agent to
+  perform. For the recommended workflow in this Java implementation, that means adding a comment to
+  the current card, upserting the single `## Codex Workpad` comment, and moving the current card to
+  an allowed board-local list.
+- If a workflow instructs the agent to add or update checklist items, labels, URL attachments, PR
+  links, or other Trello fields, the implementation MUST provide a scoped tool or documented
+  equivalent for those writes before claiming conformance for that workflow.
 - Write tools MUST be scoped to the configured board and current card unless an explicit allowlist
   permits broader access.
 - Read-only deployments MAY disable write-capable operations, but then the implementation MUST
@@ -1814,6 +1896,10 @@ SHOULD return:
 - `running` (list of running session rows)
 - each running row SHOULD include `turn_count`
 - `retrying` (list of retry queue rows)
+- `routing`
+  - `activeLists`
+  - `terminalLists`
+  - `handoffLists`
 - `codex_totals`
   - `input_tokens`
   - `output_tokens`
@@ -1893,10 +1979,19 @@ Extension config:
   - Enables the HTTP server extension.
   - `0` requests an ephemeral port for local development and tests.
   - CLI `--port` overrides `server.port` when both are present.
+- `SYMPHONY_HTTP_PORT` / `QUARKUS_HTTP_PORT` (Java implementation environment extension)
+  - Uses Quarkus's normal HTTP port override path.
+  - When either external port override is present, it takes precedence over `server.port`.
+- `SYMPHONY_AUTOSTART` (Java implementation environment extension)
+  - Defaults to `true`.
+  - Set to `false` only for tests or embedded/injected service usage where the caller starts the
+    orchestrator explicitly.
 
 Enablement (extension):
 
 - Start the HTTP server when a CLI `--port` argument is provided.
+- Start or reconfigure the HTTP server through the implementation's host framework when an external
+  port override such as `SYMPHONY_HTTP_PORT` or `QUARKUS_HTTP_PORT` is present.
 - Start the HTTP server when `server.port` is present in `WORKFLOW.md` front matter.
 - The `server` top-level key is owned by this extension.
 - Positive `server.port` values bind that port.
@@ -2043,6 +2138,8 @@ API design notes:
 
 - The JSON shapes above are the RECOMMENDED baseline for interoperability and debugging ergonomics.
 - Implementations MAY add fields, but SHOULD avoid breaking existing fields within a version.
+- This Java implementation serializes HTTP API fields with Java record accessor names, for example
+  `generatedAt`, `codexTotals`, `cardIdentifier`, `turnCount`, and `routing.activeLists`.
 - Endpoints SHOULD be read-only except for operational triggers like `/refresh`.
 - Unsupported methods on defined routes SHOULD return `405 Method Not Allowed`.
 - API errors SHOULD use a JSON envelope such as `{"error":{"code":"...","message":"..."}}`.
@@ -2895,15 +2992,19 @@ Required when the workflow expects the agent to perform Trello handoff transitio
   enablement for non-`trello_rest` tools.
 - Trello tool execution context includes the active worker session's current card ID and resolved
   board ID.
-- Ability to add comments to the current card when `trello_tools.allow_comments` permits it.
+- Ability to perform every Trello write the workflow tells the agent to perform.
+- Ability to add comments to the current card when the workflow uses comment handoff and
+  `trello_tools.allow_comments` permits it.
 - Ability to move the current card to allowed board-local lists.
-- Ability to add or update checklist items on the current card when `trello_tools.allow_checklists`
-  permits it.
-- Ability to add policy-enabled URL attachments, such as GitHub PR links, when
-  `trello_tools.allow_url_attachments` permits it.
+- Ability to maintain the current-card `## Codex Workpad` comment when the workflow uses the workpad
+  pattern and `trello_tools.allow_comments` permits it.
+- Ability to add or update checklist items on the current card when the workflow asks for checklist
+  writes and `trello_tools.allow_checklists` permits it.
+- Ability to add policy-enabled URL attachments, such as GitHub PR links, when the workflow asks for
+  URL attachment writes and `trello_tools.allow_url_attachments` permits it.
 - Write operations are scoped to the configured board and current card unless explicitly allowlisted.
-- Generic `trello_rest` writes are classified and unclassified writes fail with structured policy
-  errors.
+- If generic `trello_rest` is implemented, writes are classified and unclassified writes fail with
+  structured policy errors.
 - Destructive operations are disabled by default.
 - Write-capable operations require a Trello token with write permission, or an operator-visible
   warning when startup cannot verify write capability without side effects.

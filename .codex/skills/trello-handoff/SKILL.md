@@ -10,9 +10,9 @@ description: >
 
 ## Goals
 
-- Move only the current card through configured board columns.
+- Move only the current card through configured board lists.
 - Leave clear Trello comments for humans.
-- Keep active columns free of blocked or completed work.
+- Keep active lists free of blocked or completed work.
 - Use the workpad for detailed state and a short comment for the visible
   handoff.
 
@@ -24,11 +24,11 @@ Use these scoped tools when they are advertised:
 - `trello_add_comment`
 - `trello_upsert_workpad`
 
-The move tool uses Trello's API term `list_name` for a board column name.
+The move tool uses Trello's term `list_name` for a board list name.
 
 ## Pickup
 
-When a card starts in `Ready for Codex` and an `In Progress` column is
+When a card starts in `Ready for Codex` and an `In Progress` list is
 configured, first move it to `In Progress`:
 
 ```json
@@ -40,7 +40,7 @@ configured, first move it to `In Progress`:
 }
 ```
 
-If no in-progress column is configured, leave the card in its active column and
+If no in-progress list is configured, leave the card in its active list and
 continue work.
 
 ## Human Review
@@ -52,11 +52,11 @@ Before moving to `Human Review`:
 2. Add one concise visible handoff comment.
 3. Move the card to `Human Review`.
 
-Do not attempt landing from `Human Review`; that column is for a person.
+Do not attempt landing from `Human Review`; that list is for a person.
 
 ## Rework
 
-When a human moves a card from `Human Review` back to an active column such as
+When a human moves a card from `Human Review` back to an active list such as
 `Ready for Codex`, treat it as rework rather than a new task.
 
 Before changing code:
@@ -82,7 +82,7 @@ Move to `Blocked` when the card cannot proceed safely because of missing auth,
 inaccessible files, unclear requirements, failing external systems, or unsafe
 merge conditions.
 
-If no `Blocked` column exists but the workflow configured a review column as
+If no `Blocked` list exists but the workflow configured a review list as
 the blocked destination, move there so the card leaves the active queue. In the
 comment, say that the card is blocked.
 
@@ -94,6 +94,6 @@ completion comment when useful, and move to `Done`.
 
 ## Stop Conditions
 
-- The destination column is not in the configured move allowlist.
+- The destination list is not in the configured move allowlist.
 - The handoff comment would expose secrets or unrelated local details.
 - Required validation, review sweep, or landing checks are incomplete.

@@ -32,7 +32,7 @@ description: >
    - retrying cards
    - last Codex event and message
    - token totals and rate-limit data
-3. Check the card's current Trello column. Cards in non-active columns are not
+3. Check the card's current Trello list. Cards in non-active lists are not
    dispatched.
 4. Read recent Trello comments on the card. Blocker comments often contain the
    exact missing path, auth, or permission problem.
@@ -64,7 +64,7 @@ into Trello or GitHub.
 
 - Card identifier or sanitized card title.
 - Workflow file name, not a private absolute path unless required for the fix.
-- Current Trello column.
+- Current Trello list.
 - Last service state for the card.
 - Last Codex event and error message.
 - Trello comment summary, especially blocker comments.

@@ -6,13 +6,13 @@ consulted: [SPEC.md, README.md, OpenAI Symphony Elixir workflow]
 informed: [Future maintainers]
 ---
 
-# Use A Workflow-Configured In-Progress Pickup Column
+# Use A Workflow-Configured In-Progress Pickup List
 
 ## Context and Problem Statement
 
 Users looking at Trello should be able to tell when Codex has picked up a card. The implementation
 already exposes running work through the status page and API, but a Trello board is easier to scan
-when picked-up cards leave the queue column.
+when picked-up cards leave the queue list.
 
 How should Symphony for Trello make pickup visible while preserving the specification boundary that
 tracker writes are driven by the workflow instead of hard-coded board assumptions?
@@ -23,35 +23,35 @@ tracker writes are driven by the workflow instead of hard-coded board assumption
 * Stay aligned with the original Symphony workflow pattern where Codex moves work from a queue state
   to an in-progress state.
 * Keep card mutation policy in `WORKFLOW.md`.
-* Keep imported existing boards usable when they do not have an in-progress column.
-* Preserve retry and restart behavior for cards already moved to the in-progress column.
+* Keep imported existing boards usable when they do not have an in-progress list.
+* Preserve retry and restart behavior for cards already moved to the in-progress list.
 
 ## Considered Options
 
-* Workflow-configured scheduler move to an in-progress pickup column.
+* Workflow-configured scheduler move to an in-progress pickup list.
 * Prompt-only agent move.
 * Add only a pickup comment.
 * Keep pickup visible only in the status page/API.
 
 ## Decision Outcome
 
-Chosen option: "Workflow-configured scheduler move to an in-progress pickup column".
+Chosen option: "Workflow-configured scheduler move to an in-progress pickup list".
 
 The recommended board setup creates `In Progress`. Generated workflows include `Ready for Codex` and
 `In Progress` in `tracker.active_states`, set `tracker.in_progress_state` to `In Progress`, and
 include `In Progress` in `trello_tools.allowed_move_list_names` for workflows that still need the
 agent to move cards explicitly. After the orchestrator revalidates a selected card, it moves cards
-from earlier active columns into the configured in-progress column before rendering the prompt and
-starting Codex. Existing-board import detects a column named `In Progress` or accepts
-`--in-progress`. If no in-progress column is configured, the generated workflow leaves the card in
-the active column while Codex works.
+from earlier active lists into the configured in-progress list before rendering the prompt and
+starting Codex. Existing-board import detects a list named `In Progress` or accepts
+`--in-progress`. If no in-progress list is configured, the generated workflow leaves the card in
+the active list while Codex works.
 
 ### Consequences
 
 * Good, because the Trello board shows when a queued card was picked up.
 * Good, because a card already in `In Progress` remains eligible for continuation after retry or
   service restart.
-* Good, because existing boards without an in-progress column still work.
+* Good, because existing boards without an in-progress list still work.
 * Neutral, because a card can be visible as in progress while the service retries a failed Codex
   startup.
 * Bad, because the orchestrator now performs one workflow-configured tracker write before the agent
@@ -60,14 +60,14 @@ the active column while Codex works.
 ### Confirmation
 
 Run `./mvnw -q spotless:check verify`. Review generated workflows from `new-board` and
-`import-board`. Live deployment checks should cover both a workflow with an in-progress column and a
+`import-board`. Live deployment checks should cover both a workflow with an in-progress list and a
 workflow without one.
 
 ## Pros and Cons of the Options
 
-### Workflow-Configured Scheduler Move To An In-Progress Pickup Column
+### Workflow-Configured Scheduler Move To An In-Progress Pickup List
 
-Add an optional in-progress column to the generated workflow and have the scheduler move queue cards
+Add an optional in-progress list to the generated workflow and have the scheduler move queue cards
 there after revalidation and before Codex starts.
 
 * Good, because it mirrors the original Symphony workflow pattern.
@@ -87,7 +87,7 @@ Prompt Codex to call `trello_move_current_card` before implementation work.
 
 Have Codex add a short comment when it starts.
 
-* Good, because it works without another column.
+* Good, because it works without another list.
 * Bad, because comments are not visible in the board scan view.
 * Bad, because comments can become noisy.
 
@@ -103,4 +103,4 @@ Rely on `/` and `/api/v1/state` to show running cards.
 
 The upstream OpenAI Symphony Elixir workflow asks Codex to move queued Linear issues to
 `In Progress` before doing implementation work. Symphony for Trello follows that pattern with Trello
-columns and scoped Trello move tools.
+lists and scoped Trello move tools.

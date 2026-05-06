@@ -67,12 +67,12 @@ class SymphonyOrchestratorTest {
             assertThat(row.cardIdentifier()).isEqualTo("TRELLO-abc");
             assertThat(row.attempt()).isEqualTo(1);
         });
-        assertThat(snapshot.routing().activeColumns()).containsExactly("Todo");
-        assertThat(snapshot.routing().terminalColumns()).contains("done");
+        assertThat(snapshot.routing().activeLists()).containsExactly("Todo");
+        assertThat(snapshot.routing().terminalLists()).contains("done");
     }
 
     @Test
-    void doesNotDispatchCardsFromNonActiveColumns() throws Exception {
+    void doesNotDispatchCardsFromNonActiveLists() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         writeWorkflow(workflow, "60000");
