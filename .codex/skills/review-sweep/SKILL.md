@@ -73,9 +73,6 @@ For each item, choose one outcome:
 - Defer it only when it is out of scope, already tracked elsewhere, or conflicts
   with the current Trello card.
 
-When replying as Codex, prefix the reply with `[codex]` if the repository expects
-agent-authored GitHub comments to be marked.
-
 Use inline replies for inline review comments. Use the PR issue thread for
 top-level comments and Codex review issue comments.
 
