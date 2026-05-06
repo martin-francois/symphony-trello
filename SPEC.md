@@ -773,6 +773,19 @@ workflow, `Human Review` means a pull request is available for review unless the
 for local-only or no-push work. It also allows handoff with documented, clearly unrelated broad
 validation failures when card-specific validation passed.
 
+Before `Human Review`, the generated workflow tells Codex to classify PR check state rather than
+blocking on any non-green check:
+
+- If a failing check is caused by the current branch or can be reproduced by equivalent local
+  validation, Codex keeps the card active, fixes the failure, pushes again, and repeats the review
+  sweep.
+- If checks are pending or stale, Codex waits, refreshes, or reruns them while the card remains
+  active unless a true external blocker appears.
+- If checks cannot run because of external quota or infrastructure limits, or the failing checks are
+  clearly unrelated to the current card, Codex can move the card to `Human Review` when equivalent
+  local validation passed. The workpad and visible Trello handoff comment MUST record the check
+  caveat, the local commands used as evidence, and why the check failure is unrelated or unavailable.
+
 When `new-board` would otherwise write `WORKFLOW.md` and that file already exists, the Java
 implementation writes a board-specific file named `WORKFLOW.<slugified-board-name>.md`. If that file
 also exists, it appends a numeric suffix. Passing `--force` intentionally overwrites the selected

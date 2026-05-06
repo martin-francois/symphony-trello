@@ -191,12 +191,23 @@ The sweep must check top-level PR comments, inline review comments, review state
 CI/check status, and Codex review issue comments when present. Every actionable human, bot, or Codex
 review comment is blocking until it is addressed with code, tests, docs, or PR metadata, or answered
 with a justified response in the right thread. Do not decline correctness feedback without concrete
-validation. Failing, pending, or stale required checks mean the work is not ready for handoff when a
-pull request is already part of the card.
+validation.
+
+Classify PR checks before deciding handoff:
+
+- If a failing check is caused by the current branch or can be reproduced by equivalent local
+  validation, keep the card active, fix the failure, push again, and repeat the sweep.
+- If checks are pending or stale, wait, refresh, or rerun them while the card remains active unless
+  the workflow reaches a true external blocker.
+- If checks cannot run because of external quota or infrastructure limits, or the failing checks are
+  clearly unrelated to the current card, do not block handoff when equivalent local validation
+  passed. Record the check caveat, the local commands used as evidence, and why the failure is
+  unrelated or unavailable in the workpad and handoff comment.
 
 After feedback-driven changes, rerun the relevant validation and repeat the sweep until no
-actionable feedback remains. If GitHub auth, PR discovery, required checks, or review data are
-unavailable for a PR-backed card, treat the card as blocked instead of handing it off.
+actionable feedback remains. If GitHub auth, PR discovery, or review data are unavailable for a
+PR-backed card and no documented fallback can provide the required signal, treat the card as blocked
+instead of handing it off.
 
 ## Rework From Human Review
 
