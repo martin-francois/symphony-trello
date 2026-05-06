@@ -6,56 +6,58 @@ consulted: [docs/deployment.md, docs/ansible-deployment.md, GitHub issue 13]
 informed: [Future maintainers]
 ---
 
-# Keep Deployed Project Roots Explicit
+# Keep Deployed Host Paths Explicit
 
 ## Context and Problem Statement
 
-A deployed workflow can receive a Trello card that asks Codex to work in a local project checkout
-outside Symphony's managed workspace area. The service may be healthy, Codex may be authenticated,
-and Trello handoff may work, while the requested checkout is still inaccessible to the service user
-or systemd sandbox.
+A deployed workflow can receive a Trello card that asks Codex to work with a local file, folder, or
+project checkout outside Symphony's managed workspace area. The service may be healthy, Codex may be
+authenticated, and Trello handoff may work, while the requested host path is still inaccessible to
+the service user or systemd sandbox.
 
-How should deployed Symphony for Trello expose existing project checkouts without making broad host
+How should deployed Symphony for Trello expose existing host paths without making broad host
 filesystem access the default?
 
 ## Decision Drivers
 
 * Keep the production default narrow and predictable.
-* Let operators intentionally expose project checkouts that cards are allowed to modify.
+* Let operators intentionally expose host paths that cards are allowed to modify.
 * Support the manual systemd path and the Ansible path.
 * Make filesystem blockers visible in Trello comments.
 * Avoid changing the core Symphony workflow contract or requiring a project checkout manager now.
 
 ## Considered Options
 
-* Keep only the managed workspace accessible by default and add explicit allowed project roots.
+* Keep only the managed workspace accessible by default and add explicit allowed host paths.
 * Expose the host filesystem broadly by default.
 * Copy every target project into the per-card workspace before each run.
 * Leave deployment access handling to documentation only.
 
 ## Decision Outcome
 
-Chosen option: "Keep only the managed workspace accessible by default and add explicit allowed
-project roots", because it preserves the secure deployment posture while making intended project
-checkouts a deliberate operator choice.
+Chosen option: "Keep only the managed workspace accessible by default and add explicit allowed host
+paths", because it preserves the secure deployment posture while making intended file, folder, or
+checkout access a deliberate operator choice.
 
 The base systemd unit continues to protect home directories and keeps writable access limited to
 Symphony state. Manual deployments can add a systemd drop-in with read-only temporary filesystems for
 home locations, declared bind mounts, and matching Codex sandbox writable roots for specific paths.
-The Ansible role manages those settings from `symphony_trello_allowed_project_roots`. For parent
-directories that contain several checkouts, operators can additionally set
+The Ansible role manages those settings from `symphony_trello_allowed_project_roots`; despite the
+legacy variable name, it accepts a list of concrete files or folders. For parent directories,
+operators can additionally set
 `symphony_trello_codex_danger_full_access` so systemd still limits visible writable host paths while
 Codex does not apply a narrower workspace-write list inside that namespace. The role also exposes a
 broader `symphony_trello_allow_host_filesystem` switch for trusted single-user machines.
 
 Generated workflow prompts now tell Codex that filesystem blocker comments must state the
-inaccessible path, why the deployed service cannot access it, where accessible workspace files are,
-and how an operator can relax access through deployment configuration.
+inaccessible path, that deployed Symphony blocks undeclared host paths by default for security
+reasons, where accessible workspace files are, and which deployment settings allow one or more host
+paths.
 
 ### Consequences
 
 * Good, because unrelated host paths stay unavailable unless the operator opts in.
-* Good, because intended project roots can be managed idempotently by Ansible across systemd and
+* Good, because intended host paths can be managed idempotently by Ansible across systemd and
   Codex's own sandbox.
 * Good, because blocked Trello comments should explain host access problems without requiring
   operators to inspect systemd units first.
@@ -68,16 +70,16 @@ and how an operator can relax access through deployment configuration.
 ### Confirmation
 
 Run `ansible-playbook --syntax-check`, `ansible-lint`, `systemd-analyze verify`, live deployment
-checks with and without an allowed project root, and `./mvnw -q spotless:check verify`.
+checks with and without an allowed host path, and `./mvnw -q spotless:check verify`.
 
 ## Pros and Cons of the Options
 
-### Keep Only The Managed Workspace Accessible By Default And Add Explicit Allowed Project Roots
+### Keep Only The Managed Workspace Accessible By Default And Add Explicit Allowed Host Paths
 
-Keep the base unit strict. Expose additional project roots only through a systemd drop-in plus Codex
+Keep the base unit strict. Expose additional host paths only through a systemd drop-in plus Codex
 sandbox writable roots, or through Ansible variables that manage both.
 
-* Good, because the operator has to make each exposed root explicit.
+* Good, because the operator has to make each exposed path explicit.
 * Good, because Ansible can converge the drop-in and restart services only when inputs changed.
 * Good, because the manual deployment path remains transparent.
 * Bad, because cards that mention unconfigured host paths still block until the operator adds access
@@ -110,6 +112,6 @@ Document that cards should use accessible paths, but do not add deployment suppo
 
 ## More Information
 
-Issue 13 tracks the deployed project-checkout access problem. Manual configuration is documented in
+Issue 13 tracks the deployed host path access problem. Manual configuration is documented in
 [docs/deployment.md](../deployment.md), and Ansible configuration is documented in
 [docs/ansible-deployment.md](../ansible-deployment.md).

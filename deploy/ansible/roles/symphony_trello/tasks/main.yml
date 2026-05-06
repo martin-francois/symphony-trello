@@ -13,20 +13,20 @@
       Define symphony_trello_trello_api_key and symphony_trello_trello_api_token in an Ansible Vault
       file, and define symphony_trello_workflows in group_vars.
 
-- name: Validate allowed project roots
+- name: Validate allowed host paths
   ansible.builtin.assert:
     that:
       - item is match('^/')
       - item != '/'
       - item is not search('[\\s":]')
     fail_msg: >
-      symphony_trello_allowed_project_roots entries must be absolute paths below a concrete project
-      directory and must not contain whitespace, double quotes, or colons. Use
+      symphony_trello_allowed_project_roots entries must be concrete absolute file or folder paths
+      and must not contain whitespace, double quotes, or colons. Use
       symphony_trello_allow_host_filesystem only when you intentionally accept broad host filesystem
       access.
   loop: "{{ symphony_trello_allowed_project_roots }}"
   loop_control:
-    label: configured project root
+    label: configured host path
 
 - name: Calculate local build input fingerprint
   ansible.builtin.command:
@@ -313,23 +313,30 @@
     mode: "0755"
   when: symphony_trello_allow_host_filesystem or (symphony_trello_allowed_project_roots | length > 0)
 
-- name: Deploy project access systemd drop-in
+- name: Deploy host path access systemd drop-in
   ansible.builtin.template:
-    src: project-roots.conf.j2
-    dest: /etc/systemd/system/symphony-trello@.service.d/10-project-roots.conf
+    src: host-paths.conf.j2
+    dest: /etc/systemd/system/symphony-trello@.service.d/10-host-paths.conf
     owner: root
     group: root
     mode: "0644"
   when: symphony_trello_allow_host_filesystem or (symphony_trello_allowed_project_roots | length > 0)
-  register: symphony_trello_project_roots_dropin
+  register: symphony_trello_host_paths_dropin
   notify: Reload systemd
 
-- name: Remove project access systemd drop-in
+- name: Remove host path access systemd drop-in
+  ansible.builtin.file:
+    path: /etc/systemd/system/symphony-trello@.service.d/10-host-paths.conf
+    state: absent
+  when: not symphony_trello_allow_host_filesystem and (symphony_trello_allowed_project_roots | length == 0)
+  register: symphony_trello_host_paths_dropin_removed
+  notify: Reload systemd
+
+- name: Remove legacy host path systemd drop-in
   ansible.builtin.file:
     path: /etc/systemd/system/symphony-trello@.service.d/10-project-roots.conf
     state: absent
-  when: not symphony_trello_allow_host_filesystem and (symphony_trello_allowed_project_roots | length == 0)
-  register: symphony_trello_project_roots_dropin_removed
+  register: symphony_trello_legacy_host_paths_dropin_removed
   notify: Reload systemd
 
 - name: Apply pending systemd reload before service changes
@@ -407,8 +414,9 @@
           or (symphony_trello_secret_files.results | selectattr('changed') | list | length > 0)
           or (symphony_trello_codex_auth_file.changed | default(false))
           or symphony_trello_unit_file.changed
-          or (symphony_trello_project_roots_dropin.changed | default(false))
-          or (symphony_trello_project_roots_dropin_removed.changed | default(false))
+          or (symphony_trello_host_paths_dropin.changed | default(false))
+          or (symphony_trello_host_paths_dropin_removed.changed | default(false))
+          or (symphony_trello_legacy_host_paths_dropin_removed.changed | default(false))
           or symphony_trello_app_sync.changed
           or (symphony_trello_workflow_copy.results | selectattr('changed') | list | length > 0) }}
 

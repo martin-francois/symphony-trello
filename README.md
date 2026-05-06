@@ -433,9 +433,14 @@ trello_move_current_card with list_name "Human Review". If the work is blocked o
 update the workpad with the blocker, add a Trello comment explaining the blocker, then call
 trello_move_current_card with list_name "Blocked". If the blocker is a local filesystem access
 problem, the Trello comment must include the inaccessible path, why it is inaccessible, that deployed
-Symphony exposes only managed workspaces and explicitly allowed project roots by default, that
-accessible files are available in the current per-card workspace shown by `pwd`, and that an operator
-can relax access with the systemd or Ansible allowed-project-roots deployment setting.
+Symphony allows only managed workspaces and explicitly allowed host paths by default for security
+reasons so Trello cards cannot make Codex read or edit unrelated host files, that accessible files
+are available in the current per-card workspace shown by `pwd`, and that an operator can allow one or
+more files or folders with the manual deployment settings `BindPaths`, `ReadWritePaths`, and
+`SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS`, as documented in
+`docs/deployment.md#allow-host-path-access`, or with the Ansible list setting
+`symphony_trello_allowed_project_roots`, as documented in
+`docs/ansible-deployment.md#host-path-access`.
 
 Card URL: {{ card.url }}
 ```
@@ -608,9 +613,14 @@ trello_move_current_card with list_name "Human Review". If the work is blocked o
 update the workpad with the blocker, add a Trello comment explaining the blocker, then call
 trello_move_current_card with list_name "Blocked". If the blocker is a local filesystem access
 problem, the Trello comment must include the inaccessible path, why it is inaccessible, that deployed
-Symphony exposes only managed workspaces and explicitly allowed project roots by default, that
-accessible files are available in the current per-card workspace shown by `pwd`, and that an operator
-can relax access with the systemd or Ansible allowed-project-roots deployment setting.
+Symphony allows only managed workspaces and explicitly allowed host paths by default for security
+reasons so Trello cards cannot make Codex read or edit unrelated host files, that accessible files
+are available in the current per-card workspace shown by `pwd`, and that an operator can allow one or
+more files or folders with the manual deployment settings `BindPaths`, `ReadWritePaths`, and
+`SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS`, as documented in
+`docs/deployment.md#allow-host-path-access`, or with the Ansible list setting
+`symphony_trello_allowed_project_roots`, as documented in
+`docs/ansible-deployment.md#host-path-access`.
 
 Card URL: {{ card.url }}
 ```
@@ -773,8 +783,9 @@ Important environment variables:
 - `SYMPHONY_HTTP_PORT`: Quarkus HTTP port, default `8080`.
 - `SYMPHONY_AUTOSTART`: set `false` in tests or when only using injected services.
 - `TRELLO_API_KEY` and `TRELLO_API_TOKEN`: default Trello credential variable names.
-- `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS`: path-separated roots that are added to Codex's
-  `workspaceWrite` sandbox policy.
+- `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS`: path-separated files or folders that are added to
+  Codex's `workspaceWrite` sandbox policy for deployments that intentionally expose extra host
+  paths.
 - `SYMPHONY_CODEX_DANGER_FULL_ACCESS`: set `true` only with an intentionally broad deployment
   sandbox.
 

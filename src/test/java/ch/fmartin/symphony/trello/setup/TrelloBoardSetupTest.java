@@ -192,7 +192,8 @@ class TrelloBoardSetupTest {
                 .contains("If the Trello card names a specific local path or project")
                 .contains("Filesystem access blocker details")
                 .contains("inaccessible path")
-                .contains("allowed project roots")
+                .contains("allowed host paths")
+                .contains("symphony_trello_allowed_project_roots")
                 .contains("max_concurrent_agents: 1");
         EffectiveConfig config = resolve(workflow);
         assertThat(config.tracker().boardId()).isEqualTo("abc123");
