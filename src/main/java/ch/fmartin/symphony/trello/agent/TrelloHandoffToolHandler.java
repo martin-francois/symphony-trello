@@ -108,7 +108,7 @@ public class TrelloHandoffToolHandler {
         if (!config.trelloTools().allowComments()) {
             return failure("trello_comments_disabled", "Trello comments are disabled by trello_tools.allow_comments.");
         }
-        String text = requiredText(arguments, "text");
+        String text = TrelloMarkdown.escapeLeadingHashtags(requiredText(arguments, "text"));
         trello.addComment(config, card.id(), text);
         return success(Map.of("status", "comment_added", "card_id", card.id()));
     }
@@ -153,9 +153,18 @@ public class TrelloHandoffToolHandler {
     private static String workpadText(String text) {
         String trimmed = text.strip();
         if (trimmed.startsWith(WORKPAD_MARKER)) {
-            return trimmed;
+            int markerEnd = markerLineEnd(trimmed);
+            return trimmed.substring(0, markerEnd) + TrelloMarkdown.escapeLeadingHashtags(trimmed.substring(markerEnd));
         }
-        return WORKPAD_MARKER + System.lineSeparator() + System.lineSeparator() + trimmed;
+        return WORKPAD_MARKER
+                + System.lineSeparator()
+                + System.lineSeparator()
+                + TrelloMarkdown.escapeLeadingHashtags(trimmed);
+    }
+
+    private static int markerLineEnd(String text) {
+        int lineEnd = text.indexOf('\n');
+        return lineEnd < 0 ? text.length() : lineEnd;
     }
 
     private ObjectNode moveCurrentCard(EffectiveConfig config, Card card, JsonNode arguments) {

@@ -1838,6 +1838,11 @@ Trello Workflow Conformance:
   perform. For the recommended workflow in this Java implementation, that means adding a comment to
   the current card, upserting the single `## Codex Workpad` comment, and moving the current card to
   an allowed board-local list.
+- Java implementation extension: Trello-facing markdown written by `trello_add_comment` and
+  `trello_upsert_workpad` escapes a GitHub issue reference such as `#2076` when it would be the
+  first visible text of a paragraph or unordered bullet item. This avoids Trello rendering issue
+  references as headings while preserving normal Markdown headings and hashtags later in the same
+  line.
 - If a workflow instructs the agent to add or update checklist items, labels, URL attachments, PR
   links, or other Trello fields, the implementation MUST provide a scoped tool or documented
   equivalent for those writes before claiming conformance for that workflow.
