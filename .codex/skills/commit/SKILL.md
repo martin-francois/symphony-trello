@@ -1,9 +1,8 @@
 ---
 name: commit
 description: >
-  Create a focused Conventional Commit from the current staged changes. Use when
-  asked to commit, prepare a commit, or finalize a Symphony-for-Trello issue
-  branch.
+  Create a focused commit from the current staged changes. Use when asked to
+  commit, prepare a commit, or finalize a Symphony-for-Trello issue branch.
 ---
 
 # Commit
@@ -11,7 +10,7 @@ description: >
 ## Goals
 
 - Commit only the intended changes.
-- Use a Conventional Commit subject.
+- Match the target repository's commit-message convention.
 - For branches that may become GitHub pull requests, make the commit author
   match the authenticated GitHub user before creating commits.
 - Preserve unrelated user changes.
@@ -58,7 +57,21 @@ description: >
    generic fallback author. If the card explicitly says the work is local-only
    or must not be pushed, keep the existing local Git identity and mention that
    no PR author identity was needed.
-5. Choose a Conventional Commit type and concise imperative subject.
+5. Choose the commit message style:
+
+   - First, read the target repository's `CONTRIBUTING.md` or equivalent
+     contributor guide when one exists, and follow any commit-message
+     convention it defines.
+   - If no contributor guide defines a convention, inspect the last 20 to 50
+     commit subjects on the default branch and infer the established style.
+   - If the repository has no commits, no reachable default-branch history, or
+     only one commit without a documented convention, treat the history as too
+     small to infer from and default to Conventional Commits.
+   - If the guide is silent and recent history is mixed or unclear, default to
+     Conventional Commits with a concise imperative subject.
+   - Do not force Conventional Commits on a repository that clearly uses a
+     different convention.
+
 6. Write a body when the commit is not self-explanatory. Include:
    - Summary of the behavior or docs changed.
    - Important rationale or tradeoffs.
