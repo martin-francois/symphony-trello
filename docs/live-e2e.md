@@ -5,8 +5,8 @@ board ids.
 
 Run this in two phases. First use real Trello with the deterministic Java app-server test double in
 place of real Codex. That catches scheduler, Trello, workflow import, handoff tool, and concurrency
-issues without model variability. Then run the strict real-Codex phase against fresh disposable
-cards before claiming real `codex app-server` coverage.
+issues without model variability. Then run the real-Codex phase that matches the claim you need
+before claiming real `codex app-server` coverage.
 
 ## Inputs
 
@@ -47,9 +47,41 @@ The harness covers:
 6. `max_concurrent_agents: 2` on one board.
 7. Two Symphony processes watching two boards at the same time.
 8. Fake app-server Trello comments and handoff moves.
-9. Final `/api/v1/state` drain to zero running and retrying entries.
+9. A long-running external-project card with Docker fixture files, proving Trello shows
+   `In Progress` while work is underway and `Human Review` after handoff.
+10. Final `/api/v1/state` drain to zero running and retrying entries.
 
-Use the manual sections below when you need a step-by-step reproduction, strict real-Codex coverage,
+The fake-Codex external-project case creates a disposable directory under `target/live-e2e-it/`
+outside the Symphony workspace root. The directory contains a minimal Dockerfile with a 30-second
+build step. The fake app-server sleeps for 30 seconds instead of running Docker, which keeps this
+test deterministic while still reproducing the board lifecycle that exposed the original problem.
+
+## Optional Real Codex Docker Harness
+
+Use this after the fake-Codex harness when you need proof that real Codex, real Trello, and Docker
+work together. It is opt-in because it uses model time, Docker daemon access, and an image pull.
+
+```bash
+SYMPHONY_RUN_REAL_CODEX_DOCKER_E2E=1 ./mvnw -q -Dit.test=LiveTrelloE2eIT verify
+```
+
+If the Trello token can access more than one Workspace:
+
+```bash
+SYMPHONY_RUN_REAL_CODEX_DOCKER_E2E=1 \
+SYMPHONY_LIVE_E2E_TRELLO_WORKSPACE_ID=replace-with-workspace-id \
+./mvnw -q -Dit.test=LiveTrelloE2eIT verify
+```
+
+The real-Codex Docker test creates a disposable Trello board and a disposable external project under
+`target/live-e2e-it/`. The card asks Codex to build a small Docker image whose Dockerfile contains
+`RUN sleep 30`, run the image, write `docker-output.txt`, verify the file, comment on the Trello
+card, and move the card to `Human Review`. The test starts Symphony with
+`SYMPHONY_CODEX_DANGER_FULL_ACCESS=true` because Docker daemon access usually fails inside Codex's
+workspace-write sandbox. The test verifies that the card first appears in `In Progress`, then
+reaches `Human Review`, and that the output file contains the run id.
+
+Use the manual sections below when you need a step-by-step reproduction, real-Codex coverage,
 deployment troubleshooting, or a scenario the Java harness does not automate yet.
 
 ## What To Verify
@@ -498,6 +530,19 @@ Codex's sandbox needs; `RestrictAddressFamilies` must include `AF_NETLINK`.
 
 Use this when changing systemd hardening or Ansible deployment access.
 
+Use disposable external projects for this scenario. Do not reuse a private checkout. A suitable
+fixture is a temporary directory outside the Symphony workspace root with this Dockerfile:
+
+```dockerfile
+FROM alpine:3.22
+RUN sleep 30
+COPY expected.txt /expected.txt
+CMD ["cat", "/expected.txt"]
+```
+
+Put a unique run id in `expected.txt`. The 30-second build step gives enough time to observe that
+Trello moves the card from `Ready for Codex` to `In Progress` before the final handoff.
+
 1. Deploy with no extra project roots.
 2. Create a Trello card that asks Codex to inspect a disposable host path outside
    `/var/lib/symphony-trello`.
@@ -514,6 +559,11 @@ Use this when changing systemd hardening or Ansible deployment access.
    `symphony_trello_allowed_project_roots` narrow.
 8. Deploy again with a different allowed root and create a card for the previous path. It should
    block again, proving the allowlist did not become broad host access.
+
+For the successful path, the card should ask Codex to build the Docker image from the disposable
+project, run it, write the output to a file in the same disposable project, verify the output, then
+move the Trello card to `Human Review`. While Docker is running, the card should already be visible
+in `In Progress`.
 
 ### Regression Scenario: In-Progress Pickup Visibility
 
