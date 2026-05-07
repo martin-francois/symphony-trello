@@ -1,4 +1,4 @@
-{%- set workflow_source = lookup('ansible.builtin.file', item.source | default(item.src)) | replace('\r\n', '\n') -%}
+{%- set workflow_source = lookup('ansible.builtin.file', item.source) | replace('\r\n', '\n') -%}
 {%- set workflow_lines = workflow_source.split('\n') -%}
 {%- set has_front_matter = workflow_lines | length > 0 and workflow_lines[0].strip() == '---' -%}
 {%- if has_front_matter -%}
