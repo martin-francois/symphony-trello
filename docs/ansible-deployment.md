@@ -96,8 +96,7 @@ symphony_trello_workflows:
 Each `name` becomes a systemd service instance. For example, `project-a` becomes
 `symphony-trello@project-a` and reads `/etc/symphony-trello/workflows/project-a.WORKFLOW.md`.
 
-Each `source` points to the local workflow file that should be deployed for that service. `src` is
-still accepted for older local variable files.
+Each `source` points to the local workflow file that should be deployed for that service.
 
 The playbook does not copy the source workflow verbatim. It renders a deployed copy and keeps the
 prompt body, board routing, Codex settings, and other workflow policy from the source file. It then

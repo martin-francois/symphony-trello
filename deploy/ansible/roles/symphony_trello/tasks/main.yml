@@ -18,7 +18,7 @@
     that:
       - item.name is defined
       - item.name is match('^[A-Za-z0-9_.-]+$')
-      - item.src is defined or item.source is defined
+      - item.source is defined
       - item.workspace_root is not defined or item.workspace_root is match('^/')
       - item.workspace_root is not defined or item.workspace_root is not search('(^|/)\\.\\.(/|$)')
       - item.workspace_root is not defined
@@ -161,7 +161,7 @@
 
 - name: Validate local workflow files exist
   ansible.builtin.stat:
-    path: "{{ item.source | default(item.src) }}"
+    path: "{{ item.source }}"
   loop: "{{ symphony_trello_workflows }}"
   loop_control:
     label: "{{ item.name }}"
@@ -173,7 +173,7 @@
   ansible.builtin.assert:
     that:
       - item.stat.exists
-    fail_msg: "Workflow {{ item.item.name }} points to missing local file {{ item.item.source | default(item.item.src) }}."
+    fail_msg: "Workflow {{ item.item.name }} points to missing local file {{ item.item.source }}."
   loop: "{{ symphony_trello_local_workflow_files.results }}"
   loop_control:
     label: "{{ item.item.name }}"
@@ -419,12 +419,6 @@
     and not symphony_trello_allow_host_filesystem
   register: symphony_trello_env_file_removed
 
-- name: Remove legacy environment file that could contain old secrets
-  ansible.builtin.file:
-    path: "{{ symphony_trello_config_dir }}/env"
-    state: absent
-  register: symphony_trello_legacy_env_file_removed
-
 - name: Deploy systemd unit template
   ansible.builtin.copy:
     src: "{{ symphony_trello_unit_src }}"
@@ -461,13 +455,6 @@
     state: absent
   when: not symphony_trello_allow_host_filesystem and (symphony_trello_allowed_project_roots | length == 0)
   register: symphony_trello_host_paths_dropin_removed
-  notify: Reload systemd
-
-- name: Remove legacy host path systemd drop-in
-  ansible.builtin.file:
-    path: /etc/systemd/system/symphony-trello@.service.d/10-project-roots.conf
-    state: absent
-  register: symphony_trello_legacy_host_paths_dropin_removed
   notify: Reload systemd
 
 - name: Apply pending systemd reload before service changes
@@ -541,13 +528,11 @@
       {{ (symphony_trello_env_file.changed | default(false))
           or symphony_trello_service_user.changed
           or (symphony_trello_env_file_removed.changed | default(false))
-          or symphony_trello_legacy_env_file_removed.changed
           or (symphony_trello_secret_files.results | selectattr('changed') | list | length > 0)
           or (symphony_trello_codex_auth_file.changed | default(false))
           or symphony_trello_unit_file.changed
           or (symphony_trello_host_paths_dropin.changed | default(false))
           or (symphony_trello_host_paths_dropin_removed.changed | default(false))
-          or (symphony_trello_legacy_host_paths_dropin_removed.changed | default(false))
           or symphony_trello_app_sync.changed
           or (symphony_trello_workflow_copy.results | selectattr('changed') | list | length > 0) }}
 
