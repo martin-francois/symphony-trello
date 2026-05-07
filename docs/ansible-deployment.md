@@ -137,13 +137,15 @@ do not point this at tools installed below `/root` or a personal home directory.
 
 By default, the deployed service lets Codex read and write only Symphony-managed paths such as
 `/var/lib/symphony-trello`. This is safer for production because Trello cards cannot make Codex edit
-unrelated host files.
+unrelated host files. It also prevents Codex from reading undeclared home-directory paths.
 
 If cards should work with files or folders outside the managed workspace, explicitly allow those host
-paths. The setting is a list, so you can provide more than one path:
+paths. The setting is a list, so you can provide more than one path. Allowed host paths are visible
+to the service and writable when the underlying file permissions also allow the service user to write
+them:
 
 ```yaml
-symphony_trello_allowed_project_roots:
+symphony_trello_allowed_host_paths:
   - /srv/projects/example
   - /srv/shared/input.txt
 ```
@@ -158,7 +160,7 @@ If you expose a parent directory and Codex still reports a sandbox error for tha
 systemd paths narrow and relax only Codex's inner sandbox:
 
 ```yaml
-symphony_trello_allowed_project_roots:
+symphony_trello_allowed_host_paths:
   - /srv/projects
 symphony_trello_codex_danger_full_access: true
 ```
@@ -176,6 +178,10 @@ symphony_trello_allow_host_filesystem: true
 Use that only for a trusted single-user machine. It gives Codex sessions run by the service much more
 host filesystem access than the default deployment. The playbook also tells Codex to use
 `dangerFullAccess` for turns when this is enabled.
+
+The older `symphony_trello_allowed_project_roots` name still works as a compatibility alias for
+existing deployments. Prefer `symphony_trello_allowed_host_paths` for new files because the entries
+can be any concrete file or folder, not only project roots.
 
 If cards should run Docker commands through the host Docker daemon, add the service user to the
 host's Docker group:

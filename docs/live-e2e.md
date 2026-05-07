@@ -550,13 +550,13 @@ Trello moves the card from `Ready for Codex` to `In Progress` before the final h
    inaccessible, why the deployed service could not access it, that files are available in the
    per-card workspace shown by `pwd`, and that deployment access can be relaxed with allowed host
    paths.
-4. Deploy again with that disposable path in `symphony_trello_allowed_project_roots`.
+4. Deploy again with that disposable path in `symphony_trello_allowed_host_paths`.
 5. Create a fresh card that asks Codex to read and write a harmless marker file in the allowed path.
 6. Verify the card moves to the review handoff list, the marker file changed as requested, and
    `/api/v1/state` drains to zero running and retrying entries.
 7. If the allowed path is a parent directory and Codex reports a sandbox error
    for the parent, rerun with `symphony_trello_codex_danger_full_access: true` while keeping
-   `symphony_trello_allowed_project_roots` narrow.
+   `symphony_trello_allowed_host_paths` narrow.
 8. Deploy again with a different allowed path and create a card for the previous path. It should
    block again, proving the allowlist did not become broad host access.
 
@@ -572,7 +572,7 @@ Use a disposable repository, not a private project checkout.
 
 1. Prepare a readable local repository checkout outside the Symphony workspace root and make it
    read-only for the service user.
-2. Deploy with the parent directory in `symphony_trello_allowed_project_roots`.
+2. Deploy with the parent directory in `symphony_trello_allowed_host_paths`.
 3. Create one Trello card whose title names only the repository URL and asks for a small committed
    code or documentation change.
 4. Create another Trello card whose title names the read-only local checkout path and asks for the

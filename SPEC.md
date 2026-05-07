@@ -3220,7 +3220,7 @@ When this profile is used:
   chosen paths
 - the playbook MAY expose variables for host-specific choices such as
   `symphony_trello_service_environment`, `symphony_trello_codex_auth_src`,
-  `symphony_trello_allowed_project_roots`, and `symphony_trello_codex_danger_full_access`
+  `symphony_trello_allowed_host_paths`, and `symphony_trello_codex_danger_full_access`
 - rerunning the playbook SHOULD be idempotent when inputs have not changed
 - changed application inputs SHOULD rebuild the app on the controller before deployment
 - changed app artifacts or workflow files SHOULD restart only affected managed services
@@ -3252,8 +3252,10 @@ When this profile is used:
 - an operator may allow one or more files or folders with documented systemd or Ansible settings
 - allowed host paths SHOULD be reflected in both the systemd filesystem policy and Codex's
   `workspaceWrite` writable roots when that sandbox mode is used
-- the Ansible profile maps allowed host paths from `symphony_trello_allowed_project_roots` into the
+- the Ansible profile maps allowed host paths from `symphony_trello_allowed_host_paths` into the
   systemd drop-in and Codex writable-root environment for managed services
+- implementations MAY keep older deployment variable names as aliases, but new documentation SHOULD
+  use names that describe concrete files or folders rather than project roots
 - the manual systemd profile documents the equivalent `BindPaths`, `ReadWritePaths`, and
   `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS` settings
 - a less strict Codex inner sandbox MAY be enabled for trusted workflows while systemd still limits

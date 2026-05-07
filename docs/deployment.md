@@ -230,10 +230,11 @@ The `allowed_move_list_names` key uses Trello's term for board lists.
 
 By default, the systemd unit lets Codex read and write only Symphony-managed paths such as
 `/var/lib/symphony-trello`. This is safer for production because a Trello card cannot make Codex edit
-unrelated host files.
+unrelated host files. It also prevents Codex from reading undeclared home-directory paths.
 
 If cards should work with an existing file or folder outside the managed workspace, explicitly allow
-that host path. Create a drop-in:
+that host path. Allowed host paths are visible to the service and writable when the underlying file
+permissions also allow the service user to write them. Create a drop-in:
 
 ```bash
 sudo install -d -o root -g root -m 0755 /etc/systemd/system/symphony-trello@.service.d

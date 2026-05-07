@@ -278,7 +278,16 @@ When the work is ready for human review, update the workpad with the final summa
 evidence, and PR URL when applicable, call trello_add_comment with a concise summary and verification
 notes, then call trello_move_current_card with list_name "Human Review". If the work is blocked or
 unsafe to hand off, update the workpad with the blocker, add a Trello comment explaining the blocker,
-then call trello_move_current_card with list_name "Blocked".
+then call trello_move_current_card with list_name "Blocked". If the blocker is a local filesystem
+access problem, the Trello comment must include the inaccessible path, why it is inaccessible, that
+deployed Symphony blocks undeclared host paths by default for security reasons so Trello cards cannot
+make Codex read or edit unrelated host files, that accessible files are available in the current
+per-card workspace shown by `pwd`, and that an operator can allow one or more files or folders with
+the manual deployment settings `BindPaths`, `ReadWritePaths`, and
+`SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS`, as documented in
+`docs/deployment.md#allow-host-path-access`, or with the Ansible list setting
+`symphony_trello_allowed_host_paths`, as documented in
+`docs/ansible-deployment.md#host-path-access`.
 
 Card URL: {{ card.url }}
 
