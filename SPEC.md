@@ -3152,8 +3152,8 @@ GitHub commit authoring extension:
   `user.email` are configured and the checkout-local `symphony-trello.github-author-verified`
   marker is `true`
 - when the task checkout has no complete workflow-verified local Git author, the commit skill SHOULD
-  resolve the authenticated GitHub user with the same GitHub CLI authentication context used for PR
-  publication and configure the task checkout's Git author from that identity before the first
+  resolve the authenticated GitHub login with the same GitHub CLI authentication context used for PR
+  publication and configure the task checkout's Git author name from that login before the first
   commit is created
 - the preferred author email is the user's public GitHub email when available, otherwise an actual
   GitHub noreply address returned by the authenticated account's email API
@@ -3165,8 +3165,15 @@ GitHub commit authoring extension:
   commit author set cannot be verified
 - if identity lookup fails before PR-bound commits are created, the workflow SHOULD block visibly
   instead of using a generic fallback author
-- already-pushed commits SHOULD NOT be rewritten only to fix author metadata unless a human or
-  workflow policy explicitly allows a safe force-push
+- before moving a card to `Human Review`, generated workflows SHOULD verify that every commit in the
+  PR range is authored with the authenticated GitHub login and email, including commits that already
+  existed when continuing an existing PR
+- a PR with any commit authored as a generic Codex identity SHOULD NOT be treated as ready for human
+  review
+- generated workflows MAY explicitly allow an author-only rewrite of the current non-default task PR
+  branch, followed by `git push --force-with-lease`, when the PR range contains wrong-author commits
+- generated workflows SHOULD NOT rewrite the default branch, an unnamed branch, or a branch that
+  contains unrelated human-owned work only to fix author metadata
 - local-only or no-push work MAY use the existing local Git identity because no GitHub PR author
   identity is needed
 - commit messages SHOULD follow the target repository's documented convention, such as

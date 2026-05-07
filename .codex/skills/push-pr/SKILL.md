@@ -33,11 +33,11 @@ description: >
 
 2. Run the required local checks for the change.
 3. Before pushing, verify that commits intended for the PR are authored as the
-   authenticated GitHub user:
+   authenticated GitHub login:
 
    ```bash
-   if ! github_name="$(gh api user --jq 'if (.name // "") == "" then .login else .name end')" || [ -z "$github_name" ]; then
-     echo "GitHub identity lookup failed: cannot verify PR commit author name" >&2
+   if ! github_name="$(gh api user --jq '.login // ""')" || [ -z "$github_name" ]; then
+     echo "GitHub identity lookup failed: cannot verify PR commit author login" >&2
      exit 1
    fi
    if ! github_email="$(gh api user --jq '.email // ""')"; then
@@ -77,6 +77,7 @@ description: >
      exit 1
    fi
    git log --format='%H %an <%ae>' "$merge_base"..HEAD
+   symphony_trello_author_rewrite=false
    wrong_authors="$(
      git log --format='%H%x09%an <%ae>' "$merge_base"..HEAD |
        while IFS="$(printf '\t')" read -r commit author; do
@@ -86,19 +87,52 @@ description: >
        done
    )"
    if [ -n "$wrong_authors" ]; then
-     printf 'Git author verification failed: expected PR commits authored as %s\n%s\n' "$github_author" "$wrong_authors" >&2
-     exit 1
+     current_branch="$(git branch --show-current)"
+     if [ -z "$current_branch" ] || [ "$current_branch" = "$default_branch" ]; then
+       printf 'Git author verification failed: expected PR commits authored as %s\n%s\n' "$github_author" "$wrong_authors" >&2
+       echo "Refusing to rewrite author metadata on the default branch or an unnamed branch" >&2
+       exit 1
+     fi
+     printf 'Git author verification will rewrite PR branch commits to %s\n%s\n' "$github_author" "$wrong_authors" >&2
+     export GIT_AUTHOR_NAME="$github_name"
+     export GIT_AUTHOR_EMAIL="$github_email"
+     export GIT_COMMITTER_NAME="$github_name"
+     export GIT_COMMITTER_EMAIL="$github_email"
+     if ! git rebase --exec 'git commit --amend --no-edit --reset-author' "$merge_base"; then
+       echo "Git author verification failed: could not rewrite PR commit authors" >&2
+       exit 1
+     fi
+     unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
+     wrong_authors="$(
+       git log --format='%H%x09%an <%ae>' "$merge_base"..HEAD |
+         while IFS="$(printf '\t')" read -r commit author; do
+           if [ "$author" != "$github_author" ]; then
+             printf '%s %s\n' "$commit" "$author"
+           fi
+         done
+     )"
+     if [ -n "$wrong_authors" ]; then
+       printf 'Git author verification failed after rewrite: expected PR commits authored as %s\n%s\n' "$github_author" "$wrong_authors" >&2
+       exit 1
+     fi
+     symphony_trello_author_rewrite=true
    fi
    ```
 
-   If an unpublished commit uses the wrong author, amend it before pushing. If
-   the branch was already pushed, do not rewrite it unless the workflow or human
-   explicitly says a force-push is safe. Surface any mismatch in the workpad or
-   handoff comment.
+   This generated workflow explicitly allows a narrow author-only rewrite of the
+   current non-default PR branch when the PR range contains wrong-author commits,
+   because a card must not reach Human Review with a PR authored as a generic
+   Codex identity. Do not rewrite the default branch, an unnamed branch, or a
+   branch that contains unrelated human-owned work; stop and surface the exact
+   mismatch instead.
 4. Push normally:
 
    ```bash
-   git push -u origin HEAD
+   if [ "${symphony_trello_author_rewrite:-false}" = true ]; then
+     git push --force-with-lease -u origin HEAD
+   else
+     git push -u origin HEAD
+   fi
    ```
 
 5. If push is rejected because the branch is stale, use `repo-sync`, rerun
@@ -130,4 +164,5 @@ description: >
 - Required checks have not run and there is no clear reason to publish anyway.
 - PR metadata would be misleading or incomplete.
 - The branch contains wrong-author commits and rewriting them would be unsafe
-  without human approval.
+  because the branch is the default branch, unnamed, or contains unrelated
+  human-owned work.

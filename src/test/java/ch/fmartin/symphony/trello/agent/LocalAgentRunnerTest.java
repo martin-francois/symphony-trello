@@ -71,7 +71,7 @@ class LocalAgentRunnerTest {
         assertThat(Files.readString(expectedWorkspace.resolve("after.txt"))).contains("after");
         assertThat(expectedWorkspace.resolve(CodexSkillInstaller.installedSkillPath("commit")))
                 .content()
-                .contains("configure it from the authenticated GitHub user");
+                .contains("configure it from the authenticated GitHub login");
     }
 
     @Test
