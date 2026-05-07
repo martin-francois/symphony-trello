@@ -180,7 +180,11 @@ public class SymphonyOrchestrator {
                 List<Card> candidates = tracker.fetchCandidateCards(config).stream()
                         .sorted(TrelloClient.dispatchComparator(config))
                         .toList();
+                Set<String> releasedCards = releaseIdleInProgressOverflow(candidates);
                 for (Card card : candidates) {
+                    if (releasedCards.contains(card.id())) {
+                        continue;
+                    }
                     if (availableSlots() <= 0) {
                         break;
                     }
@@ -379,6 +383,7 @@ public class SymphonyOrchestrator {
         if (suppressRetry) {
             claimed.remove(cardId);
         } else {
+            releaseCurrentFromDispatch(entry.card, reason);
             scheduleRetry(cardId, nextAttempt(entry.retryAttempt), entry.identifier(), reason, false);
         }
         LOG.infof("card_id=%s card_identifier=%s outcome=terminated reason=%s", cardId, entry.identifier(), reason);
@@ -395,6 +400,7 @@ public class SymphonyOrchestrator {
             dispatchCard = tracker.prepareForDispatch(config, card);
         } catch (RuntimeException e) {
             claimed.remove(card.id());
+            releaseCurrentFromDispatch(card, "prepare for dispatch failed");
             scheduleRetry(card.id(), nextAttempt(attempt), card.identifier(), e.getMessage(), false);
             return;
         }
@@ -406,6 +412,7 @@ public class SymphonyOrchestrator {
             prompt = prompts.render(workflow.promptTemplate(), dispatchCard, attempt);
         } catch (RuntimeException e) {
             running.remove(dispatchCard.id());
+            releaseFromDispatch(dispatchCard, "prompt render failed");
             scheduleRetry(dispatchCard.id(), nextAttempt(attempt), dispatchCard.identifier(), e.getMessage(), false);
             return;
         }
@@ -451,6 +458,7 @@ public class SymphonyOrchestrator {
             completed.add(cardId);
             scheduleRetry(cardId, 1, entry.identifier(), null, true);
         } else {
+            releaseCurrentFromDispatch(entry.card, result.reason());
             scheduleRetry(cardId, nextAttempt(entry.retryAttempt), entry.identifier(), result.reason(), false);
         }
     }
@@ -562,7 +570,8 @@ public class SymphonyOrchestrator {
                 workspaces.removeForIdentifierIfPresent(card.identifier(), config);
             } else if (!TrelloClient.isActive(card, config)) {
                 claimed.remove(cardId);
-            } else if (!shouldDispatch(card, true)) {
+            } else if (!shouldDispatchIgnoringSlots(card, true)) {
+                releaseFromDispatch(card, "card is active but not currently dispatch-eligible");
                 scheduleRetry(
                         cardId,
                         retry.attempt() + 1,
@@ -570,7 +579,16 @@ public class SymphonyOrchestrator {
                         "card is active but not currently dispatch-eligible",
                         false);
             } else if (availableSlots() == 0) {
+                releaseFromDispatch(card, "no available orchestrator slots");
                 scheduleRetry(cardId, retry.attempt() + 1, card.identifier(), "no available orchestrator slots", false);
+            } else if (perStateSlots(card) == 0) {
+                releaseFromDispatch(card, "no available orchestrator slots for card state");
+                scheduleRetry(
+                        cardId,
+                        retry.attempt() + 1,
+                        card.identifier(),
+                        "no available orchestrator slots for card state",
+                        false);
             } else {
                 claimed.remove(cardId);
                 refreshForDispatch(card).ifPresent(promptCard -> dispatch(promptCard, retry.attempt()));
@@ -579,15 +597,87 @@ public class SymphonyOrchestrator {
     }
 
     private boolean shouldDispatch(Card card, boolean ignoreClaim) {
+        return shouldDispatchIgnoringSlots(card, ignoreClaim) && availableSlots() > 0 && perStateSlots(card) > 0;
+    }
+
+    private boolean shouldDispatchIgnoringSlots(Card card, boolean ignoreClaim) {
         return card.hasRequiredDispatchFields()
                 && !isOutOfBoardScope(card)
                 && TrelloClient.isActive(card, config)
                 && !TrelloClient.isTerminal(card, config)
                 && (ignoreClaim || !claimed.contains(card.id()))
                 && !running.containsKey(card.id())
-                && availableSlots() > 0
-                && perStateSlots(card) > 0
                 && blockersAllowDispatch(card);
+    }
+
+    private Set<String> releaseIdleInProgressOverflow(List<Card> candidates) {
+        if (blank(config.tracker().inProgressState())) {
+            return Set.of();
+        }
+
+        int plannedRunning = running.size();
+        Map<String, Integer> plannedRunningByState = runningCountsByState();
+        Set<String> releasedCards = new HashSet<>();
+        for (Card card : candidates) {
+            if (running.containsKey(card.id()) || claimed.contains(card.id())) {
+                continue;
+            }
+            String state = StateNames.normalize(card.state());
+            int plannedStateRunning = plannedRunningByState.getOrDefault(state, 0);
+            if (shouldDispatchIgnoringSlots(card, false)
+                    && plannedRunning < config.agent().maxConcurrentAgents()
+                    && plannedStateRunning < perStateLimit(card)) {
+                plannedRunning++;
+                plannedRunningByState.put(state, plannedStateRunning + 1);
+                continue;
+            }
+            if (isConfiguredInProgress(card)) {
+                releaseFromDispatch(card, "not currently running");
+                releasedCards.add(card.id());
+            }
+        }
+        return releasedCards;
+    }
+
+    private void releaseFromDispatch(Card card, String reason) {
+        if (!isConfiguredInProgress(card)) {
+            return;
+        }
+        try {
+            tracker.releaseFromDispatch(config, card);
+            LOG.infof(
+                    "card_id=%s card_identifier=%s outcome=released_from_in_progress reason=%s",
+                    card.id(), card.identifier(), reason);
+        } catch (RuntimeException e) {
+            LOG.warnf(
+                    "card_id=%s card_identifier=%s outcome=release_from_in_progress_failed reason=%s",
+                    card.id(), card.identifier(), e.getMessage());
+        }
+    }
+
+    private void releaseCurrentFromDispatch(Card card, String reason) {
+        if (blank(config.tracker().inProgressState())) {
+            return;
+        }
+        try {
+            CardLookupResult result =
+                    tracker.fetchCardStatesByIds(config, List.of(card.id())).get(card.id());
+            if (result instanceof CardLookupResult.Found found) {
+                releaseFromDispatch(found.card(), reason);
+            } else if (result instanceof CardLookupResult.Failed failed) {
+                LOG.warnf(
+                        "card_id=%s card_identifier=%s outcome=release_from_in_progress_refresh_failed reason=%s",
+                        card.id(), card.identifier(), failed.message());
+            }
+        } catch (RuntimeException e) {
+            LOG.warnf(
+                    "card_id=%s card_identifier=%s outcome=release_from_in_progress_refresh_failed reason=%s",
+                    card.id(), card.identifier(), e.getMessage());
+        }
+    }
+
+    private boolean isConfiguredInProgress(Card card) {
+        return StateNames.normalize(config.tracker().inProgressState()).equals(StateNames.normalize(card.state()));
     }
 
     private boolean blockersAllowDispatch(Card card) {
@@ -603,15 +693,27 @@ public class SymphonyOrchestrator {
         return Math.max(config.agent().maxConcurrentAgents() - running.size(), 0);
     }
 
+    private static boolean blank(String value) {
+        return value == null || value.isBlank();
+    }
+
     private int perStateSlots(Card card) {
         String state = StateNames.normalize(card.state());
-        int limit = config.agent()
+        return Math.max(perStateLimit(card) - runningCountsByState().getOrDefault(state, 0), 0);
+    }
+
+    private int perStateLimit(Card card) {
+        return config.agent()
                 .maxConcurrentAgentsByState()
-                .getOrDefault(state, config.agent().maxConcurrentAgents());
-        long runningInState = running.values().stream()
-                .filter(entry -> StateNames.normalize(entry.card.state()).equals(state))
-                .count();
-        return (int) Math.max(limit - runningInState, 0);
+                .getOrDefault(StateNames.normalize(card.state()), config.agent().maxConcurrentAgents());
+    }
+
+    private Map<String, Integer> runningCountsByState() {
+        Map<String, Integer> counts = new HashMap<>();
+        running.values().stream()
+                .map(entry -> StateNames.normalize(entry.card.state()))
+                .forEach(state -> counts.merge(state, 1, Integer::sum));
+        return counts;
     }
 
     private boolean isOutOfBoardScope(Card card) {

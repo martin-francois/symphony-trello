@@ -1000,7 +1000,7 @@ public final class TrelloBoardSetup {
                 Symphony only dispatches cards from configured active lists: %s.
 
                 - %s: queued work; %s.
-                - %s: active work already picked up by Codex; continue the existing execution flow.
+                - %s: work currently running in Codex; continue the existing execution flow.
                 - %s: blocked work. Symphony does not dispatch it while this list is not configured as active.
                 - %s: human review. Do not code from this list unless a human moves the card back to an active list.
                 - %s: %s.

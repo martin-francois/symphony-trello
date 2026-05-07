@@ -497,6 +497,10 @@ Fields:
   - OPTIONAL Trello list name used as the visible pickup state.
   - When configured, implementations MAY move a dispatch-eligible card from an earlier active
     list/state into this list after revalidation and before starting the coding agent.
+  - A card in this visible pickup state SHOULD represent work that is currently running. If the
+    orchestrator has to wait for retry/backoff or cannot run the card because concurrency slots are
+    full, it SHOULD move the card back to the previous configured active list when that target can be
+    resolved.
   - When `active_list_ids` is empty, this value MUST also appear in `active_states`.
   - The move is workflow-configured tracker behavior for Trello's visible board state; it does not
     change the coding agent's responsibility for later handoff comments and state transitions.
@@ -1089,8 +1093,10 @@ Tick sequence:
 5. Revalidate a selected card before dispatch. If `tracker.in_progress_state` is configured and the
    card is in an earlier active state/list, move it to that in-progress list and use the refreshed
    card snapshot for the prompt.
-6. Dispatch eligible cards while slots remain.
-7. Notify observability/status consumers of state changes.
+6. If a configured visible pickup list contains cards that cannot be dispatched now because no slot is
+   planned for them, release those cards back to the previous configured active list when possible.
+7. Dispatch eligible cards while slots remain.
+8. Notify observability/status consumers of state changes.
 
 If per-tick validation fails, dispatch is skipped for that tick, but reconciliation still happens
 first.
@@ -1188,9 +1194,12 @@ Retry handling behavior:
    - Do not clean the workspace.
 6. If the card is active but not otherwise candidate-eligible, for example blocked:
    - Requeue with an explicit error reason, unless the implementation documents a release policy.
+   - If the card is in a configured visible pickup list, move it back to the previous configured
+     active list when possible before waiting for the next retry.
 7. If the card is active and candidate-eligible:
    - Dispatch if slots are available.
-   - Otherwise requeue with error `no available orchestrator slots`.
+   - Otherwise move it back from the configured visible pickup list when possible, then requeue with
+     error `no available orchestrator slots`.
 
 Note:
 
@@ -2512,6 +2521,7 @@ function terminate_running_card(state, card_id, cleanup_workspace, suppress_retr
   if suppress_retry:
     state.claimed.remove(card_id)
   else:
+    tracker.release_from_dispatch_if_needed(running_entry.card)
     state = schedule_retry(state, card_id, next_attempt_from(running_entry), {
       identifier: running_entry.identifier,
       error: "worker terminated"
@@ -2703,6 +2713,7 @@ on_worker_exit(card_id, worker_identity, reason, state):
       delay_type: continuation
     })
   else:
+    tracker.release_from_dispatch_if_needed(running_entry.card)
     state = schedule_retry(state, card_id, next_attempt_from(running_entry), {
       identifier: running_entry.identifier,
       error: format("worker exited: %reason")
@@ -2754,12 +2765,14 @@ on_retry_timer(card_id, state):
     return state
 
   if not should_dispatch_ignoring_claim(card, state):
+    tracker.release_from_dispatch_if_needed(card)
     return schedule_retry(state, card_id, retry_entry.attempt + 1, {
       identifier: card.identifier,
       error: "card is active but not currently dispatch-eligible"
     })
 
   if available_slots(state) == 0:
+    tracker.release_from_dispatch_if_needed(card)
     return schedule_retry(state, card_id, retry_entry.attempt + 1, {
       identifier: card.identifier,
       error: "no available orchestrator slots"

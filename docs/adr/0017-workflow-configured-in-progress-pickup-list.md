@@ -10,21 +10,22 @@ informed: [Future maintainers]
 
 ## Context and Problem Statement
 
-Users looking at Trello should be able to tell when Codex has picked up a card. The implementation
-already exposes running work through the status page and API, but a Trello board is easier to scan
-when picked-up cards leave the queue list.
+Users looking at Trello should be able to tell when Codex is actively working on a card. The
+implementation already exposes running work through the status page and API, but a Trello board is
+easier to scan when running cards leave the queue list.
 
 How should Symphony for Trello make pickup visible while preserving the specification boundary that
 tracker writes are driven by the workflow instead of hard-coded board assumptions?
 
 ## Decision Drivers
 
-* Make picked-up Codex work visible from the Trello board.
+* Make active Codex work visible from the Trello board.
 * Stay aligned with the original Symphony workflow pattern where Codex moves work from a queue state
   to an in-progress state.
 * Keep card mutation policy in `WORKFLOW.md`.
 * Keep imported existing boards usable when they do not have an in-progress list.
-* Preserve retry and restart behavior for cards already moved to the in-progress list.
+* Preserve restart behavior for cards already moved to the in-progress list.
+* Avoid leaving retry/backoff cards in `In Progress` when no worker is running for them.
 
 ## Considered Options
 
@@ -42,18 +43,20 @@ The recommended board setup creates `In Progress`. Generated workflows include `
 include `In Progress` in `trello_tools.allowed_move_list_names` for workflows that still need the
 agent to move cards explicitly. After the orchestrator revalidates a selected card, it moves cards
 from earlier active lists into the configured in-progress list before rendering the prompt and
-starting Codex. Existing-board import detects a list named `In Progress` or accepts
-`--in-progress`. If no in-progress list is configured, the generated workflow leaves the card in
-the active list while Codex works.
+starting Codex. If the attempt fails and waits for retry/backoff, or if a card is visible in
+`In Progress` but cannot be run because concurrency slots are full, the orchestrator moves it back
+to the previous configured active list when that target can be resolved. Existing-board import
+detects a list named `In Progress` or accepts `--in-progress`. If no in-progress list is configured,
+the generated workflow leaves the card in the active list while Codex works.
 
 ### Consequences
 
 * Good, because the Trello board shows when a queued card was picked up.
-* Good, because a card already in `In Progress` remains eligible for continuation after retry or
-  service restart.
+* Good, because a card already in `In Progress` remains eligible for continuation after a service
+  restart.
+* Good, because retry/backoff cards no longer look like currently running work when the previous
+  active list can be resolved.
 * Good, because existing boards without an in-progress list still work.
-* Neutral, because a card can be visible as in progress while the service retries a failed Codex
-  startup.
 * Bad, because the orchestrator now performs one workflow-configured tracker write before the agent
   starts.
 

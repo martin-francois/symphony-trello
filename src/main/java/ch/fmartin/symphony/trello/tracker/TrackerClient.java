@@ -21,4 +21,6 @@ public interface TrackerClient {
     default Card prepareForDispatch(EffectiveConfig config, Card card) {
         return card;
     }
+
+    default void releaseFromDispatch(EffectiveConfig config, Card card) {}
 }

@@ -24,6 +24,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
@@ -259,6 +260,225 @@ class SymphonyOrchestratorTest {
         assertThat(tracker.prepareForDispatchCalls.get()).isGreaterThanOrEqualTo(2);
         assertThat(snapshot.retrying())
                 .anySatisfy(row -> assertThat(row.cardIdentifier()).isEqualTo("TRELLO-abc"));
+    }
+
+    @Test
+    void releasesIdleInProgressCardsWhenConcurrencyIsFull() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: key
+                  api_token: token
+                  board_id: board-1
+                  active_states: [Todo, In Progress]
+                  in_progress_state: In Progress
+                workspace:
+                  root: work
+                polling:
+                  interval_ms: 60000
+                agent:
+                  max_concurrent_agents: 1
+                codex:
+                  command: fake
+                ---
+                {{ card.state }}
+                """);
+        Card first = TestCards.card("card-1", "TRELLO-first", "In Progress");
+        Card second = TestCards.card("card-2", "TRELLO-second", "In Progress");
+        FakeTracker tracker = new FakeTracker(List.of(first, second));
+        CountDownLatch workerStarted = new CountDownLatch(1);
+        CountDownLatch releaseWorker = new CountDownLatch(1);
+        AgentRunner runner = mock(AgentRunner.class);
+        doAnswer(invocation -> {
+                    workerStarted.countDown();
+                    releaseWorker.await(5, TimeUnit.SECONDS);
+                    return AgentRunResult.ok();
+                })
+                .when(runner)
+                .run(any());
+        SymphonyOrchestrator orchestrator = new SymphonyOrchestrator(
+                new WorkflowLoader(),
+                new ConfigResolver(),
+                tracker,
+                runner,
+                new PromptRenderer(),
+                new WorkspaceManager(new HookRunner()));
+        orchestrator.workflowPath = workflow;
+
+        // when
+        orchestrator.start();
+        assertThat(workerStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        waitUntil(() -> tracker.releasedCards.size() == 1);
+        RuntimeSnapshot snapshot = orchestrator.snapshot();
+        releaseWorker.countDown();
+        orchestrator.stop();
+
+        // then
+        assertThat(snapshot.running()).singleElement().satisfies(row -> assertThat(row.cardIdentifier())
+                .isEqualTo("TRELLO-first"));
+        assertThat(tracker.releasedCards).containsExactly("TRELLO-second");
+    }
+
+    @Test
+    void releasesFailedInProgressCardBeforeRetryBackoff() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: key
+                  api_token: token
+                  board_id: board-1
+                  active_states: [Todo, In Progress]
+                  in_progress_state: In Progress
+                workspace:
+                  root: work
+                polling:
+                  interval_ms: 60000
+                agent:
+                  max_retry_backoff_ms: 60000
+                codex:
+                  command: fake
+                ---
+                {{ card.state }}
+                """);
+        FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
+        tracker.preparedCard = TestCards.card("card-1", "TRELLO-abc", "In Progress");
+        AgentRunner runner = mock(AgentRunner.class);
+        when(runner.run(any())).thenReturn(AgentRunResult.fail("codex failed"));
+        SymphonyOrchestrator orchestrator = new SymphonyOrchestrator(
+                new WorkflowLoader(),
+                new ConfigResolver(),
+                tracker,
+                runner,
+                new PromptRenderer(),
+                new WorkspaceManager(new HookRunner()));
+        orchestrator.workflowPath = workflow;
+
+        // when
+        orchestrator.start();
+        waitUntil(() -> orchestrator.snapshot().counts().retrying() == 1);
+        RuntimeSnapshot snapshot = orchestrator.snapshot();
+        orchestrator.stop();
+
+        // then
+        assertThat(snapshot.retrying()).singleElement().satisfies(row -> assertThat(row.cardIdentifier())
+                .isEqualTo("TRELLO-abc"));
+        assertThat(tracker.releasedCards).containsExactly("TRELLO-abc");
+        assertThat(tracker.cardState("card-1").state()).isEqualTo("Todo");
+    }
+
+    @Test
+    void releasesCurrentCardWhenPrepareForDispatchFailsAfterPickupMove() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: key
+                  api_token: token
+                  board_id: board-1
+                  active_states: [Todo, In Progress]
+                  in_progress_state: In Progress
+                workspace:
+                  root: work
+                polling:
+                  interval_ms: 60000
+                agent:
+                  max_retry_backoff_ms: 60000
+                codex:
+                  command: fake
+                ---
+                {{ card.state }}
+                """);
+        FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
+        tracker.preparedCard = TestCards.card("card-1", "TRELLO-abc", "In Progress");
+        tracker.prepareForDispatchFailure = new IllegalStateException("post-move refresh failed");
+        SymphonyOrchestrator orchestrator = new SymphonyOrchestrator(
+                new WorkflowLoader(),
+                new ConfigResolver(),
+                tracker,
+                mock(AgentRunner.class),
+                new PromptRenderer(),
+                new WorkspaceManager(new HookRunner()));
+        orchestrator.workflowPath = workflow;
+
+        // when
+        orchestrator.start();
+        waitUntil(() -> orchestrator.snapshot().counts().retrying() == 1);
+        RuntimeSnapshot snapshot = orchestrator.snapshot();
+        orchestrator.stop();
+
+        // then
+        assertThat(snapshot.retrying()).singleElement().satisfies(row -> assertThat(row.cardIdentifier())
+                .isEqualTo("TRELLO-abc"));
+        assertThat(tracker.releasedCards).containsExactly("TRELLO-abc");
+        assertThat(tracker.cardState("card-1").state()).isEqualTo("Todo");
+    }
+
+    @Test
+    void doesNotReleaseFailedCardThatAlreadyMovedOutOfInProgress() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: key
+                  api_token: token
+                  board_id: board-1
+                  active_states: [Todo, In Progress]
+                  in_progress_state: In Progress
+                workspace:
+                  root: work
+                polling:
+                  interval_ms: 60000
+                agent:
+                  max_retry_backoff_ms: 60000
+                codex:
+                  command: fake
+                ---
+                {{ card.state }}
+                """);
+        FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "In Progress")));
+        AgentRunner runner = mock(AgentRunner.class);
+        when(runner.run(any())).thenAnswer(invocation -> {
+            tracker.setCardState(TestCards.card("card-1", "TRELLO-abc", "Blocked"));
+            return AgentRunResult.fail("handoff failed after move");
+        });
+        SymphonyOrchestrator orchestrator = new SymphonyOrchestrator(
+                new WorkflowLoader(),
+                new ConfigResolver(),
+                tracker,
+                runner,
+                new PromptRenderer(),
+                new WorkspaceManager(new HookRunner()));
+        orchestrator.workflowPath = workflow;
+
+        // when
+        orchestrator.start();
+        waitUntil(() -> orchestrator.snapshot().counts().retrying() == 1);
+        RuntimeSnapshot snapshot = orchestrator.snapshot();
+        orchestrator.stop();
+
+        // then
+        assertThat(snapshot.retrying()).singleElement().satisfies(row -> assertThat(row.cardIdentifier())
+                .isEqualTo("TRELLO-abc"));
+        assertThat(tracker.releasedCards).isEmpty();
+        assertThat(tracker.cardState("card-1").state()).isEqualTo("Blocked");
     }
 
     @Test
@@ -678,7 +898,9 @@ class SymphonyOrchestratorTest {
         private final AtomicInteger candidateFetches = new AtomicInteger();
         private final AtomicInteger promptStateFetches = new AtomicInteger();
         private final AtomicInteger prepareForDispatchCalls = new AtomicInteger();
+        private final List<String> releasedCards = new ArrayList<>();
         private volatile Card preparedCard;
+        private volatile RuntimeException prepareForDispatchFailure;
 
         private FakeTracker(List<Card> candidates) {
             setCandidates(candidates);
@@ -690,7 +912,13 @@ class SymphonyOrchestratorTest {
         }
 
         private void setCardState(Card card) {
-            this.cardStates = Map.of(card.id(), new CardLookupResult.Found(card));
+            Map<String, CardLookupResult> updated = new LinkedHashMap<>(this.cardStates);
+            updated.put(card.id(), new CardLookupResult.Found(card));
+            this.cardStates = updated;
+        }
+
+        private Card cardState(String cardId) {
+            return ((CardLookupResult.Found) cardStates.get(cardId)).card();
         }
 
         @Override
@@ -730,7 +958,16 @@ class SymphonyOrchestratorTest {
                 return card;
             }
             setCardState(preparedCard);
+            if (prepareForDispatchFailure != null) {
+                throw prepareForDispatchFailure;
+            }
             return preparedCard;
+        }
+
+        @Override
+        public void releaseFromDispatch(EffectiveConfig config, Card card) {
+            releasedCards.add(card.identifier());
+            setCardState(TestCards.card(card.id(), card.identifier(), "Todo"));
         }
     }
 

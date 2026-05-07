@@ -213,6 +213,10 @@ matters, and easy for another engineer to understand without asking the original
 - Do not manually move a Trello card to prove an automatic workflow transition works. For transition
   bugs, fix the code or workflow, reproduce with a fresh card or freshly queued card, and verify that
   Symphony performs the move itself.
+- For Trello in-progress routing, verify `max_concurrent_agents` against visible board state, not
+  only `/api/v1/state`. When an in-progress list is configured, cards waiting for retry/backoff or
+  blocked by concurrency should not remain in `In Progress`; that list should show cards currently
+  worked by active Codex workers.
 - For PR handoff behavior, do not treat every non-green CI state as blocked. If CI fails because of
   the card's changes or current branch, the card should stay active while Codex reruns the failing
   check or closest local equivalent and fixes reproducible failures. If the related CI failure passes
