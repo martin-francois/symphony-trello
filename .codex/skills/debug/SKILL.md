@@ -51,7 +51,7 @@ description: >
 ## Useful Commands
 
 ```bash
-curl -fsS http://127.0.0.1:8080/api/v1/state | jq
+curl -fsS http://127.0.0.1:18080/api/v1/state | jq
 rg -n "card_identifier=<redacted>|worker_identity=|session_id=" log/ target/ /var/log 2>/dev/null
 systemctl status 'symphony-trello@*'
 journalctl -u 'symphony-trello@<workflow>' --since '1 hour ago'

@@ -112,7 +112,7 @@ Start the service:
 ./mvnw quarkus:dev
 ```
 
-By default the [status page](#operations) binds to `127.0.0.1:8080`. Use `SYMPHONY_HTTP_PORT=0` for
+By default the [status page](#operations) binds to `127.0.0.1:18080`. Use `SYMPHONY_HTTP_PORT=0` for
 an ephemeral test port, configure `server.port` in [`WORKFLOW.md`](#workflow-contract), or pass
 `--port` for local development. Command-line `--port` wins over `server.port`.
 
@@ -120,7 +120,7 @@ Packaged runs also accept a positional workflow path and `--port`:
 
 ```bash
 ./mvnw package
-java -jar target/quarkus-app/quarkus-run.jar ./WORKFLOW.md --port 8081
+java -jar target/quarkus-app/quarkus-run.jar ./WORKFLOW.md --port 18081
 ```
 
 ## Trello Setup
@@ -231,7 +231,7 @@ The first run writes `WORKFLOW.md`. If that file already exists and you did not 
 Symphony keeps the existing file and writes a board-specific file instead. For a board named
 `My Project`, the next file is `WORKFLOW.my-project.md`. If that file also exists, Symphony adds a
 number, such as `WORKFLOW.my-project-2.md`. Symphony also chooses the first unused status port from
-`8080`, `8081`, `8082`, and so on by checking other workflow files in the same folder. Use
+`18080`, `18081`, `18082`, and so on by checking other workflow files in the same folder. Use
 `--server-port` when you want to choose the port yourself.
 
 Pass `--force` only when you intentionally want to replace the selected workflow file:
@@ -322,7 +322,7 @@ Common setup command options:
   card. The generated workflow uses `./workspaces`; choose another path when you want those
   checkouts on a different disk or clearly separated from the repository.
 - `--server-port PORT`: choose the HTTP status port written into the generated workflow. If you omit
-  it, Symphony uses the first unused workflow port starting at `8080`. Use `0` only for a
+  it, Symphony uses the first unused workflow port starting at `18080`. Use `0` only for a
   temporary local run where you do not need a predictable status URL.
 - `--max-agents N`: choose how many cards from this board may run at the same time. Start with `1`
   if you want one-at-a-time review, or raise it when your machine and workflow can handle parallel
@@ -492,7 +492,7 @@ Operationally, use the board like this:
 2. Move a card to `Ready for Codex` only when the title and description are clear enough for an
    engineer to start.
 3. Watch the card move to `In Progress` after Codex picks it up.
-4. Watch Symphony at `http://127.0.0.1:8080/`; see [Operations](#operations) for the available
+4. Watch Symphony at `http://127.0.0.1:18080/`; see [Operations](#operations) for the available
    status endpoints.
 5. Review the card after Codex moves it to `Human Review` or `Blocked`.
 6. Move the card out of active lists if you want to pause or prevent further retries.
@@ -750,7 +750,7 @@ tracker:
 workspace:
   root: ./workspaces
 server:
-  port: 8080
+  port: 18080
 codex:
   command: codex app-server
 ---
@@ -858,7 +858,7 @@ scheduler tick. Invalid reloads are logged and the last known good configuration
 Important environment variables:
 
 - `SYMPHONY_WORKFLOW_PATH`: workflow file path, default `WORKFLOW.md`.
-- `SYMPHONY_HTTP_PORT`: Quarkus HTTP port, default `8080`.
+- `SYMPHONY_HTTP_PORT`: Quarkus HTTP port, default `18080`.
 - `SYMPHONY_AUTOSTART`: set `false` in tests or when only using injected services.
 - `TRELLO_API_KEY` and `TRELLO_API_TOKEN`: default Trello credential variable names.
 - `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS`: path-separated files or folders that are added to

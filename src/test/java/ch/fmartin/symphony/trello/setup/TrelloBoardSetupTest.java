@@ -229,9 +229,9 @@ class TrelloBoardSetupTest {
                 .contains("allowed host paths")
                 .contains("symphony_trello_allowed_project_roots")
                 .contains("server:")
-                .contains("port: 8080")
+                .contains("port: 18080")
                 .contains("max_concurrent_agents: 1");
-        assertThat(result.serverPort()).isEqualTo(8080);
+        assertThat(result.serverPort()).isEqualTo(18080);
         EffectiveConfig config = resolve(workflow);
         assertThat(config.tracker().boardId()).isEqualTo("abc123");
         assertThat(config.tracker().activeStates()).containsExactly("Ready for Codex", "In Progress", "Merging");
@@ -311,7 +311,7 @@ class TrelloBoardSetupTest {
                 .content(StandardCharsets.UTF_8)
                 .contains("board_id: \"existing\"")
                 .contains("root: \"./agent-workspaces\"")
-                .contains("port: 8080")
+                .contains("port: 18080")
                 .contains("allowed_move_list_names:")
                 .contains("- \"In Progress\"")
                 .contains("- \"Human Review\"")
@@ -355,7 +355,7 @@ class TrelloBoardSetupTest {
                 .contains("## Completion Bar Before \"Human Review\"")
                 .contains("move the card to \"Done\"")
                 .contains("max_concurrent_agents: 2");
-        assertThat(result.serverPort()).isEqualTo(8080);
+        assertThat(result.serverPort()).isEqualTo(18080);
         EffectiveConfig config = resolve(workflow);
         assertThat(config.tracker().boardId()).isEqualTo("existing");
         assertThat(config.workspace().root()).isEqualTo(workflow.getParent().resolve("agent-workspaces"));
@@ -757,8 +757,8 @@ class TrelloBoardSetupTest {
 
         // then
         Path generatedWorkflow = tempDir.resolve("WORKFLOW.my-project.md");
-        assertThat(result.serverPort()).isEqualTo(8081);
-        assertThat(generatedWorkflow).content(StandardCharsets.UTF_8).contains("port: 8081");
+        assertThat(result.serverPort()).isEqualTo(18081);
+        assertThat(generatedWorkflow).content(StandardCharsets.UTF_8).contains("port: 18081");
     }
 
     @Test
@@ -904,8 +904,8 @@ class TrelloBoardSetupTest {
                 true));
 
         // then
-        assertThat(result.serverPort()).isEqualTo(8080);
-        assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: 8080");
+        assertThat(result.serverPort()).isEqualTo(18080);
+        assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: 18080");
     }
 
     @Test
@@ -937,8 +937,8 @@ class TrelloBoardSetupTest {
                 true));
 
         // then
-        assertThat(result.serverPort()).isEqualTo(8080);
-        assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: 8080");
+        assertThat(result.serverPort()).isEqualTo(18080);
+        assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: 18080");
     }
 
     @Test

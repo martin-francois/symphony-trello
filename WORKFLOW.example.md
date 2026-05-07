@@ -23,7 +23,7 @@ tracker:
 workspace:
   root: ./workspaces
 server:
-  port: 8080
+  port: 18080
 hooks:
   timeout_ms: 60000
 agent:
