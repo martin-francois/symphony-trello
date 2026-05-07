@@ -1,13 +1,16 @@
 package ch.fmartin.symphony.trello.agent;
 
+import ch.fmartin.symphony.trello.codex.CodexSkillCatalog;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
 import ch.fmartin.symphony.trello.tracker.CardLookupResult;
 import ch.fmartin.symphony.trello.tracker.TrackerClient;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
+import ch.fmartin.symphony.trello.workspace.CodexSkillInstaller;
 import ch.fmartin.symphony.trello.workspace.HookRunner;
 import ch.fmartin.symphony.trello.workspace.Workspace;
 import ch.fmartin.symphony.trello.workspace.WorkspaceManager;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -19,6 +22,7 @@ public class LocalAgentRunner implements AgentRunner {
     private final CodexAppServerClient codex;
     private final TrackerClient tracker;
     private final PromptRenderer prompts;
+    private final CodexSkillInstaller codexSkills;
     private final Map<String, Thread> active = new ConcurrentHashMap<>();
 
     public LocalAgentRunner(
@@ -27,11 +31,23 @@ public class LocalAgentRunner implements AgentRunner {
             CodexAppServerClient codex,
             TrackerClient tracker,
             PromptRenderer prompts) {
+        this(workspaceManager, hooks, codex, tracker, prompts, new CodexSkillInstaller());
+    }
+
+    @Inject
+    public LocalAgentRunner(
+            WorkspaceManager workspaceManager,
+            HookRunner hooks,
+            CodexAppServerClient codex,
+            TrackerClient tracker,
+            PromptRenderer prompts,
+            CodexSkillInstaller codexSkills) {
         this.workspaceManager = workspaceManager;
         this.hooks = hooks;
         this.codex = codex;
         this.tracker = tracker;
         this.prompts = prompts;
+        this.codexSkills = codexSkills;
     }
 
     @Override
@@ -46,6 +62,9 @@ public class LocalAgentRunner implements AgentRunner {
                     request.config().hooks().beforeRun(),
                     workspace.path(),
                     request.config().hooks());
+            if (usesBundledCodexSkills(request.prompt())) {
+                codexSkills.installInto(workspace.path());
+            }
             return codex.runSession(
                     request.config(),
                     request.card(),
@@ -66,6 +85,10 @@ public class LocalAgentRunner implements AgentRunner {
             }
             active.remove(request.workerIdentity());
         }
+    }
+
+    private static boolean usesBundledCodexSkills(String prompt) {
+        return prompt.contains(".codex/skills/" + CodexSkillCatalog.INSTALLED_SKILL_PREFIX);
     }
 
     private CodexAppServerClient.TurnDecision continuationDecision(AgentRunRequest request, int completedTurns) {

@@ -45,6 +45,31 @@ class WorkspaceManagerTest {
     }
 
     @Test
+    void runsCreateHookBeforeWorkspaceContainsAnyManagedFiles() throws Exception {
+        // given
+        var config = new ConfigResolver()
+                .resolve(new WorkflowDefinition(
+                        tempDir.resolve("WORKFLOW.md"),
+                        Map.of(
+                                "tracker",
+                                Map.of("kind", "trello", "api_key", "k", "api_token", "t", "board_id", "b"),
+                                "workspace",
+                                Map.of("root", "work"),
+                                "hooks",
+                                Map.of(
+                                        "after_create",
+                                        "test -z \"$(find . -mindepth 1 -maxdepth 1 -print -quit)\""
+                                                + " && echo cloned > checkout.txt")),
+                        ""));
+
+        // when
+        Workspace workspace = manager.createForCard("TRELLO-populate", config);
+
+        // then
+        assertThat(workspace.path().resolve("checkout.txt")).content().contains("cloned");
+    }
+
+    @Test
     void rejectsRootItselfAndSiblingPrefixPaths() {
         // given
         Path root = tempDir.resolve("root");

@@ -77,12 +77,24 @@ description: >
      exit 1
    fi
    git log --format='%H %an <%ae>' "$merge_base"..HEAD
+   wrong_authors="$(
+     git log --format='%H%x09%an <%ae>' "$merge_base"..HEAD |
+       while IFS="$(printf '\t')" read -r commit author; do
+         if [ "$author" != "$github_author" ]; then
+           printf '%s %s\n' "$commit" "$author"
+         fi
+       done
+   )"
+   if [ -n "$wrong_authors" ]; then
+     printf 'Git author verification failed: expected PR commits authored as %s\n%s\n' "$github_author" "$wrong_authors" >&2
+     exit 1
+   fi
    ```
 
-   Compare the listed authors with `$github_author`. If an unpublished commit
-   uses the wrong author, amend it before pushing. If the branch was already
-   pushed, do not rewrite it unless the workflow or human explicitly says a
-   force-push is safe. Surface any mismatch in the workpad or handoff comment.
+   If an unpublished commit uses the wrong author, amend it before pushing. If
+   the branch was already pushed, do not rewrite it unless the workflow or human
+   explicitly says a force-push is safe. Surface any mismatch in the workpad or
+   handoff comment.
 4. Push normally:
 
    ```bash

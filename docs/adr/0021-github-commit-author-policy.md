@@ -48,8 +48,16 @@ by the authenticated account's email API otherwise. It does not guess the norepl
 GitHub accounts can use different noreply address forms. It checks lookup success before writing Git
 config so failed auth does not replace a useful local identity with blank values. The push-pr skill
 checks PR-bound commit authors before publishing, fails closed when it cannot resolve the
-default-branch comparison range, and avoids force-pushing wrong-author fixes unless a human or
-workflow explicitly allows it.
+default-branch comparison range or when any PR-bound commit author does not match the authenticated
+GitHub account, and avoids force-pushing wrong-author fixes unless a human or workflow explicitly
+allows it.
+
+A live deployed run showed that merely referencing `.codex/skills/commit/SKILL.md` in the generated
+workflow is not enough when the target repository does not contain Symphony's skills. The Java
+runtime now packages the shipped skills and refreshes them into namespaced `.codex/skills` paths in
+each per-card workspace after workspace sync hooks and before Codex starts when the rendered prompt
+references those namespaced paths. That makes the commit and push-pr instructions discoverable in
+deployed workspaces while preserving legacy workflows that still expect an empty workspace root.
 
 If GitHub identity lookup fails before PR-bound commits exist, Codex records a visible Trello blocker
 and stops rather than creating commits with a generic fallback author. Local-only and no-push cards
@@ -62,6 +70,10 @@ can keep the existing local Git identity because there is no GitHub PR author to
   lookup is needed.
 * Good, because a workflow-verified checkout-local author avoids repeated GitHub API calls.
 * Good, because an unrelated local Git author is not silently trusted for PR-bound work.
+* Good, because shipped skills are present in deployed task workspaces even when the target
+  repository has no Symphony-specific `.codex/skills`.
+* Good, because namespaced workspace-local skill paths can be excluded from checkout-root Git status
+  without hiding user or repository-provided Codex skills.
 * Good, because users without a public GitHub email can still use their real GitHub noreply author
   email when the GitHub CLI auth context can read it.
 * Good, because the workflow blocks instead of guessing an email that may not belong to the
@@ -77,9 +89,10 @@ can keep the existing local Git identity because there is no GitHub PR author to
 
 ### Confirmation
 
-Run `./mvnw -q -Dtest=CodexSkillStructureTest,TrelloBoardSetupTest test` and confirm the generated
-workflow and repository-local skills describe workflow-verified checkout-local author reuse, GitHub
-identity resolution, noreply fallback, lookup failure handling, and safe pushed-branch behavior.
+Run `./mvnw -q -Dtest=CodexSkillStructureTest,TrelloBoardSetupTest,WorkspaceManagerTest test` and
+confirm the generated workflow, packaged workspace skills, and repository-local source skills
+describe workflow-verified checkout-local author reuse, GitHub identity resolution, noreply fallback,
+lookup failure handling, and safe pushed-branch behavior.
 
 For a live PR-bound card, inspect `git log --format='%an <%ae>'` on the task branch before pushing
 and confirm it matches the name from `gh api user` and either the public email from `gh api user` or

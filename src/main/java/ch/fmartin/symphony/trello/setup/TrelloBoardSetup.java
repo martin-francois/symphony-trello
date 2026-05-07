@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
+import ch.fmartin.symphony.trello.codex.CodexSkillCatalog;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -584,17 +585,17 @@ public final class TrelloBoardSetup {
 
                 ## Repository Skills
 
-                Use repository-local skills when they fit:
+                Use the workspace-local skills under `.codex/skills/symphony-trello-*` when they fit.
+                Symphony installs these skill files in the per-card workspace after workspace sync hooks
+                and before Codex starts, so they are available even when the target repository does not
+                provide its own skills:
 
-                - `.codex/skills/trello-workpad/SKILL.md` for workpad updates.
-                - `.codex/skills/trello-handoff/SKILL.md` for Trello pickup, review, blocked, merge,
-                  and done handoff.
-                - `.codex/skills/review-sweep/SKILL.md` when a pull request or branch is involved.
-                - `.codex/skills/repo-sync/SKILL.md`, `.codex/skills/commit/SKILL.md`, and
-                  `.codex/skills/push-pr/SKILL.md` for branch, commit, and PR hygiene.
-                - `.codex/skills/land/SKILL.md` only when this workflow says the current Trello
-                  list is Merging.
-                - `.codex/skills/debug/SKILL.md` when diagnosing a stuck or retrying run.
+                - `%s` for workpad updates.
+                - `%s` for Trello pickup, review, blocked, merge, and done handoff.
+                - `%s` when a pull request or branch is involved.
+                - `%s`, `%s`, and `%s` for branch, commit, and PR hygiene.
+                - `%s` only when this workflow says the current Trello list is Merging.
+                - `%s` when diagnosing a stuck or retrying run.
 
                 Read the Trello description carefully, inspect the repository, make the smallest maintainable change,
                 run relevant verification, and leave the workspace in a reviewable state.
@@ -605,15 +606,16 @@ public final class TrelloBoardSetup {
                 Do not edit a shared host checkout directly unless the card explicitly asks you to work there and
                 that checkout is writable.
 
-                If the Trello card names only a repository URL, create or reuse a writable checkout in the current
-                workspace. Prefer cloning from a readable matching local checkout under an allowed host path, then
-                set the checkout's `origin` remote to the repository URL when needed. If no matching local checkout
-                is readable, clone the repository URL directly into the workspace.
+                If the Trello card names only a repository URL, create or reuse a writable checkout in a subdirectory
+                of the current workspace. Prefer cloning from a readable matching local checkout under an allowed host
+                path, then set the checkout's `origin` remote to the repository URL when needed. If no matching local
+                checkout is readable, clone the repository URL into a new subdirectory named after the repository.
 
                 If the Trello card names a specific local path or checkout, inspect it as source context. When it is
-                not writable, clone from that readable local path into the current workspace and work in the clone
-                instead of blocking. Block only when the path is not readable, the repository cannot be cloned into a
-                writable workspace, or required repository/auth context is unavailable. If Git rejects a readable
+                not writable, clone from that readable local path into a subdirectory of the current workspace and work
+                in the clone instead of blocking. Block only when the path is not readable, the repository cannot be
+                cloned into a writable workspace subdirectory, or required repository/auth context is unavailable. If
+                Git rejects a readable
                 local checkout because of safe-directory ownership checks, add only that source checkout to the
                 current user's Git safe directories with `git config --global --add safe.directory <source-checkout>`,
                 then retry a read-only clone with `git clone --no-hardlinks <source-checkout> <workspace-checkout>`.
@@ -656,6 +658,14 @@ public final class TrelloBoardSetup {
                         trelloToolsYaml(handoffStates),
                         maxAgents,
                         workpadPrompt(!handoffStates.isEmpty()),
+                        skillPath("trello-workpad"),
+                        skillPath("trello-handoff"),
+                        skillPath("review-sweep"),
+                        skillPath("repo-sync"),
+                        skillPath("commit"),
+                        skillPath("push-pr"),
+                        skillPath("land"),
+                        skillPath("debug"),
                         operatingPosturePrompt(!handoffStates.isEmpty()),
                         routingPrompt(
                                 activeStates, terminalStates, inProgressState, reviewState, blockedState, mergingState),
@@ -687,6 +697,10 @@ public final class TrelloBoardSetup {
                 handoff notes. Do not include private host paths; use sanitized workspace or repository names when
                 context is needed.
                 """;
+    }
+
+    private static String skillPath(String skillName) {
+        return CodexSkillCatalog.installedSkillPath(skillName);
     }
 
     private static String operatingPosturePrompt(boolean workpadToolEnabled) {
@@ -826,7 +840,7 @@ public final class TrelloBoardSetup {
                 ## Pull Request Publication
 
                 For repository-changing work, %s means a human can review a pull request. Before moving the card
-                there, use `.codex/skills/commit/SKILL.md` and `.codex/skills/push-pr/SKILL.md` to commit, push,
+                there, use `%s` and `%s` to commit, push,
                 and create or update the PR for the current branch. Create a ready-for-review, non-draft PR by
                 default. Create a draft PR only when the Trello card explicitly asks for a draft PR. Add the PR
                 URL to %s.
@@ -846,10 +860,18 @@ public final class TrelloBoardSetup {
                 the local-only result and the workspace/branch/commit evidence in %s.
 
                 If GitHub auth, push permission, branch protection, or repository policy prevents a required PR, try
-                the fallback strategies in `.codex/skills/push-pr/SKILL.md`. If a PR is still required and cannot be
+                the fallback strategies in `%s`. If a PR is still required and cannot be
                 created or updated, %s with the exact blocker instead of moving to %s.
                 """
-                .formatted(reviewHandoff, prEvidence, localEvidence, blockedText, reviewHandoff)
+                .formatted(
+                        reviewHandoff,
+                        skillPath("commit"),
+                        skillPath("push-pr"),
+                        prEvidence,
+                        localEvidence,
+                        skillPath("push-pr"),
+                        blockedText,
+                        reviewHandoff)
                 .stripTrailing();
     }
 
@@ -863,7 +885,7 @@ public final class TrelloBoardSetup {
                 ## Pull Request Feedback Sweep
 
                 If the Trello description, Trello comments, current branch, repository context, or open PR list
-                identifies an associated pull request, use `.codex/skills/review-sweep/SKILL.md` before moving the
+                identifies an associated pull request, use `%s` before moving the
                 card to %s or landing from Merging. Cards without PR context do not need GitHub review checks.
 
                 The sweep must check top-level PR comments, inline review comments, review states and summaries,
@@ -894,7 +916,7 @@ public final class TrelloBoardSetup {
                 PR-backed card and no documented fallback can provide the required signal, %s instead of handing it
                 off.
                 """
-                .formatted(reviewHandoff, checkCaveatDestination, blockedText)
+                .formatted(skillPath("review-sweep"), reviewHandoff, checkCaveatDestination, blockedText)
                 .stripTrailing();
     }
 
@@ -960,7 +982,7 @@ public final class TrelloBoardSetup {
 
                 %s is human approval for landing. Only run landing when the current Trello list is %s. Do not
                 merge from Human Review, and do not call `gh pr merge` directly from the workflow prompt. Open
-                `.codex/skills/land/SKILL.md` and follow it.
+                `%s` and follow it.
 
                 Before landing, identify the PR, run the PR feedback sweep, run current card-specific validation,
                 check mergeability, branch state, required reviews, and CI/check status, and follow the repository's
@@ -970,7 +992,13 @@ public final class TrelloBoardSetup {
                 update the workpad and %s. After successful landing, update the workpad with merge evidence, add a
                 concise completion comment when useful, and move the card to %s.
                 """
-                .formatted(quote(mergingState), quote(mergingState), quote(mergingState), blockedText, doneDestination)
+                .formatted(
+                        quote(mergingState),
+                        quote(mergingState),
+                        quote(mergingState),
+                        skillPath("land"),
+                        blockedText,
+                        doneDestination)
                 .stripTrailing();
     }
 

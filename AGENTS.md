@@ -151,6 +151,13 @@ matters, and easy for another engineer to understand without asking the original
 - For PR-bound commits, generated workflows and commit instructions should reuse a checkout-local
   Git author only when the author is complete and marked as verified for this workflow. Only call
   GitHub APIs again when that verified author config is missing or incomplete.
+- When generated workflows reference Symphony's `.codex/skills`, make sure deployed per-card
+  workspaces receive the namespaced shipped skills after workspace sync hooks and before Codex
+  starts. Do not rely on the target repository containing Symphony-specific skill files, and do not
+  dirty checkout-root Git status with shipped skill files.
+- Keep legacy workflows compatible: install workspace-local shipped skills only when the rendered
+  prompt references the namespaced Symphony skill paths, so older workflows that clone into an empty
+  workspace root stay empty until Codex runs.
 - For deployment filesystem access, describe the concept as "allowed host paths". Use
   `symphony_trello_allowed_host_paths` for Ansible and treat
   `symphony_trello_allowed_project_roots` as a compatibility alias only. The allowed entries can be
