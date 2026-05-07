@@ -60,6 +60,36 @@ class CodexSkillStructureTest {
     }
 
     @Test
+    void repositoryLocalSkillsArePackagedForWorkspaceSeeding() throws IOException {
+        // given
+        List<Path> skillFiles;
+        try (var paths = Files.list(SKILLS_ROOT)) {
+            skillFiles = paths.filter(Files::isDirectory)
+                    .map(path -> path.resolve("SKILL.md"))
+                    .sorted(Comparator.comparing(Path::toString))
+                    .toList();
+        }
+
+        // when
+        List<String> packagedResources = skillFiles.stream()
+                .map(path ->
+                        "codex-skills/%s/SKILL.md".formatted(path.getParent().getFileName()))
+                .toList();
+
+        // then
+        assertThat(packagedResources).allSatisfy(resource -> {
+            try (var stream = getClass().getClassLoader().getResourceAsStream(resource)) {
+                assertThat(stream).as("packaged skill resource %s", resource).isNotNull();
+                assertThat(new String(stream.readAllBytes(), StandardCharsets.UTF_8))
+                        .as("packaged skill body %s", resource)
+                        .contains("# ");
+            } catch (IOException e) {
+                throw new AssertionError("Could not read packaged skill resource " + resource, e);
+            }
+        });
+    }
+
+    @Test
     void reviewSweepSkillCoversPrFeedbackSourcesAndOutcomes() throws IOException {
         // given
         Path skill = SKILLS_ROOT.resolve("review-sweep").resolve("SKILL.md");
@@ -166,6 +196,10 @@ class CodexSkillStructureTest {
                 .contains("could not resolve origin default branch")
                 .contains("git fetch origin")
                 .contains("git merge-base HEAD")
+                .contains("wrong_authors=")
+                .contains("%H%x09%an <%ae>")
+                .contains("[ \"$author\" != \"$github_author\" ]")
+                .contains("expected PR commits authored as")
                 .contains("configure a public email or accessible GitHub noreply email")
                 .contains("number,state,title,url,isDraft")
                 .contains("Do not pass\n     `--draft` unless")

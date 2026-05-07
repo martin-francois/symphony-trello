@@ -3125,6 +3125,14 @@ When this profile is used:
 - the workflow prompt names the skills that are relevant for the current board workflow
 - skills are instructional prompt context for the coding agent, not Java runtime plugins
 - missing or ignored skills MUST NOT break scheduler startup, but can reduce agent behavior quality
+- if the rendered prompt references this Java implementation's shipped namespaced skill paths, the
+  runtime SHOULD install those skills into the per-card workspace after workspace sync hooks and
+  before Codex starts so deployed workspaces do not depend on the target repository containing
+  Symphony-specific skill files
+- prompts that do not reference the namespaced shipped skill paths SHOULD keep their existing
+  workspace shape, including legacy generated workflows that expect an empty workspace root
+- when the per-card workspace is a Git checkout root, this Java implementation SHOULD keep shipped
+  skill files out of normal `git status` output for the target repository
 - skills that cause Trello writes still rely on the scoped Trello tools from Section 10.5 and the
   `trello_tools` policy from Section 5.3.7
 - skills MUST NOT require the agent to read Trello API keys, Trello tokens, Codex auth files, or
@@ -3132,8 +3140,10 @@ When this profile is used:
 
 This Java repository ships skills for Trello workpad updates, Trello handoff, PR feedback sweeps,
 repository sync, commits, push/PR preparation, landing from `Merging`, and live-run debugging. The
-recommended generated workflow references those skills only as supporting instructions. The workflow
-front matter and scoped tools remain the authoritative runtime controls.
+runtime packages those skills and refreshes them under a per-card workspace's
+`.codex/skills/symphony-trello-*` directories before starting Codex when the rendered prompt
+references them. The recommended generated workflow references those skills only as supporting
+instructions. The workflow front matter and scoped tools remain the authoritative runtime controls.
 
 GitHub commit authoring extension:
 
@@ -3151,8 +3161,8 @@ GitHub commit authoring extension:
   email API when the public email may be absent
 - the workflow SHOULD NOT guess a noreply address format when the account email API does not return
   one
-- push-time author verification SHOULD fail closed when the default branch or merge-base range
-  cannot be resolved
+- push-time author verification SHOULD fail closed when the default branch, merge-base range, or PR
+  commit author set cannot be verified
 - if identity lookup fails before PR-bound commits are created, the workflow SHOULD block visibly
   instead of using a generic fallback author
 - already-pushed commits SHOULD NOT be rewritten only to fix author metadata unless a human or
@@ -3264,9 +3274,11 @@ When this profile is used:
   inaccessible, where the per-card workspace is, and which documented setting relaxes access
 
 Generated workflows SHOULD prefer writable per-card checkouts over editing shared host checkouts.
-When a readable host checkout is not writable, the agent should clone it into the per-card workspace
-and work there. This preserves the security default while still allowing cards to use existing host
-repositories as source context when an operator has allowed read access.
+When a card names only a repository URL or when a readable host checkout is not writable, the agent
+should clone into a repository-named subdirectory of the per-card workspace and work there. This
+preserves the security default while still allowing cards to use existing host repositories as source
+context when an operator has allowed read access, and it keeps the workspace root available for
+runtime-managed metadata such as Codex skills.
 
 ### 19.5 Opt-In Java Live E2E Harness
 

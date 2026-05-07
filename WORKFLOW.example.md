@@ -93,16 +93,20 @@ Symphony only dispatches cards from configured active lists: `Todo`, `In Progres
 - Any other list: out of scope for this Symphony process unless it is added to `active_states` or
   `terminal_states`.
 
-Use repository-local skills when they fit:
+Use the workspace-local skills under `.codex/skills/symphony-trello-*` when they fit. Symphony
+installs these skill files in the per-card workspace after workspace sync hooks and before Codex
+starts, so they are available even when the target repository does not provide its own skills:
 
-- `.codex/skills/trello-workpad/SKILL.md` for workpad updates.
-- `.codex/skills/trello-handoff/SKILL.md` for Trello pickup, review, blocked, merge, and done
-  handoff.
-- `.codex/skills/review-sweep/SKILL.md` when a pull request or branch is involved.
-- `.codex/skills/repo-sync/SKILL.md`, `.codex/skills/commit/SKILL.md`, and
-  `.codex/skills/push-pr/SKILL.md` for branch, commit, and PR hygiene.
-- `.codex/skills/land/SKILL.md` only when this workflow says the current Trello list is Merging.
-- `.codex/skills/debug/SKILL.md` when diagnosing a stuck or retrying run.
+- `.codex/skills/symphony-trello-trello-workpad/SKILL.md` for workpad updates.
+- `.codex/skills/symphony-trello-trello-handoff/SKILL.md` for Trello pickup, review, blocked,
+  merge, and done handoff.
+- `.codex/skills/symphony-trello-review-sweep/SKILL.md` when a pull request or branch is involved.
+- `.codex/skills/symphony-trello-repo-sync/SKILL.md`,
+  `.codex/skills/symphony-trello-commit/SKILL.md`, and
+  `.codex/skills/symphony-trello-push-pr/SKILL.md` for branch, commit, and PR hygiene.
+- `.codex/skills/symphony-trello-land/SKILL.md` only when this workflow says the current Trello list
+  is Merging.
+- `.codex/skills/symphony-trello-debug/SKILL.md` when diagnosing a stuck or retrying run.
 
 ## Repository Checkout Policy
 
@@ -110,18 +114,20 @@ Do implementation work inside the current per-card workspace or a writable check
 Do not edit a shared host checkout directly unless the card explicitly asks you to work there and
 that checkout is writable.
 
-If the Trello card names only a repository URL, create or reuse a writable checkout in the current
-workspace. Prefer cloning from a readable matching local checkout under an allowed host path, then
-set the checkout's `origin` remote to the repository URL when needed. If no matching local checkout
-is readable, clone the repository URL directly into the workspace.
+If the Trello card names only a repository URL, create or reuse a writable checkout in a subdirectory
+of the current workspace. Prefer cloning from a readable matching local checkout under an allowed
+host path, then set the checkout's `origin` remote to the repository URL when needed. If no matching
+local checkout is readable, clone the repository URL into a new subdirectory named after the
+repository.
 
 If the Trello card names a specific local path or checkout, inspect it as source context. When it is
-not writable, clone from that readable local path into the current workspace and work in the clone
-instead of blocking. Block only when the path is not readable, the repository cannot be cloned into a
-writable workspace, or required repository/auth context is unavailable. If Git rejects a readable
-local checkout because of safe-directory ownership checks, add only that source checkout to the
-current user's Git safe directories with `git config --global --add safe.directory <source-checkout>`,
-then retry a read-only clone with `git clone --no-hardlinks <source-checkout> <workspace-checkout>`.
+not writable, clone from that readable local path into a subdirectory of the current workspace and
+work in the clone instead of blocking. Block only when the path is not readable, the repository
+cannot be cloned into a writable workspace subdirectory, or required repository/auth context is
+unavailable. If Git rejects a readable local checkout because of safe-directory ownership checks, add
+only that source checkout to the current user's Git safe directories with
+`git config --global --add safe.directory <source-checkout>`, then retry a read-only clone with
+`git clone --no-hardlinks <source-checkout> <workspace-checkout>`.
 After cloning from a local checkout, do not inherit the source checkout's current branch as the task
 base. Start the task branch from the repository's default branch when it is discoverable, usually
 `origin/main`, unless the Trello card explicitly asks for a different base.
@@ -167,10 +173,11 @@ or a human explicitly changes the requirement.
 ## Pull Request Publication
 
 For repository-changing work, Human Review means a human can review a pull request. Before moving
-the card there, use `.codex/skills/commit/SKILL.md` and `.codex/skills/push-pr/SKILL.md` to commit,
-push, and create or update the PR for the current branch. Create a ready-for-review, non-draft PR by
-default. Create a draft PR only when the Trello card explicitly asks for a draft PR. Add the PR URL
-to the workpad and the visible handoff comment.
+the card there, use `.codex/skills/symphony-trello-commit/SKILL.md` and
+`.codex/skills/symphony-trello-push-pr/SKILL.md` to commit, push, and create or update the PR for
+the current branch. Create a ready-for-review, non-draft PR by default. Create a draft PR only when
+the Trello card explicitly asks for a draft PR. Add the PR URL to the workpad and the visible
+handoff comment.
 
 Before creating commits for PR-bound work, reuse the task checkout's local Git author only when both
 `user.name` and `user.email` are already configured and `symphony-trello.github-author-verified` is
@@ -188,16 +195,16 @@ explain the local-only result and the workspace/branch/commit evidence in the wo
 comment.
 
 If GitHub auth, push permission, branch protection, or repository policy prevents a required PR, try
-the fallback strategies in `.codex/skills/push-pr/SKILL.md`. If a PR is still required and cannot be
-created or updated, move the card to `Blocked` with the exact blocker instead of moving to Human
-Review.
+the fallback strategies in `.codex/skills/symphony-trello-push-pr/SKILL.md`. If a PR is still
+required and cannot be created or updated, move the card to `Blocked` with the exact blocker instead
+of moving to Human Review.
 
 ## Pull Request Feedback Sweep
 
 If the Trello description, Trello comments, current branch, repository context, or open PR list
-identifies an associated pull request, use `.codex/skills/review-sweep/SKILL.md` before moving the
-card to Human Review or landing from Merging. Cards without PR context do not need GitHub review
-checks.
+identifies an associated pull request, use `.codex/skills/symphony-trello-review-sweep/SKILL.md`
+before moving the card to Human Review or landing from Merging. Cards without PR context do not need
+GitHub review checks.
 
 The sweep must check top-level PR comments, inline review comments, review states and summaries,
 CI/check status, and Codex review issue comments when present. Every actionable human, bot, or Codex
@@ -247,7 +254,7 @@ create duplicate progress summary comments when the workpad already contains the
 
 `Merging` is human approval for landing. Only run landing when the current Trello list is
 `Merging`. Do not merge from Human Review, and do not call `gh pr merge` directly from the workflow
-prompt. Open `.codex/skills/land/SKILL.md` and follow it.
+prompt. Open `.codex/skills/symphony-trello-land/SKILL.md` and follow it.
 
 Before landing, identify the PR, run the PR feedback sweep, run current card-specific validation,
 check mergeability, branch state, required reviews, and CI/check status, and follow the repository's

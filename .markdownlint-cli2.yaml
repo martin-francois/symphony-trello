@@ -6,3 +6,5 @@ globs:
   - "docs/**/*.md"
 ignores:
   - "WORKFLOW.md"
+  - "WORKFLOW.*.md"
+  - "!WORKFLOW.example.md"

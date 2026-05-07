@@ -17,6 +17,7 @@ import ch.fmartin.symphony.trello.prompt.PromptRenderer;
 import ch.fmartin.symphony.trello.tracker.CardLookupResult;
 import ch.fmartin.symphony.trello.tracker.TrackerClient;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
+import ch.fmartin.symphony.trello.workspace.CodexSkillInstaller;
 import ch.fmartin.symphony.trello.workspace.HookRunner;
 import ch.fmartin.symphony.trello.workspace.WorkspaceManager;
 import java.nio.file.Files;
@@ -41,13 +42,13 @@ class LocalAgentRunnerTest {
         when(codex.runSession(any(), any(), any(), any(), any(), any(), any())).thenReturn(AgentRunResult.ok());
         var runner = runner(codex, CardLookupResult.Found::new);
         EffectiveConfig config = config(Map.of(
-                "before_run", "echo before > before.txt",
-                "after_run", "echo after > after.txt"));
+                "before_run", "rm -rf .codex && echo before > before.txt", "after_run", "echo after > after.txt"));
         Card card = TestCards.card("card-1", "TRELLO-local", "Ready for Codex");
+        String renderedPrompt = "Use " + CodexSkillInstaller.installedSkillPath("commit");
 
         // when
         AgentRunResult result = runner.run(
-                new AgentRunner.AgentRunRequest(card, null, "handoff prompt", config, "worker-success", event -> {}));
+                new AgentRunner.AgentRunRequest(card, null, renderedPrompt, config, "worker-success", event -> {}));
 
         // then
         ArgumentCaptor<Path> workspace = ArgumentCaptor.forClass(Path.class);
@@ -63,11 +64,33 @@ class LocalAgentRunnerTest {
                         eq("worker-success"),
                         any(),
                         any());
-        assertThat(prompt.getValue()).isEqualTo("handoff prompt");
+        assertThat(prompt.getValue()).isEqualTo(renderedPrompt);
         assertThat(workspace.getValue())
                 .isEqualTo(expectedWorkspace.toAbsolutePath().normalize());
         assertThat(Files.readString(expectedWorkspace.resolve("before.txt"))).contains("before");
         assertThat(Files.readString(expectedWorkspace.resolve("after.txt"))).contains("after");
+        assertThat(expectedWorkspace.resolve(CodexSkillInstaller.installedSkillPath("commit")))
+                .content()
+                .contains("configure it from the authenticated GitHub user");
+    }
+
+    @Test
+    void leavesLegacyWorkspaceEmptyWhenPromptDoesNotReferenceBundledSkills() throws Exception {
+        // given
+        CodexAppServerClient codex = mock(CodexAppServerClient.class);
+        when(codex.runSession(any(), any(), any(), any(), any(), any(), any())).thenReturn(AgentRunResult.ok());
+        var runner = runner(codex, CardLookupResult.Found::new);
+        EffectiveConfig config = config(Map.of());
+        Card card = TestCards.card("card-1", "TRELLO-legacy", "Ready for Codex");
+
+        // when
+        AgentRunResult result = runner.run(
+                new AgentRunner.AgentRunRequest(card, null, "legacy prompt", config, "worker-legacy", event -> {}));
+
+        // then
+        assertThat(result).isEqualTo(AgentRunResult.ok());
+        assertThat(config.workspace().root().resolve("TRELLO-legacy").resolve(".codex"))
+                .doesNotExist();
     }
 
     @Test
