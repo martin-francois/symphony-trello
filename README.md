@@ -795,7 +795,8 @@ The most common skills are:
   message convention, and, for PR-bound work, configure the commit author from the authenticated
   GitHub account before committing.
 - `.codex/skills/push-pr/SKILL.md`: push the branch, check PR-bound commit authors, and create or
-  update the pull request.
+  update the pull request. Repository-changing work creates a ready-for-review PR by default. Cards
+  that need a draft PR must ask for one explicitly.
 - `.codex/skills/land/SKILL.md`: land an approved PR only from `Merging`, then move successful work
   to the configured completion list or blocked landing attempts to `Blocked`.
 - `.codex/skills/debug/SKILL.md`: diagnose stuck, retrying, blocked, or failed runs.

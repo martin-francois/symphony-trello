@@ -774,8 +774,10 @@ that branch is discoverable, instead of inheriting the source checkout's current
 The generated workflow treats unavailable push credentials as blocking only when a card, repository
 policy, or human requires a push or pull request. For repository-changing work in the recommended
 workflow, `Human Review` means a pull request is available for review unless the card explicitly asks
-for local-only or no-push work. It also allows handoff with documented, clearly unrelated broad
-validation failures when card-specific validation passed.
+for local-only or no-push work. Generated workflows create ready-for-review, non-draft pull requests
+by default and create draft pull requests only when the Trello card explicitly asks for a draft PR.
+They also allow handoff with documented, clearly unrelated broad validation failures when
+card-specific validation passed.
 
 Before `Human Review`, the generated workflow tells Codex to classify PR check state rather than
 blocking on any non-green check:
@@ -3160,6 +3162,15 @@ GitHub commit authoring extension:
   subjects and infer a clear existing style; histories with no commits, one commit, no reachable
   default branch, or mixed styles SHOULD be treated as inconclusive and fall back to Conventional
   Commits
+
+GitHub pull request publication extension:
+
+- generated workflows SHOULD create ready-for-review, non-draft pull requests by default
+- generated workflows SHOULD create draft pull requests only when the Trello card explicitly asks for
+  a draft PR
+- if a draft pull request already exists for completed repository-changing work and the card did not
+  ask for draft, generated workflows SHOULD mark it ready for review before moving the card to
+  `Human Review`
 
 ### 19.2 Manual systemd Deployment Profile
 

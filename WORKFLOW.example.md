@@ -168,8 +168,9 @@ or a human explicitly changes the requirement.
 
 For repository-changing work, Human Review means a human can review a pull request. Before moving
 the card there, use `.codex/skills/commit/SKILL.md` and `.codex/skills/push-pr/SKILL.md` to commit,
-push, and create or update the PR for the current branch. Add the PR URL to the workpad and the
-visible handoff comment.
+push, and create or update the PR for the current branch. Create a ready-for-review, non-draft PR by
+default. Create a draft PR only when the Trello card explicitly asks for a draft PR. Add the PR URL
+to the workpad and the visible handoff comment.
 
 This PR requirement applies when the card asks for code, documentation, configuration, tests, or
 other version-controlled repository changes. It does not apply when the card explicitly asks for a

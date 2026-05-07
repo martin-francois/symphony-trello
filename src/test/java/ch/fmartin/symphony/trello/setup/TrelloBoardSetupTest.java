@@ -171,6 +171,8 @@ class TrelloBoardSetupTest {
                 .contains("## Pull Request Publication")
                 .contains("For repository-changing work, \"Human Review\" means a human can review a pull request")
                 .contains("and create or update the PR")
+                .contains("Create a ready-for-review, non-draft PR by\ndefault")
+                .contains("Create a draft PR only when the Trello card explicitly asks for a draft PR")
                 .contains("resolve the authenticated GitHub identity")
                 .contains("GitHub noreply email")
                 .contains("user:email")
@@ -608,7 +610,7 @@ class TrelloBoardSetupTest {
                 .contains("## Acceptance Criteria And Validation")
                 .contains("the final Codex response or handoff comment")
                 .contains("Record the plan, acceptance criteria, validation plan")
-                .contains("Add the PR URL to the final response")
+                .contains("Add the PR\nURL to the final response")
                 .contains("record a short rework plan for the final response")
                 .contains("finish the final-response plan");
     }

@@ -10,7 +10,9 @@ description: >
 ## Goals
 
 - Push the current branch without changing remotes behind the user's back.
-- Create a PR when none exists, or update the existing PR.
+- Create a ready-for-review, non-draft PR when none exists, or update the
+  existing PR.
+- Use a draft PR only when the Trello card explicitly asks for a draft PR.
 - Keep PR title and body aligned with the full branch scope.
 - Distinguish stale-branch problems from auth or permission problems.
 
@@ -95,12 +97,15 @@ description: >
 7. Create or update the PR:
 
    ```bash
-   gh pr view --json number,state,title,url
+   gh pr view --json number,state,title,url,isDraft
    ```
 
-   - If there is no open PR, create one.
+   - If there is no open PR, create a ready-for-review PR. Do not pass
+     `--draft` unless the Trello card explicitly asks for a draft PR.
    - If the branch is tied to a closed or merged PR, create a new branch or ask
      for the intended publishing path.
+   - If an existing PR is draft and the card did not ask for draft, mark it
+     ready for review before handoff, for example with `gh pr ready`.
    - Reconsider the title and body on every update.
 8. Use `.github/pull_request_template.md` when present. Fill every section with
    concrete content and remove placeholders.
