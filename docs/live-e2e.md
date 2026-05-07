@@ -614,6 +614,14 @@ CI is unavailable or clearly unrelated and the appropriate local or card-specifi
    check caveat.
 7. Verify `/api/v1/state` reaches zero running and retrying entries after the handoff.
 
+Observed on 2026-05-07 during a temporary live author verification run:
+
+- The deployed workflow resolved the GitHub CLI identity before creating the PR-bound commit.
+- The task branch commit author matched the authenticated GitHub account used for push and PR
+  creation.
+- The card reached `Human Review` with a ready-for-review pull request instead of blocking on
+  generic service-user author metadata.
+
 ### Regression Scenario: In-Progress Pickup Visibility
 
 Use this when changing generated workflows, Trello move tools, or the recommended board layout.
