@@ -26,7 +26,7 @@ class CodexSkillInstallerTest {
         assertThat(workspace.resolve(CodexSkillInstaller.installedSkillPath("commit")))
                 .content()
                 .contains("name: symphony-trello-commit")
-                .contains("configure it from the authenticated GitHub user");
+                .contains("configure it from the authenticated GitHub login");
         assertThat(workspace.resolve(CodexSkillInstaller.installedSkillPath("push-pr")))
                 .content()
                 .contains("name: symphony-trello-push-pr")
@@ -53,7 +53,7 @@ class CodexSkillInstallerTest {
         installer.installInto(workspace);
 
         // then
-        assertThat(commitSkill).content().contains("configure it from the authenticated GitHub user");
+        assertThat(commitSkill).content().contains("configure it from the authenticated GitHub login");
     }
 
     @Test

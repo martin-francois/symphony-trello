@@ -614,6 +614,34 @@ CI is unavailable or clearly unrelated and the appropriate local or card-specifi
    check caveat.
 7. Verify `/api/v1/state` reaches zero running and retrying entries after the handoff.
 
+### Regression Scenario: Existing PR With Wrong Commit Author
+
+Use this when changing generated workflow PR publication instructions, commit author policy, shipped
+Codex skills, or deployed workspace skill installation.
+
+The problem this protects against is a card reaching `Human Review` because the new commit has the
+right author while an existing commit in the same PR still uses a generic Codex author. The final
+assertion must inspect every commit on the resulting PR through GitHub, not only the latest local
+commit.
+
+1. Create a temporary recommended Trello board with the fast path command and deploy that workflow
+   with Ansible.
+2. In a disposable repository or private test repository, create a temporary non-default branch with
+   one harmless commit authored as `Codex <codex@openai.com>`, push it, and open a temporary PR.
+3. Create a Trello card in `Ready for Codex` that asks Codex to continue that existing PR and make
+   one tiny documentation-only commit.
+4. Before the fix, this reproduced the bug: Codex created a new correctly-authored commit, pushed
+   the branch, moved the card to `Human Review`, and the PR still contained the earlier generic
+   Codex-author commit.
+5. After the fix, wait until the card reaches `Human Review`, then inspect the PR with
+   `gh pr view --json commits`.
+6. Verify every PR commit author is the authenticated GitHub user, for example
+   `martinfrancois <f.martin@fastmail.com>`, and no commit is authored as
+   `Codex <codex@openai.com>`.
+7. Verify the Trello workpad or handoff comment records that the PR branch author range was checked
+   or rewritten, and `/api/v1/state` reaches zero running and retrying entries.
+8. Close the temporary PR and delete the temporary branch after recording the result.
+
 ### Regression Scenario: In-Progress Pickup Visibility
 
 Use this when changing generated workflows, Trello move tools, or the recommended board layout.

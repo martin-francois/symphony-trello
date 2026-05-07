@@ -13,7 +13,7 @@ description: >
 - Match the target repository's commit-message convention.
 - For branches that may become GitHub pull requests, reuse a checkout-local
   commit author only when it was already verified or configured for this
-  workflow. Otherwise, configure it from the authenticated GitHub user before
+  workflow. Otherwise, configure it from the authenticated GitHub login before
   creating commits.
 - Preserve unrelated user changes.
 - Include validation evidence in the commit body when it helps review.
@@ -36,8 +36,8 @@ description: >
    current_email="$(git config --local --get user.email || true)"
    author_verified="$(git config --local --get symphony-trello.github-author-verified || true)"
    if [ -z "$current_name" ] || [ -z "$current_email" ] || [ "$author_verified" != "true" ]; then
-     if ! github_name="$(gh api user --jq 'if (.name // "") == "" then .login else .name end')" || [ -z "$github_name" ]; then
-       echo "GitHub identity lookup failed: could not resolve user name" >&2
+     if ! github_name="$(gh api user --jq '.login // ""')" || [ -z "$github_name" ]; then
+       echo "GitHub identity lookup failed: could not resolve user login" >&2
        exit 1
      fi
      if ! github_email="$(gh api user --jq '.email // ""')"; then

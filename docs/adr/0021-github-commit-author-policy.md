@@ -42,15 +42,19 @@ The commit skill first checks whether the task checkout already has local `user.
 `user.email` values plus a `symphony-trello.github-author-verified=true` marker. When all three are
 present, it reuses that author so later commits in the same checkout do not perform another GitHub
 API lookup. When the author is missing or not marked verified, the skill resolves the authenticated
-GitHub user with `gh api user`, configures the task checkout's Git author before the first PR-bound
-commit, and uses the public GitHub email when available or an actual GitHub noreply address returned
-by the authenticated account's email API otherwise. It does not guess the noreply format because
+GitHub login with `gh api user`, configures the task checkout's Git author name from that login
+before the first PR-bound commit, and uses the public GitHub email when available or an actual GitHub
+noreply address returned by the authenticated account's email API otherwise. It does not guess the noreply format because
 GitHub accounts can use different noreply address forms. It checks lookup success before writing Git
 config so failed auth does not replace a useful local identity with blank values. The push-pr skill
 checks PR-bound commit authors before publishing, fails closed when it cannot resolve the
 default-branch comparison range or when any PR-bound commit author does not match the authenticated
-GitHub account, and avoids force-pushing wrong-author fixes unless a human or workflow explicitly
-allows it.
+GitHub account, and verifies the whole PR range before Human Review. A live reproduction showed that
+checking only newly-created commits is insufficient: an existing PR branch can already contain a
+wrong-author commit and still receive a new correctly-authored commit. The generated workflow now
+explicitly allows a narrow author-only rewrite of the current non-default task PR branch followed by
+`git push --force-with-lease` when the PR range contains wrong-author commits. It still refuses to
+rewrite the default branch, an unnamed branch, or unrelated human-owned work.
 
 A live deployed run showed that merely referencing `.codex/skills/commit/SKILL.md` in the generated
 workflow is not enough when the target repository does not contain Symphony's skills. The Java
@@ -81,11 +85,13 @@ can keep the existing local Git identity because there is no GitHub PR author to
 * Good, because push-time author verification does not silently pass when the default-branch base is
   missing.
 * Good, because wrong-author unpublished commits can be fixed before publication.
+* Good, because existing task PR branches can be corrected before Human Review instead of preserving
+  a generic Codex author in the final PR.
 * Bad, because a prompt/skill instruction cannot enforce authoring as strongly as a dedicated Git
   wrapper would.
 * Bad, because private-email accounts need GitHub CLI auth with the `user:email` scope.
-* Bad, because existing pushed commits with the wrong author still require human judgment before any
-  history rewrite.
+* Bad, because author-only rewrites still change commit hashes and require `--force-with-lease` on
+  the task branch.
 
 ### Confirmation
 
@@ -94,9 +100,11 @@ confirm the generated workflow, packaged workspace skills, and repository-local 
 describe workflow-verified checkout-local author reuse, GitHub identity resolution, noreply fallback,
 lookup failure handling, and safe pushed-branch behavior.
 
-For a live PR-bound card, inspect `git log --format='%an <%ae>'` on the task branch before pushing
-and confirm it matches the name from `gh api user` and either the public email from `gh api user` or
-an actual noreply email from `gh api user/emails` for the service user.
+For a live PR-bound card, inspect every PR commit through GitHub after handoff and confirm each
+author matches the login from `gh api user` and either the public email from `gh api user` or an
+actual noreply email from `gh api user/emails` for the service user. Include a reproduction where an
+existing PR branch starts with a generic Codex author and the workflow must fix the whole PR range
+before Human Review.
 
 ## Pros and Cons of the Options
 

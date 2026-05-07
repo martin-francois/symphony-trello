@@ -218,6 +218,9 @@ matters, and easy for another engineer to understand without asking the original
 - When reporting live E2E results, state which external systems were real and which parts used test
   doubles. Do not imply that real Codex completed a path when only deterministic fake Codex completed
   it against real Trello.
+- For live PR-author verification, inspect every commit in the resulting pull request through GitHub,
+  not only the new commit Codex just created. A card is not proven fixed when an existing PR still
+  contains earlier commits authored by a generic Codex identity.
 - Do not call a live deployment healthy just because the systemd service is active. When a real
   workflow has active work, verify that Codex can authenticate, the work finishes or reaches an
   expected terminal state, Trello handoff happens when required, and `/api/v1/state` has no
