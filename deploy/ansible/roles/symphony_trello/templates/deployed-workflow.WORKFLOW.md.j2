@@ -1,0 +1,44 @@
+{%- set workflow_source = lookup('ansible.builtin.file', item.source | default(item.src)) | replace('\r\n', '\n') -%}
+{%- set workflow_lines = workflow_source.split('\n') -%}
+{%- set has_front_matter = workflow_lines | length > 0 and workflow_lines[0].strip() == '---' -%}
+{%- if has_front_matter -%}
+{%- set parsed = namespace(front_matter=[], body=[], in_front_matter=true) -%}
+{%- for line in workflow_lines[1:] -%}
+{%- if parsed.in_front_matter and line.strip() == '---' -%}
+{%- set parsed.in_front_matter = false -%}
+{%- elif parsed.in_front_matter -%}
+{%- set _ = parsed.front_matter.append(line) -%}
+{%- else -%}
+{%- set _ = parsed.body.append(line) -%}
+{%- endif -%}
+{%- endfor -%}
+{%- set workflow_front_matter = parsed.front_matter | join('\n') -%}
+{%- set workflow_body = parsed.body | join('\n') -%}
+{%- set workflow_config = (workflow_front_matter | from_yaml) | default({}, true) -%}
+{%- else -%}
+{%- set workflow_body = workflow_source -%}
+{%- set workflow_config = {} -%}
+{%- endif -%}
+{%- set tracker_config = workflow_config.tracker | default({}) -%}
+{%- set workspace_config = workflow_config.workspace | default({}) -%}
+{%- set server_config = workflow_config.server | default({}) -%}
+{%- set deployed_tracker = tracker_config | combine({
+  'api_key': 'file:$CREDENTIALS_DIRECTORY/trello-api-key',
+  'api_token': 'file:$CREDENTIALS_DIRECTORY/trello-api-token'
+}, recursive=True) -%}
+{%- set deployed_workspace = workspace_config | combine({
+  'root': item.workspace_root | default(symphony_trello_state_dir ~ '/workspaces/' ~ item.name)
+}, recursive=True) -%}
+{%- set deployed_config = workflow_config | combine({
+  'tracker': deployed_tracker,
+  'workspace': deployed_workspace
+}, recursive=True) -%}
+{%- if item.port is defined -%}
+{%- set deployed_config = deployed_config | combine({
+  'server': server_config | combine({'port': item.port | int}, recursive=True)
+}, recursive=True) -%}
+{%- endif %}
+---
+{{ deployed_config | to_nice_yaml(indent=2, sort_keys=false) | trim }}
+---
+{{ workflow_body | trim }}

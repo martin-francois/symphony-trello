@@ -1,9 +1,10 @@
 ---
 symphony_trello_workflows:
   - name: project-a
-    src: "{{ playbook_dir }}/../../WORKFLOW.project-a.md"
+    source: "{{ playbook_dir }}/../../WORKFLOW.project-a.md"
   - name: project-b
-    src: "{{ playbook_dir }}/../../WORKFLOW.project-b.md"
+    source: "{{ playbook_dir }}/../../WORKFLOW.project-b.md"
+    port: 18081
 
 # Leave this unset when Java and Codex are already on the service user's normal systemd PATH.
 # Set it when they are installed in custom directories.

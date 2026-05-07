@@ -87,25 +87,40 @@ Edit `group_vars/symphony_trello/vars.yml`:
 ---
 symphony_trello_workflows:
   - name: project-a
-    src: "{{ playbook_dir }}/../../WORKFLOW.project-a.md"
+    source: "{{ playbook_dir }}/../../WORKFLOW.project-a.md"
   - name: project-b
-    src: "{{ playbook_dir }}/../../WORKFLOW.project-b.md"
+    source: "{{ playbook_dir }}/../../WORKFLOW.project-b.md"
+    port: 18081
 ```
 
 Each `name` becomes a systemd service instance. For example, `project-a` becomes
 `symphony-trello@project-a` and reads `/etc/symphony-trello/workflows/project-a.WORKFLOW.md`.
 
-Each `src` points to the local workflow file that should be deployed for that service.
-Generated workflow files already include a stable `server.port`. When you deploy several workflows,
-keep each port different so every service has its own `/api/v1/state` endpoint.
+Each `source` points to the local workflow file that should be deployed for that service. `src` is
+still accepted for older local variable files.
 
-For deployed workflow files, set Trello credentials to the systemd credential files:
+The playbook does not copy the source workflow verbatim. It renders a deployed copy and keeps the
+prompt body, board routing, Codex settings, and other workflow policy from the source file. It then
+overlays deployment-owned values:
+
+- `tracker.api_key` and `tracker.api_token` use the systemd credential files.
+- `workspace.root` defaults to `/var/lib/symphony-trello/workspaces/<name>`.
+- `server.port` is replaced only when the workflow entry sets `port`.
+
+Use `workspace_root` only when that workflow should store per-card workspaces in a different
+service-owned directory under `symphony_trello_state_dir`:
 
 ```yaml
-tracker:
-  api_key: file:$CREDENTIALS_DIRECTORY/trello-api-key
-  api_token: file:$CREDENTIALS_DIRECTORY/trello-api-token
+symphony_trello_workflows:
+  - name: project-a
+    source: "{{ playbook_dir }}/../../WORKFLOW.project-a.md"
+    workspace_root: /var/lib/symphony-trello/workspaces/project-a
 ```
+
+Generated workflow files already include a stable `server.port`. When you deploy several workflows,
+keep each deployed port different so every service has its own `/api/v1/state` endpoint. Set `port`
+on a workflow entry when you want the deployed service to use a different port than the local
+workflow file.
 
 The workflow list is the desired state. By default, a workflow service that exists on the server but
 is no longer listed here is stopped, disabled, and removed from `/etc/symphony-trello/workflows`.
@@ -279,15 +294,15 @@ Add or edit a local workflow file, then update `symphony_trello_workflows`:
 ```yaml
 symphony_trello_workflows:
   - name: project-a
-    src: "{{ playbook_dir }}/../../WORKFLOW.project-a.md"
+    source: "{{ playbook_dir }}/../../WORKFLOW.project-a.md"
   - name: project-b
-    src: "{{ playbook_dir }}/../../WORKFLOW.project-b.md"
+    source: "{{ playbook_dir }}/../../WORKFLOW.project-b.md"
   - name: project-c
-    src: "{{ playbook_dir }}/../../WORKFLOW.project-c.md"
+    source: "{{ playbook_dir }}/../../WORKFLOW.project-c.md"
 ```
 
-Rerun the playbook. New workflow files are installed, changed workflow files are updated, and managed
-services restart when their inputs changed.
+Rerun the playbook. New workflow files are rendered into deployed copies, changed workflow files are
+updated, and managed services restart when their inputs changed.
 
 ## Remove A Workflow
 

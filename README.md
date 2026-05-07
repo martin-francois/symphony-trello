@@ -893,7 +893,9 @@ indefinitely.
 
 For a server deployment with one or more workflow files, use the systemd guide in
 [docs/deployment.md](docs/deployment.md). For repeatable server setup with Ansible Vault secrets and
-declared workflow files, use [docs/ansible-deployment.md](docs/ansible-deployment.md).
+declared workflow files, use [docs/ansible-deployment.md](docs/ansible-deployment.md). The Ansible
+path renders deployed workflow copies with server-safe credentials and workspace paths, so generated
+local workflows do not need manual edits before deployment.
 
 ## Build and Test
 

@@ -13,6 +13,35 @@
       Define symphony_trello_trello_api_key and symphony_trello_trello_api_token in an Ansible Vault
       file, and define symphony_trello_workflows in group_vars.
 
+- name: Validate workflow declarations
+  ansible.builtin.assert:
+    that:
+      - item.name is defined
+      - item.name is match('^[A-Za-z0-9_.-]+$')
+      - item.src is defined or item.source is defined
+      - item.workspace_root is not defined or item.workspace_root is match('^/')
+      - item.workspace_root is not defined or item.workspace_root is not search('(^|/)\\.\\.(/|$)')
+      - item.workspace_root is not defined
+        or item.workspace_root == symphony_trello_state_dir
+        or item.workspace_root is match('^' ~ (symphony_trello_state_dir | regex_escape) ~ '/')
+      - item.port is not defined or item.port | string is match('^(0|[1-9][0-9]{0,4})$')
+      - item.port is not defined or (item.port | int) >= 0
+      - item.port is not defined or (item.port | int) <= 65535
+    fail_msg: >
+      Each symphony_trello_workflows entry needs a service-safe name and a source workflow file.
+      Optional workspace_root values must be absolute paths under symphony_trello_state_dir without
+      .. segments, and optional port values must be between 0 and 65535.
+  loop: "{{ symphony_trello_workflows }}"
+  loop_control:
+    label: "{{ item.name | default('unnamed workflow') }}"
+
+- name: Validate workflow names are unique
+  ansible.builtin.assert:
+    that:
+      - symphony_trello_workflows | map(attribute='name') | list | unique | length
+        == symphony_trello_workflows | length
+    fail_msg: "Workflow service names in symphony_trello_workflows must be unique."
+
 - name: Validate allowed host paths
   ansible.builtin.assert:
     that:
@@ -132,7 +161,7 @@
 
 - name: Validate local workflow files exist
   ansible.builtin.stat:
-    path: "{{ item.src }}"
+    path: "{{ item.source | default(item.src) }}"
   loop: "{{ symphony_trello_workflows }}"
   loop_control:
     label: "{{ item.name }}"
@@ -144,7 +173,7 @@
   ansible.builtin.assert:
     that:
       - item.stat.exists
-    fail_msg: "Workflow {{ item.item.name }} points to missing local file {{ item.item.src }}."
+    fail_msg: "Workflow {{ item.item.name }} points to missing local file {{ item.item.source | default(item.item.src) }}."
   loop: "{{ symphony_trello_local_workflow_files.results }}"
   loop_control:
     label: "{{ item.item.name }}"
@@ -462,9 +491,9 @@
     group: root
     recurse: true
 
-- name: Deploy workflow files
-  ansible.builtin.copy:
-    src: "{{ item.src }}"
+- name: Render deployed workflow files
+  ansible.builtin.template:
+    src: deployed-workflow.WORKFLOW.md.j2
     dest: "{{ symphony_trello_workflow_dir }}/{{ item.name }}.WORKFLOW.md"
     owner: root
     group: "{{ symphony_trello_group }}"
