@@ -831,12 +831,14 @@ public final class TrelloBoardSetup {
                 default. Create a draft PR only when the Trello card explicitly asks for a draft PR. Add the PR
                 URL to %s.
 
-                Before creating commits for PR-bound work, resolve the authenticated GitHub identity with `gh api
-                user` and configure the task checkout's Git author from that identity. Use the public GitHub email
-                when available, otherwise fetch the account's actual GitHub noreply email with `gh api
-                user/emails`. The noreply lookup needs GitHub CLI auth with the `user:email` scope. Do not guess a
-                noreply address format. If the identity cannot be resolved, treat PR-bound work as blocked before
-                committing instead of using a generic fallback author.
+                Before creating commits for PR-bound work, reuse the task checkout's local Git author only when both
+                `user.name` and `user.email` are already configured and `symphony-trello.github-author-verified` is
+                `true`. Otherwise, resolve the authenticated GitHub identity with `gh api user` and configure the
+                task checkout's Git author from that identity. Use the public GitHub email when available, otherwise
+                fetch the account's actual GitHub noreply email with `gh api user/emails`. The noreply lookup needs
+                GitHub CLI auth with the `user:email` scope. Do not guess a noreply address format. If the identity
+                cannot be resolved when lookup is needed, treat PR-bound work as blocked before committing instead
+                of using a generic fallback author.
 
                 This PR requirement applies when the card asks for code, documentation, configuration, tests, or
                 other version-controlled repository changes. It does not apply when the card explicitly asks for a

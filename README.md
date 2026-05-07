@@ -792,8 +792,8 @@ The most common skills are:
 - `.codex/skills/review-sweep/SKILL.md`: check PR comments, inline review feedback, and checks
   before handoff.
 - `.codex/skills/commit/SKILL.md`: commit focused changes, follow the target repository's commit
-  message convention, and, for PR-bound work, configure the commit author from the authenticated
-  GitHub account before committing.
+  message convention, and, for PR-bound work, reuse a workflow-verified checkout-local commit author
+  or configure one from the authenticated GitHub account before committing.
 - `.codex/skills/push-pr/SKILL.md`: push the branch, check PR-bound commit authors, and create or
   update the pull request. Repository-changing work creates a ready-for-review PR by default. Cards
   that need a draft PR must ask for one explicitly.
@@ -803,12 +803,16 @@ The most common skills are:
 
 These files are instructions for Codex. Symphony does not execute them directly.
 
-For GitHub pull requests, Codex uses the GitHub CLI account that publishes the PR as the commit
-author. If that account has no public email, Codex fetches the account's actual GitHub noreply email
-through `gh api user/emails`, which needs the `user:email` GitHub CLI scope. If that email is not
-accessible, PR-bound work must stop before committing. If commits show the wrong author, check
-`gh auth status`, `gh api user`, `gh api user/emails`, and the repository's local `git config
-user.name` and `git config user.email` inside the task checkout.
+For GitHub pull requests, Codex first checks the task checkout's local `git config user.name`,
+`git config user.email`, and `git config symphony-trello.github-author-verified`. If the author is
+complete and marked verified, it reuses that author and avoids another GitHub API lookup. Otherwise,
+Codex uses the GitHub CLI account that publishes the PR as the commit author and stores the verified
+author in the checkout-local Git config. If that account has no public email, Codex fetches the
+account's actual GitHub noreply email through `gh api user/emails`, which needs the `user:email`
+GitHub CLI scope. If that email is not accessible, PR-bound work must stop before committing. If
+commits show the wrong author, check `gh auth status`, `gh api user`, `gh api user/emails`, and the
+repository's local `git config user.name`, `git config user.email`, and
+`git config symphony-trello.github-author-verified` inside the task checkout.
 
 ### Trello Write Controls
 

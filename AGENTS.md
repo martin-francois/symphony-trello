@@ -148,6 +148,9 @@ matters, and easy for another engineer to understand without asking the original
 - For repository-changing work, generated workflows and PR publishing instructions should create
   ready-for-review, non-draft pull requests by default. Use a draft PR only when the Trello card
   explicitly asks for a draft PR.
+- For PR-bound commits, generated workflows and commit instructions should reuse a checkout-local
+  Git author only when the author is complete and marked as verified for this workflow. Only call
+  GitHub APIs again when that verified author config is missing or incomplete.
 - For deployment filesystem access, describe the concept as "allowed host paths" unless you are
   naming the existing `symphony_trello_allowed_project_roots` variable. The allowed entries can be
   multiple files or folders; do not imply they must be repository or project roots. Explain that

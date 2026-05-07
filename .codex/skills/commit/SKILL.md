@@ -11,8 +11,10 @@ description: >
 
 - Commit only the intended changes.
 - Match the target repository's commit-message convention.
-- For branches that may become GitHub pull requests, make the commit author
-  match the authenticated GitHub user before creating commits.
+- For branches that may become GitHub pull requests, reuse a checkout-local
+  commit author only when it was already verified or configured for this
+  workflow. Otherwise, configure it from the authenticated GitHub user before
+  creating commits.
 - Preserve unrelated user changes.
 - Include validation evidence in the commit body when it helps review.
 - Reference the implemented GitHub issue in a footer when the work belongs to an
@@ -25,34 +27,44 @@ description: >
 3. Re-read newly added files before committing. Do not commit generated output,
    secrets, local run artifacts, private board names, card ids, account names,
    or host paths.
-4. If this branch may be pushed to GitHub or published as a pull request, resolve
-   the GitHub identity before committing:
+4. If this branch may be pushed to GitHub or published as a pull request, first
+   check whether this checkout already has a local Git author verified by this
+   workflow:
 
    ```bash
-   if ! github_name="$(gh api user --jq 'if (.name // "") == "" then .login else .name end')" || [ -z "$github_name" ]; then
-     echo "GitHub identity lookup failed: could not resolve user name" >&2
-     exit 1
-   fi
-   if ! github_email="$(gh api user --jq '.email // ""')"; then
-     echo "GitHub identity lookup failed: could not resolve user email metadata" >&2
-     exit 1
-   fi
-   if [ -z "$github_email" ]; then
-     if ! github_email="$(gh api user/emails --jq '[.[] | select(.email | endswith("@users.noreply.github.com")) | .email][0] // ""' 2>/dev/null)"; then
-       echo "GitHub identity lookup failed: gh api user/emails needs the user:email scope; run gh auth refresh -s user:email for this account" >&2
+   current_name="$(git config --local --get user.name || true)"
+   current_email="$(git config --local --get user.email || true)"
+   author_verified="$(git config --local --get symphony-trello.github-author-verified || true)"
+   if [ -z "$current_name" ] || [ -z "$current_email" ] || [ "$author_verified" != "true" ]; then
+     if ! github_name="$(gh api user --jq 'if (.name // "") == "" then .login else .name end')" || [ -z "$github_name" ]; then
+       echo "GitHub identity lookup failed: could not resolve user name" >&2
        exit 1
      fi
+     if ! github_email="$(gh api user --jq '.email // ""')"; then
+       echo "GitHub identity lookup failed: could not resolve user email metadata" >&2
+       exit 1
+     fi
+     if [ -z "$github_email" ]; then
+       if ! github_email="$(gh api user/emails --jq '[.[] | select(.email | endswith("@users.noreply.github.com")) | .email][0] // ""' 2>/dev/null)"; then
+         echo "GitHub identity lookup failed: gh api user/emails needs the user:email scope; run gh auth refresh -s user:email for this account" >&2
+         exit 1
+       fi
+     fi
+     if [ -z "$github_email" ]; then
+       echo "GitHub identity lookup failed: configure a public email or accessible GitHub noreply email for this account" >&2
+       exit 1
+     fi
+     git config --local user.name "$github_name"
+     git config --local user.email "$github_email"
+     git config --local symphony-trello.github-author-verified true
    fi
-   if [ -z "$github_email" ]; then
-     echo "GitHub identity lookup failed: configure a public email or accessible GitHub noreply email for this account" >&2
-     exit 1
-   fi
-   git config user.name "$github_name"
-   git config user.email "$github_email"
    ```
 
-   Use the same `gh` authentication context that will create or update the PR.
-   If this lookup fails for PR-bound work, stop, update the Trello workpad or
+   The verification marker avoids repeated GitHub API calls for later commits in
+   the same checkout while still preventing an unrelated local author from being
+   silently reused for PR-bound work. Use the same `gh` authentication context
+   that will create or update the PR when lookup is needed. If this lookup is
+   needed and fails for PR-bound work, stop, update the Trello workpad or
    handoff comment with the exact blocker, and do not create a commit with a
    generic fallback author. If the card explicitly says the work is local-only
    or must not be pushed, keep the existing local Git identity and mention that
@@ -104,5 +116,5 @@ For normal code changes, run:
 - The staged diff includes unrelated user changes.
 - The commit would include secrets or local/private operational details.
 - The requested commit message would misrepresent the staged changes.
-- PR-bound work cannot resolve the authenticated GitHub identity before the
-  first commit.
+- PR-bound work needs GitHub identity lookup before the first commit and cannot
+  resolve it.
