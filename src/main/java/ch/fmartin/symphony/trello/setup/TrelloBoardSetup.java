@@ -827,7 +827,9 @@ public final class TrelloBoardSetup {
 
                 For repository-changing work, %s means a human can review a pull request. Before moving the card
                 there, use `.codex/skills/commit/SKILL.md` and `.codex/skills/push-pr/SKILL.md` to commit, push,
-                and create or update the PR for the current branch. Add the PR URL to %s.
+                and create or update the PR for the current branch. Create a ready-for-review, non-draft PR by
+                default. Create a draft PR only when the Trello card explicitly asks for a draft PR. Add the PR
+                URL to %s.
 
                 Before creating commits for PR-bound work, resolve the authenticated GitHub identity with `gh api
                 user` and configure the task checkout's Git author from that identity. Use the public GitHub email

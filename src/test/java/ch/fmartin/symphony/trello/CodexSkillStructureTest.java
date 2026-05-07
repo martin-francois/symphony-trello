@@ -147,6 +147,8 @@ class CodexSkillStructureTest {
                 .contains("has not been pushed")
                 .contains("do not rewrite history");
         assertThat(pushPrBody)
+                .contains("Create a ready-for-review, non-draft PR")
+                .contains("Use a draft PR only when the Trello card explicitly asks for a draft PR")
                 .contains("verify that commits intended for the PR are authored")
                 .contains("authenticated GitHub user")
                 .contains("gh api user")
@@ -158,6 +160,9 @@ class CodexSkillStructureTest {
                 .contains("git fetch origin")
                 .contains("git merge-base HEAD")
                 .contains("configure a public email or accessible GitHub noreply email")
+                .contains("number,state,title,url,isDraft")
+                .contains("Do not pass\n     `--draft` unless")
+                .contains("mark it\n     ready for review")
                 .contains("branch was already")
                 .contains("force-push is safe");
     }

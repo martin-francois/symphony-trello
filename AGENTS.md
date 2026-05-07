@@ -145,6 +145,9 @@ matters, and easy for another engineer to understand without asking the original
   requires a list to be archived before it can be permanently deleted.
 - For deployment auth, prefer reusing the existing Codex CLI auth file from `codex login`. Do not
   steer users toward configuring raw OpenAI API keys unless they explicitly ask for that mode.
+- For repository-changing work, generated workflows and PR publishing instructions should create
+  ready-for-review, non-draft pull requests by default. Use a draft PR only when the Trello card
+  explicitly asks for a draft PR.
 - For deployment filesystem access, describe the concept as "allowed host paths" unless you are
   naming the existing `symphony_trello_allowed_project_roots` variable. The allowed entries can be
   multiple files or folders; do not imply they must be repository or project roots. Explain that
