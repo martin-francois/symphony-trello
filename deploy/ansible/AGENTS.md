@@ -11,6 +11,9 @@ These instructions apply to files under `deploy/ansible`. Follow the repository 
 - Manage workflow services from declared desired state in `symphony_trello_workflows`. Removing a
   workflow from that list should stop and disable the matching service and remove the deployed
   workflow file.
+- Do not require operators to hand-edit generated local workflows for deployment-only settings.
+  Render deployed workflow copies with systemd credential references, service-local workspace roots,
+  and explicit per-workflow port overrides when configured.
 - Do not hide required manual cleanup in documentation. Workspace data under
   `/var/lib/symphony-trello` may contain useful run output and should not be deleted automatically
   when a workflow is removed.

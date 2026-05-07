@@ -3197,6 +3197,13 @@ When this profile is used:
 
 - `symphony_trello_workflows` is the desired state for deployed workflow services
 - each declared workflow has a local source file and a service name
+- the playbook MAY render a deployed workflow copy from the source workflow instead of copying it
+  verbatim, provided the rendered file remains a normal `WORKFLOW.md` contract for the runtime
+- rendered deployed workflow copies MAY overlay deployment-owned fields such as `tracker.api_key`,
+  `tracker.api_token`, `workspace.root`, and `server.port`
+- if the Ansible profile supports per-workflow `workspace.root` overrides, it SHOULD keep those
+  roots under the service state directory unless it also updates the service write policy for the
+  chosen paths
 - the playbook MAY expose variables for host-specific choices such as
   `symphony_trello_service_environment`, `symphony_trello_codex_auth_src`,
   `symphony_trello_allowed_project_roots`, and `symphony_trello_codex_danger_full_access`
