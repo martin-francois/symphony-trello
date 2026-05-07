@@ -12,9 +12,9 @@ ProtectHome=false
 TemporaryFileSystem=
 TemporaryFileSystem=/home:ro /root:ro /run/user:ro
 BindPaths=
-{% for allowed_path in symphony_trello_allowed_project_roots %}
+{% for allowed_path in symphony_trello_effective_allowed_host_paths %}
 BindPaths={{ allowed_path }}
 {% endfor %}
 ReadWritePaths=
-ReadWritePaths={{ ([symphony_trello_state_dir] + symphony_trello_allowed_project_roots) | join(' ') }}
+ReadWritePaths={{ ([symphony_trello_state_dir] + symphony_trello_effective_allowed_host_paths) | join(' ') }}
 {% endif %}

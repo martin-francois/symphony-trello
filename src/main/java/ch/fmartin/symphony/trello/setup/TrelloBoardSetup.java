@@ -55,13 +55,13 @@ public final class TrelloBoardSetup {
     private static final String FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION =
             """
             Filesystem access blocker details must include the inaccessible path, why it is inaccessible,
-            that deployed Symphony allows only managed workspaces and explicitly allowed host paths by
-            default for security reasons so Trello cards cannot make Codex read or edit unrelated host
-            files, that accessible files are available in the current per-card workspace shown by `pwd`,
-            and that an operator can allow one or more files or folders with the manual deployment
+            that deployed Symphony blocks undeclared host paths by default for security reasons so Trello
+            cards cannot make Codex read or edit unrelated host files, that accessible files are available
+            in the current per-card workspace shown by `pwd`, and that an operator can allow one or more
+            files or folders with the manual deployment
             settings `BindPaths`, `ReadWritePaths`, and `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS`,
             as documented in `docs/deployment.md#allow-host-path-access`, or with the Ansible list
-            setting `symphony_trello_allowed_project_roots`, as documented in
+            setting `symphony_trello_allowed_host_paths`, as documented in
             `docs/ansible-deployment.md#host-path-access`.""";
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
     private static final TypeReference<List<Map<String, Object>>> LIST_MAP_TYPE = new TypeReference<>() {};

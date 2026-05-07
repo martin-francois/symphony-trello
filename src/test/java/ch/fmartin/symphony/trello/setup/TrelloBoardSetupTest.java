@@ -232,8 +232,9 @@ class TrelloBoardSetupTest {
                 .contains("A pull request exists and is linked in the workpad and handoff comment")
                 .contains("Filesystem access blocker details")
                 .contains("inaccessible path")
-                .contains("allowed host paths")
-                .contains("symphony_trello_allowed_project_roots")
+                .contains("by default for security reasons")
+                .contains("undeclared host paths")
+                .contains("symphony_trello_allowed_host_paths")
                 .contains("server:")
                 .contains("port: 18080")
                 .contains("max_concurrent_agents: 1");

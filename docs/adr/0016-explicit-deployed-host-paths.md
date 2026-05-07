@@ -42,12 +42,12 @@ checkout access a deliberate operator choice.
 The base systemd unit continues to protect home directories and keeps writable access limited to
 Symphony state. Manual deployments can add a systemd drop-in with read-only temporary filesystems for
 home locations, declared bind mounts, and matching Codex sandbox writable roots for specific paths.
-The Ansible role manages those settings from `symphony_trello_allowed_project_roots`; despite the
-legacy variable name, it accepts a list of concrete files or folders. For parent directories,
-operators can additionally set
-`symphony_trello_codex_danger_full_access` so systemd still limits visible writable host paths while
-Codex does not apply a narrower workspace-write list inside that namespace. The role also exposes a
-broader `symphony_trello_allow_host_filesystem` switch for trusted single-user machines.
+The Ansible role manages those settings from `symphony_trello_allowed_host_paths`, which accepts a
+list of concrete files or folders. The older `symphony_trello_allowed_project_roots` variable remains
+a compatibility alias for existing deployments. For parent directories, operators can additionally
+set `symphony_trello_codex_danger_full_access` so systemd still limits visible writable host paths
+while Codex does not apply a narrower workspace-write list inside that namespace. The role also
+exposes a broader `symphony_trello_allow_host_filesystem` switch for trusted single-user machines.
 
 Generated workflow prompts now tell Codex that filesystem blocker comments must state the
 inaccessible path, that deployed Symphony blocks undeclared host paths by default for security

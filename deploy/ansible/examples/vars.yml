@@ -14,7 +14,7 @@ symphony_trello_workflows:
 # cards should let Codex read and write paths outside /var/lib/symphony-trello. The playbook updates
 # both systemd path access and Codex sandbox writable roots. This is a list, so multiple paths are
 # supported.
-# symphony_trello_allowed_project_roots:
+# symphony_trello_allowed_host_paths:
 #   - /srv/projects/example
 #   - /srv/shared/input.txt
 

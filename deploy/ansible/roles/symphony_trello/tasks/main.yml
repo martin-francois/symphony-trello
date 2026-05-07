@@ -7,11 +7,25 @@
       - symphony_trello_trello_api_token is defined
       - symphony_trello_trello_api_token | length > 0
       - symphony_trello_workflows is defined
+      - symphony_trello_allowed_host_paths is iterable
+      - symphony_trello_allowed_host_paths is not string
       - symphony_trello_allowed_project_roots is iterable
       - symphony_trello_allowed_project_roots is not string
     fail_msg: >
       Define symphony_trello_trello_api_key and symphony_trello_trello_api_token in an Ansible Vault
       file, and define symphony_trello_workflows in group_vars.
+
+- name: Resolve allowed host paths
+  ansible.builtin.set_fact:
+    symphony_trello_effective_allowed_host_paths: >-
+      {{
+        (
+          (symphony_trello_allowed_host_paths | default([]))
+          + (symphony_trello_allowed_project_roots | default([]))
+        )
+        | unique
+        | list
+      }}
 
 - name: Validate workflow declarations
   ansible.builtin.assert:
@@ -49,11 +63,11 @@
       - item != '/'
       - item is not search('[\\s":]')
     fail_msg: >
-      symphony_trello_allowed_project_roots entries must be concrete absolute file or folder paths
+      symphony_trello_allowed_host_paths entries must be concrete absolute file or folder paths
       and must not contain whitespace, double quotes, or colons. Use
       symphony_trello_allow_host_filesystem only when you intentionally accept broad host filesystem
       access.
-  loop: "{{ symphony_trello_allowed_project_roots }}"
+  loop: "{{ symphony_trello_effective_allowed_host_paths }}"
   loop_control:
     label: configured host path
 
@@ -395,15 +409,15 @@
       {% if symphony_trello_service_path is defined %}
       PATH="{{ symphony_trello_service_path | replace('\\', '\\\\') | replace('"', '\\"') }}"
       {% endif %}
-      {% if symphony_trello_allowed_project_roots | length > 0 %}
-      SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS="{{ symphony_trello_allowed_project_roots | join(':') }}"
+      {% if symphony_trello_effective_allowed_host_paths | length > 0 %}
+      SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS="{{ symphony_trello_effective_allowed_host_paths | join(':') }}"
       {% endif %}
       {% if symphony_trello_allow_host_filesystem or symphony_trello_codex_danger_full_access %}
       SYMPHONY_CODEX_DANGER_FULL_ACCESS=true
       {% endif %}
   when: >
     symphony_trello_service_path is defined
-    or (symphony_trello_allowed_project_roots | length > 0)
+    or (symphony_trello_effective_allowed_host_paths | length > 0)
     or symphony_trello_codex_danger_full_access
     or symphony_trello_allow_host_filesystem
   register: symphony_trello_env_file
@@ -414,7 +428,7 @@
     state: absent
   when: >
     symphony_trello_service_path is not defined
-    and (symphony_trello_allowed_project_roots | length == 0)
+    and (symphony_trello_effective_allowed_host_paths | length == 0)
     and not symphony_trello_codex_danger_full_access
     and not symphony_trello_allow_host_filesystem
   register: symphony_trello_env_file_removed
@@ -436,7 +450,7 @@
     owner: root
     group: root
     mode: "0755"
-  when: symphony_trello_allow_host_filesystem or (symphony_trello_allowed_project_roots | length > 0)
+  when: symphony_trello_allow_host_filesystem or (symphony_trello_effective_allowed_host_paths | length > 0)
 
 - name: Deploy host path access systemd drop-in
   ansible.builtin.template:
@@ -445,7 +459,7 @@
     owner: root
     group: root
     mode: "0644"
-  when: symphony_trello_allow_host_filesystem or (symphony_trello_allowed_project_roots | length > 0)
+  when: symphony_trello_allow_host_filesystem or (symphony_trello_effective_allowed_host_paths | length > 0)
   register: symphony_trello_host_paths_dropin
   notify: Reload systemd
 
@@ -453,7 +467,7 @@
   ansible.builtin.file:
     path: /etc/systemd/system/symphony-trello@.service.d/10-host-paths.conf
     state: absent
-  when: not symphony_trello_allow_host_filesystem and (symphony_trello_allowed_project_roots | length == 0)
+  when: not symphony_trello_allow_host_filesystem and (symphony_trello_effective_allowed_host_paths | length == 0)
   register: symphony_trello_host_paths_dropin_removed
   notify: Reload systemd
 
