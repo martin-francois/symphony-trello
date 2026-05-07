@@ -412,6 +412,22 @@ class TrelloClientTest {
     }
 
     @Test
+    void releaseFromDispatchMovesInProgressCardBackToPreviousActiveList() {
+        // given
+        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var config = config(
+                "input", Map.of("active_states", List.of("Todo", "In Progress"), "in_progress_state", "In Progress"));
+        Card inProgressCard =
+                card("65df9f76b4a22a1234567896", "TRELLO-pickup", "In Progress", "list-progress", null, BigDecimal.ONE);
+
+        // when
+        client.releaseFromDispatch(config, inProgressCard);
+
+        // then
+        assertThat(writeRequests).containsExactly("PUT /1/cards/65df9f76b4a22a1234567896/idList?value=list-todo");
+    }
+
+    @Test
     void resolveBoardIdRejectsClosedBoard() {
         // given
         TrelloClient client = new TrelloClient(new ObjectMapper());

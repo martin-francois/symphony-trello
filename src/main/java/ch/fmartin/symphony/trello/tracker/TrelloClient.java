@@ -163,6 +163,18 @@ public class TrelloClient implements TrackerClient {
         throw new TrelloException("trello_card_missing", "Card disappeared after moving to in-progress list");
     }
 
+    @Override
+    public void releaseFromDispatch(EffectiveConfig config, Card card) {
+        String inProgressState = config.tracker().inProgressState();
+        if (blank(inProgressState)
+                || !StateNames.normalize(inProgressState).equals(StateNames.normalize(card.state()))) {
+            return;
+        }
+
+        BoardContext context = boardContext(config);
+        releaseTarget(config, card, context).ifPresent(target -> moveCardToList(config, card.id(), target.id()));
+    }
+
     private Map<String, CardLookupResult> fetchCardStatesByIds(
             EffectiveConfig config, List<String> cardIds, boolean includeOlderWorkpad) {
         BoardContext context = boardContext(config);
@@ -369,6 +381,31 @@ public class TrelloClient implements TrackerClient {
         int currentIndex = active.indexOf(StateNames.normalize(card.state()));
         int targetIndex = active.indexOf(StateNames.normalize(target.name()));
         return currentIndex >= 0 && targetIndex >= 0 && currentIndex < targetIndex;
+    }
+
+    private static Optional<BoardList> releaseTarget(EffectiveConfig config, Card card, BoardContext context) {
+        if (card.listId() != null && !config.tracker().activeListIds().isEmpty()) {
+            int currentIndex = config.tracker().activeListIds().indexOf(card.listId());
+            if (currentIndex > 0) {
+                return Optional.ofNullable(context.lists()
+                                .get(config.tracker().activeListIds().get(currentIndex - 1)))
+                        .filter(list -> !list.closed());
+            }
+        }
+
+        List<String> active = config.tracker().activeStates().stream()
+                .map(StateNames::normalize)
+                .toList();
+        int inProgressIndex =
+                active.indexOf(StateNames.normalize(config.tracker().inProgressState()));
+        if (inProgressIndex <= 0) {
+            return Optional.empty();
+        }
+        Set<String> targetNames = Set.of(active.get(inProgressIndex - 1));
+        return context.lists().values().stream()
+                .filter(list -> !list.closed())
+                .filter(list -> targetNames.contains(StateNames.normalize(list.name())))
+                .findFirst();
     }
 
     private Optional<Card> normalize(Map<String, Object> payload, BoardContext context, EffectiveConfig config) {

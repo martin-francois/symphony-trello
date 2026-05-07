@@ -130,7 +130,7 @@ public final class TrelloBoardSetupMain {
                 import-board options:
                   --board ID            Required Trello board id or short link
                   --active NAME         Repeatable or comma-separated list name. Defaults to Ready for Codex when present.
-                  --in-progress NAME    Optional list Codex moves cards to when it picks them up. Defaults to In Progress when present.
+                  --in-progress NAME    Optional list Symphony moves cards to before Codex starts. Defaults to In Progress when present.
                   --no-in-progress      Do not configure an in-progress pickup list.
                   --terminal NAME       Repeatable or comma-separated list name. Defaults to Done when present.
                   --blocked NAME        Optional blocked list name. Defaults to Blocked when present.

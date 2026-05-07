@@ -251,7 +251,7 @@ Use the generated board like this:
 1. Put raw ideas or incomplete tasks in `Inbox`.
 2. Move only cards that are ready for agent work into `Ready for Codex`.
 3. Symphony starts Codex for cards in `Ready for Codex`.
-4. Codex moves the card to `In Progress` first, so the board shows that the card was picked up.
+4. Symphony moves the card to `In Progress` before Codex starts, so the board shows active work.
 5. Codex works in a local workspace, creates or updates a pull request for repository-changing work,
    adds a Trello comment with its summary and verification notes, and moves the card to
    `Human Review` when the PR is ready for human review.
@@ -517,8 +517,8 @@ Recommended meaning:
 
 - `Inbox`: rough tasks, ideas, or incomplete cards. Symphony ignores this list.
 - `Ready for Codex`: cards that are ready to run. Symphony polls this list.
-- `In Progress`: cards Codex has picked up. Symphony also treats this as active so a restart or
-  retry can continue the card.
+- `In Progress`: active Codex work. If an attempt fails and waits for a retry, Symphony moves the
+  card back to the queue list when it can.
 - `Blocked`: cards Codex could not safely finish. Symphony ignores this list.
 - `Human Review`: work produced by Codex that needs human review. Symphony ignores this list.
 - `Merging`: human-approved work that is ready for the landing flow.
@@ -703,10 +703,10 @@ in the Trello list from top to bottom. If there is still a tie, older cards run 
 List routing for the recommended board:
 
 - `Inbox`: rough ideas or incomplete tasks. Symphony ignores this list.
-- `Ready for Codex`: queued work. Symphony dispatches from here and Codex moves the card to
+- `Ready for Codex`: queued work. Symphony dispatches from here and moves the card to
   `In Progress`.
-- `In Progress`: active work that Codex has picked up. Symphony can continue it after retries or
-  restarts.
+- `In Progress`: work currently running in Codex. If an attempt is waiting for retry or no
+  concurrency slot is available, Symphony moves the card back to the queue list when it can.
 - `Blocked`: work that needs a human or environment fix. Symphony ignores it until a human moves it
   back to an active list.
 - `Human Review`: work ready for a person. Symphony does not code from this list.

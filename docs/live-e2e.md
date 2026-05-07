@@ -664,6 +664,27 @@ problem. A workflow with a configured blocked handoff list should move blocked c
 active list. A workflow without a blocked list should move blocked cards to the review handoff list
 when one is configured.
 
+### Regression Scenario: In-Progress List Shows Only Running Work
+
+Observed on 2026-05-07 against a real Trello board:
+
+- The workflow had `max_concurrent_agents: 1` and a configured `In Progress` pickup list.
+- Two cards were visible in `In Progress`, but `/api/v1/state` showed only one running worker.
+- The extra visible card had failed quickly and was waiting for retry/backoff, so it was not actually
+  being worked.
+
+Reproduce this with a disposable board and no private project paths:
+
+1. Use a workflow with `Ready for Codex` and `In Progress` as active lists,
+   `in_progress_state: In Progress`, and `max_concurrent_agents: 1`.
+2. Create two `Ready for Codex` cards whose work fails after pickup, for example by asking for a
+   write to a disposable host path that is intentionally not allowed by the deployed sandbox.
+3. Verify the first picked-up card moves to `In Progress` while the worker is actually running.
+4. After the failure is detected and a retry is scheduled, verify that any retry/backoff card is moved
+   back to `Ready for Codex` when that release target exists.
+5. While one worker is running, verify no second card remains in `In Progress` unless
+   `/api/v1/state` also reports a matching running worker for it.
+
 ## Deterministic App-Server
 
 For reproducible live testing, point `codex.command` at:
