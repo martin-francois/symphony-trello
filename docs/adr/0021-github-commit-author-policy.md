@@ -38,14 +38,18 @@ workflow logic into the scheduler?
 
 Chosen option: "Configure Git author identity in the repository-local commit and push-pr skills",
 because commit creation is agent workflow behavior and the skills already own commit and PR hygiene.
-The commit skill resolves the authenticated GitHub user with `gh api user`, configures the task
-checkout's Git author before the first PR-bound commit, and uses the public GitHub email when
-available or an actual GitHub noreply address returned by the authenticated account's email API
-otherwise. It does not guess the noreply format because GitHub accounts can use different noreply
-address forms. It checks lookup success before writing Git config so failed auth does not replace a
-useful local identity with blank values. The push-pr skill checks PR-bound commit authors before
-publishing, fails closed when it cannot resolve the default-branch comparison range, and avoids
-force-pushing wrong-author fixes unless a human or workflow explicitly allows it.
+The commit skill first checks whether the task checkout already has local `user.name` and
+`user.email` values plus a `symphony-trello.github-author-verified=true` marker. When all three are
+present, it reuses that author so later commits in the same checkout do not perform another GitHub
+API lookup. When the author is missing or not marked verified, the skill resolves the authenticated
+GitHub user with `gh api user`, configures the task checkout's Git author before the first PR-bound
+commit, and uses the public GitHub email when available or an actual GitHub noreply address returned
+by the authenticated account's email API otherwise. It does not guess the noreply format because
+GitHub accounts can use different noreply address forms. It checks lookup success before writing Git
+config so failed auth does not replace a useful local identity with blank values. The push-pr skill
+checks PR-bound commit authors before publishing, fails closed when it cannot resolve the
+default-branch comparison range, and avoids force-pushing wrong-author fixes unless a human or
+workflow explicitly allows it.
 
 If GitHub identity lookup fails before PR-bound commits exist, Codex records a visible Trello blocker
 and stops rather than creating commits with a generic fallback author. Local-only and no-push cards
@@ -54,7 +58,10 @@ can keep the existing local Git identity because there is no GitHub PR author to
 ### Consequences
 
 * Good, because the scheduler stays out of repository-specific Git operations.
-* Good, because the same GitHub CLI account is used for author lookup, push, and PR creation.
+* Good, because the same GitHub CLI account is used for author lookup, push, and PR creation when
+  lookup is needed.
+* Good, because a workflow-verified checkout-local author avoids repeated GitHub API calls.
+* Good, because an unrelated local Git author is not silently trusted for PR-bound work.
 * Good, because users without a public GitHub email can still use their real GitHub noreply author
   email when the GitHub CLI auth context can read it.
 * Good, because the workflow blocks instead of guessing an email that may not belong to the
@@ -71,8 +78,8 @@ can keep the existing local Git identity because there is no GitHub PR author to
 ### Confirmation
 
 Run `./mvnw -q -Dtest=CodexSkillStructureTest,TrelloBoardSetupTest test` and confirm the generated
-workflow and repository-local skills describe GitHub identity resolution, noreply fallback, lookup
-failure handling, and safe pushed-branch behavior.
+workflow and repository-local skills describe workflow-verified checkout-local author reuse, GitHub
+identity resolution, noreply fallback, lookup failure handling, and safe pushed-branch behavior.
 
 For a live PR-bound card, inspect `git log --format='%an <%ae>'` on the task branch before pushing
 and confirm it matches the name from `gh api user` and either the public email from `gh api user` or
@@ -82,7 +89,8 @@ an actual noreply email from `gh api user/emails` for the service user.
 
 ### Configure Git author identity in the repository-local commit and push-pr skills
 
-Codex resolves the GitHub identity and configures the task checkout before committing.
+Codex reuses a workflow-verified checkout-local author when one is already configured. Otherwise, it
+resolves the GitHub identity and configures the task checkout before committing.
 
 * Good, because this is where commit and PR decisions already live.
 * Good, because it works for both local and deployed runs that have GitHub CLI auth.

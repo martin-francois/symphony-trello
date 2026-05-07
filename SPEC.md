@@ -3138,9 +3138,12 @@ front matter and scoped tools remain the authoritative runtime controls.
 GitHub commit authoring extension:
 
 - when generated workflows create commits for work that may be published as a GitHub pull request,
-  the commit skill SHOULD resolve the authenticated GitHub user with the same GitHub CLI
-  authentication context used for PR publication
-- the task checkout's Git author SHOULD be configured from that GitHub identity before the first
+  the commit skill SHOULD first reuse a task-checkout-local Git author when both `user.name` and
+  `user.email` are configured and the checkout-local `symphony-trello.github-author-verified`
+  marker is `true`
+- when the task checkout has no complete workflow-verified local Git author, the commit skill SHOULD
+  resolve the authenticated GitHub user with the same GitHub CLI authentication context used for PR
+  publication and configure the task checkout's Git author from that identity before the first
   commit is created
 - the preferred author email is the user's public GitHub email when available, otherwise an actual
   GitHub noreply address returned by the authenticated account's email API
