@@ -468,7 +468,7 @@ fi
 
 CARD_ID="replace-with-card-id"
 EXPECTED_LIST="Human Review"
-STATE_URL="http://127.0.0.1:8080/api/v1/state"
+STATE_URL="http://127.0.0.1:18080/api/v1/state"
 CUTOFF="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 for attempt in {1..60}; do

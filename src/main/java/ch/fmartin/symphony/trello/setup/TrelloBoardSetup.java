@@ -31,7 +31,7 @@ public final class TrelloBoardSetup {
     public static final Path DEFAULT_WORKFLOW_PATH = Path.of("WORKFLOW.md");
     public static final Path DEFAULT_WORKSPACE_ROOT = Path.of("./workspaces");
     public static final int DEFAULT_MAX_CONCURRENT_AGENTS = 1;
-    public static final int DEFAULT_SERVER_PORT = 8080;
+    public static final int DEFAULT_SERVER_PORT = 18080;
     public static final String RECOMMENDED_ACTIVE_STATE = "Ready for Codex";
     public static final String RECOMMENDED_IN_PROGRESS_STATE = "In Progress";
     public static final String RECOMMENDED_BLOCKED_STATE = "Blocked";

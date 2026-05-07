@@ -117,7 +117,7 @@ public final class TrelloBoardSetupMain {
                 Common options:
                   --workflow PATH       Exact workflow file to write. Default: WORKFLOW.md, or a board-specific name when WORKFLOW.md exists.
                   --workspace-root PATH Where Symphony should create one local work directory per Trello card. Default: ./workspaces
-                  --server-port PORT    HTTP status port for the generated workflow. Default: first available port from 8080.
+                  --server-port PORT    HTTP status port for the generated workflow. Default: first available port from 18080.
                   --max-agents N        How many cards from this board may run at the same time. Default: 1
                   --force               Overwrite an existing workflow file
                   --endpoint URL        Trello API endpoint. Default: https://api.trello.com/1
