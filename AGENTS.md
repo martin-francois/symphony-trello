@@ -99,18 +99,20 @@ matters, and easy for another engineer to understand without asking the original
 - Use "Symphony for Trello" as the human-facing product name. Use `symphony-trello` only for
   technical identifiers such as artifact IDs, service names, application names, and other places
   where spaces or title case are not suitable.
-- Use **connect/disconnect/manage** for the relationship between Symphony and Trello boards in
-  user-facing docs, CLI output, generated workflow prompts, GitHub issues, and tests. Use
-  `Trello board` / `Trello boards` rather than bare `board` / `boards` for this relationship. Use
-  **connect** / **disconnect** for setup and configuration actions: users connect a Trello board to
-  Symphony or disconnect a Trello board from Symphony. Use **manage** / **managing** for runtime
-  behavior: Symphony manages connected Trello boards by reading cards/comments and performing
-  configured actions such as moving cards, adding comments, creating/updating pull requests, and
-  merging when configured. Example option labels: `Keep connected Trello boards`, `Connect another
-  Trello board`, and `Disconnect a Trello board from Symphony`.
-  Do not use "watch", "stop watching", "use", or "stop using" for this Trello-board relationship;
-  "watch" is still fine for unrelated technical behavior such as watching files, logs, status
-  pages, or retrying cards.
+- Use **connect/disconnect/manage** for the relationship between Symphony and Trello in
+  user-facing docs, CLI output, generated workflow prompts, GitHub issues, and tests. In this
+  relationship context, qualify Trello-owned objects with `Trello`: use `Trello board(s)`, `Trello
+  list(s)`, `Trello card(s)`, and `Trello comment(s)` rather than bare `board(s)`, `list(s)`,
+  `card(s)`, or `comment(s)`. Use **connect** / **disconnect** for setup and configuration actions:
+  users connect a Trello board to Symphony or disconnect a Trello board from Symphony. Use
+  **manage** / **managing** for runtime behavior: Symphony manages connected Trello boards by
+  reading Trello cards/comments and performing configured actions such as moving Trello cards,
+  adding Trello comments, creating/updating pull requests, and merging when configured. Example
+  option labels: `Keep connected Trello boards`, `Connect another Trello board`, and `Disconnect a
+  Trello board from Symphony`.
+  Do not use "watch", "stop watching", "use", or "stop using" for this Symphony/Trello
+  relationship; "watch" is still fine for unrelated technical behavior such as watching files, logs,
+  status pages, or retrying cards.
 - Use `ch.fmartin.symphony.trello` as the Java package root and Maven group ID. Do not use
   `com.openai...` for implementation namespaces because this project is an adapted variant, not an
   official OpenAI implementation.
