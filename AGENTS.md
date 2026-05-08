@@ -101,13 +101,18 @@ matters, and easy for another engineer to understand without asking the original
   where spaces or title case are not suitable.
 - Use **connect/disconnect/manage** for the relationship between Symphony and Trello boards in
   user-facing docs, CLI output, generated workflow prompts, GitHub issues, and tests. Use
-  `Trello board` / `Trello boards` rather than bare `board` / `boards` for this relationship. Use
   **connect** / **disconnect** for setup and configuration actions: users connect a Trello board to
   Symphony or disconnect a Trello board from Symphony. Use **manage** / **managing** for runtime
   behavior: Symphony manages connected Trello boards by reading cards/comments and performing
   configured actions such as moving cards, adding comments, creating/updating pull requests, and
   merging when configured. Example option labels: `Keep connected Trello boards`, `Connect another
   Trello board`, and `Disconnect a Trello board from Symphony`.
+  When a word refers to any Trello entity and could be ambiguous, qualify it with `Trello`. This is
+  a general rule, not a fixed list: apply it to boards, lists, cards, comments, labels, members,
+  checklists, attachments, actions, or any other Trello API/domain entity whenever context alone does
+  not clearly identify Trello. For example, use `Trello comment` if `comment` could mean a GitHub PR
+  comment, GitHub issue comment, Trello comment, or code comment; use `Trello list` if `list` could
+  mean a Java `List<>`, a generic collection, or a Trello list.
   Do not use "watch", "stop watching", "use", or "stop using" for this Trello-board relationship;
   "watch" is still fine for unrelated technical behavior such as watching files, logs, status
   pages, or retrying cards.
