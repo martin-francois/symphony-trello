@@ -99,6 +99,15 @@ matters, and easy for another engineer to understand without asking the original
 - Use "Symphony for Trello" as the human-facing product name. Use `symphony-trello` only for
   technical identifiers such as artifact IDs, service names, application names, and other places
   where spaces or title case are not suitable.
+- Use **connect/disconnect/manage** for the relationship between Symphony and Trello boards in
+  user-facing docs, CLI output, generated workflow prompts, GitHub issues, and tests. Use
+  **connect** / **disconnect** for setup and configuration actions: users connect a Trello board to
+  Symphony or disconnect a board from Symphony. Use **manage** / **managing** for runtime behavior:
+  Symphony manages connected boards by reading cards/comments and performing configured actions such
+  as moving cards, adding comments, creating/updating pull requests, and merging when configured.
+  Do not use "watch", "stop watching", "use", or "stop using" for this board relationship;
+  "watch" is still fine for unrelated technical behavior such as watching files, logs, status
+  pages, or retrying cards.
 - Use `ch.fmartin.symphony.trello` as the Java package root and Maven group ID. Do not use
   `com.openai...` for implementation namespaces because this project is an adapted variant, not an
   official OpenAI implementation.
