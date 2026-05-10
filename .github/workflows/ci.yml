@@ -13,6 +13,44 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - name: Markdown lint
         uses: DavidAnson/markdownlint-cli2-action@ded1f9488f68a970bc66ea5619e13e9b52e601cd # v23
+      - name: Installer shell syntax
+        run: |
+          bash -n install.sh
+          bash -n uninstall.sh
+      - name: Install shell lint tooling
+        run: sudo apt-get update && sudo apt-get install -y shellcheck shfmt
+      - name: Installer shell lint
+        run: |
+          shellcheck install.sh uninstall.sh
+          shfmt -d install.sh uninstall.sh
+      - name: PowerShell script smoke and analysis
+        run: |
+          ./scripts/pwsh-docker.sh -NoProfile -File ./install.ps1 --dry-run --no-onboard
+          ./scripts/pwsh-docker.sh -NoProfile -File ./uninstall.ps1 --dry-run --yes
+          ./scripts/pwsh-docker.sh -NoProfile -Command '
+            $ErrorActionPreference = "Stop"
+            if (-not (Get-Module -ListAvailable -Name PSScriptAnalyzer)) {
+              Install-Module PSScriptAnalyzer -Scope CurrentUser -Force -Repository PSGallery
+            }
+            $ignoredRules = @(
+              "PSAvoidUsingInvokeExpression",
+              "PSAvoidUsingWriteHost",
+              "PSReviewUnusedParameter",
+              "PSUseApprovedVerbs",
+              "PSUseShouldProcessForStateChangingFunctions",
+              "PSUseSingularNouns"
+            )
+            $results = @(
+              foreach ($script in @("install.ps1", "uninstall.ps1")) {
+                Invoke-ScriptAnalyzer -Path $script -Severity Warning,Error
+              }
+            )
+            $results = @($results | Where-Object { $ignoredRules -notcontains $_.RuleName })
+            if ($results.Count -gt 0) {
+              $results | Format-Table -AutoSize | Out-String | Write-Host
+              exit 1
+            }
+          '
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: "3.14"
@@ -50,7 +88,23 @@ jobs:
           distribution: temurin
           java-version: "25"
           cache: maven
+      - name: Pull PowerShell test image
+        run: docker pull mcr.microsoft.com/dotnet/sdk:8.0
       - name: Formatting
         run: ./mvnw spotless:check
-      - name: Test and coverage
+      - name: Test and coverage, including installer lifecycle
+        env:
+          SYMPHONY_TRELLO_TEST_PWSH: ./scripts/pwsh-docker.sh
         run: ./mvnw verify
+
+  windows-powershell:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+      - name: PowerShell generated-wrapper lifecycle
+        run: .\mvnw.cmd -q -Dtest=InstallerScriptLifecycleTest#powershellInstallerLifecycleInstallsStartsStopsAndUninstallsWithFakeJavaOnWindows test

@@ -741,9 +741,34 @@ If implemented, setup commands SHOULD:
 
 This Java implementation provides:
 
+- `setup-local`: guided local onboarding
+- `setup-local check`: local prerequisite, credential, workflow, manifest, and worker health checks
+- `setup-local repair-port --board NAME`: board-specific local HTTP port repair
+- `setup-local configure-github`: in-place GitHub workflow upgrade for connected boards
 - `list-workspaces`: prints Workspaces accessible to the configured Trello token
 - `new-board`: creates the recommended Trello board and starter workflow
 - `import-board`: writes a starter workflow for an existing board
+- `start [--board NAME | --workflow PATH]`: starts a managed local worker
+- `stop [--board NAME | --workflow PATH]`: stops one managed local worker, or all connected workers
+  when no selector is provided
+- `status [--board NAME | --workflow PATH]`: reports managed local worker health
+- `logs [--board NAME | --workflow PATH] [--follow]`: prints or follows managed local worker logs
+
+The installed Bash and PowerShell wrappers dispatch `--help`, `-h`, `--version`, `setup-local`,
+`new-board`, `import-board`, `list-workspaces`, `start`, `stop`, `status`, `logs`, and unknown
+commands to this Java command boundary. The wrappers bootstrap paths, classpath, managed Codex/npm
+paths, dotenv defaults, config/workspace/state locations, and caller directory context; Java owns
+managed worker process selection, PID/log files, health checks, start/stop/status/logs behavior, and
+usage errors. Unknown commands MUST fail through Java command usage handling instead of being
+treated as workflow paths.
+
+The Java command-line boundary uses a typed parser. Command classes parse arguments, validate command
+shape, map inputs to request objects, delegate to setup services, and return exit codes. Trello,
+Codex, GitHub, workflow generation, health-check, port-repair, and onboarding decisions remain in
+the setup services instead of command parser classes.
+
+When a setup command accepts `--server-port`, the value MUST be a concrete TCP port from 1 through
+65535. Omit the option to let setup choose the first available managed status port.
 
 When `new-board` is used without an explicit Workspace and the token can access exactly one Trello
 Workspace, the Java implementation uses that Workspace automatically. If the token can access
@@ -3085,7 +3110,9 @@ Required when the workflow expects the agent to perform Trello handoff transitio
   workspaces.
 - The opt-in Java live E2E harness follows Section 19.5 when external Trello credentials are
   supplied.
-- Java repository quality gates follow Section 19.6 for this repository's maintained implementation.
+- Local installer and onboarding commands follow Section 19.6 when this repository's one-liner
+  scripts or `setup-local` command are used.
+- Java repository quality gates follow Section 19.7 for this repository's maintained implementation.
 - `trello_rest` client-side tool extension exposes scoped Trello REST access through the app-server
   session using configured Symphony auth.
 - `trello_rest` client-side tool extension disallows destructive operations by default.
@@ -3308,7 +3335,97 @@ When this profile is used:
 - live test output and committed documentation MUST avoid leaking Trello tokens, private board IDs,
   private card IDs, private project names, account names, or private host paths
 
-### 19.6 Java Repository Quality Profile
+### 19.6 Local Installer And Plan B Onboarding Profile
+
+This Java repository ships an OpenClaw-inspired local onboarding profile. The repository-hosted
+install scripts are bootstrap wrappers; Java setup code owns Trello, Codex, GitHub, board, and
+workflow decisions so shell and PowerShell do not duplicate product behavior.
+
+When this profile is used:
+
+- `install.sh`, `install.ps1`, `uninstall.sh`, and `uninstall.ps1` are repository-hosted entrypoints
+  for first install, update-oriented reruns, and conservative uninstall
+- the source-checkout installer MUST detect the supported OS/architecture, Git, a Java 25+ JDK
+  including `javac`, Codex CLI, and Codex CLI authentication before delegating to product setup.
+  Supported local platforms are macOS arm64/amd64, Linux arm64/amd64, WSL2 through the Linux path,
+  Windows amd64, and best-effort Windows arm64
+- missing Git, Java, Codex CLI, or Codex npm-fallback Node/npm prerequisites MUST produce concrete
+  assisted installation. The installer MUST reuse an existing authenticated Codex CLI first and
+  otherwise fall back to a user-local Codex npm install under `SYMPHONY_HOME`. For this
+  source-checkout installer, Node/npm MAY be reused from `PATH` or installed through the platform
+  package manager. The installer MUST ask before privileged or system-wide commands and print the
+  exact install steps first
+- if Codex CLI authentication is missing, the installer MUST ask whether the machine can open a
+  browser before choosing `codex login` or `codex login --device-auth`
+- `setup-local` is the Java-owned setup/check command for local onboarding
+- `setup-local check` MUST validate core prerequisites, Codex auth, Trello credentials and member
+  identity when credentials are available, GitHub auth for GitHub-enabled boards, workflow existence
+  and parseability, connected-board manifest consistency, configured local server status per board,
+  and port conflicts per board without changing Trello or workflow files
+- managed local starts and `setup-local check` MUST verify real local HTTP health. A PID file or
+  process command line is not sufficient proof that Symphony is managing a board
+- local HTTP health MUST compare both the expected workflow path and Trello board id or key before
+  reporting that a worker is managing the expected board. The local status endpoint MUST be available
+  to loopback clients only because it exposes local workflow paths
+- `setup-local repair-port --board NAME` MUST repair only the selected connected local workflow by
+  assigning the next free managed HTTP port and updating the workflow plus connected-board manifest
+- `setup-local --dry-run` reports planned setup work without changing Trello or workflow files
+- when `setup-local` chooses a default managed HTTP port, it MUST avoid ports reserved by connected
+  workflows and ports already accepting connections on localhost
+- setup MUST separate installer-managed app files from user data. Local credentials, workflows,
+  connected-board metadata, workspaces, and state/log files are user data
+- uninstall MUST preserve the current config, workspaces, and state directories by default and remove
+  them only when the matching local-data cleanup scope was explicitly requested
+- GitHub integration is optional; a missing GitHub account, GitHub CLI, or GitHub auth MUST NOT
+  block a non-GitHub local workflow. When a user requests GitHub integration and GitHub CLI is
+  missing, setup MUST offer assisted GitHub CLI installation where the platform helper knows a
+  command, run `gh auth login`, and verify `gh auth status`
+- setup MUST decide GitHub integration before creating or importing a Trello board because the list
+  set and workflow prompt depend on that decision
+- GitHub-enabled existing-board import MAY create a missing `Merging` list after the user has
+  selected or requested GitHub integration. `setup-local configure-github` MUST be able to upgrade
+  an existing connected non-GitHub board in place instead of forcing a new board connection
+- GitHub-enabled generated boards include `Merging` and PR publication/landing workflow guidance
+- non-GitHub generated boards MUST NOT create `Merging`, include it in active states, or require PR
+  publication/landing before `Human Review`
+- setup MUST write ignored local Trello credentials after the user provides them directly and MUST
+  redact secret values in terminal output. Credentials already supplied through real environment
+  variables or an existing dotenv file MUST NOT be copied into another dotenv file.
+- setup MUST reject local dotenv output paths that are not ignored by this repository's default
+  `.env` ignore patterns
+- if setup writes credentials to a non-default dotenv file, the managed-run wrapper MUST provide a
+  way to start the workflow with that same dotenv file instead of requiring credentials to be copied
+  into the default `.env`
+- setup MUST allocate workflow filenames from board-name slugs and choose non-conflicting local
+  ports without asking in the simple path
+- setup MUST keep Codex's workspace sandbox enabled by default and record explicit additional
+  writable roots only when the user opts into extra path access
+- setup MUST ask before recording `dangerFullAccess` and explain that it disables Codex's
+  command/filesystem sandbox without granting OS privileges
+- interactive setup MUST ask for workspace access and `dangerFullAccess` only after the Trello board
+  has been created, connected, imported, or selected for upgrade
+- setup MUST start the managed local worker in the simple path unless `--no-start` or an equivalent
+  explicit skip option is used
+- the local CLI invoked through the managed-run wrapper MUST provide status, logs, start, and stop
+  commands through Java lifecycle services
+- local uninstall MUST stop managed processes before deleting installer-managed files
+- local uninstall MUST preserve local credentials, workflows, connected-board metadata, workspaces,
+  state/logs, Codex auth, GitHub auth, and Trello boards by default
+- local uninstall MUST require explicit cleanup scopes such as config, workspaces, state/logs, or
+  all local data before deleting user data
+- local uninstall MUST NOT treat the installer-managed app confirmation as confirmation to delete
+  user data; unattended user-data cleanup MUST require a separate explicit confirmation option
+- local uninstall MUST require an installer marker before recursively deleting the app directory.
+  It is a local convenience profile and does not replace the Ansible server deployment profile.
+- deterministic CI SHOULD exercise the POSIX installer lifecycle beyond syntax checks by driving
+  interactive prompts through a pseudo-terminal, using test doubles for external tools/services,
+  verifying install, update, managed start/status, and uninstall cleanup behavior without real Trello,
+  GitHub, or Codex side effects
+- deterministic CI SHOULD exercise PowerShell installer smoke paths through native `pwsh` or the
+  Microsoft .NET SDK container image that includes PowerShell, so Linux CI and local Linux machines
+  can run the same PowerShell checks without a host PowerShell installation
+
+### 19.7 Java Repository Quality Profile
 
 This profile documents build and maintenance rules for this Java repository. These rules are not
 runtime conformance requirements for other Symphony-for-Trello implementations.

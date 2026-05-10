@@ -259,6 +259,49 @@ class TrelloBoardSetupTest {
     }
 
     @Test
+    void createsNonGithubRecommendedBoardListsAndWorkflow() {
+        // given
+        Path workflow = tempDir.resolve("non-github-workflow.md");
+
+        // when
+        var result = setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "Local Queue",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                null,
+                1,
+                false,
+                false,
+                TrelloBoardSetup.GitHubIntegration.DISABLED));
+
+        // then
+        assertThat(result.boardKey()).isEqualTo("abc123");
+        assertThat(createdLists)
+                .containsExactly("Inbox", "Ready for Codex", "In Progress", "Blocked", "Human Review", "Done");
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("- \"Ready for Codex\"")
+                .contains("- \"In Progress\"")
+                .contains("## Local And Non-GitHub Repository Work")
+                .contains("do not require GitHub auth")
+                .contains("## Non-GitHub Review Feedback")
+                .contains("reread the full card description and new Trello comments")
+                .contains("This workflow has no GitHub landing flow configured")
+                .doesNotContain("Merging")
+                .doesNotContain("## Pull Request Publication")
+                .doesNotContain("linked PR comments")
+                .doesNotContain("PR feedback sweep")
+                .doesNotContain("## Landing From \"Merging\"");
+        EffectiveConfig config = resolve(workflow);
+        assertThat(config.tracker().activeStates()).containsExactly("Ready for Codex", "In Progress");
+        assertThat(config.trelloTools().allowedMoveListNames())
+                .containsExactly("in progress", "human review", "blocked");
+    }
+
+    @Test
     void requiresWorkspaceIdWhenTokenCanAccessMultipleWorkspaces() {
         // given
         workspaceResponse.set(
@@ -554,6 +597,43 @@ class TrelloBoardSetupTest {
     }
 
     @Test
+    void importDoesNotCreateMergingWhenThereIsNoLandingDestination() {
+        // given
+        boardListsResponse.set(
+                """
+                [
+                  {"id":"list-ready","name":"Ready for Codex","closed":false,"pos":1},
+                  {"id":"list-in-progress","name":"In Progress","closed":false,"pos":2},
+                  {"id":"list-review","name":"Human Review","closed":false,"pos":3},
+                  {"id":"list-blocked","name":"Blocked","closed":false,"pos":4}
+                ]
+                """);
+        Path workflow = tempDir.resolve("imported-no-created-landing.md");
+
+        // when
+        var result = setup.importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "input",
+                List.of(),
+                List.of(),
+                null,
+                workflow,
+                Path.of("./agent-workspaces"),
+                2,
+                false));
+
+        // then
+        assertThat(result.openLists()).doesNotContain("Merging");
+        assertThat(result.activeStates()).containsExactly("Ready for Codex", "In Progress");
+        assertThat(createdLists).isEmpty();
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("This workflow has no landing approval list configured")
+                .doesNotContain("## Landing From \"Merging\"");
+    }
+
+    @Test
     void importPrefersHumanReviewWhenLegacyReviewAlsoExists() {
         // given
         boardListsResponse.set(
@@ -698,6 +778,15 @@ class TrelloBoardSetupTest {
     @Test
     void importRefusesToOverwriteExistingWorkflowUnlessForced() throws IOException {
         // given
+        boardListsResponse.set(
+                """
+                [
+                  {"id":"list-ready","name":"Ready for Codex","closed":false,"pos":1},
+                  {"id":"list-review","name":"Human Review","closed":false,"pos":2},
+                  {"id":"list-blocked","name":"Blocked","closed":false,"pos":3},
+                  {"id":"list-done","name":"Done","closed":false,"pos":4}
+                ]
+                """);
         Path workflow = tempDir.resolve("WORKFLOW.md");
         Files.writeString(workflow, "keep me", StandardCharsets.UTF_8);
 
@@ -719,6 +808,7 @@ class TrelloBoardSetupTest {
         // then
         assertThatThrownBy(action).isInstanceOf(TrelloBoardSetupException.class).hasMessageContaining("--force");
         assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo("keep me");
+        assertThat(createdLists).isEmpty();
     }
 
     @Test
@@ -843,6 +933,44 @@ class TrelloBoardSetupTest {
 
         // then
         assertThatThrownBy(action).isInstanceOf(TrelloBoardSetupException.class).hasMessageContaining("already used");
+    }
+
+    @Test
+    void newBoardIgnoresEphemeralServerPortReservedByExistingWorkflow() throws IOException {
+        // given
+        Path existingWorkflow = tempDir.resolve("ephemeral.WORKFLOW.md");
+        Files.writeString(
+                existingWorkflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: $TRELLO_API_KEY
+                  api_token: $TRELLO_API_TOKEN
+                  board_id: "existing"
+                server:
+                  port: 0
+                ---
+                # Existing
+                """,
+                StandardCharsets.UTF_8);
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+
+        // when
+        var result = setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "My Project",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                1,
+                false,
+                true));
+
+        // then
+        assertThat(result.serverPort()).isEqualTo(18080);
+        assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: 18080");
     }
 
     @Test

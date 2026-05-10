@@ -1,0 +1,727 @@
+param(
+  [Alias("-dry-run", "dry-run", "--dry-run")]
+  [switch]$DryRun,
+  [Alias("-no-onboard", "no-onboard", "--no-onboard")]
+  [switch]$NoOnboard,
+  [Alias("-symphony-home", "symphony-home", "--symphony-home")]
+  [string]$SymphonyHome = $(if ($env:SYMPHONY_HOME) { $env:SYMPHONY_HOME } else { "$env:LOCALAPPDATA\SymphonyTrello" }),
+  [Alias("-prefix", "--prefix")]
+  [string]$Prefix = "",
+  [Alias("-bin-dir", "bin-dir", "--bin-dir")]
+  [string]$BinDir = "$env:USERPROFILE\.local\bin",
+  [Alias("-repo", "--repo")]
+  [string]$Repo = "https://github.com/martinfrancois/symphony-trello.git",
+  [Alias("-ref", "--ref")]
+  [string]$Ref = "main",
+  [switch]$Help,
+  [Parameter(ValueFromRemainingArguments = $true)]
+  [string[]]$RemainingArgs = @()
+)
+
+$ErrorActionPreference = "Stop"
+$OriginalPath = $env:PATH
+$DefaultSymphonyHome = if ($env:SYMPHONY_HOME) { $env:SYMPHONY_HOME } else { "$env:LOCALAPPDATA\SymphonyTrello" }
+$DefaultPrefix = ""
+$DefaultBinDir = "$env:USERPROFILE\.local\bin"
+$DefaultRepo = "https://github.com/martinfrancois/symphony-trello.git"
+$DefaultRef = "main"
+
+function Apply-PositionalFlag([string]$Token) {
+  switch ($Token) {
+    { $_ -in @("-dry-run", "--dry-run") } {
+      Set-Variable -Name DryRun -Value $true -Scope 1
+      return $true
+    }
+    { $_ -in @("-no-onboard", "--no-onboard") } {
+      Set-Variable -Name NoOnboard -Value $true -Scope 1
+      return $true
+    }
+    { $_ -in @("-help", "--help", "-h") } {
+      Set-Variable -Name Help -Value $true -Scope 1
+      return $true
+    }
+    default {
+      return $false
+    }
+  }
+}
+
+function Apply-PublicArgs([string[]]$Tokens) {
+  for ($i = 0; $i -lt $Tokens.Count; $i++) {
+    $token = $Tokens[$i]
+    switch ($token) {
+      { $_ -in @("-dry-run", "--dry-run") } {
+        Set-Variable -Name DryRun -Value $true -Scope 1
+        break
+      }
+      { $_ -in @("-no-onboard", "--no-onboard") } {
+        Set-Variable -Name NoOnboard -Value $true -Scope 1
+        break
+      }
+      { $_ -in @("-help", "--help", "-h") } {
+        Set-Variable -Name Help -Value $true -Scope 1
+        break
+      }
+      { $_ -in @("-prefix", "--prefix") } {
+        $i++
+        if ($i -ge $Tokens.Count) { throw "Missing value for $token" }
+        Set-Variable -Name Prefix -Value $Tokens[$i] -Scope 1
+        break
+      }
+      { $_ -in @("-bin-dir", "--bin-dir") } {
+        $i++
+        if ($i -ge $Tokens.Count) { throw "Missing value for $token" }
+        Set-Variable -Name BinDir -Value $Tokens[$i] -Scope 1
+        break
+      }
+      { $_ -in @("-repo", "--repo") } {
+        $i++
+        if ($i -ge $Tokens.Count) { throw "Missing value for $token" }
+        Set-Variable -Name Repo -Value $Tokens[$i] -Scope 1
+        break
+      }
+      { $_ -in @("-ref", "--ref") } {
+        $i++
+        if ($i -ge $Tokens.Count) { throw "Missing value for $token" }
+        Set-Variable -Name Ref -Value $Tokens[$i] -Scope 1
+        break
+      }
+      { $_ -in @("-symphony-home", "--symphony-home") } {
+        $i++
+        if ($i -ge $Tokens.Count) { throw "Missing value for $token" }
+        Set-Variable -Name SymphonyHome -Value $Tokens[$i] -Scope 1
+        break
+      }
+      default {
+        if (-not (Test-ImplicitDefaultToken $token)) {
+          throw "Unknown option: $token"
+        }
+      }
+    }
+  }
+}
+
+function Test-ImplicitDefaultToken([string]$Token) {
+  return $Token -eq $DefaultSymphonyHome -or
+    $Token -eq $DefaultPrefix -or
+    $Token -eq $DefaultBinDir -or
+    $Token -eq $DefaultRepo -or
+    $Token -eq $DefaultRef
+}
+
+$positionalTokens = @($SymphonyHome, $Prefix, $BinDir, $Repo, $Ref) + $RemainingArgs |
+  Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+if (($positionalTokens | Where-Object { $_.StartsWith("-") } | Select-Object -First 1)) {
+  $SymphonyHome = $DefaultSymphonyHome
+  $Prefix = $DefaultPrefix
+  $BinDir = $DefaultBinDir
+  $Repo = $DefaultRepo
+  $Ref = $DefaultRef
+  Apply-PublicArgs $positionalTokens
+} else {
+  if (Apply-PositionalFlag $SymphonyHome) {
+    $SymphonyHome = $DefaultSymphonyHome
+  }
+  if (Apply-PositionalFlag $Prefix) {
+    $Prefix = $DefaultPrefix
+  }
+  if (Apply-PositionalFlag $BinDir) {
+    $BinDir = $DefaultBinDir
+  }
+  if (Apply-PositionalFlag $Repo) {
+    $Repo = $DefaultRepo
+  }
+  if (Apply-PositionalFlag $Ref) {
+    $Ref = $DefaultRef
+  }
+  foreach ($token in $RemainingArgs) {
+    if (-not (Apply-PositionalFlag $token)) {
+      throw "Unknown option: $token"
+    }
+  }
+}
+
+if ($Help) {
+  @"
+Usage:
+  powershell -c "irm https://raw.githubusercontent.com/martinfrancois/symphony-trello/main/install.ps1 | iex"
+
+Options:
+  --dry-run     Print planned actions without changing files.
+  --no-onboard  Install or update the command without running setup-local.
+  -DryRun       Alias for --dry-run.
+  -NoOnboard    Alias for --no-onboard.
+  -Prefix PATH  App checkout path. Default: <SYMPHONY_HOME>\app.
+  -BinDir PATH  Command directory.
+"@
+  exit 0
+}
+
+$SymphonyHome = [System.IO.Path]::GetFullPath($SymphonyHome)
+if (-not $Prefix) {
+  $Prefix = Join-Path $SymphonyHome "app"
+}
+$ConfigDir = if ($env:SYMPHONY_TRELLO_CONFIG_DIR) { $env:SYMPHONY_TRELLO_CONFIG_DIR } else { Join-Path $SymphonyHome "config" }
+$WorkspaceRoot = if ($env:SYMPHONY_TRELLO_WORKSPACE_ROOT) { $env:SYMPHONY_TRELLO_WORKSPACE_ROOT } else { Join-Path $SymphonyHome "workspaces" }
+$StateHome = if ($env:SYMPHONY_TRELLO_STATE_HOME) { $env:SYMPHONY_TRELLO_STATE_HOME } else { Join-Path $SymphonyHome "state" }
+$Prefix = [System.IO.Path]::GetFullPath($Prefix)
+$ConfigDir = [System.IO.Path]::GetFullPath($ConfigDir)
+$WorkspaceRoot = [System.IO.Path]::GetFullPath($WorkspaceRoot)
+$StateHome = [System.IO.Path]::GetFullPath($StateHome)
+$BinDir = [System.IO.Path]::GetFullPath($BinDir)
+$CodexNpmPrefix = Join-Path $SymphonyHome "npm"
+$InstallContextFile = Join-Path $StateHome "install-context.properties"
+
+function Invoke-Step([string]$Label, [scriptblock]$Action) {
+  Write-Host "  RUN  $Label"
+  if (-not $DryRun) {
+    $global:LASTEXITCODE = 0
+    & $Action
+    if (-not $?) {
+      throw "$Label failed."
+    }
+    if ($global:LASTEXITCODE -ne 0) {
+      throw "$Label failed with exit code $global:LASTEXITCODE."
+    }
+  }
+}
+
+function Write-InstallContext {
+  if ($DryRun) {
+    return
+  }
+  try {
+    New-Item -ItemType Directory -Force -Path $StateHome | Out-Null
+    $packageManager = if (Test-Command "winget") { "winget" } else { "none" }
+    @(
+      "installer=install.ps1",
+      "platform=$(Get-PlatformLabel)",
+      "repo_url=$Repo",
+      "ref=$Ref",
+      "app_dir=$Prefix",
+      "config_dir=$ConfigDir",
+      "workspace_root=$WorkspaceRoot",
+      "state_home=$StateHome",
+      "bin_dir=$BinDir",
+      "dry_run=$DryRun",
+      "no_onboard=$NoOnboard",
+      "codex_npm_prefix=$CodexNpmPrefix",
+      "git_available=$(if (Test-Command "git") { "yes" } else { "no" })",
+      "java_25_available=$(if (Test-Java25) { "yes" } else { "no" })",
+      "npm_available=$(if (Test-Command "npm") { "yes" } else { "no" })",
+      "codex_available=$(if (Test-Command "codex") { "yes" } else { "no" })",
+      "gh_available=$(if (Test-Command "gh") { "yes" } else { "no" })",
+      "package_manager=$packageManager"
+    ) | Set-Content -Encoding UTF8 -Path $InstallContextFile
+  } catch {
+    return
+  }
+}
+
+function Test-Command([string]$Name) {
+  $null -ne (Get-Command $Name -ErrorAction SilentlyContinue)
+}
+
+function Test-Java25 {
+  if (-not (Test-Command "java")) {
+    return $false
+  }
+  if (-not (Test-Command "javac")) {
+    return $false
+  }
+  $output = (& java -version) 2>&1 | Out-String
+  $javacOutput = (& javac -version) 2>&1 | Out-String
+  return $output -match 'version "([0-9]+)' -and [int]$Matches[1] -ge 25 -and $javacOutput -match 'javac ([0-9]+)' -and [int]$Matches[1] -ge 25
+}
+
+function Test-PathContains([string]$Directory, [string]$PathValue = $env:PATH) {
+  $separator = [System.IO.Path]::PathSeparator
+  return ($PathValue -split [regex]::Escape($separator)) -contains $Directory
+}
+
+function Add-PathPrefix([string]$Directory) {
+  if (-not (Test-PathContains $Directory $env:PATH)) {
+    $env:PATH = "$Directory$([System.IO.Path]::PathSeparator)$env:PATH"
+  }
+}
+
+function Enable-ManagedCodexPath {
+  $managedCodexCommands = @(
+    (Join-Path $BinDir "codex.cmd"),
+    (Join-Path $BinDir "codex.ps1"),
+    (Join-Path $CodexNpmPrefix "codex.cmd"),
+    (Join-Path $CodexNpmPrefix "codex.ps1"),
+    (Join-Path $CodexNpmPrefix "bin\codex.cmd"),
+    (Join-Path $CodexNpmPrefix "bin\codex.ps1")
+  )
+  if ($managedCodexCommands | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1) {
+    Add-PathPrefix (Join-Path $CodexNpmPrefix "bin")
+    Add-PathPrefix $CodexNpmPrefix
+    Add-PathPrefix $BinDir
+  }
+}
+
+function Get-ManagedPidFile {
+  if (-not (Test-Path -LiteralPath $StateHome -PathType Container)) {
+    return $null
+  }
+  return Get-ChildItem -LiteralPath $StateHome -Filter "*.pid" -File -ErrorAction SilentlyContinue |
+    Select-Object -First 1
+}
+
+function ConvertTo-PowerShellLiteral([string]$Value) {
+  return "'" + ($Value -replace "'", "''") + "'"
+}
+
+function Get-PlatformLabel {
+  $isWindowsPlatform = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
+    [System.Runtime.InteropServices.OSPlatform]::Windows)
+  if (-not $isWindowsPlatform) {
+    if ($env:SYMPHONY_TRELLO_ALLOW_NON_WINDOWS_PWSH_FOR_TEST -eq "1") {
+      return "Non-Windows PowerShell test runtime"
+    }
+    throw "install.ps1 supports Windows PowerShell setup only. On Linux, macOS, or WSL2, use install.sh."
+  }
+  $architecture = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
+  if ($architecture -eq "x64") {
+    return "Windows amd64"
+  }
+  if ($architecture -eq "arm64") {
+    return "Windows arm64 (best effort)"
+  }
+  throw "Unsupported platform: Windows $architecture. Supported Windows platforms: amd64, with arm64 best-effort."
+}
+
+function Read-YesNo([string]$Prompt) {
+  $answer = Read-Host $Prompt
+  return $answer -match '^[Yy]'
+}
+
+function Get-WingetPackageCommand([string]$Package) {
+  if (-not (Test-Command "winget")) {
+    return ""
+  }
+  switch ($Package) {
+    "git" { return "winget install --id Git.Git --source winget" }
+    "java" { return "winget install --id Azul.Zulu.25.JDK --source winget" }
+    "node" { return "winget install --id OpenJS.NodeJS.LTS --source winget" }
+    "gh" { return "winget install --id GitHub.cli --source winget" }
+    default { return "" }
+  }
+}
+
+function Install-PackageOrExit([string]$Label, [string]$Package, [string]$Fallback) {
+  $command = Get-WingetPackageCommand $Package
+  if (-not $command) {
+    throw "$Label is required.`n$Fallback`nThen rerun this installer."
+  }
+  Write-Host
+  Write-Host "$Label is missing."
+  Write-Host "Proposed install command:"
+  Write-Host "  $command"
+  if (-not (Read-YesNo "Run this command now? [y/N]")) {
+    throw "$Fallback`nThen rerun this installer."
+  }
+  Invoke-Step $command { Invoke-Expression $command }
+}
+
+function Assert-AvailableAfterInstall([scriptblock]$Check, [string]$Label, [string]$Fix) {
+  if (-not (& $Check)) {
+    throw "$Label was installed, but it is not available in this PowerShell session.`n$Fix`nThen rerun this installer."
+  }
+}
+
+function Test-CodexAuthenticated {
+  if (-not (Test-Command "codex")) {
+    return $false
+  }
+  & codex login status *> $null
+  return $LASTEXITCODE -eq 0
+}
+
+function Get-CodexInstallPlan {
+  $nodeStatus = if (Test-Command "npm") { "yes" } else { "no" }
+  return "Symphony-managed npm at $CodexNpmPrefix (Node.js/npm installed: $nodeStatus)"
+}
+
+function Get-CodexNpmInstallCommand {
+  return "npm install --global --prefix $(ConvertTo-PowerShellLiteral $CodexNpmPrefix) @openai/codex"
+}
+
+function Write-CodexNpmInstallPlan {
+  Write-Host "Install Codex CLI with Symphony-managed npm."
+  Write-Host "  Install location: $CodexNpmPrefix"
+  Write-Host "  Command link: $(Join-Path $BinDir 'codex.cmd')"
+  Write-Host "This keeps system-wide npm packages unchanged."
+  if (-not (Test-Command "npm")) {
+    $nodeCommand = Get-WingetPackageCommand "node"
+    if (-not $nodeCommand) {
+      throw "Automatic Node.js/npm install requires the Windows Package Manager.`nInstall Node.js with npm from https://nodejs.org/ or the Windows Package Manager.`nThen rerun this installer."
+    }
+    Write-Host "  Node.js/npm install: $nodeCommand"
+  }
+  Write-Host "  Codex CLI install: $(Get-CodexNpmInstallCommand)"
+}
+
+function Install-CodexWithUserLocalNpm {
+  if (-not (Test-Command "npm")) {
+    $nodeCommand = Get-WingetPackageCommand "node"
+    if (-not $nodeCommand) {
+      throw "Automatic Node.js/npm install requires the Windows Package Manager.`nInstall Node.js with npm from https://nodejs.org/ or the Windows Package Manager.`nThen rerun this installer."
+    }
+    Invoke-Step $nodeCommand { Invoke-Expression $nodeCommand }
+    Assert-AvailableAfterInstall { Test-Command "npm" } "Node.js/npm" "Open a new PowerShell window with npm on PATH."
+  }
+  Invoke-Step (Get-CodexNpmInstallCommand) {
+    & npm install --global --prefix $CodexNpmPrefix "@openai/codex"
+  }
+  Invoke-Step "make Codex CLI available from $BinDir" {
+    New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
+    $codexNpmPrefixLiteral = ConvertTo-PowerShellLiteral $CodexNpmPrefix
+    @"
+@echo off
+set "CODEX_NPM_PREFIX=$CodexNpmPrefix"
+if exist "%CODEX_NPM_PREFIX%\codex.cmd" (
+  call "%CODEX_NPM_PREFIX%\codex.cmd" %*
+) else (
+  call "%CODEX_NPM_PREFIX%\bin\codex.cmd" %*
+)
+"@ | Set-Content -Encoding ASCII (Join-Path $BinDir "codex.cmd")
+    @"
+`$CodexNpmPrefix = $codexNpmPrefixLiteral
+`$CodexCommand = Join-Path `$CodexNpmPrefix "codex.ps1"
+if (-not (Test-Path `$CodexCommand)) {
+  `$CodexCommand = Join-Path `$CodexNpmPrefix "bin\codex.ps1"
+}
+& `$CodexCommand @args
+exit `$LASTEXITCODE
+"@ | Set-Content -Encoding UTF8 (Join-Path $BinDir "codex.ps1")
+  }
+  $env:PATH = "$BinDir;$CodexNpmPrefix;$CodexNpmPrefix\bin;$env:PATH"
+}
+
+function Install-CodexOrExit {
+  if (Test-CodexAuthenticated) {
+    return
+  }
+  if (Test-Command "codex") {
+    return
+  }
+  Write-Host
+  if (Test-Command "npm") {
+    Write-Host "Codex CLI is missing."
+  } else {
+    Write-Host "Codex CLI is missing and needs Node.js with npm."
+  }
+  Write-CodexNpmInstallPlan
+  if (-not (Read-YesNo "Run now? [y/N]")) {
+    throw "Install Codex CLI, then rerun this installer.`nThe installer will help you log in after it finds Codex CLI."
+  }
+  Install-CodexWithUserLocalNpm
+  Assert-AvailableAfterInstall { Test-Command "codex" } "Codex CLI" "Open a new PowerShell window with the Symphony bin directory on PATH."
+}
+
+function Ensure-Prerequisites {
+  if (-not (Test-Command "git")) {
+    Install-PackageOrExit "Git" "git" "Install Git from https://git-scm.com/download/win or the Windows Package Manager."
+    Assert-AvailableAfterInstall { Test-Command "git" } "Git" "Open a new PowerShell window with Git on PATH."
+  }
+  if (-not (Test-Java25)) {
+    Install-PackageOrExit "Java 25+ JDK" "java" "Install a Java 25 or newer JDK with javac, then make java and javac available on PATH."
+    Assert-AvailableAfterInstall { Test-Java25 } "Java 25+ JDK" "Open a new PowerShell window with java and javac on PATH."
+  }
+  if (-not $NoOnboard) {
+    Install-CodexOrExit
+  }
+}
+
+function Write-DryRunPrerequisitePlan {
+  if (-not (Test-Command "git")) {
+    $command = Get-WingetPackageCommand "git"
+    Write-Host "  WOULD offer to install Git$(if ($command) { " with: $command" })"
+  }
+  if (-not (Test-Java25)) {
+    $command = Get-WingetPackageCommand "java"
+    Write-Host "  WOULD offer to install Java 25+ JDK$(if ($command) { " with: $command" })"
+  }
+  if ((-not $NoOnboard) -and (-not (Test-Command "codex"))) {
+    $nodeStatus = if (Test-Command "npm") { "yes" } else { "no" }
+    Write-Host "  WOULD offer to install Codex CLI with Symphony-managed npm:"
+    Write-Host "          Install location: $CodexNpmPrefix"
+    Write-Host "          Command link: $(Join-Path $BinDir 'codex.cmd')"
+    Write-Host "          Node.js/npm installed: $nodeStatus"
+  } elseif ($NoOnboard -and (-not (Test-Command "codex"))) {
+    Write-Host "  NOTE   Codex CLI setup is skipped because --no-onboard was passed."
+  }
+}
+
+function Test-RemoteBranch([string]$Remote, [string]$GitRef) {
+  & git ls-remote --exit-code --heads $Remote $GitRef *> $null
+  return $LASTEXITCODE -eq 0
+}
+
+function Invoke-CheckoutRef([string]$CheckoutPath, [string]$GitRef) {
+  & git -C $CheckoutPath show-ref --verify --quiet "refs/remotes/origin/$GitRef"
+  if ($LASTEXITCODE -eq 0) {
+    Invoke-Step "git -C $CheckoutPath checkout -B $GitRef origin/$GitRef" {
+      & git -C $CheckoutPath checkout -B $GitRef "origin/$GitRef"
+    }
+    Invoke-Step "git -C $CheckoutPath pull --ff-only origin $GitRef" {
+      & git -C $CheckoutPath pull --ff-only origin $GitRef
+    }
+  } else {
+    Invoke-Step "git -C $CheckoutPath checkout --detach $GitRef" {
+      & git -C $CheckoutPath checkout --detach $GitRef
+    }
+  }
+}
+
+function Assert-ExistingCheckoutSafe {
+  if (Test-Path "$Prefix\.symphony-trello-install") {
+    return
+  }
+  $originUrl = ""
+  try {
+    $originUrl = (& git -C $Prefix remote get-url origin) 2>$null
+    if ($LASTEXITCODE -ne 0) {
+      $originUrl = ""
+    }
+  } catch {
+    $originUrl = ""
+  }
+  if ($originUrl -eq $Repo) {
+    return
+  }
+  throw "Refusing to update existing Git checkout without Symphony installer marker:`n  $Prefix`nUse an empty --prefix path, or pass a checkout whose origin remote is:`n  $Repo"
+}
+
+Write-Host "Symphony for Trello installer"
+Write-Host
+Enable-ManagedCodexPath
+Write-Host "Detected $(Get-PlatformLabel)"
+Write-Host "Install: $Prefix"
+Write-Host "Config: $ConfigDir"
+Write-Host "Workspaces: $WorkspaceRoot"
+Write-Host "State/logs: $StateHome"
+Write-Host "Command: $BinDir\symphony-trello.ps1"
+Write-Host
+Write-Host "Checking prerequisites..."
+Write-Host ($(if (Test-Command "git") { "  OK      Git available" } else { "  NEEDED  Git" }))
+Write-Host ($(if (Test-Java25) { "  OK      Java 25+ JDK available" } else { "  NEEDED  Java 25+ JDK" }))
+Write-Host ($(if (Test-Command "codex") {
+      "  OK      Codex CLI available"
+    } elseif ($NoOnboard) {
+      "  NEEDED  Codex CLI (only needed for guided setup; skipped by --no-onboard)"
+    } else {
+      "  NEEDED  Codex CLI"
+    }))
+
+if ($DryRun) {
+  Write-Host
+  Write-Host "Dry run: no files changed."
+  Write-DryRunPrerequisitePlan
+  Write-Host "  WOULD clone or update: $Prefix"
+  Write-Host "  WOULD build packaged Quarkus app with Maven wrapper"
+  Write-Host "  WOULD install CLI executable: $BinDir\symphony-trello.ps1"
+  if (-not $NoOnboard) {
+    Write-Host "  WOULD run guided setup after install."
+  }
+  exit 0
+}
+
+Ensure-Prerequisites
+
+if (-not $NoOnboard) {
+  try {
+    & codex login status *> $null
+    $codexAuthenticated = $LASTEXITCODE -eq 0
+  } catch {
+    $codexAuthenticated = $false
+  }
+  if (-not $codexAuthenticated) {
+    Write-Host "Codex CLI is installed but not logged in."
+    $browser = Read-Host "Can this machine open a browser for Codex login? [Y/n]"
+    $loginCommand = "codex login"
+    if ($browser -match '^[Nn]') {
+      $loginCommand = "codex login --device-auth"
+      try {
+        Invoke-Step $loginCommand { & codex login --device-auth }
+      } catch {
+        throw "Codex login did not complete successfully.`nRun '$loginCommand', then rerun this installer."
+      }
+    } else {
+      try {
+        Invoke-Step $loginCommand { & codex login }
+      } catch {
+        throw "Codex login did not complete successfully.`nRun '$loginCommand', then rerun this installer."
+      }
+    }
+    & codex login status *> $null
+    if ($LASTEXITCODE -ne 0) {
+      throw "Codex login did not complete successfully.`nRun '$loginCommand', then rerun this installer."
+    }
+  }
+}
+
+Write-Host
+Write-Host "Installing Symphony..."
+$UpdatingExistingCheckout = Test-Path -LiteralPath (Join-Path $Prefix ".git")
+$RestartManagedWorkers = $false
+if ($UpdatingExistingCheckout -and (Get-ManagedPidFile)) {
+  $RestartManagedWorkers = $true
+  Write-Host "Stopping managed workers before update..."
+  Invoke-Step "$BinDir\symphony-trello.ps1 stop" { & "$BinDir\symphony-trello.ps1" stop }
+}
+if (-not $UpdatingExistingCheckout) {
+  if (Test-RemoteBranch $Repo $Ref) {
+    Invoke-Step "git clone --branch $Ref $Repo $Prefix" {
+      New-Item -ItemType Directory -Force -Path (Split-Path $Prefix) | Out-Null
+      & git clone --branch $Ref $Repo $Prefix
+    }
+  } else {
+    Invoke-Step "git clone $Repo $Prefix" {
+      New-Item -ItemType Directory -Force -Path (Split-Path $Prefix) | Out-Null
+      & git clone $Repo $Prefix
+    }
+    Invoke-Step "git -C $Prefix fetch --tags --prune origin" {
+      & git -C $Prefix fetch --tags --prune origin
+    }
+    Invoke-CheckoutRef $Prefix $Ref
+  }
+} else {
+  Assert-ExistingCheckoutSafe
+  Invoke-Step "git -C $Prefix fetch --tags --prune origin" {
+    & git -C $Prefix fetch --tags --prune origin
+  }
+  Invoke-CheckoutRef $Prefix $Ref
+}
+Invoke-Step "$Prefix\mvnw.cmd -q -DskipTests clean package" { & "$Prefix\mvnw.cmd" -q -f "$Prefix\pom.xml" -DskipTests clean package }
+Invoke-Step "create $BinDir\symphony-trello.ps1" {
+  New-Item -ItemType Directory -Force -Path $BinDir, $ConfigDir, $WorkspaceRoot, $StateHome | Out-Null
+  Set-Content -Encoding ASCII -Path "$Prefix\.symphony-trello-install" -Value "symphony-trello installer-managed app directory"
+  $PrefixLiteral = ConvertTo-PowerShellLiteral $Prefix
+  $ConfigDirLiteral = ConvertTo-PowerShellLiteral $ConfigDir
+  $WorkspaceRootLiteral = ConvertTo-PowerShellLiteral $WorkspaceRoot
+  $StateHomeLiteral = ConvertTo-PowerShellLiteral $StateHome
+  $CommandLiteral = ConvertTo-PowerShellLiteral (Join-Path $BinDir "symphony-trello.cmd")
+  $BinDirLiteral = ConvertTo-PowerShellLiteral $BinDir
+  $CodexNpmPrefixLiteral = ConvertTo-PowerShellLiteral $CodexNpmPrefix
+  @"
+`$ErrorActionPreference = "Stop"
+`$AppHome = $PrefixLiteral
+`$ConfigDir = if (`$env:SYMPHONY_TRELLO_CONFIG_DIR) { `$env:SYMPHONY_TRELLO_CONFIG_DIR } else { $ConfigDirLiteral }
+`$WorkspaceRoot = if (`$env:SYMPHONY_TRELLO_WORKSPACE_ROOT) { `$env:SYMPHONY_TRELLO_WORKSPACE_ROOT } else { $WorkspaceRootLiteral }
+`$StateHome = if (`$env:SYMPHONY_TRELLO_STATE_HOME) { `$env:SYMPHONY_TRELLO_STATE_HOME } else { $StateHomeLiteral }
+`$BinDir = $BinDirLiteral
+`$CodexNpmPrefix = $CodexNpmPrefixLiteral
+`$env:PATH = "`$BinDir;`$CodexNpmPrefix;`$CodexNpmPrefix\bin;`$env:PATH"
+New-Item -ItemType Directory -Force -Path `$StateHome | Out-Null
+function Test-CliOption {
+  param([string[]]`$Values, [string]`$Name)
+  foreach (`$value in `$Values) {
+    if (`$value -eq `$Name -or `$value.StartsWith("`$Name=")) {
+      return `$true
+    }
+  }
+  return `$false
+}
+function Invoke-SetupCli {
+  param([string[]]`$CliArgs = @())
+  `$classpath = @(
+    (Join-Path `$AppHome "target\quarkus-app\quarkus-run.jar"),
+    (Join-Path `$AppHome "target\quarkus-app\app\*"),
+    (Join-Path `$AppHome "target\quarkus-app\lib\main\*"),
+    (Join-Path `$AppHome "target\quarkus-app\quarkus\*")
+  ) -join ";"
+  `$callerDir = (Get-Location).Path
+  `$env:SYMPHONY_TRELLO_APP_HOME = `$AppHome
+  `$env:SYMPHONY_TRELLO_COMMAND = $CommandLiteral
+  `$env:SYMPHONY_TRELLO_CONFIG_DIR = `$ConfigDir
+  `$env:SYMPHONY_TRELLO_WORKSPACE_ROOT = `$WorkspaceRoot
+  `$env:SYMPHONY_TRELLO_STATE_HOME = `$StateHome
+  `$env:SYMPHONY_TRELLO_CALLER_DIR = `$callerDir
+  if (-not `$env:SYMPHONY_TRELLO_DOTENV) {
+    `$env:SYMPHONY_TRELLO_DOTENV = Join-Path `$ConfigDir ".env"
+  }
+  if (`$CliArgs.Count -gt 0 -and `$CliArgs[0] -eq "setup-local") {
+    `$defaults = @()
+    if (-not (Test-CliOption `$CliArgs "--config-dir")) {
+      `$defaults += @("--config-dir", `$ConfigDir)
+    }
+    if (-not (Test-CliOption `$CliArgs "--workspace-root")) {
+      `$defaults += @("--workspace-root", `$WorkspaceRoot)
+    }
+    if (`$defaults.Count -gt 0) {
+      `$tail = if (`$CliArgs.Count -gt 1) { `$CliArgs[1..(`$CliArgs.Count - 1)] } else { @() }
+      `$CliArgs = @(`$CliArgs[0]) + `$defaults + `$tail
+    }
+  } elseif (`$CliArgs.Count -gt 0 -and (`$CliArgs[0] -eq "new-board" -or `$CliArgs[0] -eq "import-board")) {
+    `$defaults = @()
+    if (-not (Test-CliOption `$CliArgs "--workspace-root")) {
+      `$defaults += @("--workspace-root", `$WorkspaceRoot)
+    }
+    if (`$defaults.Count -gt 0) {
+      `$tail = if (`$CliArgs.Count -gt 1) { `$CliArgs[1..(`$CliArgs.Count - 1)] } else { @() }
+      `$CliArgs = @(`$CliArgs[0]) + `$defaults + `$tail
+    }
+  } elseif (`$CliArgs.Count -gt 0 -and (`$CliArgs[0] -eq "start" -or `$CliArgs[0] -eq "stop" -or `$CliArgs[0] -eq "status" -or `$CliArgs[0] -eq "logs")) {
+    `$defaults = @()
+    if (-not (Test-CliOption `$CliArgs "--config-dir")) {
+      `$defaults += @("--config-dir", `$ConfigDir)
+    }
+    if (-not (Test-CliOption `$CliArgs "--workspace-root")) {
+      `$defaults += @("--workspace-root", `$WorkspaceRoot)
+    }
+    if (-not (Test-CliOption `$CliArgs "--state-home")) {
+      `$defaults += @("--state-home", `$StateHome)
+    }
+    if (-not (Test-CliOption `$CliArgs "--app-home")) {
+      `$defaults += @("--app-home", `$AppHome)
+    }
+    if (`$defaults.Count -gt 0) {
+      `$tail = if (`$CliArgs.Count -gt 1) { `$CliArgs[1..(`$CliArgs.Count - 1)] } else { @() }
+      `$CliArgs = @(`$CliArgs[0]) + `$defaults + `$tail
+    }
+  }
+  `$shell = if (`$env:SYMPHONY_TRELLO_WRAPPER_SHELL -eq "cmd") { "cmd" } else { "powershell" }
+  & java "-Dsymphony.trello.app.home=`$AppHome" "-Dsymphony.trello.config.dir=`$ConfigDir" "-Dsymphony.trello.shell=`$shell" -cp `$classpath ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain @CliArgs
+  exit `$LASTEXITCODE
+}
+Invoke-SetupCli @args
+"@ | Set-Content -Encoding UTF8 "$BinDir\symphony-trello.ps1"
+@"
+@echo off
+set "SYMPHONY_TRELLO_WRAPPER_SHELL=cmd"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0symphony-trello.ps1" %*
+"@ | Set-Content -Encoding ASCII "$BinDir\symphony-trello.cmd"
+}
+Write-Host "  OK  Command installed: $BinDir\symphony-trello.ps1"
+if (-not (Test-PathContains $BinDir $OriginalPath)) {
+  Write-Host "  NOTE  Add $BinDir to PATH so you can run symphony-trello.ps1 from a new shell."
+  Write-Host "        For PowerShell, add it to the user PATH environment variable or your profile."
+}
+
+if (-not $NoOnboard) {
+  Write-Host
+  if ($RestartManagedWorkers) {
+    Write-Host "Restarting managed workers after update..."
+  }
+  Write-Host "Starting setup..."
+  if ($DryRun) {
+    Write-Host "  WOULD run: $BinDir\symphony-trello.ps1 setup-local"
+    if ($RestartManagedWorkers) {
+      Write-Host "  WOULD run: $BinDir\symphony-trello.ps1 start --all"
+    }
+  } else {
+    Write-InstallContext
+    Invoke-Step "$BinDir\symphony-trello.ps1 setup-local" { & "$BinDir\symphony-trello.ps1" setup-local }
+    if ($RestartManagedWorkers) {
+      Invoke-Step "$BinDir\symphony-trello.ps1 start --all" { & "$BinDir\symphony-trello.ps1" start --all }
+    }
+  }
+} elseif ($RestartManagedWorkers) {
+  Write-Host
+  Write-Host "Restarting managed workers after update..."
+  Write-InstallContext
+  Invoke-Step "$BinDir\symphony-trello.ps1 start --all" { & "$BinDir\symphony-trello.ps1" start --all }
+}

@@ -24,6 +24,16 @@
       "datasourceTemplate": "npm",
       "depNameTemplate": "pnpm",
       "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/ci\\.yml$/",
+        "/^scripts/pwsh-docker\\.sh$/"
+      ],
+      "matchStrings": ["(?<depName>mcr\\.microsoft\\.com/dotnet/sdk):(?<currentValue>\\d+\\.\\d+)"],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
     }
   ],
   "packageRules": [

@@ -10,6 +10,7 @@ logs/
 WORKFLOW.md
 WORKFLOW.*.md
 !WORKFLOW.example.md
+connected-boards.json
 .secrets/
 .env
 .env.*
