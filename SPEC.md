@@ -1166,8 +1166,10 @@ as a refresh/normalization failure instead of dispatching it.
 
 Sorting order (stable intent):
 
-1. `priority` ascending, where lower values are preferred and null/unknown sorts last
-2. active-state/list order as configured in `tracker.active_list_ids`, then `tracker.active_states`
+1. active-state/list order, with later configured entries preferred first. For the default active
+   flow this means `Merging`, then `In Progress`, then `Ready for Codex`.
+2. `priority` ascending within the same active state/list, where lower values are preferred and
+   null/unknown sorts last
 3. Trello `position` ascending, if available
 4. `created_at` oldest first, if available
 5. `identifier` lexicographic tie-breaker
@@ -2901,7 +2903,7 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 
 ### 17.4 Orchestrator Dispatch, Reconciliation, and Retry
 
-- Dispatch sort order is priority, active-state/list order, Trello position, creation time,
+- Dispatch sort order is later active-state/list first, priority, Trello position, creation time,
   identifier
 - Card in `tracker.blocker_enforced_states` with non-terminal blockers is not eligible
 - Card in `tracker.blocker_enforced_states` with terminal blockers is eligible
