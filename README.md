@@ -498,6 +498,8 @@ tracker:
     - Deleted
 workspace:
   root: ./workspaces
+polling:
+  interval_ms: 5000
 trello_tools:
   enabled: true
   allow_writes: true
@@ -872,6 +874,8 @@ workspace:
   root: ./workspaces
 server:
   port: 18080
+polling:
+  interval_ms: 5000
 codex:
   command: codex app-server
   model: gpt-5.5
@@ -886,6 +890,23 @@ Unknown template variables fail the affected attempt, then the orchestrator appl
 behavior. This is intentional; typo-tolerant prompts hide broken automation.
 
 ## Advanced Configuration
+
+### Polling Interval
+
+Generated workflows poll Trello every 5 seconds:
+
+```yaml
+polling:
+  interval_ms: 5000
+```
+
+Increase `polling.interval_ms` in [`WORKFLOW.md`](#workflow-contract) if Trello rate-limit warnings
+repeat in the logs. Deployments above roughly 5-10 boards sharing the same Trello token should
+consider a higher value, such as `10000` or `30000`.
+
+To check for rate limits, search the service logs for `Trello rate limit reached`. Occasional
+warnings can happen during bursts; repeated warnings mean the interval is too aggressive for the
+current board count and token.
 
 ### Codex Command
 

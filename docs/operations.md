@@ -122,6 +122,11 @@ thread. If Codex does not emit token usage events, the values remain zero.
 Symphony does not invent rate-limit state. If the field is absent or `null`, Codex has not reported
 rate-limit data to this process yet.
 
+Trello API rate limits are logged separately. Search logs for `Trello rate limit reached`. The
+warning includes the workflow file and current `polling.interval_ms`. Repeated warnings usually mean
+the workflow should poll less often, especially when more than 5-10 boards share the same Trello
+token.
+
 ## Common States
 
 - A card in `Ready for Codex` is queued.

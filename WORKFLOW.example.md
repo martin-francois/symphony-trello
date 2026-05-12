@@ -24,6 +24,8 @@ workspace:
   root: ./workspaces
 server:
   port: 18080
+polling:
+  interval_ms: 5000
 hooks:
   timeout_ms: 60000
 agent:
