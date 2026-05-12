@@ -75,7 +75,7 @@ jobs:
       - name: Enable pnpm
         run: |
           corepack enable
-          corepack prepare pnpm@10.33.2 --activate
+          corepack prepare pnpm@11.0.9 --activate
       - name: Validate Renovate config
         run: pnpm dlx --package renovate renovate-config-validator renovate.json
 
