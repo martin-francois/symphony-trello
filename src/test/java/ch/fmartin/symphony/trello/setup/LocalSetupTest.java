@@ -1,0 +1,2438 @@
+package ch.fmartin.symphony.trello.setup;
+
+import static ch.fmartin.symphony.trello.setup.ManifestAssertions.assertThatManifest;
+import static ch.fmartin.symphony.trello.setup.TerminalTranscriptAssertions.assertThatTranscript;
+import static ch.fmartin.symphony.trello.setup.WorkflowAssertions.assertThatWorkflow;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+
+import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.ServerSocket;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
+
+class LocalSetupTest extends LocalSetupFixtureSupport {
+    @Test
+    void dryRunReportsPlannedWorkflowWithoutChangingTrello() {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.dry-run.md");
+
+        // when
+        SetupRunResult result = runSetup("--dry-run", "--workflow", workflow.toString());
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "Symphony for Trello setup",
+                        "Checking prerequisites",
+                        "Dry run",
+                        "WOULD write workflows under:");
+        assertThat(trello.createdLists()).isEmpty();
+    }
+
+    @ParameterizedTest
+    @MethodSource("githubAuthCheckScenarios")
+    void checkReportsGithubAuthState(GithubAuthCheckScenario scenario) {
+        // given
+
+        // when
+        SetupRunResult result = runSetup("check", scenario.githubFlag());
+
+        // then
+        if (scenario.expectedExitCode() == 0) {
+            result.assertSuccess();
+        } else {
+            result.assertFailure(scenario.expectedExitCode()).stderrEmpty();
+        }
+        result.stdoutContains(scenario.expectedOutput()).stdoutDoesNotContain(scenario.forbiddenOutput());
+    }
+
+    private static Stream<GithubAuthCheckScenario> githubAuthCheckScenarios() {
+        return Stream.of(
+                new GithubAuthCheckScenario(
+                        "--no-github treats missing GitHub auth as optional",
+                        "--no-github",
+                        0,
+                        "OPTIONAL GitHub CLI authenticated",
+                        "NEEDED  GitHub CLI authenticated"),
+                new GithubAuthCheckScenario(
+                        "--github treats missing GitHub auth as needed",
+                        "--github",
+                        2,
+                        "NEEDED  GitHub CLI authenticated",
+                        "OPTIONAL GitHub CLI authenticated"));
+    }
+
+    private record GithubAuthCheckScenario(
+            String name, String githubFlag, int expectedExitCode, String expectedOutput, String forbiddenOutput) {
+        @Override
+        public String toString() {
+            return name;
+        }
+    }
+
+    @Test
+    void nonInteractiveSetupCreatesNonGithubBoardAndWorkflow() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.local.md");
+        Path env = tempDir.resolve(".env");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Local Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "GitHub integration skipped",
+                        "Board connected: \"Local Queue\"",
+                        "Starting Symphony",
+                        "Symphony is connected to \"Local Queue\"",
+                        "You're good to go - your Trello board is now a queue for Codex work.",
+                        "Symphony picks it up, moves it to `In Progress`, runs Codex, and keeps the Trello card updated.",
+                        "GitHub PR flow to a connected board")
+                .stdoutDoesNotContain(
+                        "TRELLO_API_TOKEN=token", "Log:", "workflow's Trello handoff lists", "\u2019", "\u2014");
+        assertThat(trello.createdLists())
+                .containsExactly("Inbox", "Ready for Codex", "In Progress", "Blocked", "Human Review", "Done");
+        assertThat(env).content(StandardCharsets.UTF_8).contains("TRELLO_API_KEY=key", "TRELLO_API_TOKEN=token");
+        assertOwnerOnlyWhenPosix(env);
+        assertThatWorkflow(workflow).hasNoGithubFlow().doesNotHaveMerging();
+        assertThat(commands.startedWorkflows).containsExactly(workflow.toString());
+        assertThat(commands.startedEnvFiles).containsExactly(env.toString());
+    }
+
+    @Test
+    void nonInteractiveSetupReadsCredentialsFromSelectedEnvFile() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.custom-env.md");
+        Path env = tempDir.resolve(".env.custom");
+        Files.writeString(env, "TRELLO_API_KEY=key%nTRELLO_API_TOKEN=token%n".formatted(), StandardCharsets.UTF_8);
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--board-name",
+                "Env Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess();
+        assertThat(trello.createdLists())
+                .containsExactly("Inbox", "Ready for Codex", "In Progress", "Blocked", "Human Review", "Done");
+        assertThat(env).content(StandardCharsets.UTF_8).containsOnlyOnce("TRELLO_API_KEY=key");
+        assertThat(commands.startedWorkflows).containsExactly(workflow.toString());
+        assertThat(commands.startedEnvFiles).containsExactly(env.toString());
+    }
+
+    @Test
+    void setupDoesNotCopyRealEnvironmentCredentialsIntoDotenv() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.real-env.md");
+        Path env = tempDir.resolve(".env");
+        LocalSetup environmentBackedSetup = setupWithEnvironment(Map.of(
+                "SYMPHONY_TRELLO_CONFIG_DIR",
+                tempDir.resolve("config").toString(),
+                "SYMPHONY_TRELLO_COMMAND",
+                "symphony-trello",
+                "TRELLO_API_KEY",
+                "real-key",
+                "TRELLO_API_TOKEN",
+                "real-token"));
+
+        // when
+        SetupRunResult result = runSetup(
+                environmentBackedSetup,
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--board-name",
+                "Real Env Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("Credentials loaded from environment variables")
+                .stdoutDoesNotContain("real-token");
+        assertThat(env).doesNotExist();
+    }
+
+    @Test
+    void setupUsesWorkspaceRootFromEnvironmentWhenOptionIsOmitted() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.workspace-env.md");
+        Path env = tempDir.resolve(".env");
+        Path workspaceRoot = tempDir.resolve("env-workspaces");
+        LocalSetup environmentBackedSetup = setupWithEnvironment(Map.of(
+                "SYMPHONY_TRELLO_CONFIG_DIR",
+                tempDir.resolve("config").toString(),
+                "SYMPHONY_TRELLO_COMMAND",
+                "symphony-trello",
+                "SYMPHONY_TRELLO_WORKSPACE_ROOT",
+                workspaceRoot.toString()));
+
+        // when
+        SetupRunResult result = runSetup(
+                environmentBackedSetup,
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Workspace Env Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess();
+        assertThat(workflow).content(StandardCharsets.UTF_8).contains(workspaceRoot.toString());
+        assertThat(tempDir.resolve("config").resolve("connected-boards.json"))
+                .content(StandardCharsets.UTF_8)
+                .contains(workspaceRoot.toString());
+    }
+
+    @Test
+    void setupPersistsOnlyPromptedCredentialWhenOtherCredentialComesFromRealEnvironment() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.partial-real-env.md");
+        Path env = tempDir.resolve(".env");
+        LocalSetup environmentBackedSetup = setupWithEnvironment(Map.of(
+                "SYMPHONY_TRELLO_CONFIG_DIR",
+                tempDir.resolve("config").toString(),
+                "SYMPHONY_TRELLO_COMMAND",
+                "symphony-trello",
+                "TRELLO_API_KEY",
+                "real-key"));
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                environmentBackedSetup,
+                "prompt-token\n\nn\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--board-name",
+                "Partial Real Env Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess();
+        assertThat(env)
+                .content(StandardCharsets.UTF_8)
+                .contains("TRELLO_API_TOKEN=prompt-token")
+                .doesNotContain("TRELLO_API_KEY", "real-key");
+        assertThatTranscript(result.stdout()).doesNotLeak("real-key").doesNotLeak("prompt-token");
+    }
+
+    @ParameterizedTest
+    @MethodSource("dotenvCredentialEscapingScenarios")
+    void setupEscapesCredentialsWhenWritingDotenv(DotenvCredentialEscapingScenario scenario) throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW." + scenario.fileSuffix() + ".md");
+        Path env = tempDir.resolve(".env");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                scenario.apiKey(),
+                "--token",
+                scenario.apiToken(),
+                "--board-name",
+                "Escaped Env Queue " + scenario.fileSuffix(),
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess();
+        assertThat(env)
+                .content(StandardCharsets.UTF_8)
+                .contains(scenario.expectedKeyLine(), scenario.expectedTokenLine());
+    }
+
+    private static Stream<DotenvCredentialEscapingScenario> dotenvCredentialEscapingScenarios() {
+        return Stream.of(
+                new DotenvCredentialEscapingScenario(
+                        "plain",
+                        "plain-key",
+                        "plain-token",
+                        "TRELLO_API_KEY=plain-key",
+                        "TRELLO_API_TOKEN=plain-token"),
+                new DotenvCredentialEscapingScenario(
+                        "space",
+                        "key with space",
+                        "token with space",
+                        "TRELLO_API_KEY=\"key with space\"",
+                        "TRELLO_API_TOKEN=\"token with space\""),
+                new DotenvCredentialEscapingScenario(
+                        "quote",
+                        "key\"quoted",
+                        "token\"quoted",
+                        "TRELLO_API_KEY=\"key\\\"quoted\"",
+                        "TRELLO_API_TOKEN=\"token\\\"quoted\""),
+                new DotenvCredentialEscapingScenario(
+                        "backslash",
+                        "key\\slash",
+                        "token\\slash",
+                        "TRELLO_API_KEY=\"key\\\\slash\"",
+                        "TRELLO_API_TOKEN=\"token\\\\slash\""),
+                new DotenvCredentialEscapingScenario(
+                        "tab",
+                        "key\tvalue",
+                        "token\tvalue",
+                        "TRELLO_API_KEY=\"key\\tvalue\"",
+                        "TRELLO_API_TOKEN=\"token\\tvalue\""));
+    }
+
+    private record DotenvCredentialEscapingScenario(
+            String fileSuffix, String apiKey, String apiToken, String expectedKeyLine, String expectedTokenLine) {
+        @Override
+        public String toString() {
+            return fileSuffix;
+        }
+    }
+
+    @Test
+    void interactiveSetupPromptsForWorkspaceAccessAndSandboxAfterBoardSetup() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.prompt-order.md");
+        Path env = tempDir.resolve(".env.prompt-order");
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                "\n\nn\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Prompt Order Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "Trello board",
+                        "Workspace access",
+                        "This controls which files/folders sandboxed Trello card runs may use.",
+                        "Default workspace path:",
+                        "Allow Codex to run without its command/filesystem sandbox for this workflow (danger-full-access)? [y/N] ");
+        result.stdoutDoesNotContain(
+                "Added paths grant read/write access.",
+                "Directories apply recursively.",
+                "Use absolute paths, ~, or paths relative to the current directory.",
+                "Local setup relies on Codex sandbox behavior and normal OS permissions, not OS-level filesystem isolation.",
+                "Additional paths, comma-separated:");
+        assertThatTranscript(result.stdout())
+                .containsSectionsInOrder("Trello board", "Workspace access", "Codex execution");
+    }
+
+    @Test
+    void nonInteractiveDangerFullAccessWritesGeneratedWorkflowPolicy() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.danger.md");
+        Path env = tempDir.resolve(".env.danger");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Danger Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--danger-full-access",
+                "--no-github");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "danger-full-access disables Codex's command/filesystem sandbox", "Codex sandbox disabled")
+                .stdoutDoesNotContain("[y/N]");
+        assertThatWorkflow(workflow).hasDangerFullAccess();
+    }
+
+    @Test
+    void setupSkipsDefaultServerPortWhenItIsAlreadyBoundLocally() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.bound-port.md");
+        Path env = tempDir.resolve(".env");
+        try (ServerSocket occupiedPort = new ServerSocket()) {
+            try {
+                occupiedPort.bind(new InetSocketAddress("127.0.0.1", TrelloBoardSetup.DEFAULT_SERVER_PORT));
+            } catch (IOException e) {
+                Assumptions.abort(
+                        "Default setup port is already unavailable before the test can bind it: " + e.getMessage());
+            }
+
+            // when
+            SetupRunResult result = runSetup(
+                    "--non-interactive",
+                    "--endpoint",
+                    endpoint(),
+                    "--key",
+                    "key",
+                    "--token",
+                    "token",
+                    "--board-name",
+                    "Bound Port Queue",
+                    "--workflow",
+                    workflow.toString(),
+                    "--env",
+                    env.toString(),
+                    "--no-github");
+
+            // then
+            result.assertSuccess().stdoutContains("Local server port selected for \"Bound Port Queue\": 18081");
+            assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: 18081");
+        }
+    }
+
+    @Test
+    void setupPollsPositiveHttpPortOverrideWhenStartingManagedWorker() throws Exception {
+        // given
+        int overridePort = availablePort();
+        commands.healthPortOverride = overridePort;
+        LocalSetup setupWithOverride = setupWithEnvironment(Map.of(
+                "SYMPHONY_TRELLO_CONFIG_DIR",
+                tempDir.resolve("config").toString(),
+                "SYMPHONY_TRELLO_COMMAND",
+                "symphony-trello",
+                "SYMPHONY_HTTP_PORT",
+                String.valueOf(overridePort)));
+        Path workflow = tempDir.resolve("WORKFLOW.port-override.md");
+        Path env = tempDir.resolve(".env");
+
+        // when
+        SetupRunResult setupResult = runSetupWithInput(
+                setupWithOverride,
+                "\n\nn\nn\n",
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Port Override Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--server-port",
+                "19080",
+                "--no-github");
+        SetupRunResult checkResult = runSetup(setupWithOverride, "check", "--endpoint", endpoint());
+
+        // then
+        setupResult.assertSuccess().stdoutContains("OK  Symphony is connected to");
+        checkResult
+                .assertSuccess()
+                .stdoutContains("OK    \"Port Override Queue\" local server: http://127.0.0.1:" + overridePort
+                        + " (already running)")
+                .stdoutDoesNotContain("configured port is used by another process");
+    }
+
+    @Test
+    void setupPollsPositiveHttpPortOverrideFromSelectedEnvFileWhenStartingManagedWorker() throws Exception {
+        // given
+        int overridePort = availablePort();
+        commands.healthPortOverride = overridePort;
+        Path workflow = tempDir.resolve("WORKFLOW.env-port-override.md");
+        Path env = tempDir.resolve(".env.port-override");
+        Files.writeString(
+                env,
+                """
+                TRELLO_API_KEY=key
+                TRELLO_API_TOKEN=token
+                SYMPHONY_HTTP_PORT=%d
+                """
+                        .formatted(overridePort),
+                StandardCharsets.UTF_8);
+
+        // when
+        SetupRunResult setupResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--board-name",
+                "Dotenv Port Override Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--server-port",
+                "19080",
+                "--no-github");
+        SetupRunResult checkResult = runSetup("check", "--endpoint", endpoint());
+
+        // then
+        setupResult.assertSuccess().stdoutContains("OK  Symphony is connected to");
+        checkResult
+                .assertSuccess()
+                .stdoutContains("OK    \"Dotenv Port Override Queue\" local server: http://127.0.0.1:" + overridePort
+                        + " (already running)")
+                .stdoutDoesNotContain("configured port is used by another process");
+    }
+
+    @Test
+    void setupResolvesRelativeUserDataPathsInsideConfigDirectory() throws Exception {
+        // given
+        Path config = tempDir.resolve("configured-data");
+        Path workflow = config.resolve("WORKFLOW.relative.md");
+        Path env = config.resolve(".env.relative");
+        Path manifest = config.resolve("boards.json");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Relative Paths",
+                "--config-dir",
+                config.toString(),
+                "--workflow",
+                "WORKFLOW.relative.md",
+                "--manifest",
+                "boards.json",
+                "--env",
+                ".env.relative",
+                "--no-github");
+
+        // then
+        result.assertSuccess();
+        assertThat(env).content(StandardCharsets.UTF_8).contains("TRELLO_API_KEY=key");
+        assertThatManifest(manifest)
+                .hasBoard("Relative Paths")
+                .hasWorkflowPath("Relative Paths", workflow)
+                .hasEnvPath("Relative Paths", env);
+        assertThat(commands.startedWorkflows).containsExactly(workflow.toString());
+        assertThat(commands.startedEnvFiles).containsExactly(env.toString());
+        assertThat(tempDir.resolve("WORKFLOW.relative.md")).doesNotExist();
+        assertThat(tempDir.resolve(".env.relative")).doesNotExist();
+        assertThat(tempDir.resolve("boards.json")).doesNotExist();
+    }
+
+    @Test
+    void nonInteractiveSetupConnectsExistingBoardFromBoardOptionWithoutPrompting() throws Exception {
+        // given
+        Path env = tempDir.resolve(".env");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "board-1",
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        Path workflow = tempDir.resolve("config").resolve("WORKFLOW.imported-queue.md");
+        result.assertSuccess()
+                .stdoutContains("Board connected: \"Imported Queue\"", "Symphony is connected to \"Imported Queue\"");
+        assertThat(trello.createdLists()).isEmpty();
+        assertThat(trello.boardLookups()).contains("/1/boards/board-1");
+        assertThatWorkflow(workflow)
+                .hasBoardId("abc123")
+                .hasActiveStates("Ready for Codex")
+                .hasTerminalStates("Human Review");
+        assertThat(commands.startedWorkflows).containsExactly(workflow.toString());
+        assertThat(commands.startedEnvFiles).containsExactly(env.toString());
+    }
+
+    @Test
+    void reconnectsExistingBoardByConnectedBoardNameBeforeTrelloLookup() throws Exception {
+        // given
+        Path existingWorkflow = tempDir.resolve("WORKFLOW.connected-name.md");
+        Path existingEnv = tempDir.resolve(".env.connected-name");
+        fixture.givenConnectedBoard("Connected Import", existingWorkflow, existingEnv, 18144, false);
+        Path env = tempDir.resolve(".env.reconnected-name");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "Connected Import",
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess().stdoutContains("Board connected: \"Imported Queue\"");
+        assertThat(trello.boardLookups()).contains("/1/boards/board-1");
+        assertThat(trello.boardLookups()).noneMatch(path -> path.contains("Connected"));
+    }
+
+    @Test
+    void existingBoardSetupUsesSuffixedWorkflowPathWhenGeneratedWorkflowAlreadyExists() throws Exception {
+        // given
+        Path config = tempDir.resolve("config");
+        Files.createDirectories(config);
+        Path existingWorkflow = config.resolve("WORKFLOW.imported-queue.md");
+        Path expectedWorkflow = config.resolve("WORKFLOW.imported-queue-2.md");
+        Files.writeString(existingWorkflow, "existing", StandardCharsets.UTF_8);
+        Path env = tempDir.resolve(".env");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "board-1",
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess();
+        assertThat(existingWorkflow).content(StandardCharsets.UTF_8).isEqualTo("existing");
+        assertThat(expectedWorkflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("board_id: \"abc123\"", "## Local And Non-GitHub Repository Work");
+        assertThat(commands.startedWorkflows).containsExactly(expectedWorkflow.toString());
+    }
+
+    @Test
+    void nonInteractiveSetupConnectsExistingBoardWithExplicitListMappings() throws Exception {
+        // given
+        trello.givenRawBoardListsJson(
+                """
+                [
+                  {"id":"list-1","name":"Backlog","closed":false,"pos":1},
+                  {"id":"list-2","name":"Build Next","closed":false,"pos":2},
+                  {"id":"list-3","name":"Doing","closed":false,"pos":3},
+                  {"id":"list-4","name":"Needs Help","closed":false,"pos":4},
+                  {"id":"list-5","name":"Team Review","closed":false,"pos":5},
+                  {"id":"list-6","name":"Shipped","closed":false,"pos":6}
+                ]
+                """);
+        Path env = tempDir.resolve(".env");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "board-1",
+                "--active",
+                "Build Next, Doing,",
+                "--in-progress",
+                "Doing",
+                "--terminal",
+                "Shipped,",
+                "--blocked",
+                "Needs Help",
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        Path workflow = tempDir.resolve("config").resolve("WORKFLOW.imported-queue.md");
+        result.assertSuccess();
+        assertThat(trello.createdLists()).isEmpty();
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains(
+                        "- \"Build Next\"", "in_progress_state: \"Doing\"", "- \"Shipped\"", "list_name \"Needs Help\"")
+                .doesNotContain("- \" Doing\"", "- \"\"");
+        assertThat(commands.startedWorkflows).containsExactly(workflow.toString());
+        assertThat(commands.startedEnvFiles).containsExactly(env.toString());
+    }
+
+    @Test
+    void githubExistingBoardSetupCreatesMissingRecommendedLists() throws Exception {
+        // given
+        commands.githubAuthenticated = true;
+        trello.givenRawBoardListsJson(
+                """
+                [
+                  {"id":"list-1","name":"Inbox","closed":false,"pos":1},
+                  {"id":"list-2","name":"Ready for Codex","closed":false,"pos":2},
+                  {"id":"list-3","name":"In Progress","closed":false,"pos":3},
+                  {"id":"list-4","name":"Blocked","closed":false,"pos":4},
+                  {"id":"list-5","name":"Human Review","closed":false,"pos":5},
+                  {"id":"list-6","name":"Done","closed":false,"pos":6}
+                ]
+                """);
+        Path env = tempDir.resolve(".env");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "board-1",
+                "--env",
+                env.toString(),
+                "--github");
+
+        // then
+        Path workflow = tempDir.resolve("config").resolve("WORKFLOW.imported-queue.md");
+        result.assertSuccess().stdoutContains("Board connected: \"Imported Queue\"");
+        assertThat(trello.createdLists()).containsExactly("Merging");
+        assertThatWorkflow(workflow).hasGithubFlow().hasMerging();
+    }
+
+    @Test
+    void githubExistingBoardSetupValidatesListMappingsBeforeCreatingMissingMergingList() {
+        // given
+        commands.githubAuthenticated = true;
+        Path env = tempDir.resolve(".env");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "board-1",
+                "--active",
+                "Buildd",
+                "--env",
+                env.toString(),
+                "--github");
+
+        // then
+        result.assertFailure(2).stderrContains("setup_unknown_active_state");
+        assertThat(trello.createdLists()).isEmpty();
+    }
+
+    @Test
+    void interactiveGithubExistingBoardSetupAbortsWhenMissingMergingListCreationIsDeclined() throws Exception {
+        // given
+        commands.githubAuthenticated = true;
+        trello.givenRawBoardListsJson(
+                """
+                [
+                  {"id":"list-1","name":"Ready for Codex","closed":false,"pos":1},
+                  {"id":"list-2","name":"In Progress","closed":false,"pos":2},
+                  {"id":"list-3","name":"Blocked","closed":false,"pos":3},
+                  {"id":"list-4","name":"Human Review","closed":false,"pos":4},
+                  {"id":"list-5","name":"Done","closed":false,"pos":5}
+                ]
+                """);
+        Path workflow = tempDir.resolve("config").resolve("WORKFLOW.imported-queue.md");
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                "n\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "board-1",
+                "--active",
+                "Ready for Codex",
+                "--terminal",
+                "Done",
+                "--in-progress",
+                "In Progress",
+                "--blocked",
+                "Blocked",
+                "--github");
+
+        // then
+        result.assertFailure(2)
+                .stdoutContains("GitHub mode will create this missing list: Merging")
+                .stderrContains("setup_github_import_list_declined", "needs a Merging list");
+        assertThat(trello.createdLists()).isEmpty();
+        assertThat(workflow).doesNotExist();
+    }
+
+    @Test
+    void interactiveExistingBoardSetupPromptsForListMappings() throws Exception {
+        // given
+        trello.givenRawBoardListsJson(
+                """
+                [
+                  {"id":"list-1","name":"Queue","closed":false,"pos":1},
+                  {"id":"list-2","name":"Working","closed":false,"pos":2},
+                  {"id":"list-3","name":"Blocked","closed":false,"pos":3},
+                  {"id":"list-4","name":"Human Review","closed":false,"pos":4},
+                  {"id":"list-5","name":"Finished","closed":false,"pos":5}
+                ]
+                """);
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                "2\nboard-1\nQueue\nFinished\nWorking\nBlocked\nn\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--no-github");
+
+        // then
+        Path workflow = tempDir.resolve("config").resolve("WORKFLOW.imported-queue.md");
+        result.assertSuccess()
+                .stdoutContains(
+                        "Existing board lists",
+                        "Queued-work list names",
+                        "In-progress list name",
+                        "move it to `Queue`",
+                        "moves it to `Working`",
+                        "move it to `Finished`")
+                .stdoutDoesNotContain("move it to `Ready for Codex`", "moves it to `In Progress`", "move it to `Done`");
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("- \"Queue\"", "in_progress_state: \"Working\"", "- \"Finished\"", "list_name \"Blocked\"");
+    }
+
+    @Test
+    void interactiveExistingBoardSetupTreatsDashAsNoBlockedList() throws Exception {
+        // given
+        trello.givenRawBoardListsJson(
+                """
+                [
+                  {"id":"list-1","name":"Queue","closed":false,"pos":1},
+                  {"id":"list-2","name":"Working","closed":false,"pos":2},
+                  {"id":"list-3","name":"Human Review","closed":false,"pos":3},
+                  {"id":"list-4","name":"Finished","closed":false,"pos":4}
+                ]
+                """);
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                "2\nboard-1\nQueue\nFinished\nWorking\n-\nn\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--no-github");
+
+        // then
+        Path workflow = tempDir.resolve("config").resolve("WORKFLOW.imported-queue.md");
+        result.assertSuccess();
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("- \"Queue\"", "in_progress_state: \"Working\"", "- \"Finished\"")
+                .doesNotContain("blocked_state: \"-\"", "list_name \"-\"");
+    }
+
+    @Test
+    void interactiveExistingBoardSetupCanOptOutOfDetectedOptionalLists() throws Exception {
+        // given
+        trello.givenRawBoardListsJson(
+                """
+                [
+                  {"id":"list-1","name":"Ready for Codex","closed":false,"pos":1},
+                  {"id":"list-2","name":"In Progress","closed":false,"pos":2},
+                  {"id":"list-3","name":"Blocked","closed":false,"pos":3},
+                  {"id":"list-4","name":"Human Review","closed":false,"pos":4},
+                  {"id":"list-5","name":"Done","closed":false,"pos":5}
+                ]
+                """);
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                "2\nboard-1\n-\n-\nn\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--no-github");
+
+        // then
+        Path workflow = tempDir.resolve("config").resolve("WORKFLOW.imported-queue.md");
+        result.assertSuccess()
+                .stdoutContains(
+                        "In-progress list name [In Progress, enter - for none]",
+                        "Blocked list name [Blocked, enter - for none]");
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("- \"Ready for Codex\"", "- \"Done\"")
+                .doesNotContain("in_progress_state:", "blocked_state:", "list_name \"Blocked\"");
+    }
+
+    @Test
+    void setupUsesSuffixedWorkflowPathWhenGeneratedWorkflowAlreadyExists() throws Exception {
+        // given
+        Path config = tempDir.resolve("config");
+        Files.createDirectories(config);
+        Path existingWorkflow = config.resolve("WORKFLOW.repeat-queue.md");
+        Files.writeString(existingWorkflow, "existing", StandardCharsets.UTF_8);
+        Path expectedWorkflow = config.resolve("WORKFLOW.repeat-queue-2.md");
+        Path env = tempDir.resolve(".env");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Repeat Queue",
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess();
+        assertThat(existingWorkflow).content(StandardCharsets.UTF_8).isEqualTo("existing");
+        assertThat(expectedWorkflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("board_id: \"abc123\"", "## Local And Non-GitHub Repository Work");
+        assertThat(commands.startedWorkflows).containsExactly(expectedWorkflow.toString());
+    }
+
+    @Test
+    void forcedWorkflowReplacementRemovesStaleManifestEntryWithSameWorkflowPath() throws Exception {
+        // given
+        Path config = tempDir.resolve("config");
+        Files.createDirectories(config);
+        Path workflow = config.resolve("WORKFLOW.shared.md");
+        Files.writeString(workflow, "existing", StandardCharsets.UTF_8);
+        Path manifest = config.resolve("connected-boards.json");
+        Files.writeString(
+                manifest,
+                """
+                {
+                  "boards": [
+                    {
+                      "boardId": "old-board",
+                      "boardKey": "old",
+                      "boardName": "Old Board",
+                      "boardUrl": "https://trello.example/old",
+                      "workflowPath": "%s",
+                      "envPath": "%s",
+                      "workspaceRoot": "%s",
+                      "serverPort": 18080,
+                      "githubEnabled": false,
+                      "additionalWritableRoots": [],
+                      "dangerFullAccess": false
+                    }
+                  ]
+                }
+                """
+                        .formatted(workflow, tempDir.resolve(".env.old"), tempDir.resolve("workspaces")),
+                StandardCharsets.UTF_8);
+        Path env = tempDir.resolve(".env");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "board-1",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--force",
+                "--no-github");
+
+        // then
+        result.assertSuccess();
+        assertThatManifest(manifest)
+                .hasBoardCount(1)
+                .hasBoard("Imported Queue")
+                .hasBoardId("Imported Queue", "board-1")
+                .hasNoBoard("Old Board");
+        assertThat(commands.commandEvents).containsExactly("stop:" + workflow, "start:" + workflow);
+    }
+
+    @Test
+    void forcedWorkflowReplacementStopsStaleWorkerEvenWhenStartupIsSkipped() throws Exception {
+        // given
+        Path config = tempDir.resolve("config");
+        Files.createDirectories(config);
+        Path workflow = config.resolve("WORKFLOW.shared-no-start.md");
+        Files.writeString(workflow, "existing", StandardCharsets.UTF_8);
+        Path manifest = config.resolve("connected-boards.json");
+        Files.writeString(
+                manifest,
+                """
+                {
+                  "boards": [
+                    {
+                      "boardId": "old-board",
+                      "boardKey": "old",
+                      "boardName": "Old Board",
+                      "boardUrl": "https://trello.example/old",
+                      "workflowPath": "%s",
+                      "envPath": "%s",
+                      "workspaceRoot": "%s",
+                      "serverPort": 18080,
+                      "githubEnabled": false,
+                      "additionalWritableRoots": [],
+                      "dangerFullAccess": false
+                    }
+                  ]
+                }
+                """
+                        .formatted(workflow, tempDir.resolve(".env.old"), tempDir.resolve("workspaces")),
+                StandardCharsets.UTF_8);
+        Path env = tempDir.resolve(".env");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "board-1",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--force",
+                "--no-start",
+                "--no-github");
+
+        // then
+        result.assertSuccess();
+        assertThatManifest(manifest)
+                .hasBoardCount(1)
+                .hasBoard("Imported Queue")
+                .hasBoardId("Imported Queue", "board-1")
+                .hasNoBoard("Old Board");
+        assertThat(commands.commandEvents).containsExactly("stop:" + workflow);
+        assertThat(commands.startedWorkflows).isEmpty();
+    }
+
+    @Test
+    void setupSurfacesManagedWorkerStartFailure() throws Exception {
+        // given
+        doThrow(new TrelloBoardSetupException("setup_worker_start_failed", "Unable to start managed worker."))
+                .when(workerManager)
+                .start(any(), any(), any(), any());
+        Path workflow = tempDir.resolve("WORKFLOW.no-command.md");
+        Path env = tempDir.resolve(".env");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "No Command Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertFailure(2).stderrContains("setup_worker_start_failed", "Unable to start managed worker.");
+    }
+
+    @Test
+    void setupSurfacesUnhealthyManagedWorkerStart() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.running-queue.md");
+        Path env = tempDir.resolve(".env");
+        doThrow(
+                        new TrelloBoardSetupException(
+                                "setup_start_unhealthy",
+                                "Symphony start returned successfully, but /api/v1/state did not report the expected workflow."))
+                .when(workerManager)
+                .start(any(), any(), any(), any());
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Running Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains("setup_start_unhealthy", "/api/v1/state", "Troubleshooting report written:");
+    }
+
+    @Test
+    void repairPortDoesNotTreatStoppedWorkflowNameContainingRunningAsActive() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.running-queue.md");
+        Path env = tempDir.resolve(".env.running-queue");
+        SetupRunResult firstResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Running Name Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+        commands.startedWorkflows.clear();
+        commands.startedEnvFiles.clear();
+        commands.stoppedWorkflows.clear();
+        commands.commandEvents.clear();
+        commands.close();
+        commands.statusByWorkflow.put(workflow.toString(), "stopped WORKFLOW.running-queue.md");
+
+        // when
+        SetupRunResult result = runSetup("repair-port", "--board", "Running Name Queue");
+
+        // then
+        firstResult.assertSuccess();
+        result.assertSuccess().stdoutContains("Updated \"Running Name Queue\"", "Restart: symphony-trello start --env");
+        assertThat(commands.commandEvents).isEmpty();
+        assertThat(commands.stoppedWorkflows).isEmpty();
+        assertThat(commands.startedEnvFiles).isEmpty();
+    }
+
+    @Test
+    void repairPortDryRunReportsPlannedPortWithoutChangingFilesOrWorker() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.repair-dry-run.md");
+        Path env = tempDir.resolve(".env.repair-dry-run");
+        Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
+        SetupRunResult firstResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Dry Run Repair Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--server-port",
+                String.valueOf(availablePort()),
+                "--no-github");
+        firstResult.assertSuccess();
+        String originalWorkflow = Files.readString(workflow, StandardCharsets.UTF_8);
+        String originalManifest = Files.readString(manifest, StandardCharsets.UTF_8);
+        commands.startedWorkflows.clear();
+        commands.startedEnvFiles.clear();
+        commands.stoppedWorkflows.clear();
+        commands.commandEvents.clear();
+
+        // when
+        SetupRunResult result = runSetup("repair-port", "--dry-run", "--board", "Dry Run Repair Queue");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("Dry run", "WOULD   update \"Dry Run Repair Queue\"", "WOULD   restart Symphony");
+        assertThat(Files.readString(workflow, StandardCharsets.UTF_8)).isEqualTo(originalWorkflow);
+        assertThat(Files.readString(manifest, StandardCharsets.UTF_8)).isEqualTo(originalManifest);
+        assertThat(commands.commandEvents).isEmpty();
+        assertThat(commands.stoppedWorkflows).isEmpty();
+        assertThat(commands.startedEnvFiles).isEmpty();
+    }
+
+    @ParameterizedTest
+    @MethodSource("repairPortBoardSelectors")
+    void repairPortAcceptsConnectedBoardNameIdKeyOrUrl(String selector) throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.repair-selector.md");
+        Path env = tempDir.resolve(".env.repair-selector");
+        SetupRunResult firstResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Repair Selector Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--server-port",
+                String.valueOf(availablePort()),
+                "--no-github");
+        commands.startedWorkflows.clear();
+        commands.startedEnvFiles.clear();
+        commands.stoppedWorkflows.clear();
+        commands.commandEvents.clear();
+
+        // when
+        SetupRunResult result = runSetup("repair-port", "--board", selector);
+
+        // then
+        firstResult.assertSuccess();
+        result.assertSuccess().stdoutContains("Updated \"Repair Selector Queue\"");
+    }
+
+    private static Stream<String> repairPortBoardSelectors() {
+        return Stream.of("Repair Selector Queue", "board-1", "abc123", "https://trello.com/b/abc123/board");
+    }
+
+    @Test
+    void repairPortRefusesDotenvHttpPortOverrideWithoutChangingFiles() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.dotenv-repair-override.md");
+        Path env = tempDir.resolve(".env.dotenv-repair-override");
+        Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
+        SetupRunResult firstResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Dotenv Repair Override Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+        String originalWorkflow = Files.readString(workflow, StandardCharsets.UTF_8);
+        String originalManifest = Files.readString(manifest, StandardCharsets.UTF_8);
+        Files.writeString(env, "SYMPHONY_HTTP_PORT=%d%n".formatted(availablePort()), StandardOpenOption.APPEND);
+        commands.startedWorkflows.clear();
+        commands.startedEnvFiles.clear();
+        commands.stoppedWorkflows.clear();
+        commands.commandEvents.clear();
+
+        // when
+        SetupRunResult result = runSetup("repair-port", "--board", "Dotenv Repair Override Queue");
+
+        // then
+        firstResult.assertSuccess();
+        result.assertFailure(2)
+                .stdoutDoesNotContain("Updated \"Dotenv Repair Override Queue\"")
+                .stderrContains(
+                        "setup_repair_port_http_override",
+                        "SYMPHONY_HTTP_PORT in " + env,
+                        "Remove or update SYMPHONY_HTTP_PORT/QUARKUS_HTTP_PORT");
+        assertThat(Files.readString(workflow, StandardCharsets.UTF_8)).isEqualTo(originalWorkflow);
+        assertThat(Files.readString(manifest, StandardCharsets.UTF_8)).isEqualTo(originalManifest);
+        assertThat(commands.commandEvents).isEmpty();
+        assertThat(commands.stoppedWorkflows).isEmpty();
+        assertThat(commands.startedEnvFiles).isEmpty();
+    }
+
+    @Test
+    void repairPortRefusesEnvironmentHttpPortOverrideWithoutChangingFiles() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.environment-repair-override.md");
+        Path env = tempDir.resolve(".env.environment-repair-override");
+        Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
+        SetupRunResult firstResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Environment Repair Override Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+        String originalWorkflow = Files.readString(workflow, StandardCharsets.UTF_8);
+        String originalManifest = Files.readString(manifest, StandardCharsets.UTF_8);
+        LocalSetup setupWithOverride = setupWithEnvironment(Map.of(
+                "SYMPHONY_TRELLO_CONFIG_DIR",
+                tempDir.resolve("config").toString(),
+                "SYMPHONY_TRELLO_COMMAND",
+                "symphony-trello",
+                "QUARKUS_HTTP_PORT",
+                String.valueOf(availablePort())));
+        commands.startedWorkflows.clear();
+        commands.startedEnvFiles.clear();
+        commands.stoppedWorkflows.clear();
+        commands.commandEvents.clear();
+
+        // when
+        SetupRunResult result =
+                runSetup(setupWithOverride, "repair-port", "--board", "Environment Repair Override Queue");
+
+        // then
+        firstResult.assertSuccess();
+        result.assertFailure(2)
+                .stdoutDoesNotContain("Updated \"Environment Repair Override Queue\"")
+                .stderrContains(
+                        "setup_repair_port_http_override",
+                        "QUARKUS_HTTP_PORT environment variable",
+                        "Remove or update SYMPHONY_HTTP_PORT/QUARKUS_HTTP_PORT");
+        assertThat(Files.readString(workflow, StandardCharsets.UTF_8)).isEqualTo(originalWorkflow);
+        assertThat(Files.readString(manifest, StandardCharsets.UTF_8)).isEqualTo(originalManifest);
+        assertThat(commands.commandEvents).isEmpty();
+        assertThat(commands.stoppedWorkflows).isEmpty();
+        assertThat(commands.startedEnvFiles).isEmpty();
+    }
+
+    @Test
+    void setupRestartsExistingBoardWithSavedEnvFile() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.saved-env.md");
+        Path env = tempDir.resolve(".env.saved");
+        SetupRunResult firstResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Saved Env Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+        commands.startedWorkflows.clear();
+        commands.startedEnvFiles.clear();
+
+        // when
+        SetupRunResult secondResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "new-key",
+                "--token",
+                "new-token",
+                "--no-github");
+
+        // then
+        firstResult.assertSuccess();
+        secondResult
+                .assertSuccess()
+                .stdoutContains(
+                        "Keeping connected Trello boards.",
+                        "You're good to go - your Trello board is now a queue for Codex work.");
+        assertThat(commands.startedWorkflows).containsExactly(workflow.toString());
+        assertThat(commands.startedEnvFiles).containsExactly(env.toString());
+    }
+
+    @Test
+    void setupKeepsExistingManifestWithoutFreshTrelloCredentials() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.saved-only.md");
+        Path env = tempDir.resolve(".env.saved-only");
+        SetupRunResult firstResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Saved Only Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+        commands.startedWorkflows.clear();
+        commands.startedEnvFiles.clear();
+        trello.memberLookups().clear();
+        trello.workspaceLookups().clear();
+
+        // when
+        SetupRunResult secondResult = runSetup("--non-interactive", "--no-github");
+
+        // then
+        firstResult.assertSuccess();
+        secondResult
+                .assertSuccess()
+                .stdoutContains(
+                        "Keeping connected Trello boards.",
+                        "You're good to go - your Trello board is now a queue for Codex work.");
+        assertThat(trello.memberLookups()).isEmpty();
+        assertThat(trello.workspaceLookups()).isEmpty();
+        assertThat(commands.startedWorkflows).containsExactly(workflow.toString());
+        assertThat(commands.startedEnvFiles).containsExactly(env.toString());
+    }
+
+    @Test
+    void existingBoardSetupDoesNotRequireWorkspaceSelection() throws Exception {
+        // given
+        trello.givenWorkspaces("[]");
+        Path env = tempDir.resolve(".env");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "board-1",
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        Path workflow = tempDir.resolve("config").resolve("WORKFLOW.imported-queue.md");
+        result.assertSuccess().stdoutContains("Board connected: \"Imported Queue\"");
+        assertThat(trello.workspaceLookups()).isEmpty();
+        assertThat(trello.boardLookups()).contains("/1/boards/board-1");
+        assertThat(workflow).exists();
+    }
+
+    @Test
+    void nonInteractiveNewBoardRequiresWorkspaceIdWhenTokenHasMultipleWorkspaces() {
+        // given
+        trello.givenWorkspaces(
+                """
+                [
+                  {"id":"workspace-1","name":"first","displayName":"First"},
+                  {"id":"workspace-2","name":"second","displayName":"Second"}
+                ]
+        """);
+        Path workflow = tempDir.resolve("WORKFLOW.multi-workspace.md");
+        Path env = tempDir.resolve(".env");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Ambiguous Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertFailure(2).stderrContains("setup_workspace_id_required", "--workspace-id");
+        assertThat(trello.createdLists()).isEmpty();
+        assertThat(workflow).doesNotExist();
+    }
+
+    @Test
+    void setupWithConnectAnotherGithubBoardConnectsNewBoardInsteadOfUpgradingExistingBoard() throws Exception {
+        // given
+        Path firstWorkflow = tempDir.resolve("WORKFLOW.local-first.md");
+        Path env = tempDir.resolve(".env");
+        SetupRunResult firstResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Local First",
+                "--workflow",
+                firstWorkflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+        commands.githubAuthenticated = true;
+        commands.startedWorkflows.clear();
+        commands.startedEnvFiles.clear();
+        trello.createdLists().clear();
+
+        // when
+        SetupRunResult secondResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "GitHub Explicit",
+                "--env",
+                env.toString(),
+                "--github");
+
+        // then
+        Path secondWorkflow = tempDir.resolve("config").resolve("WORKFLOW.github-explicit.md");
+        firstResult.assertSuccess();
+        secondResult.assertSuccess().stdoutContains("Board connected: \"GitHub Explicit\"");
+        assertThatWorkflow(firstWorkflow).hasNoGithubFlow();
+        assertThatWorkflow(secondWorkflow).hasGithubFlow();
+        assertThat(trello.createdLists())
+                .containsExactly(
+                        "Inbox", "Ready for Codex", "In Progress", "Blocked", "Human Review", "Merging", "Done");
+        assertThat(commands.stoppedWorkflows).containsExactly(firstWorkflow.toString());
+        assertThat(commands.startedWorkflows).containsExactly(secondWorkflow.toString());
+    }
+
+    @Test
+    void setupWithExplicitGithubBoardConnectsNewBoardInsteadOfUpgradingExistingBoard() throws Exception {
+        // given
+        Path firstWorkflow = tempDir.resolve("WORKFLOW.local-first.md");
+        Path env = tempDir.resolve(".env");
+        SetupRunResult firstResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Local First",
+                "--workflow",
+                firstWorkflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+        commands.githubAuthenticated = true;
+        commands.startedWorkflows.clear();
+        commands.startedEnvFiles.clear();
+        trello.createdLists().clear();
+
+        // when
+        SetupRunResult secondResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "GitHub Explicit",
+                "--env",
+                env.toString(),
+                "--github");
+
+        // then
+        Path secondWorkflow = tempDir.resolve("config").resolve("WORKFLOW.github-explicit.md");
+        firstResult.assertSuccess();
+        secondResult.assertSuccess().stdoutContains("Board connected: \"GitHub Explicit\"");
+        assertThatWorkflow(firstWorkflow).hasNoGithubFlow();
+        assertThatWorkflow(secondWorkflow).hasGithubFlow();
+        assertThat(trello.createdLists())
+                .containsExactly(
+                        "Inbox", "Ready for Codex", "In Progress", "Blocked", "Human Review", "Merging", "Done");
+        assertThat(commands.stoppedWorkflows).containsExactly(firstWorkflow.toString());
+        assertThat(commands.startedWorkflows).containsExactly(secondWorkflow.toString());
+    }
+
+    @Test
+    void nonInteractiveSetupWithExistingManifestConnectsExplicitBoardRequest() throws Exception {
+        // given
+        Path firstWorkflow = tempDir.resolve("WORKFLOW.first.md");
+        Path env = tempDir.resolve(".env");
+        SetupRunResult firstResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "First Queue",
+                "--workflow",
+                firstWorkflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+        commands.startedWorkflows.clear();
+        commands.startedEnvFiles.clear();
+        trello.createdLists().clear();
+
+        // when
+        SetupRunResult secondResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Second Queue",
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        Path secondWorkflow = tempDir.resolve("config").resolve("WORKFLOW.second-queue.md");
+        firstResult.assertSuccess();
+        secondResult.assertSuccess().stdoutContains("Board connected: \"Second Queue\"");
+        assertThat(trello.createdLists())
+                .containsExactly("Inbox", "Ready for Codex", "In Progress", "Blocked", "Human Review", "Done");
+        assertThat(secondWorkflow).content(StandardCharsets.UTF_8).contains("## Local And Non-GitHub Repository Work");
+        assertThat(commands.startedWorkflows).containsExactly(secondWorkflow.toString());
+    }
+
+    @Test
+    void disconnectBoardCancelsWhenBoardNumberIsBlank() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.disconnect.md");
+        Path env = tempDir.resolve(".env");
+        SetupRunResult firstResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Disconnect Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+        commands.startedWorkflows.clear();
+        commands.startedEnvFiles.clear();
+
+        // when
+        SetupRunResult secondResult = runSetupWithInput(
+                "3\n\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        SetupRunResult checkResult = runSetup("check", "--endpoint", endpoint(), "--no-github");
+        firstResult.assertSuccess();
+        secondResult.assertSuccess().stdoutContains("Disconnect cancelled.");
+        checkResult.assertSuccess().stdoutContains("local server: http://127.0.0.1:", "(already running)");
+    }
+
+    @Test
+    void disconnectBoardStopsSelectedManagedWorkflowAndRemovesManifestEntry() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.disconnect-stop.md");
+        Path env = tempDir.resolve(".env");
+        SetupRunResult firstResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Disconnect Stop Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+        commands.stoppedWorkflows.clear();
+
+        // when
+        SetupRunResult secondResult = runSetupWithInput(
+                "3\n1\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        SetupRunResult checkResult = runSetup("check", "--endpoint", endpoint(), "--no-github");
+        firstResult.assertSuccess();
+        secondResult.assertSuccess().stdoutContains("Symphony will stop managing \"Disconnect Stop Queue\"");
+        checkResult.assertSuccess().stdoutContains("No Trello boards connected to Symphony");
+        assertThat(commands.stoppedWorkflows).containsExactly(workflow.toString());
+    }
+
+    @Test
+    void disconnectBoardDoesNotRequireCodexAuthentication() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.disconnect-without-codex.md");
+        Path env = tempDir.resolve(".env");
+        SetupRunResult firstResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Disconnect Without Codex Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+        commands.codexAuthenticated = false;
+        commands.codexLoginCommands.clear();
+        commands.stoppedWorkflows.clear();
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                "3\n1\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        firstResult.assertSuccess();
+        result.assertSuccess().stdoutContains("Symphony will stop managing \"Disconnect Without Codex Queue\"");
+        assertThatManifest(tempDir.resolve("config").resolve("connected-boards.json"))
+                .hasBoardCount(0);
+        assertThat(commands.codexLoginCommands).isEmpty();
+        assertThat(commands.stoppedWorkflows).containsExactly(workflow.toString());
+    }
+
+    @Test
+    void setupKeepsWorkflowFrontMatterReadableWhenCodexAccessIsCustomized() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.codex-access.md");
+        Path env = tempDir.resolve(".env");
+        Path allowedPath = Path.of("relative-allowed-path");
+        Path expectedAllowedPath = allowedPath.toAbsolutePath().normalize();
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Codex Access Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--add-path",
+                allowedPath.toString(),
+                "--no-github");
+
+        // then
+        var loadedWorkflow = new WorkflowLoader().load(workflow);
+        result.assertSuccess();
+        assertThat(loadedWorkflow.config())
+                .containsKeys("tracker", "codex")
+                .extractingByKey("codex")
+                .asString()
+                .contains(expectedAllowedPath.toString());
+        assertThat(Files.readString(workflow, StandardCharsets.UTF_8)).doesNotStartWith("---\n---\n");
+    }
+
+    @Test
+    void rerunWithNameAndExistingBoardConnectsAnotherBoardWithoutKeepMenu() throws Exception {
+        // given
+        Path firstWorkflow = tempDir.resolve("WORKFLOW.first-name.md");
+        Path env = tempDir.resolve(".env.name-rerun");
+        SetupRunResult firstResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "First Name Queue",
+                "--workflow",
+                firstWorkflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+        commands.startedWorkflows.clear();
+        trello.createdLists().clear();
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                "n\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Docs Queue",
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        Path secondWorkflow = tempDir.resolve("config").resolve("WORKFLOW.docs-queue.md");
+        firstResult.assertSuccess();
+        result.assertSuccess()
+                .stdoutContains("Board connected: \"Docs Queue\"")
+                .stdoutDoesNotContain(
+                        "Keeping connected Trello boards", "What do you want to do?", "Choose board setup");
+        assertThat(secondWorkflow).exists();
+        assertThat(trello.createdLists())
+                .containsExactly("Inbox", "Ready for Codex", "In Progress", "Blocked", "Human Review", "Done");
+    }
+
+    @Test
+    void rerunWithBoardAndExistingBoardImportsThatBoardWithoutKeepMenu() throws Exception {
+        // given
+        Path firstWorkflow = tempDir.resolve("WORKFLOW.first-board.md");
+        Path env = tempDir.resolve(".env.board-rerun");
+        SetupRunResult firstResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "First Board Queue",
+                "--workflow",
+                firstWorkflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+        commands.startedWorkflows.clear();
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                "\n\nn\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "https://trello.com/b/abc123/imported",
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        firstResult.assertSuccess();
+        result.assertSuccess()
+                .stdoutContains("Board connected: \"Imported Queue\"")
+                .stdoutDoesNotContain(
+                        "Keeping connected Trello boards", "What do you want to do?", "Choose board setup");
+        assertThat(trello.boardLookups()).anySatisfy(path -> assertThat(path).contains("/1/boards/abc123"));
+    }
+
+    @ParameterizedTest
+    @MethodSource("broadWorkspacePathScenarios")
+    void setupHandlesBroadWorkspacePathConfirmation(BroadWorkspacePathScenario scenario) throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW." + scenario.fileSuffix() + ".md");
+        Path env = tempDir.resolve(".env");
+
+        // when
+        SetupRunResult result = scenario.input() == null
+                ? runSetup(broadWorkspacePathArgs(workflow, env, scenario))
+                : runSetupWithInput(scenario.input(), broadWorkspacePathArgs(workflow, env, scenario));
+
+        // then
+        if (scenario.expectedExitCode() == 0) {
+            result.assertSuccess();
+            if (!scenario.allowAllPaths()) {
+                result.stdoutContains("Adding / grants broad recursive read/write access");
+            }
+            if (scenario.expectedRootPersisted()) {
+                assertThatWorkflow(workflow).hasAdditionalWritableRoot(Path.of("/"));
+            } else {
+                assertThat(Files.readString(workflow, StandardCharsets.UTF_8))
+                        .doesNotContain("additional_writable_roots");
+            }
+        } else {
+            result.assertFailure(scenario.expectedExitCode()).stderrContains("setup_broad_path_requires_confirmation");
+            assertThat(workflow).doesNotExist();
+            assertThat(trello.createdLists()).isEmpty();
+        }
+    }
+
+    private static Stream<BroadWorkspacePathScenario> broadWorkspacePathScenarios() {
+        return Stream.of(
+                new BroadWorkspacePathScenario("interactive-declined", false, false, "\nn\nn\nn\n", 0, false),
+                new BroadWorkspacePathScenario("non-interactive-rejected", true, false, null, 2, false),
+                new BroadWorkspacePathScenario("non-interactive-allowed", true, true, null, 0, true));
+    }
+
+    private String[] broadWorkspacePathArgs(Path workflow, Path env, BroadWorkspacePathScenario scenario) {
+        List<String> args = new ArrayList<>();
+        if (scenario.nonInteractive()) {
+            args.add("--non-interactive");
+        }
+        args.addAll(List.of(
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Broad Path Queue " + scenario.fileSuffix(),
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--add-path",
+                "/"));
+        if (scenario.allowAllPaths()) {
+            args.add("--allow-all-paths");
+        }
+        args.add("--no-github");
+        return args.toArray(String[]::new);
+    }
+
+    private record BroadWorkspacePathScenario(
+            String fileSuffix,
+            boolean nonInteractive,
+            boolean allowAllPaths,
+            String input,
+            int expectedExitCode,
+            boolean expectedRootPersisted) {
+        @Override
+        public String toString() {
+            return fileSuffix;
+        }
+    }
+
+    @Test
+    void setupReplacesExistingExportedCredentialsInSelectedEnvFile() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.replaced-env.md");
+        Path env = tempDir.resolve(".env.custom");
+        Files.writeString(
+                env,
+                """
+                export TRELLO_API_KEY=old-key
+                TRELLO_API_TOKEN = old-token
+                """,
+                StandardCharsets.UTF_8);
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "new-key",
+                "--token",
+                "new-token",
+                "--board-name",
+                "Replaced Env Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess();
+        assertThat(env)
+                .content(StandardCharsets.UTF_8)
+                .contains("TRELLO_API_KEY=new-key", "TRELLO_API_TOKEN=new-token")
+                .doesNotContain("old-key", "old-token", "export TRELLO_API_KEY", "TRELLO_API_TOKEN =");
+    }
+
+    @ParameterizedTest
+    @MethodSource("unsafeEnvPathScenarios")
+    void setupRejectsEnvPathsThatWouldPersistSecrets(UnsafeEnvPathScenario scenario) {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW." + scenario.fileSuffix() + ".md");
+        Path env = tempDir.resolve(scenario.envFileName());
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Unsafe Env " + scenario.fileSuffix(),
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertFailure(2).stderrContains(scenario.expectedErrorFragments());
+        assertThat(trello.createdLists()).isEmpty();
+        assertThat(env).doesNotExist();
+    }
+
+    private static Stream<UnsafeEnvPathScenario> unsafeEnvPathScenarios() {
+        return Stream.of(
+                new UnsafeEnvPathScenario("trackable", "trello.env", "setup_env_path_not_ignored"),
+                new UnsafeEnvPathScenario(
+                        "template", ".env.example", "setup_env_path_not_ignored", "tracked template"));
+    }
+
+    private record UnsafeEnvPathScenario(String fileSuffix, String envFileName, String... expectedErrorFragments) {
+        @Override
+        public String toString() {
+            return fileSuffix;
+        }
+    }
+
+    @Test
+    void explicitWorkflowPathFailsWhenFileExistsWithoutForce() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("existing.md");
+        Files.writeString(workflow, "existing", StandardCharsets.UTF_8);
+        Path env = tempDir.resolve(".env");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Explicit Workflow",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertFailure(2).stderrContains("setup_workflow_exists");
+        assertThat(trello.memberLookups()).isEmpty();
+        assertThat(trello.workspaceLookups()).isEmpty();
+        assertThat(trello.boardLookups()).isEmpty();
+        assertThat(trello.createdLists()).isEmpty();
+        assertThat(env).doesNotExist();
+        assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo("existing");
+    }
+
+    @Test
+    void setupWithGithubCreatesMergingWorkflowWhenGithubIsAuthenticated() {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.github.md");
+        Path env = tempDir.resolve(".env");
+        commands.githubAuthenticated = true;
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "GitHub Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString());
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "GitHub CLI authenticated",
+                        "You're good to go - your Trello board is now a queue for Codex work.",
+                        "Symphony picks it up, moves it to `In Progress`, runs Codex, and opens or updates a pull request.",
+                        "Review the PR. If you want changes, comment on the PR or Trello card, then move the Trello card back to `Ready for Codex`.",
+                        "When the PR is ready to merge, move the Trello card to `Merging`; Symphony will re-check it, merge it, and move the Trello card to `Done`.")
+                .stdoutDoesNotContain("workflow's Trello handoff lists", "\u2019", "\u2014");
+        assertThat(trello.createdLists())
+                .containsExactly(
+                        "Inbox", "Ready for Codex", "In Progress", "Blocked", "Human Review", "Merging", "Done");
+        assertThatWorkflow(workflow).hasGithubFlow().hasMerging();
+        assertThat(commands.startedWorkflows).containsExactly(workflow.toString());
+    }
+
+    @Test
+    void interactiveSetupWithGithubRunsInlineLoginWhenGithubCliIsInstalledButNotAuthenticated() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.github-login.md");
+        Path env = tempDir.resolve(".env");
+        commands.githubAuthenticated = false;
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                "",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "GitHub Login Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--github");
+
+        // then
+        result.assertSuccess().stdoutContains("Starting GitHub login:", "OK  GitHub CLI authenticated as alex-example");
+        assertThat(commands.githubLoginCommands).containsExactly("gh auth login");
+    }
+
+    @Test
+    void interactiveSetupWithGithubStopsWhenMissingGithubCliInstallIsDeclined() throws Exception {
+        // given
+        commands.githubCliAvailable = false;
+        Path workflow = tempDir.resolve("WORKFLOW.github-cli-declined.md");
+        Path env = tempDir.resolve(".env");
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                "n\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "GitHub CLI Declined Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--github");
+
+        // then
+        result.assertFailure(2)
+                .stdoutContains("GitHub CLI is missing.", "Proposed install command:")
+                .stderrContains("setup_github_cli_declined");
+        assertThat(commands.githubLoginCommands).isEmpty();
+    }
+
+    @Test
+    void interactiveSetupWithGithubInstallsMissingGithubCliThenRunsInlineLogin() throws Exception {
+        // given
+        commands.githubCliAvailable = false;
+        Path workflow = tempDir.resolve("WORKFLOW.github-cli-installed.md");
+        Path env = tempDir.resolve(".env");
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                "y\n\nn\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "GitHub CLI Install Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--github");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("GitHub CLI is missing.", "Starting GitHub login:", "OK  GitHub CLI authenticated");
+        assertThat(commands.commandEvents).contains("install-gh");
+        assertThat(commands.githubLoginCommands).containsExactly("gh auth login");
+    }
+
+    @Test
+    void interactiveSetupWithGithubInstallsMissingGithubCliWithWingetOnWindows() throws Exception {
+        // given
+        commands.githubCliAvailable = false;
+        commands.wingetAvailable = true;
+        String previousOsName = System.getProperty("os.name");
+        Path workflow = tempDir.resolve("WORKFLOW.github-cli-winget.md");
+        Path env = tempDir.resolve(".env");
+
+        // when
+        SetupRunResult result;
+        try {
+            System.setProperty("os.name", "Windows 11");
+            result = runSetupWithInput(
+                    "y\n\nn\nn\n",
+                    "--endpoint",
+                    endpoint(),
+                    "--key",
+                    "key",
+                    "--token",
+                    "token",
+                    "--board-name",
+                    "GitHub CLI Winget Queue",
+                    "--workflow",
+                    workflow.toString(),
+                    "--env",
+                    env.toString(),
+                    "--github");
+        } finally {
+            System.setProperty("os.name", previousOsName);
+        }
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("winget install --id GitHub.cli --source winget", "OK  GitHub CLI authenticated");
+        assertThat(commands.commandEvents).contains("install-gh-winget");
+        assertThat(commands.githubLoginCommands).containsExactly("gh auth login");
+    }
+
+    @Test
+    void setupRejectsJavaRuntimeWithoutJavacForSourceInstall() {
+        // given
+        commands.javacAvailable = false;
+
+        // when
+        SetupRunResult result = runSetup("check", "--no-github");
+
+        // then
+        result.assertFailure(2).stderrEmpty().stdoutContains("NEEDED  Java 25+ JDK");
+    }
+
+    @Test
+    void interactiveSetupUsesCodexDeviceLoginWhenAuthIsMissing() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.codex-login.md");
+        Path env = tempDir.resolve(".env");
+        commands.codexAuthenticated = false;
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                "n\n\nn\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Codex Login Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("Can this machine open a browser for Codex login? [Y/n]")
+                .stdoutDoesNotContain("Device auth");
+        assertThat(commands.codexLoginCommands).containsExactly("codex login --device-auth");
+    }
+
+    @ParameterizedTest
+    @MethodSource("nonInteractiveGithubFailureScenarios")
+    void setupWithGithubFailsBeforeCreatingBoardWhenCliOrAuthIsMissing(NonInteractiveGithubFailureScenario scenario) {
+        // given
+        commands.githubCliAvailable = scenario.githubCliAvailable();
+        Path workflow = tempDir.resolve("WORKFLOW." + scenario.fileSuffix() + ".md");
+        Path env = tempDir.resolve(".env");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "GitHub Failure " + scenario.fileSuffix(),
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--github");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(scenario.expectedErrorFragments())
+                .stderrDoesNotContain(scenario.forbiddenErrorFragments());
+        assertThat(trello.createdLists()).isEmpty();
+        assertThat(workflow).doesNotExist();
+        assertThat(commands.githubLoginCommands).isEmpty();
+    }
+
+    private static Stream<NonInteractiveGithubFailureScenario> nonInteractiveGithubFailureScenarios() {
+        return Stream.of(
+                new NonInteractiveGithubFailureScenario(
+                        "unauthenticated-gh",
+                        true,
+                        new String[] {"setup_github_auth_required", "gh auth login"},
+                        new String[] {"setup_github_cli_required"}),
+                new NonInteractiveGithubFailureScenario(
+                        "missing-gh",
+                        false,
+                        new String[] {"setup_github_cli_required", "Install the GitHub CLI"},
+                        new String[] {"setup_github_auth_required"}));
+    }
+
+    private record NonInteractiveGithubFailureScenario(
+            String fileSuffix,
+            boolean githubCliAvailable,
+            String[] expectedErrorFragments,
+            String[] forbiddenErrorFragments) {
+        @Override
+        public String toString() {
+            return fileSuffix;
+        }
+    }
+}

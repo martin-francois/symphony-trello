@@ -47,8 +47,17 @@ public final class TrelloBoardSetup {
             RECOMMENDED_REVIEW_STATE,
             RECOMMENDED_MERGING_STATE,
             "Done");
+    public static final List<String> RECOMMENDED_NON_GITHUB_LISTS = List.of(
+            "Inbox",
+            RECOMMENDED_ACTIVE_STATE,
+            RECOMMENDED_IN_PROGRESS_STATE,
+            RECOMMENDED_BLOCKED_STATE,
+            RECOMMENDED_REVIEW_STATE,
+            "Done");
     public static final List<String> RECOMMENDED_ACTIVE_STATES =
             List.of(RECOMMENDED_ACTIVE_STATE, RECOMMENDED_IN_PROGRESS_STATE, RECOMMENDED_MERGING_STATE);
+    public static final List<String> RECOMMENDED_NON_GITHUB_ACTIVE_STATES =
+            List.of(RECOMMENDED_ACTIVE_STATE, RECOMMENDED_IN_PROGRESS_STATE);
     public static final List<String> RECOMMENDED_TERMINAL_STATES = List.of("Done");
 
     private static final List<String> SYSTEM_TERMINAL_STATES =
@@ -93,8 +102,10 @@ public final class TrelloBoardSetup {
         String boardKey = boardKey(board);
         String boardUrl = string(board.get("url"));
 
+        boolean githubEnabled = request.githubIntegration().enabled();
         List<String> createdLists = new ArrayList<>();
-        for (String listName : RECOMMENDED_LISTS) {
+        List<String> recommendedLists = githubEnabled ? RECOMMENDED_LISTS : RECOMMENDED_NON_GITHUB_LISTS;
+        for (String listName : recommendedLists) {
             postMap(
                     request.endpoint(),
                     "lists",
@@ -108,15 +119,16 @@ public final class TrelloBoardSetup {
                 request.force(),
                 workflowTemplate(
                         boardKey,
-                        RECOMMENDED_ACTIVE_STATES,
+                        githubEnabled ? RECOMMENDED_ACTIVE_STATES : RECOMMENDED_NON_GITHUB_ACTIVE_STATES,
                         RECOMMENDED_TERMINAL_STATES,
                         RECOMMENDED_IN_PROGRESS_STATE,
                         RECOMMENDED_REVIEW_STATE,
                         RECOMMENDED_BLOCKED_STATE,
-                        RECOMMENDED_MERGING_STATE,
+                        githubEnabled ? RECOMMENDED_MERGING_STATE : null,
                         request.workspaceRoot(),
                         serverPort,
-                        request.maxConcurrentAgents()));
+                        request.maxConcurrentAgents(),
+                        githubEnabled));
 
         return new NewBoardResult(
                 boardId, boardKey, request.boardName(), boardUrl, createdLists, workflowPath, serverPort);
@@ -159,6 +171,43 @@ public final class TrelloBoardSetup {
                 .toList();
     }
 
+    public MemberInfo getMemberInfo(MemberInfoRequest request) {
+        request.validate();
+        Map<String, Object> member = getMap(
+                request.endpoint(), "members/me", Map.of("fields", "id,username,fullName"), request.credentials());
+        String username = requiredString(member, "username");
+        return new MemberInfo(
+                requiredString(member, "id"), username, fallback(string(member.get("fullName")), username));
+    }
+
+    public BoardInfo getBoardInfo(BoardInfoRequest request) {
+        request.validate();
+        Map<String, Object> board = getMap(
+                request.endpoint(),
+                "boards/" + encodeSegment(request.boardId()),
+                Map.of("fields", "id,name,shortLink,url,closed"),
+                request.credentials());
+        if (bool(board.get("closed"))) {
+            throw new TrelloBoardSetupException("trello_board_closed", "Trello board is archived");
+        }
+        return new BoardInfo(
+                requiredString(board, "id"), boardKey(board), requiredString(board, "name"), string(board.get("url")));
+    }
+
+    public List<String> getOpenBoardListNames(BoardInfoRequest request) {
+        request.validate();
+        return getList(
+                        request.endpoint(),
+                        "boards/" + encodeSegment(request.boardId()) + "/lists",
+                        Map.of("filter", "open", "fields", "id,name,closed,pos"),
+                        request.credentials())
+                .stream()
+                .map(TrelloBoardSetup::toBoardList)
+                .filter(list -> !list.closed())
+                .map(BoardList::name)
+                .toList();
+    }
+
     public ImportBoardResult importExistingBoard(ImportBoardRequest request) {
         request.validate();
         Map<String, Object> board = getMap(
@@ -180,10 +229,10 @@ public final class TrelloBoardSetup {
                 .map(TrelloBoardSetup::toBoardList)
                 .toList();
 
-        List<String> openListNames = lists.stream()
+        List<String> openListNames = new ArrayList<>(lists.stream()
                 .filter(list -> !list.closed())
                 .map(BoardList::name)
-                .toList();
+                .toList());
         List<String> activeStates =
                 request.activeStates().isEmpty() ? defaultActiveStates(openListNames) : request.activeStates();
         if (activeStates.isEmpty()) {
@@ -195,22 +244,40 @@ public final class TrelloBoardSetup {
 
         List<String> terminalStates =
                 request.terminalStates().isEmpty() ? defaultTerminalStates(openListNames) : request.terminalStates();
-        String blockedState =
-                blank(request.blockedState()) ? defaultBlockedState(openListNames) : request.blockedState();
+        boolean canCreateMergingList = request.githubIntegration().enabled()
+                && request.createMissingGithubLists()
+                && !terminalStates.isEmpty()
+                && openListNames.stream().noneMatch(name -> name.equalsIgnoreCase(RECOMMENDED_MERGING_STATE));
+        List<String> validationListNames =
+                canCreateMergingList ? withOptionalListName(openListNames, RECOMMENDED_MERGING_STATE) : openListNames;
+        String blockedState = "-".equals(request.blockedState())
+                ? null
+                : blank(request.blockedState()) ? defaultBlockedState(openListNames) : request.blockedState();
         String inProgressState =
                 request.detectInProgressState() ? defaultInProgressState(openListNames) : request.inProgressState();
-        String mergingState = defaultMergingState(openListNames, terminalStates);
+        String mergingState =
+                request.githubIntegration().enabled() ? defaultMergingState(validationListNames, terminalStates) : null;
+        boolean shouldCreateMergingList = canCreateMergingList && !blank(mergingState);
         String reviewState = defaultReviewState(openListNames);
         activeStates = withOptionalActiveState(activeStates, inProgressState);
         activeStates = withOptionalActiveState(activeStates, mergingState);
-        validateConfiguredLists("active", activeStates, openListNames);
+        validateConfiguredLists("active", activeStates, validationListNames);
         validateConfiguredLists("terminal", terminalStates, openListNames);
         validateConfiguredList("in-progress", inProgressState, openListNames);
         validateConfiguredList("blocked", blockedState, openListNames);
-        validateConfiguredList("merging", mergingState, openListNames);
+        validateConfiguredList("merging", mergingState, validationListNames);
+        ensureWorkflowWritable(request.workflowPath(), request.force());
+        int serverPort = resolveServerPort(request.workflowPath(), request.serverPort(), request.force());
+        if (shouldCreateMergingList) {
+            postMap(
+                    request.endpoint(),
+                    "lists",
+                    orderedMap("name", RECOMMENDED_MERGING_STATE, "idBoard", resolvedBoardId, "pos", "bottom"),
+                    request.credentials());
+            openListNames.add(RECOMMENDED_MERGING_STATE);
+        }
 
         String boardKey = boardKey(board);
-        int serverPort = resolveServerPort(request.workflowPath(), request.serverPort(), request.force());
         writeWorkflow(
                 request.workflowPath(),
                 request.force(),
@@ -224,7 +291,8 @@ public final class TrelloBoardSetup {
                         mergingState,
                         request.workspaceRoot(),
                         serverPort,
-                        request.maxConcurrentAgents()));
+                        request.maxConcurrentAgents(),
+                        request.githubIntegration().enabled()));
 
         return new ImportBoardResult(
                 resolvedBoardId,
@@ -510,9 +578,7 @@ public final class TrelloBoardSetup {
     }
 
     private static void validateServerPort(int port, String label) {
-        if (port < 0 || port > 65535) {
-            throw new TrelloBoardSetupException("setup_invalid_server_port", label + " must be between 0 and 65535");
-        }
+        LocalPort.validateWorkflowServerPort(port, label);
     }
 
     private static Path ensureWorkflowWritable(Path workflowPath, boolean force) {
@@ -535,7 +601,8 @@ public final class TrelloBoardSetup {
             String mergingState,
             Path workspaceRoot,
             int serverPort,
-            int maxAgents) {
+            int maxAgents,
+            boolean githubEnabled) {
         String doneState = landingDoneState(terminalStates);
         List<String> handoffStates =
                 allowedMoveStates(inProgressState, reviewState, blockedState, mergingState, doneState);
@@ -547,6 +614,7 @@ public final class TrelloBoardSetup {
                   api_token: $TRELLO_API_TOKEN
                   board_id: %s
                   active_states:
+                %s
                 %s
                 %s
                   blocker_enforced_states:
@@ -583,19 +651,7 @@ public final class TrelloBoardSetup {
 
                 %s
 
-                ## Repository Skills
-
-                Use the workspace-local skills under `.codex/skills/symphony-trello-*` when they fit.
-                Symphony installs these skill files in the per-card workspace after workspace sync hooks
-                and before Codex starts, so they are available even when the target repository does not
-                provide its own skills:
-
-                - `%s` for workpad updates.
-                - `%s` for Trello pickup, review, blocked, merge, and done handoff.
-                - `%s` when a pull request or branch is involved.
-                - `%s`, `%s`, and `%s` for branch, commit, and PR hygiene.
-                - `%s` only when this workflow says the current Trello list is Merging.
-                - `%s` when diagnosing a stuck or retrying run.
+                %s
 
                 Read the Trello description carefully, inspect the repository, make the smallest maintainable change,
                 run relevant verification, and leave the workspace in a reviewable state.
@@ -650,7 +706,8 @@ public final class TrelloBoardSetup {
                 .formatted(
                         yamlScalar(boardId),
                         yamlList(activeStates),
-                        inProgressStateYaml(inProgressState),
+                        optionalTrackerStateYaml("in_progress_state", inProgressState),
+                        optionalTrackerStateYaml("blocked_state", blockedState),
                         yamlList(activeStates),
                         yamlList(withSystemTerminalStates(terminalStates)),
                         yamlScalar(workspaceRoot.toString()),
@@ -658,6 +715,77 @@ public final class TrelloBoardSetup {
                         trelloToolsYaml(handoffStates),
                         maxAgents,
                         workpadPrompt(!handoffStates.isEmpty()),
+                        repositorySkillsPrompt(githubEnabled),
+                        operatingPosturePrompt(!handoffStates.isEmpty()),
+                        routingPrompt(
+                                activeStates, terminalStates, inProgressState, reviewState, blockedState, mergingState),
+                        executionPrompt(
+                                reviewState,
+                                blockedDestination(reviewState, blockedState),
+                                !handoffStates.isEmpty(),
+                                githubEnabled),
+                        validationPrompt(!handoffStates.isEmpty(), reviewState),
+                        prPublicationPrompt(
+                                reviewState,
+                                blockedDestination(reviewState, blockedState),
+                                !handoffStates.isEmpty(),
+                                githubEnabled),
+                        prFeedbackPrompt(
+                                reviewState,
+                                blockedDestination(reviewState, blockedState),
+                                !handoffStates.isEmpty(),
+                                githubEnabled),
+                        reworkPrompt(activeStates, reviewState, mergingState, !handoffStates.isEmpty(), githubEnabled),
+                        landingPrompt(
+                                mergingState, doneState, blockedDestination(reviewState, blockedState), githubEnabled),
+                        pickupPrompt(activeStates, inProgressState, mergingState),
+                        completionBarPrompt(
+                                reviewState,
+                                blockedDestination(reviewState, blockedState),
+                                !handoffStates.isEmpty(),
+                                githubEnabled),
+                        handoffPrompt(reviewState, blockedState, !handoffStates.isEmpty(), githubEnabled));
+    }
+
+    private static String repositorySkillsPrompt(boolean githubEnabled) {
+        if (!githubEnabled) {
+            return """
+                    ## Repository Skills
+
+                    Use the workspace-local skills under `.codex/skills/symphony-trello-*` when they fit.
+                    Symphony installs these skill files in the per-card workspace after workspace sync hooks
+                    and before Codex starts, so they are available even when the target repository does not
+                    provide its own skills:
+
+                    - `%s` for workpad updates.
+                    - `%s` for Trello pickup, review, blocked, and done handoff.
+                    - `%s` and `%s` for branch and commit hygiene.
+                    - `%s` when diagnosing a stuck or retrying run.
+                    """
+                    .formatted(
+                            skillPath("trello-workpad"),
+                            skillPath("trello-handoff"),
+                            skillPath("repo-sync"),
+                            skillPath("commit"),
+                            skillPath("debug"))
+                    .stripTrailing();
+        }
+        return """
+                ## Repository Skills
+
+                Use the workspace-local skills under `.codex/skills/symphony-trello-*` when they fit.
+                Symphony installs these skill files in the per-card workspace after workspace sync hooks
+                and before Codex starts, so they are available even when the target repository does not
+                provide its own skills:
+
+                - `%s` for workpad updates.
+                - `%s` for Trello pickup, review, blocked, merge, and done handoff.
+                - `%s` when a pull request or branch is involved.
+                - `%s`, `%s`, and `%s` for branch, commit, and PR hygiene.
+                - `%s` only when this workflow says the current Trello list is Merging.
+                - `%s` when diagnosing a stuck or retrying run.
+                """
+                .formatted(
                         skillPath("trello-workpad"),
                         skillPath("trello-handoff"),
                         skillPath("review-sweep"),
@@ -665,23 +793,8 @@ public final class TrelloBoardSetup {
                         skillPath("commit"),
                         skillPath("push-pr"),
                         skillPath("land"),
-                        skillPath("debug"),
-                        operatingPosturePrompt(!handoffStates.isEmpty()),
-                        routingPrompt(
-                                activeStates, terminalStates, inProgressState, reviewState, blockedState, mergingState),
-                        executionPrompt(
-                                reviewState, blockedDestination(reviewState, blockedState), !handoffStates.isEmpty()),
-                        validationPrompt(!handoffStates.isEmpty(), reviewState),
-                        prPublicationPrompt(
-                                reviewState, blockedDestination(reviewState, blockedState), !handoffStates.isEmpty()),
-                        prFeedbackPrompt(
-                                reviewState, blockedDestination(reviewState, blockedState), !handoffStates.isEmpty()),
-                        reworkPrompt(activeStates, reviewState, mergingState, !handoffStates.isEmpty()),
-                        landingPrompt(mergingState, doneState, blockedDestination(reviewState, blockedState)),
-                        pickupPrompt(activeStates, inProgressState, mergingState),
-                        completionBarPrompt(
-                                reviewState, blockedDestination(reviewState, blockedState), !handoffStates.isEmpty()),
-                        handoffPrompt(reviewState, blockedState, !handoffStates.isEmpty()));
+                        skillPath("debug"))
+                .stripTrailing();
     }
 
     private static String workpadPrompt(boolean workpadToolEnabled) {
@@ -726,7 +839,8 @@ public final class TrelloBoardSetup {
                 .stripTrailing();
     }
 
-    private static String executionPrompt(String reviewState, String blockedDestination, boolean workpadToolEnabled) {
+    private static String executionPrompt(
+            String reviewState, String blockedDestination, boolean workpadToolEnabled, boolean githubEnabled) {
         String reviewHandoff = blank(reviewState) ? "human review" : quote(reviewState);
         String blockedText = blank(blockedDestination)
                 ? "record a blocker in the final response"
@@ -746,8 +860,11 @@ public final class TrelloBoardSetup {
                 : """
 
                 Do not report completed work as ready until the final response contains the implementation, validation,
-                PR, and blocker details that apply to the card.
+                repository, and blocker details that apply to the card.
                 """;
+        String publicationStep = githubEnabled
+                ? "Publish or update a pull request when repository changes should be reviewed."
+                : "For repository changes, create a local commit or patch according to the card and workflow.";
         return """
                 ## Execution Flow
 
@@ -759,20 +876,21 @@ public final class TrelloBoardSetup {
                 6. %s
                 7. Run the validation required by the card and the repository.
                 8. Commit logical changes with a clear message when repository files changed.
-                9. Publish or update a pull request when repository changes should be reviewed.
+                9. %s
                 10. Only move to %s after the completion bar below is met. If the work cannot safely reach the
                     completion bar, %s.
                 %s
                 """
-                .formatted(planningRecord, progressRecord, reviewHandoff, blockedText, duplicateProgress)
+                .formatted(
+                        planningRecord, progressRecord, publicationStep, reviewHandoff, blockedText, duplicateProgress)
                 .stripTrailing();
     }
 
-    private static String inProgressStateYaml(String inProgressState) {
-        if (blank(inProgressState)) {
+    private static String optionalTrackerStateYaml(String key, String value) {
+        if (blank(value)) {
             return "";
         }
-        return "  in_progress_state: " + yamlScalar(inProgressState);
+        return "  " + key + ": " + yamlScalar(value);
     }
 
     private static String trelloToolsYaml(List<String> handoffStates) {
@@ -829,7 +947,27 @@ public final class TrelloBoardSetup {
     }
 
     private static String prPublicationPrompt(
-            String reviewState, String blockedDestination, boolean workpadToolEnabled) {
+            String reviewState, String blockedDestination, boolean workpadToolEnabled, boolean githubEnabled) {
+        if (!githubEnabled) {
+            String reviewHandoff = blank(reviewState) ? "human review" : quote(reviewState);
+            String localEvidence = workpadToolEnabled ? "the workpad and handoff comment" : "the final response";
+            return """
+                    ## Local And Non-GitHub Repository Work
+
+                    This workflow does not have GitHub PR integration configured. Do not create pull requests,
+                    do not require GitHub auth, and do not refer to a landing approval list. For repository-changing work,
+                    make the smallest maintainable local commit when a Git repository is available, run relevant
+                    validation, and record the branch, commit, workspace path, and validation evidence in %s before
+                    moving the card to %s.
+
+                    If the card explicitly asks for a patch instead of a commit, leave the patch or changed files in
+                    the workspace and record the exact location. If the work needs a remote Git provider or permission
+                    that is not available in this non-GitHub workflow, treat that as a blocker instead of inventing a
+                    GitHub PR flow.
+                    """
+                    .formatted(localEvidence, reviewHandoff)
+                    .stripTrailing();
+        }
         String reviewHandoff = blank(reviewState) ? "human review" : quote(reviewState);
         String blockedText = blank(blockedDestination)
                 ? "record a blocker in the final response"
@@ -884,7 +1022,18 @@ public final class TrelloBoardSetup {
                 .stripTrailing();
     }
 
-    private static String prFeedbackPrompt(String reviewState, String blockedDestination, boolean workpadToolEnabled) {
+    private static String prFeedbackPrompt(
+            String reviewState, String blockedDestination, boolean workpadToolEnabled, boolean githubEnabled) {
+        if (!githubEnabled) {
+            return """
+                    ## Non-GitHub Review Feedback
+
+                    If a reviewed card is moved back to an active list, reread the Trello card description and Trello
+                    comments, then continue from the existing workspace or local branch when possible. Do not require
+                    PR comments, PR checks, or GitHub review state in this workflow.
+                    """
+                    .stripTrailing();
+        }
         String reviewHandoff = blank(reviewState) ? "ready-for-review handoff" : quote(reviewState);
         String blockedText = blank(blockedDestination)
                 ? "treat the card as blocked"
@@ -930,11 +1079,40 @@ public final class TrelloBoardSetup {
     }
 
     private static String reworkPrompt(
-            List<String> activeStates, String reviewState, String mergingState, boolean workpadToolEnabled) {
+            List<String> activeStates,
+            String reviewState,
+            String mergingState,
+            boolean workpadToolEnabled,
+            boolean githubEnabled) {
         String reviewHandoff = blank(reviewState) ? "human review" : quote(reviewState);
         List<String> implementationStates = implementationActiveStates(activeStates, mergingState);
         String activeText =
                 implementationStates.isEmpty() ? "an active implementation list" : quotedList(implementationStates);
+        if (!githubEnabled) {
+            String contextSources =
+                    workpadToolEnabled ? "new Trello comments and the existing workpad" : "new Trello comments";
+            String reworkPlan = workpadToolEnabled
+                    ? "update the workpad with a short rework plan"
+                    : "record a short rework plan for the final response";
+            String reworkEvidence = workpadToolEnabled
+                    ? "update the existing workpad with the rework evidence, and add one concise handoff comment. Do not create\n"
+                            + "duplicate progress summary comments when the workpad already contains the details."
+                    : "include the rework evidence in the final response.";
+            return """
+                    ## Rework From Human Review
+
+                    If a human moves a reviewed card from %s back to %s, treat the next run as rework. Before changing
+                    code, reread the full card description and %s.
+
+                    Identify what changed since the last handoff and %s that says what will be done differently.
+                    Preserve completed work that still satisfies the current card; do not restart from scratch or create
+                    a new branch unless the Trello card or a human explicitly asks for a reset.
+
+                    Before returning the card to %s, rerun card-specific validation and %s
+                    """
+                    .formatted(reviewHandoff, activeText, contextSources, reworkPlan, reviewHandoff, reworkEvidence)
+                    .stripTrailing();
+        }
         String contextSources = workpadToolEnabled
                 ? "new Trello comments, existing workpad, linked PR comments,"
                 : "new Trello comments, linked PR comments,";
@@ -971,13 +1149,24 @@ public final class TrelloBoardSetup {
                 .stripTrailing();
     }
 
-    private static String landingPrompt(String mergingState, String doneState, String blockedDestination) {
+    private static String landingPrompt(
+            String mergingState, String doneState, String blockedDestination, boolean githubEnabled) {
+        if (!githubEnabled) {
+            return """
+                    ## Landing
+
+                    This workflow has no GitHub landing flow configured. Do not merge remote branches or land pull
+                    requests from this workflow. Move completed local/non-GitHub work to the configured review or done
+                    destination described in the handoff rules.
+                    """
+                    .stripTrailing();
+        }
         if (blank(mergingState)) {
             return """
                     ## Landing
 
                     This workflow has no landing approval list configured. Do not merge or land from Human Review.
-                    A human must land outside Symphony or add a Merging-style list to the workflow active lists
+                    A human must land outside Symphony or add a landing approval list to the workflow active lists
                     and Trello move allowlist.
                     """
                     .stripTrailing();
@@ -1061,8 +1250,12 @@ public final class TrelloBoardSetup {
                 .stripTrailing();
     }
 
-    private static String handoffPrompt(String reviewState, String blockedState, boolean workpadToolEnabled) {
+    private static String handoffPrompt(
+            String reviewState, String blockedState, boolean workpadToolEnabled, boolean githubEnabled) {
         String blockedDestination = blockedDestination(reviewState, blockedState);
+        if (!githubEnabled) {
+            return nonGithubHandoffPrompt(reviewState, blockedDestination, workpadToolEnabled);
+        }
         if (blank(reviewState) && blank(blockedDestination)) {
             if (!workpadToolEnabled) {
                 return """
@@ -1113,6 +1306,58 @@ public final class TrelloBoardSetup {
                 .formatted(reviewState, blockedDestination, FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION);
     }
 
+    private static String nonGithubHandoffPrompt(
+            String reviewState, String blockedDestination, boolean workpadToolEnabled) {
+        String workpadReview =
+                workpadToolEnabled ? "update the workpad with the final summary and validation evidence, " : "";
+        String workpadBlocker = workpadToolEnabled ? "update the workpad with the blocker and " : "";
+        if (blank(reviewState) && blank(blockedDestination)) {
+            return """
+                    When the work is ready for human review, %sleave the workspace in a reviewable state and summarize the status in the Codex response.
+                    If the work is blocked, %ssummarize the blocker in the Codex response; an operator must move the card out of the active list manually. Leaving blocked work active can make Symphony run it again.
+                    If a human returns a reviewed card to an active list, reread the card and Trello comments before changing code again.
+                    %s"""
+                    .formatted(workpadReview, workpadBlocker, FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION)
+                    .stripTrailing();
+        }
+        if (blank(reviewState)) {
+            return """
+                    When the work is ready for human review, %sleave the workspace in a reviewable state and summarize the status in the Codex response.
+                    If the work is blocked or unsafe to hand off, %scall trello_add_comment with the blocker, then call trello_move_current_card with list_name "%s".
+                    If a human returns a reviewed card to an active list, reread the card and Trello comments before changing code again.
+                    %s"""
+                    .formatted(
+                            workpadReview, workpadBlocker, blockedDestination, FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION)
+                    .stripTrailing();
+        }
+        if (blank(blockedDestination) || reviewState.equalsIgnoreCase(blockedDestination)) {
+            return """
+                    When the work is ready for human review, %scall trello_add_comment with a concise summary and verification notes, then call trello_move_current_card with list_name "%s".
+                    If the work is blocked or unsafe to hand off, %sadd a Trello comment explaining the blocker, then call trello_move_current_card with list_name "%s" so the card leaves the active list. Do not leave blocked work in an active list; Symphony may run it again.
+                    If a human returns a reviewed card to an active list, treat it as rework: reread the card and Trello comments before changing code again.
+                    %s"""
+                    .formatted(
+                            workpadReview,
+                            reviewState,
+                            workpadBlocker,
+                            reviewState,
+                            FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION)
+                    .stripTrailing();
+        }
+        return """
+                When the work is ready for human review, %scall trello_add_comment with a concise summary and verification notes, then call trello_move_current_card with list_name "%s".
+                If the work is blocked or unsafe to hand off, %sadd a Trello comment explaining the blocker, then call trello_move_current_card with list_name "%s".
+                If a human returns a reviewed card to an active list, treat it as rework: reread the card and Trello comments before changing code again.
+                %s"""
+                .formatted(
+                        workpadReview,
+                        reviewState,
+                        workpadBlocker,
+                        blockedDestination,
+                        FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION)
+                .stripTrailing();
+    }
+
     private static String pickupPrompt(List<String> activeStates, String inProgressState, String mergingState) {
         if (blank(inProgressState)) {
             String landingException = blank(mergingState)
@@ -1136,23 +1381,38 @@ public final class TrelloBoardSetup {
     }
 
     private static String completionBarPrompt(
-            String reviewState, String blockedDestination, boolean workpadToolEnabled) {
+            String reviewState, String blockedDestination, boolean workpadToolEnabled, boolean githubEnabled) {
         String planRecord = workpadToolEnabled ? "workpad plan" : "final-response plan";
         String prRecord = workpadToolEnabled ? "the workpad and handoff comment" : "the final response";
         if (blank(reviewState)) {
+            String publicationText = githubEnabled ? "PR publication" : "local repository handoff";
             return """
                     ## Completion Bar
 
                     This workflow has no human review list configured. Before reporting ready-for-review status,
-                    finish the %s, validation, commit, and PR publication requirements that
+                    finish the %s, validation, commit, and %s requirements that
                     apply to this card. If the work is blocked, report the blocker clearly and keep the card out of
                     any active list manually.
                     """
-                    .formatted(planRecord)
+                    .formatted(planRecord, publicationText)
                     .stripTrailing();
         }
         String blockedText =
                 blank(blockedDestination) ? "block in the final response" : "move to " + quote(blockedDestination);
+        String pullRequestLine = "";
+        if (githubEnabled) {
+            pullRequestLine = workpadToolEnabled
+                    ? """
+                - A pull request exists and is linked in the workpad and handoff comment for repository-changing work
+                  unless the card explicitly requested local-only/no-push work.
+                - PR feedback sweep is complete for any existing or newly created PR.
+                """
+                    : """
+                - A pull request exists and is linked in the final response for repository-changing work
+                  unless the card explicitly requested local-only/no-push work.
+                - PR feedback sweep is complete for any existing or newly created PR.
+                """;
+        }
         return """
                 ## Completion Bar Before %s
 
@@ -1162,15 +1422,13 @@ public final class TrelloBoardSetup {
                 - Card-provided validation or testing requirements are complete, or a specific blocker is recorded.
                 - Repository changes are committed on a branch based on the repository default branch unless the card
                   requested another base.
-                - A pull request exists and is linked in %s for repository-changing work
-                  unless the card explicitly requested local-only/no-push work.
-                - PR feedback sweep is complete for any existing or newly created PR.
+                %s
                 - Relevant local validation is current after the latest commit.
                 - The working tree does not contain unrelated uncommitted changes.
 
                 If any required item cannot be satisfied, %s with the exact blocker.
                 """
-                .formatted(quote(reviewState), quote(reviewState), planRecord, prRecord, blockedText)
+                .formatted(quote(reviewState), quote(reviewState), planRecord, pullRequestLine, blockedText)
                 .stripTrailing();
     }
 
@@ -1300,6 +1558,15 @@ public final class TrelloBoardSetup {
         }
         List<String> combined = new ArrayList<>(activeStates);
         combined.add(extraState);
+        return List.copyOf(combined);
+    }
+
+    private static List<String> withOptionalListName(List<String> names, String extraName) {
+        if (blank(extraName) || names.stream().anyMatch(existing -> existing.equalsIgnoreCase(extraName))) {
+            return names;
+        }
+        List<String> combined = new ArrayList<>(names);
+        combined.add(extraName);
         return List.copyOf(combined);
     }
 
@@ -1445,7 +1712,8 @@ public final class TrelloBoardSetup {
             Integer serverPort,
             int maxConcurrentAgents,
             boolean force,
-            boolean useBoardNameWorkflowFallback) {
+            boolean useBoardNameWorkflowFallback,
+            GitHubIntegration githubIntegration) {
         public NewBoardRequest(
                 URI endpoint,
                 TrelloCredentials credentials,
@@ -1466,7 +1734,33 @@ public final class TrelloBoardSetup {
                     null,
                     maxConcurrentAgents,
                     force,
-                    useBoardNameWorkflowFallback);
+                    useBoardNameWorkflowFallback,
+                    GitHubIntegration.ENABLED);
+        }
+
+        public NewBoardRequest(
+                URI endpoint,
+                TrelloCredentials credentials,
+                String boardName,
+                String workspaceId,
+                Path workflowPath,
+                Path workspaceRoot,
+                Integer serverPort,
+                int maxConcurrentAgents,
+                boolean force,
+                boolean useBoardNameWorkflowFallback) {
+            this(
+                    endpoint,
+                    credentials,
+                    boardName,
+                    workspaceId,
+                    workflowPath,
+                    workspaceRoot,
+                    serverPort,
+                    maxConcurrentAgents,
+                    force,
+                    useBoardNameWorkflowFallback,
+                    GitHubIntegration.ENABLED);
         }
 
         private void validate() {
@@ -1474,6 +1768,7 @@ public final class TrelloBoardSetup {
             Objects.requireNonNull(credentials, "credentials").validate();
             Objects.requireNonNull(workflowPath, "workflowPath");
             Objects.requireNonNull(workspaceRoot, "workspaceRoot");
+            Objects.requireNonNull(githubIntegration, "githubIntegration");
             validateOptionalServerPort(serverPort, "--server-port");
             if (blank(boardName)) {
                 throw new TrelloBoardSetupException("setup_missing_board_name", "Missing board name");
@@ -1492,6 +1787,23 @@ public final class TrelloBoardSetup {
         }
     }
 
+    public record MemberInfoRequest(URI endpoint, TrelloCredentials credentials) {
+        private void validate() {
+            Objects.requireNonNull(endpoint, "endpoint");
+            Objects.requireNonNull(credentials, "credentials").validate();
+        }
+    }
+
+    public record BoardInfoRequest(URI endpoint, TrelloCredentials credentials, String boardId) {
+        private void validate() {
+            Objects.requireNonNull(endpoint, "endpoint");
+            Objects.requireNonNull(credentials, "credentials").validate();
+            if (blank(boardId)) {
+                throw new TrelloBoardSetupException("setup_missing_board_id", "Missing board id");
+            }
+        }
+    }
+
     public record ImportBoardRequest(
             URI endpoint,
             TrelloCredentials credentials,
@@ -1505,7 +1817,9 @@ public final class TrelloBoardSetup {
             Path workspaceRoot,
             Integer serverPort,
             int maxConcurrentAgents,
-            boolean force) {
+            boolean force,
+            GitHubIntegration githubIntegration,
+            boolean createMissingGithubLists) {
         public ImportBoardRequest(
                 URI endpoint,
                 TrelloCredentials credentials,
@@ -1532,7 +1846,74 @@ public final class TrelloBoardSetup {
                     workspaceRoot,
                     null,
                     maxConcurrentAgents,
-                    force);
+                    force,
+                    GitHubIntegration.ENABLED,
+                    false);
+        }
+
+        public ImportBoardRequest(
+                URI endpoint,
+                TrelloCredentials credentials,
+                String boardId,
+                List<String> activeStates,
+                List<String> terminalStates,
+                String inProgressState,
+                boolean detectInProgressState,
+                String blockedState,
+                Path workflowPath,
+                Path workspaceRoot,
+                Integer serverPort,
+                int maxConcurrentAgents,
+                boolean force,
+                GitHubIntegration githubIntegration) {
+            this(
+                    endpoint,
+                    credentials,
+                    boardId,
+                    activeStates,
+                    terminalStates,
+                    inProgressState,
+                    detectInProgressState,
+                    blockedState,
+                    workflowPath,
+                    workspaceRoot,
+                    serverPort,
+                    maxConcurrentAgents,
+                    force,
+                    githubIntegration,
+                    false);
+        }
+
+        public ImportBoardRequest(
+                URI endpoint,
+                TrelloCredentials credentials,
+                String boardId,
+                List<String> activeStates,
+                List<String> terminalStates,
+                String inProgressState,
+                boolean detectInProgressState,
+                String blockedState,
+                Path workflowPath,
+                Path workspaceRoot,
+                Integer serverPort,
+                int maxConcurrentAgents,
+                boolean force) {
+            this(
+                    endpoint,
+                    credentials,
+                    boardId,
+                    activeStates,
+                    terminalStates,
+                    inProgressState,
+                    detectInProgressState,
+                    blockedState,
+                    workflowPath,
+                    workspaceRoot,
+                    serverPort,
+                    maxConcurrentAgents,
+                    force,
+                    GitHubIntegration.ENABLED,
+                    false);
         }
 
         public ImportBoardRequest(
@@ -1559,7 +1940,9 @@ public final class TrelloBoardSetup {
                     workspaceRoot,
                     null,
                     maxConcurrentAgents,
-                    force);
+                    force,
+                    GitHubIntegration.ENABLED,
+                    false);
         }
 
         public ImportBoardRequest(
@@ -1587,7 +1970,9 @@ public final class TrelloBoardSetup {
                     workspaceRoot,
                     null,
                     maxConcurrentAgents,
-                    force);
+                    force,
+                    GitHubIntegration.ENABLED,
+                    false);
         }
 
         private void validate() {
@@ -1597,6 +1982,7 @@ public final class TrelloBoardSetup {
             Objects.requireNonNull(terminalStates, "terminalStates");
             Objects.requireNonNull(workflowPath, "workflowPath");
             Objects.requireNonNull(workspaceRoot, "workspaceRoot");
+            Objects.requireNonNull(githubIntegration, "githubIntegration");
             validateOptionalServerPort(serverPort, "--server-port");
             if (blank(boardId)) {
                 throw new TrelloBoardSetupException("setup_missing_board_id", "Missing board id");
@@ -1617,6 +2003,10 @@ public final class TrelloBoardSetup {
             Path workflowPath,
             int serverPort) {}
 
+    public record MemberInfo(String id, String username, String displayName) {}
+
+    public record BoardInfo(String boardId, String boardKey, String boardName, String boardUrl) {}
+
     public record WorkspaceInfo(String id, String name, String displayName, String url) {}
 
     public record ImportBoardResult(
@@ -1633,4 +2023,13 @@ public final class TrelloBoardSetup {
             int serverPort) {}
 
     private record BoardList(String id, String name, boolean closed) {}
+
+    public enum GitHubIntegration {
+        ENABLED,
+        DISABLED;
+
+        public boolean enabled() {
+            return this == ENABLED;
+        }
+    }
 }

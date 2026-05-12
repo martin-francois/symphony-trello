@@ -138,6 +138,14 @@ public class SymphonyOrchestrator {
         return selected.toAbsolutePath().normalize();
     }
 
+    public synchronized String selectedBoardId() {
+        return config == null ? null : config.tracker().resolvedBoardId();
+    }
+
+    public synchronized String selectedConfiguredBoardId() {
+        return config == null ? null : config.tracker().boardId();
+    }
+
     public void requestRefresh() {
         refreshRequested.set(true);
         if (tickRunning) {

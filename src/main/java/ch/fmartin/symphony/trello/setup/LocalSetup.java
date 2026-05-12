@@ -1,0 +1,1302 @@
+package ch.fmartin.symphony.trello.setup;
+
+import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.GitHubIntegration;
+import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.TrelloCredentials;
+import ch.fmartin.symphony.trello.setup.TrelloCredentialStore.CredentialSelection;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.PrintStream;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+public final class LocalSetup {
+    private static final Path DEFAULT_ENV_PATH = Path.of(".env");
+    private static final String DEFAULT_COMMAND = "symphony-trello";
+    private static final String CONFIG_DIR_ENV = "SYMPHONY_TRELLO_CONFIG_DIR";
+    private static final String STATE_HOME_ENV = "SYMPHONY_TRELLO_STATE_HOME";
+    private static final String COMMAND_ENV = "SYMPHONY_TRELLO_COMMAND";
+    private static final String CALLER_DIR_ENV = "SYMPHONY_TRELLO_CALLER_DIR";
+    private static final Duration LOCAL_STATUS_TIMEOUT = Duration.ofMillis(500);
+
+    private final TrelloBoardSetup boardSetup;
+    private final CommandRunner commands;
+    private final Map<String, String> environment;
+    private final WorkflowConfigEditor workflowConfig;
+    private final LocalHealthChecker healthChecker;
+    private final LocalWorkerManager workerManager;
+    private final PrerequisiteChecker prerequisiteChecker;
+    private final CodexAuthFlow codexAuthFlow;
+    private final TrelloCredentialStore credentialStore;
+    private final GitHubConfigurator githubConfigurator;
+    private final TrelloBoardConnector boardConnector;
+    private final WorkspaceAccessFlow workspaceAccessFlow;
+    private final CodexSandboxFlow codexSandboxFlow;
+    private final SetupDiagnosticReporter diagnosticReporter;
+
+    public LocalSetup(TrelloBoardSetup boardSetup, CommandRunner commands) {
+        this(boardSetup, commands, System.getenv());
+    }
+
+    LocalSetup(TrelloBoardSetup boardSetup, CommandRunner commands, Map<String, String> environment) {
+        this(boardSetup, commands, environment, new WorkflowConfigEditor(), null);
+    }
+
+    LocalSetup(
+            TrelloBoardSetup boardSetup,
+            CommandRunner commands,
+            Map<String, String> environment,
+            WorkflowConfigEditor workflowConfig,
+            LocalWorkerManager workerManager) {
+        this.boardSetup = boardSetup;
+        this.commands = commands;
+        this.environment = Map.copyOf(environment);
+        this.workflowConfig = workflowConfig;
+        HttpClient httpClient =
+                HttpClient.newBuilder().connectTimeout(LOCAL_STATUS_TIMEOUT).build();
+        this.healthChecker = new LocalHealthChecker(environment, workflowConfig, httpClient);
+        this.workerManager =
+                workerManager == null ? new LocalWorkerManager(environment, workflowConfig) : workerManager;
+        this.prerequisiteChecker = new PrerequisiteChecker(commands);
+        this.codexAuthFlow = new CodexAuthFlow(commands);
+        this.credentialStore = new TrelloCredentialStore(this.environment);
+        this.githubConfigurator = new GitHubConfigurator(commands);
+        this.boardConnector = new TrelloBoardConnector(boardSetup, workflowConfig);
+        this.workspaceAccessFlow = new WorkspaceAccessFlow();
+        this.codexSandboxFlow = new CodexSandboxFlow();
+        this.diagnosticReporter = new SetupDiagnosticReporter(this.environment, commands);
+    }
+
+    public static int run(String[] args, InputStream in, PrintStream out, PrintStream err) {
+        return new SetupLocalCommandFactory()
+                .execute(
+                        args,
+                        new LocalSetup(new TrelloBoardSetup(new ObjectMapper()), new ProcessCommandRunner()),
+                        new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8)),
+                        out,
+                        err);
+    }
+
+    int run(String[] args, BufferedReader input, PrintStream out, PrintStream err) {
+        return new SetupLocalCommandFactory().execute(args, this, input, out, err);
+    }
+
+    int run(LocalSetupRequest request, BufferedReader input, PrintStream out, PrintStream err) {
+        return run(request, new StreamTerminal(input, out, err));
+    }
+
+    int run(LocalSetupRequest request, Terminal terminal) {
+        PrintStream out = terminal.out();
+        PrintStream err = terminal.err();
+        try {
+            Options options = Options.from(request, environment);
+
+            printHeader(out, options);
+            Prerequisites prerequisites = prerequisites();
+            printPrerequisites(out, prerequisites, options);
+            if (options.check()) {
+                return runCheck(options, prerequisites, out);
+            }
+            if (options.repairPort()) {
+                return repairPort(options, out);
+            }
+            if (options.dryRun()) {
+                printDryRun(out, options, prerequisites);
+                return 0;
+            }
+            ConnectedBoardRepository boards = connectedBoards(options);
+            ConnectedBoardManifest manifest = boards.load();
+            if (!manifest.boards().isEmpty() && !options.forceNewSetup()) {
+                ExistingSetupAction action = existingSetupAction(manifest, terminal, options);
+                if (action == ExistingSetupAction.DISCONNECT) {
+                    disconnectBoard(options, manifest, terminal);
+                    return 0;
+                }
+                if (action != ExistingSetupAction.CONNECT) {
+                    codexAuthFlow.ensureAuthenticated(prerequisites, options, terminal);
+                    if (action == ExistingSetupAction.KEEP) {
+                        out.println();
+                        out.println("Keeping connected Trello boards.");
+                        startExistingBoards(options, manifest, out);
+                        printMiniTutorial(out, manifest);
+                        return 0;
+                    }
+                    if (action == ExistingSetupAction.UPDATE_CODEX_ACCESS) {
+                        updateExistingCodexAccess(options, manifest, terminal);
+                        return 0;
+                    }
+                    if (action == ExistingSetupAction.UPGRADE_GITHUB) {
+                        upgradeExistingBoardToGithub(options, manifest, terminal);
+                        return 0;
+                    }
+                }
+            }
+            codexAuthFlow.ensureAuthenticated(prerequisites, options, terminal);
+
+            preflightLocalWorkflowWrite(options);
+            CredentialSelection credentialSelection = credentials(options, options.envPath(), terminal);
+            TrelloCredentials credentials = credentialSelection.credentials();
+            TrelloBoardSetup.MemberInfo memberInfo =
+                    boardSetup.getMemberInfo(new TrelloBoardSetup.MemberInfoRequest(options.endpoint(), credentials));
+            out.println();
+            out.println("Validating Trello...");
+            out.println("  OK  Connected to Trello as \"" + memberInfo.displayName() + "\"");
+            if (credentialSelection.persist()) {
+                writeEnv(credentialSelection, options.envPath(), terminal);
+            } else {
+                out.println();
+                out.println("Saving Trello credentials...");
+                out.println(
+                        "  OK  Credentials loaded from " + credentialSelection.sourceDescription(options.envPath()));
+                out.println("  OK  Trello API key: " + TrelloCredentialStore.redact(credentials.apiKey()));
+                out.println("  OK  Trello token: " + TrelloCredentialStore.redact(credentials.apiToken()));
+            }
+
+            GitHubIntegration githubIntegration = resolveGitHubIntegration(options, prerequisites, terminal);
+            SetupResult result =
+                    boardConnector.createOrConnectBoard(options, credentials, githubIntegration, manifest, terminal);
+            options = configureCodexAccess(options, terminal);
+            applyCodexAccess(options, result.workflowPath());
+            ConnectedBoard connectedBoard = ConnectedBoard.from(result, options, githubIntegration);
+            stopReplacedBoards(options, manifest.boardsReplacedBy(connectedBoard));
+            manifest = manifest.withBoard(connectedBoard);
+            boards.save(manifest);
+
+            out.println();
+            out.println("Trello board");
+            out.println("  OK  Board connected: \"" + result.boardName() + "\"");
+            out.println("  OK  Board lists: " + quoted(result.lists()));
+            out.println("  OK  Workflow written: " + result.workflowPath());
+            out.println("  OK  Local server port selected for \"" + result.boardName() + "\": " + result.serverPort());
+            printWorkspaceAndSandboxSummary(options, out);
+            startBoard(options, connectedBoard, out);
+            out.println();
+            out.println("Board:");
+            out.println("  " + result.boardUrl());
+            out.println();
+            printMiniTutorial(
+                    out, githubIntegration.enabled(), workflowConfig.listConfiguration(result.workflowPath()));
+            return 0;
+        } catch (TrelloBoardSetupException | IllegalArgumentException | IOException e) {
+            err.println("setup_failed code=%s message=%s".formatted(errorCode(e), e.getMessage()));
+            diagnosticReporter.reportFailure(e, request, terminal);
+            return 2;
+        }
+    }
+
+    private static void preflightLocalWorkflowWrite(Options options) {
+        if (options.workflowPathExplicit()
+                && !options.force()
+                && Files.exists(options.workflowPath().toAbsolutePath().normalize())) {
+            throw new TrelloBoardSetupException(
+                    "setup_workflow_exists",
+                    "Workflow file already exists: " + options.workflowPath() + ". Pass --force to replace it.");
+        }
+    }
+
+    private static ConnectedBoardRepository connectedBoards(Options options) {
+        return new ConnectedBoardRepository(options.manifestPath());
+    }
+
+    private ConnectedBoardManifest connectedBoardsUnchecked(Options options) {
+        try {
+            return connectedBoards(options).load();
+        } catch (IOException e) {
+            return new ConnectedBoardManifest(List.of());
+        }
+    }
+
+    private LocalWorkerPaths localWorkerPaths(Options options) {
+        return LocalWorkerPaths.from(
+                Optional.empty(),
+                Optional.of(options.configDir()),
+                Optional.of(options.workspaceRoot()),
+                Optional.empty(),
+                environment);
+    }
+
+    private int runCheck(Options options, Prerequisites prerequisites, PrintStream out) throws IOException {
+        ConnectedBoardManifest manifest = connectedBoards(options).load();
+        boolean ok = prerequisites.readyFor(options);
+        if (prerequisites.readyFor(options)) {
+            out.println("  OK      Local prerequisites ready");
+        }
+        if (manifest.boards().isEmpty()) {
+            out.println("  WARN    No Trello boards connected to Symphony");
+            return prerequisites.readyFor(options) ? 0 : 2;
+        }
+        for (ConnectedBoard board : manifest.boards()) {
+            WorkflowValidation workflow = workflowConfig.validate(board);
+            if (workflow.ok()) {
+                out.println("  OK      Workflow: " + board.workflowPath());
+            } else {
+                out.println("  WARN    " + workflow.message());
+                ok = false;
+            }
+            if (board.githubEnabled() && !prerequisites.githubAuth().available()) {
+                out.println("  WARN    GitHub CLI is not authenticated for \"" + board.boardName() + "\"");
+                ok = false;
+            }
+            if (!checkTrelloCredentials(options, board, out)) {
+                ok = false;
+            }
+            BoardHealth health = healthChecker.boardHealth(board);
+            printBoardHealth(options, board, health, out);
+            ok = ok && health.kind() == BoardHealthKind.SAME_WORKFLOW;
+        }
+        return ok ? 0 : 2;
+    }
+
+    private static void printBoardHealth(Options options, ConnectedBoard board, BoardHealth health, PrintStream out) {
+        if (health.kind() == BoardHealthKind.SAME_WORKFLOW) {
+            out.println("  OK    \"" + board.boardName() + "\" local server: "
+                    + LocalHealthChecker.localServerUrl(health.port()) + " (already running)");
+            return;
+        }
+        if (health.kind() == BoardHealthKind.STOPPED) {
+            out.println("  WARN  \"" + board.boardName() + "\" local server is not running");
+            out.println("        Start: " + options.command() + " start --env " + board.envPath() + " --workflow "
+                    + board.workflowPath());
+            return;
+        }
+        if (health.kind() == BoardHealthKind.PORT_USED) {
+            out.println("  WARN  \"" + board.boardName() + "\" configured port " + health.port()
+                    + " is in use by another process");
+            out.println("        Suggested fix: " + repairPortCommand(options, board));
+            return;
+        }
+        out.println("  WARN  \"" + board.boardName() + "\" local server: "
+                + LocalHealthChecker.localServerUrl(health.port()) + " (wrong Symphony workflow or board)");
+        out.println("        Expected workflow: "
+                + board.workflowPath().toAbsolutePath().normalize());
+        out.println("        Actual workflow: " + health.actualWorkflowPath().orElse("<unknown>"));
+        out.println("        Expected board: " + board.boardId() + " or " + board.boardKey());
+        out.println("        Actual board: " + health.actualBoardId().orElse("<unknown>"));
+        out.println("        Suggested fix: " + repairPortCommand(options, board));
+    }
+
+    private static String repairPortCommand(Options options, ConnectedBoard board) {
+        return options.command() + " setup-local repair-port --board \"" + board.boardName() + "\"";
+    }
+
+    private boolean checkTrelloCredentials(Options options, ConnectedBoard board, PrintStream out) {
+        try {
+            CredentialSelection credentials = credentialStore.loadExisting(options, board.envPath());
+            if (TrelloCredentialStore.blank(credentials.apiKeyValue())
+                    || TrelloCredentialStore.blank(credentials.apiTokenValue())) {
+                out.println("  WARN    Trello credentials are missing for \"" + board.boardName() + "\": "
+                        + board.envPath());
+                return false;
+            }
+            TrelloBoardSetup.MemberInfo member = boardSetup.getMemberInfo(
+                    new TrelloBoardSetup.MemberInfoRequest(options.endpoint(), credentials.credentials()));
+            out.println("  OK      Trello credentials for \"" + board.boardName() + "\" as " + member.displayName());
+            return true;
+        } catch (RuntimeException e) {
+            out.println(
+                    "  WARN    Trello credential check failed for \"" + board.boardName() + "\": " + e.getMessage());
+            return false;
+        }
+    }
+
+    private int repairPort(Options options, PrintStream out) throws IOException {
+        ConnectedBoardRepository boards = connectedBoards(options);
+        ConnectedBoardManifest manifest = boards.load();
+        if (manifest.boards().isEmpty()) {
+            out.println("  WARN    No Trello boards connected to Symphony");
+            return 2;
+        }
+        String boardSelector = options.repairBoardName()
+                .orElseThrow(() -> new TrelloBoardSetupException(
+                        "setup_repair_board_required", "repair-port requires --board NAME."));
+        ConnectedBoard board = manifest.findByBoard(boardSelector)
+                .orElseThrow(() -> new TrelloBoardSetupException(
+                        "setup_repair_board_not_found",
+                        "No connected Trello board matches \"" + boardSelector + "\"."));
+        Optional<String> overrideSource = healthChecker.externalHttpPortOverrideSource(board.envPath());
+        if (overrideSource.isPresent()) {
+            throw new TrelloBoardSetupException(
+                    "setup_repair_port_http_override",
+                    "setup-local repair-port cannot update workflow server.port while "
+                            + overrideSource.get()
+                            + " overrides the HTTP port. Remove or update SYMPHONY_HTTP_PORT/QUARKUS_HTTP_PORT in the board env file or service environment, then rerun setup-local repair-port.");
+        }
+        BoardHealth health = healthChecker.boardHealth(board);
+        boolean wasRunning = health.kind() == BoardHealthKind.SAME_WORKFLOW;
+        int port = nextAvailablePort(manifest, board);
+        if (options.dryRun()) {
+            out.println();
+            out.println("Dry run");
+            out.println("  WOULD   update \"" + board.boardName() + "\" to use http://127.0.0.1:" + port);
+            if (wasRunning) {
+                out.println("  WOULD   restart Symphony for \"" + board.boardName() + "\"");
+            } else {
+                out.println("          Restart: " + options.command() + " start --env " + board.envPath()
+                        + " --workflow " + board.workflowPath());
+            }
+            return 0;
+        }
+        ensureManagedRestartPossible(options, board, health);
+        if (wasRunning) {
+            stopBoard(options, board.boardName(), board.workflowPath());
+        }
+        workflowConfig.updateServerPort(board.workflowPath(), port);
+        boards.save(manifest.withBoard(board.withServerPort(port)));
+        out.println("  OK      Updated \"" + board.boardName() + "\" to use http://127.0.0.1:" + port);
+        if (wasRunning) {
+            startBoard(options, board.withServerPort(port), out);
+        } else {
+            out.println("          Restart: " + options.command() + " start --env " + board.envPath() + " --workflow "
+                    + board.workflowPath());
+        }
+        return 0;
+    }
+
+    private static int nextAvailablePort(ConnectedBoardManifest manifest, ConnectedBoard ignoredBoard) {
+        Set<Integer> reserved = manifest.boards().stream()
+                .filter(board -> !board.boardId().equals(ignoredBoard.boardId()))
+                .map(ConnectedBoard::serverPort)
+                .collect(Collectors.toSet());
+        for (int port = TrelloBoardSetup.DEFAULT_SERVER_PORT; port <= 65535; port++) {
+            if (!reserved.contains(port) && !LocalHealthChecker.portAcceptsConnections(port)) {
+                return port;
+            }
+        }
+        throw new TrelloBoardSetupException("setup_server_port_unavailable", "No free local server port was found.");
+    }
+
+    private Prerequisites prerequisites() {
+        return prerequisiteChecker.check();
+    }
+
+    private CredentialSelection credentials(Options options, Path envPath, Terminal terminal) throws IOException {
+        return credentialStore.loadOrPrompt(options, envPath, terminal);
+    }
+
+    private CredentialSelection credentials(Options options, Terminal terminal) throws IOException {
+        return credentials(options, options.envPath(), terminal);
+    }
+
+    private void writeEnv(CredentialSelection credentials, Path envPath, Terminal terminal) throws IOException {
+        credentialStore.write(credentials, envPath, terminal);
+    }
+
+    private GitHubIntegration resolveGitHubIntegration(Options options, Prerequisites prerequisites, Terminal terminal)
+            throws IOException {
+        return githubConfigurator.resolve(options, prerequisites, terminal);
+    }
+
+    static boolean isBroadAccessPathForCli(Path path) {
+        return WorkspaceAccessFlow.isBroadAccessPath(path);
+    }
+
+    private Options configureCodexAccess(Options options, Terminal terminal) throws IOException {
+        List<Path> allowedPaths = workspaceAccessFlow.resolve(options, terminal);
+        boolean dangerFullAccess = codexSandboxFlow.resolve(options, terminal);
+        return options.withCodexAccess(allowedPaths, dangerFullAccess);
+    }
+
+    private static ExistingSetupAction existingSetupAction(
+            ConnectedBoardManifest manifest, Terminal terminal, Options options) throws IOException {
+        PrintStream out = terminal.out();
+        if (hasPotentialConnectedBoardCodexAccessTarget(manifest, options)) {
+            rejectMixedCodexAccessUpdate(options);
+        }
+        if (options.nonInteractive()) {
+            rejectNonInteractiveIgnoredWorkflowUpdate(options);
+        }
+        if (options.githubMode().orElse(false)) {
+            if (hasSelectedGithubBoardCodexAccessTarget(manifest, options)) {
+                return ExistingSetupAction.UPDATE_CODEX_ACCESS;
+            }
+            if (options.configureGithub() || !options.hasExplicitBoardSetupRequest()) {
+                if (manifest.boards().stream().anyMatch(board -> !board.githubEnabled())) {
+                    return ExistingSetupAction.UPGRADE_GITHUB;
+                }
+                if (hasConnectedBoardCodexAccessTarget(manifest, options)) {
+                    return ExistingSetupAction.UPDATE_CODEX_ACCESS;
+                }
+                return ExistingSetupAction.KEEP;
+            }
+            if (options.hasExplicitBoardSetupRequest()) {
+                return ExistingSetupAction.CONNECT;
+            }
+            return ExistingSetupAction.KEEP;
+        }
+        if (hasConnectedBoardCodexAccessTarget(manifest, options)) {
+            return ExistingSetupAction.UPDATE_CODEX_ACCESS;
+        }
+        if (options.hasExplicitBoardSetupRequest()) {
+            return ExistingSetupAction.CONNECT;
+        }
+        if (options.nonInteractive()) {
+            return ExistingSetupAction.KEEP;
+        }
+        out.println();
+        out.println("Trello boards configured for Symphony:");
+        for (int i = 0; i < manifest.boards().size(); i++) {
+            ConnectedBoard board = manifest.boards().get(i);
+            out.println("  " + (i + 1) + ". \"" + board.boardName() + "\"     " + board.boardUrl());
+        }
+        out.println();
+        out.println("What do you want to do?");
+        out.println("  1. Keep connected Trello boards");
+        out.println("  2. Connect another Trello board");
+        out.println("  3. Disconnect a Trello board from Symphony");
+        out.println();
+        return switch (parseChoice(terminal.readLine("Choice [1]: "), 1, 3)) {
+            case 2 -> ExistingSetupAction.CONNECT;
+            case 3 -> ExistingSetupAction.DISCONNECT;
+            default -> ExistingSetupAction.KEEP;
+        };
+    }
+
+    private static boolean hasConnectedBoardCodexAccessTarget(ConnectedBoardManifest manifest, Options options) {
+        return options.hasCodexAccessOnlyUpdateRequest()
+                && hasPotentialConnectedBoardCodexAccessTarget(manifest, options);
+    }
+
+    private static boolean hasPotentialConnectedBoardCodexAccessTarget(
+            ConnectedBoardManifest manifest, Options options) {
+        if (!options.hasCodexAccessUpdateRequest() || options.boardName().isPresent()) {
+            return false;
+        }
+        return options.existingBoardId().isEmpty()
+                || manifest.findByBoard(options.existingBoardId().orElseThrow()).isPresent();
+    }
+
+    private static boolean hasSelectedGithubBoardCodexAccessTarget(ConnectedBoardManifest manifest, Options options) {
+        if (!options.hasCodexAccessOnlyUpdateRequest()
+                || options.boardName().isPresent()
+                || options.existingBoardId().isEmpty()) {
+            return false;
+        }
+        return manifest.findByBoard(options.existingBoardId().orElseThrow())
+                .filter(ConnectedBoard::githubEnabled)
+                .isPresent();
+    }
+
+    private void updateExistingCodexAccess(Options options, ConnectedBoardManifest manifest, Terminal terminal)
+            throws IOException {
+        PrintStream out = terminal.out();
+        ConnectedBoard board = selectBoardForCodexAccessUpdate(options, manifest, terminal);
+        ConnectedBoard updated = withRequestedCodexAccess(options, board, terminal);
+        BoardHealth health = healthChecker.boardHealth(board);
+        ensureManagedRestartPossible(options, board, health);
+        applyCodexAccess(
+                options.withCodexAccess(updated.additionalWritableRoots(), updated.dangerFullAccess()),
+                board.workflowPath());
+        connectedBoards(options).save(manifest.withBoard(updated));
+
+        out.println();
+        out.println("Codex access");
+        out.println("  OK  Updated workflow: " + board.workflowPath());
+        printWorkspaceAndSandboxSummary(
+                options.withCodexAccess(updated.additionalWritableRoots(), updated.dangerFullAccess()), out);
+        if (health.kind() == BoardHealthKind.SAME_WORKFLOW && !options.noStart()) {
+            stopBoard(options, board.boardName(), board.workflowPath());
+            startBoard(options, updated, out);
+        } else if (health.kind() == BoardHealthKind.SAME_WORKFLOW) {
+            out.println();
+            out.println("Restart skipped. Restart Symphony for the updated workflow when you are ready:");
+            out.println("  " + options.command() + " stop --workflow " + board.workflowPath());
+            out.println("  " + options.command() + " start --env " + board.envPath() + " --workflow "
+                    + board.workflowPath());
+        } else {
+            out.println();
+            out.println("Start Symphony for the updated workflow:");
+            out.println("  " + options.command() + " start --env " + board.envPath() + " --workflow "
+                    + board.workflowPath());
+        }
+    }
+
+    private ConnectedBoard withRequestedCodexAccess(Options options, ConnectedBoard board, Terminal terminal)
+            throws IOException {
+        PrintStream out = terminal.out();
+        List<Path> requestedRoots = new ArrayList<>();
+        for (Path root : options.additionalWritableRoots()) {
+            if (WorkspaceAccessFlow.isBroadAccessPath(root) && !options.allowAllPaths() && !options.nonInteractive()) {
+                out.println();
+                out.println(
+                        "Adding / grants broad recursive read/write access to all files and folders Symphony can normally access.");
+                out.println(
+                        "If you meant your home directory or one project, use ~ or that project directory instead.");
+                if (!PromptSupport.yes(terminal, "Allow / anyway? [y/N] ")) {
+                    continue;
+                }
+            } else {
+                WorkspaceAccessFlow.rejectBroadAccessPath(root, options.allowAllPaths());
+            }
+            requestedRoots.add(root);
+        }
+        List<Path> updatedRoots = new ArrayList<>(board.additionalWritableRoots());
+        for (Path root : requestedRoots) {
+            if (updatedRoots.stream().noneMatch(existing -> PathsEqual.samePath(existing, root))) {
+                updatedRoots.add(root);
+            }
+        }
+        boolean requestedDangerFullAccess = options.dangerFullAccess();
+        if (requestedDangerFullAccess && !board.dangerFullAccess()) {
+            if (options.nonInteractive()) {
+                CodexSandboxFlow.printWarning(terminal);
+            } else {
+                out.println();
+                out.println("Codex execution");
+                requestedDangerFullAccess = PromptSupport.yes(
+                        terminal,
+                        "Allow Codex to run without its command/filesystem sandbox for this workflow (danger-full-access)? [y/N] ");
+                if (requestedDangerFullAccess) {
+                    CodexSandboxFlow.printWarning(terminal);
+                }
+            }
+        }
+        boolean updatedDangerFullAccess = board.dangerFullAccess() || requestedDangerFullAccess;
+        return board.withCodexAccess(List.copyOf(updatedRoots), updatedDangerFullAccess);
+    }
+
+    private static ConnectedBoard selectBoardForCodexAccessUpdate(
+            Options options, ConnectedBoardManifest manifest, Terminal terminal) throws IOException {
+        PrintStream out = terminal.out();
+        rejectMixedCodexAccessUpdate(options);
+        if (options.existingBoardId().isPresent()) {
+            String selector = options.existingBoardId().orElseThrow();
+            return manifest.findByBoard(selector)
+                    .orElseThrow(() -> new TrelloBoardSetupException(
+                            "setup_board_selection_required",
+                            "No connected Trello board matches \"" + selector + "\"."));
+        }
+        if (manifest.boards().size() == 1) {
+            return manifest.boards().getFirst();
+        }
+        if (options.nonInteractive()) {
+            throw new TrelloBoardSetupException(
+                    "setup_board_selection_required",
+                    "Multiple Trello boards are connected. Re-run with --board NAME to choose which connected board to update.");
+        }
+        out.println();
+        out.println("Choose the Trello board to update:");
+        for (int i = 0; i < manifest.boards().size(); i++) {
+            out.println("  " + (i + 1) + ". \"" + manifest.boards().get(i).boardName() + "\"");
+        }
+        return manifest.boards()
+                .get(parseChoice(
+                                terminal.readLine("Board [1]: "),
+                                1,
+                                manifest.boards().size())
+                        - 1);
+    }
+
+    private static void rejectMixedCodexAccessUpdate(Options options) {
+        if (options.hasCodexAccessUpdateRequest() && !options.hasCodexAccessOnlyUpdateRequest()) {
+            throw new TrelloBoardSetupException(
+                    "setup_mixed_codex_access_update",
+                    "--add-path and --danger-full-access update Codex access only. Rerun without other workflow setup options such as --server-port, --active, --terminal, --in-progress, --blocked, --workspace-root, --workflow, or --max-agents.");
+        }
+    }
+
+    private static void rejectNonInteractiveIgnoredWorkflowUpdate(Options options) {
+        if (options.hasNonAccessWorkflowUpdateRequest() && !options.hasExplicitBoardSetupRequest()) {
+            throw new TrelloBoardSetupException(
+                    "setup_board_selection_required",
+                    "Existing connected Trello boards cannot be updated by an implicit keep rerun with workflow setup options. Re-run with --board or --board-name so setup can apply options such as --server-port, --active, --terminal, --workspace-root, --workflow, or --max-agents.");
+        }
+    }
+
+    private void upgradeExistingBoardToGithub(Options options, ConnectedBoardManifest manifest, Terminal terminal)
+            throws IOException {
+        PrintStream out = terminal.out();
+        ConnectedBoard board = selectNonGithubBoardForUpgrade(options, manifest, terminal);
+        if (!options.nonInteractive()
+                && !PromptSupport.yesDefaultTrue(
+                        terminal, "Configure GitHub PR handling for \"" + board.boardName() + "\"? [Y/n] ")) {
+            out.println("GitHub upgrade cancelled.");
+            return;
+        }
+
+        CredentialSelection credentialSelection = credentials(options, board.envPath(), terminal);
+        TrelloCredentials credentials = credentialSelection.credentials();
+        TrelloBoardSetup.MemberInfo memberInfo =
+                boardSetup.getMemberInfo(new TrelloBoardSetup.MemberInfoRequest(options.endpoint(), credentials));
+        out.println();
+        out.println("Validating Trello...");
+        out.println("  OK  Connected to Trello as \"" + memberInfo.displayName() + "\"");
+        if (credentialSelection.persist()) {
+            writeEnv(credentialSelection, board.envPath(), terminal);
+        }
+
+        resolveGitHubIntegration(options, prerequisites(), terminal);
+        BoardHealth previousHealth = healthChecker.boardHealth(board);
+        ensureManagedRestartPossible(options, board, previousHealth);
+        List<String> openLists = boardSetup.getOpenBoardListNames(
+                new TrelloBoardSetup.BoardInfoRequest(options.endpoint(), credentials, board.boardId()));
+        WorkflowListConfiguration existingLists =
+                workflowConfig.listConfiguration(board.workflowPath()).onlyOpenLists(openLists);
+        if (!openLists.stream().anyMatch(name -> name.equalsIgnoreCase(TrelloBoardSetup.RECOMMENDED_MERGING_STATE))) {
+            out.println();
+            out.println("GitHub mode needs one more Trello list:");
+            out.println("  " + TrelloBoardSetup.RECOMMENDED_MERGING_STATE);
+            if (!options.nonInteractive()
+                    && !PromptSupport.yesDefaultTrue(terminal, "Create the missing GitHub list now? [Y/n] ")) {
+                throw new TrelloBoardSetupException(
+                        "setup_github_upgrade_list_declined",
+                        "GitHub workflow upgrade needs a Merging list for landing approval.");
+            }
+        }
+
+        TrelloBoardSetup.ImportBoardResult result =
+                boardSetup.importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
+                        options.endpoint(),
+                        credentials,
+                        board.boardId(),
+                        existingLists.activeStates(),
+                        existingLists.terminalStates(),
+                        existingLists.inProgressState().orElse(null),
+                        false,
+                        existingLists.blockedState().orElse(null),
+                        board.workflowPath(),
+                        board.workspaceRoot(),
+                        board.serverPort(),
+                        options.maxAgentsExplicit()
+                                ? options.maxAgents()
+                                : workflowConfig.maxAgents(board.workflowPath()).orElse(options.maxAgents()),
+                        true,
+                        GitHubIntegration.ENABLED,
+                        true));
+        ConnectedBoard access = withRequestedCodexAccess(options, board, terminal);
+        applyCodexAccess(
+                options.withCodexAccess(access.additionalWritableRoots(), access.dangerFullAccess()),
+                board.workflowPath());
+        ConnectedBoard upgraded = new ConnectedBoard(
+                board.boardId(),
+                board.boardKey(),
+                board.boardName(),
+                board.boardUrl(),
+                board.workflowPath(),
+                board.envPath(),
+                board.workspaceRoot(),
+                result.serverPort(),
+                true,
+                access.additionalWritableRoots(),
+                access.dangerFullAccess());
+        connectedBoards(options).save(manifest.withBoard(upgraded));
+        out.println();
+        out.println("  OK  GitHub workflow enabled for \"" + board.boardName() + "\"");
+        if (previousHealth.kind() == BoardHealthKind.SAME_WORKFLOW && !options.noStart()) {
+            stopBoard(options, board.boardName(), board.workflowPath());
+            startBoard(options, upgraded, out);
+        } else if (previousHealth.kind() == BoardHealthKind.SAME_WORKFLOW) {
+            out.println();
+            out.println("Restart skipped. Restart Symphony for the updated workflow when you are ready:");
+            out.println("  " + options.command() + " stop --workflow " + board.workflowPath());
+            out.println("  " + options.command() + " start --env " + board.envPath() + " --workflow "
+                    + board.workflowPath());
+        } else {
+            out.println("          Restart: " + options.command() + " start --env " + board.envPath() + " --workflow "
+                    + board.workflowPath());
+        }
+    }
+
+    private static ConnectedBoard selectNonGithubBoardForUpgrade(
+            Options options, ConnectedBoardManifest manifest, Terminal terminal) throws IOException {
+        PrintStream out = terminal.out();
+        List<ConnectedBoard> candidates = manifest.boards().stream()
+                .filter(board -> !board.githubEnabled())
+                .toList();
+        if (candidates.isEmpty()) {
+            throw new TrelloBoardSetupException(
+                    "setup_github_upgrade_not_found", "No non-GitHub connected board is available to upgrade.");
+        }
+        if (options.existingBoardId().isPresent()) {
+            String requested = options.existingBoardId().orElseThrow();
+            String requestedBoardId = TrelloBoardIds.parse(requested);
+            return candidates.stream()
+                    .filter(board -> board.boardName().equalsIgnoreCase(requested)
+                            || board.boardId().equalsIgnoreCase(requested)
+                            || board.boardKey().equalsIgnoreCase(requested)
+                            || board.boardId().equalsIgnoreCase(requestedBoardId)
+                            || board.boardKey().equalsIgnoreCase(requestedBoardId))
+                    .findFirst()
+                    .orElseThrow(() -> new TrelloBoardSetupException(
+                            "setup_github_upgrade_not_found",
+                            "No connected non-GitHub board matches \"" + requested + "\"."));
+        }
+        if (candidates.size() == 1) {
+            return candidates.getFirst();
+        }
+        if (options.nonInteractive()) {
+            throw new TrelloBoardSetupException(
+                    "setup_github_upgrade_board_required",
+                    "Multiple non-GitHub boards are connected. Re-run with --board NAME.");
+        }
+        out.println();
+        out.println("Choose the Trello board to configure for GitHub:");
+        for (int i = 0; i < candidates.size(); i++) {
+            out.println("  " + (i + 1) + ". \"" + candidates.get(i).boardName() + "\"");
+        }
+        return candidates.get(parseChoice(terminal.readLine("Board [1]: "), 1, candidates.size()) - 1);
+    }
+
+    private void disconnectBoard(Options options, ConnectedBoardManifest manifest, Terminal terminal)
+            throws IOException {
+        PrintStream out = terminal.out();
+        out.println();
+        out.println("Disconnecting a Trello board from Symphony only removes it from Symphony's local config.");
+        out.println("Note: this will NOT delete or archive the Trello board.");
+        out.println();
+        String answer = terminal.readLine("Disconnect which Trello board from Symphony? [1-"
+                + manifest.boards().size() + "]: ");
+        if (blank(answer)) {
+            out.println("Disconnect cancelled.");
+            return;
+        }
+        int selected = parseChoice(answer, 1, manifest.boards().size());
+        ConnectedBoard removed = manifest.boards().get(selected - 1);
+        stopBoard(options, removed.boardName(), removed.workflowPath());
+        connectedBoards(options).save(manifest.withoutBoard(removed.boardId()));
+        out.println("  OK  Symphony will stop managing \"" + removed.boardName() + "\"");
+        out.println("  Trello board unchanged: " + removed.boardUrl());
+    }
+
+    private void startExistingBoards(Options options, ConnectedBoardManifest manifest, PrintStream out) {
+        for (ConnectedBoard board : manifest.boards()) {
+            startBoard(options, board, out);
+        }
+    }
+
+    private void startBoard(Options options, ConnectedBoard board, PrintStream out) {
+        if (options.noStart()) {
+            out.println();
+            out.println("Start skipped. Start Symphony before moving Trello cards:");
+            out.println("  " + options.command() + " start --env " + board.envPath() + " --workflow "
+                    + board.workflowPath());
+            return;
+        }
+        out.println();
+        out.println("Starting Symphony...");
+        try {
+            workerManager.start(localWorkerPaths(options), board, board.envPath(), out);
+        } catch (IOException e) {
+            throw new TrelloBoardSetupException(
+                    "setup_start_failed",
+                    "Could not start Symphony for \"" + board.boardName() + "\": " + e.getMessage());
+        }
+        out.println("  OK  Symphony is connected to \"" + board.boardName() + "\"");
+    }
+
+    private void printMiniTutorial(PrintStream out, ConnectedBoardManifest manifest) {
+        if (manifest.boards().isEmpty()) {
+            return;
+        }
+        ConnectedBoard board = manifest.boards().getFirst();
+        out.println();
+        if (!board.boardUrl().isBlank()) {
+            out.println("Board:");
+            out.println("  " + board.boardUrl());
+            out.println();
+        }
+        printMiniTutorial(board, out);
+    }
+
+    private void printMiniTutorial(ConnectedBoard board, PrintStream out) {
+        printMiniTutorial(out, board.githubEnabled(), workflowConfig.listConfiguration(board.workflowPath()));
+    }
+
+    private void stopBoard(Options options, String boardName, Path workflowPath) {
+        ConnectedBoard board = connectedBoardsUnchecked(options)
+                .findByWorkflow(workflowPath)
+                .orElse(new ConnectedBoard(
+                        workflowPath.getFileName().toString(),
+                        workflowPath.getFileName().toString(),
+                        boardName,
+                        "",
+                        workflowPath,
+                        options.envPath(),
+                        options.workspaceRoot(),
+                        TrelloBoardSetup.DEFAULT_SERVER_PORT,
+                        false,
+                        List.of(),
+                        false));
+        try {
+            workerManager.stop(localWorkerPaths(options), board, new PrintStream(OutputStream.nullOutputStream()));
+        } catch (IOException e) {
+            throw new TrelloBoardSetupException(
+                    "setup_stop_failed", "Could not stop Symphony for \"" + boardName + "\": " + e.getMessage());
+        }
+    }
+
+    private void ensureManagedRestartPossible(Options options, ConnectedBoard board, BoardHealth health) {
+        if (health.kind() != BoardHealthKind.SAME_WORKFLOW || options.noStart()) {
+            return;
+        }
+        try {
+            if (workerManager.canStopManagedWorker(localWorkerPaths(options), board)) {
+                return;
+            }
+        } catch (IOException e) {
+            throw new TrelloBoardSetupException(
+                    "setup_worker_state_unreadable",
+                    "Could not inspect managed worker state for \"" + board.boardName() + "\": " + e.getMessage());
+        }
+        throw new TrelloBoardSetupException(
+                "setup_worker_untracked",
+                "Symphony is already running for \""
+                        + board.boardName()
+                        + "\" at "
+                        + LocalHealthChecker.localServerUrl(health.port())
+                        + ", but this checkout has no managed pid for it. Stop that process manually, then rerun the setup command so Symphony can apply the workflow change and restart it.");
+    }
+
+    private void stopReplacedBoards(Options options, List<ConnectedBoard> replacedBoards) {
+        if (replacedBoards.isEmpty()) {
+            return;
+        }
+        List<Path> stoppedWorkflowPaths = new ArrayList<>();
+        for (ConnectedBoard board : replacedBoards) {
+            if (stoppedWorkflowPaths.stream().anyMatch(stopped -> PathsEqual.samePath(stopped, board.workflowPath()))) {
+                continue;
+            }
+            stopBoard(options, board.boardName(), board.workflowPath());
+            stoppedWorkflowPaths.add(board.workflowPath());
+        }
+    }
+
+    private static void printWorkspaceAndSandboxSummary(Options options, PrintStream out) {
+        out.println();
+        out.println("Workspace access");
+        out.println("This controls which files/folders sandboxed card runs may use.");
+        out.println("Codex execution sandboxing is configured separately.");
+        out.println("Cards run in per-card workspaces under:");
+        out.println("  " + options.workspaceRoot());
+        out.println("  OK  Additional read/write paths allowed: "
+                + options.additionalWritableRoots().size());
+        out.println();
+        out.println("Codex execution");
+        if (options.dangerFullAccess()) {
+            out.println("  WARN  Codex sandbox disabled: danger-full-access enabled for this workflow");
+        } else {
+            out.println("  OK  Codex sandbox: workspace-limited");
+        }
+    }
+
+    private void applyCodexAccess(Options options, Path workflowPath) throws IOException {
+        workflowConfig.applyCodexAccess(workflowPath, options.additionalWritableRoots(), options.dangerFullAccess());
+    }
+
+    private static void printHeader(PrintStream out, Options options) {
+        out.println(options.check() ? "Symphony setup check" : "Symphony for Trello setup");
+    }
+
+    private static void printPrerequisites(PrintStream out, Prerequisites prerequisites, Options options) {
+        out.println();
+        out.println("Checking prerequisites...");
+        out.println(statusLine("Git", prerequisites.git().available()));
+        out.println(statusLine("Java 25+ JDK", prerequisites.java().available()));
+        out.println(statusLine("Codex CLI", prerequisites.codex().available()));
+        out.println(
+                statusLine("Codex CLI authenticated", prerequisites.codexAuth().available()));
+        if (prerequisites.githubAuth().available()) {
+            out.println(statusLine("GitHub CLI authenticated", true));
+        } else if (options.githubMode().orElse(false)) {
+            out.println(statusLine("GitHub CLI authenticated", false));
+        } else {
+            out.println("  OPTIONAL GitHub CLI authenticated");
+        }
+    }
+
+    private static String statusLine(String name, boolean ok) {
+        return "  " + (ok ? "OK      " : "NEEDED  ") + name;
+    }
+
+    private static void printDryRun(PrintStream out, Options options, Prerequisites prerequisites) {
+        out.println();
+        out.println("Dry run");
+        if (!prerequisites.git().available()) {
+            out.println("  WOULD require Git installation");
+        }
+        if (!prerequisites.java().available()) {
+            out.println("  WOULD require Java 25+ JDK installation");
+        }
+        if (!prerequisites.codex().available()) {
+            out.println("  WOULD require Codex CLI installation");
+        }
+        out.println("  WOULD configure Trello credentials: " + options.envPath());
+        out.println("  WOULD write workflows under: " + options.configDir());
+        out.println("  WOULD start Symphony after setup unless --no-start is used");
+    }
+
+    private static void printMiniTutorial(
+            PrintStream out, boolean githubEnabled, WorkflowListConfiguration listConfiguration) {
+        String queueTarget = tutorialQueueTarget(listConfiguration);
+        String runningText = listConfiguration
+                .inProgressState()
+                .map(state -> "moves it to " + code(state) + ", runs Codex")
+                .orElse("runs Codex from that Trello list");
+        String doneTarget = tutorialDoneTarget(listConfiguration);
+        out.println("You're good to go - your Trello board is now a queue for Codex work.");
+        out.println("Create a Trello card with a clear task and move it to " + queueTarget + ".");
+        if (githubEnabled) {
+            out.println("Symphony picks it up, " + runningText + ", and opens or updates a pull request.");
+            out.println(
+                    "Review the PR. If you want changes, comment on the PR or Trello card, then move the Trello card back to "
+                            + queueTarget + ".");
+            if (listConfiguration.activeStates().stream()
+                    .anyMatch(state -> state.equalsIgnoreCase(TrelloBoardSetup.RECOMMENDED_MERGING_STATE))) {
+                out.println("When the PR is ready to merge, move the Trello card to "
+                        + code(TrelloBoardSetup.RECOMMENDED_MERGING_STATE)
+                        + "; Symphony will re-check it, merge it, and move the Trello card to " + doneTarget + ".");
+            } else {
+                out.println(
+                        "Landing stays manual until a `Merging` Trello list and terminal Trello list are configured in the workflow.");
+            }
+            out.println(
+                    "By default, Symphony handles one card per board at a time; later you can raise `agent.max_concurrent_agents` in `WORKFLOW.md`.");
+        } else {
+            out.println("Symphony picks it up, " + runningText + ", and keeps the Trello card updated.");
+            out.println(
+                    "Review the result and add Trello comments describing what should change. Move the Trello card back to "
+                            + queueTarget + " when you want Symphony to address them. If you accept it, move it to "
+                            + doneTarget + ".");
+            out.println(
+                    "By default, Symphony handles one card per board at a time; later you can raise `agent.max_concurrent_agents` in `WORKFLOW.md`.");
+            out.println();
+            out.println(
+                    "PS: to add GitHub later, run `symphony-trello setup-local configure-github`. Symphony will add the GitHub PR flow to a connected board, including GitHub-specific Trello lists such as `Merging` when needed. In GitHub mode Symphony can create PRs and link them on the Trello card. `Merging` means: Symphony, please do final checks, merge this PR if safe, and move the Trello card to the configured terminal Trello list.");
+        }
+        out.println();
+        out.println("Read more:");
+        out.println("  Features: https://github.com/martinfrancois/symphony-trello#current-capabilities");
+        out.println("  How it works: https://github.com/martinfrancois/symphony-trello#how-it-works");
+        out.println("  Concurrency: https://github.com/martinfrancois/symphony-trello#workflow-contract");
+    }
+
+    private static String tutorialQueueTarget(WorkflowListConfiguration listConfiguration) {
+        return listConfiguration.activeStates().stream()
+                .filter(state -> listConfiguration.inProgressState().stream().noneMatch(state::equalsIgnoreCase))
+                .filter(state -> !state.equalsIgnoreCase(TrelloBoardSetup.RECOMMENDED_MERGING_STATE))
+                .findFirst()
+                .or(() -> listConfiguration.activeStates().stream().findFirst())
+                .map(LocalSetup::code)
+                .orElse("a configured active Trello list");
+    }
+
+    private static String tutorialDoneTarget(WorkflowListConfiguration listConfiguration) {
+        return listConfiguration.terminalStates().stream()
+                .findFirst()
+                .map(LocalSetup::code)
+                .orElse("a completed Trello list outside the active queue");
+    }
+
+    private static String code(String value) {
+        return "`" + value + "`";
+    }
+
+    private static String errorCode(Exception e) {
+        return e instanceof TrelloBoardSetupException setupException ? setupException.code() : "setup_local_failed";
+    }
+
+    private static String quoted(List<String> values) {
+        return values.stream()
+                .map(value -> "\"" + value + "\"")
+                .reduce((left, right) -> left + ", " + right)
+                .orElse("");
+    }
+
+    private static int parseChoice(String answer, int defaultChoice, int maxChoice) {
+        if (blank(answer)) {
+            return defaultChoice;
+        }
+        int parsed = Integer.parseInt(answer.strip());
+        if (parsed < 1 || parsed > maxChoice) {
+            throw new IllegalArgumentException("Choice must be between 1 and " + maxChoice);
+        }
+        return parsed;
+    }
+
+    private static boolean blank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    record Options(
+            boolean check,
+            boolean dryRun,
+            boolean repairPort,
+            boolean nonInteractive,
+            boolean force,
+            boolean forceNewSetup,
+            boolean configureGithub,
+            Optional<Boolean> githubMode,
+            Optional<String> apiKey,
+            Optional<String> apiToken,
+            Optional<String> boardName,
+            Optional<String> existingBoardId,
+            Optional<String> workspaceId,
+            List<String> activeStates,
+            List<String> terminalStates,
+            String inProgressState,
+            boolean detectInProgressState,
+            String blockedState,
+            Path workflowPath,
+            boolean workflowPathExplicit,
+            Path workspaceRoot,
+            boolean workspaceRootExplicit,
+            Path configDir,
+            Path manifestPath,
+            Optional<Integer> serverPort,
+            int maxAgents,
+            boolean maxAgentsExplicit,
+            Path envPath,
+            List<Path> additionalWritableRoots,
+            boolean allowAllPaths,
+            boolean dangerFullAccess,
+            boolean noStart,
+            String command,
+            URI endpoint,
+            Path callerDirectory) {
+        static Options from(LocalSetupRequest request, Map<String, String> environment) {
+            boolean check = request.action() == LocalSetupRequest.Action.CHECK;
+            boolean repairPort = request.action() == LocalSetupRequest.Action.REPAIR_PORT;
+            boolean configureGithub = request.action() == LocalSetupRequest.Action.CONFIGURE_GITHUB;
+            Path configDir = request.configDir().orElseGet(() -> defaultConfigDir(environment));
+            Path workflow = request.workflowPath().orElse(TrelloBoardSetup.DEFAULT_WORKFLOW_PATH);
+            boolean workflowPathExplicit = request.workflowPath().isPresent();
+            Path workspaceRoot = request.workspaceRoot().orElseGet(() -> defaultWorkspaceRoot(environment));
+            Path manifest = request.manifestPath().orElse(null);
+            Path envPath = request.envPath().orElse(null);
+            List<Path> additionalWritableRoots = request.additionalWritableRoots().stream()
+                    .map(path -> WorkspaceAccessFlow.resolveAccessPath(path, callerDirectory(environment)))
+                    .toList();
+            request.serverPort().ifPresent(LocalPort::validateCliServerPort);
+            Boolean githubMode = request.githubMode().orElse(null);
+            if (configureGithub) {
+                githubMode = true;
+            }
+            configDir = configDir.toAbsolutePath().normalize();
+            envPath = resolveUserDataPath(envPath == null ? DEFAULT_ENV_PATH : envPath, configDir);
+            manifest = resolveUserDataPath(manifest == null ? Path.of("connected-boards.json") : manifest, configDir);
+            additionalWritableRoots =
+                    additionalWritableRoots.stream().map(Path::normalize).toList();
+            if (request.nonInteractive()) {
+                boolean broadPathAllowed = request.allowAllPaths();
+                additionalWritableRoots.forEach(
+                        path -> WorkspaceAccessFlow.rejectBroadAccessPath(path, broadPathAllowed));
+            }
+            if (workflowPathExplicit) {
+                workflow = resolveUserDataPath(workflow, configDir);
+            }
+            boolean workspaceRootExplicit = request.workspaceRoot().isPresent();
+            validateEnvPath(envPath);
+            String command = environment.getOrDefault(COMMAND_ENV, DEFAULT_COMMAND);
+            return new Options(
+                    check,
+                    request.dryRun(),
+                    repairPort,
+                    request.nonInteractive(),
+                    request.force(),
+                    request.forceNewSetup(),
+                    configureGithub,
+                    Optional.ofNullable(githubMode),
+                    request.apiKey(),
+                    request.apiToken(),
+                    request.boardName(),
+                    request.existingBoardId(),
+                    request.workspaceId(),
+                    List.copyOf(request.activeStates()),
+                    List.copyOf(request.terminalStates()),
+                    request.inProgressState(),
+                    request.detectInProgressState(),
+                    request.blockedState(),
+                    workflow,
+                    workflowPathExplicit,
+                    workspaceRoot,
+                    workspaceRootExplicit,
+                    configDir,
+                    manifest,
+                    request.serverPort(),
+                    request.maxAgents(),
+                    request.maxAgentsExplicit(),
+                    envPath,
+                    List.copyOf(additionalWritableRoots),
+                    request.allowAllPaths(),
+                    request.dangerFullAccess(),
+                    request.noStart(),
+                    command,
+                    request.endpoint(),
+                    callerDirectory(environment));
+        }
+
+        Options withCodexAccess(List<Path> additionalWritableRoots, boolean dangerFullAccess) {
+            return new Options(
+                    check,
+                    dryRun,
+                    repairPort,
+                    nonInteractive,
+                    force,
+                    forceNewSetup,
+                    configureGithub,
+                    githubMode,
+                    apiKey,
+                    apiToken,
+                    boardName,
+                    existingBoardId,
+                    workspaceId,
+                    activeStates,
+                    terminalStates,
+                    inProgressState,
+                    detectInProgressState,
+                    blockedState,
+                    workflowPath,
+                    workflowPathExplicit,
+                    workspaceRoot,
+                    workspaceRootExplicit,
+                    configDir,
+                    manifestPath,
+                    serverPort,
+                    maxAgents,
+                    maxAgentsExplicit,
+                    envPath,
+                    additionalWritableRoots,
+                    allowAllPaths,
+                    dangerFullAccess,
+                    noStart,
+                    command,
+                    endpoint,
+                    callerDirectory);
+        }
+
+        private static Path resolveUserDataPath(Path path, Path configDir) {
+            return path.isAbsolute()
+                    ? path.normalize()
+                    : configDir.resolve(path).normalize();
+        }
+
+        private static Path defaultConfigDir(Map<String, String> environment) {
+            String configured = environment.get(CONFIG_DIR_ENV);
+            if (!blank(configured)) {
+                return Path.of(configured);
+            }
+            return Path.of(".").toAbsolutePath().normalize();
+        }
+
+        private static Path callerDirectory(Map<String, String> environment) {
+            String configured = environment.get(CALLER_DIR_ENV);
+            if (!blank(configured)) {
+                return Path.of(configured).toAbsolutePath().normalize();
+            }
+            return Path.of(".").toAbsolutePath().normalize();
+        }
+
+        private static Path defaultWorkspaceRoot(Map<String, String> environment) {
+            String configured = environment.get("SYMPHONY_TRELLO_WORKSPACE_ROOT");
+            if (!blank(configured)) {
+                return Path.of(configured);
+            }
+            return TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT;
+        }
+
+        private static void validateEnvPath(Path envPath) {
+            Path fileName = envPath.getFileName();
+            String name = fileName == null ? "" : fileName.toString();
+            if (".env.example".equals(name)
+                    || ".env.template".equals(name)
+                    || (!".env".equals(name) && !name.startsWith(".env."))) {
+                throw new TrelloBoardSetupException(
+                        "setup_env_path_not_ignored",
+                        "--env must point to an ignored dotenv file named .env or .env.NAME, not a tracked template.");
+            }
+        }
+
+        boolean hasExplicitBoardSetupRequest() {
+            return boardName.isPresent() || existingBoardId.isPresent();
+        }
+
+        boolean hasCodexAccessUpdateRequest() {
+            return !additionalWritableRoots.isEmpty() || dangerFullAccess;
+        }
+
+        boolean hasCodexAccessOnlyUpdateRequest() {
+            return hasCodexAccessUpdateRequest() && !hasNonAccessWorkflowUpdateRequest();
+        }
+
+        private boolean hasNonAccessWorkflowUpdateRequest() {
+            return workspaceId.isPresent()
+                    || !activeStates.isEmpty()
+                    || !terminalStates.isEmpty()
+                    || inProgressState != null
+                    || !detectInProgressState
+                    || !blank(blockedState)
+                    || workflowPathExplicit
+                    || workspaceRootExplicit
+                    || serverPort.isPresent()
+                    || maxAgentsExplicit;
+        }
+
+        Optional<String> repairBoardName() {
+            return existingBoardId;
+        }
+    }
+
+    record SetupResult(
+            String boardId,
+            String boardKey,
+            String boardName,
+            String boardUrl,
+            List<String> lists,
+            Path workflowPath,
+            int serverPort) {
+        static SetupResult from(TrelloBoardSetup.NewBoardResult result) {
+            return new SetupResult(
+                    result.boardId(),
+                    result.boardKey(),
+                    result.boardName(),
+                    result.boardUrl(),
+                    result.lists(),
+                    result.workflowPath(),
+                    result.serverPort());
+        }
+
+        static SetupResult from(TrelloBoardSetup.ImportBoardResult result) {
+            return new SetupResult(
+                    result.boardId(),
+                    result.boardKey(),
+                    result.boardName(),
+                    result.boardUrl(),
+                    result.openLists(),
+                    result.workflowPath(),
+                    result.serverPort());
+        }
+    }
+
+    private record ExistingBoardLists(
+            List<String> activeStates,
+            List<String> terminalStates,
+            String inProgressState,
+            boolean detectInProgressState,
+            String blockedState,
+            boolean createMissingGithubLists) {}
+
+    private enum ExistingSetupAction {
+        KEEP,
+        CONNECT,
+        DISCONNECT,
+        UPGRADE_GITHUB,
+        UPDATE_CODEX_ACCESS
+    }
+
+    private enum BoardSetupChoice {
+        NEW,
+        EXISTING
+    }
+}

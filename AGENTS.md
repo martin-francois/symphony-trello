@@ -42,12 +42,22 @@ matters, and easy for another engineer to understand without asking the original
    ```
 
    Use `spotless:apply` before that when formatting changed.
+   When a change needs PowerShell verification and local `pwsh` is unavailable, use
+   `./scripts/pwsh-docker.sh` for the PowerShell install/uninstall checks and set
+   `SYMPHONY_TRELLO_TEST_PWSH=./scripts/pwsh-docker.sh` for Java tests that support a configurable
+   PowerShell command. Do not report PowerShell as skipped only because `pwsh` is missing if Docker
+   is available.
 11. Commit with Conventional Commits for this repository when asked to commit, and keep the working
    tree clean before claiming the work is done. When an agent creates commits inside another target
    repository for a Trello card, follow that repository's documented commit convention first. If it
    has no documented convention, infer from the last 20 to 50 commits on the default branch. If the
    repository has no commits, only one commit, no reachable default-branch history, or mixed recent
    styles, default to Conventional Commits.
+   For feature-branch work in this repository, preserve a single review commit by amending the
+   existing branch commit or squashing related local commits before pushing, unless the user
+   explicitly asks for multiple commits.
+   Keep `feat/issue-35-plan-b-onboarding` as a single commit on top of `main`; amend or squash and
+   force-push when changing that branch.
 12. When the user asks for a concrete repo change, commit and push the completed change unless they
    explicitly ask not to.
 13. When a change affects runtime behavior and the user is likely to verify it manually afterward,
@@ -146,6 +156,17 @@ matters, and easy for another engineer to understand without asking the original
   move optional modes, safety knobs, and advanced configuration into later sections.
 - Keep deployment instructions focused on operating a prepared version. Do not put contributor or CI
   verification commands such as formatting, linting, or full test runs into deployment steps.
+- For installer/onboarding changes, do not rely on syntax checks or dry runs alone. Add or update
+  deterministic lifecycle coverage that drives prompts through a real pseudo-terminal when prompts
+  exist, uses test doubles for external tools and services, verifies install/update/start/status
+  behavior, and proves uninstall removes installer-managed files and state without external side
+  effects.
+- When changing installer, updater, onboarding, or uninstaller output, review the text from a
+  first-time user's perspective before committing. Make dry-run output name the same major actions
+  as the real run, distinguish files that will be removed from auth/data that will be preserved,
+  avoid labels that can be mistaken for commands to execute, avoid internal shorthand in prompts,
+  show exact paths for this run when deletion is possible, and keep follow-up instructions to one
+  clear next action.
 - In prerequisites, name only tools the reader must install or provide. Do not list the Maven wrapper
   as a prerequisite when it is already committed. For command-line tools such as Codex, state exactly
   how the service finds them, such as `PATH` lookup or a configurable command path.
@@ -156,6 +177,10 @@ matters, and easy for another engineer to understand without asking the original
 - In user-facing docs, CLI text, and generated workflow prompts, call visible Trello board lanes
   "lists". On first use in the README, briefly explain that a Trello list is the board column that
   contains cards, for example `Ready for Codex` or `In Progress`.
+- Use "connect" and "disconnect" for setup/configuration actions between Symphony and Trello
+  boards. Use "manage" or "managing" for runtime behavior. Avoid "watch", "stop watching", "use",
+  and "stop using" for the Symphony/Trello relationship. When a Trello entity word could be
+  ambiguous, qualify it, for example `Trello comment`, `Trello list`, or `Trello card`.
 - Use Trello's UI term "archived" in prose for archived cards, lists, and boards. Use
   `closed` only when naming Trello REST API fields or parameters, and explain nearby that Trello's
   API uses `closed` for archived resources. Distinguish archived lists from deleted lists; Trello
@@ -221,6 +246,11 @@ matters, and easy for another engineer to understand without asking the original
 
 - Follow the testing pyramid: fast focused unit tests first, broader integration tests where shared
   contracts or external boundaries are involved.
+- When a bug is found, explicitly ask why the current suite missed it and add the smallest
+  regression test that would have failed before the fix. Prefer writing that test before the fix
+  when practical. If the fix already exists, temporarily revert or otherwise disable the fix when
+  feasible to confirm the regression test fails for the original bug, then restore the fix and make
+  the test pass.
 - Use JUnit 6 and AssertJ. Prefer readable AssertJ chains when they improve the failure message.
 - Use Mockito for mocks. Keep purpose-built fakes only when they model an external protocol,
   stateful fixture, or concurrency behavior more clearly than Mockito stubbing.
@@ -302,6 +332,10 @@ matters, and easy for another engineer to understand without asking the original
 - When adding or updating ADRs, document the options that were seriously considered, why the chosen
   option won, what becomes easier, what becomes worse, and how future maintainers can confirm the
   decision is still implemented.
+- When a conversation resolves a durable tradeoff that future maintainers would otherwise have to
+  rediscover, add or update an ADR in the same change. Signals include choosing one reasonable
+  approach over another, removing or narrowing a supported path, accepting a user-facing tradeoff, or
+  explaining why an obvious alternative should not be used.
 - When a session contains multiple durable design decisions, review the recent conversation and
   commit history before finishing so relevant decisions are captured in ADRs instead of living only
   in chat.
@@ -333,3 +367,12 @@ matters, and easy for another engineer to understand without asking the original
 - Be direct about residual risk, skipped verification, or parts that are intentionally not covered.
 - If a review tool is available, use it before finalizing non-trivial code changes and address
   justified findings.
+- For `codex review`, choose the scope explicitly on the first run and do not pass a positional
+  prompt with scoped review flags. The installed Codex CLI rejects that combination even when its
+  usage text implies `[PROMPT]` might work. Correct forms are:
+  `codex review --uncommitted --title "Short review title"` for staged, unstaged, or untracked local
+  changes; `codex review --base origin/main --title "Short review title"` for an already committed
+  feature branch; and `codex review --commit SHA --title "Short review title"` for one specific
+  commit. Never run `codex review --uncommitted "prompt"`, `codex review "prompt" --uncommitted`,
+  `printf "prompt" | codex review --uncommitted -`, bare `codex review`, or a mismatched scope and
+  then correct it later.
