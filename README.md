@@ -504,6 +504,8 @@ trello_tools:
   allow_url_attachments: false
 codex:
   command: codex app-server
+  model: gpt-5.5
+  reasoning_effort: medium
 ---
 \# Trello Card
 
@@ -699,6 +701,8 @@ agent:
   max_concurrent_agents: 1
 codex:
   command: codex app-server
+  model: gpt-5.5
+  reasoning_effort: medium
   approval_policy: never
   turn_timeout_ms: 3600000
   read_timeout_ms: 5000
@@ -863,6 +867,8 @@ server:
   port: 18080
 codex:
   command: codex app-server
+  model: gpt-5.5
+  reasoning_effort: medium
 ---
 \# Task
 
@@ -876,17 +882,31 @@ behavior. This is intentional; typo-tolerant prompts hide broken automation.
 
 ### Codex Command
 
-Generated workflows use:
+Generated workflows include a Codex section like this:
 
 ```yaml
 codex:
   command: codex app-server
+  model: gpt-5.5
+  reasoning_effort: medium
 ```
 
-Symphony runs that value with `bash -lc` from the card workspace. Any command is acceptable if it
-starts a Codex app-server on stdio for the same OS user that runs Symphony. Examples include an
+Symphony runs `codex.command` with `bash -lc` from the card workspace. Any command is acceptable if
+it starts a Codex app-server on stdio for the same OS user that runs Symphony. Examples include an
 absolute path such as `/opt/codex/bin/codex app-server` or a small wrapper script that sets up the
 environment before starting `codex app-server`.
+
+Generated workflows also make model selection explicit. During setup, Symphony asks the installed
+Codex CLI which model and reasoning effort it recommends, then writes those values to the workflow.
+If the model list is available but does not name a default, setup uses the first returned model. If
+the model list is empty or lacks usable model details, setup writes the fallback values shown above.
+If the installed Codex app-server cannot answer the model-list request at all, setup omits the
+first-class model fields so the generated workflow remains compatible with older app-server versions.
+
+`codex.model` maps to the app-server `model` request field. `codex.reasoning_effort` maps to the
+app-server turn `effort` field. Edit those workflow values to choose a different model or reasoning
+level. If either field is omitted, the installed Codex CLI/app-server default or `codex.command`
+configuration decides the value.
 
 ### Workspace-Local Skills
 

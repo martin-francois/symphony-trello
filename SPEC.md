@@ -610,10 +610,20 @@ Fields:
 For Codex-owned config values such as `approval_policy`, `thread_sandbox`, and
 `turn_sandbox_policy`, supported values are defined by the targeted Codex app-server version.
 Implementors SHOULD treat them as pass-through Codex config values rather than relying on a
-hand-maintained enum in this spec. To inspect the installed Codex schema, run
+hand-maintained enum in this spec. The Java implementation maps `codex.model` to the app-server
+`model` field and `codex.reasoning_effort` to the app-server turn `effort` field. To inspect the
+installed Codex schema, run
 `codex app-server generate-json-schema --out <dir>` and inspect the generated definitions. The
 generated schema is version-specific to the installed Codex binary. Implementations MAY validate
 these fields locally if they want stricter startup checks.
+
+The Java setup flow writes explicit `model` and `reasoning_effort` values into generated workflows.
+It queries the installed Codex CLI with the app-server `model/list` method and uses the default
+model's recommended reasoning effort. If the model list is available but does not mark a default,
+setup uses the first returned model. If the list is empty or lacks usable model details, setup writes
+`gpt-5.5` and `medium`. If the installed app-server cannot answer the model-list request, setup
+omits the first-class fields so the generated workflow remains compatible with Codex versions that
+do not expose them.
 
 - `command` (string shell command)
   - Default: `codex app-server`
@@ -621,6 +631,14 @@ these fields locally if they want stricter startup checks.
   - On POSIX systems, `bash -lc <codex.command>` is a conforming default.
   - Non-POSIX process launch behavior is implementation-defined.
   - The launched process MUST speak a compatible app-server protocol.
+- `model` (string, OPTIONAL)
+  - Default: implementation-defined.
+  - When configured and supported by the targeted app-server schema, pass it through as the app-server
+    `model` field.
+- `reasoning_effort` (string, OPTIONAL)
+  - Default: implementation-defined.
+  - When configured and supported by the targeted app-server schema, pass it through as the app-server
+    reasoning effort field. The Java implementation uses the turn `effort` request field.
 - `approval_policy` (Codex `AskForApproval` value)
   - Default: implementation-defined.
 - `thread_sandbox` (Codex `SandboxMode` value)
@@ -958,6 +976,8 @@ implemented.
 - `agent.max_retry_backoff_ms`: integer, default `300000` (5m)
 - `agent.max_concurrent_agents_by_state`: map of positive integers, default `{}`
 - `codex.command`: shell command string, default `codex app-server`
+- `codex.model`: string, default implementation-defined
+- `codex.reasoning_effort`: string, default implementation-defined
 - `codex.approval_policy`: Codex `AskForApproval` value, default implementation-defined
 - `codex.thread_sandbox`: Codex `SandboxMode` value, default implementation-defined
 - `codex.turn_sandbox_policy`: Codex `SandboxPolicy` value, default implementation-defined
@@ -1420,8 +1440,8 @@ Notes:
 - The default command is `codex app-server`.
 - On POSIX systems, `bash -lc <codex.command>` is a conforming launch default.
 - On non-POSIX systems, process launch behavior is implementation-defined and MUST be documented.
-- Approval policy, sandbox policy, cwd, prompt input, and OPTIONAL tool declarations are supplied
-  using fields supported by the targeted Codex app-server version.
+- Model, reasoning effort, approval policy, sandbox policy, cwd, prompt input, and OPTIONAL tool
+  declarations are supplied using fields supported by the targeted Codex app-server version.
 
 RECOMMENDED additional process settings:
 
@@ -1442,8 +1462,8 @@ client to:
 - Start the first turn with the rendered card prompt.
 - Start later in-worker continuation turns on the same live thread with continuation guidance rather
   than resending the original card prompt.
-- Supply the implementation's documented approval and sandbox policy using fields supported by the
-  targeted protocol.
+- Supply the implementation's documented model, reasoning effort, approval, and sandbox policy using
+  fields supported by the targeted protocol.
 - Include card-identifying metadata, such as `<card.identifier>: <card.title>`, when the targeted
   protocol supports turn or session titles.
 - Advertise implemented client-side tools using the targeted protocol.
@@ -1531,7 +1551,7 @@ Important emitted events include, for example:
 
 ### 10.5 Approval, Tool Calls, and User Input Policy
 
-Approval, sandbox, and user-input behavior is implementation-defined.
+Model, reasoning, approval, sandbox, and user-input behavior is implementation-defined.
 
 Policy requirements:
 
@@ -2944,7 +2964,8 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
   resume
 - Client identity/capability payloads are valid when the targeted Codex app-server protocol requires
   them
-- Policy-related startup payloads use the implementation's documented approval/sandbox settings
+- Policy-related startup payloads use the implementation's documented model, reasoning,
+  approval, and sandbox settings
 - Thread and turn identities exposed by the targeted protocol are extracted and used to emit
   `session_started`
 - Request/response read timeout is enforced
