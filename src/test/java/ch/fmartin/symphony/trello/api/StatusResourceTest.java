@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -9,8 +10,10 @@ import static org.mockito.Mockito.when;
 import ch.fmartin.symphony.trello.orchestrator.CardDebugDetails;
 import ch.fmartin.symphony.trello.orchestrator.RuntimeSnapshot;
 import ch.fmartin.symphony.trello.orchestrator.SymphonyOrchestrator;
+import jakarta.inject.Inject;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
+import java.lang.reflect.Constructor;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
@@ -19,6 +22,18 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class StatusResourceTest {
+    @Test
+    void productionConstructorIsMarkedForCdiInjection() throws Exception {
+        // given
+        Constructor<StatusResource> constructor = StatusResource.class.getConstructor(SymphonyOrchestrator.class);
+
+        // when
+        boolean hasInjectAnnotation = constructor.isAnnotationPresent(Inject.class);
+
+        // then
+        assertThat(hasInjectAnnotation).isTrue();
+    }
+
     @Test
     void rendersEscapedHtmlStatusRows() {
         // given
@@ -50,6 +65,28 @@ class StatusResourceTest {
 
         // then
         assertThat(state).isSameAs(snapshot);
+    }
+
+    @Test
+    void localStatusIncludesWorkflowPathAndBoardIdForLoopbackClientsOnly() {
+        // given
+        SymphonyOrchestrator orchestrator = mock(SymphonyOrchestrator.class);
+        when(orchestrator.selectedBoardId()).thenReturn("board-1");
+        when(orchestrator.selectedConfiguredBoardId()).thenReturn("abc123");
+        when(orchestrator.selectedWorkflowPath()).thenReturn(Path.of("/private/workflow.md"));
+        var loopbackResource = new StatusResource(orchestrator, () -> true);
+        var remoteResource = new StatusResource(orchestrator, () -> false);
+
+        // when
+        Object loopbackStatus = loopbackResource.localStatus();
+        Throwable remoteFailure = catchThrowable(remoteResource::localStatus);
+
+        // then
+        assertThat(loopbackStatus).isInstanceOfSatisfying(Map.class, status -> assertThat(status)
+                .containsEntry("boardId", "board-1")
+                .containsEntry("configuredBoardId", "abc123")
+                .containsEntry("workflowPath", "/private/workflow.md"));
+        assertThat(remoteFailure).isInstanceOf(NotFoundException.class);
     }
 
     @Test

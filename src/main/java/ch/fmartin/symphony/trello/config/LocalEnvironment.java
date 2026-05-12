@@ -9,11 +9,17 @@ import java.util.Optional;
 
 public final class LocalEnvironment {
     private static final Path DEFAULT_DOTENV = Path.of(".env");
+    private static final String DOTENV_PATH_ENV = "SYMPHONY_TRELLO_DOTENV";
 
     private LocalEnvironment() {}
 
     public static Optional<String> get(String name) {
-        return get(name, DEFAULT_DOTENV, System.getenv());
+        Map<String, String> environment = System.getenv();
+        return get(name, defaultDotenv(environment), environment);
+    }
+
+    public static Optional<String> get(String name, Path dotenv) {
+        return get(name, dotenv, System.getenv());
     }
 
     static Optional<String> get(String name, Path dotenv, Map<String, String> environment) {
@@ -25,7 +31,29 @@ public final class LocalEnvironment {
         return hasText(value) ? Optional.of(value) : Optional.empty();
     }
 
-    static Map<String, String> load(Path dotenv) {
+    public static Optional<String> firstPresent(String... names) {
+        Map<String, String> environment = System.getenv();
+        return firstPresent(defaultDotenv(environment), environment, names);
+    }
+
+    public static Optional<String> firstPresent(Path dotenv, Map<String, String> environment, String... names) {
+        for (String name : names) {
+            String value = environment.get(name);
+            if (hasText(value)) {
+                return Optional.of(value);
+            }
+        }
+        Map<String, String> dotenvValues = load(dotenv);
+        for (String name : names) {
+            String value = dotenvValues.get(name);
+            if (hasText(value)) {
+                return Optional.of(value);
+            }
+        }
+        return Optional.empty();
+    }
+
+    public static Map<String, String> load(Path dotenv) {
         if (!Files.isRegularFile(dotenv)) {
             return Map.of();
         }
@@ -38,6 +66,15 @@ public final class LocalEnvironment {
         } catch (IOException ignored) {
             return Map.of();
         }
+    }
+
+    static Path defaultDotenv(Map<String, String> environment) {
+        String configured = environment.get(DOTENV_PATH_ENV);
+        return hasText(configured) ? Path.of(configured) : DEFAULT_DOTENV;
+    }
+
+    public static Path defaultDotenv() {
+        return defaultDotenv(System.getenv());
     }
 
     private static Optional<Entry> parseLine(String rawLine) {
@@ -77,11 +114,37 @@ public final class LocalEnvironment {
         if (value.length() >= 2) {
             char first = value.charAt(0);
             char last = value.charAt(value.length() - 1);
-            if ((first == '"' && last == '"') || (first == '\'' && last == '\'')) {
+            if (first == '"' && last == '"') {
+                return unescapeDoubleQuoted(value.substring(1, value.length() - 1));
+            }
+            if (first == '\'' && last == '\'') {
                 return value.substring(1, value.length() - 1);
             }
         }
         return value;
+    }
+
+    private static String unescapeDoubleQuoted(String value) {
+        StringBuilder unescaped = new StringBuilder(value.length());
+        for (int i = 0; i < value.length(); i++) {
+            char current = value.charAt(i);
+            if (current != '\\' || i == value.length() - 1) {
+                unescaped.append(current);
+                continue;
+            }
+            char escaped = value.charAt(++i);
+            switch (escaped) {
+                case '"' -> unescaped.append('"');
+                case '\\' -> unescaped.append('\\');
+                case 'b' -> unescaped.append('\b');
+                case 'f' -> unescaped.append('\f');
+                case 'n' -> unescaped.append('\n');
+                case 'r' -> unescaped.append('\r');
+                case 't' -> unescaped.append('\t');
+                default -> unescaped.append('\\').append(escaped);
+            }
+        }
+        return unescaped.toString();
     }
 
     private record Entry(String key, String value) {}

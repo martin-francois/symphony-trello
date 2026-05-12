@@ -1,0 +1,383 @@
+package ch.fmartin.symphony.trello.setup;
+
+import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.*;
+import static org.assertj.core.api.Assertions.assertThat;
+
+import ch.fmartin.symphony.trello.setup.InstallerScriptFixture.ProcessResult;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+class InstallerScriptLifecycleTest {
+    @TempDir
+    Path temporaryDirectory;
+
+    @Test
+    void posixInstallerLifecycleInstallsUpdatesStartsAndUninstallsWithTestDoubles() throws Exception {
+        // given
+        Assumptions.assumeTrue(commandExists("bash"));
+        Assumptions.assumeTrue(commandExists("git"));
+        Assumptions.assumeTrue(commandExists("script"));
+        Path installScript = Path.of("install.sh").toAbsolutePath();
+        Path uninstallScript = Path.of("uninstall.sh").toAbsolutePath();
+        Path sourceRepository = createSourceRepository(temporaryDirectory);
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path symphonyHome = temporaryDirectory.resolve("home");
+        Path installPrefix = symphonyHome.resolve("app");
+        Path configDirectory = symphonyHome.resolve("config");
+        Path workspaceRoot = symphonyHome.resolve("workspaces");
+        Path binDirectory = temporaryDirectory.resolve("bin");
+        Path stateHome = symphonyHome.resolve("state");
+        Path fakeLog = temporaryDirectory.resolve("fake-tools.log");
+        Map<String, String> environment = Map.of(
+                "PATH",
+                fakeBin + System.getProperty("path.separator") + System.getenv("PATH"),
+                "SYMPHONY_TRELLO_REPO_URL",
+                sourceRepository.toUri().toString(),
+                "SYMPHONY_TRELLO_REF",
+                "main",
+                "SYMPHONY_HOME",
+                symphonyHome.toString(),
+                "SYMPHONY_FAKE_LOG",
+                fakeLog.toString(),
+                "SYMPHONY_FAKE_SLOW_TERM",
+                "true");
+
+        // when
+        ProcessResult install = runWithPseudoTerminal(
+                environment,
+                "n\napi-key\napi-token\nLifecycle Board\n",
+                "bash " + shellQuote(installScript.toString()) + " --bin-dir " + shellQuote(binDirectory.toString()));
+        Path installedCommand = binDirectory.resolve("symphony-trello");
+        Path callerDirectory = temporaryDirectory.resolve("posix caller");
+        Files.createDirectories(callerDirectory);
+        List<ProcessResult> picocliHelpResults = new ArrayList<>();
+        for (String[] command : installedPicocliHelpCommands()) {
+            picocliHelpResults.add(run(environment, commandWithPrefix(installedCommand.toString(), command)));
+        }
+        ProcessResult directBoardSetup = run(
+                environment,
+                callerDirectory,
+                installedCommand.toString(),
+                "new-board",
+                "--name",
+                "Wrapper Dispatch Board",
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--workflow",
+                "relative workflow.md",
+                "--workspace-root",
+                "relative workspaces");
+        ProcessResult unknownCommand = run(environment, installedCommand.toString(), "definitely-not-a-command");
+        ProcessResult statusAfterInstall = run(environment, installedCommand.toString(), "status");
+        ProcessResult noArgStart = run(environment, installedCommand.toString(), "start");
+        ProcessResult update = run(
+                environment, "bash", installScript.toString(), "--no-onboard", "--bin-dir", binDirectory.toString());
+        addSourceRepositoryCommit(sourceRepository, "UPGRADE_MARKER", "updated\n");
+        ProcessResult secondUpdate = run(
+                environment, "bash", installScript.toString(), "--no-onboard", "--bin-dir", binDirectory.toString());
+        String markerContentAfterUpdate =
+                Files.readString(installPrefix.resolve("UPGRADE_MARKER"), StandardCharsets.UTF_8);
+        ProcessResult statusWhileRunning = run(environment, installedCommand.toString(), "status");
+        Path pidFile = singleFile(stateHome, ".pid");
+        long managedPid =
+                Long.parseLong(Files.readString(pidFile, StandardCharsets.UTF_8).trim());
+        ProcessResult stop = run(
+                environment,
+                installedCommand.toString(),
+                "stop",
+                "--workflow",
+                configDirectory.resolve("WORKFLOW.lifecycle-board.md").toString());
+        ProcessResult restart = run(environment, installedCommand.toString(), "start");
+        Path restartedPidFile = singleFile(stateHome, ".pid");
+        long restartedManagedPid = Long.parseLong(
+                Files.readString(restartedPidFile, StandardCharsets.UTF_8).trim());
+        ProcessResult uninstall =
+                run(environment, "bash", uninstallScript.toString(), "--yes", "--bin-dir", binDirectory.toString());
+
+        // then
+        assertThat(install.exitCode()).isZero();
+        assertThat(install.output())
+                .contains(
+                        "Codex CLI is installed but not logged in.",
+                        "Can this machine open a browser for Codex login?",
+                        "RUN  codex login --device-auth",
+                        "Starting setup...",
+                        "Command installed")
+                .doesNotContain("Device auth");
+        assertThat(picocliHelpResults).allSatisfy(result -> {
+            assertThat(result.exitCode()).as(result.output()).isZero();
+            assertThat(result.output()).containsAnyOf("Usage: symphony-trello", "symphony-trello test");
+        });
+        assertThat(directBoardSetup.exitCode()).as(directBoardSetup.output()).isZero();
+        assertThat(unknownCommand.exitCode()).isEqualTo(2);
+        assertThat(unknownCommand.output())
+                .contains("setup_failed code=setup_invalid_arguments")
+                .contains("definitely-not-a-command");
+        assertThat(statusAfterInstall.output()).contains("running WORKFLOW.lifecycle-board.md.");
+        assertThat(noArgStart.output()).contains("already running", "WORKFLOW.lifecycle-board.md");
+        assertThat(update.exitCode()).isZero();
+        assertThat(secondUpdate.exitCode()).isZero();
+        assertThat(markerContentAfterUpdate).isEqualTo("updated\n");
+        assertThat(statusWhileRunning.output()).contains("running WORKFLOW.lifecycle-board.md.");
+        assertThat(stop.exitCode()).isZero();
+        assertThat(stop.output()).contains("Stopped WORKFLOW.lifecycle-board.md");
+        assertThat(processStopsWithin(managedPid, 5)).isTrue();
+        assertThat(restart.exitCode()).isZero();
+        assertThat(restart.output()).contains("Started Symphony for Trello");
+        assertThat(uninstall.exitCode()).isZero();
+        assertThat(uninstall.output()).contains("STOP", "REMOVE  " + binDirectory.resolve("symphony-trello"));
+        assertThat(processStopsWithin(restartedManagedPid, 5)).isTrue();
+        assertThat(installPrefix).doesNotExist();
+        assertThat(binDirectory.resolve("symphony-trello")).doesNotExist();
+        assertThat(configDirectory).exists();
+        assertThat(configDirectory.resolve(".env"))
+                .content(StandardCharsets.UTF_8)
+                .contains("TRELLO_API_KEY=api-key");
+        assertThat(configDirectory.resolve("WORKFLOW.lifecycle-board.md")).exists();
+        assertThat(configDirectory.resolve("connected-boards.json"))
+                .content(StandardCharsets.UTF_8)
+                .contains(configDirectory.resolve("WORKFLOW.lifecycle-board.md").toString());
+        assertThat(workspaceRoot).exists();
+        assertThat(stateHome).exists();
+        ProcessResult cleanup = run(
+                environment,
+                "bash",
+                uninstallScript.toString(),
+                "--yes",
+                "--yes-local-data",
+                "--remove-config",
+                "--remove-workspaces",
+                "--remove-state",
+                "--bin-dir",
+                binDirectory.toString());
+        assertThat(cleanup.exitCode()).isZero();
+        assertThat(cleanup.output())
+                .contains("REMOVE  " + configDirectory, "REMOVE  " + workspaceRoot, "REMOVE  " + stateHome);
+        assertThat(configDirectory).doesNotExist();
+        assertThat(workspaceRoot).doesNotExist();
+        assertThat(stateHome).doesNotExist();
+        assertThat(regularFilesUnder(binDirectory)).isEmpty();
+        assertThat(fakeLog)
+                .content()
+                .contains(
+                        "codex login --device-auth",
+                        "setup-local key=api-key token=api-token board=Lifecycle Board",
+                        "setup-cli",
+                        "setup-cli cwd=" + callerDirectory,
+                        "-Dsymphony.trello.config.dir=" + configDirectory,
+                        "new-board --name Wrapper Dispatch Board",
+                        "--workflow relative workflow.md",
+                        "--workspace-root relative workspaces",
+                        "dotenv=" + configDirectory.resolve(".env"),
+                        "definitely-not-a-command",
+                        "mvnw -q -f " + installPrefix.resolve("pom.xml") + " -DskipTests clean package",
+                        "jar-start",
+                        "app-present-before-exit",
+                        "jar-stopped")
+                .doesNotContain("new-board --workflow");
+    }
+
+    @Test
+    void powershellInstallerLifecycleInstallsStartsStopsAndUninstallsWithFakeJavaOnWindows() throws Exception {
+        // given
+        Assumptions.assumeTrue(isWindows());
+        Assumptions.assumeTrue(commandExists("pwsh"));
+        Assumptions.assumeTrue(commandExists("git"));
+        Path installScript = Path.of("install.ps1").toAbsolutePath();
+        Path uninstallScript = Path.of("uninstall.ps1").toAbsolutePath();
+        Path sourceRepository = createWindowsSourceRepository(temporaryDirectory);
+        Path fakeBin = createFakeWindowsToolchain(temporaryDirectory);
+        Path symphonyHome = temporaryDirectory.resolve("home $value & (demo) é");
+        Path installPrefix = symphonyHome.resolve("app");
+        Path configDirectory = symphonyHome.resolve("config");
+        Path workspaceRoot = symphonyHome.resolve("workspaces");
+        Path stateHome = symphonyHome.resolve("state");
+        Path binDirectory = temporaryDirectory.resolve("bin $value & (demo) é");
+        Path workflow = temporaryDirectory.resolve("WORKFLOW $value & (demo) é.md");
+        Path envFile = temporaryDirectory.resolve(".env $value & (demo) é");
+        Path fakeLog = temporaryDirectory.resolve("fake powershell tools.log");
+        Map<String, String> environment = Map.of(
+                "PATH", fakeBin + System.getProperty("path.separator") + System.getenv("PATH"),
+                "SYMPHONY_FAKE_LOG", fakeLog.toString(),
+                "SYMPHONY_FAKE_JAVA", fakeBin.resolve("fake-java.ps1").toString());
+
+        // when
+        ProcessResult install = run(
+                environment,
+                "pwsh",
+                "-NoProfile",
+                "-File",
+                installScript.toString(),
+                "--no-onboard",
+                "--prefix",
+                installPrefix.toString(),
+                "--bin-dir",
+                binDirectory.toString(),
+                "--repo",
+                sourceRepository.toUri().toString(),
+                "--ref",
+                "main");
+        Path installedScript = binDirectory.resolve("symphony-trello.ps1");
+        Path installedCmdShim = binDirectory.resolve("symphony-trello.cmd");
+        Path callerDirectory = temporaryDirectory.resolve("windows caller");
+        Files.createDirectories(callerDirectory);
+        List<ProcessResult> picocliHelpResults = new ArrayList<>();
+        for (String[] command : installedPicocliHelpCommands()) {
+            picocliHelpResults.add(run(environment, powerShellFileCommand(installedScript.toString(), command)));
+        }
+        ProcessResult directBoardSetup =
+                run(environment, callerDirectory, powerShellFileCommand(installedScript.toString(), new String[] {
+                    "new-board",
+                    "--name",
+                    "Wrapper Dispatch Board",
+                    "--key",
+                    "key",
+                    "--token",
+                    "token",
+                    "--workflow",
+                    "relative workflow.md",
+                    "--workspace-root",
+                    "relative workspaces"
+                }));
+        ProcessResult cmdShimBoardSetup = run(
+                environment,
+                callerDirectory,
+                "cmd.exe",
+                "/c",
+                installedCmdShim.toString(),
+                "new-board",
+                "--name",
+                "Command Prompt Wrapper Dispatch Board",
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--workflow",
+                "cmd workflow.md",
+                "--workspace-root",
+                "cmd workspaces");
+        ProcessResult unknownCommand =
+                run(environment, "pwsh", "-NoProfile", "-File", installedScript.toString(), "definitely-not-a-command");
+        Files.writeString(workflow, "# Windows workflow\n", StandardCharsets.UTF_8);
+        Files.writeString(envFile, "TRELLO_API_KEY=key\n", StandardCharsets.UTF_8);
+        ProcessResult start = run(
+                environment,
+                "pwsh",
+                "-NoProfile",
+                "-File",
+                installedScript.toString(),
+                "start",
+                "--env",
+                envFile.toString(),
+                "--workflow",
+                workflow.toString());
+        ProcessResult status = run(
+                environment,
+                "pwsh",
+                "-NoProfile",
+                "-File",
+                installedScript.toString(),
+                "status",
+                "--workflow",
+                workflow.toString());
+        ProcessResult logs = run(
+                environment,
+                "pwsh",
+                "-NoProfile",
+                "-Command",
+                "& "
+                        + powerShellLiteral(installedScript.toString())
+                        + " logs --workflow "
+                        + powerShellLiteral(workflow.toString())
+                        + " | Select-Object -First 1");
+        ProcessResult stop = run(
+                environment,
+                "pwsh",
+                "-NoProfile",
+                "-File",
+                installedScript.toString(),
+                "stop",
+                "--workflow",
+                workflow.toString());
+        ProcessResult uninstall = run(
+                environment,
+                "pwsh",
+                "-NoProfile",
+                "-File",
+                uninstallScript.toString(),
+                "--yes",
+                "--prefix",
+                installPrefix.toString(),
+                "--bin-dir",
+                binDirectory.toString());
+
+        // then
+        assertThat(install.exitCode()).as(install.output()).isZero();
+        assertThat(picocliHelpResults).allSatisfy(result -> {
+            assertThat(result.exitCode()).as(result.output()).isZero();
+            assertThat(result.output()).containsAnyOf("Usage: symphony-trello", "symphony-trello test");
+        });
+        assertThat(directBoardSetup.exitCode()).as(directBoardSetup.output()).isZero();
+        assertThat(cmdShimBoardSetup.exitCode()).as(cmdShimBoardSetup.output()).isZero();
+        assertThat(unknownCommand.exitCode()).isEqualTo(2);
+        assertThat(unknownCommand.output())
+                .contains("setup_failed code=setup_invalid_arguments")
+                .contains("definitely-not-a-command");
+        assertThat(start.exitCode()).as(start.output()).isZero();
+        assertThat(status.output()).contains("running WORKFLOW $value & (demo) é.md");
+        assertThat(logs.output()).contains("fake wrapper log");
+        assertThat(stop.output()).contains("Stopped WORKFLOW $value & (demo) é.md");
+        assertThat(fakeLog)
+                .content()
+                .contains(
+                        "setup-cli cwd=" + callerDirectory,
+                        "-Dsymphony.trello.config.dir=" + configDirectory,
+                        "-Dsymphony.trello.shell=powershell",
+                        "-Dsymphony.trello.shell=cmd",
+                        "new-board --name Wrapper Dispatch Board",
+                        "new-board --name Command Prompt Wrapper Dispatch Board",
+                        "--workflow relative workflow.md",
+                        "--workflow cmd workflow.md",
+                        "--workspace-root relative workspaces",
+                        "--workspace-root cmd workspaces",
+                        "dotenv=" + configDirectory.resolve(".env"))
+                .doesNotContain("new-board --workflow");
+        assertThat(uninstall.exitCode()).as(uninstall.output()).isZero();
+        assertThat(installPrefix).doesNotExist();
+        assertThat(binDirectory.resolve("symphony-trello.ps1")).doesNotExist();
+        assertThat(configDirectory).exists();
+        assertThat(workspaceRoot).exists();
+        assertThat(stateHome).exists();
+        ProcessResult cleanup = run(
+                environment,
+                "pwsh",
+                "-NoProfile",
+                "-File",
+                uninstallScript.toString(),
+                "--yes",
+                "--yes-local-data",
+                "--remove-config",
+                "--remove-workspaces",
+                "--remove-state",
+                "--prefix",
+                installPrefix.toString(),
+                "--bin-dir",
+                binDirectory.toString());
+        assertThat(cleanup.exitCode()).as(cleanup.output()).isZero();
+        assertThat(configDirectory).doesNotExist();
+        assertThat(workspaceRoot).doesNotExist();
+        assertThat(stateHome).doesNotExist();
+        assertThat(fakeLog)
+                .content(StandardCharsets.UTF_8)
+                .contains("mvnw.cmd -q -DskipTests clean package", "dotenv=" + envFile, "jar-start");
+    }
+}

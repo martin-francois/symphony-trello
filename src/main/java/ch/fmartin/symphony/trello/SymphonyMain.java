@@ -12,10 +12,12 @@ import jakarta.inject.Inject;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import picocli.CommandLine;
+import picocli.CommandLine.Option;
+import picocli.CommandLine.Parameters;
 
 @QuarkusMain
 public class SymphonyMain {
@@ -51,18 +53,18 @@ public class SymphonyMain {
         if (options.port().isPresent()) {
             return options.port();
         }
-        if (hasExternalPortOverride()) {
+        if (hasText(System.getProperty("quarkus.http.port"))) {
             return Optional.empty();
+        }
+        Optional<String> externalPort = externalHttpPortOverride();
+        if (externalPort.isPresent()) {
+            return externalPort;
         }
         return configuredServerPort(workflowPath);
     }
 
-    private static boolean hasExternalPortOverride() {
-        if (hasText(System.getProperty("quarkus.http.port"))) {
-            return true;
-        }
-        return LocalEnvironment.get("SYMPHONY_HTTP_PORT").isPresent()
-                || LocalEnvironment.get("QUARKUS_HTTP_PORT").isPresent();
+    private static Optional<String> externalHttpPortOverride() {
+        return LocalEnvironment.firstPresent("SYMPHONY_HTTP_PORT", "QUARKUS_HTTP_PORT");
     }
 
     private static boolean hasText(String value) {
@@ -139,20 +141,16 @@ public class SymphonyMain {
 
     record CliOptions(Optional<String> workflowPath, Optional<String> port) {
         static CliOptions parse(String... args) {
-            String workflowPath = null;
-            String port = null;
-            List<String> arguments = new ArrayList<>(List.of(args));
-            for (int i = 0; i < arguments.size(); i++) {
-                String argument = arguments.get(i);
-                if ("--port".equals(argument) && i + 1 < arguments.size()) {
-                    port = arguments.get(++i);
-                } else if (argument.startsWith("--port=")) {
-                    port = argument.substring("--port=".length());
-                } else if (!argument.startsWith("-") && workflowPath == null) {
-                    workflowPath = argument;
-                }
-            }
-            return new CliOptions(Optional.ofNullable(workflowPath), Optional.ofNullable(port));
+            RuntimeArgs parsed = CommandLine.populateCommand(new RuntimeArgs(), args);
+            return new CliOptions(Optional.ofNullable(parsed.workflowPath), Optional.ofNullable(parsed.port));
         }
+    }
+
+    private static final class RuntimeArgs {
+        @Parameters(index = "0", arity = "0..1", description = "Workflow file to run.")
+        String workflowPath;
+
+        @Option(names = "--port", description = "HTTP port for this Symphony worker.")
+        String port;
     }
 }

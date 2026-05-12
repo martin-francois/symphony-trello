@@ -50,6 +50,58 @@ class LocalEnvironmentTest {
         assertThat(apiKey).contains("key-from-env");
     }
 
+    @Test
+    void realEnvironmentAliasesWinOverDotenvAliases() throws Exception {
+        // given
+        Path dotenv = tempDir.resolve(".env");
+        Files.writeString(dotenv, "SYMPHONY_HTTP_PORT=18080");
+
+        // when
+        var port = LocalEnvironment.firstPresent(
+                dotenv, Map.of("QUARKUS_HTTP_PORT", "19080"), "SYMPHONY_HTTP_PORT", "QUARKUS_HTTP_PORT");
+
+        // then
+        assertThat(port).contains("19080");
+    }
+
+    @Test
+    void readsEscapedDoubleQuotedDotenvValues() throws Exception {
+        // given
+        Path dotenv = tempDir.resolve(".env");
+        Files.writeString(dotenv, "TRELLO_API_TOKEN=\"token\\\"quoted\\\\path\\tvalue\"");
+
+        // when
+        var apiToken = LocalEnvironment.get("TRELLO_API_TOKEN", dotenv, Map.of());
+
+        // then
+        assertThat(apiToken).contains("token\"quoted\\path\tvalue");
+    }
+
+    @Test
+    void preservesUnknownBackslashEscapesInDoubleQuotedDotenvValues() throws Exception {
+        // given
+        Path dotenv = tempDir.resolve(".env");
+        Files.writeString(dotenv, "SYMPHONY_WORKFLOW_PATH=\"C:\\Users\\Jane Doe\\WORKFLOW.md\"");
+
+        // when
+        var workflowPath = LocalEnvironment.get("SYMPHONY_WORKFLOW_PATH", dotenv, Map.of());
+
+        // then
+        assertThat(workflowPath).contains("C:\\Users\\Jane Doe\\WORKFLOW.md");
+    }
+
+    @Test
+    void configuredDotenvPathCanOverrideDefaultDotenvLocation() {
+        // given
+        Path dotenv = tempDir.resolve("runtime.env");
+
+        // when
+        Path resolved = LocalEnvironment.defaultDotenv(Map.of("SYMPHONY_TRELLO_DOTENV", dotenv.toString()));
+
+        // then
+        assertThat(resolved).isEqualTo(dotenv);
+    }
+
     @ParameterizedTest(name = "{0}")
     @MethodSource("ignoredDotenvLines")
     void ignoresInvalidDotenvLines(String ignoredLine) throws Exception {

@@ -72,22 +72,134 @@ a small low-risk project, then expand once the workflow matches how you review a
 
 ## Quick Start
 
-Prerequisites:
+The easiest path is the installer. It installs or updates Symphony for Trello, runs guided setup,
+and starts the managed local worker unless you pass `--no-onboard`.
 
-- JDK 25 available on `PATH`. The project uses Azul Zulu 25 through SDKMAN for local development.
-- [Codex CLI installed](https://help.openai.com/en/articles/11096431-openai-codex-ligetting-started)
-  and signed in.
+macOS, Linux, and Windows through WSL2:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/martinfrancois/symphony-trello/main/install.sh | bash
+```
+
+For Windows, WSL2 is the recommended setup path. Run the Linux installer inside WSL2, keep Codex
+CLI and Git on the WSL2 `PATH`, and use Linux paths for allowed local files and folders.
+
+Native Windows PowerShell is implemented as best effort:
+
+```powershell
+powershell -c "irm https://raw.githubusercontent.com/martinfrancois/symphony-trello/main/install.ps1 | iex"
+```
+
+The guided setup supports these local platforms:
+
+| Platform | Status |
+| --- | --- |
+| macOS arm64/amd64 | Supported |
+| Linux arm64/amd64 | Supported |
+| WSL2 on Windows | Supported through the Linux installer |
+| Windows amd64 PowerShell | Best effort |
+| Windows arm64 PowerShell | Best effort |
+
+It checks Git, a Java 25+ JDK, Codex CLI auth, Trello credentials, and optional GitHub CLI auth.
+When Git, Java, or Codex CLI is missing, the installer offers a concrete install command before it
+continues. GitHub is not required unless you want Symphony to create and land GitHub pull requests.
+If GitHub is not configured, setup creates a Trello board without the GitHub-specific `Merging` list
+and writes a non-GitHub starter workflow. If you enable GitHub while importing an existing board,
+setup creates the missing `Merging` list when needed.
+
+With WSL2, browser login may open in Windows; if that is awkward, choose device login when setup asks
+whether the machine can open a browser. The managed `start`, `stop`, `status`, and `logs` commands
+are lightweight per-user processes, not a Windows service or systemd unit.
+
+Setup saves Trello credentials that you type or pass directly. If credentials already come from real
+environment variables or an existing `.env` file, setup uses them without copying them into another
+file. Workflows, connected-board metadata, workspaces, and logs live under `SYMPHONY_HOME` by
+default, separate from the installer-managed app checkout.
+
+During setup, you can keep the default Codex workspace access or allow extra local files/folders.
+Extra paths are opt-in because Trello cards should not make Codex read or edit unrelated files by
+accident. You can also opt into `danger-full-access`, but setup asks for confirmation because that
+disables Codex's command/filesystem sandbox for that workflow.
+
+If you want to inspect the installer first:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/martinfrancois/symphony-trello/main/install.sh -o install.sh
+less install.sh
+bash install.sh
+```
+
+```powershell
+irm https://raw.githubusercontent.com/martinfrancois/symphony-trello/main/install.ps1 -OutFile install.ps1
+notepad install.ps1
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+Pass installer flags like this:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/martinfrancois/symphony-trello/main/install.sh | bash -s -- --dry-run
+```
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/martinfrancois/symphony-trello/main/install.ps1'))) --dry-run --no-onboard"
+```
+
+Useful commands after install:
+
+```bash
+symphony-trello setup-local check
+symphony-trello setup-local repair-port --board "My Board Name"
+symphony-trello status --board "My Board Name"
+symphony-trello logs --board "My Board Name"
+symphony-trello stop --board "My Board Name"
+```
+
+Use `setup-local repair-port --board "My Board Name"` only when `setup-local check` reports that
+a board's local HTTP port is already used by another process.
+
+Uninstall removes only the installer-managed command and app checkout by default. It preserves local
+`.env` files, workflows, connected-board metadata, workspaces, logs/state, Codex auth, GitHub auth,
+and Trello boards.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/martinfrancois/symphony-trello/main/uninstall.sh | bash
+```
+
+```powershell
+powershell -c "irm https://raw.githubusercontent.com/martinfrancois/symphony-trello/main/uninstall.ps1 | iex"
+```
+
+To inspect uninstall first or pass cleanup scopes:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/martinfrancois/symphony-trello/main/uninstall.sh -o uninstall.sh
+less uninstall.sh
+bash uninstall.sh --dry-run
+bash uninstall.sh --remove-config --remove-workspaces --remove-state
+bash uninstall.sh --yes --yes-local-data --remove-all-local-data
+```
+
+`--yes` only skips the prompt for installer-managed app files. Add `--yes-local-data` only when you
+also want unattended deletion of local `.env` files, workflows, workspaces, state, and logs.
+
+### Source Checkout
 
 By default, Symphony starts Codex by running `codex app-server`. That works when `codex` is on the
 `PATH` for the user that starts Symphony. If not, set `codex.command` in
 [`WORKFLOW.md`](#workflow-contract) to the full path or to a wrapper script.
 
-Start with [Trello Setup](#trello-setup) if you do not yet have Trello credentials or
-[`WORKFLOW.md`](#workflow-contract). That section walks you through creating the Trello key/token,
-then either creating the recommended board or importing an existing board.
+Start with the browser steps in [Trello Setup](#trello-setup) if you do not yet have Trello
+credentials. The board setup commands in that section use the installed `symphony-trello` wrapper.
+From a source checkout without the wrapper, run the same Java CLI through Maven:
 
-If you already have the Trello key/token but no `WORKFLOW.md`, skip the browser credential steps and
-use one of the board setup paths in [Trello Setup](#trello-setup).
+```bash
+./mvnw -q exec:java -Dexec.args='new-board --name "Symphony Work Queue"'
+./mvnw -q exec:java -Dexec.args='import-board --board abc123 --active "Ready for Codex" --in-progress "In Progress" --terminal Done --blocked Blocked'
+```
+
+If those source-checkout commands print `symphony-trello start` under `Next`, use the installed
+wrapper command, or use `./mvnw quarkus:dev` for a developer run from the checkout.
 
 If you already have both Trello credentials and `WORKFLOW.md`, put the credentials in an ignored
 project-root `.env` file:
@@ -133,9 +245,11 @@ Trello has three concepts that matter for Symphony:
 - **Lists** are the lanes on the board that contain cards. `WORKFLOW.md` and tool fields use names
   like `active_list_ids`, `allowed_move_list_names`, `list_id`, and `list_name`.
 
-Symphony reads cards, creates local Codex workspaces, and runs Codex. For repository-changing work,
-the generated workflow tells Codex to commit the change, create or update a pull request, leave a
-Trello handoff comment, and move the card to `Human Review` when the PR is ready for a person.
+Symphony reads cards, creates local Codex workspaces, and runs Codex. When GitHub integration is
+configured, the generated workflow tells Codex to commit the change, create or update a pull request,
+leave a Trello handoff comment, and move the card to `Human Review` when the PR is ready for a
+person. Without GitHub integration, the workflow stays local/non-GitHub and does not create the
+GitHub-specific `Merging` list.
 
 Start with the browser setup below. Those steps create the Trello credentials used by both board
 setup paths.
@@ -184,7 +298,11 @@ Workspace and authorize the API token in the browser.
 13. Click `Allow`.
 14. Copy the generated token. Treat it like a password: it grants access as your Trello account to
     boards and Workspaces your account can access.
-15. Save both values in the project-root `.env` file:
+15. Save both values in the `.env` file read by the command you will run:
+
+    - Installed `symphony-trello` command: `$HOME/.local/share/symphony-trello/config/.env`,
+      unless you installed with a custom `SYMPHONY_HOME` or `SYMPHONY_TRELLO_CONFIG_DIR`.
+    - Source checkout with Maven: the project-root `.env`.
 
 ```properties
 TRELLO_API_KEY=replace-with-generated-key
@@ -196,20 +314,27 @@ TRELLO_API_TOKEN=replace-with-generated-token
 Use this path when you are new to Trello or want Symphony to create a clean `Inbox` -> `Ready for
 Codex` -> `In Progress` -> `Blocked` -> `Human Review` -> `Merging` -> `Done` board for you. One
 command creates the board, creates the recommended lists, and writes a workflow file for that
-board.
+board. This direct command keeps the GitHub PR flow enabled by default. Use `setup-local` or pass
+`--no-github` when you want a local/non-GitHub workflow without `Merging`.
 
 Now create the board and workflow:
 
 ```bash
-./mvnw -q exec:java -Dexec.args='new-board --name "Symphony Work Queue"'
+symphony-trello new-board --name "Symphony Work Queue"
+```
+
+For a non-GitHub board:
+
+```bash
+symphony-trello new-board --name "Symphony Work Queue" --no-github
 ```
 
 If your token can access exactly one Workspace, Symphony uses it automatically. If your token can
 access multiple Workspaces, the command stops and asks for `--workspace-id`. Show the available ids:
 
 ```bash
-./mvnw -q exec:java -Dexec.args='list-workspaces'
-./mvnw -q exec:java -Dexec.args='new-board --name "Symphony Work Queue" --workspace-id workspace-id-from-list-workspaces'
+symphony-trello list-workspaces
+symphony-trello new-board --name "Symphony Work Queue" --workspace-id workspace-id-from-list-workspaces
 ```
 
 The command creates this Trello board layout:
@@ -226,6 +351,8 @@ It also writes a workflow with `Ready for Codex`, `In Progress`, and `Merging` a
 `Done` as the terminal list, `In Progress`, `Human Review`, `Blocked`, and `Done` as allowed move
 lists, `./workspaces` as the local workspace directory, a stable HTTP status port, and
 `max_concurrent_agents: 1`. With that default, Symphony starts one card at a time from this board.
+With `--no-github`, `Merging` is not created, the active lists are `Ready for Codex` and
+`In Progress`, and the workflow does not require PR publication or landing.
 
 The first run writes `WORKFLOW.md`. If that file already exists and you did not pass `--workflow`,
 Symphony keeps the existing file and writes a board-specific file instead. For a board named
@@ -237,13 +364,14 @@ number, such as `WORKFLOW.my-project-2.md`. Symphony also chooses the first unus
 Pass `--force` only when you intentionally want to replace the selected workflow file:
 
 ```bash
-./mvnw -q exec:java -Dexec.args='new-board --name "Symphony Work Queue" --force'
+symphony-trello new-board --name "Symphony Work Queue" --force
 ```
 
-Start Symphony after the file is generated:
+Start Symphony with the command printed under `Next` after the file is generated. It looks like
+this:
 
 ```bash
-./mvnw quarkus:dev
+symphony-trello start --env .env --workflow WORKFLOW.md
 ```
 
 Use the generated board like this:
@@ -284,7 +412,13 @@ Use this path when you already have a Trello board and want Symphony to write a 
 2. Run the import command:
 
 ```bash
-./mvnw -q exec:java -Dexec.args='import-board --board abc123 --active "Ready for Codex" --in-progress "In Progress" --terminal Done --blocked Blocked'
+symphony-trello import-board --board abc123 --active "Ready for Codex" --in-progress "In Progress" --terminal Done --blocked Blocked
+```
+
+Add `--no-github` when the imported board should not use GitHub PR publication or landing:
+
+```bash
+symphony-trello import-board --board abc123 --active "Ready for Codex" --in-progress "In Progress" --terminal Done --blocked Blocked --no-github
 ```
 
 You may omit `--active` when the board already has a list named `Ready for Codex`. You may omit
@@ -322,8 +456,7 @@ Common setup command options:
   card. The generated workflow uses `./workspaces`; choose another path when you want those
   checkouts on a different disk or clearly separated from the repository.
 - `--server-port PORT`: choose the HTTP status port written into the generated workflow. If you omit
-  it, Symphony uses the first unused workflow port starting at `18080`. Use `0` only for a
-  temporary local run where you do not need a predictable status URL.
+  it, Symphony uses the first unused workflow port starting at `18080`.
 - `--max-agents N`: choose how many cards from this board may run at the same time. Start with `1`
   if you want one-at-a-time review, or raise it when your machine and workflow can handle parallel
   Codex sessions.
@@ -876,6 +1009,9 @@ Important environment variables:
 - `SYMPHONY_WORKFLOW_PATH`: workflow file path, default `WORKFLOW.md`.
 - `SYMPHONY_HTTP_PORT`: Quarkus HTTP port, default `18080`.
 - `SYMPHONY_AUTOSTART`: set `false` in tests or when only using injected services.
+- `SYMPHONY_TRELLO_DOTENV`: ignored dotenv file used by local managed runs when credentials are not
+  in real environment variables. The installer wrapper sets this when you start with
+  `symphony-trello start --env PATH --workflow WORKFLOW.md`.
 - `TRELLO_API_KEY` and `TRELLO_API_TOKEN`: default Trello credential variable names.
 - `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS`: path-separated files or folders that are added to
   Codex's `workspaceWrite` sandbox policy for deployments that intentionally expose extra host
@@ -923,7 +1059,19 @@ local workflows do not need manual edits before deployment.
 `verify` runs PMD's narrow source check, the deterministic test suite, ArchUnit architecture checks,
 the application build, and the JaCoCo coverage gate. The ArchUnit checks reject circular dependencies
 between production top-level packages. `verify` also fails if line coverage drops below 80%. The test
-suite does not call Trello. Real Trello smoke testing is intentionally environment-dependent and
-should use disposable boards/cards; see [docs/live-e2e.md](docs/live-e2e.md). See
+suite does not call Trello.
+
+PowerShell installer tests use native `pwsh` when it is installed. CI also runs them through
+Microsoft's
+[.NET SDK container](https://learn.microsoft.com/en-us/powershell/scripting/install/powershell-in-docker?view=powershell-7.6):
+
+```bash
+./scripts/pwsh-docker.sh -NoProfile -File ./install.ps1 --dry-run --no-onboard
+./scripts/pwsh-docker.sh -NoProfile -File ./uninstall.ps1 --dry-run --yes
+SYMPHONY_TRELLO_TEST_PWSH=./scripts/pwsh-docker.sh ./mvnw -Dtest=InstallerScriptTest test
+```
+
+Real Trello smoke testing is intentionally environment-dependent and should use disposable
+boards/cards; see [docs/live-e2e.md](docs/live-e2e.md). See
 [CONTRIBUTING.md](CONTRIBUTING.md) for the full contributor checklist and [AGENTS.md](AGENTS.md) for
 repository-local AI agent instructions.

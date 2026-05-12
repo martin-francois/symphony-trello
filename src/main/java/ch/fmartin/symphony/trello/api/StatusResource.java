@@ -1,23 +1,40 @@
 package ch.fmartin.symphony.trello.api;
 
 import ch.fmartin.symphony.trello.orchestrator.SymphonyOrchestrator;
+import io.vertx.ext.web.RoutingContext;
+import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.function.BooleanSupplier;
 
 @Path("/")
 public class StatusResource {
     private final SymphonyOrchestrator orchestrator;
+    private final BooleanSupplier loopbackClient;
 
+    @Context
+    RoutingContext routingContext;
+
+    @Inject
     public StatusResource(SymphonyOrchestrator orchestrator) {
+        this(orchestrator, null);
+    }
+
+    StatusResource(SymphonyOrchestrator orchestrator, BooleanSupplier loopbackClient) {
         this.orchestrator = orchestrator;
+        this.loopbackClient = loopbackClient;
     }
 
     @GET
@@ -70,6 +87,20 @@ public class StatusResource {
     }
 
     @GET
+    @Path("/api/v1/local-status")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Object localStatus() {
+        if (!isLoopbackClient()) {
+            throw new NotFoundException();
+        }
+        Map<String, Object> status = new LinkedHashMap<>();
+        status.put("boardId", orchestrator.selectedBoardId());
+        status.put("configuredBoardId", orchestrator.selectedConfiguredBoardId());
+        status.put("workflowPath", orchestrator.selectedWorkflowPath().toString());
+        return status;
+    }
+
+    @GET
     @Path("/api/v1/{cardIdentifier}")
     @Produces(MediaType.APPLICATION_JSON)
     public Object card(@PathParam("cardIdentifier") String cardIdentifier) {
@@ -95,5 +126,25 @@ public class StatusResource {
             return "";
         }
         return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+    }
+
+    private boolean isLoopbackClient() {
+        if (loopbackClient != null) {
+            return loopbackClient.getAsBoolean();
+        }
+        if (routingContext == null
+                || routingContext.request() == null
+                || routingContext.request().remoteAddress() == null) {
+            return false;
+        }
+        String hostAddress = routingContext.request().remoteAddress().hostAddress();
+        if (hostAddress == null || hostAddress.isBlank()) {
+            return false;
+        }
+        try {
+            return InetAddress.getByName(hostAddress).isLoopbackAddress();
+        } catch (UnknownHostException ignored) {
+            return false;
+        }
     }
 }
