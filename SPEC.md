@@ -804,6 +804,12 @@ by default and create draft pull requests only when the Trello card explicitly a
 They also allow handoff with documented, clearly unrelated broad validation failures when
 card-specific validation passed.
 
+For GitHub-backed pull requests, generated workflows treat GitHub review threads as part of the PR
+feedback set. Addressed review threads SHOULD be resolved through the GitHub API when the
+authenticated GitHub user is allowed to resolve them. If a thread cannot be resolved because of
+permissions, API support, or ambiguity, the workflow MUST record that clearly and MUST NOT claim the
+thread was resolved.
+
 Before `Human Review`, the generated workflow tells Codex to classify PR check state rather than
 blocking on any non-green check:
 
@@ -824,6 +830,19 @@ blocking on any non-green check:
   `Human Review` when card-specific validation and related checks are clean.
 - The workpad and visible Trello handoff comment MUST record the check state, local commands used
   when local validation was required, and any unavailable, flaky, or unrelated check caveat.
+
+When a human moves the Trello card to `Merging`, generated workflows use this deterministic landing
+policy:
+
+- merge and move to `Done` only after the PR merged successfully
+- `Human Review` -> `Merging` with no new feedback and a clean PR is approval to land
+- exact, unambiguous feedback added before the card entered `Merging` that Codex addressed with
+  current validation and clean checks can land without another human review
+- material fixups, broad interpretation, or unverifiable changes return the card to `Human Review`
+  with the reason and a request for renewed approval
+- unresolved actionable feedback, required reviews, mergeability, checks, auth, or repository policy
+  move the card to `Blocked` with the blocker class and next human action
+- the workflow SHOULD NOT leave the card parked in `Merging` after a failed landing attempt
 
 When `new-board` would otherwise write `WORKFLOW.md` and that file already exists, the Java
 implementation writes a board-specific file named `WORKFLOW.<slugified-board-name>.md`. If that file
@@ -3218,6 +3237,18 @@ GitHub pull request publication extension:
 - if a draft pull request already exists for completed repository-changing work and the card did not
   ask for draft, generated workflows SHOULD mark it ready for review before moving the card to
   `Human Review`
+
+GitHub landing extension:
+
+- before landing from `Merging`, generated workflows SHOULD sweep top-level PR comments, inline
+  review comments, review states, review threads, Codex review comments, and checks
+- generated workflows SHOULD resolve addressed GitHub review threads when the authenticated GitHub
+  user can resolve them
+- generated workflows MUST NOT merge while actionable feedback, required reviews, mergeability,
+  required checks, auth, or repository policy remain unresolved
+- if a review thread cannot be resolved because of permissions or API limitations but the feedback is
+  otherwise addressed, generated workflows MAY land only when the unresolved thread and reason are
+  recorded clearly
 
 ### 19.2 Manual systemd Deployment Profile
 
