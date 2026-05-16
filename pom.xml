@@ -119,6 +119,10 @@
         <includes>
           <include>*/SKILL.md</include>
         </includes>
+        <excludes>
+          <exclude>tessl__*/SKILL.md</exclude>
+          <exclude>tessl:*/SKILL.md</exclude>
+        </excludes>
       </resource>
     </resources>
     <plugins>

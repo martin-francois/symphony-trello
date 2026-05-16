@@ -12,7 +12,7 @@ param(
   [Alias("-repo", "--repo")]
   [string]$Repo = "https://github.com/martinfrancois/symphony-trello.git",
   [Alias("-ref", "--ref")]
-  [string]$Ref = "main",
+  [string]$Ref = "v0.2.0", # x-release-please-version
   [switch]$Help,
   [Parameter(ValueFromRemainingArguments = $true)]
   [string[]]$RemainingArgs = @()
@@ -24,7 +24,7 @@ $DefaultSymphonyHome = if ($env:SYMPHONY_HOME) { $env:SYMPHONY_HOME } else { "$e
 $DefaultPrefix = ""
 $DefaultBinDir = "$env:USERPROFILE\.local\bin"
 $DefaultRepo = "https://github.com/martinfrancois/symphony-trello.git"
-$DefaultRef = "main"
+$DefaultRef = "v0.2.0" # x-release-please-version
 
 function Apply-PositionalFlag([string]$Token) {
   switch ($Token) {
@@ -144,7 +144,8 @@ if (($positionalTokens | Where-Object { $_.StartsWith("-") } | Select-Object -Fi
 if ($Help) {
   @"
 Usage:
-  powershell -c "irm https://raw.githubusercontent.com/martinfrancois/symphony-trello/main/install.ps1 | iex"
+  `$env:SYMPHONY_TRELLO_REF = "$DefaultRef"
+  & ([scriptblock]::Create((irm "https://raw.githubusercontent.com/martinfrancois/symphony-trello/`$env:SYMPHONY_TRELLO_REF/install.ps1"))) --ref `$env:SYMPHONY_TRELLO_REF
 
 Options:
   --dry-run     Print planned actions without changing files.

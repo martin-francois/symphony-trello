@@ -1,0 +1,64 @@
+name: Feature request
+description: Suggest a change to product behavior, setup, docs, or operations.
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What problem should this solve?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Trello workflow
+        - Local installer or onboarding
+        - Codex runtime
+        - GitHub integration
+        - Deployment
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Describe the solution you want
+      description: Describe the behavior, docs, or workflow you want.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: List simpler or narrower options if you considered them.
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Current workaround
+      description: If there is a workaround today, describe it and why it is clumsy or incomplete.
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Add examples, screenshots, workflow snippets, or links that clarify the request.
+  - type: checkboxes
+    id: ai-assistance
+    attributes:
+      label: AI Assistance (if used)
+      description: If an AI agent helped prepare this request, mark the relevant boxes. Otherwise leave this blank.
+      options:
+        - label: AI-assisted issue
+          required: false
+        - label: I confirm I understand and reviewed this request
+          required: false
+  - type: textarea
+    id: ai-context
+    attributes:
+      label: AI prompts / session logs (optional)
+      description: Add redacted prompts or session excerpts if they help reviewers understand the request.
+      render: text

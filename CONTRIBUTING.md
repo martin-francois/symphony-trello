@@ -1,7 +1,7 @@
 # Contributing
 
-AI agents working in this repository must also follow `AGENTS.md`. It captures the project-specific
-engineering preferences that should persist across Codex sessions.
+Read the [Code of Conduct](CODE_OF_CONDUCT.md) before participating. It applies to issues, pull
+requests, reviews, and other project spaces.
 
 ## Development Setup
 
@@ -33,6 +33,47 @@ engineering preferences that should persist across Codex sessions.
    chmod 600 .env
    ```
 
+## Running From Source
+
+Start with the browser steps in `README.md` if you do not yet have Trello credentials. The board
+setup commands in the README use the installed `symphony-trello` wrapper. From a source checkout
+without the wrapper, run the same Java CLI through Maven:
+
+```bash
+./mvnw -q exec:java -Dexec.args='new-board --name "Symphony Work Queue"'
+./mvnw -q exec:java -Dexec.args='import-board --board abc123 --active "Ready for Codex" --in-progress "In Progress" --terminal Done --blocked Blocked'
+```
+
+If those source-checkout commands print `symphony-trello start` under `Next`, use the installed
+wrapper command, or use `./mvnw quarkus:dev` for a developer run from the checkout.
+
+If you already have both Trello credentials and `WORKFLOW.md`, put the credentials in an ignored
+project-root `.env` file:
+
+```properties
+TRELLO_API_KEY=replace-with-generated-key
+TRELLO_API_TOKEN=replace-with-generated-token
+```
+
+Exported environment variables with the same names also work and take precedence over `.env`.
+
+Start the service from the checkout:
+
+```bash
+./mvnw quarkus:dev
+```
+
+By default the status page binds to `127.0.0.1:18080`. Use `SYMPHONY_HTTP_PORT=0` for an ephemeral
+test port, configure `server.port` in `WORKFLOW.md`, or pass `--port` for local development.
+Command-line `--port` wins over `server.port`.
+
+Packaged runs also accept a positional workflow path and `--port`:
+
+```bash
+./mvnw package
+java -jar target/quarkus-app/quarkus-run.jar ./WORKFLOW.md --port 18081
+```
+
 ## Quality Bar
 
 Before submitting changes:
@@ -47,15 +88,83 @@ Before submitting changes:
   like `java.util.Arrays.stream(...)` should be written as `Arrays.stream(...)` with an import.
 - Document non-obvious design choices in `docs/adr/`.
 - Keep refactors separate from behavior changes when practical.
+- Use a Conventional Commit PR title or squash commit title when the change is merged. The release
+  automation uses those titles to choose the next SemVer version and update
+  [CHANGELOG.md](CHANGELOG.md).
+
+`./mvnw verify` runs PMD's narrow source check, the deterministic test suite, ArchUnit architecture
+checks, the application build, and the JaCoCo coverage gate. The ArchUnit checks reject circular
+dependencies between production top-level packages. `verify` also fails if line coverage drops below
+80%. The test suite does not call Trello.
+
+PowerShell installer tests use native `pwsh` when it is installed. CI also runs them through
+Microsoft's .NET SDK container:
+
+```bash
+./scripts/pwsh-docker.sh -NoProfile -File ./install.ps1 --dry-run --no-onboard
+./scripts/pwsh-docker.sh -NoProfile -File ./uninstall.ps1 --dry-run --yes
+SYMPHONY_TRELLO_TEST_PWSH=./scripts/pwsh-docker.sh ./mvnw -Dtest=InstallerScriptTest test
+```
 
 ## Commit Style
 
-Use Conventional Commits:
+Use Conventional Commits. For a PR with one logical change, maintainers squash the PR and use the PR
+title as the source of truth for changelog and version bump decisions:
 
 - `feat: add retry snapshot endpoint`
 - `fix: suppress stale worker exit retries`
 - `test: cover archived-list Trello normalization`
 - `docs: document production safety posture`
+
+Each PR must still cover one cohesive change. If a feature or bug fix needs directly related cleanup
+or refactoring to make that change correct or maintainable, keep those as separate focused commits.
+Use one commit for the user-visible feature or fix and separate commits for each dedicated type of
+supporting cleanup or refactoring. Unrelated cleanup, refactoring, formatting, dependency changes,
+or tooling changes belong in a separate PR. Maintainers may rebase-merge cohesive multi-commit PRs
+without squashing, so every commit title should be a useful Conventional Commit.
+
+Use `feat:` for user-visible additions and `fix:` for user-visible bug fixes. Add a
+`BREAKING CHANGE:` footer only when a release really requires manual action from users or operators.
+Do not edit `CHANGELOG.md` manually; the release automation updates it.
+
+## Maintainer Release Setup
+
+The release automation intentionally uses GitHub Actions' default `GITHUB_TOKEN`. Pull requests
+created with that token do not trigger another normal `pull_request` CI run, which keeps generated
+release pull requests from rerunning the full project validation just for changelog and version
+updates.
+
+Confirm the repository's GitHub Actions settings allow workflows to create pull requests. Without
+that owner setting, Release Please cannot open or update generated release pull requests with
+`GITHUB_TOKEN` even though the workflow grants `pull-requests: write`.
+
+Before merging a generated release pull request, review the release notes and generated file changes.
+The implementation changes included in that release should already have passed CI on their own pull
+requests before reaching `main`. If repository rules require full PR CI on every pull request, the
+repository owner may need to use an explicit maintainer bypass for generated release pull requests
+after reviewing the release automation output.
+
+## Issues
+
+Before opening a pull request, search the existing issues and pull requests. Open a new issue when
+the change is not trivial, then wait for maintainer feedback or assignment before starting larger
+work.
+
+Use the issue templates and include enough detail for another person to reproduce the problem or
+evaluate the proposal. Do not include Trello credentials, Codex auth files, GitHub tokens, private
+Trello board links, or unrelated host paths.
+
+## Pull Requests
+
+Create pull requests from a topic branch and fill out the template. Link the issue with `Fixes #123`
+when the PR should close it. Keep the PR focused on one user-visible change or one cleanup.
+
+Before marking a PR ready for review:
+
+- run the validation commands listed in [Quality Bar](#quality-bar);
+- update tests and docs when behavior changes;
+- complete the GitHub CLA check when prompted;
+- enable maintainer edits when contributing from a fork.
 
 ## Local Trello Testing
 
@@ -75,7 +184,40 @@ Recommended smoke path:
 4. Move the card to a terminal list.
 5. Confirm the workspace is removed after reconciliation.
 
+## Security Reports
+
+Do not open public issues for vulnerabilities or leaked credentials. Follow [SECURITY.md](SECURITY.md)
+and keep Trello credentials, Codex auth files, GitHub tokens, private board links, and unrelated host
+paths out of public reports.
+
 ## AI Disclosure
 
-When this project becomes public, follow the target repository or organization policy for AI
-assistance disclosure. If no policy exists, disclose material AI assistance in the pull request body.
+AI-assisted contributions are allowed when a human owns the result. Follow
+[AI_CONTRIBUTION_POLICY.md](AI_CONTRIBUTION_POLICY.md) and disclose material AI assistance in the
+pull request body.
+
+## AI Agent Setup
+
+AI agents working in this repository must also follow `AGENTS.md`. It captures the project-specific
+engineering preferences that should persist across Codex sessions.
+
+When using an AI agent for a contribution, give it this instruction before it changes code:
+
+> This repository vendors the `tessl-labs/good-oss-citizen` guidance. If the `tessl` command is
+> available, run `tessl install` from the repository root before starting so generated agent links
+> and rules are fresh. If `tessl` is not available, say so and continue by following `AGENTS.md`,
+> `CONTRIBUTING.md`, `AI_CONTRIBUTION_POLICY.md`, the issue/PR templates, and the vendored
+> `tessl-labs/good-oss-citizen` rules under `.tessl/tiles/` directly.
+
+The install command is:
+
+```bash
+tessl install
+```
+
+The checked-in `tessl.json` pins and vendors `tessl-labs/good-oss-citizen`, so the guidance is
+available from a fresh clone even before generated Tessl files are refreshed.
+
+If you want this guidance and the `tessl` command is missing, install the Tessl CLI from the
+[official Tessl installation guide](https://docs.tessl.io/introduction-to-tessl/installation), then
+rerun `tessl install` from the repository root.

@@ -19,6 +19,15 @@
   "customManagers": [
     {
       "customType": "regex",
+      "managerFilePatterns": ["/^tessl\\.json$/"],
+      "matchStrings": [
+        "\"(?<depName>tessl-labs/good-oss-citizen)\"\\s*:\\s*\\{\\s*\"version\"\\s*:\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "custom.tessl-tile",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
       "managerFilePatterns": ["/^\\.github/workflows/ci\\.yml$/"],
       "matchStrings": ["corepack prepare pnpm@(?<currentValue>\\d+\\.\\d+\\.\\d+) --activate"],
       "datasourceTemplate": "npm",
@@ -36,7 +45,24 @@
       "versioningTemplate": "docker"
     }
   ],
+  "customDatasources": {
+    "tessl-tile": {
+      "defaultRegistryUrlTemplate": "https://api.tessl.io/v1/tiles/{{packageName}}",
+      "transformTemplates": [
+        "{\"releases\":[{\"version\": data.attributes.latestVersion, \"releaseTimestamp\": data.attributes.latestVersionData.attributes.createdAt}], \"homepage\":\"https://tessl.io/registry/\" & data.attributes.fullName}"
+      ]
+    }
+  },
   "packageRules": [
+    {
+      "matchPackageNames": ["tessl-labs/good-oss-citizen"],
+      "automerge": false,
+      "dependencyDashboardApproval": true,
+      "addLabels": ["tessl"],
+      "prBodyNotes": [
+        "After Renovate updates `tessl.json`, run `tessl install`, review the refreshed `.tessl/tiles` diff, and commit those vendored tile changes before merging."
+      ]
+    },
     {
       "matchUpdateTypes": ["major"],
       "automerge": false,

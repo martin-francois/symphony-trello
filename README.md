@@ -43,32 +43,28 @@ a small low-risk project, then expand once the workflow matches how you review a
 ## Table of Contents
 
 - [How It Works](#how-it-works)
-- [Current Capabilities](#current-capabilities)
+- [What You Get](#what-you-get)
 - [Quick Start](#quick-start)
 - [Trello Setup](#trello-setup)
+- [Advanced Setup](#advanced-setup)
 - [Workflow Contract](#workflow-contract)
 - [Advanced Configuration](#advanced-configuration)
 - [Operations](#operations)
 - [Safety Posture](#safety-posture)
 - [Production Deployment](#production-deployment)
-- [Build and Test](#build-and-test)
+- [Contributing and Security](#contributing-and-security)
 
-## Current Capabilities
+## What You Get
 
-- Trello REST polling for active cards, terminal cards, and per-card reconciliation.
-- Trello normalization for open cards, archived cards, archived Trello lists, archived
-  boards, labels, priority labels, due dates, positions, and ObjectId-derived creation time.
-- Dynamic `WORKFLOW.md` reload with last-known-good behavior after invalid edits.
-- Strict prompt rendering with `card`, `issue`, and `attempt` variables.
-- Per-card workspace creation, sanitization, root containment checks, and lifecycle hooks.
-- Codex app-server subprocess integration over newline-delimited JSON-RPC.
-- Same-session Codex continuation turns while a card remains active, capped by `agent.max_turns`.
-- Scoped Trello handoff tools for Codex to update one workpad comment, add a handoff comment, and
-  move the current card to configured board-local handoff lists.
-- Single-authority in-memory orchestration state, claim-before-spawn dispatch, retries, stall checks,
-  stale worker identity filtering, and terminal workspace cleanup.
-- JSON and HTML status surfaces at `/api/v1/state`, `/api/v1/{card_identifier}`, `/api/v1/refresh`,
-  and `/`, including the configured active, terminal, and handoff routing lists.
+- Guided local setup that can create a Trello board for you or connect an existing board.
+- A repeatable Trello flow from `Ready for Codex` to active work, human review, blocked, merge, and
+  done lists.
+- One local workspace per Trello card so Codex work is separated by task.
+- Optional GitHub pull request flow for repository-changing work.
+- Trello comments that show progress, blockers, validation, and handoff notes on the card.
+- A local status page and JSON API for running, retrying, blocked, and finished work.
+- Configurable workflow files for board lists, workspace paths, Codex settings, concurrency, and
+  safe local file access.
 
 ## Quick Start
 
@@ -77,18 +73,24 @@ and starts the managed local worker unless you pass `--no-onboard`.
 
 macOS, Linux, and Windows through WSL2:
 
+<!-- x-release-please-start-version -->
 ```bash
-curl -fsSL https://raw.githubusercontent.com/martinfrancois/symphony-trello/main/install.sh | bash
+export SYMPHONY_TRELLO_REF=v0.2.0
+curl -fsSL "https://raw.githubusercontent.com/martinfrancois/symphony-trello/${SYMPHONY_TRELLO_REF}/install.sh" | bash
 ```
+<!-- x-release-please-end -->
 
 For Windows, WSL2 is the recommended setup path. Run the Linux installer inside WSL2, keep Codex
 CLI and Git on the WSL2 `PATH`, and use Linux paths for allowed local files and folders.
 
 Native Windows PowerShell is implemented as best effort:
 
+<!-- x-release-please-start-version -->
 ```powershell
-powershell -c "irm https://raw.githubusercontent.com/martinfrancois/symphony-trello/main/install.ps1 | iex"
+$env:SYMPHONY_TRELLO_REF = "v0.2.0"
+& ([scriptblock]::Create((irm "https://raw.githubusercontent.com/martinfrancois/symphony-trello/$env:SYMPHONY_TRELLO_REF/install.ps1"))) --ref $env:SYMPHONY_TRELLO_REF
 ```
+<!-- x-release-please-end -->
 
 The guided setup supports these local platforms:
 
@@ -123,27 +125,39 @@ disables Codex's command/filesystem sandbox for that workflow.
 
 If you want to inspect the installer first:
 
+<!-- x-release-please-start-version -->
 ```bash
-curl -fsSL https://raw.githubusercontent.com/martinfrancois/symphony-trello/main/install.sh -o install.sh
+export SYMPHONY_TRELLO_REF=v0.2.0
+curl -fsSL "https://raw.githubusercontent.com/martinfrancois/symphony-trello/${SYMPHONY_TRELLO_REF}/install.sh" -o install.sh
 less install.sh
 bash install.sh
 ```
+<!-- x-release-please-end -->
 
+<!-- x-release-please-start-version -->
 ```powershell
-irm https://raw.githubusercontent.com/martinfrancois/symphony-trello/main/install.ps1 -OutFile install.ps1
+$env:SYMPHONY_TRELLO_REF = "v0.2.0"
+irm "https://raw.githubusercontent.com/martinfrancois/symphony-trello/$env:SYMPHONY_TRELLO_REF/install.ps1" -OutFile install.ps1
 notepad install.ps1
-powershell -ExecutionPolicy Bypass -File .\install.ps1
+powershell -ExecutionPolicy Bypass -File .\install.ps1 --ref $env:SYMPHONY_TRELLO_REF
 ```
+<!-- x-release-please-end -->
 
 Pass installer flags like this:
 
+<!-- x-release-please-start-version -->
 ```bash
-curl -fsSL https://raw.githubusercontent.com/martinfrancois/symphony-trello/main/install.sh | bash -s -- --dry-run
+export SYMPHONY_TRELLO_REF=v0.2.0
+curl -fsSL "https://raw.githubusercontent.com/martinfrancois/symphony-trello/${SYMPHONY_TRELLO_REF}/install.sh" | bash -s -- --dry-run
 ```
+<!-- x-release-please-end -->
 
+<!-- x-release-please-start-version -->
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -Command "& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/martinfrancois/symphony-trello/main/install.ps1'))) --dry-run --no-onboard"
+$env:SYMPHONY_TRELLO_REF = "v0.2.0"
+& ([scriptblock]::Create((irm "https://raw.githubusercontent.com/martinfrancois/symphony-trello/$env:SYMPHONY_TRELLO_REF/install.ps1"))) --ref $env:SYMPHONY_TRELLO_REF --dry-run --no-onboard
 ```
+<!-- x-release-please-end -->
 
 Useful commands after install:
 
@@ -162,78 +176,32 @@ Uninstall removes only the installer-managed command and app checkout by default
 `.env` files, workflows, connected-board metadata, workspaces, logs/state, Codex auth, GitHub auth,
 and Trello boards.
 
+<!-- x-release-please-start-version -->
 ```bash
-curl -fsSL https://raw.githubusercontent.com/martinfrancois/symphony-trello/main/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/martinfrancois/symphony-trello/v0.2.0/uninstall.sh | bash
 ```
+<!-- x-release-please-end -->
 
+<!-- x-release-please-start-version -->
 ```powershell
-powershell -c "irm https://raw.githubusercontent.com/martinfrancois/symphony-trello/main/uninstall.ps1 | iex"
+powershell -c "irm https://raw.githubusercontent.com/martinfrancois/symphony-trello/v0.2.0/uninstall.ps1 | iex"
 ```
+<!-- x-release-please-end -->
 
 To inspect uninstall first or pass cleanup scopes:
 
+<!-- x-release-please-start-version -->
 ```bash
-curl -fsSL https://raw.githubusercontent.com/martinfrancois/symphony-trello/main/uninstall.sh -o uninstall.sh
+curl -fsSL https://raw.githubusercontent.com/martinfrancois/symphony-trello/v0.2.0/uninstall.sh -o uninstall.sh
 less uninstall.sh
 bash uninstall.sh --dry-run
 bash uninstall.sh --remove-config --remove-workspaces --remove-state
 bash uninstall.sh --yes --yes-local-data --remove-all-local-data
 ```
+<!-- x-release-please-end -->
 
 `--yes` only skips the prompt for installer-managed app files. Add `--yes-local-data` only when you
 also want unattended deletion of local `.env` files, workflows, workspaces, state, and logs.
-
-### Source Checkout
-
-By default, Symphony starts Codex by running `codex app-server`. That works when `codex` is on the
-`PATH` for the user that starts Symphony. If not, set `codex.command` in
-[`WORKFLOW.md`](#workflow-contract) to the full path or to a wrapper script.
-
-Start with the browser steps in [Trello Setup](#trello-setup) if you do not yet have Trello
-credentials. The board setup commands in that section use the installed `symphony-trello` wrapper.
-From a source checkout without the wrapper, run the same Java CLI through Maven:
-
-```bash
-./mvnw -q exec:java -Dexec.args='new-board --name "Symphony Work Queue"'
-./mvnw -q exec:java -Dexec.args='import-board --board abc123 --active "Ready for Codex" --in-progress "In Progress" --terminal Done --blocked Blocked'
-```
-
-If those source-checkout commands print `symphony-trello start` under `Next`, use the installed
-wrapper command, or use `./mvnw quarkus:dev` for a developer run from the checkout.
-
-If you already have both Trello credentials and `WORKFLOW.md`, put the credentials in an ignored
-project-root `.env` file:
-
-```bash
-cp .env.example .env
-chmod 600 .env
-```
-
-Fill `.env` with:
-
-```properties
-TRELLO_API_KEY=replace-with-generated-key
-TRELLO_API_TOKEN=replace-with-generated-token
-```
-
-Exported environment variables with the same names also work and take precedence over `.env`.
-
-Start the service:
-
-```bash
-./mvnw quarkus:dev
-```
-
-By default the [status page](#operations) binds to `127.0.0.1:18080`. Use `SYMPHONY_HTTP_PORT=0` for
-an ephemeral test port, configure `server.port` in [`WORKFLOW.md`](#workflow-contract), or pass
-`--port` for local development. Command-line `--port` wins over `server.port`.
-
-Packaged runs also accept a positional workflow path and `--port`:
-
-```bash
-./mvnw package
-java -jar target/quarkus-app/quarkus-run.jar ./WORKFLOW.md --port 18081
-```
 
 ## Trello Setup
 
@@ -474,6 +442,11 @@ Common setup command options:
   `In Progress` list.
 - `--blocked NAME`: during `import-board`, choose the Trello list where Codex should move cards it
   cannot safely finish. If you omit it, import uses a list named `Blocked` when the board has one.
+
+## Advanced Setup
+
+Use this section only when the guided setup, `new-board`, or `import-board` commands do not fit how
+you want to connect a board. Most first-time local installs can skip it.
 
 ### Option A: Reuse An Existing Board
 
@@ -1049,29 +1022,10 @@ declared workflow files, use [docs/ansible-deployment.md](docs/ansible-deploymen
 path renders deployed workflow copies with server-safe credentials and workspace paths, so generated
 local workflows do not need manual edits before deployment.
 
-## Build and Test
+## Contributing and Security
 
-```bash
-./mvnw spotless:check
-./mvnw verify
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contributor setup and development checks,
+[AI_CONTRIBUTION_POLICY.md](AI_CONTRIBUTION_POLICY.md) for AI-assisted contribution expectations,
+and [SECURITY.md](SECURITY.md) for private vulnerability reporting guidance.
 
-`verify` runs PMD's narrow source check, the deterministic test suite, ArchUnit architecture checks,
-the application build, and the JaCoCo coverage gate. The ArchUnit checks reject circular dependencies
-between production top-level packages. `verify` also fails if line coverage drops below 80%. The test
-suite does not call Trello.
-
-PowerShell installer tests use native `pwsh` when it is installed. CI also runs them through
-Microsoft's
-[.NET SDK container](https://learn.microsoft.com/en-us/powershell/scripting/install/powershell-in-docker?view=powershell-7.6):
-
-```bash
-./scripts/pwsh-docker.sh -NoProfile -File ./install.ps1 --dry-run --no-onboard
-./scripts/pwsh-docker.sh -NoProfile -File ./uninstall.ps1 --dry-run --yes
-SYMPHONY_TRELLO_TEST_PWSH=./scripts/pwsh-docker.sh ./mvnw -Dtest=InstallerScriptTest test
-```
-
-Real Trello smoke testing is intentionally environment-dependent and should use disposable
-boards/cards; see [docs/live-e2e.md](docs/live-e2e.md). See
-[CONTRIBUTING.md](CONTRIBUTING.md) for the full contributor checklist and [AGENTS.md](AGENTS.md) for
-repository-local AI agent instructions.
+Release notes are tracked in [CHANGELOG.md](CHANGELOG.md).

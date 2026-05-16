@@ -16,26 +16,36 @@ matters, and easy for another engineer to understand without asking the original
 
 1. Start by reading the relevant specification, existing implementation, tests, README,
    `CONTRIBUTING.md`, and ADRs before changing code.
-2. Prefer TDD when the behavior can be isolated. If TDD is impractical, make sure the final tests
+2. If this checkout contains `tessl.json` and the `tessl` command is available, run `tessl install`
+   from the repository root before contribution work so generated agent links and rules are fresh.
+   If `tessl` is not available, say so briefly and continue by following `AGENTS.md`,
+   `CONTRIBUTING.md`, `AI_CONTRIBUTION_POLICY.md`, the issue/PR templates, and the vendored
+   `tessl-labs/good-oss-citizen` rules at
+   `.tessl/tiles/tessl-labs/good-oss-citizen/rules/good-oss-citizen.md` directly.
+3. Prefer TDD when the behavior can be isolated. If TDD is impractical, make sure the final tests
    would have failed for the bug or missing behavior.
-3. Keep changes narrowly scoped. Separate pure refactors from behavior changes when practical.
-4. Update documentation and ADRs when behavior, setup, architecture, or tradeoffs change.
-5. When the user corrects an agent mistake, says something was not done the way they wanted, or
+4. Keep changes narrowly scoped. Each branch or pull request should cover one cohesive change. If a
+   feature or bug fix needs directly related cleanup or refactoring to make that change correct or
+   maintainable, keep the cleanup/refactoring focused on that change. Put unrelated cleanup,
+   refactoring, formatting, dependency updates, or tooling changes in a separate issue, branch, or
+   pull request.
+5. Update documentation and ADRs when behavior, setup, architecture, or tradeoffs change.
+6. When the user corrects an agent mistake, says something was not done the way they wanted, or
    explicitly asks for a durable preference to persist, update this file in the same change when
    reasonable so future sessions do not repeat the issue. Do not add new rules only because the agent
    independently chose a reasonable improvement.
-6. When a new user preference changes how this file itself should be maintained, review existing
+7. When a new user preference changes how this file itself should be maintained, review existing
    agent-added rules for conflicts with that new preference in the same turn.
-7. When fixing a documentation pattern, search the relevant file or docs set for similar instances
+8. When fixing a documentation pattern, search the relevant file or docs set for similar instances
    before committing instead of correcting only the one sentence the user pointed out.
-8. When you notice a potential improvement that is outside the current task scope, keep the current
+9. When you notice a potential improvement that is outside the current task scope, keep the current
    work focused and create or suggest a GitHub issue instead of adding "future improvement",
    "convenience gap", or similar sections to user-facing documentation.
-9. Redact private project names, host paths, Trello card ids, short links, account names, and similar
+10. Redact private project names, host paths, Trello card ids, short links, account names, and similar
    internals from committed files, GitHub issues, and user-facing summaries unless the user
    explicitly asks to preserve them. Keep only the minimum technical detail needed to reproduce or
    understand the issue.
-10. Run the relevant verification before finishing. For normal code changes, use:
+11. Run the relevant verification before finishing. For normal code changes, use:
 
    ```bash
    ./mvnw -q spotless:check verify
@@ -47,7 +57,7 @@ matters, and easy for another engineer to understand without asking the original
    `SYMPHONY_TRELLO_TEST_PWSH=./scripts/pwsh-docker.sh` for Java tests that support a configurable
    PowerShell command. Do not report PowerShell as skipped only because `pwsh` is missing if Docker
    is available.
-11. Commit with Conventional Commits for this repository when asked to commit, and keep the working
+12. Commit with Conventional Commits for this repository when asked to commit, and keep the working
    tree clean before claiming the work is done. When an agent creates commits inside another target
    repository for a Trello card, follow that repository's documented commit convention first. If it
    has no documented convention, infer from the last 20 to 50 commits on the default branch. If the
@@ -56,15 +66,24 @@ matters, and easy for another engineer to understand without asking the original
    For feature-branch work in this repository, preserve a single review commit by amending the
    existing branch commit or squashing related local commits before pushing, unless the user
    explicitly asks for multiple commits.
+   If the user explicitly wants a multi-commit pull request, keep each commit focused and
+   Conventional Commit titled. Use one commit for the user-visible feature or fix and separate
+   commits only for directly supporting cleanup or refactoring that belongs to the same cohesive
+   change; unrelated work still belongs in a separate branch or pull request.
+   When the user asks to address another round of review comments on an existing pull request and
+   wants an easy review delta, first squash the already-pushed PR commits into one base commit when
+   they ask for that, then make the new review-response changes in a separate follow-up commit. Run
+   the Codex review/fix loop before pushing, reply to the handled review threads, and push the
+   updated branch.
    Keep `feat/issue-35-plan-b-onboarding` as a single commit on top of `main`; amend or squash and
    force-push when changing that branch.
-12. When the user asks for a concrete repo change, commit and push the completed change unless they
+13. When the user asks for a concrete repo change, commit and push the completed change unless they
    explicitly ask not to.
-13. When a change affects runtime behavior and the user is likely to verify it manually afterward,
+14. When a change affects runtime behavior and the user is likely to verify it manually afterward,
    deploy it with the Ansible workflow before finishing when the deployment inputs are available.
    If unsure, ask at the end whether to deploy with Ansible next. Do not deploy or suggest
    deployment for docs-only changes.
-14. When fixing a bug that was observed during live deployed execution, and live verification is
+15. When fixing a bug that was observed during live deployed execution, and live verification is
    reasonably possible from the current environment, deploy with Ansible and perform the relevant
    live deployed verification before claiming the fix is complete.
 
@@ -97,6 +116,9 @@ matters, and easy for another engineer to understand without asking the original
 - Pin GitHub Actions to full commit SHAs with the tracked version tag in a comment. Renovate may
   automerge non-major GitHub Actions updates after the configured release-age delay, but major
   action updates still need human review.
+- In contributor-facing documentation, refer to changelog/version/tag tooling as "release
+  automation" unless the concrete tool name is necessary for a command, filename, workflow name, or
+  maintainer-only implementation detail.
 - When configuring build-tool integrations such as Java agents, prefer the official documented
   Maven pattern over hand-built local repository paths or other brittle shortcuts.
 - Do not use Perl/Python/Ruby/Node one-liners as the documented implementation of a reproducible
@@ -106,6 +128,16 @@ matters, and easy for another engineer to understand without asking the original
 - Lead the README with who the project is for, why they should use it, and the practical benefits
   before implementation details. Move technical mechanics into supporting sections once the value is
   clear.
+- Keep README content focused on users and operators who want to evaluate, install, configure, run,
+  troubleshoot, or deploy Symphony for Trello. Move contributor-only content such as source-checkout
+  development runs, build/test commands, CI details, coding standards, and PR process rules to
+  `CONTRIBUTING.md`, `AGENTS.md`, or focused developer docs. Before adding README content, ask
+  whether a first-time user or operator needs it to succeed with the product; if not, put it
+  elsewhere.
+- In human contributor docs and GitHub templates, keep AI-agent-only guidance at the bottom after
+  sections that apply to all contributors, including security and maintainer process sections. Do not
+  put AI-only setup instructions in the middle where a human reader might assume the remaining
+  document is only for agents and stop reading.
 - Use "Symphony for Trello" as the human-facing product name. Use `symphony-trello` only for
   technical identifiers such as artifact IDs, service names, application names, and other places
   where spaces or title case are not suitable.
@@ -367,6 +399,9 @@ matters, and easy for another engineer to understand without asking the original
 - Be direct about residual risk, skipped verification, or parts that are intentionally not covered.
 - If a review tool is available, use it before finalizing non-trivial code changes and address
   justified findings.
+- When Codex makes repository changes, run the Codex review/fix loop after every completed change
+  unless the user explicitly says not to. This requirement is specific to Codex sessions; do not
+  impose it on Claude or other AI tools.
 - For `codex review`, choose the scope explicitly on the first run and do not pass a positional
   prompt with scoped review flags. The installed Codex CLI rejects that combination even when its
   usage text implies `[PROMPT]` might work. Correct forms are:
@@ -376,3 +411,7 @@ matters, and easy for another engineer to understand without asking the original
   commit. Never run `codex review --uncommitted "prompt"`, `codex review "prompt" --uncommitted`,
   `printf "prompt" | codex review --uncommitted -`, bare `codex review`, or a mismatched scope and
   then correct it later.
+
+# Agent Rules <!-- tessl-managed -->
+
+@.tessl/RULES.md follow the [instructions](.tessl/RULES.md)
