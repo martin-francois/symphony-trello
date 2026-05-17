@@ -448,7 +448,7 @@ class TrelloClientTest {
                 "board-1", Map.of("active_list_ids", List.of("ready", "review"), "terminal_list_ids", List.of("done")));
         Card lowPriorityReview = card("card-3", "TRELLO-c", "Review", "review", 2, BigDecimal.ONE);
         Card highPriorityReview = card("card-1", "TRELLO-a", "Review", "review", 1, BigDecimal.TEN);
-        Card readyWithoutPriority = card("card-2", "TRELLO-b", "Ready", "ready", null, BigDecimal.TEN);
+        Card highPriorityReady = card("card-2", "TRELLO-b", "Ready", "ready", 1, BigDecimal.ZERO);
         Card done = card("card-4", "TRELLO-d", "Done", "done", null, BigDecimal.ONE);
         Card outOfScope = new Card(
                 "card-5",
@@ -481,16 +481,34 @@ class TrelloClientTest {
                 BigDecimal.ONE);
 
         // when
-        List<Card> sorted = List.of(lowPriorityReview, readyWithoutPriority, highPriorityReview).stream()
+        List<Card> sorted = List.of(lowPriorityReview, highPriorityReady, highPriorityReview).stream()
                 .sorted(TrelloClient.dispatchComparator(config))
                 .toList();
 
         // then
-        assertThat(TrelloClient.isActive(readyWithoutPriority, config)).isTrue();
+        assertThat(TrelloClient.isActive(highPriorityReady, config)).isTrue();
         assertThat(TrelloClient.isTerminal(done, config)).isTrue();
         assertThat(TrelloClient.isActive(done, config)).isFalse();
         assertThat(TrelloClient.isActive(outOfScope, config)).isFalse();
         assertThat(sorted).extracting(Card::identifier).containsExactly("TRELLO-a", "TRELLO-c", "TRELLO-b");
+    }
+
+    @Test
+    void dispatchOrderingPrioritizesLaterConfiguredActiveStatesBeforePriority() {
+        // given
+        var config = config("board-1", Map.of("active_states", List.of("Ready for Codex", "In Progress", "Merging")));
+        Card highPriorityReady = card("card-1", "TRELLO-a", "Ready for Codex", null, 1, BigDecimal.ZERO);
+        Card lowPriorityMerging = card("card-2", "TRELLO-b", "Merging", null, 3, BigDecimal.TEN);
+        Card inProgress = card("card-3", "TRELLO-c", "In Progress", null, 2, BigDecimal.ONE);
+        Card sameLaneHigherPriority = card("card-4", "TRELLO-d", "Merging", null, 1, BigDecimal.TEN);
+
+        // when
+        List<Card> sorted = List.of(highPriorityReady, lowPriorityMerging, inProgress, sameLaneHigherPriority).stream()
+                .sorted(TrelloClient.dispatchComparator(config))
+                .toList();
+
+        // then
+        assertThat(sorted).extracting(Card::identifier).containsExactly("TRELLO-d", "TRELLO-b", "TRELLO-c", "TRELLO-a");
     }
 
     @ParameterizedTest(name = "{0} remains terminal even with terminal list IDs configured")
