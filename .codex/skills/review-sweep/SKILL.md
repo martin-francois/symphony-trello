@@ -12,8 +12,11 @@ description: >
 
 - Find the PR related to the current Trello card or branch.
 - Gather top-level comments, inline review comments, review states, and checks.
+- Gather GitHub review threads, including whether each thread is resolved.
 - Treat actionable human, bot, and Codex review feedback as blocking until
   handled.
+- Resolve addressed GitHub review threads when the authenticated user is
+  allowed to resolve them.
 - Reply in the right place when accepting, clarifying, or pushing back.
 - Keep PR title, body, branch, and metadata aligned with the current Trello
   scope when an existing PR is reused.
@@ -54,6 +57,69 @@ gh api "repos/{owner}/{repo}/pulls/$pr_number/reviews"
 gh pr checks "$pr_number"
 ```
 
+Also fetch review threads through GraphQL when the repository supports them.
+Paginate the review-thread connection so large PRs do not silently omit
+feedback:
+
+```bash
+owner="$(gh repo view --json owner --jq .owner.login)"
+repo="$(gh repo view --json name --jq .name)"
+gh api graphql --paginate \
+  -f owner="$owner" \
+  -f repo="$repo" \
+  -F number="$pr_number" \
+  -f query='
+    query($owner: String!, $repo: String!, $number: Int!, $endCursor: String) {
+      repository(owner: $owner, name: $repo) {
+        pullRequest(number: $number) {
+          reviewThreads(first: 100, after: $endCursor) {
+            pageInfo { hasNextPage endCursor }
+            nodes {
+              id
+              isResolved
+              isOutdated
+              path
+              line
+              comments(first: 100) {
+                nodes {
+                  id
+                  body
+                  author { login }
+                  createdAt
+                }
+              }
+            }
+          }
+        }
+      }
+    }'
+```
+
+If a returned thread has 100 comments, fetch that thread's comments with a
+separate paginated query before classifying the thread. Do not treat a possible
+incomplete comments page as a complete feedback sweep:
+
+```bash
+gh api graphql --paginate \
+  -f thread_id="$thread_id" \
+  -f query='
+    query($thread_id: ID!, $endCursor: String) {
+      node(id: $thread_id) {
+        ... on PullRequestReviewThread {
+          comments(first: 100, after: $endCursor) {
+            pageInfo { hasNextPage endCursor }
+            nodes {
+              id
+              body
+              author { login }
+              createdAt
+            }
+          }
+        }
+      }
+    }'
+```
+
 Treat Codex review issue comments as part of the PR feedback set when the
 repository uses GitHub issue comments for Codex review output.
 
@@ -75,6 +141,25 @@ For each item, choose one outcome:
 
 Use inline replies for inline review comments. Use the PR issue thread for
 top-level comments and Codex review issue comments.
+
+When an inline review thread is addressed, resolve the GitHub review thread if
+the authenticated GitHub user is allowed to do so:
+
+```bash
+gh api graphql \
+  -f thread_id="$thread_id" \
+  -f query='
+    mutation($thread_id: ID!) {
+      resolveReviewThread(input: {threadId: $thread_id}) {
+        thread { id isResolved }
+      }
+    }'
+```
+
+If the API call fails because of permissions, API support, or ambiguity, do not
+claim the thread was resolved. Record that the feedback was addressed but the
+thread remains unresolved, and include the reason in the Trello workpad or PR
+reply.
 
 If the PR title, body, branch, labels, or linked card references no longer
 match the work actually completed, update the PR metadata before handoff.
@@ -110,7 +195,8 @@ workpad with:
 
 - PR URL, if one exists.
 - Feedback classes found.
-- What changed or why feedback was declined.
+- What changed, which review threads were resolved, and why any thread remains
+  unresolved.
 - Check status and validation evidence.
 - Remaining blockers, if any.
 
