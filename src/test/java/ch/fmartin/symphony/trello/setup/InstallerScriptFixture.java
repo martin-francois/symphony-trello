@@ -10,9 +10,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 final class InstallerScriptFixture {
+    private static final Pattern POSIX_INSTALLER_DEFAULT_REF =
+            Pattern.compile("(?m)^DEFAULT_REF=\"([^\"]+)\" # x-release-please-version$");
+
     private InstallerScriptFixture() {}
 
     static String output(Process process) throws IOException {
@@ -171,6 +175,16 @@ final class InstallerScriptFixture {
         return "'" + value.replace("'", "''") + "'";
     }
 
+    static String installerDefaultRef() throws IOException {
+        String installScript = Files.readString(Path.of("install.sh"), StandardCharsets.UTF_8);
+        return POSIX_INSTALLER_DEFAULT_REF
+                .matcher(installScript)
+                .results()
+                .findFirst()
+                .map(match -> match.group(1))
+                .orElseThrow(() -> new IllegalStateException("install.sh is missing the Release Please default ref"));
+    }
+
     static Path createSourceRepository(Path temporaryDirectory) throws Exception {
         Path repository = temporaryDirectory.resolve("source");
         Files.createDirectories(repository);
@@ -195,6 +209,8 @@ final class InstallerScriptFixture {
                 .assertSuccess();
         run(Map.of(), "git", "-C", repository.toString(), "add", ".").assertSuccess();
         run(Map.of(), "git", "-C", repository.toString(), "commit", "-m", "Initial test source")
+                .assertSuccess();
+        run(Map.of(), "git", "-C", repository.toString(), "tag", installerDefaultRef())
                 .assertSuccess();
         return repository;
     }
@@ -222,6 +238,8 @@ final class InstallerScriptFixture {
                 .assertSuccess();
         run(Map.of(), "git", "-C", repository.toString(), "add", ".").assertSuccess();
         run(Map.of(), "git", "-C", repository.toString(), "commit", "-m", "Initial test source")
+                .assertSuccess();
+        run(Map.of(), "git", "-C", repository.toString(), "tag", installerDefaultRef())
                 .assertSuccess();
         return repository;
     }

@@ -8,6 +8,7 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.List;
@@ -23,13 +24,7 @@ class CodexSkillStructureTest {
     @Test
     void repositoryLocalSkillsHaveValidFrontMatterAndMatchingNames() throws IOException {
         // given
-        List<Path> skillFiles;
-        try (var paths = Files.list(SKILLS_ROOT)) {
-            skillFiles = paths.filter(Files::isDirectory)
-                    .map(path -> path.resolve("SKILL.md"))
-                    .sorted(Comparator.comparing(Path::toString))
-                    .toList();
-        }
+        List<Path> skillFiles = repositoryLocalSkillFiles();
 
         // when
         List<SkillMetadata> metadata =
@@ -62,13 +57,7 @@ class CodexSkillStructureTest {
     @Test
     void repositoryLocalSkillsArePackagedForWorkspaceSeeding() throws IOException {
         // given
-        List<Path> skillFiles;
-        try (var paths = Files.list(SKILLS_ROOT)) {
-            skillFiles = paths.filter(Files::isDirectory)
-                    .map(path -> path.resolve("SKILL.md"))
-                    .sorted(Comparator.comparing(Path::toString))
-                    .toList();
-        }
+        List<Path> skillFiles = repositoryLocalSkillFiles();
 
         // when
         List<String> packagedResources = skillFiles.stream()
@@ -87,6 +76,9 @@ class CodexSkillStructureTest {
                 throw new AssertionError("Could not read packaged skill resource " + resource, e);
             }
         });
+        assertThat(getClass().getClassLoader().getResource("codex-skills/tessl__recon/SKILL.md"))
+                .as("ignored Tessl-generated skill symlinks are not packaged")
+                .isNull();
     }
 
     @Test
@@ -249,6 +241,15 @@ class CodexSkillStructureTest {
                     body);
         } catch (IOException e) {
             throw new AssertionError("Could not read skill file " + file, e);
+        }
+    }
+
+    private List<Path> repositoryLocalSkillFiles() throws IOException {
+        try (var paths = Files.list(SKILLS_ROOT)) {
+            return paths.filter(path -> Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS))
+                    .map(path -> path.resolve("SKILL.md"))
+                    .sorted(Comparator.comparing(Path::toString))
+                    .toList();
         }
     }
 

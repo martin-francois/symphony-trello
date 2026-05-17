@@ -1,0 +1,147 @@
+name: Bug report
+description: Report a reproducible problem in Symphony for Trello.
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Do not include Trello API keys, Trello tokens, Codex auth files, GitHub tokens, private Trello board links, account names, private host paths, deployment-specific host paths, or screenshots/logs containing those values.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Describe the bug
+      description: Give a clear, concise description of the user-visible problem.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where did this happen?
+      options:
+        - Installer or onboarding
+        - Local CLI command
+        - Running service
+        - Deployment or live run
+        - Trello card or board behavior
+        - GitHub integration
+        - Documentation
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Use a disposable Trello board or sanitized examples when possible. If setup choices matter, include what you remember; if you do not remember, say so.
+      placeholder: |
+        1. Start from ...
+        2. Choose ... during installer/onboarding, if relevant
+        3. Move a Trello card to ...
+        4. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: Describe what you expected to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Describe what actually happened. Include error messages as text instead of screenshots of text.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output
+      description: Paste the smallest useful log, CLI output, Trello comment text, or status response. Redact secrets, account names, board links, and private paths.
+      render: text
+  - type: textarea
+    id: setup-context
+    attributes:
+      label: Setup path or configuration used, if known
+      description: List only the setup details you know. If you edited config files manually, include only the smallest redacted file or setting needed to reproduce it.
+      placeholder: |
+        Install/run context, if relevant:
+        - one-line install, Docker/container, Ansible deployment, VM, WSL, source checkout, or other:
+
+        Setup choices, if relevant:
+        - new board or existing Trello board:
+        - GitHub enabled:
+        - extra allowed paths:
+        - danger-full-access:
+
+        Manual config, if relevant:
+        - command or file changed:
+        - redacted setting:
+  - type: input
+    id: version
+    attributes:
+      label: Symphony for Trello version
+      description: Paste `symphony-trello --version`, the release version, or the commit SHA if known.
+      placeholder: "symphony-trello --version: "
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      description: Include OS name/version and whether this is running in Docker, WSL, or a VM.
+      placeholder: "Ubuntu 24.04 / macOS 15 / Windows 11 / Windows through WSL / Docker"
+    validations:
+      required: true
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: Install or run method
+      options:
+        - One-line installer
+        - Source checkout
+        - Docker/container
+        - Ansible deployment
+        - Other
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: java-version
+    attributes:
+      label: Java version
+      description: Paste `java -version` from the same terminal where you run `symphony-trello`; the installed command uses that Java from your PATH.
+      placeholder: "java -version"
+      render: text
+  - type: input
+    id: codex-version
+    attributes:
+      label: Codex CLI version
+      description: Paste `codex --version` if Codex CLI is installed or if the installer reached a Codex step.
+      placeholder: "codex --version: "
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Workaround
+      description: If you found a temporary workaround, describe exactly what you did. If not, write "None known".
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Add recent changes, network/proxy details, time zone, or anything else that may affect reproduction.
+  - type: checkboxes
+    id: ai-assistance
+    attributes:
+      label: AI Assistance (if used)
+      description: If an AI agent helped prepare this report, mark the relevant boxes. Otherwise leave this blank.
+      options:
+        - label: AI-assisted issue
+          required: false
+        - label: I confirm I understand and reviewed this report
+          required: false
+  - type: textarea
+    id: ai-context
+    attributes:
+      label: AI prompts / session logs (optional)
+      description: Add redacted prompts or session excerpts if they help reviewers understand the report.
+      render: text
