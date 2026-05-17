@@ -317,8 +317,8 @@ public class TrelloClient implements TrackerClient {
     }
 
     public static Comparator<Card> dispatchComparator(EffectiveConfig config) {
-        return Comparator.comparing((Card card) -> card.priority() == null ? Integer.MAX_VALUE : card.priority())
-                .thenComparingInt(card -> activeOrder(card, config))
+        return Comparator.comparingInt((Card card) -> activeOrder(card, config))
+                .thenComparing(card -> card.priority() == null ? Integer.MAX_VALUE : card.priority())
                 .thenComparing(card -> card.position() == null ? BigDecimal.valueOf(Long.MAX_VALUE) : card.position())
                 .thenComparing(card -> card.createdAt() == null ? Instant.MAX : card.createdAt())
                 .thenComparing(Card::identifier);
@@ -327,13 +327,15 @@ public class TrelloClient implements TrackerClient {
     private static int activeOrder(Card card, EffectiveConfig config) {
         if (card.listId() != null && !config.tracker().activeListIds().isEmpty()) {
             int index = config.tracker().activeListIds().indexOf(card.listId());
-            return index < 0 ? Integer.MAX_VALUE : index;
+            return index < 0
+                    ? Integer.MAX_VALUE
+                    : config.tracker().activeListIds().size() - 1 - index;
         }
         List<String> active = config.tracker().activeStates().stream()
                 .map(StateNames::normalize)
                 .toList();
         int index = active.indexOf(StateNames.normalize(card.state()));
-        return index < 0 ? Integer.MAX_VALUE : index;
+        return index < 0 ? Integer.MAX_VALUE : active.size() - 1 - index;
     }
 
     private BoardContext boardContext(EffectiveConfig config) {

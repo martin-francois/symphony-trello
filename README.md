@@ -218,6 +218,9 @@ configured, the generated workflow tells Codex to commit the change, create or u
 leave a Trello handoff comment, and move the card to `Human Review` when the PR is ready for a
 person. Without GitHub integration, the workflow stays local/non-GitHub and does not create the
 GitHub-specific `Merging` list.
+When several active Trello lists have cards, Symphony handles later workflow lists first, such as
+`Merging` before `In Progress` before `Ready for Codex`, then uses priority labels and Trello card
+position within the same list.
 
 Start with the browser setup below. Those steps create the Trello credentials used by both board
 setup paths.
