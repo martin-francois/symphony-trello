@@ -737,7 +737,11 @@ public final class TrelloBoardSetup {
                                 githubEnabled),
                         reworkPrompt(activeStates, reviewState, mergingState, !handoffStates.isEmpty(), githubEnabled),
                         landingPrompt(
-                                mergingState, doneState, blockedDestination(reviewState, blockedState), githubEnabled),
+                                mergingState,
+                                reviewState,
+                                doneState,
+                                blockedDestination(reviewState, blockedState),
+                                githubEnabled),
                         pickupPrompt(activeStates, inProgressState, mergingState),
                         completionBarPrompt(
                                 reviewState,
@@ -1047,11 +1051,13 @@ public final class TrelloBoardSetup {
                 identifies an associated pull request, use `%s` before moving the
                 card to %s or landing from Merging. Cards without PR context do not need GitHub review checks.
 
-                The sweep must check top-level PR comments, inline review comments, review states and summaries,
-                CI/check status, and Codex review issue comments when present. Every actionable human, bot, or Codex
-                review comment is blocking until it is addressed with code, tests, docs, or PR metadata, or answered
-                with a justified response in the right thread. Do not decline correctness feedback without concrete
-                validation.
+                The sweep must check top-level PR comments, inline review comments, GitHub review threads and whether
+                each thread is resolved, review states and summaries, CI/check status, and Codex review issue comments
+                when present. Every actionable human, bot, or Codex review comment is blocking until it is addressed
+                with code, tests, docs, or PR metadata, or answered with a justified response in the right thread. Do
+                not decline correctness feedback without concrete validation. Resolve addressed GitHub review threads
+                when the authenticated GitHub user is allowed to resolve them; if a thread cannot be resolved because
+                of permissions, API limitations, or ambiguity, record that clearly and do not claim it was resolved.
 
                 Classify PR checks before deciding handoff:
                 - If a failing check is related to the card's changes, the current branch, or can be reproduced by
@@ -1071,11 +1077,21 @@ public final class TrelloBoardSetup {
                   flaky, or unrelated check caveat in %s.
 
                 After feedback-driven changes, rerun the relevant validation and repeat the sweep until no
-                actionable feedback remains. If GitHub auth, PR discovery, or review data are unavailable for a
-                PR-backed card and no documented fallback can provide the required signal, %s instead of handing it
-                off.
+                actionable feedback remains. For landing from Merging, exact and unambiguous feedback that was
+                added before the card entered %s and addressed with clean checks may land without returning to
+                %s; material fixups, ambiguity, or unverifiable changes require renewed %s. If GitHub auth, PR
+                discovery, or review data are
+                unavailable for a PR-backed card and no documented fallback can provide the required signal, %s
+                instead of handing it off.
                 """
-                .formatted(skillPath("review-sweep"), reviewHandoff, checkCaveatDestination, blockedText)
+                .formatted(
+                        skillPath("review-sweep"),
+                        reviewHandoff,
+                        checkCaveatDestination,
+                        quote("Merging"),
+                        reviewHandoff,
+                        reviewHandoff,
+                        blockedText)
                 .stripTrailing();
     }
 
@@ -1151,7 +1167,11 @@ public final class TrelloBoardSetup {
     }
 
     private static String landingPrompt(
-            String mergingState, String doneState, String blockedDestination, boolean githubEnabled) {
+            String mergingState,
+            String reviewState,
+            String doneState,
+            String blockedDestination,
+            boolean githubEnabled) {
         if (!githubEnabled) {
             return """
                     ## Landing
@@ -1162,40 +1182,60 @@ public final class TrelloBoardSetup {
                     """
                     .stripTrailing();
         }
+        String reviewHandoff = blank(reviewState) ? "human review" : quote(reviewState);
         if (blank(mergingState)) {
             return """
                     ## Landing
 
-                    This workflow has no landing approval list configured. Do not merge or land from Human Review.
-                    A human must land outside Symphony or add a landing approval list to the workflow active lists
+                    This workflow has no landing approval list configured. Do not merge or land from %s.
+                    A human must land outside Symphony or add a Merging-style list to the workflow active lists
                     and Trello move allowlist.
                     """
+                    .formatted(reviewHandoff)
                     .stripTrailing();
         }
         String doneDestination = blank(doneState) ? "the configured done list" : quote(doneState);
         String blockedText = blank(blockedDestination)
                 ? "block with a visible Codex response because no blocked destination is configured"
                 : "move the card to " + quote(blockedDestination) + " with a concise blocker";
+        String fixupDecision = blank(reviewState)
+                ? "If landing required material fixups, broad interpretation, or unverifiable changes, update the "
+                        + "workpad and " + blockedText + "."
+                : "If final work in the landing approval list required material fixups, broad interpretation, or "
+                        + "unverifiable changes, move back to\n  " + quote(reviewState)
+                        + " with the reason and ask for renewed approval.";
         return """
                 ## Landing From %s
 
                 %s is human approval for landing. Only run landing when the current Trello list is %s. Do not
-                merge from Human Review, and do not call `gh pr merge` directly from the workflow prompt. Open
+                merge from %s, and do not call `gh pr merge` directly from the workflow prompt. Open
                 `%s` and follow it.
 
                 Before landing, identify the PR, run the PR feedback sweep, run current card-specific validation,
                 check mergeability, branch state, required reviews, and CI/check status, and follow the repository's
                 merge policy. Do not enable auto-merge unless the repository policy explicitly requires it.
 
-                If PR discovery, checks, auth, branch state, merge policy, or outstanding review feedback is unclear,
-                update the workpad and %s. After successful landing, update the workpad with merge evidence, add a
-                concise completion comment when useful, and move the card to %s.
+                Deterministic landing decisions:
+                - If the card moved from %s to %s with no new feedback and the PR is clean, land it.
+                - If exact, unambiguous feedback added before the card entered %s was addressed with current
+                  validation and clean checks, land it.
+                - %s
+                - If PR discovery, checks, auth, branch state, merge policy, required reviews, or actionable review
+                  feedback is unresolved, update the workpad and %s.
+
+                After successful landing, update the workpad with merge evidence, add a concise completion comment
+                when useful, and move the card to %s.
                 """
                 .formatted(
                         quote(mergingState),
                         quote(mergingState),
                         quote(mergingState),
+                        reviewHandoff,
                         skillPath("land"),
+                        reviewHandoff,
+                        quote(mergingState),
+                        quote(mergingState),
+                        fixupDecision,
                         blockedText,
                         doneDestination)
                 .stripTrailing();
