@@ -173,6 +173,8 @@ class TrelloBoardSetupTest {
                 .contains("and create or update the PR")
                 .contains("Create a ready-for-review, non-draft PR by\ndefault")
                 .contains("Create a draft PR only when the Trello card explicitly asks for a draft PR")
+                .contains("PR: <https://github.com/owner/repo/pull/123>")
+                .contains("do not write a bare PR URL followed by punctuation")
                 .contains("reuse the task checkout's local Git author")
                 .contains("user.name")
                 .contains("user.email")
