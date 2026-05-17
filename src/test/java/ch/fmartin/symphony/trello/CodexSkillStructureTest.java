@@ -130,6 +130,7 @@ class CodexSkillStructureTest {
                 .contains("moves a card from `Human Review` back to an active list")
                 .contains("Read the existing `## Codex Workpad` comment")
                 .contains("Run `review-sweep` when a PR or branch exists")
+                .contains("PR: <https://github.com/owner/repo/pull/123>")
                 .contains("Preserve completed work")
                 .contains("Do not close the")
                 .contains("existing PR")
@@ -202,6 +203,8 @@ class CodexSkillStructureTest {
                 .contains("number,state,title,url,isDraft")
                 .contains("Do not pass\n     `--draft` unless")
                 .contains("mark it\n     ready for review")
+                .contains("PR: <https://github.com/owner/repo/pull/123>")
+                .contains("trailing\n    punctuation cannot be absorbed into the link")
                 .contains("contains unrelated\n  human-owned work");
     }
 

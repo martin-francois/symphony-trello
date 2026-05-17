@@ -156,7 +156,9 @@ description: >
 8. Use `.github/pull_request_template.md` when present. Fill every section with
    concrete content and remove placeholders.
 9. Include validation evidence and any known limitations.
-10. Return the PR URL.
+10. Return the PR URL. When writing it into Trello-visible text, put it on its
+    own line as `PR: <https://github.com/owner/repo/pull/123>` so trailing
+    punctuation cannot be absorbed into the link.
 
 ## Stop Conditions
 
