@@ -3,7 +3,8 @@ set -euo pipefail
 
 ORIGINAL_PATH="$PATH"
 REPO_URL="${SYMPHONY_TRELLO_REPO_URL:-https://github.com/martinfrancois/symphony-trello.git}"
-REF="${SYMPHONY_TRELLO_REF:-main}"
+DEFAULT_REF="v0.2.0" # x-release-please-version
+REF="${SYMPHONY_TRELLO_REF:-$DEFAULT_REF}"
 SYMPHONY_HOME="${SYMPHONY_HOME:-$HOME/.local/share/symphony-trello}"
 APP_DIR="$SYMPHONY_HOME/app"
 CONFIG_DIR="${SYMPHONY_TRELLO_CONFIG_DIR:-$SYMPHONY_HOME/config}"
@@ -19,18 +20,19 @@ CODEX_NPM_PREFIX="$SYMPHONY_HOME/npm"
 APT_UPDATED=false
 
 usage() {
-  cat <<'USAGE'
+  cat <<USAGE
 Usage:
-  curl -fsSL https://raw.githubusercontent.com/martinfrancois/symphony-trello/main/install.sh | bash
-  curl -fsSL https://raw.githubusercontent.com/martinfrancois/symphony-trello/main/install.sh | bash -s -- --dry-run
+  export SYMPHONY_TRELLO_REF=${DEFAULT_REF}
+  curl -fsSL "https://raw.githubusercontent.com/martinfrancois/symphony-trello/\${SYMPHONY_TRELLO_REF}/install.sh" | bash
+  curl -fsSL "https://raw.githubusercontent.com/martinfrancois/symphony-trello/\${SYMPHONY_TRELLO_REF}/install.sh" | bash -s -- --dry-run
 
 Options:
   --dry-run          Print planned actions without changing files.
   --no-onboard      Install or update the command without running setup-local.
-  --prefix PATH     App checkout path. Default: $SYMPHONY_HOME/app
+  --prefix PATH     App checkout path. Default: \$SYMPHONY_HOME/app
   --bin-dir PATH    Command directory. Default: ~/.local/bin
   --repo URL        Git repository URL.
-  --ref REF         Git ref to check out. Default: main
+  --ref REF         Git ref to check out. Default: ${DEFAULT_REF}
   --help            Show this help.
 
 Environment:

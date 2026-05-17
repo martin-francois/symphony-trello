@@ -89,6 +89,53 @@ class InstallerScriptTest {
     }
 
     @Test
+    void posixInstallerDryRunOffersJava25WhenJava24IsOnPath() throws Exception {
+        // given
+        Assumptions.assumeTrue(Files.exists(Path.of("/bin/bash")));
+        Path fakeBin = temporaryDirectory.resolve("java-24-bin");
+        Files.createDirectories(fakeBin);
+        String success = """
+                #!/bin/sh
+                exit 0
+                """;
+        writeExecutable(fakeBin.resolve("git"), success);
+        writeExecutable(fakeBin.resolve("codex"), success);
+        writeExecutable(fakeBin.resolve("apt-get"), success);
+        writeCommandProxy(fakeBin, "sed", "/bin/sed");
+        writeCommandProxy(fakeBin, "head", "/usr/bin/head");
+        writeExecutable(
+                fakeBin.resolve("java"),
+                """
+                #!/bin/sh
+                echo 'openjdk version "24.0.2"' >&2
+                """);
+        writeExecutable(
+                fakeBin.resolve("javac"),
+                """
+                #!/bin/sh
+                echo 'javac 24.0.2'
+                """);
+        Map<String, String> environment = Map.of(
+                "PATH", fakeBin.toString(),
+                "SYMPHONY_TRELLO_TEST_EUID", "0",
+                "SYMPHONY_TRELLO_TEST_OS", "Linux",
+                "SYMPHONY_TRELLO_TEST_ARCH", "x86_64");
+
+        // when
+        ProcessResult result = run(environment, "/bin/bash", "install.sh", "--dry-run", "--no-onboard");
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output())
+                .contains(
+                        "OK      Git available",
+                        "NEEDED  Java 25+ JDK",
+                        "OK      Codex CLI available",
+                        "WOULD offer to install Java 25+ JDK with: apt-get update && apt-get install -y openjdk-25-jdk")
+                .doesNotContain("WOULD offer to install Git");
+    }
+
+    @Test
     void posixInstallerProposesPackageManagerCommandWithoutSudoWhenRoot() throws Exception {
         // given
         Assumptions.assumeTrue(Files.exists(Path.of("/bin/bash")));

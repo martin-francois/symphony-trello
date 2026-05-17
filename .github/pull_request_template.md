@@ -1,0 +1,91 @@
+## Summary
+
+Describe the change in 2-5 bullet points.
+
+- Problem:
+- Why it matters:
+- What changed:
+- What did not change:
+
+## Change Type
+
+Choose all that apply.
+
+- [ ] Bug fix
+- [ ] Feature
+- [ ] Documentation
+- [ ] Refactor required for this change
+- [ ] Chore / infrastructure
+
+## Linked Issue
+
+- Fixes #
+- Related #
+
+## User-Visible Behavior
+
+Describe what a user, operator, or contributor can observe after this PR. If there is no
+user-visible change, write `None`.
+
+## Root Cause And Guardrail
+
+For bug fixes or regressions, explain why the issue happened and what now prevents it from coming
+back. For non-bug changes, write `N/A`.
+
+- Root cause:
+- Test or guardrail added:
+- If no test was added, why not:
+
+## Validation
+
+List the commands, manual checks, or live checks you ran. Include relevant failures that were fixed
+during the PR.
+
+- [ ] `./mvnw -q spotless:check verify`
+- [ ] Installer or script checks, if touched
+- [ ] Documentation lint, if Markdown changed
+- [ ] Manual or live check, if behavior changed
+
+Details:
+
+```text
+
+```
+
+## Human Verification
+
+Describe what you tried manually and what result you saw. If the change cannot be tried manually,
+explain why.
+
+```text
+
+```
+
+## Review Checklist
+
+- [ ] Docs updated, or N/A
+- [ ] ADR updated for architecture decisions or tradeoffs, or N/A
+- [ ] PR title or squash title uses Conventional Commits and is release-note ready
+- [ ] Live E2E/deployment notes included when behavior or deployment changed, or N/A
+- [ ] Redaction checked: no Trello credentials, Codex auth files, GitHub tokens, private board links,
+      account names, private host paths, or deployment-specific paths
+
+## AI Assistance (if used)
+
+<!--
+AI/Vibe-Coded PRs Welcome! 🤖
+Built with Codex, Claude, or other AI tools? Awesome — just mark it.
+AI PRs are first-class citizens here. We just want transparency so reviewers know what to look for.
+-->
+
+- [ ] AI-assisted PR
+- [ ] I confirm I understand what the code does
+
+<details>
+<summary>AI prompts / session logs (optional, but super helpful)</summary>
+
+```text
+
+```
+
+</details>
