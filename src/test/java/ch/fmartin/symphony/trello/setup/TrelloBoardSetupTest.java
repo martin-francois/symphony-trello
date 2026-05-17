@@ -143,6 +143,9 @@ class TrelloBoardSetupTest {
                 .contains("list_name \"Human Review\"")
                 .contains("## Landing From \"Merging\"")
                 .contains("Only run landing when the current Trello list is \"Merging\"")
+                .contains("If the card moved from \"Human Review\" to \"Merging\" with no new feedback")
+                .contains("If exact, unambiguous feedback added before the card entered \"Merging\"")
+                .contains("If final work in the landing approval list required material fixups")
                 .contains("Do not enable auto-merge")
                 .contains("move the card to \"Blocked\" with a concise blocker")
                 .contains("move the card to \"Done\"")
@@ -198,6 +201,8 @@ class TrelloBoardSetupTest {
                 .contains("card to \"Human Review\" or landing from Merging")
                 .contains("top-level PR comments")
                 .contains("inline review comments")
+                .contains("GitHub review threads")
+                .contains("Resolve addressed GitHub review threads")
                 .contains("Codex review issue comments")
                 .contains("Classify PR checks before deciding handoff")
                 .contains("If a failing check is related to the card's changes")
@@ -403,6 +408,8 @@ class TrelloBoardSetupTest {
                 .contains("local-only/no-push work")
                 .contains("## Pull Request Feedback Sweep")
                 .contains("Every actionable human, bot, or Codex")
+                .contains("GitHub review threads")
+                .contains("Resolve addressed GitHub review threads")
                 .contains("## Rework From Human Review")
                 .contains("treat the next run as rework")
                 .contains("linked PR comments")
@@ -418,6 +425,7 @@ class TrelloBoardSetupTest {
                 .contains("list_name \"Human Review\"")
                 .contains("## Landing From \"Merging\"")
                 .contains("Only run landing when the current Trello list is \"Merging\"")
+                .contains("If exact, unambiguous feedback added before the card entered \"Merging\"")
                 .contains("## Completion Bar Before \"Human Review\"")
                 .contains("move the card to \"Done\"")
                 .contains("max_concurrent_agents: 2");
@@ -520,13 +528,13 @@ class TrelloBoardSetupTest {
     }
 
     @Test
-    void importUsesConfiguredTerminalListForLandingWhenMergingExists() {
+    void importUsesConfiguredReviewAndTerminalListsForLandingWhenMergingExists() {
         // given
         boardListsResponse.set(
                 """
                 [
                   {"id":"list-ready","name":"Ready for Codex","closed":false,"pos":1},
-                  {"id":"list-review","name":"Human Review","closed":false,"pos":2},
+                  {"id":"list-review","name":"Review","closed":false,"pos":2},
                   {"id":"list-merging","name":"Merging","closed":false,"pos":3},
                   {"id":"list-blocked","name":"Blocked","closed":false,"pos":4},
                   {"id":"list-released","name":"Released","closed":false,"pos":5}
@@ -550,12 +558,59 @@ class TrelloBoardSetupTest {
         // then
         assertThat(result.activeStates()).containsExactly("Ready for Codex", "Merging");
         EffectiveConfig config = resolve(workflow);
-        assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("human review", "blocked", "released");
+        assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("review", "blocked", "released");
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("## Landing From \"Merging\"")
+                .contains("merge from \"Review\"")
+                .contains("renewed \"Review\"")
+                .contains("move back to\n  \"Review\" with the reason")
                 .contains("move the card to \"Released\"")
+                .doesNotContain("renewed Human Review")
+                .doesNotContain("move back to\n  \"Human Review\"")
                 .doesNotContain("move the card to \"Done\"");
+    }
+
+    @Test
+    void importUsesBlockedDestinationForLandingFixupsWhenNoReviewListExists() {
+        // given
+        boardListsResponse.set(
+                """
+                [
+                  {"id":"list-ready","name":"Ready for Codex","closed":false,"pos":1},
+                  {"id":"list-merging","name":"Merging","closed":false,"pos":2},
+                  {"id":"list-blocked","name":"Blocked","closed":false,"pos":3},
+                  {"id":"list-done","name":"Done","closed":false,"pos":4}
+                ]
+                """);
+        Path workflow = tempDir.resolve("imported-landing-without-review.md");
+
+        // when
+        var result = setup.importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "input",
+                List.of(),
+                List.of(),
+                null,
+                workflow,
+                Path.of("./agent-workspaces"),
+                2,
+                false));
+
+        // then
+        assertThat(result.activeStates()).containsExactly("Ready for Codex", "Merging");
+        EffectiveConfig config = resolve(workflow);
+        assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("blocked", "done");
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("## Landing From \"Merging\"")
+                .contains("If exact, unambiguous feedback added before the card entered \"Merging\"")
+                .contains("If landing required material fixups")
+                .contains("move the card to \"Blocked\" with a concise blocker")
+                .doesNotContain("renewed human review")
+                .doesNotContain("move back to\n  human review")
+                .doesNotContain("move back to\n  \"Human Review\"");
     }
 
     @Test

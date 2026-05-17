@@ -98,6 +98,14 @@ class CodexSkillStructureTest {
                 .contains("gh api \"repos/{owner}/{repo}/issues/$pr_number/comments\"")
                 .contains("gh api \"repos/{owner}/{repo}/pulls/$pr_number/comments\"")
                 .contains("gh api \"repos/{owner}/{repo}/pulls/$pr_number/reviews\"")
+                .contains("gh api graphql --paginate")
+                .contains("reviewThreads(first: 100, after: $endCursor)")
+                .contains("pageInfo { hasNextPage endCursor }")
+                .contains("comments(first: 100)")
+                .contains("comments(first: 100, after: $endCursor)")
+                .contains("resolveReviewThread")
+                .contains("Do not treat a possible\nincomplete comments page as a complete feedback sweep")
+                .contains("do not\nclaim the thread was resolved")
                 .contains("Codex review issue comments")
                 .contains("correctness")
                 .contains("design")
@@ -223,9 +231,13 @@ class CodexSkillStructureTest {
                 .contains("mergeability")
                 .contains("review feedback")
                 .contains("required checks are green")
+                .contains("Resolve addressed GitHub review threads when possible")
+                .contains("configured review handoff list to the\n  landing approval list")
+                .contains("precise, unambiguous feedback")
+                .contains("material fixups, broad\n  interpretation, or unverifiable changes")
                 .contains("move the card to the configured landing completion list")
-                .contains("move the card to `Blocked`")
-                .contains("The card is in `Human Review` rather than `Merging`");
+                .contains("configured blocked\n  destination")
+                .contains("configured review handoff list rather than the landing\n  approval list");
     }
 
     private SkillMetadata readSkillMetadata(Path file) {

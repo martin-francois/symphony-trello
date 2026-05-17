@@ -369,7 +369,8 @@ Use the generated board like this:
    instead of starting over.
 9. If the work is accepted and should be landed by Codex, a human moves the card to `Merging`.
    Codex treats `Merging` as the approval signal, runs the landing skill, checks PR feedback and CI,
-   follows the repository's merge policy, and moves successful landed work to `Done`.
+   resolves addressed GitHub review threads when GitHub allows it, follows the repository's merge
+   policy, and moves successful landed work to `Done`.
 10. If you land outside Codex instead, move the card to `Done` yourself after the work is accepted and
    landed.
 
@@ -773,9 +774,10 @@ If a human moves a reviewed card from "Human Review" back to "Ready for Codex" o
 treat the next run as rework. Reread the card, new Trello comments, existing workpad, and linked PR
 feedback before changing code again.
 
-Only land work when the card is in "Merging". Before landing, sweep PR comments and checks, run the
-card-specific validation, follow the repository's merge policy, and move successful landed work to
-"Done". If landing cannot safely proceed, move the card to "Blocked" with a concise blocker.
+Only land work when the card is in "Merging". Before landing, sweep PR comments, review threads, and
+checks, resolve addressed GitHub review threads when GitHub allows it, run the card-specific
+validation, follow the repository's merge policy, and move successful landed work to "Done". If
+landing cannot safely proceed, move the card to "Blocked" with a concise blocker.
 
 For repository-changing work, "Human Review" means there is a pull request ready for a person.
 Commit the change, push the branch, create or update the PR, and include the PR URL in the workpad
@@ -907,7 +909,7 @@ The most common skills are:
 - `.codex/skills/symphony-trello-trello-handoff/SKILL.md`: move the current card through pickup,
   review, blocked, merge, and done handoff.
 - `.codex/skills/symphony-trello-review-sweep/SKILL.md`: check PR comments, inline review feedback,
-  and checks before handoff.
+  GitHub review threads, and checks before handoff.
 - `.codex/skills/symphony-trello-commit/SKILL.md`: commit focused changes, follow the target
   repository's commit message convention, and, for PR-bound work, reuse a workflow-verified
   checkout-local commit author or configure one from the authenticated GitHub account before
@@ -915,8 +917,9 @@ The most common skills are:
 - `.codex/skills/symphony-trello-push-pr/SKILL.md`: push the branch, check PR-bound commit authors,
   and create or update the pull request. Repository-changing work creates a ready-for-review PR by
   default. Cards that need a draft PR must ask for one explicitly.
-- `.codex/skills/symphony-trello-land/SKILL.md`: land an approved PR only from `Merging`, then move
-  successful work to the configured completion list or blocked landing attempts to `Blocked`.
+- `.codex/skills/symphony-trello-land/SKILL.md`: land an approved PR only from `Merging`, resolve
+  addressed review threads when possible, then move successful work to the configured completion list
+  or blocked landing attempts to `Blocked`.
 - `.codex/skills/symphony-trello-debug/SKILL.md`: diagnose stuck, retrying, blocked, or failed runs.
 
 These files are instructions for Codex. Symphony copies them into the workspace but does not execute

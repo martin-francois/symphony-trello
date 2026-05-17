@@ -29,6 +29,10 @@ description: >
 ## Steps
 
 1. Use `review-sweep` and address all actionable feedback.
+   Resolve addressed GitHub review threads when possible. If a thread cannot be
+   resolved because of permissions or API limitations, keep landing eligible
+   only when the feedback is otherwise addressed and the workpad records the
+   unresolved thread and reason.
 2. Run local validation required by `AGENTS.md` and the Trello card.
 3. Check PR mergeability and branch state:
 
@@ -49,7 +53,8 @@ description: >
    - required checks are green,
    - mergeability is clean,
    - required reviews are satisfied,
-   - actionable comments are addressed or explicitly resolved,
+   - actionable comments and review threads are addressed or explicitly
+     resolved,
    - local validation is current.
 8. After merging:
    - update the workpad with merge evidence,
@@ -62,9 +67,30 @@ If landing cannot proceed, use `trello-handoff` to move the card to `Blocked`
 with a concise explanation. Include the exact class of blocker: auth, merge
 conflict, failing checks, outstanding feedback, missing PR, or unclear policy.
 
+## Landing Decision Table
+
+- Move to the configured landing completion list only after the PR merged
+  successfully.
+- If a human moved the card from the configured review handoff list to the
+  landing approval list without adding new feedback, treat that as approval to
+  land when the PR is identifiable, checks and mergeability are clean, required
+  reviews are satisfied, and policy is clear.
+- If precise, unambiguous feedback was added before the landing approval list,
+  and the feedback was addressed exactly with current validation and clean
+  checks, land to the configured landing completion list.
+- If final work in the landing approval list required material fixups, broad
+  interpretation, or unverifiable changes, move back to the configured review
+  handoff list with the exact reason and ask for renewed approval.
+- If actionable feedback, required reviews, mergeability, checks, auth, or
+  repository policy remain unresolved, move to the configured blocked
+  destination with the exact blocker class and next human action.
+- Do not leave the Trello card parked in `Merging` after a failed landing
+  attempt.
+
 ## Stop Conditions
 
-- The card is in `Human Review` rather than `Merging`.
+- The card is in the configured review handoff list rather than the landing
+  approval list.
 - The PR cannot be identified.
 - CI/checks are failing, pending beyond a reasonable wait, or unavailable when
   required.
