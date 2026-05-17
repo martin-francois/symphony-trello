@@ -981,7 +981,8 @@ public final class TrelloBoardSetup {
                 there, use `%s` and `%s` to commit, push,
                 and create or update the PR for the current branch. Create a ready-for-review, non-draft PR by
                 default. Create a draft PR only when the Trello card explicitly asks for a draft PR. Add the PR
-                URL to %s.
+                URL to %s. In Trello-visible text, put PR links on their own line as `PR: <https://github.com/owner/repo/pull/123>`;
+                do not write a bare PR URL followed by punctuation.
 
                 Before creating commits for PR-bound work, reuse the task checkout's local Git author only when both
                 `user.name` and `user.email` are already configured and `symphony-trello.github-author-verified` is
