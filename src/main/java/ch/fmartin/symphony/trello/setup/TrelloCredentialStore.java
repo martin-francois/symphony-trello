@@ -105,9 +105,10 @@ final class TrelloCredentialStore {
         if (Files.exists(envPath)) {
             Files.write(envPath, lines, StandardCharsets.UTF_8, StandardOpenOption.TRUNCATE_EXISTING);
         } else {
-            try {
+            if (supportsPosixFilePermissions(
+                    parent == null ? envPath.toAbsolutePath().normalize() : parent)) {
                 Files.createFile(envPath, PosixFilePermissions.asFileAttribute(ownerOnlyEnvPermissions()));
-            } catch (UnsupportedOperationException e) {
+            } else {
                 Files.createFile(envPath);
             }
             Files.write(envPath, lines, StandardCharsets.UTF_8, StandardOpenOption.TRUNCATE_EXISTING);
@@ -116,11 +117,14 @@ final class TrelloCredentialStore {
     }
 
     private static void secureEnvPermissions(Path envPath) throws IOException {
-        try {
-            Files.setPosixFilePermissions(envPath, ownerOnlyEnvPermissions());
-        } catch (UnsupportedOperationException ignored) {
-            // Non-POSIX filesystems such as Windows do not expose chmod-style file permissions.
+        if (!supportsPosixFilePermissions(envPath)) {
+            return;
         }
+        Files.setPosixFilePermissions(envPath, ownerOnlyEnvPermissions());
+    }
+
+    private static boolean supportsPosixFilePermissions(Path path) throws IOException {
+        return Files.getFileStore(path).supportsFileAttributeView("posix");
     }
 
     private static Set<PosixFilePermission> ownerOnlyEnvPermissions() {

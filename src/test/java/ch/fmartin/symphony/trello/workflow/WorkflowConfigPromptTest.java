@@ -44,6 +44,7 @@ class WorkflowConfigPromptTest {
                   max_concurrent_agents_by_state:
                     "Ready   For Codex": 2
                     ignored: 0
+                    invalid: nope
                 codex:
                   command: "codex app-server --listen stdio://"
                   model: gpt-5.5
@@ -61,7 +62,9 @@ class WorkflowConfigPromptTest {
         // then
         assertThat(config.tracker().activeStates()).containsExactly("Todo", "In Progress");
         assertThat(config.tracker().priorityLabels()).containsEntry("urgent", 1).doesNotContainKey("invalid");
-        assertThat(config.agent().maxConcurrentAgentsByState()).containsEntry("ready for codex", 2);
+        assertThat(config.agent().maxConcurrentAgentsByState())
+                .containsEntry("ready for codex", 2)
+                .doesNotContainKeys("ignored", "invalid");
         assertThat(config.codex().model()).isEqualTo("gpt-5.5");
         assertThat(config.codex().reasoningEffort()).isEqualTo("xhigh");
         assertThat(config.workspace().root())
