@@ -67,7 +67,7 @@ matters, and easy for another engineer to understand without asking the original
    `SYMPHONY_TRELLO_TEST_PWSH=./scripts/pwsh-docker.sh` for Java tests that support a configurable
    PowerShell command. Do not report PowerShell as skipped only because `pwsh` is missing if Docker
    is available.
-13. Commit with Conventional Commits for this repository when asked to commit, and keep the working
+14. Commit with Conventional Commits for this repository when asked to commit, and keep the working
    tree clean before claiming the work is done. When an agent creates commits inside another target
    repository for a Trello card, follow that repository's documented commit convention first. If it
    has no documented convention, infer from the last 20 to 50 commits on the default branch. If the
@@ -87,13 +87,13 @@ matters, and easy for another engineer to understand without asking the original
    updated branch.
    Keep `feat/issue-35-plan-b-onboarding` as a single commit on top of `main`; amend or squash and
    force-push when changing that branch.
-14. When the user asks for a concrete repo change, commit and push the completed change unless they
+15. When the user asks for a concrete repo change, commit and push the completed change unless they
    explicitly ask not to.
-15. When a change affects runtime behavior and the user is likely to verify it manually afterward,
+16. When a change affects runtime behavior and the user is likely to verify it manually afterward,
    deploy it with the Ansible workflow before finishing when the deployment inputs are available.
    If unsure, ask at the end whether to deploy with Ansible next. Do not deploy or suggest
    deployment for docs-only changes.
-16. When fixing a bug that was observed during live deployed execution, and live verification is
+17. When fixing a bug that was observed during live deployed execution, and live verification is
    reasonably possible from the current environment, deploy with Ansible and perform the relevant
    live deployed verification before claiming the fix is complete.
 
