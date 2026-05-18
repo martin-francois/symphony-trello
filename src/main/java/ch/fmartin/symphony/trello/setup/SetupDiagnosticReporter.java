@@ -81,6 +81,11 @@ final class SetupDiagnosticReporter {
             "--add-path",
             "--endpoint");
 
+    private enum WorkflowPathResolution {
+        CONFIG_DIR,
+        CALLER_DIRECTORY
+    }
+
     private final Map<String, String> environment;
     private final CommandRunner commandRunner;
     private final HttpClient httpClient;
@@ -96,6 +101,21 @@ final class SetupDiagnosticReporter {
 
     static Optional<Path> reportFailure(
             Exception exception, String[] args, BufferedReader input, PrintStream out, PrintStream err) {
+        return reportFailure(exception, args, input, out, err, workflowPathResolution(List.of(args)));
+    }
+
+    static Optional<Path> reportSetupLocalFailure(
+            Exception exception, String[] args, BufferedReader input, PrintStream out, PrintStream err) {
+        return reportFailure(exception, args, input, out, err, WorkflowPathResolution.CONFIG_DIR);
+    }
+
+    private static Optional<Path> reportFailure(
+            Exception exception,
+            String[] args,
+            BufferedReader input,
+            PrintStream out,
+            PrintStream err,
+            WorkflowPathResolution workflowPathResolution) {
         if (!shouldReport(exception)) {
             return Optional.empty();
         }
@@ -105,7 +125,11 @@ final class SetupDiagnosticReporter {
             return Optional.empty();
         }
         return reporter.reportFailure(
-                exception, arguments, new StreamTerminal(input, out, err), !isNonInteractive(arguments));
+                exception,
+                arguments,
+                new StreamTerminal(input, out, err),
+                !isNonInteractive(arguments),
+                workflowPathResolution);
     }
 
     static boolean shouldReport(Exception exception) {
@@ -141,8 +165,12 @@ final class SetupDiagnosticReporter {
     }
 
     private Optional<Path> reportFailure(
-            Exception exception, List<String> args, Terminal terminal, boolean offerIssuePrompt) {
-        Optional<Path> reportPath = write(exception, args);
+            Exception exception,
+            List<String> args,
+            Terminal terminal,
+            boolean offerIssuePrompt,
+            WorkflowPathResolution workflowPathResolution) {
+        Optional<Path> reportPath = write(exception, args, workflowPathResolution);
         reportPath.ifPresent(path -> {
             terminal.err().println("Troubleshooting report written: " + path);
             terminal.err().println("Review it before sharing. It is intended to omit secrets and private identifiers.");
@@ -154,10 +182,22 @@ final class SetupDiagnosticReporter {
     }
 
     Optional<Path> write(Exception exception, List<String> args) {
+        return write(exception, args, workflowPathResolution(args));
+    }
+
+    private Optional<Path> write(
+            Exception exception, List<String> args, WorkflowPathResolution workflowPathResolution) {
         try {
             LocalWorkerPaths paths = LocalWorkerPaths.from(
-                    Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), environment);
-            return write(exception, args, paths, paths.manifestPath());
+                    pathOption(args, "--app-home"),
+                    pathOption(args, "--config-dir"),
+                    pathOption(args, "--workspace-root"),
+                    pathOption(args, "--state-home"),
+                    environment);
+            Path manifestPath = pathOption(args, "--manifest")
+                    .map(path -> resolveUserDataPath(path, paths.configDir()))
+                    .orElse(paths.manifestPath());
+            return write(exception, args, paths, manifestPath, workflowPathResolution);
         } catch (RuntimeException | IOException ignored) {
             return Optional.empty();
         }
@@ -170,26 +210,39 @@ final class SetupDiagnosticReporter {
             Path manifestPath = request.manifestPath()
                     .map(path -> resolveUserDataPath(path, paths.configDir()))
                     .orElse(paths.manifestPath());
-            return write(exception, requestArguments(request), paths, manifestPath);
+            return write(exception, requestArguments(request), paths, manifestPath, WorkflowPathResolution.CONFIG_DIR);
         } catch (RuntimeException | IOException ignored) {
             return Optional.empty();
         }
     }
 
-    private Optional<Path> write(Exception exception, List<String> args, LocalWorkerPaths paths, Path manifestPath)
+    private Optional<Path> write(
+            Exception exception,
+            List<String> args,
+            LocalWorkerPaths paths,
+            Path manifestPath,
+            WorkflowPathResolution workflowPathResolution)
             throws IOException {
         try {
             Path reportDir = paths.stateHome().resolve("troubleshooting");
             Files.createDirectories(reportDir);
             Path report = reportDir.resolve("setup-failure-" + FILE_TIMESTAMP.format(Instant.now()) + ".md");
-            Files.writeString(report, render(exception, args, paths, manifestPath), StandardCharsets.UTF_8);
+            Files.writeString(
+                    report,
+                    render(exception, args, paths, manifestPath, workflowPathResolution),
+                    StandardCharsets.UTF_8);
             return Optional.of(report);
         } catch (RuntimeException | IOException ignored) {
             return Optional.empty();
         }
     }
 
-    private String render(Exception exception, List<String> args, LocalWorkerPaths paths, Path manifestPath)
+    private String render(
+            Exception exception,
+            List<String> args,
+            LocalWorkerPaths paths,
+            Path manifestPath,
+            WorkflowPathResolution workflowPathResolution)
             throws IOException {
         ConnectedBoardManifest manifest = manifest(manifestPath);
         sensitiveValues = sensitiveValues(manifest, paths, args);
@@ -221,10 +274,10 @@ final class SetupDiagnosticReporter {
         appendManifest(body, manifest);
 
         section(body, "Workflow Summary");
-        appendWorkflows(body, manifest, paths);
+        appendWorkflows(body, manifest, paths, args, workflowPathResolution);
 
         section(body, "Local Health Probes");
-        appendHealthProbes(body, manifest, paths);
+        appendHealthProbes(body, manifest, paths, args, workflowPathResolution);
 
         section(body, "Recent Logs");
         appendRecentLogs(body, paths.stateHome());
@@ -340,17 +393,14 @@ final class SetupDiagnosticReporter {
         }
     }
 
-    private void appendWorkflows(StringBuilder body, ConnectedBoardManifest manifest, LocalWorkerPaths paths) {
+    private void appendWorkflows(
+            StringBuilder body,
+            ConnectedBoardManifest manifest,
+            LocalWorkerPaths paths,
+            List<String> args,
+            WorkflowPathResolution workflowPathResolution) {
         WorkflowConfigEditor editor = new WorkflowConfigEditor();
-        SequencedSet<Path> workflowPaths = new LinkedHashSet<>();
-        manifest.boards().stream().map(ConnectedBoard::workflowPath).forEach(workflowPaths::add);
-        try (Stream<Path> files = Files.list(paths.configDir())) {
-            files.filter(path -> path.getFileName().toString().endsWith(".md"))
-                    .filter(path -> path.getFileName().toString().contains("WORKFLOW"))
-                    .forEach(workflowPaths::add);
-        } catch (IOException ignored) {
-            // The report should still be useful when config files are missing or unreadable.
-        }
+        SequencedSet<Path> workflowPaths = reportWorkflowPaths(manifest, paths, args, workflowPathResolution);
         body.append("| workflow | board_hash | port | max_agents | active | terminal | in_progress | blocked |\n");
         body.append("| --- | --- | ---: | ---: | ---: | ---: | --- | --- |\n");
         for (Path workflow : workflowPaths) {
@@ -377,18 +427,19 @@ final class SetupDiagnosticReporter {
         }
     }
 
-    private void appendHealthProbes(StringBuilder body, ConnectedBoardManifest manifest, LocalWorkerPaths paths) {
+    private void appendHealthProbes(
+            StringBuilder body,
+            ConnectedBoardManifest manifest,
+            LocalWorkerPaths paths,
+            List<String> args,
+            WorkflowPathResolution workflowPathResolution) {
         WorkflowConfigEditor editor = new WorkflowConfigEditor();
         SequencedSet<Integer> ports = new LinkedHashSet<>();
         manifest.boards().stream().map(ConnectedBoard::serverPort).forEach(ports::add);
-        try (Stream<Path> files = Files.list(paths.configDir())) {
-            files.filter(path -> path.getFileName().toString().endsWith(".md"))
-                    .map(editor::serverPort)
-                    .flatMap(Optional::stream)
-                    .forEach(ports::add);
-        } catch (IOException ignored) {
-            // Missing config should not prevent the rest of the report from being written.
-        }
+        reportWorkflowPaths(manifest, paths, args, workflowPathResolution).stream()
+                .map(editor::serverPort)
+                .flatMap(Optional::stream)
+                .forEach(ports::add);
         if (ports.isEmpty()) {
             body.append("No configured local ports found.\n");
             return;
@@ -397,6 +448,59 @@ final class SetupDiagnosticReporter {
             appendProbe(body, port, "/api/v1/local-status");
             appendProbe(body, port, "/api/v1/state");
         }
+    }
+
+    private static SequencedSet<Path> reportWorkflowPaths(
+            ConnectedBoardManifest manifest,
+            LocalWorkerPaths paths,
+            List<String> args,
+            WorkflowPathResolution workflowPathResolution) {
+        SequencedSet<Path> workflowPaths = new LinkedHashSet<>();
+        manifest.boards().stream().map(ConnectedBoard::workflowPath).forEach(workflowPaths::add);
+        workflowPathOption(args, paths.configDir(), workflowPathResolution).ifPresent(workflowPaths::add);
+        workflowFilesIfReadable(paths.configDir()).forEach(workflowPaths::add);
+        return workflowPaths;
+    }
+
+    private static List<Path> workflowFilesIfReadable(Path configDir) {
+        try (Stream<Path> files = Files.list(configDir)) {
+            return files.filter(path -> path.getFileName().toString().endsWith(".md"))
+                    .filter(SetupDiagnosticReporter::hasWorkflowFileName)
+                    .toList();
+        } catch (IOException e) {
+            return List.of();
+        }
+    }
+
+    private static boolean hasWorkflowFileName(Path path) {
+        return path.getFileName().toString().contains("WORKFLOW");
+    }
+
+    private static Optional<Path> workflowPathOption(
+            List<String> args, Path configDir, WorkflowPathResolution workflowPathResolution) {
+        return pathOption(args, "--workflow")
+                .map(path -> resolveWorkflowPathOption(path, configDir, workflowPathResolution));
+    }
+
+    private static Optional<Path> pathOption(List<String> args, String option) {
+        for (int index = 0; index < args.size(); index++) {
+            String arg = args.get(index);
+            if (option.equals(arg) && index + 1 < args.size()) {
+                return Optional.of(Path.of(args.get(index + 1)));
+            }
+            if (arg.startsWith(option + "=")) {
+                return Optional.of(Path.of(arg.substring(option.length() + 1)));
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static Path resolveWorkflowPathOption(
+            Path path, Path configDir, WorkflowPathResolution workflowPathResolution) {
+        return switch (workflowPathResolution) {
+            case CONFIG_DIR -> resolveUserDataPath(path, configDir);
+            case CALLER_DIRECTORY -> path.toAbsolutePath().normalize();
+        };
     }
 
     private void appendProbe(StringBuilder body, int port, String path) {
@@ -716,6 +820,12 @@ final class SetupDiagnosticReporter {
 
     private static boolean isNonInteractive(List<String> args) {
         return args.stream().anyMatch("--non-interactive"::equals);
+    }
+
+    private static WorkflowPathResolution workflowPathResolution(List<String> args) {
+        return args.stream().findFirst().filter("setup-local"::equals).isPresent()
+                ? WorkflowPathResolution.CONFIG_DIR
+                : WorkflowPathResolution.CALLER_DIRECTORY;
     }
 
     private String probeBody(String path, String body) {

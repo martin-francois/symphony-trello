@@ -294,6 +294,148 @@ class SetupDiagnosticReporterTest {
         assertThat(terminal.stderr()).doesNotContain("Troubleshooting report written:");
     }
 
+    @Test
+    void missingConfigDirectoryStillWritesTroubleshootingReport() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("missing-config");
+        Path workspaceRoot = tempDir.resolve("workspaces");
+        Path workflow = configDir.resolve("WORKFLOW.missing.md");
+        Path env = configDir.resolve(".env");
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+        var terminal = new RecordingTerminal();
+
+        // when
+        Optional<Path> report = reporter.reportFailure(
+                new TrelloBoardSetupException("setup_missing_config", "setup failed"),
+                request(configDir, workspaceRoot, Path.of("connected-boards.json"), workflow, env),
+                terminal);
+
+        // then
+        assertThat(report).hasValueSatisfying(path -> assertThat(path)
+                .content(StandardCharsets.UTF_8)
+                .contains("## Workflow Summary", "## Local Health Probes", "No configured local ports found."));
+        assertThat(terminal.stderr()).contains("Troubleshooting report written:");
+    }
+
+    @Test
+    void healthProbesIncludeCustomMarkdownWorkflowWhenManifestIsMissing() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("custom-workflow-config");
+        Path workspaceRoot = tempDir.resolve("workspaces");
+        Path workflow = tempDir.resolve("custom-board.md");
+        Path env = configDir.resolve(".env");
+        int port = freePort();
+        Files.createDirectories(configDir);
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  board_id: "custom-board-id"
+                server:
+                  port: %d
+                ---
+                Body
+                """
+                        .formatted(port),
+                StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+        var terminal = new RecordingTerminal();
+
+        // when
+        Optional<Path> report = reporter.reportFailure(
+                new TrelloBoardSetupException("setup_custom_workflow_failed", "setup failed"),
+                request(configDir, workspaceRoot, Path.of("missing-manifest.json"), workflow, env),
+                terminal);
+
+        // then
+        assertThat(report).hasValueSatisfying(path -> assertThat(path)
+                .content(StandardCharsets.UTF_8)
+                .contains("http://127.0.0.1:" + port + "/api/v1/local-status")
+                .doesNotContain("No configured local ports found."));
+    }
+
+    @Test
+    void lifecycleReportResolvesRelativeWorkflowFromCallerDirectory() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("lifecycle-config");
+        Path relativeWorkflow = Path.of("target", "diagnostic-workflow-" + System.nanoTime() + ".md");
+        Files.createDirectories(relativeWorkflow.toAbsolutePath().normalize().getParent());
+        Files.writeString(relativeWorkflow, workflowWithPort(19192), StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        try {
+
+            // when
+            Optional<Path> report = reporter.write(
+                    new TrelloBoardSetupException("setup_lifecycle_failed", "setup failed"),
+                    List.of("start", "--config-dir", configDir.toString(), "--workflow", relativeWorkflow.toString()));
+
+            // then
+            assertThat(report).hasValueSatisfying(path -> assertThat(path)
+                    .content(StandardCharsets.UTF_8)
+                    .contains("http://127.0.0.1:19192/api/v1/local-status")
+                    .doesNotContain("No configured local ports found."));
+        } finally {
+            Files.deleteIfExists(relativeWorkflow);
+        }
+    }
+
+    @Test
+    void setupLocalReportResolvesRelativeWorkflowFromConfigDirectory() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("setup-config");
+        Path workflow = configDir.resolve("custom.md");
+        Files.createDirectories(configDir);
+        Files.writeString(workflow, workflowWithPort(19193), StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        Optional<Path> report = reporter.write(
+                new TrelloBoardSetupException("setup_local_failed", "setup failed"),
+                List.of("setup-local", "--config-dir", configDir.toString(), "--workflow", "custom.md"));
+
+        // then
+        assertThat(report).hasValueSatisfying(path -> assertThat(path)
+                .content(StandardCharsets.UTF_8)
+                .contains("http://127.0.0.1:19193/api/v1/local-status")
+                .doesNotContain("No configured local ports found."));
+    }
+
+    @Test
+    void healthProbesIgnoreUnrelatedMarkdownWithServerPort() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("markdown-config");
+        Path workspaceRoot = tempDir.resolve("workspaces");
+        Path workflow = configDir.resolve("WORKFLOW.missing.md");
+        Path env = configDir.resolve(".env");
+        Files.createDirectories(configDir);
+        Files.writeString(
+                configDir.resolve("notes.md"),
+                """
+                ---
+                server:
+                  port: 19091
+                ---
+                Notes, not a Symphony workflow.
+                """,
+                StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+        var terminal = new RecordingTerminal();
+
+        // when
+        Optional<Path> report = reporter.reportFailure(
+                new TrelloBoardSetupException("setup_notes_failed", "setup failed"),
+                request(configDir, workspaceRoot, Path.of("missing-manifest.json"), workflow, env),
+                terminal);
+
+        // then
+        assertThat(report).hasValueSatisfying(path -> assertThat(path)
+                .content(StandardCharsets.UTF_8)
+                .contains("No configured local ports found.")
+                .doesNotContain("19091"));
+    }
+
     private static HttpServer fakeLocalServer(int port) throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
         server.createContext(
@@ -333,6 +475,19 @@ class SetupDiagnosticReporterTest {
         try (ServerSocket socket = new ServerSocket(0)) {
             return socket.getLocalPort();
         }
+    }
+
+    private static String workflowWithPort(int port) {
+        return """
+                ---
+                tracker:
+                  board_id: "custom-board-id"
+                server:
+                  port: %d
+                ---
+                Body
+                """
+                .formatted(port);
     }
 
     private static String largeLog() {

@@ -440,8 +440,8 @@ public class CodexAppServerClient {
                 while ((line = reader.readLine()) != null) {
                     LOG.debugf("codex_stderr pid=%d message=%s", process.pid(), line);
                 }
-            } catch (IOException ignored) {
-                // Stderr is diagnostic-only and must not fail the run by itself.
+            } catch (IOException e) {
+                LOG.debugf("codex_stderr pid=%d outcome=reader_failed reason=%s", process.pid(), e.getMessage());
             }
         }
 
