@@ -88,8 +88,11 @@ Before submitting changes:
   like `java.util.Arrays.stream(...)` should be written as `Arrays.stream(...)` with an import.
 - Document non-obvious design choices in `docs/adr/`.
 - Keep refactors separate from behavior changes when practical.
-- Use a Conventional Commit PR title or squash commit title when the change is merged. The release
-  automation uses those titles to choose the next SemVer version and update
+- Use a Conventional Commit PR title or squash commit title when the change is merged. CI checks
+  pull request titles with commitlint because the release automation uses those titles for normal
+  squash merges. CI also checks pull request commit messages so rebase-merged or intentionally
+  multi-commit PRs keep release automation input clean. Messages that reach `main` must be
+  release-note ready so the automation can choose the next SemVer version and update
   [CHANGELOG.md](CHANGELOG.md).
 
 `./mvnw -q spotless:check verify` remains the default local validation command. It runs Spotless
@@ -148,6 +151,22 @@ without squashing, so every commit title should be a useful Conventional Commit.
 Use `feat:` for user-visible additions and `fix:` for user-visible bug fixes. Add a
 `BREAKING CHANGE:` footer only when a release really requires manual action from users or operators.
 Do not edit `CHANGELOG.md` manually; the release automation updates it.
+
+Before opening or retitling a pull request, run the same title check that CI uses:
+
+```bash
+printf '%s\n' 'docs: describe static-analysis policy' | pnpm dlx --package @commitlint/cli@21.0.1 --package @commitlint/config-conventional@21.0.1 commitlint --config commitlint.config.cjs
+```
+
+Replace the sample title with the exact pull request title. Normal squash-merge PRs are covered by
+that PR-title check. For multi-commit PRs that maintainers may rebase-merge, check the commit range
+too:
+
+```bash
+pnpm dlx --package @commitlint/cli@21.0.1 --package @commitlint/config-conventional@21.0.1 commitlint --config commitlint.config.cjs --from origin/main --to HEAD --verbose
+```
+
+Every retained commit title in that range must be a useful Conventional Commit.
 
 ## Maintainer Release Setup
 
