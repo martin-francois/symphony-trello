@@ -80,6 +80,11 @@ matters, and easy for another engineer to understand without asking the original
    Conventional Commit titled. Use one commit for the user-visible feature or fix and separate
    commits only for directly supporting cleanup or refactoring that belongs to the same cohesive
    change; unrelated work still belongs in a separate branch or pull request.
+   When one pull request intentionally covers multiple GitHub issues, keep at least one focused
+   commit per issue so each issue has its own reviewable unit. Combine multiple issues in one pull
+   request only when the issues are cohesive or merging them together is materially easier. A single
+   issue may still use multiple focused commits when requested or when that improves review, but do
+   not collapse separate issue work into one mixed commit unless the user explicitly asks.
    When the user asks to address another round of review comments on an existing pull request and
    wants an easy review delta, first squash the already-pushed PR commits into one base commit when
    they ask for that, then make the new review-response changes in a separate follow-up commit. Run
