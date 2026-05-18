@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
+import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
@@ -253,6 +254,8 @@ class TrelloBoardSetupTest {
                 .contains("port: 18080")
                 .contains("model: \"gpt-5.5\"")
                 .contains("reasoning_effort: \"medium\"")
+                .contains("polling:")
+                .contains("interval_ms: " + ConfigDefaults.DEFAULT_POLLING_INTERVAL_MS)
                 .contains("max_concurrent_agents: 1");
         assertThat(result.serverPort()).isEqualTo(18080);
         EffectiveConfig config = resolve(workflow);
@@ -268,6 +271,7 @@ class TrelloBoardSetupTest {
                 .containsExactly("in progress", "human review", "blocked", "done");
         assertThat(config.trelloTools().allowChecklists()).isFalse();
         assertThat(config.trelloTools().allowUrlAttachments()).isFalse();
+        assertThat(config.polling().interval()).isEqualTo(ConfigDefaults.DEFAULT_POLLING_INTERVAL);
     }
 
     @Test
@@ -382,6 +386,8 @@ class TrelloBoardSetupTest {
                 .contains("port: 18080")
                 .contains("model: \"gpt-5.5\"")
                 .contains("reasoning_effort: \"medium\"")
+                .contains("polling:")
+                .contains("interval_ms: " + ConfigDefaults.DEFAULT_POLLING_INTERVAL_MS)
                 .contains("allowed_move_list_names:")
                 .contains("- \"In Progress\"")
                 .contains("- \"Human Review\"")
@@ -442,6 +448,7 @@ class TrelloBoardSetupTest {
         assertThat(config.codex().model()).isEqualTo("gpt-5.5");
         assertThat(config.codex().reasoningEffort()).isEqualTo("medium");
         assertThat(config.workspace().root()).isEqualTo(workflow.getParent().resolve("agent-workspaces"));
+        assertThat(config.polling().interval()).isEqualTo(ConfigDefaults.DEFAULT_POLLING_INTERVAL);
     }
 
     @Test

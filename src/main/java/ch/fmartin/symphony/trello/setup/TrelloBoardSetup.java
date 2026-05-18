@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
 import ch.fmartin.symphony.trello.codex.CodexSkillCatalog;
+import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -676,6 +677,8 @@ public final class TrelloBoardSetup {
                   root: %s
                 server:
                   port: %d
+                polling:
+                  interval_ms: %d
                 %s
                 agent:
                   max_concurrent_agents: %d
@@ -764,6 +767,7 @@ public final class TrelloBoardSetup {
                         yamlList(withSystemTerminalStates(terminalStates)),
                         yamlScalar(workspaceRoot.toString()),
                         serverPort,
+                        ConfigDefaults.DEFAULT_POLLING_INTERVAL_MS,
                         trelloToolsYaml(handoffStates),
                         maxAgents,
                         codexModelYaml(codexModelDefaults),

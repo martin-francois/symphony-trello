@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 import ch.fmartin.symphony.trello.TestCards;
+import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.config.ConfigException;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.StateNames;
@@ -65,6 +66,7 @@ class WorkflowConfigPromptTest {
         assertThat(config.agent().maxConcurrentAgentsByState())
                 .containsEntry("ready for codex", 2)
                 .doesNotContainKeys("ignored", "invalid");
+        assertThat(config.polling().interval()).isEqualTo(ConfigDefaults.DEFAULT_POLLING_INTERVAL);
         assertThat(config.codex().model()).isEqualTo("gpt-5.5");
         assertThat(config.codex().reasoningEffort()).isEqualTo("xhigh");
         assertThat(config.workspace().root())
