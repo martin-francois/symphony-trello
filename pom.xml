@@ -17,7 +17,7 @@
     <archunit.version>1.4.2</archunit.version>
     <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
     <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
-    <quarkus.platform.version>3.35.2</quarkus.platform.version>
+    <quarkus.platform.version>3.35.3</quarkus.platform.version>
     <assertj.version>3.27.7</assertj.version>
     <pebble.version>4.1.1</pebble.version>
     <maven-compiler-plugin.version>3.15.0</maven-compiler-plugin.version>
@@ -28,7 +28,7 @@
     <jacoco.version>0.8.14</jacoco.version>
     <mockito.version>5.23.0</mockito.version>
     <picocli.version>4.7.7</picocli.version>
-    <spotless.version>3.4.0</spotless.version>
+    <spotless.version>3.5.0</spotless.version>
     <surefire.version>3.5.5</surefire.version>
   </properties>
 
