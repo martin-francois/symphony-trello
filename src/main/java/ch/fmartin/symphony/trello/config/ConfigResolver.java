@@ -275,13 +275,9 @@ public class ConfigResolver {
     private static Map<String, Integer> priorityLabels(Map<String, Object> configured) {
         Map<String, Integer> values = new LinkedHashMap<>(DEFAULT_PRIORITIES);
         configured.forEach((key, value) -> {
-            try {
-                int priority = value instanceof Number number ? number.intValue() : Integer.parseInt(value.toString());
-                if (priority > 0) {
-                    values.put(StateNames.normalize(key), priority);
-                }
-            } catch (NumberFormatException ignored) {
-                // Invalid priority labels are ignored by specification.
+            OptionalInt priority = positiveInteger(value);
+            if (priority.isPresent()) {
+                values.put(StateNames.normalize(key), priority.getAsInt());
             }
         });
         return Map.copyOf(values);
@@ -290,16 +286,21 @@ public class ConfigResolver {
     private static Map<String, Integer> positiveStateMap(Map<String, Object> configured) {
         Map<String, Integer> values = new LinkedHashMap<>();
         configured.forEach((key, value) -> {
-            try {
-                int limit = value instanceof Number number ? number.intValue() : Integer.parseInt(value.toString());
-                if (limit > 0) {
-                    values.put(StateNames.normalize(key), limit);
-                }
-            } catch (NumberFormatException ignored) {
-                // Invalid entries are ignored by specification.
+            OptionalInt limit = positiveInteger(value);
+            if (limit.isPresent()) {
+                values.put(StateNames.normalize(key), limit.getAsInt());
             }
         });
         return Map.copyOf(values);
+    }
+
+    private static OptionalInt positiveInteger(Object value) {
+        try {
+            int parsed = value instanceof Number number ? number.intValue() : Integer.parseInt(value.toString());
+            return parsed > 0 ? OptionalInt.of(parsed) : OptionalInt.empty();
+        } catch (NumberFormatException e) {
+            return OptionalInt.empty();
+        }
     }
 
     private static Path path(Path workflowDirectory, String value) {

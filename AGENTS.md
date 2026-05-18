@@ -38,14 +38,20 @@ matters, and easy for another engineer to understand without asking the original
    agent-added rules for conflicts with that new preference in the same turn.
 8. When fixing a documentation pattern, search the relevant file or docs set for similar instances
    before committing instead of correcting only the one sentence the user pointed out.
-9. When you notice a potential improvement that is outside the current task scope, keep the current
+9. When a catch block intentionally ignores an exception or falls back, make that policy explicit.
+   Prefer a small helper whose name states the fallback, a narrow debug log when the failure is useful
+   diagnostic context, or tests/spec wording that prove the quiet fallback is intentional. Do not
+   leave comment-only or empty catch bodies in production code, and do not add noisy logs for
+   expected optional data, spec-defined parse skips, non-POSIX filesystem behavior, or best-effort
+   diagnostics.
+10. When you notice a potential improvement that is outside the current task scope, keep the current
    work focused and create or suggest a GitHub issue instead of adding "future improvement",
    "convenience gap", or similar sections to user-facing documentation.
-10. Redact private project names, host paths, Trello card ids, short links, account names, and similar
+11. Redact private project names, host paths, Trello card ids, short links, account names, and similar
    internals from committed files, GitHub issues, and user-facing summaries unless the user
    explicitly asks to preserve them. Keep only the minimum technical detail needed to reproduce or
    understand the issue.
-11. Run the relevant verification before finishing. For normal code changes, use:
+12. Run the relevant verification before finishing. For normal code changes, use:
 
    ```bash
    ./mvnw -q spotless:check verify
@@ -57,7 +63,7 @@ matters, and easy for another engineer to understand without asking the original
    `SYMPHONY_TRELLO_TEST_PWSH=./scripts/pwsh-docker.sh` for Java tests that support a configurable
    PowerShell command. Do not report PowerShell as skipped only because `pwsh` is missing if Docker
    is available.
-12. Commit with Conventional Commits for this repository when asked to commit, and keep the working
+13. Commit with Conventional Commits for this repository when asked to commit, and keep the working
    tree clean before claiming the work is done. When an agent creates commits inside another target
    repository for a Trello card, follow that repository's documented commit convention first. If it
    has no documented convention, infer from the last 20 to 50 commits on the default branch. If the
@@ -77,13 +83,13 @@ matters, and easy for another engineer to understand without asking the original
    updated branch.
    Keep `feat/issue-35-plan-b-onboarding` as a single commit on top of `main`; amend or squash and
    force-push when changing that branch.
-13. When the user asks for a concrete repo change, commit and push the completed change unless they
+14. When the user asks for a concrete repo change, commit and push the completed change unless they
    explicitly ask not to.
-14. When a change affects runtime behavior and the user is likely to verify it manually afterward,
+15. When a change affects runtime behavior and the user is likely to verify it manually afterward,
    deploy it with the Ansible workflow before finishing when the deployment inputs are available.
    If unsure, ask at the end whether to deploy with Ansible next. Do not deploy or suggest
    deployment for docs-only changes.
-15. When fixing a bug that was observed during live deployed execution, and live verification is
+16. When fixing a bug that was observed during live deployed execution, and live verification is
    reasonably possible from the current environment, deploy with Ansible and perform the relevant
    live deployed verification before claiming the fix is complete.
 

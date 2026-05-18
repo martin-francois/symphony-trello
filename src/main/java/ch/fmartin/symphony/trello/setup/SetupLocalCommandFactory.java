@@ -28,7 +28,7 @@ final class SetupLocalCommandFactory {
                     err.println(
                             "setup_failed code=%s message=%s".formatted(errorCode(exception), exception.getMessage()));
                     if (!(exception instanceof ParameterException)) {
-                        SetupDiagnosticReporter.reportFailure(exception, args, input, out, err);
+                        SetupDiagnosticReporter.reportSetupLocalFailure(exception, args, input, out, err);
                     }
                     return 2;
                 })
