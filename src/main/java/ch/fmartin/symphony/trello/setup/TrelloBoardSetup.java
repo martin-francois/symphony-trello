@@ -6,6 +6,8 @@ import ch.fmartin.symphony.trello.tracker.TrelloClient;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import jakarta.ws.rs.core.Response.Status;
+import jakarta.ws.rs.core.Response.Status.Family;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
@@ -394,7 +396,7 @@ public final class TrelloBoardSetup {
                         default -> throw new IllegalArgumentException("Unsupported method: " + method);
                     };
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() >= 200 && response.statusCode() < 300) {
+            if (isSuccessfulStatus(response.statusCode())) {
                 return json.readValue(response.body(), type);
             }
             throw statusException(response.statusCode(), response.body());
@@ -1720,23 +1722,32 @@ public final class TrelloBoardSetup {
         String detail = blank(responseBody)
                 ? ""
                 : ": " + responseBody.strip().lines().findFirst().orElse("");
-        return switch (statusCode) {
-            case 400 ->
+        Status status = Status.fromStatusCode(statusCode);
+        if (status == null) {
+            return new TrelloBoardSetupException(
+                    "trello_api_status", "Trello returned HTTP " + statusCode + detail, statusCode);
+        }
+        return switch (status) {
+            case BAD_REQUEST ->
                 new TrelloBoardSetupException(
                         "trello_invalid_request", "Trello rejected the setup request" + detail, statusCode);
-            case 401 ->
+            case UNAUTHORIZED ->
                 new TrelloBoardSetupException(
                         "trello_auth_failed", "Trello authentication failed" + detail, statusCode);
-            case 403 ->
+            case FORBIDDEN ->
                 new TrelloBoardSetupException(
                         "trello_permission_denied", "Trello permission denied" + detail, statusCode);
-            case 404 ->
+            case NOT_FOUND ->
                 new TrelloBoardSetupException(
                         "trello_resource_not_found", "Trello resource not found" + detail, statusCode);
             default ->
                 new TrelloBoardSetupException(
                         "trello_api_status", "Trello returned HTTP " + statusCode + detail, statusCode);
         };
+    }
+
+    private static boolean isSuccessfulStatus(int statusCode) {
+        return Family.SUCCESSFUL == Family.familyOf(statusCode);
     }
 
     private static String boardKey(Map<String, Object> board) {

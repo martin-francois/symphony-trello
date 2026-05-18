@@ -3,6 +3,7 @@ package ch.fmartin.symphony.trello.setup;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.ws.rs.core.Response.Status;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -71,7 +72,7 @@ final class LocalHealthChecker {
                     .GET()
                     .build();
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() != 200) {
+            if (response.statusCode() != Status.OK.getStatusCode()) {
                 return new BoardHealth(BoardHealthKind.PORT_USED, port, Optional.empty(), Optional.empty());
             }
             Map<String, Object> status = JSON.readValue(response.body(), JSON_MAP_TYPE);

@@ -414,6 +414,10 @@ matters, and easy for another engineer to understand without asking the original
   `java.util.Arrays.stream(...)`. PMD enforces this with the narrow
   `UnnecessaryFullyQualifiedName` rule.
 - Keep code ASCII unless an existing file or domain requirement clearly needs Unicode.
+- Use named HTTP status constants or focused helper methods for production HTTP status handling.
+  Avoid raw status-code literals such as `200`, `404`, or `429` in production code when a named
+  constant or helper makes the intent clearer. Tests and fake servers may use literals when the
+  status itself is the scenario under test.
 - Avoid unrelated metadata churn and broad rewrites.
 
 ## Specification And ADR Discipline
