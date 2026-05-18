@@ -56,6 +56,9 @@ a small low-risk project, then expand once the workflow matches how you review a
 
 ## What You Get
 
+All current Symphony for Trello features work with Trello's Free plan. If a future feature requires
+a paid Trello plan, the README will call that out next to the feature and name the required plan.
+
 - Guided local setup that can create a Trello board for you or connect an existing board.
 - A repeatable Trello flow from `Ready for Codex` to active work, human review, blocked, merge, and
   done lists.
