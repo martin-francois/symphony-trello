@@ -25,6 +25,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public final class TrelloBoardSetup {
@@ -33,6 +34,9 @@ public final class TrelloBoardSetup {
     public static final Path DEFAULT_WORKSPACE_ROOT = Path.of("./workspaces");
     public static final int DEFAULT_MAX_CONCURRENT_AGENTS = 1;
     public static final int DEFAULT_SERVER_PORT = 18080;
+    public static final String DEFAULT_CODEX_MODEL = "gpt-5.5";
+    public static final String DEFAULT_CODEX_REASONING_EFFORT = "medium";
+    private static final String CODEX_MODEL_DEFAULTS_LABEL = "codexModelDefaults";
     public static final String RECOMMENDED_ACTIVE_STATE = "Ready for Codex";
     public static final String RECOMMENDED_IN_PROGRESS_STATE = "In Progress";
     public static final String RECOMMENDED_BLOCKED_STATE = "Blocked";
@@ -79,12 +83,22 @@ public final class TrelloBoardSetup {
     private final ObjectMapper json;
     private final ObjectMapper yaml;
     private final HttpClient httpClient;
+    private final Supplier<CodexModelDefaults> codexModelDefaults;
 
     public TrelloBoardSetup(ObjectMapper json) {
+        this(json, CodexModelDefaults.fallback());
+    }
+
+    public TrelloBoardSetup(ObjectMapper json, CodexModelDefaults codexModelDefaults) {
+        this(json, codexModelDefaultsSupplier(codexModelDefaults));
+    }
+
+    TrelloBoardSetup(ObjectMapper json, Supplier<CodexModelDefaults> codexModelDefaults) {
         this.json = json;
         this.yaml = new ObjectMapper(new YAMLFactory());
         this.httpClient =
                 HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
+        this.codexModelDefaults = Objects.requireNonNull(codexModelDefaults, CODEX_MODEL_DEFAULTS_LABEL);
     }
 
     public NewBoardResult createRecommendedBoard(NewBoardRequest request) {
@@ -128,7 +142,8 @@ public final class TrelloBoardSetup {
                         request.workspaceRoot(),
                         serverPort,
                         request.maxConcurrentAgents(),
-                        githubEnabled));
+                        githubEnabled,
+                        codexModelDefaultsForWorkflow(workflowPath)));
 
         return new NewBoardResult(
                 boardId, boardKey, request.boardName(), boardUrl, createdLists, workflowPath, serverPort);
@@ -292,7 +307,8 @@ public final class TrelloBoardSetup {
                         request.workspaceRoot(),
                         serverPort,
                         request.maxConcurrentAgents(),
-                        request.githubIntegration().enabled()));
+                        request.githubIntegration().enabled(),
+                        codexModelDefaultsForWorkflow(request.workflowPath())));
 
         return new ImportBoardResult(
                 resolvedBoardId,
@@ -311,6 +327,40 @@ public final class TrelloBoardSetup {
     private Map<String, Object> getMap(
             URI endpoint, String path, Map<String, String> query, TrelloCredentials credentials) {
         return request("GET", endpoint, path, query, credentials, MAP_TYPE);
+    }
+
+    private CodexModelDefaults codexModelDefaults() {
+        return Objects.requireNonNull(codexModelDefaults.get(), CODEX_MODEL_DEFAULTS_LABEL);
+    }
+
+    private CodexModelDefaults codexModelDefaultsForWorkflow(Path workflowPath) {
+        CodexModelDefaults defaults = codexModelDefaults();
+        try {
+            return readWorkflowFrontMatter(workflowPath)
+                    .map(frontMatter -> preserveExistingCodexModelDefaults(frontMatter, defaults))
+                    .orElse(defaults);
+        } catch (TrelloBoardSetupException e) {
+            return defaults;
+        }
+    }
+
+    private static CodexModelDefaults preserveExistingCodexModelDefaults(
+            Map<String, Object> frontMatter, CodexModelDefaults defaults) {
+        Object codex = frontMatter.get("codex");
+        if (!(codex instanceof Map<?, ?> codexMap)) {
+            return defaults;
+        }
+        String model = string(codexMap.get("model"));
+        String reasoningEffort = string(codexMap.get("reasoning_effort"));
+        if (blank(model) && blank(reasoningEffort)) {
+            return CodexModelDefaults.omittedFirstClassFields();
+        }
+        return CodexModelDefaults.partial(model, reasoningEffort);
+    }
+
+    private static Supplier<CodexModelDefaults> codexModelDefaultsSupplier(CodexModelDefaults codexModelDefaults) {
+        Objects.requireNonNull(codexModelDefaults, CODEX_MODEL_DEFAULTS_LABEL);
+        return () -> codexModelDefaults;
     }
 
     private List<Map<String, Object>> getList(
@@ -602,7 +652,8 @@ public final class TrelloBoardSetup {
             Path workspaceRoot,
             int serverPort,
             int maxAgents,
-            boolean githubEnabled) {
+            boolean githubEnabled,
+            CodexModelDefaults codexModelDefaults) {
         String doneState = landingDoneState(terminalStates);
         List<String> handoffStates =
                 allowedMoveStates(inProgressState, reviewState, blockedState, mergingState, doneState);
@@ -630,6 +681,7 @@ public final class TrelloBoardSetup {
                   max_concurrent_agents: %d
                 codex:
                   command: codex app-server
+                %s
                   approval_policy: never
                   turn_timeout_ms: 3600000
                   read_timeout_ms: 5000
@@ -714,6 +766,7 @@ public final class TrelloBoardSetup {
                         serverPort,
                         trelloToolsYaml(handoffStates),
                         maxAgents,
+                        codexModelYaml(codexModelDefaults),
                         workpadPrompt(!handoffStates.isEmpty()),
                         repositorySkillsPrompt(githubEnabled),
                         operatingPosturePrompt(!handoffStates.isEmpty()),
@@ -799,6 +852,24 @@ public final class TrelloBoardSetup {
                         skillPath("land"),
                         skillPath("debug"))
                 .stripTrailing();
+    }
+
+    private static String codexModelYaml(CodexModelDefaults codexModelDefaults) {
+        if (!codexModelDefaults.firstClassFieldsSupported()) {
+            return "";
+        }
+        StringBuilder yaml = new StringBuilder();
+        if (!blank(codexModelDefaults.model())) {
+            yaml.append("  model: ")
+                    .append(yamlScalar(codexModelDefaults.model()))
+                    .append('\n');
+        }
+        if (!blank(codexModelDefaults.reasoningEffort())) {
+            yaml.append("  reasoning_effort: ")
+                    .append(yamlScalar(codexModelDefaults.reasoningEffort()))
+                    .append('\n');
+        }
+        return yaml.toString();
     }
 
     private static String workpadPrompt(boolean workpadToolEnabled) {
@@ -2049,6 +2120,45 @@ public final class TrelloBoardSetup {
     public record BoardInfo(String boardId, String boardKey, String boardName, String boardUrl) {}
 
     public record WorkspaceInfo(String id, String name, String displayName, String url) {}
+
+    public record CodexModelDefaults(String model, String reasoningEffort, boolean firstClassFieldsSupported) {
+        public CodexModelDefaults {
+            model = blank(model) ? null : model;
+            reasoningEffort = blank(reasoningEffort) ? null : reasoningEffort;
+            if (!firstClassFieldsSupported && (model == null || reasoningEffort == null)) {
+                throw new IllegalArgumentException(
+                        "unsupported first-class Codex defaults must include fallback model and reasoning effort");
+            }
+        }
+
+        public CodexModelDefaults(String model, String reasoningEffort) {
+            this(requireNonBlank(model, "model"), requireNonBlank(reasoningEffort, "reasoningEffort"), true);
+        }
+
+        public static CodexModelDefaults fallback() {
+            return new CodexModelDefaults(DEFAULT_CODEX_MODEL, DEFAULT_CODEX_REASONING_EFFORT);
+        }
+
+        public static CodexModelDefaults unsupportedFirstClassFields() {
+            return new CodexModelDefaults(DEFAULT_CODEX_MODEL, DEFAULT_CODEX_REASONING_EFFORT, false);
+        }
+
+        public static CodexModelDefaults omittedFirstClassFields() {
+            return new CodexModelDefaults(null, null, true);
+        }
+
+        static CodexModelDefaults partial(String model, String reasoningEffort) {
+            return new CodexModelDefaults(
+                    blank(model) ? null : model, blank(reasoningEffort) ? null : reasoningEffort, true);
+        }
+
+        private static String requireNonBlank(String value, String name) {
+            if (blank(value)) {
+                throw new IllegalArgumentException(name + " must not be blank");
+            }
+            return value;
+        }
+    }
 
     public record ImportBoardResult(
             String boardId,

@@ -81,6 +81,8 @@ public record EffectiveConfig(
 
     public record CodexConfig(
             String command,
+            String model,
+            String reasoningEffort,
             Object approvalPolicy,
             Object threadSandbox,
             Object turnSandboxPolicy,

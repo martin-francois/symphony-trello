@@ -46,6 +46,8 @@ class WorkflowConfigPromptTest {
                     ignored: 0
                 codex:
                   command: "codex app-server --listen stdio://"
+                  model: gpt-5.5
+                  reasoning_effort: xhigh
                 ---
                 Work on {{ card.identifier }} / {{ issue.identifier }} attempt={{ attempt }}.
                 """);
@@ -60,6 +62,8 @@ class WorkflowConfigPromptTest {
         assertThat(config.tracker().activeStates()).containsExactly("Todo", "In Progress");
         assertThat(config.tracker().priorityLabels()).containsEntry("urgent", 1).doesNotContainKey("invalid");
         assertThat(config.agent().maxConcurrentAgentsByState()).containsEntry("ready for codex", 2);
+        assertThat(config.codex().model()).isEqualTo("gpt-5.5");
+        assertThat(config.codex().reasoningEffort()).isEqualTo("xhigh");
         assertThat(config.workspace().root())
                 .isEqualTo(tempDir.resolve("workspaces").toAbsolutePath().normalize());
         assertThat(renderedPrompt).contains("TRELLO-abc / TRELLO-abc attempt=3");

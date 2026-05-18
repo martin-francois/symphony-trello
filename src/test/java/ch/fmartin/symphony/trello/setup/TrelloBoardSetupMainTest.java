@@ -19,7 +19,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -110,6 +112,25 @@ class TrelloBoardSetupMainTest {
                 .contains("new-board")
                 .contains("import-board");
         assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("commandsThatDoNotWriteWorkflows")
+    void doesNotResolveCodexModelDefaultsForCommandsThatDoNotWriteWorkflows(String name, String[] args) {
+        // given
+        AtomicBoolean resolved = new AtomicBoolean();
+
+        // when
+        CliRunResult result = runCli(
+                () -> {
+                    resolved.set(true);
+                    return TrelloBoardSetup.CodexModelDefaults.fallback();
+                },
+                args);
+
+        // then
+        result.assertSuccess();
+        assertThat(resolved).as(name).isFalse();
     }
 
     @ParameterizedTest(name = "{0}")
@@ -271,6 +292,34 @@ class TrelloBoardSetupMainTest {
                                         workflow.toAbsolutePath().normalize().toString()))
                 .doesNotContain("./mvnw quarkus:dev");
         assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
+    }
+
+    @Test
+    void newBoardWritesResolverBackedCodexModelDefaults() {
+        // given
+        Path workflow = tempDir.resolve("resolver-backed-model.WORKFLOW.md");
+
+        // when
+        CliRunResult result = runCli(
+                () -> new TrelloBoardSetup.CodexModelDefaults("gpt-test-maintainer", "high"),
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--name",
+                "Resolver Backed Queue",
+                "--workflow",
+                workflow.toString());
+
+        // then
+        result.assertSuccess();
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-test-maintainer\"")
+                .contains("reasoning_effort: \"high\"");
     }
 
     @Test
@@ -627,9 +676,17 @@ class TrelloBoardSetupMainTest {
     }
 
     private CliRunResult runCli(String... args) {
+        return runCli(() -> TrelloBoardSetup.CodexModelDefaults.fallback(), args);
+    }
+
+    private CliRunResult runCli(Supplier<TrelloBoardSetup.CodexModelDefaults> codexModelDefaults, String... args) {
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
-        int exitCode = run(stdout, stderr, args);
+        int exitCode = TrelloBoardSetupMain.run(
+                args,
+                new PrintStream(stdout, true, StandardCharsets.UTF_8),
+                new PrintStream(stderr, true, StandardCharsets.UTF_8),
+                codexModelDefaults);
         return new CliRunResult(
                 exitCode, stdout.toString(StandardCharsets.UTF_8), stderr.toString(StandardCharsets.UTF_8));
     }
@@ -638,7 +695,8 @@ class TrelloBoardSetupMainTest {
         return TrelloBoardSetupMain.run(
                 args,
                 new PrintStream(stdout, true, StandardCharsets.UTF_8),
-                new PrintStream(stderr, true, StandardCharsets.UTF_8));
+                new PrintStream(stderr, true, StandardCharsets.UTF_8),
+                TrelloBoardSetup.CodexModelDefaults.fallback());
     }
 
     private static Stream<Arguments> directCommandHelp() {
@@ -646,6 +704,14 @@ class TrelloBoardSetupMainTest {
                 Arguments.of("new-board", "Usage: symphony-trello new-board"),
                 Arguments.of("import-board", "Usage: symphony-trello import-board"),
                 Arguments.of("list-workspaces", "Usage: symphony-trello list-workspaces"));
+    }
+
+    private static Stream<Arguments> commandsThatDoNotWriteWorkflows() {
+        return Stream.of(
+                Arguments.of("root help", new String[] {"--help"}),
+                Arguments.of("root version", new String[] {"--version"}),
+                Arguments.of("status help", new String[] {"status", "--help"}),
+                Arguments.of("setup-local help", new String[] {"setup-local", "--help"}));
     }
 
     private static Stream<Arguments> versionCommands() {

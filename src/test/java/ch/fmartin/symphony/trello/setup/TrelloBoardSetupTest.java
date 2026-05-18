@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.setup;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
 import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
@@ -250,10 +251,14 @@ class TrelloBoardSetupTest {
                 .contains("symphony_trello_allowed_host_paths")
                 .contains("server:")
                 .contains("port: 18080")
+                .contains("model: \"gpt-5.5\"")
+                .contains("reasoning_effort: \"medium\"")
                 .contains("max_concurrent_agents: 1");
         assertThat(result.serverPort()).isEqualTo(18080);
         EffectiveConfig config = resolve(workflow);
         assertThat(config.tracker().boardId()).isEqualTo("abc123");
+        assertThat(config.codex().model()).isEqualTo("gpt-5.5");
+        assertThat(config.codex().reasoningEffort()).isEqualTo("medium");
         assertThat(config.tracker().activeStates()).containsExactly("Ready for Codex", "In Progress", "Merging");
         assertThat(config.tracker().terminalStates())
                 .contains("done", "archived", "archivedlist", "archivedboard", "deleted");
@@ -375,6 +380,8 @@ class TrelloBoardSetupTest {
                 .contains("board_id: \"existing\"")
                 .contains("root: \"./agent-workspaces\"")
                 .contains("port: 18080")
+                .contains("model: \"gpt-5.5\"")
+                .contains("reasoning_effort: \"medium\"")
                 .contains("allowed_move_list_names:")
                 .contains("- \"In Progress\"")
                 .contains("- \"Human Review\"")
@@ -432,7 +439,140 @@ class TrelloBoardSetupTest {
         assertThat(result.serverPort()).isEqualTo(18080);
         EffectiveConfig config = resolve(workflow);
         assertThat(config.tracker().boardId()).isEqualTo("existing");
+        assertThat(config.codex().model()).isEqualTo("gpt-5.5");
+        assertThat(config.codex().reasoningEffort()).isEqualTo("medium");
         assertThat(config.workspace().root()).isEqualTo(workflow.getParent().resolve("agent-workspaces"));
+    }
+
+    @Test
+    void omitsModelFieldsWhenFirstClassCodexFieldsAreUnsupported() {
+        // given
+        Path workflow = tempDir.resolve("unsupported-codex-model-fields.md");
+        TrelloBoardSetup setupWithoutFirstClassFields = new TrelloBoardSetup(
+                new ObjectMapper(), TrelloBoardSetup.CodexModelDefaults.unsupportedFirstClassFields());
+
+        // when
+        setupWithoutFirstClassFields.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "Compatibility Queue",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                1,
+                false,
+                false));
+
+        // then
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("command: codex app-server")
+                .doesNotContain("model:")
+                .doesNotContain("reasoning_effort:");
+        EffectiveConfig config = resolve(workflow);
+        assertThat(config.codex().model()).isNull();
+        assertThat(config.codex().reasoningEffort()).isNull();
+    }
+
+    @Test
+    void preservesExistingWorkflowModelAndReasoningWhenForceRegeneratingWorkflow() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("existing-codex-model.md");
+        writeExistingWorkflow(
+                workflow,
+                """
+                  model: "gpt-hand-edited"
+                  reasoning_effort: "high"
+                """);
+
+        // when
+        forceRegenerateExistingWorkflow(workflow);
+
+        // then
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-hand-edited\"")
+                .contains("reasoning_effort: \"high\"")
+                .doesNotContain("model: \"gpt-new\"");
+        EffectiveConfig config = resolve(workflow);
+        assertThat(config.codex().model()).isEqualTo("gpt-hand-edited");
+        assertThat(config.codex().reasoningEffort()).isEqualTo("high");
+    }
+
+    @Test
+    void preservesExistingWorkflowReasoningOmissionWhenForceRegeneratingWorkflow() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("existing-codex-model-only.md");
+        writeExistingWorkflow(workflow, """
+                  model: "gpt-hand-edited"
+                """);
+
+        // when
+        forceRegenerateExistingWorkflow(workflow);
+
+        // then
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-hand-edited\"")
+                .doesNotContain("reasoning_effort:");
+        EffectiveConfig config = resolve(workflow);
+        assertThat(config.codex().model()).isEqualTo("gpt-hand-edited");
+        assertThat(config.codex().reasoningEffort()).isNull();
+    }
+
+    @Test
+    void preservesExistingWorkflowModelOmissionWhenForceRegeneratingWorkflow() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("existing-codex-reasoning-only.md");
+        writeExistingWorkflow(workflow, """
+                  reasoning_effort: "high"
+                """);
+
+        // when
+        forceRegenerateExistingWorkflow(workflow);
+
+        // then
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("reasoning_effort: \"high\"")
+                .doesNotContain("model:");
+        EffectiveConfig config = resolve(workflow);
+        assertThat(config.codex().model()).isNull();
+        assertThat(config.codex().reasoningEffort()).isEqualTo("high");
+    }
+
+    @Test
+    void preservesExistingWorkflowModelAndReasoningOmissionWhenForceRegeneratingWorkflow() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("existing-codex-command-only.md");
+        writeExistingWorkflow(workflow, "");
+
+        // when
+        forceRegenerateExistingWorkflow(workflow);
+
+        // then
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("command: codex app-server")
+                .doesNotContain("model:")
+                .doesNotContain("reasoning_effort:");
+        EffectiveConfig config = resolve(workflow);
+        assertThat(config.codex().model()).isNull();
+        assertThat(config.codex().reasoningEffort()).isNull();
+    }
+
+    @Test
+    void codexModelDefaultsRejectUnsupportedStateWithoutFallbackValues() {
+        // given
+        ThrowingCallable createInvalidDefaults = () -> new TrelloBoardSetup.CodexModelDefaults(null, null, false);
+
+        // when
+        Throwable thrown = catchThrowable(createInvalidDefaults);
+
+        // then
+        assertThat(thrown)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("unsupported first-class Codex defaults");
     }
 
     @Test
@@ -1218,6 +1358,41 @@ class TrelloBoardSetupTest {
 
     private static EffectiveConfig resolve(Path workflow) {
         return new ConfigResolver().resolve(new WorkflowLoader().load(workflow));
+    }
+
+    private static void writeExistingWorkflow(Path workflow, String codexFields) throws IOException {
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: existing
+                server:
+                  port: 18080
+                codex:
+                  command: codex app-server
+                %s---
+                # Existing workflow
+                """
+                        .formatted(codexFields),
+                StandardCharsets.UTF_8);
+    }
+
+    private void forceRegenerateExistingWorkflow(Path workflow) {
+        TrelloBoardSetup setupWithNewDefaults =
+                new TrelloBoardSetup(new ObjectMapper(), new TrelloBoardSetup.CodexModelDefaults("gpt-new", "medium"));
+        setupWithNewDefaults.importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "input",
+                List.of(),
+                List.of(),
+                null,
+                workflow,
+                Path.of("./agent-workspaces"),
+                2,
+                true));
     }
 
     private static Map<String, String> query(HttpExchange exchange) {

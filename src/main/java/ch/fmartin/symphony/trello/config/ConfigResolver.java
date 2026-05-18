@@ -90,6 +90,8 @@ public class ConfigResolver {
                         positiveStateMap(object(agent, "max_concurrent_agents_by_state"))),
                 new EffectiveConfig.CodexConfig(
                         string(codex, "command", "codex app-server"),
+                        optionalString(codex, "model"),
+                        optionalString(codex, "reasoning_effort"),
                         codex.get("approval_policy"),
                         codex.get("thread_sandbox"),
                         codex.get("turn_sandbox_policy"),
@@ -158,6 +160,11 @@ public class ConfigResolver {
             return defaultValue;
         }
         return value.toString();
+    }
+
+    private static String optionalString(Map<String, Object> root, String key) {
+        String value = string(root, key, null);
+        return blank(value) ? null : value;
     }
 
     private static String secret(

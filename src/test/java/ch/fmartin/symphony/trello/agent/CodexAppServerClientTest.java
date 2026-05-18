@@ -201,6 +201,139 @@ class CodexAppServerClientTest {
     }
 
     @Test
+    void sendsConfiguredModelAndReasoningEffortToCodexAppServer() throws Exception {
+        // given
+        Path capture = tempDir.resolve("model-requests.jsonl");
+        Path appServer = tempDir.resolve("model-capturing-app-server.sh");
+        Files.writeString(
+                appServer,
+                """
+                #!/usr/bin/env bash
+                capture="$1"
+                : > "$capture"
+                while IFS= read -r line; do
+                  case "$line" in
+                    *\\"method\\":\\"initialize\\"*) echo '{"id":1,"result":{"userAgent":"model-test"}}' ;;
+                    *\\"method\\":\\"thread/start\\"*)
+                      printf '%s\\n' "$line" >> "$capture"
+                      echo '{"id":2,"result":{"thread":{"id":"thread-model"}}}'
+                      ;;
+                    *\\"method\\":\\"turn/start\\"*)
+                      printf '%s\\n' "$line" >> "$capture"
+                      echo '{"id":3,"result":{"turn":{"id":"turn-model"}}}'
+                      echo '{"method":"turn/completed","params":{"threadId":"thread-model","turn":{"id":"turn-model","error":null}}}'
+                      ;;
+                  esac
+                done
+                """);
+        appServer.toFile().setExecutable(true);
+        EffectiveConfig config = config(Map.of(
+                "command",
+                appServer + " " + capture,
+                "model",
+                "gpt-5.5",
+                "reasoning_effort",
+                "xhigh",
+                "read_timeout_ms",
+                1000,
+                "turn_timeout_ms",
+                1000));
+        Path workspace = config.workspace().root().resolve("TRELLO-model");
+        Files.createDirectories(workspace);
+        CodexAppServerClient client =
+                new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
+
+        // when
+        AgentRunResult result = client.runTurn(
+                config,
+                TestCards.card("card-1", "TRELLO-model", "Ready for Codex"),
+                workspace,
+                "Do a model capture no-op turn.",
+                "worker-model",
+                event -> {});
+
+        // then
+        assertThat(result).isEqualTo(AgentRunResult.ok());
+        List<JsonNode> requests = Files.readAllLines(capture).stream()
+                .map(line -> {
+                    try {
+                        return json.readTree(line);
+                    } catch (Exception e) {
+                        throw new IllegalStateException(e);
+                    }
+                })
+                .toList();
+        assertThat(requests)
+                .extracting(request -> request.path("method").asText())
+                .containsExactly("thread/start", "turn/start");
+        assertThat(requests.get(0).path("params").path("model").asText()).isEqualTo("gpt-5.5");
+        assertThat(requests.get(1).path("params").path("model").asText()).isEqualTo("gpt-5.5");
+        assertThat(requests.get(1).path("params").path("effort").asText()).isEqualTo("xhigh");
+    }
+
+    @Test
+    void omitsModelAndReasoningEffortWhenWorkflowDoesNotConfigureThem() throws Exception {
+        // given
+        Path capture = tempDir.resolve("default-model-requests.jsonl");
+        Path appServer = tempDir.resolve("default-model-capturing-app-server.sh");
+        Files.writeString(
+                appServer,
+                """
+                #!/usr/bin/env bash
+                capture="$1"
+                : > "$capture"
+                while IFS= read -r line; do
+                  case "$line" in
+                    *\\"method\\":\\"initialize\\"*) echo '{"id":1,"result":{"userAgent":"default-model-test"}}' ;;
+                    *\\"method\\":\\"thread/start\\"*)
+                      printf '%s\\n' "$line" >> "$capture"
+                      echo '{"id":2,"result":{"thread":{"id":"thread-default-model"}}}'
+                      ;;
+                    *\\"method\\":\\"turn/start\\"*)
+                      printf '%s\\n' "$line" >> "$capture"
+                      echo '{"id":3,"result":{"turn":{"id":"turn-default-model"}}}'
+                      echo '{"method":"turn/completed","params":{"threadId":"thread-default-model","turn":{"id":"turn-default-model","error":null}}}'
+                      ;;
+                  esac
+                done
+                """);
+        appServer.toFile().setExecutable(true);
+        EffectiveConfig config =
+                config(Map.of("command", appServer + " " + capture, "read_timeout_ms", 1000, "turn_timeout_ms", 1000));
+        Path workspace = config.workspace().root().resolve("TRELLO-default-model");
+        Files.createDirectories(workspace);
+        CodexAppServerClient client =
+                new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
+
+        // when
+        AgentRunResult result = client.runTurn(
+                config,
+                TestCards.card("card-1", "TRELLO-default-model", "Ready for Codex"),
+                workspace,
+                "Do a default model capture no-op turn.",
+                "worker-default-model",
+                event -> {});
+
+        // then
+        assertThat(result).isEqualTo(AgentRunResult.ok());
+        List<JsonNode> requests = Files.readAllLines(capture).stream()
+                .map(line -> {
+                    try {
+                        return json.readTree(line);
+                    } catch (Exception e) {
+                        throw new IllegalStateException(e);
+                    }
+                })
+                .toList();
+        assertThat(requests)
+                .extracting(request -> request.path("method").asText())
+                .containsExactly("thread/start", "turn/start");
+        assertThat(requests.get(0).path("params").has("model")).isFalse();
+        assertThat(requests.get(1).path("params").has("model")).isFalse();
+        assertThat(requests.get(1).path("params").has("effort")).isFalse();
+    }
+
+    @Test
     void continuesMultipleTurnsOnOneThreadWhenControllerRequestsIt() throws Exception {
         // given
         Path capture = tempDir.resolve("turns.jsonl");
