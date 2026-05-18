@@ -92,7 +92,15 @@ matters, and easy for another engineer to understand without asking the original
 - Keep complexity to the minimum that satisfies the spec and current use cases.
 - Prefer existing project patterns and standard Quarkus/JDK APIs over new abstractions.
 - Centralize connected constants and configuration values. Do not duplicate magic values with the
-  same meaning in multiple places.
+  same meaning in multiple places. More generally, when separate code, docs, test data, generated
+  templates, constants, literals, or other artifacts represent one concept and a maintainer would
+  expect them to change together, centralize or derive them from one shared source in the narrowest
+  sensible scope. Strings and numbers are common examples, but the rule is about coupled change, not
+  literal type or textual equality. Do not centralize independent values only because they happen to
+  look the same today; leave them separate when they represent different concepts that could
+  reasonably change independently. When duplicated logic would need to change together at multiple
+  call sites, extract a shared helper or abstraction so the coupling is explicit and future
+  contributors only have one place to update.
 - Add comments only for non-obvious decisions, surprising constraints, or tradeoffs that would slow
   down a future maintainer.
 - Use Java 25 LTS language/runtime features where they make the code clearer, but do not be clever

@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Callable;
+import java.util.function.Supplier;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Mixin;
@@ -75,7 +76,22 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
     }
 
     static int run(String[] args, PrintStream out, PrintStream err) {
-        TrelloBoardSetup boardSetup = new TrelloBoardSetup(new ObjectMapper());
+        return run(args, out, err, (TrelloBoardSetup.CodexModelDefaults) null);
+    }
+
+    static int run(
+            String[] args, PrintStream out, PrintStream err, TrelloBoardSetup.CodexModelDefaults codexModelDefaults) {
+        ObjectMapper json = new ObjectMapper();
+        return run(args, out, err, () -> codexModelDefaults(json, codexModelDefaults));
+    }
+
+    static int run(
+            String[] args,
+            PrintStream out,
+            PrintStream err,
+            Supplier<TrelloBoardSetup.CodexModelDefaults> codexModelDefaults) {
+        ObjectMapper json = new ObjectMapper();
+        TrelloBoardSetup boardSetup = new TrelloBoardSetup(json, codexModelDefaults);
         return run(
                 args,
                 new TrelloBoardSetupService(boardSetup),
@@ -83,6 +99,11 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                 new LocalWorkerManager(System.getenv()),
                 out,
                 err);
+    }
+
+    private static TrelloBoardSetup.CodexModelDefaults codexModelDefaults(
+            ObjectMapper json, TrelloBoardSetup.CodexModelDefaults codexModelDefaults) {
+        return codexModelDefaults != null ? codexModelDefaults : new CodexModelDefaultsResolver(json).resolve();
     }
 
     static int run(

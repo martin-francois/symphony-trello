@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public final class LocalSetup {
@@ -81,10 +82,21 @@ public final class LocalSetup {
     }
 
     public static int run(String[] args, InputStream in, PrintStream out, PrintStream err) {
+        ObjectMapper json = new ObjectMapper();
+        return run(args, in, out, err, () -> new CodexModelDefaultsResolver(json).resolve());
+    }
+
+    static int run(
+            String[] args,
+            InputStream in,
+            PrintStream out,
+            PrintStream err,
+            Supplier<TrelloBoardSetup.CodexModelDefaults> codexModelDefaults) {
+        ObjectMapper json = new ObjectMapper();
         return new SetupLocalCommandFactory()
                 .execute(
                         args,
-                        new LocalSetup(new TrelloBoardSetup(new ObjectMapper()), new ProcessCommandRunner()),
+                        new LocalSetup(new TrelloBoardSetup(json, codexModelDefaults), new ProcessCommandRunner()),
                         new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8)),
                         out,
                         err);

@@ -192,6 +192,7 @@ public class CodexAppServerClient {
         ObjectNode params = object("cwd", workspace.toString(), "serviceName", "symphony-trello", "ephemeral", true);
         putIfPresent(params, "approvalPolicy", config.codex().approvalPolicy());
         putIfPresent(params, "sandbox", config.codex().threadSandbox());
+        putIfPresent(params, "model", config.codex().model());
         var toolSpecs = trelloTools.toolSpecs(config);
         if (!toolSpecs.isEmpty()) {
             params.set("dynamicTools", toolSpecs);
@@ -203,6 +204,8 @@ public class CodexAppServerClient {
         ObjectNode params = object("threadId", threadId, "cwd", workspace.toString());
         params.set("input", json.createArrayNode().add(object("type", "text", "text", prompt)));
         putIfPresent(params, "approvalPolicy", config.codex().approvalPolicy());
+        putIfPresent(params, "model", config.codex().model());
+        putIfPresent(params, "effort", config.codex().reasoningEffort());
         putIfPresent(params, "sandboxPolicy", sandboxPolicy(config));
         return params;
     }
