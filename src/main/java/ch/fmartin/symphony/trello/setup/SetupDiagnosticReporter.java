@@ -759,19 +759,13 @@ final class SetupDiagnosticReporter {
             if (captureNext) {
                 addValue(values, arg);
                 captureNext = false;
-                continue;
-            }
-            Optional<String> option = REDACTED_COMMAND_VALUE_OPTIONS.stream()
-                    .filter(redactedOption -> arg.equals(redactedOption) || arg.startsWith(redactedOption + "="))
-                    .findFirst();
-            if (option.isEmpty()) {
-                continue;
-            }
-            String redactedOption = option.orElseThrow();
-            if (arg.equals(redactedOption)) {
-                captureNext = true;
             } else {
-                addValue(values, arg.substring(redactedOption.length() + 1));
+                Optional<String> redactedOption = redactedCommandValueOption(arg);
+                captureNext = redactedOption.map(arg::equals).orElse(false);
+                redactedOption
+                        .filter(option -> !arg.equals(option))
+                        .map(option -> arg.substring(option.length() + 1))
+                        .ifPresent(value -> addValue(values, value));
             }
         }
         return values;
@@ -790,24 +784,21 @@ final class SetupDiagnosticReporter {
             if (redactNext) {
                 sanitizedArgs.add("<redacted>");
                 redactNext = false;
-                continue;
+            } else {
+                Optional<String> redactedOption = redactedCommandValueOption(arg);
+                sanitizedArgs.add(redactedOption
+                        .map(option -> arg.equals(option) ? arg : option + "=<redacted>")
+                        .orElse(arg));
+                redactNext = redactedOption.map(arg::equals).orElse(false);
             }
-            Optional<String> secretOption = REDACTED_COMMAND_VALUE_OPTIONS.stream()
-                    .filter(option -> arg.equals(option) || arg.startsWith(option + "="))
-                    .findFirst();
-            if (secretOption.isPresent()) {
-                String option = secretOption.orElseThrow();
-                if (arg.equals(option)) {
-                    sanitizedArgs.add(arg);
-                    redactNext = true;
-                } else {
-                    sanitizedArgs.add(option + "=<redacted>");
-                }
-                continue;
-            }
-            sanitizedArgs.add(arg);
         }
         return sanitize(String.join(" ", sanitizedArgs));
+    }
+
+    private static Optional<String> redactedCommandValueOption(String arg) {
+        return REDACTED_COMMAND_VALUE_OPTIONS.stream()
+                .filter(option -> arg.equals(option) || arg.startsWith(option + "="))
+                .findAny();
     }
 
     private String sanitizeExceptionMessage(Exception exception) {
