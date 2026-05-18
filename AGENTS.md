@@ -380,6 +380,14 @@ matters, and easy for another engineer to understand without asking the original
   describe the desired outcome and explicitly compare plausible implementation layers. Do not assume
   the Java scheduler/service must own behavior that may fit better in generated workflow text,
   repository-local skills, or scoped agent tools.
+- When creating a GitHub issue or changing an issue's scope, check the other open issues for hard
+  ordering dependencies. Add dependencies bidirectionally using the exact headings
+  `Must be implemented before:` and `Must be implemented after:` so both sides stay discoverable.
+  Do not add loose related links as dependencies; use this only when one issue really must land
+  before another.
+- When an open issue has one or more unresolved `Must be implemented after:` dependencies, make sure
+  it has the `blocked` label. When all issues listed under `Must be implemented after:` are closed,
+  remove the `blocked` label so the issue queue reflects that it can be started.
 - When adding or changing behavior that extends beyond `SPEC.md` but does not conflict with it,
   append the extension contract to `SPEC.md` in the same change. Keep implementation-specific
   extensions clearly labeled as optional or Java implementation extensions so the core adapted
