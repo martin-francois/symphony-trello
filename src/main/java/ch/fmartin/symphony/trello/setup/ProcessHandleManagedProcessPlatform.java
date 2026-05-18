@@ -54,21 +54,25 @@ abstract class ProcessHandleManagedProcessPlatform implements ManagedProcessPlat
                 .resolve("target/quarkus-app/quarkus-run.jar")
                 .toString();
         boolean matchesInstall = arguments.contains(marker) && arguments.contains(jar);
-        if (workflowPath.isEmpty()) {
-            return matchesInstall;
-        }
-        String workflow =
-                workflowPath.orElseThrow().toAbsolutePath().normalize().toString();
-        return matchesInstall && arguments.contains(workflow);
+        return workflowPath
+                .map(Path::toAbsolutePath)
+                .map(Path::normalize)
+                .map(Path::toString)
+                .map(workflow -> matchesInstall && arguments.contains(workflow))
+                .orElse(matchesInstall);
     }
 
     @Override
     public boolean stop(long pid, Duration gracefulTimeout, Duration forcedTimeout) {
-        Optional<ProcessHandle> maybeHandle = ProcessHandle.of(pid);
-        if (maybeHandle.isEmpty() || !maybeHandle.orElseThrow().isAlive()) {
+        return ProcessHandle.of(pid)
+                .map(handle -> stopHandle(handle, gracefulTimeout, forcedTimeout))
+                .orElse(true);
+    }
+
+    private boolean stopHandle(ProcessHandle handle, Duration gracefulTimeout, Duration forcedTimeout) {
+        if (!handle.isAlive()) {
             return true;
         }
-        ProcessHandle handle = maybeHandle.orElseThrow();
         handle.descendants()
                 .sorted(Comparator.comparingLong(ProcessHandle::pid).reversed())
                 .forEach(ProcessHandle::destroy);

@@ -321,16 +321,23 @@ final class LocalWorkerManager {
             throw new TrelloBoardSetupException(
                     "setup_worker_selection_conflict", "--board and --workflow cannot be used together.");
         }
-        if (board.isPresent()) {
-            return manifest.findByBoard(board.orElseThrow())
-                    .orElseThrow(() -> new TrelloBoardSetupException(
-                            "setup_worker_board_not_found",
-                            "No connected Trello board matches \"" + board.orElseThrow() + "\"."));
-        }
-        if (workflow.isPresent()) {
-            Path workflowPath = workflow.orElseThrow().toAbsolutePath().normalize();
-            return manifest.findByWorkflow(workflowPath).orElse(workflowBoard(workflowPath));
-        }
+        return board.map(selector -> selectedBoard(manifest, selector))
+                .or(() -> workflow.map(workflowSelector -> selectedWorkflow(manifest, workflowSelector)))
+                .orElseGet(() -> defaultSelectedBoard(manifest, command));
+    }
+
+    private ConnectedBoard selectedBoard(ConnectedBoardManifest manifest, String selector) {
+        return manifest.findByBoard(selector)
+                .orElseThrow(() -> new TrelloBoardSetupException(
+                        "setup_worker_board_not_found", "No connected Trello board matches \"" + selector + "\"."));
+    }
+
+    private ConnectedBoard selectedWorkflow(ConnectedBoardManifest manifest, Path workflowSelector) {
+        Path workflowPath = workflowSelector.toAbsolutePath().normalize();
+        return manifest.findByWorkflow(workflowPath).orElse(workflowBoard(workflowPath));
+    }
+
+    private ConnectedBoard defaultSelectedBoard(ConnectedBoardManifest manifest, String command) {
         if (manifest.boards().size() == 1) {
             return manifest.boards().getFirst();
         }

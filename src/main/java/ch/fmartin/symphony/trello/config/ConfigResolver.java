@@ -278,23 +278,15 @@ public class ConfigResolver {
 
     private static Map<String, Integer> priorityLabels(Map<String, Object> configured) {
         Map<String, Integer> values = new LinkedHashMap<>(DEFAULT_PRIORITIES);
-        configured.forEach((key, value) -> {
-            OptionalInt priority = positiveInteger(value);
-            if (priority.isPresent()) {
-                values.put(StateNames.normalize(key), priority.getAsInt());
-            }
-        });
+        configured.forEach((key, value) ->
+                positiveInteger(value).ifPresent(priority -> values.put(StateNames.normalize(key), priority)));
         return Map.copyOf(values);
     }
 
     private static Map<String, Integer> positiveStateMap(Map<String, Object> configured) {
         Map<String, Integer> values = new LinkedHashMap<>();
-        configured.forEach((key, value) -> {
-            OptionalInt limit = positiveInteger(value);
-            if (limit.isPresent()) {
-                values.put(StateNames.normalize(key), limit.getAsInt());
-            }
-        });
+        configured.forEach((key, value) ->
+                positiveInteger(value).ifPresent(limit -> values.put(StateNames.normalize(key), limit)));
         return Map.copyOf(values);
     }
 

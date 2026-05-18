@@ -117,9 +117,16 @@ final class TrelloBoardConnector {
     private static String workspaceId(
             LocalSetup.Options options, List<TrelloBoardSetup.WorkspaceInfo> workspaces, Terminal terminal)
             throws IOException {
-        if (options.workspaceId().isPresent()) {
-            return options.workspaceId().orElseThrow();
+        Optional<String> configuredWorkspaceId = options.workspaceId();
+        if (configuredWorkspaceId.isEmpty()) {
+            return chooseWorkspaceId(workspaces, terminal, options.nonInteractive());
         }
+        return configuredWorkspaceId.orElseThrow();
+    }
+
+    private static String chooseWorkspaceId(
+            List<TrelloBoardSetup.WorkspaceInfo> workspaces, Terminal terminal, boolean nonInteractive)
+            throws IOException {
         if (workspaces.size() == 1) {
             terminal.info("  OK  Trello Workspace: \"" + workspaces.getFirst().displayName() + "\"");
             return workspaces.getFirst().id();
@@ -134,7 +141,7 @@ final class TrelloBoardConnector {
         for (int i = 0; i < workspaces.size(); i++) {
             terminal.info("  " + (i + 1) + ". \"" + workspaces.get(i).displayName() + "\"");
         }
-        if (options.nonInteractive()) {
+        if (nonInteractive) {
             throw new TrelloBoardSetupException(
                     "setup_workspace_id_required",
                     "This token can access multiple Trello Workspaces. Re-run with --workspace-id.");
@@ -271,27 +278,31 @@ final class TrelloBoardConnector {
             Path workflowPath,
             WorkflowConfigEditor editor) {
         Set<Integer> reservedPorts = reservedWorkflowServerPorts(manifest, workflowPath, options.force(), editor);
-        if (options.serverPort().isPresent()) {
-            int requestedPort = options.serverPort().orElseThrow();
-            if (reservedPorts.contains(requestedPort)) {
-                throw new TrelloBoardSetupException(
-                        "setup_server_port_conflict",
-                        "--server-port %d is already reserved by another connected workflow.".formatted(requestedPort));
-            }
-            if (LocalHealthChecker.portAcceptsConnections(requestedPort)) {
-                throw new TrelloBoardSetupException(
-                        "setup_server_port_conflict",
-                        "--server-port %d is already in use on 127.0.0.1.".formatted(requestedPort));
-            }
-            return requestedPort;
-        }
+        return options.serverPort()
+                .map(requestedPort -> validatedRequestedServerPort(requestedPort, reservedPorts))
+                .orElseGet(() -> firstAvailableServerPort(reservedPorts));
+    }
 
+    private static int firstAvailableServerPort(Set<Integer> reservedPorts) {
         for (int port = TrelloBoardSetup.DEFAULT_SERVER_PORT; port <= 65535; port++) {
             if (!reservedPorts.contains(port) && !LocalHealthChecker.portAcceptsConnections(port)) {
                 return port;
             }
         }
         throw new TrelloBoardSetupException("setup_server_port_unavailable", "No free local server port was found.");
+    }
+
+    private static int validatedRequestedServerPort(int port, Set<Integer> reservedPorts) {
+        if (reservedPorts.contains(port)) {
+            throw new TrelloBoardSetupException(
+                    "setup_server_port_conflict",
+                    "--server-port %d is already reserved by another connected workflow.".formatted(port));
+        }
+        if (LocalHealthChecker.portAcceptsConnections(port)) {
+            throw new TrelloBoardSetupException(
+                    "setup_server_port_conflict", "--server-port %d is already in use on 127.0.0.1.".formatted(port));
+        }
+        return port;
     }
 
     private int localSetupServerPort(LocalSetup.Options options, ConnectedBoardManifest manifest, Path workflowPath) {

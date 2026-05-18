@@ -338,14 +338,13 @@ public final class LocalSetup {
                 .orElseThrow(() -> new TrelloBoardSetupException(
                         "setup_repair_board_not_found",
                         "No connected Trello board matches \"" + boardSelector + "\"."));
-        Optional<String> overrideSource = healthChecker.externalHttpPortOverrideSource(board.envPath());
-        if (overrideSource.isPresent()) {
+        healthChecker.externalHttpPortOverrideSource(board.envPath()).ifPresent(overrideSource -> {
             throw new TrelloBoardSetupException(
                     "setup_repair_port_http_override",
                     "setup-local repair-port cannot update workflow server.port while "
-                            + overrideSource.get()
+                            + overrideSource
                             + " overrides the HTTP port. Remove or update SYMPHONY_HTTP_PORT/QUARKUS_HTTP_PORT in the board env file or service environment, then rerun setup-local repair-port.");
-        }
+        });
         BoardHealth health = healthChecker.boardHealth(board);
         boolean wasRunning = health.kind() == BoardHealthKind.SAME_WORKFLOW;
         int port = nextAvailablePort(manifest, board);
@@ -486,8 +485,9 @@ public final class LocalSetup {
         if (!options.hasCodexAccessUpdateRequest() || options.boardName().isPresent()) {
             return false;
         }
-        return options.existingBoardId().isEmpty()
-                || manifest.findByBoard(options.existingBoardId().orElseThrow()).isPresent();
+        return options.existingBoardId()
+                .map(selector -> manifest.findByBoard(selector).isPresent())
+                .orElse(true);
     }
 
     private static boolean hasSelectedGithubBoardCodexAccessTarget(ConnectedBoardManifest manifest, Options options) {
@@ -496,7 +496,8 @@ public final class LocalSetup {
                 || options.existingBoardId().isEmpty()) {
             return false;
         }
-        return manifest.findByBoard(options.existingBoardId().orElseThrow())
+        return options.existingBoardId()
+                .flatMap(manifest::findByBoard)
                 .filter(ConnectedBoard::githubEnabled)
                 .isPresent();
     }
@@ -581,15 +582,17 @@ public final class LocalSetup {
 
     private static ConnectedBoard selectBoardForCodexAccessUpdate(
             Options options, ConnectedBoardManifest manifest, Terminal terminal) throws IOException {
-        PrintStream out = terminal.out();
         rejectMixedCodexAccessUpdate(options);
-        if (options.existingBoardId().isPresent()) {
-            String selector = options.existingBoardId().orElseThrow();
-            return manifest.findByBoard(selector)
-                    .orElseThrow(() -> new TrelloBoardSetupException(
-                            "setup_board_selection_required",
-                            "No connected Trello board matches \"" + selector + "\"."));
+        Optional<String> selector = options.existingBoardId();
+        if (selector.isEmpty()) {
+            return selectBoardForCodexAccessUpdateWithoutSelector(options, manifest, terminal);
         }
+        return selectedConnectedBoard(manifest, selector.orElseThrow());
+    }
+
+    private static ConnectedBoard selectBoardForCodexAccessUpdateWithoutSelector(
+            Options options, ConnectedBoardManifest manifest, Terminal terminal) throws IOException {
+        PrintStream out = terminal.out();
         if (manifest.boards().size() == 1) {
             return manifest.boards().getFirst();
         }
@@ -609,6 +612,12 @@ public final class LocalSetup {
                                 1,
                                 manifest.boards().size())
                         - 1);
+    }
+
+    private static ConnectedBoard selectedConnectedBoard(ConnectedBoardManifest manifest, String selector) {
+        return manifest.findByBoard(selector)
+                .orElseThrow(() -> new TrelloBoardSetupException(
+                        "setup_board_selection_required", "No connected Trello board matches \"" + selector + "\"."));
     }
 
     private static void rejectMixedCodexAccessUpdate(Options options) {
@@ -723,7 +732,6 @@ public final class LocalSetup {
 
     private static ConnectedBoard selectNonGithubBoardForUpgrade(
             Options options, ConnectedBoardManifest manifest, Terminal terminal) throws IOException {
-        PrintStream out = terminal.out();
         List<ConnectedBoard> candidates = manifest.boards().stream()
                 .filter(board -> !board.githubEnabled())
                 .toList();
@@ -731,20 +739,16 @@ public final class LocalSetup {
             throw new TrelloBoardSetupException(
                     "setup_github_upgrade_not_found", "No non-GitHub connected board is available to upgrade.");
         }
-        if (options.existingBoardId().isPresent()) {
-            String requested = options.existingBoardId().orElseThrow();
-            String requestedBoardId = TrelloBoardIds.parse(requested);
-            return candidates.stream()
-                    .filter(board -> board.boardName().equalsIgnoreCase(requested)
-                            || board.boardId().equalsIgnoreCase(requested)
-                            || board.boardKey().equalsIgnoreCase(requested)
-                            || board.boardId().equalsIgnoreCase(requestedBoardId)
-                            || board.boardKey().equalsIgnoreCase(requestedBoardId))
-                    .findFirst()
-                    .orElseThrow(() -> new TrelloBoardSetupException(
-                            "setup_github_upgrade_not_found",
-                            "No connected non-GitHub board matches \"" + requested + "\"."));
+        Optional<String> requested = options.existingBoardId();
+        if (requested.isEmpty()) {
+            return selectNonGithubBoardForUpgradeWithoutSelector(options, candidates, terminal);
         }
+        return nonGithubBoard(candidates, requested.orElseThrow());
+    }
+
+    private static ConnectedBoard selectNonGithubBoardForUpgradeWithoutSelector(
+            Options options, List<ConnectedBoard> candidates, Terminal terminal) throws IOException {
+        PrintStream out = terminal.out();
         if (candidates.size() == 1) {
             return candidates.getFirst();
         }
@@ -759,6 +763,20 @@ public final class LocalSetup {
             out.println("  " + (i + 1) + ". \"" + candidates.get(i).boardName() + "\"");
         }
         return candidates.get(parseChoice(terminal.readLine("Board [1]: "), 1, candidates.size()) - 1);
+    }
+
+    private static ConnectedBoard nonGithubBoard(List<ConnectedBoard> candidates, String requested) {
+        String requestedBoardId = TrelloBoardIds.parse(requested);
+        return candidates.stream()
+                .filter(board -> board.boardName().equalsIgnoreCase(requested)
+                        || board.boardId().equalsIgnoreCase(requested)
+                        || board.boardKey().equalsIgnoreCase(requested)
+                        || board.boardId().equalsIgnoreCase(requestedBoardId)
+                        || board.boardKey().equalsIgnoreCase(requestedBoardId))
+                .findFirst()
+                .orElseThrow(() -> new TrelloBoardSetupException(
+                        "setup_github_upgrade_not_found",
+                        "No connected non-GitHub board matches \"" + requested + "\"."));
     }
 
     private void disconnectBoard(Options options, ConnectedBoardManifest manifest, Terminal terminal)

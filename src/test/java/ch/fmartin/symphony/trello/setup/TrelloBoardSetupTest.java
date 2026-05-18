@@ -280,6 +280,59 @@ class TrelloBoardSetupTest {
     }
 
     @Test
+    void importsExistingBoardUsingFirstMatchingRecommendedListNames() {
+        // given
+        boardListsResponse.set(
+                """
+                [
+                  {"id":"list-ready-lower","name":"ready for codex","closed":false,"pos":1},
+                  {"id":"list-ready-title","name":"Ready for Codex","closed":false,"pos":2},
+                  {"id":"list-progress-lower","name":"in progress","closed":false,"pos":3},
+                  {"id":"list-progress-title","name":"In Progress","closed":false,"pos":4},
+                  {"id":"list-blocked-lower","name":"blocked","closed":false,"pos":5},
+                  {"id":"list-blocked-title","name":"Blocked","closed":false,"pos":6},
+                  {"id":"list-review-lower","name":"human review","closed":false,"pos":7},
+                  {"id":"list-review-title","name":"Human Review","closed":false,"pos":8},
+                  {"id":"list-done-lower","name":"done","closed":false,"pos":9},
+                  {"id":"list-done-title","name":"Done","closed":false,"pos":10}
+                ]
+                """);
+        Path workflow = tempDir.resolve("imported-duplicated-recommended-lists.md");
+
+        // when
+        var result = setup.importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "input",
+                List.of(),
+                List.of(),
+                null,
+                true,
+                null,
+                workflow,
+                Path.of("./agent-workspaces"),
+                null,
+                1,
+                false,
+                TrelloBoardSetup.GitHubIntegration.DISABLED));
+
+        // then
+        assertThat(result.activeStates()).containsExactly("ready for codex", "in progress");
+        assertThat(result.terminalStates()).containsExactly("done");
+        assertThat(result.inProgressState()).isEqualTo("in progress");
+        assertThat(result.blockedState()).isEqualTo("blocked");
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains(
+                        "- \"ready for codex\"",
+                        "- \"in progress\"",
+                        "- \"done\"",
+                        "in_progress_state: \"in progress\"",
+                        "blocked_state: \"blocked\"",
+                        "list_name \"human review\"");
+    }
+
+    @Test
     void createsNonGithubRecommendedBoardListsAndWorkflow() {
         // given
         Path workflow = tempDir.resolve("non-github-workflow.md");

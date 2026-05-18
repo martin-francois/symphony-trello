@@ -88,13 +88,10 @@ final class TrelloCredentialStore {
 
     private static CredentialValue credentialValue(
             Optional<String> directValue, Optional<String> environmentValue, String dotenvValue) {
-        if (directValue.isPresent()) {
-            return CredentialValue.direct(directValue.orElseThrow());
-        }
-        if (environmentValue.isPresent()) {
-            return CredentialValue.environment(environmentValue.orElseThrow());
-        }
-        return CredentialValue.dotenv(dotenvValue);
+        return directValue
+                .map(CredentialValue::direct)
+                .or(() -> environmentValue.map(CredentialValue::environment))
+                .orElseGet(() -> CredentialValue.dotenv(dotenvValue));
     }
 
     private static void writeEnvFile(Path envPath, List<String> lines) throws IOException {

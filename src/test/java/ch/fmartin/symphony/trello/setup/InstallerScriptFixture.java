@@ -180,7 +180,7 @@ final class InstallerScriptFixture {
         return POSIX_INSTALLER_DEFAULT_REF
                 .matcher(installScript)
                 .results()
-                .findFirst()
+                .findAny()
                 .map(match -> match.group(1))
                 .orElseThrow(() -> new IllegalStateException("install.sh is missing the Release Please default ref"));
     }

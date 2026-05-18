@@ -413,11 +413,37 @@ matters, and easy for another engineer to understand without asking the original
 - Use imports instead of inline fully qualified type names. Write `Arrays.stream(...)`, not
   `java.util.Arrays.stream(...)`. PMD enforces this with the narrow
   `UnnecessaryFullyQualifiedName` rule.
-- Keep code ASCII unless an existing file or domain requirement clearly needs Unicode.
+- Prefer streams for real collection transformations and lookups when they make the code clearer
+  than manual loop state. Do not replace a readable collection stream with a loop just to avoid an
+  `Optional`, especially when the loop needs labeled `continue`, mutable sentinel flags beyond the
+  natural state of the algorithm, or duplicated branch flow.
+- Avoid Optional-as-null-control-flow. Do not use `optional.isPresent()` followed by
+  `optional.get()`, `optional.orElseThrow()`, or equivalent value reads, and do not convert an
+  `Optional` to nullable state with `optional.orElse(null)` just to branch on `value != null`. Do
+  not convert an `Optional` to a one-element collection with `optional.stream().toList()` just to
+  enter a loop or return early. This does not forbid streaming real collections and ending with an
+  Optional-returning terminal operation when the source may contain many values. Use `findFirst()`
+  only when encounter order is part of the required behavior; use `findAny()` when any matching
+  value is equivalent. Before adding or keeping `findFirst()`, temporarily switch that specific
+  lookup to `findAny()` and run the narrow relevant test. If the test does not fail but encounter
+  order is still semantically required, add or update a realistic test that asserts the first-match
+  contract, then keep `findFirst()`. If no realistic order-dependent scenario exists, use
+  `findAny()` instead. In those cases, still keep the resulting `Optional` as the control-flow
+  boundary with whichever `Optional` API expresses the intent most clearly, such as `map`,
+  `flatMap`, `filter`, `or`, `orElse`, `orElseGet`, `orElseThrow`, `ifPresent`, or
+  `ifPresentOrElse`; this is guidance, not a closed list. If the absent branch throws a checked
+  exception or needs prompting, plain branching at that boundary is acceptable because the checked
+  exception is part of the method's honest contract. Keep this exception narrow: use it only to
+  choose between a present value and a checked-IO/prompting fallback, not as a general Optional
+  style. Do not add a dependency or project-specific functional helper only to avoid this explicit
+  branch unless the pattern becomes common enough to justify an ADR-level style decision.
+  Keep `isPresent()` only when the boolean presence check is itself the clearest logic and the value
+  is not immediately read.
 - Use named HTTP status constants or focused helper methods for production HTTP status handling.
   Avoid raw status-code literals such as `200`, `404`, or `429` in production code when a named
   constant or helper makes the intent clearer. Tests and fake servers may use literals when the
   status itself is the scenario under test.
+- Keep code ASCII unless an existing file or domain requirement clearly needs Unicode.
 - Avoid unrelated metadata churn and broad rewrites.
 
 ## Specification And ADR Discipline
@@ -434,6 +460,16 @@ matters, and easy for another engineer to understand without asking the original
   `Pros and Cons of the Options`, and `More Information` when relevant. Fill the sections with
   concrete project-specific content; do not leave template placeholders or write a short free-form
   note.
+- Create or update an ADR whenever the user and agent discuss multiple implementation options and
+  decide on one, or whenever implementation work requires choosing between meaningful alternatives.
+  The ADR must make the selected approach explicit, list the alternatives considered, and explain
+  why they were not chosen. Do not leave these decisions only in chat, PR comments, or commit
+  messages.
+- When an implementation approach, refactor, dependency, tool, API shape, user-flow behavior, or
+  testing strategy is attempted or seriously considered and then rejected for non-obvious reasons,
+  create or update an ADR that records the rejected approach and why. The goal is to prevent future
+  maintainers or agents from repeating attractive but unsuitable work and rediscovering the same
+  problem.
 - When adding or updating ADRs, document the options that were seriously considered, why the chosen
   option won, what becomes easier, what becomes worse, and how future maintainers can confirm the
   decision is still implemented.
