@@ -12,7 +12,7 @@ informed: [Future maintainers]
 
 The project should keep dependencies current with low maintenance overhead, but GitHub Actions tags
 are mutable and Renovate configuration can become noisy if it repeats inherited defaults. The project
-also uses a pinned pnpm version in a workflow command without a `package.json`.
+also uses pinned pnpm and commitlint versions in workflow commands without a `package.json`.
 
 How should dependency automation stay secure, maintainable, and clear for a Java repository?
 
@@ -24,24 +24,31 @@ How should dependency automation stay secure, maintainable, and clear for a Java
 * Allow non-major updates to automerge after the configured release-age delay.
 * Require human approval for major updates.
 * Avoid adding `package.json` solely to run a JavaScript CLI in a Java project.
+* Enforce release-note-ready pull request titles and retained pull request commit messages without
+  making Maven verification depend on Node tooling.
 
 ## Considered Options
 
-* Minimal Renovate config with action SHA pinning and a regex manager for pnpm.
+* Minimal Renovate config with action SHA pinning and regex managers for pnpm and commitlint.
 * Unpinned GitHub Actions tags.
 * Commit a `package.json` only to pin pnpm.
 * Verbose Renovate package rules for every inherited policy.
 
 ## Decision Outcome
 
-Chosen option: "Minimal Renovate config with action SHA pinning and a regex manager for pnpm",
+Chosen option: "Minimal Renovate config with action SHA pinning and regex managers for pnpm and
+commitlint",
 because it hardens CI and keeps automation behavior explicit only where it differs from presets.
 
 ### Consequences
 
 * Good, because GitHub Actions references are immutable full SHAs.
 * Good, because version comments next to action SHAs preserve Renovate tracking.
-* Good, because the Corepack pnpm version remains updateable without a package manifest.
+* Good, because the Corepack pnpm and commitlint versions remain updateable without a package
+  manifest.
+* Good, because CI checks the pull request title that usually becomes the squash commit title for
+  release automation and checks pull request commit messages for rebase-merge or intentionally
+  multi-commit paths.
 * Good, because major updates require dashboard approval and do not automerge.
 * Bad, because SHA-pinned actions are less readable than tag-only action references.
 * Bad, because the regex manager must stay aligned with the workflow command text.
@@ -50,20 +57,23 @@ because it hardens CI and keeps automation behavior explicit only where it diffe
 
 Run `pnpm dlx --package renovate renovate-config-validator renovate.json` and
 `./mvnw -q spotless:check verify`. Review should confirm `.github/workflows/*.yml` uses full action
-SHAs with version comments and that Renovate config does not duplicate global policy in package
-rules.
+SHAs with version comments, commitlint package pins are Renovate-managed, and Renovate config does
+not duplicate global policy in package rules.
 
 ## Pros and Cons of the Options
 
-### Minimal Renovate config with action SHA pinning and a regex manager for pnpm
+### Minimal Renovate config with action SHA pinning and regex managers for pnpm and commitlint
 
 Use Renovate recommended presets, `helpers:pinGitHubActionDigests`, a regex manager for
-`corepack prepare pnpm@... --activate`, and one package rule for major updates.
+`corepack prepare pnpm@... --activate`, a regex manager for commitlint package pins,
+and one package rule for major updates.
 
 * Good, because security-sensitive action refs are immutable.
 * Good, because Renovate still keeps the pins current.
+* Good, because commitlint enforces the Conventional Commit title that release automation reads
+  after squash merges and the retained commit messages release automation reads after rebase merges.
 * Good, because the config remains short enough to understand.
-* Neutral, because Renovate needs a custom regex for the workflow command.
+* Neutral, because Renovate needs custom regexes for workflow command pins.
 * Bad, because readers must know that some behavior comes from presets.
 
 ### Unpinned GitHub Actions tags
@@ -92,5 +102,5 @@ Spell out automerge, release age, grouping, and dashboard behavior in multiple p
 
 ## More Information
 
-The workflow uses pnpm only for Renovate config validation. Java dependencies and build verification
-remain Maven-based.
+The workflows use pnpm only for Renovate config validation and commitlint validation of PR titles
+and PR commit ranges. Java dependencies and build verification remain Maven-based.

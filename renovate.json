@@ -28,10 +28,26 @@
     },
     {
       "customType": "regex",
-      "managerFilePatterns": ["/^\\.github/workflows/ci\\.yml$/"],
+      "managerFilePatterns": [
+        "/^\\.github/workflows/ci\\.yml$/",
+        "/^\\.github/workflows/commitlint\\.yml$/"
+      ],
       "matchStrings": ["corepack prepare pnpm@(?<currentValue>\\d+\\.\\d+\\.\\d+) --activate"],
       "datasourceTemplate": "npm",
       "depNameTemplate": "pnpm",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/commitlint\\.yml$/",
+        "/^AGENTS\\.md$/",
+        "/^CONTRIBUTING\\.md$/"
+      ],
+      "matchStrings": [
+        "--package (?<depName>@commitlint/(?:cli|config-conventional))@(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "datasourceTemplate": "npm",
       "versioningTemplate": "semver"
     },
     {

@@ -92,6 +92,21 @@ matters, and easy for another engineer to understand without asking the original
    updated branch.
    Keep `feat/issue-35-plan-b-onboarding` as a single commit on top of `main`; amend or squash and
    force-push when changing that branch.
+   The pull request title is linted in CI because the repository normally squash-merges with that
+   title. CI also lints pull request commit messages so intentionally multi-commit or rebase-merged
+   PRs keep release automation input clean. Before publishing a PR, run the same local check with
+   the exact title:
+
+   ```bash
+   printf '%s\n' 'docs: describe static-analysis policy' | pnpm dlx --package @commitlint/cli@21.0.1 --package @commitlint/config-conventional@21.0.1 commitlint --config commitlint.config.cjs
+   ```
+
+   For a PR that may be rebase-merged or intentionally keeps multiple commits, also lint the commit
+   range:
+
+   ```bash
+   pnpm dlx --package @commitlint/cli@21.0.1 --package @commitlint/config-conventional@21.0.1 commitlint --config commitlint.config.cjs --from origin/main --to HEAD --verbose
+   ```
 15. When the user asks for a concrete repo change, commit and push the completed change unless they
    explicitly ask not to.
 16. When a change affects runtime behavior and the user is likely to verify it manually afterward,
