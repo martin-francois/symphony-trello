@@ -547,7 +547,7 @@ Fields:
 Fields:
 
 - `interval_ms` (integer)
-  - Default: `30000`
+  - Default: `5000`
   - Changes SHOULD be re-applied at runtime and affect future tick scheduling without restart.
 
 #### 5.3.3 `workspace` (object)
@@ -983,7 +983,7 @@ implemented.
 - `tracker.request_timeout_ms`: integer, default `30000`
 - `tracker.max_api_retries`: integer, default `3`
 - `tracker.api_retry_base_delay_ms`: integer, default `1000`
-- `polling.interval_ms`: integer, default `30000`
+- `polling.interval_ms`: integer, default `5000`
 - `workspace.root`: path resolved to absolute, default `<system-temp>/symphony_workspaces`
 - `hooks.after_create`: shell script or null
 - `hooks.before_run`: shell script or null
@@ -2332,6 +2332,9 @@ API design notes:
 - Trello API rate limits:
   - Back off and retry within configured bounds.
   - If retries are exhausted, surface a tracker failure and let the normal tick/retry path continue.
+  - Log a warning that names the current `polling.interval_ms`, the workflow file, and recommends
+    increasing the interval when rate limiting happens often, especially with more than 5-10 boards
+    sharing one Trello token.
 
 - Status page/log failures:
   - Do not crash the orchestrator.

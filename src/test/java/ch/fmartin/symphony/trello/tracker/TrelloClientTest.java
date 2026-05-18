@@ -3,6 +3,7 @@ package ch.fmartin.symphony.trello.tracker;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
+import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.domain.Card;
@@ -390,6 +391,24 @@ class TrelloClientTest {
                         "POST /1/cards/rate-limited-card/actions/comments?text=Retry+me");
         assertThat(thrown).isInstanceOfSatisfying(TrelloException.class, exception -> assertThat(exception.code())
                 .isEqualTo("trello_api_rate_limited"));
+    }
+
+    @Test
+    void rateLimitWarningNamesPollingIntervalSettingWorkflowPathAndBoardScaleGuidance() {
+        // given
+        var config = config("input", Map.of());
+
+        // when
+        String warning = TrelloClient.rateLimitWarning(config);
+
+        // then
+        assertThat(warning)
+                .contains("Trello rate limit reached")
+                .contains("polling.interval_ms")
+                .contains(Long.toString(ConfigDefaults.DEFAULT_POLLING_INTERVAL_MS))
+                .contains(tempDir.resolve("WORKFLOW.md").toString())
+                .contains("more than 5-10 boards")
+                .contains("same Trello token");
     }
 
     @Test

@@ -74,7 +74,8 @@ public class ConfigResolver {
                         millis(tracker, "request_timeout_ms", 30_000),
                         integer(tracker, "max_api_retries", 3),
                         millis(tracker, "api_retry_base_delay_ms", 1_000)),
-                new EffectiveConfig.PollingConfig(millis(polling, "interval_ms", 30_000)),
+                new EffectiveConfig.PollingConfig(
+                        millis(polling, "interval_ms", ConfigDefaults.DEFAULT_POLLING_INTERVAL_MS)),
                 new EffectiveConfig.WorkspaceConfig(
                         path(workflow.path().getParent(), string(workspace, "root", systemTempRoot()))),
                 new EffectiveConfig.HooksConfig(

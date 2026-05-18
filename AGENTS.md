@@ -44,14 +44,18 @@ matters, and easy for another engineer to understand without asking the original
    leave comment-only or empty catch bodies in production code, and do not add noisy logs for
    expected optional data, spec-defined parse skips, non-POSIX filesystem behavior, or best-effort
    diagnostics.
-10. When you notice a potential improvement that is outside the current task scope, keep the current
+10. When the user or a review comment identifies a concrete mistake or maintainability pattern, check
+   for similar occurrences before finishing. Fix matching cases that are in the current branch scope
+   or directly touched by the change. For matching cases outside scope, create or suggest a focused
+   follow-up issue instead of silently leaving them for rediscovery.
+11. When you notice a potential improvement that is outside the current task scope, keep the current
    work focused and create or suggest a GitHub issue instead of adding "future improvement",
    "convenience gap", or similar sections to user-facing documentation.
-11. Redact private project names, host paths, Trello card ids, short links, account names, and similar
+12. Redact private project names, host paths, Trello card ids, short links, account names, and similar
    internals from committed files, GitHub issues, and user-facing summaries unless the user
    explicitly asks to preserve them. Keep only the minimum technical detail needed to reproduce or
    understand the issue.
-12. Run the relevant verification before finishing. For normal code changes, use:
+13. Run the relevant verification before finishing. For normal code changes, use:
 
    ```bash
    ./mvnw -q spotless:check verify

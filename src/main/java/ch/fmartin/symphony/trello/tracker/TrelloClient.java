@@ -7,6 +7,7 @@ import ch.fmartin.symphony.trello.domain.Card;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.ws.rs.core.Response.Status;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.net.URI;
@@ -566,9 +567,13 @@ public class TrelloClient implements TrackerClient {
                 if (response.statusCode() >= 200 && response.statusCode() < 300) {
                     return json.readValue(response.body(), type);
                 }
-                if (response.statusCode() == 429 && attempt < maxAttempts) {
+                if (isRateLimited(response.statusCode()) && attempt < maxAttempts) {
+                    LOG.warn(rateLimitWarning(config));
                     sleep(backoff(config, attempt, response));
                     continue;
+                }
+                if (isRateLimited(response.statusCode())) {
+                    LOG.warn(rateLimitWarning(config));
                 }
                 throw statusException(response.statusCode());
             } catch (IOException e) {
@@ -585,13 +590,24 @@ public class TrelloClient implements TrackerClient {
     }
 
     private static TrelloException statusException(int statusCode) {
+        if (isRateLimited(statusCode)) {
+            return new TrelloException("trello_api_rate_limited", "Trello rate limit exceeded", statusCode);
+        }
         return switch (statusCode) {
             case 401 -> new TrelloException("trello_auth_failed", "Trello authentication failed", statusCode);
             case 403 -> new TrelloException("trello_permission_denied", "Trello permission denied", statusCode);
             case 404 -> new TrelloException("trello_card_not_found", "Trello resource not found", statusCode);
-            case 429 -> new TrelloException("trello_api_rate_limited", "Trello rate limit exceeded", statusCode);
             default -> new TrelloException("trello_api_status", "Trello returned HTTP " + statusCode, statusCode);
         };
+    }
+
+    private static boolean isRateLimited(int statusCode) {
+        return statusCode == Status.TOO_MANY_REQUESTS.getStatusCode();
+    }
+
+    static String rateLimitWarning(EffectiveConfig config) {
+        return "Trello rate limit reached. Current polling.interval_ms is %d in %s. If this happens often, increase polling.interval_ms, especially when running more than 5-10 boards with the same Trello token."
+                .formatted(config.polling().interval().toMillis(), config.workflowPath());
     }
 
     private static Duration backoff(EffectiveConfig config, int attempt, HttpResponse<?> response) {
