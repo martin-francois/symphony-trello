@@ -79,8 +79,9 @@ final class LocalHealthChecker {
             Optional<String> actualWorkflowPath = optionalString(status.get("workflowPath"));
             Optional<String> actualBoardId = optionalString(status.get("boardId"));
             Optional<String> actualConfiguredBoardId = optionalString(status.get("configuredBoardId"));
-            if (actualWorkflowPath.isPresent()
-                    && PathsEqual.samePath(Path.of(actualWorkflowPath.orElseThrow()), expectedWorkflowPath)
+            if (actualWorkflowPath
+                            .filter(path -> PathsEqual.samePath(Path.of(path), expectedWorkflowPath))
+                            .isPresent()
                     && boardIdMatches(actualBoardId, actualConfiguredBoardId, expectedBoardId, expectedBoardKey)) {
                 return new BoardHealth(BoardHealthKind.SAME_WORKFLOW, port, actualWorkflowPath, actualBoardId);
             }
@@ -102,16 +103,12 @@ final class LocalHealthChecker {
     }
 
     int managedHealthPort(Path workflowPath, int fallbackPort, Path envPath) {
-        Optional<Integer> externalPort = externalHttpPortOverride(envPath);
-        if (externalPort.isPresent()) {
-            int port = externalPort.get();
-            if (port == 0) {
-                throw new TrelloBoardSetupException(
-                        "setup_managed_port_required",
-                        "Managed local setup needs a stable HTTP port. Remove SYMPHONY_HTTP_PORT/QUARKUS_HTTP_PORT=0 or set a positive workflow server.port.");
-            }
-            return port;
-        }
+        return externalHttpPortOverride(envPath)
+                .map(LocalHealthChecker::requireStableExternalPort)
+                .orElseGet(() -> stableWorkflowPort(workflowPath, fallbackPort));
+    }
+
+    private int stableWorkflowPort(Path workflowPath, int fallbackPort) {
         int port = workflowConfig.serverPort(workflowPath).orElse(fallbackPort);
         if (port == 0) {
             throw new TrelloBoardSetupException(
@@ -197,6 +194,15 @@ final class LocalHealthChecker {
 
     private static boolean boardIdMatches(String actualBoardId, String expectedBoardId, String expectedBoardKey) {
         return actualBoardId.equals(expectedBoardId) || actualBoardId.equals(expectedBoardKey);
+    }
+
+    private static int requireStableExternalPort(int port) {
+        if (port == 0) {
+            throw new TrelloBoardSetupException(
+                    "setup_managed_port_required",
+                    "Managed local setup needs a stable HTTP port. Remove SYMPHONY_HTTP_PORT/QUARKUS_HTTP_PORT=0 or set a positive workflow server.port.");
+        }
+        return port;
     }
 
     private static Optional<String> optionalString(Object value) {

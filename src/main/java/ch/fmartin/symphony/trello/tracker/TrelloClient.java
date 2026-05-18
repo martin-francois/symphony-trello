@@ -72,8 +72,7 @@ public class TrelloClient implements TrackerClient {
                 Map.of("fields", CARD_FIELDS, "filter", "open"));
         return payload.stream()
                 .map(card -> normalize(card, context, config))
-                .filter(Optional::isPresent)
-                .map(Optional::get)
+                .flatMap(Optional::stream)
                 .filter(card -> isActive(card, config) && !isTerminal(card, config))
                 .toList();
     }
@@ -87,8 +86,7 @@ public class TrelloClient implements TrackerClient {
                 Map.of("fields", CARD_FIELDS, "filter", "all"));
         List<Card> normalized = boardCards.stream()
                 .map(card -> normalize(card, context, config))
-                .filter(Optional::isPresent)
-                .map(Optional::get)
+                .flatMap(Optional::stream)
                 .filter(card -> isTerminal(card, config))
                 .collect(Collectors.toCollection(ArrayList::new));
 
@@ -103,8 +101,7 @@ public class TrelloClient implements TrackerClient {
                     Map.of("fields", CARD_FIELDS, "filter", "all"));
             listCards.stream()
                     .map(card -> normalize(card, context, config))
-                    .filter(Optional::isPresent)
-                    .map(Optional::get)
+                    .flatMap(Optional::stream)
                     .filter(card -> isTerminal(card, config))
                     .forEach(normalized::add);
         }
@@ -139,20 +136,17 @@ public class TrelloClient implements TrackerClient {
                 .filter(list -> !list.closed())
                 .filter(list -> StateNames.normalize(list.name()).equals(StateNames.normalize(inProgressState)))
                 .findFirst();
-        if (target.isEmpty()) {
-            throw new TrelloException(
-                    "trello_in_progress_list_not_found",
-                    "Configured in-progress list was not found on the Trello board");
-        }
-        if (!shouldMoveBeforeDispatch(config, card, target.get())) {
+        BoardList targetList = target.orElseThrow(() -> new TrelloException(
+                "trello_in_progress_list_not_found", "Configured in-progress list was not found on the Trello board"));
+        if (!shouldMoveBeforeDispatch(config, card, targetList)) {
             return card;
         }
 
-        moveCardToList(config, card.id(), target.get().id());
+        moveCardToList(config, card.id(), targetList.id());
         CardLookupResult refreshed =
                 fetchCardStatesForPromptByIds(config, List.of(card.id())).get(card.id());
         if (refreshed instanceof CardLookupResult.Found found) {
-            if (!target.get().id().equals(found.card().listId())) {
+            if (!targetList.id().equals(found.card().listId())) {
                 throw new TrelloException(
                         "trello_in_progress_move_not_visible",
                         "Card was not visible in the configured in-progress list after Trello accepted the move");
@@ -258,12 +252,16 @@ public class TrelloClient implements TrackerClient {
         Optional<Map<String, Object>> workpad = actionMaps(deepPayload).stream()
                 .filter(action -> commentText(action).startsWith(WORKPAD_MARKER))
                 .findFirst();
-        if (workpad.isEmpty()) {
-            return recentPayload;
-        }
+        return workpad.map(existingWorkpad -> payloadWithWorkpadAction(recentPayload, recentActions, existingWorkpad))
+                .orElse(recentPayload);
+    }
 
+    private static Map<String, Object> payloadWithWorkpadAction(
+            Map<String, Object> recentPayload,
+            List<Map<String, Object>> recentActions,
+            Map<String, Object> existingWorkpad) {
         List<Map<String, Object>> mergedActions = new ArrayList<>();
-        mergedActions.add(workpad.get());
+        mergedActions.add(existingWorkpad);
         mergedActions.addAll(recentActions);
         Map<String, Object> mergedPayload = new LinkedHashMap<>(recentPayload);
         mergedPayload.put("actions", mergedActions);
@@ -627,9 +625,10 @@ public class TrelloClient implements TrackerClient {
         Optional<Duration> retryAfter = response == null
                 ? Optional.empty()
                 : response.headers().firstValue("Retry-After").flatMap(TrelloClient::parseRetryAfter);
-        if (retryAfter.isPresent()) {
-            return retryAfter.get();
-        }
+        return retryAfter.orElseGet(() -> exponentialBackoffWithJitter(config, attempt));
+    }
+
+    private static Duration exponentialBackoffWithJitter(EffectiveConfig config, int attempt) {
         long base = config.tracker().apiRetryBaseDelay().toMillis();
         long jitter = ThreadLocalRandom.current().nextLong(Math.max(1L, base));
         return Duration.ofMillis((base * (1L << Math.min(attempt - 1, 8))) + jitter);

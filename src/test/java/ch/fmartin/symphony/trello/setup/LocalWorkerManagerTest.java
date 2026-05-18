@@ -72,7 +72,7 @@ class LocalWorkerManagerTest {
                         any());
         assertThat(Files.readString(Files.list(fixture.paths.stateHome())
                         .filter(path -> path.getFileName().toString().endsWith(".pid"))
-                        .findFirst()
+                        .findAny()
                         .orElseThrow()))
                 .isEqualTo("42");
     }

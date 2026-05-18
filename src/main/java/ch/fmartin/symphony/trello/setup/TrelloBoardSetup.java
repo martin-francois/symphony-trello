@@ -472,11 +472,10 @@ public final class TrelloBoardSetup {
 
         Path absolute = workflowPath.toAbsolutePath().normalize();
         if (force) {
-            Optional<Integer> existingPort = replaceableWorkflowServerPortReservation(absolute);
-            if (existingPort.isPresent()
-                    && workflowServerPortConflict(absolute, existingPort.get()).isEmpty()) {
-                return existingPort.get();
-            }
+            return replaceableWorkflowServerPortReservation(absolute)
+                    .filter(existingPort ->
+                            workflowServerPortConflict(absolute, existingPort).isEmpty())
+                    .orElseGet(() -> nextAvailableWorkflowServerPort(absolute));
         }
         return nextAvailableWorkflowServerPort(absolute);
     }
@@ -487,18 +486,18 @@ public final class TrelloBoardSetup {
         }
 
         Path target = workflowPath.toAbsolutePath().normalize();
-        Optional<Path> conflictingWorkflow = workflowServerPortConflict(target, requestedPort);
-        if (conflictingWorkflow.isPresent()) {
+        workflowServerPortConflict(target, requestedPort).ifPresent(conflictingWorkflow -> {
             throw new TrelloBoardSetupException(
                     "setup_server_port_conflict",
-                    "--server-port %d is already used by %s".formatted(requestedPort, conflictingWorkflow.get()));
-        }
+                    "--server-port %d is already used by %s".formatted(requestedPort, conflictingWorkflow));
+        });
     }
 
     private Optional<Path> workflowServerPortConflict(Path target, int requestedPort) {
         for (Path candidate : siblingWorkflowFiles(target)) {
-            Optional<Integer> reservedPort = workflowServerPortReservation(candidate);
-            if (reservedPort.isPresent() && reservedPort.get() == requestedPort) {
+            if (workflowServerPortReservation(candidate)
+                    .filter(port -> port == requestedPort)
+                    .isPresent()) {
                 return Optional.of(candidate);
             }
         }
@@ -541,12 +540,13 @@ public final class TrelloBoardSetup {
     }
 
     private Optional<Integer> workflowServerPortReservation(Path workflowPath) {
-        Optional<Map<String, Object>> frontMatter = readWorkflowFrontMatter(workflowPath);
-        if (frontMatter.isEmpty() || !hasRealTrelloBoardId(frontMatter.get())) {
-            return Optional.empty();
-        }
+        return readWorkflowFrontMatter(workflowPath)
+                .filter(TrelloBoardSetup::hasRealTrelloBoardId)
+                .flatMap(workflowConfig -> workflowServerPortReservation(workflowConfig, workflowPath));
+    }
 
-        Object server = frontMatter.get().get("server");
+    private Optional<Integer> workflowServerPortReservation(Map<String, Object> workflowConfig, Path workflowPath) {
+        Object server = workflowConfig.get("server");
         if (server instanceof Map<?, ?> serverMap && serverMap.containsKey("port")) {
             int port = parseServerPort(serverMap.get("port"), workflowPath);
             return port == 0 ? Optional.empty() : Optional.of(port);
@@ -568,18 +568,14 @@ public final class TrelloBoardSetup {
         }
         try {
             String text = Files.readString(workflowPath, StandardCharsets.UTF_8);
-            Optional<String> frontMatter = frontMatter(text);
-            if (frontMatter.isEmpty()) {
-                return Optional.empty();
-            }
-            return Optional.of(yaml.readValue(frontMatter.get(), MAP_TYPE));
+            return readYamlFrontMatter(text);
         } catch (IOException e) {
             throw new TrelloBoardSetupException(
                     "setup_workflow_scan_failed", "Could not read workflow file: " + workflowPath, e);
         }
     }
 
-    private static Optional<String> frontMatter(String text) {
+    private Optional<Map<String, Object>> readYamlFrontMatter(String text) throws IOException {
         if (!text.startsWith("---")) {
             return Optional.empty();
         }
@@ -591,7 +587,7 @@ public final class TrelloBoardSetup {
         if (end < 0) {
             return Optional.empty();
         }
-        return Optional.of(text.substring(firstLineEnd + 1, end));
+        return Optional.of(yaml.readValue(text.substring(firstLineEnd + 1, end), MAP_TYPE));
     }
 
     private static boolean hasRealTrelloBoardId(Map<String, Object> frontMatter) {

@@ -475,7 +475,7 @@ public class SymphonyOrchestrator {
         String cardId = running.values().stream()
                 .filter(entry -> entry.workerIdentity.equals(event.workerIdentity()))
                 .map(entry -> entry.cardId)
-                .findFirst()
+                .findAny()
                 .orElse(null);
         if (cardId == null) {
             return;
@@ -808,10 +808,10 @@ public class SymphonyOrchestrator {
         RuntimeSnapshot snapshot = snapshot();
         Optional<RuntimeSnapshot.RunningRow> runningRow = snapshot.running().stream()
                 .filter(row -> row.cardIdentifier().equals(cardIdentifier))
-                .findFirst();
+                .findAny();
         Optional<RuntimeSnapshot.RetryRow> retryRow = snapshot.retrying().stream()
                 .filter(row -> row.cardIdentifier().equals(cardIdentifier))
-                .findFirst();
+                .findAny();
         if (runningRow.isEmpty() && retryRow.isEmpty()) {
             return Optional.empty();
         }

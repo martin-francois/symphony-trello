@@ -11,18 +11,7 @@ class ConnectedBoardManifestTest {
     @Test
     void findByBoardHandlesMissingBoardKey() {
         // given
-        ConnectedBoard board = new ConnectedBoard(
-                "board-1",
-                null,
-                "Queue",
-                "https://trello.example/board-1",
-                Path.of("WORKFLOW.md"),
-                Path.of(".env"),
-                Path.of("workspaces"),
-                ConfigDefaults.DEFAULT_SERVER_PORT,
-                false,
-                List.of(),
-                false);
+        ConnectedBoard board = board("board-1", null, "Queue", Path.of("WORKFLOW.md"));
         ConnectedBoardManifest manifest = new ConnectedBoardManifest(List.of(board));
 
         // when
@@ -34,5 +23,49 @@ class ConnectedBoardManifestTest {
         assertThat(byName).contains(board);
         assertThat(byId).contains(board);
         assertThat(missing).isEmpty();
+    }
+
+    @Test
+    void findByBoardKeepsManifestOrderWhenNamesAreDuplicated() {
+        // given
+        ConnectedBoard first = board("board-1", "first", "Queue", Path.of("WORKFLOW.first.md"));
+        ConnectedBoard second = board("board-2", "second", "Queue", Path.of("WORKFLOW.second.md"));
+        ConnectedBoardManifest manifest = new ConnectedBoardManifest(List.of(first, second));
+
+        // when
+        var selected = manifest.findByBoard("Queue");
+
+        // then
+        assertThat(selected).contains(first);
+    }
+
+    @Test
+    void findByWorkflowKeepsManifestOrderWhenWorkflowPathsAreDuplicated() {
+        // given
+        Path workflow = Path.of("WORKFLOW.md");
+        ConnectedBoard first = board("board-1", "first", "First Queue", workflow);
+        ConnectedBoard second = board("board-2", "second", "Second Queue", workflow);
+        ConnectedBoardManifest manifest = new ConnectedBoardManifest(List.of(first, second));
+
+        // when
+        var selected = manifest.findByWorkflow(workflow);
+
+        // then
+        assertThat(selected).contains(first);
+    }
+
+    private static ConnectedBoard board(String boardId, String boardKey, String boardName, Path workflowPath) {
+        return new ConnectedBoard(
+                boardId,
+                boardKey,
+                boardName,
+                "https://trello.example/" + boardId,
+                workflowPath,
+                Path.of(".env"),
+                Path.of("workspaces"),
+                ConfigDefaults.DEFAULT_SERVER_PORT,
+                false,
+                List.of(),
+                false);
     }
 }

@@ -15,22 +15,13 @@ final class GitHubConfigurator {
             throws IOException {
         terminal.info("");
         terminal.info("GitHub integration");
-        if (options.githubMode().isPresent()) {
-            boolean enabled = options.githubMode().orElseThrow();
-            if (!enabled) {
-                terminal.info("  OK  GitHub integration skipped");
-                printGithubLaterCommands(terminal);
-                return GitHubIntegration.DISABLED;
-            }
-            if (options.nonInteractive() && !prerequisites.githubCli().available()) {
-                throw new TrelloBoardSetupException(
-                        "setup_github_cli_required", "Install the GitHub CLI `gh`, then rerun setup-local --github.");
-            }
-            if (options.nonInteractive() && !prerequisites.githubAuth().available()) {
-                throw new TrelloBoardSetupException(
-                        "setup_github_auth_required",
-                        "GitHub auth is required for --github in non-interactive setup. Run `gh auth login`, then rerun setup-local --github.");
-            }
+        if (options.githubMode().filter(enabled -> !enabled).isPresent()) {
+            terminal.info("  OK  GitHub integration skipped");
+            printGithubLaterCommands(terminal);
+            return GitHubIntegration.DISABLED;
+        }
+        if (options.githubMode().filter(Boolean::booleanValue).isPresent()) {
+            requireNonInteractiveGithubPrerequisites(options, prerequisites);
             return configure(options, prerequisites, terminal);
         }
         if (prerequisites.githubAuth().available()) {
@@ -55,6 +46,19 @@ final class GitHubConfigurator {
             return GitHubIntegration.DISABLED;
         }
         return configure(options, prerequisites, terminal);
+    }
+
+    private static void requireNonInteractiveGithubPrerequisites(
+            LocalSetup.Options options, Prerequisites prerequisites) {
+        if (options.nonInteractive() && !prerequisites.githubCli().available()) {
+            throw new TrelloBoardSetupException(
+                    "setup_github_cli_required", "Install the GitHub CLI `gh`, then rerun setup-local --github.");
+        }
+        if (options.nonInteractive() && !prerequisites.githubAuth().available()) {
+            throw new TrelloBoardSetupException(
+                    "setup_github_auth_required",
+                    "GitHub auth is required for --github in non-interactive setup. Run `gh auth login`, then rerun setup-local --github.");
+        }
     }
 
     private GitHubIntegration configure(LocalSetup.Options options, Prerequisites prerequisites, Terminal terminal)

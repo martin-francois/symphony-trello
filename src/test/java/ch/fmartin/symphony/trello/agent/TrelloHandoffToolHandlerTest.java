@@ -214,6 +214,44 @@ class TrelloHandoffToolHandlerTest {
     }
 
     @Test
+    void updatesFirstExistingWorkpadCommentWhenMultipleAreVisible() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(
+                cardJson(
+                        """
+                [
+                  {
+                    "id":"action-workpad",
+                    "data":{"text":"## Codex Workpad\\n\\nVisible first"},
+                    "date":"2026-05-05T00:00:00.000Z",
+                    "memberCreator":{"fullName":"Codex"}
+                  },
+                  {
+                    "id":"action-workpad-older",
+                    "data":{"text":"## Codex Workpad\\n\\nVisible second"},
+                    "date":"2026-05-04T00:00:00.000Z",
+                    "memberCreator":{"fullName":"Codex"}
+                  }
+                ]
+                """));
+
+        // when
+        var result = handler.handle(
+                config(List.of("Review"), List.of()),
+                TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
+                json.createObjectNode()
+                        .put("tool", TrelloHandoffToolHandler.UPSERT_WORKPAD)
+                        .set("arguments", json.createObjectNode().put("text", "## Codex Workpad\n\nUpdated plan")));
+
+        // then
+        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("contentItems").get(0).path("text").asText()).contains("action-workpad");
+        assertThat(updatedCommentText.get()).isEqualTo("## Codex Workpad\n\nUpdated plan");
+        assertThat(commentText.get()).isNull();
+    }
+
+    @Test
     void failsWorkpadUpsertWhenCardRefreshFailsWithoutCreatingDuplicate() {
         // given
         TrelloHandoffToolHandler handler = handler();

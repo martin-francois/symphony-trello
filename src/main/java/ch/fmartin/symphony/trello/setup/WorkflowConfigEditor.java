@@ -31,32 +31,38 @@ final class WorkflowConfigEditor {
         try {
             FrontMatter frontMatter = read(board.workflowPath());
             SequencedMap<String, Object> yaml = parseYaml(frontMatter);
-            Optional<String> configuredBoardId = boardId(yaml);
-            if (configuredBoardId.isEmpty()) {
-                return WorkflowValidation.warn("Workflow file is missing tracker.board_id for \"" + board.boardName()
-                        + "\": " + board.workflowPath());
+            WorkflowValidation boardIdValidation = boardId(yaml)
+                    .map(configuredBoardId -> validateBoardId(board, configuredBoardId))
+                    .orElseGet(() -> WorkflowValidation.warn("Workflow file is missing tracker.board_id for \""
+                            + board.boardName() + "\": " + board.workflowPath()));
+            if (!boardIdValidation.ok()) {
+                return boardIdValidation;
             }
-            String boardId = configuredBoardId.orElseThrow();
-            if (!boardId.equals(board.boardId()) && !boardId.equals(board.boardKey())) {
-                return WorkflowValidation.warn("Workflow tracker.board_id does not match the connected board for \""
-                        + board.boardName() + "\": expected " + board.boardId() + " or " + board.boardKey()
-                        + " but found " + boardId);
-            }
-            Optional<Integer> configuredServerPort = serverPort(yaml);
-            if (configuredServerPort.isEmpty()) {
-                return WorkflowValidation.warn("Workflow file is missing server.port for \"" + board.boardName()
-                        + "\": " + board.workflowPath());
-            }
-            if (configuredServerPort.orElseThrow() != board.serverPort()) {
-                return WorkflowValidation.warn("Workflow server.port does not match the connected board for \""
-                        + board.boardName() + "\": expected " + board.serverPort() + " but found "
-                        + configuredServerPort.orElseThrow());
-            }
-            return WorkflowValidation.valid();
+            return serverPort(yaml)
+                    .map(configuredServerPort -> validateServerPort(board, configuredServerPort))
+                    .orElseGet(() -> WorkflowValidation.warn("Workflow file is missing server.port for \""
+                            + board.boardName() + "\": " + board.workflowPath()));
         } catch (IOException | TrelloBoardSetupException e) {
             return WorkflowValidation.warn("Workflow file is not readable or has invalid YAML for \""
                     + board.boardName() + "\": " + board.workflowPath() + " (" + e.getMessage() + ")");
         }
+    }
+
+    private static WorkflowValidation validateBoardId(ConnectedBoard board, String configuredBoardId) {
+        if (!configuredBoardId.equals(board.boardId()) && !configuredBoardId.equals(board.boardKey())) {
+            return WorkflowValidation.warn("Workflow tracker.board_id does not match the connected board for \""
+                    + board.boardName() + "\": expected " + board.boardId() + " or " + board.boardKey()
+                    + " but found " + configuredBoardId);
+        }
+        return WorkflowValidation.valid();
+    }
+
+    private static WorkflowValidation validateServerPort(ConnectedBoard board, int configuredServerPort) {
+        if (configuredServerPort != board.serverPort()) {
+            return WorkflowValidation.warn("Workflow server.port does not match the connected board for \""
+                    + board.boardName() + "\": expected " + board.serverPort() + " but found " + configuredServerPort);
+        }
+        return WorkflowValidation.valid();
     }
 
     Optional<Integer> serverPort(Path workflowPath) {

@@ -128,26 +128,37 @@ public class TrelloHandoffToolHandler {
         if (!(lookup instanceof CardLookupResult.Found found)) {
             return failure("trello_workpad_refresh_failed", "Could not refresh the current Trello card.");
         }
-        Card currentCard = found.card();
-        Optional<Card.Comment> existing = currentCard.comments().stream()
-                .filter(comment -> comment.text() != null && comment.text().startsWith(WORKPAD_MARKER))
-                .findFirst();
-        if (existing.isPresent()) {
-            Card.Comment workpad = existing.get();
-            if (blank(workpad.id())) {
-                return failure("trello_workpad_missing_action_id", "Existing workpad comment has no Trello action id.");
-            }
-            trello.updateComment(config, workpad.id(), text);
-            return success(Map.of("status", "workpad_updated", "card_id", card.id(), "action_id", workpad.id()));
+        return upsertWorkpadComment(config, card.id(), found.card(), text);
+    }
+
+    private ObjectNode upsertWorkpadComment(EffectiveConfig config, String cardId, Card currentCard, String text) {
+        return currentCard.comments().stream()
+                .filter(this::isWorkpadComment)
+                .findFirst()
+                .map(workpad -> updateExistingWorkpad(config, cardId, workpad, text))
+                .orElseGet(() -> createWorkpad(config, cardId, currentCard, text));
+    }
+
+    private boolean isWorkpadComment(Card.Comment comment) {
+        return comment.text() != null && comment.text().startsWith(WORKPAD_MARKER);
+    }
+
+    private ObjectNode updateExistingWorkpad(EffectiveConfig config, String cardId, Card.Comment workpad, String text) {
+        if (blank(workpad.id())) {
+            return failure("trello_workpad_missing_action_id", "Existing workpad comment has no Trello action id.");
         }
+        trello.updateComment(config, workpad.id(), text);
+        return success(Map.of("status", "workpad_updated", "card_id", cardId, "action_id", workpad.id()));
+    }
+
+    private ObjectNode createWorkpad(EffectiveConfig config, String cardId, Card currentCard, String text) {
         if (currentCard.comments().size() >= TrelloClient.WORKPAD_COMMENT_ACTION_LIMIT) {
             return failure(
                     "trello_workpad_comment_window_incomplete",
                     "Cannot safely create a workpad because the fetched Trello comment window is full and an older workpad may exist.");
         }
-        Map<String, Object> created = trello.addComment(config, card.id(), text);
-        return success(
-                Map.of("status", "workpad_created", "card_id", card.id(), "action_id", string(created.get("id"))));
+        Map<String, Object> created = trello.addComment(config, cardId, text);
+        return success(Map.of("status", "workpad_created", "card_id", cardId, "action_id", string(created.get("id"))));
     }
 
     private static String workpadText(String text) {
@@ -202,20 +213,17 @@ public class TrelloHandoffToolHandler {
         List<TrelloClient.BoardList> openLists =
                 lists.stream().filter(list -> !list.closed()).toList();
         Optional<TrelloClient.BoardList> target = !blank(listId)
-                ? openLists.stream().filter(list -> list.id().equals(listId)).findFirst()
+                ? openLists.stream().filter(list -> list.id().equals(listId)).findAny()
                 : openLists.stream()
                         .filter(list -> StateNames.normalize(list.name()).equals(StateNames.normalize(listName)))
                         .findFirst();
 
-        if (target.isEmpty()) {
-            return Optional.of(new BoardListMatch(null, "Destination list is not open on the configured board."));
-        }
-        TrelloClient.BoardList list = target.get();
-        if (allowedById(config, list) || allowedByName(config, list)) {
-            return Optional.of(new BoardListMatch(list, null));
-        }
-        return Optional.of(
-                new BoardListMatch(null, "Destination list is not included in the configured Trello move allowlist."));
+        return target.map(list -> allowedById(config, list) || allowedByName(config, list)
+                        ? new BoardListMatch(list, null)
+                        : new BoardListMatch(
+                                null, "Destination list is not included in the configured Trello move allowlist."))
+                .or(() ->
+                        Optional.of(new BoardListMatch(null, "Destination list is not open on the configured board.")));
     }
 
     private boolean allowedById(EffectiveConfig config, TrelloClient.BoardList list) {
