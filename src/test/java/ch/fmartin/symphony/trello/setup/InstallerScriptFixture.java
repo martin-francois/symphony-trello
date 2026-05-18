@@ -310,7 +310,7 @@ final class InstallerScriptFixture {
 	                    exit 0
 	                  fi
 	                fi
-	                if [[ "$*" == *"ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain start"* || "$*" == *"ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain status"* || "$*" == *"ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain stop"* || "$*" == *"ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain logs"* ]]; then
+	                if [[ "$*" == *"ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain start"* || "$*" == *"ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain status"* || "$*" == *"ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain stop"* || "$*" == *"ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain logs"* || "$*" == *"ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain diagnostics"* ]]; then
 	                  cli_args=()
 	                  found_main=false
 	                  for value in "$@"; do
@@ -491,7 +491,8 @@ final class InstallerScriptFixture {
 	                  if (($args -join " ") -like "*TrelloBoardSetupMain start*" -or
 	                      ($args -join " ") -like "*TrelloBoardSetupMain status*" -or
 	                      ($args -join " ") -like "*TrelloBoardSetupMain stop*" -or
-	                      ($args -join " ") -like "*TrelloBoardSetupMain logs*") {
+	                      ($args -join " ") -like "*TrelloBoardSetupMain logs*" -or
+	                      ($args -join " ") -like "*TrelloBoardSetupMain diagnostics*") {
 	                    $mainIndex = [Array]::IndexOf($args, "ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain")
 	                    $cliArgs = $args[($mainIndex + 1)..($args.Count - 1)]
 	                    $command = $cliArgs[0]
@@ -549,7 +550,8 @@ final class InstallerScriptFixture {
                 new String[] {"start", "--help"},
                 new String[] {"stop", "--help"},
                 new String[] {"status", "--help"},
-                new String[] {"logs", "--help"});
+                new String[] {"logs", "--help"},
+                new String[] {"diagnostics", "--help"});
     }
 
     static String[] commandWithPrefix(String executable, String[] arguments) {

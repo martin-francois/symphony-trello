@@ -1,8 +1,13 @@
 package ch.fmartin.symphony.trello.setup;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import java.io.ByteArrayOutputStream;
@@ -34,6 +39,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 class TrelloBoardSetupMainTest {
     private static final String CONFIG_DIR_PROPERTY = "symphony.trello.config.dir";
     private static final String SHELL_PROPERTY = "symphony.trello.shell";
+    private static final String CLI_COMMAND_PROPERTY = "symphony.trello.command";
 
     private HttpServer server;
     private final List<String> createdLists = new ArrayList<>();
@@ -188,6 +194,395 @@ class TrelloBoardSetupMainTest {
         assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
     }
 
+    @Test
+    void diagnosticsWritesSanitizedJsonOutputFile() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("diagnostics-config");
+        Path workspaceRoot = tempDir.resolve("diagnostics-workspaces");
+        Path stateHome = tempDir.resolve("diagnostics-state");
+        Path workflow = configDir.resolve("WORKFLOW.private.md");
+        Path output = tempDir.resolve("Users")
+                .resolve("Jane Doe")
+                .resolve("private checkout")
+                .resolve("diagnostics.json");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  board_id: "private-board-id"
+                server:
+                  port: 19183
+                ---
+                Body
+                """,
+                StandardCharsets.UTF_8);
+        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
+                        "private-board-id",
+                        "private-key",
+                        "Private Board",
+                        "https://trello.com/b/private-key/private-board",
+                        workflow,
+                        configDir.resolve(".env"),
+                        workspaceRoot,
+                        19183,
+                        false,
+                        List.of(tempDir.resolve("client checkout")),
+                        false))));
+        Files.writeString(
+                stateHome.resolve("WORKFLOW.private.err"),
+                "token=secret-token\npath=" + tempDir.resolve("client checkout") + "\n",
+                StandardCharsets.UTF_8);
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+
+        // when
+        int exitCode = run(
+                stdout,
+                stderr,
+                "diagnostics",
+                "--config-dir",
+                configDir.toString(),
+                "--workspace-root",
+                workspaceRoot.toString(),
+                "--state-home",
+                stateHome.toString(),
+                "--board",
+                "Private Board",
+                "--output",
+                output.toString(),
+                "--json");
+
+        // then
+        assertThat(exitCode).isZero();
+        assertThat(stdout.toString(StandardCharsets.UTF_8))
+                .contains("Diagnostics written.", "Review it before sharing")
+                .doesNotContain(
+                        output.toString(),
+                        output.toAbsolutePath().normalize().toString(),
+                        tempDir.toString(),
+                        "Jane Doe",
+                        "private checkout");
+        assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
+        assertThat(output)
+                .content(StandardCharsets.UTF_8)
+                .contains("\"format\":\"markdown\"", "Symphony for Trello Diagnostics", "board_count:** 1", "19183")
+                .doesNotContain(
+                        "Private Board",
+                        "private-board-id",
+                        "private-key",
+                        "secret-token",
+                        "Jane Doe",
+                        "client checkout",
+                        "private checkout",
+                        tempDir.toString());
+    }
+
+    @Test
+    void diagnosticsPrivateContextWritesPrivateTroubleshootingContextWithoutPrintingOutputPath() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("private-context-config");
+        Path workspaceRoot = tempDir.resolve("private-context-workspaces");
+        Path stateHome = tempDir.resolve("private-context-state");
+        Path workflow = configDir.resolve("WORKFLOW.private.md");
+        Path env = configDir.resolve(".env");
+        Path output = tempDir.resolve("Users")
+                .resolve("Jane Doe")
+                .resolve("private checkout")
+                .resolve("private-context.json");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.writeString(workflow, workflowWithBoardAndPort("private-board-id", 19184), StandardCharsets.UTF_8);
+        Files.writeString(env, "TRELLO_API_TOKEN=secret-token\n", StandardCharsets.UTF_8);
+        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
+                        "private-board-id",
+                        "private-key",
+                        "Private Board",
+                        "https://trello.com/b/private-key/private-board",
+                        workflow,
+                        env,
+                        workspaceRoot,
+                        19184,
+                        false,
+                        List.of(tempDir.resolve("client checkout")),
+                        false))));
+        ManagedProcessStore.ManagedProcessFiles logs = new ManagedProcessStore(stateHome).files(workflow);
+        Files.writeString(logs.stderrLog(), "secret log content\n", StandardCharsets.UTF_8);
+
+        // when
+        CliRunResult result = runCli(
+                "diagnostics",
+                "--config-dir",
+                configDir.toString(),
+                "--workspace-root",
+                workspaceRoot.toString(),
+                "--state-home",
+                stateHome.toString(),
+                "--board",
+                "Private Board",
+                "--show-private-context",
+                "--output",
+                output.toString(),
+                "--json");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("Diagnostics written.", "contains private diagnostics context")
+                .stdoutDoesNotContain(output.toString(), tempDir.toString(), "Jane Doe", "private checkout")
+                .stderrEmpty();
+        assertThat(output)
+                .content(StandardCharsets.UTF_8)
+                .contains(
+                        "\"format\":\"markdown\"",
+                        "Symphony for Trello Private Context",
+                        "Do not paste this output into public issues",
+                        "Private Board",
+                        "private-board-id",
+                        "private-key",
+                        "https://trello.com/b/private-key/private-board",
+                        workflow.toString(),
+                        env.toString(),
+                        workspaceRoot.toString(),
+                        logs.stderrLog().toString(),
+                        "19184")
+                .doesNotContain("secret-token", "secret log content");
+    }
+
+    @Test
+    void diagnosticsRejectsBoardAndWorkflowTogetherWithoutWritingReport() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("diagnostics-selector-config");
+        Path workspaceRoot = tempDir.resolve("diagnostics-selector-workspaces");
+        Path stateHome = tempDir.resolve("diagnostics-selector-state");
+        Path workflowA = configDir.resolve("WORKFLOW.board-a.md");
+        Path workflowB = configDir.resolve("WORKFLOW.board-b.md");
+        Path output = tempDir.resolve("diagnostics-selector-output.txt");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.writeString(workflowA, workflowWithBoardAndPort("board-a-id", 19188), StandardCharsets.UTF_8);
+        Files.writeString(workflowB, workflowWithBoardAndPort("board-b-id", 19189), StandardCharsets.UTF_8);
+        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(
+                        new ConnectedBoard(
+                                "board-a-id",
+                                "board-a-key",
+                                "Board A",
+                                "https://trello.com/b/board-a-key/board-a",
+                                workflowA,
+                                configDir.resolve(".env"),
+                                workspaceRoot,
+                                19188,
+                                false,
+                                List.of(),
+                                false),
+                        new ConnectedBoard(
+                                "board-b-id",
+                                "board-b-key",
+                                "Board B",
+                                "https://trello.com/b/board-b-key/board-b",
+                                workflowB,
+                                configDir.resolve(".env"),
+                                workspaceRoot,
+                                19189,
+                                false,
+                                List.of(),
+                                false))));
+        ManagedProcessStore store = new ManagedProcessStore(stateHome);
+        Files.writeString(store.files(workflowA).stdoutLog(), "board A log\n", StandardCharsets.UTF_8);
+        Files.writeString(store.files(workflowB).stdoutLog(), "board B log\n", StandardCharsets.UTF_8);
+
+        // when
+        CliRunResult result = runCli(
+                "diagnostics",
+                "--config-dir",
+                configDir.toString(),
+                "--workspace-root",
+                workspaceRoot.toString(),
+                "--state-home",
+                stateHome.toString(),
+                "--board",
+                "Board A",
+                "--workflow",
+                workflowB.toString(),
+                "--output",
+                output.toString());
+
+        // then
+        result.assertFailure(2)
+                .stdoutDoesNotContain(
+                        "# Symphony for Trello Diagnostics", "board A log", "board B log", "19188", "19189")
+                .stderrContains("setup_failed code=setup_invalid_arguments", "mutually exclusive")
+                .stderrDoesNotContain("Board A", "Board B", workflowB.toString(), tempDir.toString());
+        assertThat(output).doesNotExist();
+    }
+
+    @Test
+    void diagnosticsRejectsAmbiguousBoardNameWithoutWritingReport() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("diagnostics-ambiguous-board-config");
+        Path workspaceRoot = tempDir.resolve("diagnostics-ambiguous-board-workspaces");
+        Path stateHome = tempDir.resolve("diagnostics-ambiguous-board-state");
+        Path workflowA = configDir.resolve("WORKFLOW.duplicate-a.md");
+        Path workflowB = configDir.resolve("WORKFLOW.duplicate-b.md");
+        Path output = tempDir.resolve("diagnostics-ambiguous-board-output.txt");
+        String privateBoardName = "Private Duplicate Board";
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.writeString(workflowA, workflowWithBoardAndPort("private-board-a-id", 19190), StandardCharsets.UTF_8);
+        Files.writeString(workflowB, workflowWithBoardAndPort("private-board-b-id", 19191), StandardCharsets.UTF_8);
+        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(
+                        new ConnectedBoard(
+                                "private-board-a-id",
+                                "private-a-key",
+                                privateBoardName,
+                                "https://trello.com/b/private-a-key/private-a",
+                                workflowA,
+                                configDir.resolve(".env"),
+                                workspaceRoot,
+                                19190,
+                                false,
+                                List.of(),
+                                false),
+                        new ConnectedBoard(
+                                "private-board-b-id",
+                                "private-b-key",
+                                privateBoardName,
+                                "https://trello.com/b/private-b-key/private-b",
+                                workflowB,
+                                configDir.resolve(".env"),
+                                workspaceRoot,
+                                19191,
+                                false,
+                                List.of(),
+                                false))));
+        ManagedProcessStore store = new ManagedProcessStore(stateHome);
+        Files.writeString(store.files(workflowA).stdoutLog(), "private board A log\n", StandardCharsets.UTF_8);
+        Files.writeString(store.files(workflowB).stdoutLog(), "private board B log\n", StandardCharsets.UTF_8);
+
+        // when
+        CliRunResult result = runCli(
+                "diagnostics",
+                "--config-dir",
+                configDir.toString(),
+                "--workspace-root",
+                workspaceRoot.toString(),
+                "--state-home",
+                stateHome.toString(),
+                "--board",
+                privateBoardName,
+                "--output",
+                output.toString());
+
+        // then
+        result.assertFailure(2)
+                .stdoutDoesNotContain(
+                        "# Symphony for Trello Diagnostics",
+                        "Troubleshooting report written",
+                        "private board A log",
+                        "private board B log",
+                        "19190",
+                        "19191")
+                .stderrContains("setup_failed code=setup_invalid_arguments", "Multiple connected boards match --board")
+                .stderrDoesNotContain(
+                        privateBoardName,
+                        "private-board-a-id",
+                        "private-board-b-id",
+                        "private-a-key",
+                        "private-b-key",
+                        "https://trello.com/b/private-a-key/private-a",
+                        "https://trello.com/b/private-b-key/private-b",
+                        workflowA.toString(),
+                        workflowB.toString(),
+                        "private board A log",
+                        "private board B log",
+                        tempDir.toString());
+        assertThat(output).doesNotExist();
+    }
+
+    @Test
+    void diagnosticsOutputWriteFailureDoesNotLeakPrivatePath() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("diagnostics-output-failure-config");
+        Path privatePathComponent = tempDir.resolve("Jane Doe");
+        Path output = privatePathComponent.resolve("diagnostics.txt");
+        Files.createDirectories(configDir);
+        Files.writeString(privatePathComponent, "not a directory", StandardCharsets.UTF_8);
+
+        // when
+        CliRunResult result =
+                runCli("diagnostics", "--config-dir", configDir.toString(), "--output", output.toString());
+
+        // then
+        result.assertFailure(2)
+                .stdoutDoesNotContain("# Symphony for Trello Diagnostics")
+                .stderrContains("Could not write diagnostics output")
+                .stderrDoesNotContain(
+                        output.toString(), privatePathComponent.toString(), tempDir.toString(), "Jane Doe");
+    }
+
+    @Test
+    void startReportsMissingWorkerCredentialsBeforeLaunchingWorker() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("start-missing-credentials-config");
+        Path workspaceRoot = tempDir.resolve("start-missing-credentials-workspaces");
+        Path stateHome = tempDir.resolve("start-missing-credentials-state");
+        Path appHome = tempDir.resolve("start-missing-credentials-app");
+        Path workflow = configDir.resolve("WORKFLOW.queue.md");
+        Path env = configDir.resolve(".env");
+        Files.createDirectories(configDir);
+        Files.writeString(workflow, workflowWithBoardAndPort("board-start-id", 19192), StandardCharsets.UTF_8);
+        Files.writeString(env, "# no Trello credentials\n", StandardCharsets.UTF_8);
+        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
+                        "board-start-id",
+                        "board-start-key",
+                        "Queue",
+                        "https://trello.com/b/board-start-key/queue",
+                        workflow,
+                        env,
+                        workspaceRoot,
+                        19192,
+                        false,
+                        List.of(),
+                        false))));
+
+        // when
+        MainProcessResult result = runMainProcessWithoutTrelloCredentials(
+                tempDir,
+                "start",
+                "--config-dir",
+                configDir.toString(),
+                "--workspace-root",
+                workspaceRoot.toString(),
+                "--state-home",
+                stateHome.toString(),
+                "--app-home",
+                appHome.toString(),
+                "--board",
+                "Queue",
+                "--env",
+                env.toString());
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isEqualTo(2);
+        assertThat(result.stdout()).doesNotContain("Started Symphony", "Troubleshooting report written");
+        assertThat(result.stderr())
+                .contains(
+                        "setup_failed code=setup_worker_missing_trello_credentials",
+                        "Missing Trello credentials for worker start.",
+                        "Next step: Set these Trello credential variables",
+                        "TRELLO_API_KEY=<your Trello API key>",
+                        "TRELLO_API_TOKEN=<your Trello token>",
+                        "File:",
+                        env.toAbsolutePath().normalize().toString())
+                .doesNotContain("--key", "--token", "referenced by the workflow");
+    }
+
     @ParameterizedTest(name = "{0} help")
     @MethodSource("directCommandHelp")
     void printsDirectCommandHelp(String command, String expectedUsage) {
@@ -240,9 +635,10 @@ class TrelloBoardSetupMainTest {
     }
 
     @Test
-    void createsRecommendedBoardAndPrintsNextSteps() {
+    void createsRecommendedBoardAndPrintsNextSteps() throws Exception {
         // given
         Path workflow = tempDir.resolve("generated workflow.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.next-steps");
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
 
@@ -261,6 +657,8 @@ class TrelloBoardSetupMainTest {
                 "Symphony Work Queue",
                 "--workflow",
                 workflow.toString(),
+                "--env",
+                env.toString(),
                 "--server-port",
                 "18081");
 
@@ -274,16 +672,28 @@ class TrelloBoardSetupMainTest {
                 .content(StandardCharsets.UTF_8)
                 .contains("board_id: \"abc123\"")
                 .contains("port: 18081");
+        ConnectedBoardManifest manifest = new ConnectedBoardRepository(tempDir.resolve("connected-boards.json")).load();
+        assertThat(manifest.boards()).singleElement().satisfies(board -> {
+            assertThat(board.boardId()).isEqualTo("board-1");
+            assertThat(board.boardKey()).isEqualTo("abc123");
+            assertThat(board.boardName()).isEqualTo("Symphony Work Queue");
+            assertThat(board.boardUrl()).isEqualTo("https://trello.com/b/abc123/board");
+            assertThat(board.workflowPath()).isEqualTo(workflow.toAbsolutePath().normalize());
+            assertThat(board.envPath()).isEqualTo(env.toAbsolutePath().normalize());
+            assertThat(board.workspaceRoot())
+                    .isEqualTo(TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT
+                            .toAbsolutePath()
+                            .normalize());
+            assertThat(board.serverPort()).isEqualTo(18081);
+        });
         assertThat(stdout.toString(StandardCharsets.UTF_8))
                 .contains("Created Trello board: Symphony Work Queue")
+                .contains("Board identifier for WORKFLOW.md: abc123")
                 .contains("Wrote workflow:")
                 .contains("HTTP status port: 18081")
                 .contains(
                         "symphony-trello start --env "
-                                + shellQuote(LocalEnvironment.defaultDotenv()
-                                        .toAbsolutePath()
-                                        .normalize()
-                                        .toString())
+                                + shellQuote(env.toAbsolutePath().normalize().toString())
                                 + " --workflow "
                                 + shellQuote(
                                         workflow.toAbsolutePath().normalize().toString()),
@@ -295,9 +705,747 @@ class TrelloBoardSetupMainTest {
     }
 
     @Test
+    void newBoardPreflightsConnectedBoardManifestBeforeCreatingTrelloBoard() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("manifest-preflight.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.manifest-preflight");
+        Files.writeString(tempDir.resolve("connected-boards.json"), "{not-json", StandardCharsets.UTF_8);
+
+        // when
+        CliRunResult result = runCli(
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--name",
+                "Manifest Preflight Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString());
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_manifest_unavailable",
+                        "Could not read or write the connected-board manifest",
+                        "Next step: Check that the workflow directory is writable and connected-boards.json is valid JSON.")
+                .stdoutDoesNotContain(
+                        "Created Trello board", "Saving Trello credentials", "Troubleshooting report written");
+        assertThat(createdBoardName.get()).isNull();
+        assertThat(workflow).doesNotExist();
+        assertThat(env).doesNotExist();
+    }
+
+    @Test
+    void newBoardPreflightsUnusableConnectedBoardManifestBeforeCreatingTrelloBoard() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("unusable-manifest-preflight.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.unusable-manifest-preflight");
+        Files.writeString(tempDir.resolve("connected-boards.json"), "{\"boards\":[{}]}", StandardCharsets.UTF_8);
+
+        // when
+        CliRunResult result = runCli(
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--name",
+                "Unusable Manifest Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString());
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_manifest_unavailable",
+                        "Could not read or write the connected-board manifest",
+                        "Next step: Check that the workflow directory is writable and connected-boards.json is valid JSON.")
+                .stdoutDoesNotContain(
+                        "Created Trello board", "Saving Trello credentials", "Troubleshooting report written");
+        assertThat(createdBoardName.get()).isNull();
+        assertThat(workflow).doesNotExist();
+        assertThat(env).doesNotExist();
+    }
+
+    @Test
+    void newBoardPersistsAbsolutePathsWhenWorkflowAndEnvOptionsAreRelative() throws Exception {
+        // given
+        Path relativeDirectory = Path.of(
+                "target", "trello-board-setup-main-test", tempDir.getFileName().toString());
+        Path relativeWorkflow = relativeDirectory.resolve("relative.WORKFLOW.md");
+        Path relativeEnv = relativeDirectory.resolve(".env.relative");
+
+        // when
+        CliRunResult result = runCli(
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--name",
+                "Relative Paths Queue",
+                "--workflow",
+                relativeWorkflow.toString(),
+                "--env",
+                relativeEnv.toString());
+
+        // then
+        result.assertSuccess();
+        ConnectedBoardManifest manifest =
+                new ConnectedBoardRepository(relativeDirectory.resolve("connected-boards.json")).load();
+        assertThat(manifest.boards()).singleElement().satisfies(board -> {
+            assertThat(board.workflowPath())
+                    .isEqualTo(relativeWorkflow.toAbsolutePath().normalize());
+            assertThat(board.envPath()).isEqualTo(relativeEnv.toAbsolutePath().normalize());
+            assertThat(board.workspaceRoot())
+                    .isEqualTo(TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT
+                            .toAbsolutePath()
+                            .normalize());
+        });
+    }
+
+    @Test
+    void importBoardStopsReplacedManifestWorkflowBeforeSavingReplacement() throws Exception {
+        // given
+        Path oldWorkflow = tempDir.resolve("old-existing-board.WORKFLOW.md");
+        Path newWorkflow = tempDir.resolve("new-existing-board.WORKFLOW.md");
+        Path oldEnv = tempDir.resolve(".env.old-existing");
+        Path newEnv = tempDir.resolve(".env.new-existing");
+        Files.writeString(oldWorkflow, "old workflow", StandardCharsets.UTF_8);
+        ConnectedBoard oldBoard = new ConnectedBoard(
+                "board-1",
+                "existing",
+                "Existing Board",
+                "https://trello.com/b/existing/board",
+                oldWorkflow.toAbsolutePath().normalize(),
+                oldEnv.toAbsolutePath().normalize(),
+                TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT.toAbsolutePath().normalize(),
+                18080,
+                true,
+                List.of(),
+                false);
+        new ConnectedBoardRepository(tempDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(oldBoard)));
+        LocalWorkerManager workerManager = mock(LocalWorkerManager.class);
+        TrelloBoardSetup boardSetup =
+                new TrelloBoardSetup(new ObjectMapper(), () -> TrelloBoardSetup.CodexModelDefaults.fallback());
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+
+        // when
+        int exitCode = TrelloBoardSetupMain.run(
+                new String[] {
+                    "import-board",
+                    "--endpoint",
+                    endpoint(),
+                    "--key",
+                    "key",
+                    "--token",
+                    "token",
+                    "--board",
+                    "https://trello.com/b/input/existing-board",
+                    "--active",
+                    "Queue for Codex",
+                    "--terminal",
+                    "Released",
+                    "--workflow",
+                    newWorkflow.toString(),
+                    "--env",
+                    newEnv.toString(),
+                    "--force"
+                },
+                new TrelloBoardSetupService(boardSetup, workerManager, Map.of()),
+                new LocalSetup(boardSetup, new ProcessCommandRunner()),
+                workerManager,
+                new PrintStream(stdout, true, StandardCharsets.UTF_8),
+                new PrintStream(stderr, true, StandardCharsets.UTF_8));
+
+        // then
+        assertThat(exitCode).isZero();
+        verify(workerManager).stop(any(LocalWorkerPaths.class), eq(oldBoard), any(PrintStream.class));
+        ConnectedBoardManifest manifest = new ConnectedBoardRepository(tempDir.resolve("connected-boards.json")).load();
+        assertThat(manifest.boards()).singleElement().satisfies(board -> {
+            assertThat(board.boardId()).isEqualTo("board-1");
+            assertThat(board.workflowPath())
+                    .isEqualTo(newWorkflow.toAbsolutePath().normalize());
+        });
+    }
+
+    @Test
+    void newBoardNextStepsUseWrapperCommandWhenProvided() {
+        // given
+        Path workflow = tempDir.resolve("wrapped-command.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.wrapped-command");
+        Path command = tempDir.resolve("bin/symphony-trello");
+        String previousCommand = System.getProperty(CLI_COMMAND_PROPERTY);
+        System.setProperty(CLI_COMMAND_PROPERTY, command.toString());
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+
+        // when
+        int exitCode;
+        try {
+            exitCode = run(
+                    stdout,
+                    stderr,
+                    "new-board",
+                    "--endpoint",
+                    endpoint(),
+                    "--key",
+                    "key",
+                    "--token",
+                    "token",
+                    "--name",
+                    "Wrapped Command Queue",
+                    "--workflow",
+                    workflow.toString(),
+                    "--env",
+                    env.toString());
+        } finally {
+            if (previousCommand == null) {
+                System.clearProperty(CLI_COMMAND_PROPERTY);
+            } else {
+                System.setProperty(CLI_COMMAND_PROPERTY, previousCommand);
+            }
+        }
+
+        // then
+        assertThat(exitCode).isZero();
+        assertThat(stdout.toString(StandardCharsets.UTF_8))
+                .contains(
+                        shellQuote(command.toString())
+                                + " start --env "
+                                + shellQuote(env.toAbsolutePath().normalize().toString())
+                                + " --workflow "
+                                + shellQuote(
+                                        workflow.toAbsolutePath().normalize().toString()),
+                        shellQuote(command.toString())
+                                + " logs --workflow "
+                                + shellQuote(
+                                        workflow.toAbsolutePath().normalize().toString()))
+                .doesNotContain("\n  symphony-trello start", "\n  symphony-trello logs");
+        assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
+    }
+
+    @Test
+    void newBoardPersistsCommandLineCredentialsToRuntimeEnvFile() {
+        // given
+        Path workflow = tempDir.resolve("runtime-env.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.runtime");
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+
+        // when
+        int exitCode = run(
+                stdout,
+                stderr,
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "direct-key",
+                "--token",
+                "direct-token",
+                "--name",
+                "Runtime Env Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString());
+
+        // then
+        assertThat(exitCode).isZero();
+        assertThat(env)
+                .content(StandardCharsets.UTF_8)
+                .contains("TRELLO_API_KEY=direct-key", "TRELLO_API_TOKEN=direct-token");
+        assertThat(stdout.toString(StandardCharsets.UTF_8))
+                .contains(
+                        "Saving Trello credentials...",
+                        "Credentials saved: " + env.toAbsolutePath().normalize(),
+                        "symphony-trello start --env "
+                                + shellQuote(env.toAbsolutePath().normalize().toString())
+                                + " --workflow "
+                                + shellQuote(
+                                        workflow.toAbsolutePath().normalize().toString()))
+                .doesNotContain("direct-token");
+        assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
+    }
+
+    @Test
+    void newBoardPersistsCommandLineCredentialsToDefaultRuntimeEnvFile() throws Exception {
+        // given
+        Path workingDir = tempDir.resolve("default-runtime-env-working-dir");
+        Path workflow = tempDir.resolve("default-runtime-env.WORKFLOW.md");
+        Path env = workingDir.resolve(".env");
+        Files.createDirectories(workingDir);
+
+        // when
+        MainProcessResult result = runMainProcess(
+                workingDir,
+                Map.of(),
+                List.of("TRELLO_API_KEY", "TRELLO_API_TOKEN", "SYMPHONY_TRELLO_DOTENV"),
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "direct-key",
+                "--token",
+                "direct-token",
+                "--name",
+                "Default Runtime Env Queue",
+                "--workflow",
+                workflow.toString());
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isZero();
+        assertThat(env)
+                .content(StandardCharsets.UTF_8)
+                .contains("TRELLO_API_KEY=direct-key", "TRELLO_API_TOKEN=direct-token");
+        assertThat(result.stdout())
+                .contains(
+                        "Saving Trello credentials...",
+                        "symphony-trello start --env "
+                                + shellQuote(env.toAbsolutePath().normalize().toString())
+                                + " --workflow "
+                                + shellQuote(
+                                        workflow.toAbsolutePath().normalize().toString()))
+                .doesNotContain("direct-token");
+        assertThat(result.stderr()).isEmpty();
+    }
+
+    @Test
+    void newBoardUsesSelectedRuntimeEnvFileAsCredentialSource() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("runtime-env-source.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.runtime");
+        Files.writeString(env, "TRELLO_API_KEY=dotenv-key\nTRELLO_API_TOKEN=dotenv-token\n", StandardCharsets.UTF_8);
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+
+        // when
+        int exitCode = run(
+                stdout,
+                stderr,
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--name",
+                "Runtime Env Source Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString());
+
+        // then
+        assertThat(exitCode).isZero();
+        assertThat(createdBoardName).hasValue("Runtime Env Source Queue");
+        assertThat(env)
+                .content(StandardCharsets.UTF_8)
+                .isEqualTo("TRELLO_API_KEY=dotenv-key\nTRELLO_API_TOKEN=dotenv-token\n");
+        assertThat(stdout.toString(StandardCharsets.UTF_8))
+                .contains("symphony-trello start --env "
+                        + shellQuote(env.toAbsolutePath().normalize().toString()))
+                .doesNotContain("Saving Trello credentials", "dotenv-key", "dotenv-token");
+        assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
+    }
+
+    @Test
+    void newBoardPersistsCommandLineCredentialsToConfiguredRuntimeEnvFile() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("configured-runtime-env.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.runtime");
+
+        // when
+        MainProcessResult result = runMainProcess(
+                Path.of(".").toAbsolutePath().normalize(),
+                Map.of("SYMPHONY_TRELLO_DOTENV", env.toString()),
+                List.of(),
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "direct-key",
+                "--token",
+                "direct-token",
+                "--name",
+                "Configured Runtime Env Queue",
+                "--workflow",
+                workflow.toString());
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isZero();
+        assertThat(createdBoardName).hasValue("Configured Runtime Env Queue");
+        assertThat(env)
+                .content(StandardCharsets.UTF_8)
+                .contains("TRELLO_API_KEY=direct-key", "TRELLO_API_TOKEN=direct-token");
+        assertThat(result.stdout())
+                .contains(
+                        "Saving Trello credentials...",
+                        "symphony-trello start --env "
+                                + shellQuote(env.toAbsolutePath().normalize().toString())
+                                + " --workflow "
+                                + shellQuote(
+                                        workflow.toAbsolutePath().normalize().toString()))
+                .doesNotContain("direct-token");
+        assertThat(result.stderr()).isEmpty();
+    }
+
+    @Test
+    void newBoardRejectsUnsafeConfiguredRuntimeEnvPathBeforeWritingCredentials() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("unsafe-configured-runtime-env.WORKFLOW.md");
+        Path env = tempDir.resolve("README.md");
+        Files.writeString(env, "readme", StandardCharsets.UTF_8);
+
+        // when
+        MainProcessResult result = runMainProcess(
+                Path.of(".").toAbsolutePath().normalize(),
+                Map.of("SYMPHONY_TRELLO_DOTENV", env.toString()),
+                List.of(),
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "direct-key",
+                "--token",
+                "direct-token",
+                "--name",
+                "Configured Runtime Env Queue",
+                "--workflow",
+                workflow.toString());
+
+        // then
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(createdBoardName.get()).isNull();
+        assertThat(workflow).doesNotExist();
+        assertThat(env).content(StandardCharsets.UTF_8).isEqualTo("readme");
+        assertThat(result.stdout()).doesNotContain("Created Trello board", "Troubleshooting report written");
+        assertThat(result.stderr())
+                .contains("setup_failed code=setup_env_path_not_ignored", ".env or .env.NAME")
+                .doesNotContain("direct-key", "direct-token");
+    }
+
+    @Test
+    void newBoardRejectsUnsafeConfiguredRuntimeEnvPathEvenWhenCredentialsComeFromEnvironment() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("unsafe-configured-runtime-env-with-env-credentials.WORKFLOW.md");
+        Path env = tempDir.resolve("README.md");
+        Files.writeString(env, "readme", StandardCharsets.UTF_8);
+
+        // when
+        MainProcessResult result = runMainProcess(
+                Path.of(".").toAbsolutePath().normalize(),
+                Map.of(
+                        "SYMPHONY_TRELLO_DOTENV",
+                        env.toString(),
+                        "TRELLO_API_KEY",
+                        "environment-key",
+                        "TRELLO_API_TOKEN",
+                        "environment-token"),
+                List.of(),
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--name",
+                "Configured Runtime Env Queue",
+                "--workflow",
+                workflow.toString());
+
+        // then
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(createdBoardName.get()).isNull();
+        assertThat(workflow).doesNotExist();
+        assertThat(env).content(StandardCharsets.UTF_8).isEqualTo("readme");
+        assertThat(result.stdout()).doesNotContain("Created Trello board", "Troubleshooting report written");
+        assertThat(result.stderr())
+                .contains("setup_failed code=setup_env_path_not_ignored", ".env or .env.NAME")
+                .doesNotContain("environment-key", "environment-token");
+    }
+
+    @Test
+    void newBoardRejectsUnwritableRuntimeEnvFileBeforeCreatingBoard() throws Exception {
+        // given
+        Path notDirectory = tempDir.resolve("not-a-directory");
+        Files.writeString(notDirectory, "not a directory", StandardCharsets.UTF_8);
+        Path env = notDirectory.resolve(".env.runtime");
+        Path workflow = tempDir.resolve("unwritable-runtime-env.WORKFLOW.md");
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+
+        // when
+        int exitCode = run(
+                stdout,
+                stderr,
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "direct-key",
+                "--token",
+                "direct-token",
+                "--name",
+                "Runtime Env Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString());
+
+        // then
+        assertThat(exitCode).isEqualTo(2);
+        assertThat(createdBoardName.get()).isNull();
+        assertThat(workflow).doesNotExist();
+        assertThat(stdout.toString(StandardCharsets.UTF_8))
+                .doesNotContain("Created Trello board", "Troubleshooting report written");
+        assertThat(stderr.toString(StandardCharsets.UTF_8))
+                .contains("setup_failed code=setup_env_write_failed", "Choose a writable .env or .env.NAME file")
+                .doesNotContain(env.toString(), notDirectory.toString(), tempDir.toString());
+    }
+
+    @Test
+    void newBoardRejectsUnsafeRuntimeEnvPathBeforeWritingCredentials() throws Exception {
+        // given
+        Path env = tempDir.resolve("README.md");
+        Path workflow = tempDir.resolve("unsafe-runtime-env.WORKFLOW.md");
+        Files.writeString(env, "readme", StandardCharsets.UTF_8);
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+
+        // when
+        int exitCode = run(
+                stdout,
+                stderr,
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "direct-key",
+                "--token",
+                "direct-token",
+                "--name",
+                "Runtime Env Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString());
+
+        // then
+        assertThat(exitCode).isEqualTo(2);
+        assertThat(createdBoardName.get()).isNull();
+        assertThat(workflow).doesNotExist();
+        assertThat(env).content(StandardCharsets.UTF_8).isEqualTo("readme");
+        assertThat(stdout.toString(StandardCharsets.UTF_8))
+                .doesNotContain("Created Trello board", "Troubleshooting report written");
+        assertThat(stderr.toString(StandardCharsets.UTF_8))
+                .contains("setup_failed code=setup_env_path_not_ignored", ".env or .env.NAME")
+                .doesNotContain("direct-key", "direct-token");
+    }
+
+    @Test
+    void newBoardRejectsUnsafeRuntimeEnvPathEvenWhenCredentialsWouldNotBePersisted() throws Exception {
+        // given
+        Path env = tempDir.resolve("README.md");
+        Path workflow = tempDir.resolve("unsafe-runtime-env-without-direct-credentials.WORKFLOW.md");
+        Files.writeString(env, "readme", StandardCharsets.UTF_8);
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+
+        // when
+        int exitCode = run(
+                stdout,
+                stderr,
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--name",
+                "Runtime Env Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString());
+
+        // then
+        assertThat(exitCode).isEqualTo(2);
+        assertThat(createdBoardName.get()).isNull();
+        assertThat(workflow).doesNotExist();
+        assertThat(env).content(StandardCharsets.UTF_8).isEqualTo("readme");
+        assertThat(stdout.toString(StandardCharsets.UTF_8))
+                .doesNotContain("Created Trello board", "Troubleshooting report written");
+        assertThat(stderr.toString(StandardCharsets.UTF_8))
+                .contains("setup_failed code=setup_env_path_not_ignored", ".env or .env.NAME")
+                .doesNotContain("setup_missing_api_key");
+    }
+
+    @Test
+    void newBoardRejectsMalformedRuntimeEnvFileBeforeCreatingBoard() throws Exception {
+        // given
+        Path env = tempDir.resolve(".env.runtime");
+        Files.write(env, new byte[] {(byte) 0xc3, (byte) 0x28});
+        Path workflow = tempDir.resolve("malformed-runtime-env.WORKFLOW.md");
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+
+        // when
+        int exitCode = run(
+                stdout,
+                stderr,
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "direct-key",
+                "--token",
+                "direct-token",
+                "--name",
+                "Runtime Env Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString());
+
+        // then
+        assertThat(exitCode).isEqualTo(2);
+        assertThat(createdBoardName.get()).isNull();
+        assertThat(workflow).doesNotExist();
+        assertThat(stdout.toString(StandardCharsets.UTF_8))
+                .doesNotContain("Created Trello board", "Troubleshooting report written");
+        assertThat(stderr.toString(StandardCharsets.UTF_8))
+                .contains("setup_failed code=setup_env_write_failed", "Choose a writable .env or .env.NAME file")
+                .doesNotContain(env.toString(), tempDir.toString(), "direct-key", "direct-token");
+    }
+
+    @Test
+    void newBoardRejectsMultilineRuntimeCredentialBeforeCreatingBoard() {
+        // given
+        Path env = tempDir.resolve(".env.runtime");
+        Path workflow = tempDir.resolve("multiline-runtime-env.WORKFLOW.md");
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+
+        // when
+        int exitCode = run(
+                stdout,
+                stderr,
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "direct-key\ninvalid",
+                "--token",
+                "direct-token",
+                "--name",
+                "Runtime Env Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString());
+
+        // then
+        assertThat(exitCode).isEqualTo(2);
+        assertThat(createdBoardName.get()).isNull();
+        assertThat(env).doesNotExist();
+        assertThat(workflow).doesNotExist();
+        assertThat(stdout.toString(StandardCharsets.UTF_8))
+                .doesNotContain("Created Trello board", "Troubleshooting report written");
+        assertThat(stderr.toString(StandardCharsets.UTF_8))
+                .contains("setup_failed code=setup_env_value_multiline")
+                .doesNotContain("direct-key", "direct-token");
+    }
+
+    @Test
+    void newBoardMissingCredentialsHintUsesSelectedRuntimeEnvFile() throws Exception {
+        // given
+        Path env = tempDir.resolve(".env.runtime");
+        Path workflow = tempDir.resolve("missing-credentials-runtime-env.WORKFLOW.md");
+        Files.writeString(env, "# no credentials yet\n", StandardCharsets.UTF_8);
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+
+        // when
+        int exitCode = run(
+                stdout,
+                stderr,
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--name",
+                "Runtime Env Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString());
+
+        // then
+        assertThat(exitCode).isEqualTo(2);
+        assertThat(createdBoardName.get()).isNull();
+        assertThat(workflow).doesNotExist();
+        assertThat(stdout.toString(StandardCharsets.UTF_8)).doesNotContain("Troubleshooting report written");
+        assertThat(stderr.toString(StandardCharsets.UTF_8))
+                .contains(
+                        "setup_failed code=setup_missing_api_key",
+                        env.toAbsolutePath().normalize().toString())
+                .doesNotContain(LocalEnvironment.defaultDotenv()
+                        .toAbsolutePath()
+                        .normalize()
+                        .toString());
+    }
+
+    @Test
+    void newBoardDoesNotWriteRuntimeEnvWhenWorkflowPreflightFails() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("existing-runtime-env.WORKFLOW.md");
+        Files.writeString(workflow, "existing workflow", StandardCharsets.UTF_8);
+        Path env = tempDir.resolve(".env.runtime");
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+
+        // when
+        int exitCode = run(
+                stdout,
+                stderr,
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "direct-key",
+                "--token",
+                "direct-token",
+                "--name",
+                "Runtime Env Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString());
+
+        // then
+        assertThat(exitCode).isEqualTo(2);
+        assertThat(createdBoardName.get()).isNull();
+        assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo("existing workflow");
+        assertThat(env).doesNotExist();
+        assertThat(stdout.toString(StandardCharsets.UTF_8))
+                .doesNotContain("Created Trello board", "Saving Trello credentials", "Troubleshooting report written");
+        assertThat(stderr.toString(StandardCharsets.UTF_8))
+                .contains("setup_failed code=setup_workflow_exists")
+                .contains(workflow.toAbsolutePath().normalize() + "\nRe-run with --force")
+                .doesNotContain(workflow.toAbsolutePath().normalize() + ".")
+                .doesNotContain("direct-key", "direct-token");
+    }
+
+    @Test
     void newBoardWritesResolverBackedCodexModelDefaults() {
         // given
         Path workflow = tempDir.resolve("resolver-backed-model.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.resolver-backed-model");
 
         // when
         CliRunResult result = runCli(
@@ -312,7 +1460,9 @@ class TrelloBoardSetupMainTest {
                 "--name",
                 "Resolver Backed Queue",
                 "--workflow",
-                workflow.toString());
+                workflow.toString(),
+                "--env",
+                env.toString());
 
         // then
         result.assertSuccess();
@@ -328,6 +1478,7 @@ class TrelloBoardSetupMainTest {
         Path configDirectory = tempDir.resolve("config");
         Files.createDirectories(configDirectory);
         Path defaultWorkflow = configDirectory.resolve("WORKFLOW.md");
+        Path env = configDirectory.resolve(".env.second-board");
         Files.writeString(defaultWorkflow, "existing", StandardCharsets.UTF_8);
         String previousConfigDir = System.getProperty(CONFIG_DIR_PROPERTY);
         System.setProperty(CONFIG_DIR_PROPERTY, configDirectory.toString());
@@ -348,7 +1499,9 @@ class TrelloBoardSetupMainTest {
                     "--token",
                     "token",
                     "--name",
-                    "Second Board");
+                    "Second Board",
+                    "--env",
+                    env.toString());
 
         } finally {
             if (previousConfigDir == null) {
@@ -364,6 +1517,17 @@ class TrelloBoardSetupMainTest {
         assertThat(configDirectory.resolve("WORKFLOW.second-board.md"))
                 .content(StandardCharsets.UTF_8)
                 .contains("board_id: \"abc123\"");
+        ConnectedBoardManifest manifest =
+                new ConnectedBoardRepository(configDirectory.resolve("connected-boards.json")).load();
+        assertThat(manifest.boards()).singleElement().satisfies(board -> {
+            assertThat(board.boardName()).isEqualTo("Second Board");
+            assertThat(board.workflowPath())
+                    .isEqualTo(configDirectory
+                            .resolve("WORKFLOW.second-board.md")
+                            .toAbsolutePath()
+                            .normalize());
+            assertThat(board.envPath()).isEqualTo(env.toAbsolutePath().normalize());
+        });
         assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
     }
 
@@ -371,8 +1535,12 @@ class TrelloBoardSetupMainTest {
     void printsPowerShellSafeNextStepsWhenRequestedByWrapper() {
         // given
         Path workflow = tempDir.resolve("generated O'Brien.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.powershell");
+        Path command = tempDir.resolve("bin/Symphony O'Brien/symphony-trello.ps1");
         String previousShell = System.getProperty(SHELL_PROPERTY);
+        String previousCommand = System.getProperty(CLI_COMMAND_PROPERTY);
         System.setProperty(SHELL_PROPERTY, "powershell");
+        System.setProperty(CLI_COMMAND_PROPERTY, command.toString());
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
 
@@ -392,12 +1560,19 @@ class TrelloBoardSetupMainTest {
                     "--name",
                     "PowerShell Work Queue",
                     "--workflow",
-                    workflow.toString());
+                    workflow.toString(),
+                    "--env",
+                    env.toString());
         } finally {
             if (previousShell == null) {
                 System.clearProperty(SHELL_PROPERTY);
             } else {
                 System.setProperty(SHELL_PROPERTY, previousShell);
+            }
+            if (previousCommand == null) {
+                System.clearProperty(CLI_COMMAND_PROPERTY);
+            } else {
+                System.setProperty(CLI_COMMAND_PROPERTY, previousCommand);
             }
         }
 
@@ -405,15 +1580,17 @@ class TrelloBoardSetupMainTest {
         assertThat(exitCode).isZero();
         assertThat(stdout.toString(StandardCharsets.UTF_8))
                 .contains(
-                        "symphony-trello start --env "
-                                + powerShellQuote(LocalEnvironment.defaultDotenv()
-                                        .toAbsolutePath()
-                                        .normalize()
-                                        .toString())
+                        "& "
+                                + powerShellQuote(command.toString())
+                                + " start --env "
+                                + powerShellQuote(
+                                        env.toAbsolutePath().normalize().toString())
                                 + " --workflow "
                                 + powerShellQuote(
                                         workflow.toAbsolutePath().normalize().toString()),
-                        "symphony-trello logs --workflow "
+                        "& "
+                                + powerShellQuote(command.toString())
+                                + " logs --workflow "
                                 + powerShellQuote(
                                         workflow.toAbsolutePath().normalize().toString()));
         assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
@@ -423,6 +1600,7 @@ class TrelloBoardSetupMainTest {
     void printsCmdSafeNextStepsWhenRequestedByCmdShim() {
         // given
         Path workflow = tempDir.resolve("generated command prompt.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.cmd");
         String previousShell = System.getProperty(SHELL_PROPERTY);
         System.setProperty(SHELL_PROPERTY, "cmd");
         var stdout = new ByteArrayOutputStream();
@@ -444,7 +1622,9 @@ class TrelloBoardSetupMainTest {
                     "--name",
                     "Command Prompt Work Queue",
                     "--workflow",
-                    workflow.toString());
+                    workflow.toString(),
+                    "--env",
+                    env.toString());
         } finally {
             if (previousShell == null) {
                 System.clearProperty(SHELL_PROPERTY);
@@ -458,10 +1638,7 @@ class TrelloBoardSetupMainTest {
         assertThat(stdout.toString(StandardCharsets.UTF_8))
                 .contains(
                         "symphony-trello start --env "
-                                + cmdQuote(LocalEnvironment.defaultDotenv()
-                                        .toAbsolutePath()
-                                        .normalize()
-                                        .toString())
+                                + cmdQuote(env.toAbsolutePath().normalize().toString())
                                 + " --workflow "
                                 + cmdQuote(workflow.toAbsolutePath().normalize().toString()),
                         "symphony-trello logs --workflow "
@@ -473,6 +1650,7 @@ class TrelloBoardSetupMainTest {
     void createsNonGithubBoardWithoutMergingList() {
         // given
         Path workflow = tempDir.resolve("non-github.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.non-github");
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
 
@@ -491,6 +1669,8 @@ class TrelloBoardSetupMainTest {
                 "Local Work Queue",
                 "--workflow",
                 workflow.toString(),
+                "--env",
+                env.toString(),
                 "--no-github");
 
         // then
@@ -513,6 +1693,7 @@ class TrelloBoardSetupMainTest {
         Path workflow = tempDir.resolve("WORKFLOW.md");
         Files.writeString(workflow, "existing workflow", StandardCharsets.UTF_8);
         Path fallback = tempDir.resolve("WORKFLOW.symmetry-queue.md");
+        Path env = tempDir.resolve(".env.explicit-workflow");
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
 
@@ -530,7 +1711,9 @@ class TrelloBoardSetupMainTest {
                 "--name",
                 "Symmetry Queue",
                 "--workflow",
-                workflow.toString());
+                workflow.toString(),
+                "--env",
+                env.toString());
 
         // then
         assertThat(exitCode).isEqualTo(2);
@@ -543,9 +1726,10 @@ class TrelloBoardSetupMainTest {
     }
 
     @Test
-    void importsExistingBoardWithExplicitListsAndPrintsSelection() {
+    void importsExistingBoardWithExplicitListsAndPrintsSelection() throws Exception {
         // given
         Path workflow = tempDir.resolve("imported workflow.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.imported");
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
 
@@ -569,7 +1753,9 @@ class TrelloBoardSetupMainTest {
                 "--terminal",
                 "Released,",
                 "--workflow",
-                workflow.toString());
+                workflow.toString(),
+                "--env",
+                env.toString());
 
         // then
         assertThat(exitCode).isZero();
@@ -579,18 +1765,30 @@ class TrelloBoardSetupMainTest {
                 .contains("- \"Doing\"")
                 .contains("- \"Released\"")
                 .doesNotContain("- \" Doing\"", "- \"\"");
+        ConnectedBoardManifest manifest = new ConnectedBoardRepository(tempDir.resolve("connected-boards.json")).load();
+        assertThat(manifest.boards()).singleElement().satisfies(board -> {
+            assertThat(board.boardId()).isEqualTo("board-1");
+            assertThat(board.boardKey()).isEqualTo("existing");
+            assertThat(board.boardName()).isEqualTo("Existing Board");
+            assertThat(board.boardUrl()).isEqualTo("https://trello.com/b/existing/board");
+            assertThat(board.workflowPath()).isEqualTo(workflow.toAbsolutePath().normalize());
+            assertThat(board.envPath()).isEqualTo(env.toAbsolutePath().normalize());
+            assertThat(board.workspaceRoot())
+                    .isEqualTo(TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT
+                            .toAbsolutePath()
+                            .normalize());
+            assertThat(board.serverPort()).isEqualTo(TrelloBoardSetup.DEFAULT_SERVER_PORT);
+        });
         assertThat(stdout.toString(StandardCharsets.UTF_8))
                 .contains("Imported Trello board: Existing Board")
+                .contains("Board identifier for WORKFLOW.md: existing")
                 .contains("Active lists: Queue for Codex, Doing")
                 .contains("In-progress list: Doing")
                 .contains("Terminal lists: Released")
                 .contains(
                         "Blocked list: Blocked",
                         "symphony-trello start --env "
-                                + shellQuote(LocalEnvironment.defaultDotenv()
-                                        .toAbsolutePath()
-                                        .normalize()
-                                        .toString())
+                                + shellQuote(env.toAbsolutePath().normalize().toString())
                                 + " --workflow "
                                 + shellQuote(
                                         workflow.toAbsolutePath().normalize().toString()),
@@ -612,6 +1810,30 @@ class TrelloBoardSetupMainTest {
         // then
         result.assertFailure(exitCode).stderrContains(expectedError);
         assertThat(result.stdout()).isEmpty();
+    }
+
+    @Test
+    void missingTrelloApiKeyPrintsHintWithoutTroubleshootingReport() throws Exception {
+        // given
+        Path workingDir = tempDir.resolve("missing-credentials-run");
+        Files.createDirectories(workingDir);
+
+        // when
+        MainProcessResult result =
+                runMainProcessWithoutTrelloCredentials(workingDir, "new-board", "--name", "Test Board 1");
+
+        // then
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.stdout()).isEmpty();
+        assertThat(result.stderr())
+                .contains(
+                        "setup_failed code=setup_missing_api_key message=Missing Trello API key",
+                        "Next step: Provide Trello credentials with --key and --token")
+                .doesNotContain(
+                        "Troubleshooting report written",
+                        "Open a GitHub issue",
+                        "Issue body:",
+                        "# Symphony for Trello Setup Failure");
     }
 
     private static Stream<Arguments> invalidCliArgumentScenarios() {
@@ -703,7 +1925,8 @@ class TrelloBoardSetupMainTest {
         return Stream.of(
                 Arguments.of("new-board", "Usage: symphony-trello new-board"),
                 Arguments.of("import-board", "Usage: symphony-trello import-board"),
-                Arguments.of("list-workspaces", "Usage: symphony-trello list-workspaces"));
+                Arguments.of("list-workspaces", "Usage: symphony-trello list-workspaces"),
+                Arguments.of("diagnostics", "Usage: symphony-trello diagnostics"));
     }
 
     private static Stream<Arguments> commandsThatDoNotWriteWorkflows() {
@@ -711,6 +1934,7 @@ class TrelloBoardSetupMainTest {
                 Arguments.of("root help", new String[] {"--help"}),
                 Arguments.of("root version", new String[] {"--version"}),
                 Arguments.of("status help", new String[] {"status", "--help"}),
+                Arguments.of("diagnostics help", new String[] {"diagnostics", "--help"}),
                 Arguments.of("setup-local help", new String[] {"setup-local", "--help"}));
     }
 
@@ -723,7 +1947,8 @@ class TrelloBoardSetupMainTest {
                 Arguments.of((Object) new String[] {"setup-local", "configure-github", "--version"}),
                 Arguments.of((Object) new String[] {"new-board", "--version"}),
                 Arguments.of((Object) new String[] {"import-board", "--version"}),
-                Arguments.of((Object) new String[] {"list-workspaces", "--version"}));
+                Arguments.of((Object) new String[] {"list-workspaces", "--version"}),
+                Arguments.of((Object) new String[] {"diagnostics", "--version"}));
     }
 
     private static Stream<Arguments> mainProcessExitCases() {
@@ -763,6 +1988,17 @@ class TrelloBoardSetupMainTest {
     }
 
     private static MainProcessResult runMainProcess(String... arguments) throws IOException, InterruptedException {
+        return runMainProcess(Path.of(".").toAbsolutePath().normalize(), Map.of(), List.of(), arguments);
+    }
+
+    private static MainProcessResult runMainProcessWithoutTrelloCredentials(Path workingDir, String... arguments)
+            throws IOException, InterruptedException {
+        return runMainProcess(workingDir, Map.of(), List.of("TRELLO_API_KEY", "TRELLO_API_TOKEN"), arguments);
+    }
+
+    private static MainProcessResult runMainProcess(
+            Path workingDir, Map<String, String> environment, List<String> environmentToRemove, String... arguments)
+            throws IOException, InterruptedException {
         List<String> command = new ArrayList<>();
         command.add(Path.of(System.getProperty("java.home"), "bin", javaExecutable())
                 .toString());
@@ -770,7 +2006,10 @@ class TrelloBoardSetupMainTest {
         command.add(System.getProperty("java.class.path"));
         command.add(TrelloBoardSetupMain.class.getName());
         command.addAll(Arrays.asList(arguments));
-        Process process = new ProcessBuilder(command).start();
+        ProcessBuilder processBuilder = new ProcessBuilder(command).directory(workingDir.toFile());
+        environmentToRemove.forEach(processBuilder.environment()::remove);
+        processBuilder.environment().putAll(environment);
+        Process process = processBuilder.start();
         byte[] stdout;
         byte[] stderr;
         try {
@@ -791,6 +2030,20 @@ class TrelloBoardSetupMainTest {
 
     private static String javaExecutable() {
         return System.getProperty("os.name", "").toLowerCase().contains("win") ? "java.exe" : "java";
+    }
+
+    private static String workflowWithBoardAndPort(String boardId, int port) {
+        return """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: "%s"
+                server:
+                  port: %d
+                ---
+                Body
+                """
+                .formatted(boardId, port);
     }
 
     private record MainProcessCase(String[] arguments, int expectedExitCode, String expectedOutput) {

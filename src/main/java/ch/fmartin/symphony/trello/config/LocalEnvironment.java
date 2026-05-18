@@ -73,6 +73,11 @@ public final class LocalEnvironment {
         return hasText(configured) ? Path.of(configured) : DEFAULT_DOTENV;
     }
 
+    public static Optional<Path> configuredDotenv() {
+        String configured = System.getenv().get(DOTENV_PATH_ENV);
+        return hasText(configured) ? Optional.of(Path.of(configured)) : Optional.empty();
+    }
+
     public static Path defaultDotenv() {
         return defaultDotenv(System.getenv());
     }

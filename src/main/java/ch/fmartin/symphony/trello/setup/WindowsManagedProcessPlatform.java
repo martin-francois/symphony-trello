@@ -38,6 +38,11 @@ final class WindowsManagedProcessPlatform extends ProcessHandleManagedProcessPla
         }
     }
 
+    @Override
+    public boolean appendsToExistingLogs() {
+        return false;
+    }
+
     static String encodedStartProcessScript(
             List<String> command, Path workingDirectory, Map<String, String> environment, Path stdout, Path stderr) {
         if (command.isEmpty()) {

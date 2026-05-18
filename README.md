@@ -168,6 +168,9 @@ symphony-trello setup-local check
 symphony-trello setup-local repair-port --board "My Board Name"
 symphony-trello status --board "My Board Name"
 symphony-trello logs --board "My Board Name"
+symphony-trello diagnostics --board "My Board Name" --output diagnostics.txt
+symphony-trello diagnostics --workflow WORKFLOW.md --output diagnostics.txt
+symphony-trello diagnostics --show-private-context
 symphony-trello stop --board "My Board Name"
 ```
 
@@ -1022,6 +1025,28 @@ Useful endpoints:
 
 For field meanings, token totals, logging conventions, and troubleshooting expectations, see
 [docs/operations.md](docs/operations.md).
+
+For issue reports, run `symphony-trello diagnostics`,
+`symphony-trello diagnostics --board "My Board Name"`, or
+`symphony-trello diagnostics --workflow WORKFLOW.md`. Use `--board` or `--workflow` to keep the
+report smaller. `--board` and `--workflow` are mutually exclusive; if multiple connected Trello
+boards have the same name, use the Trello board id or short link. The command prints sanitized local
+setup, workflow, health, and recent log context without Trello, GitHub, or Codex network calls by
+default. Add `--deep` when the default report does not include enough context; it runs deeper
+public-safe checks such as local Codex and GitHub auth-status commands. Review the output before
+sharing it.
+
+Diagnostics replaces private values with stable local tokens such as `board_hash`, `key_hash`, and
+`<path:...>` so maintainers can compare related rows without seeing your Trello identifiers or local
+paths. These tokens are created with a random key stored on your machine, so they are stable for your
+installation but are not meant to be guessed by other people. If a maintainer asks which local board,
+workflow, or log one of those tokens refers to, run `symphony-trello diagnostics --show-private-context`
+on your machine. It prints private diagnostics context that maps tokens back to your local Trello
+board ids, board URLs, workflow paths, env file path, workspace root, state directory, and worker log
+files. Use it to inspect your own machine or answer a maintainer's question in your own words. Do not
+paste the `--show-private-context` output into public issues because it intentionally contains
+private Trello identifiers, URLs, and local paths. It does not include credential values or worker log
+contents.
 
 [`WORKFLOW.md`](#workflow-contract) is watched for changes and also checked defensively on each
 scheduler tick. Invalid reloads are logged and the last known good configuration remains active.

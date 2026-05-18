@@ -85,6 +85,21 @@ class LocalWorkerManagerTest {
         fixture.save(board);
         Path relativeEnv = Path.of(".env.relative");
         Path expectedEnv = relativeEnv.toAbsolutePath().normalize();
+        Files.writeString(
+                board.workflowPath(),
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: literal-key
+                  api_token: literal-token
+                  board_id: board-1
+                server:
+                  port: 18080
+                ---
+                # Queue
+                """,
+                StandardCharsets.UTF_8);
         when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
                 .thenReturn(new ManagedProcessHandle(42));
         when(fixture.healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), expectedEnv))
@@ -257,6 +272,182 @@ class LocalWorkerManagerTest {
     }
 
     @Test
+    void startFailsBeforeLaunchingPackagedAppWhenWorkerCredentialsAreMissing() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        Files.deleteIfExists(board.envPath());
+        fixture.save(board);
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.start(new StartWorkerRequest(
+                Optional.of("Queue"),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.of(fixture.paths.appHome()),
+                Optional.of(fixture.paths.configDir()),
+                Optional.of(fixture.paths.workspaceRoot()),
+                Optional.of(fixture.paths.stateHome()))));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_worker_missing_trello_credentials");
+            assertThat(failure).hasMessage("Missing Trello credentials for worker start.");
+            assertThat(failure.dotenvPath()).contains(board.envPath());
+            assertThat(failure.trelloApiKeyEnvironmentName()).contains("TRELLO_API_KEY");
+            assertThat(failure.trelloApiTokenEnvironmentName()).contains("TRELLO_API_TOKEN");
+        });
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void startAllowsFileBackedWorkflowCredentialsWithoutDotenvCredentials() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        Path secrets = fixture.paths.configDir().resolve("secrets");
+        Files.createDirectories(secrets);
+        Files.writeString(secrets.resolve("trello-api-key"), "key-from-file\n", StandardCharsets.UTF_8);
+        Files.writeString(secrets.resolve("trello-api-token"), "token-from-file\n", StandardCharsets.UTF_8);
+        Files.writeString(
+                board.workflowPath(),
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: file:secrets/trello-api-key
+                  api_token: file:secrets/trello-api-token
+                  board_id: board-1
+                server:
+                  port: 18080
+                ---
+                # Queue
+                """,
+                StandardCharsets.UTF_8);
+        Files.deleteIfExists(board.envPath());
+        fixture.save(board);
+        when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
+                .thenReturn(new ManagedProcessHandle(42));
+        when(fixture.healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), board.envPath()))
+                .thenReturn(board.serverPort());
+        when(fixture.healthChecker.waitForSameWorkflow(board, board.serverPort()))
+                .thenReturn(new BoardHealth(
+                        BoardHealthKind.SAME_WORKFLOW,
+                        board.serverPort(),
+                        Optional.of(board.workflowPath().toString()),
+                        Optional.of(board.boardId())));
+        when(fixture.platform.isAlive(42)).thenReturn(true);
+        when(fixture.platform.isManaged(42, fixture.paths.appHome(), board.workflowPath()))
+                .thenReturn(true);
+
+        // when
+        WorkerRunResult result = fixture.start(new StartWorkerRequest(
+                Optional.of("Queue"),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.of(fixture.paths.appHome()),
+                Optional.of(fixture.paths.configDir()),
+                Optional.of(fixture.paths.workspaceRoot()),
+                Optional.of(fixture.paths.stateHome())));
+
+        // then
+        result.assertSuccess().stdoutContains("Started Symphony for Trello");
+        verify(fixture.platform).start(any(), eq(fixture.paths.appHome()), any(), any(), any());
+    }
+
+    @Test
+    void startFailsBeforeLaunchingPackagedAppWhenCustomEnvironmentCredentialsAreMissing() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        Files.writeString(
+                board.workflowPath(),
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: $CUSTOM_TRELLO_API_KEY
+                  api_token: $CUSTOM_TRELLO_API_TOKEN
+                  board_id: board-1
+                server:
+                  port: 18080
+                ---
+                # Queue
+                """,
+                StandardCharsets.UTF_8);
+        Files.deleteIfExists(board.envPath());
+        fixture.save(board);
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.start(new StartWorkerRequest(
+                Optional.of("Queue"),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.of(fixture.paths.appHome()),
+                Optional.of(fixture.paths.configDir()),
+                Optional.of(fixture.paths.workspaceRoot()),
+                Optional.of(fixture.paths.stateHome()))));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_worker_missing_trello_credentials");
+            assertThat(failure).hasMessage("Missing Trello credentials for worker start.");
+            assertThat(failure.trelloApiKeyEnvironmentName()).contains("CUSTOM_TRELLO_API_KEY");
+            assertThat(failure.trelloApiTokenEnvironmentName()).contains("CUSTOM_TRELLO_API_TOKEN");
+        });
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void startSkipsCredentialPreflightForUnsupportedTrackerKind() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        Files.writeString(
+                board.workflowPath(),
+                """
+                ---
+                tracker:
+                  kind: linear
+                  board_id: board-1
+                server:
+                  port: 18080
+                ---
+                # Queue
+                """,
+                StandardCharsets.UTF_8);
+        Files.deleteIfExists(board.envPath());
+        fixture.save(board);
+        when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
+                .thenReturn(new ManagedProcessHandle(42));
+        when(fixture.healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), board.envPath()))
+                .thenReturn(board.serverPort());
+        when(fixture.healthChecker.waitForSameWorkflow(board, board.serverPort()))
+                .thenReturn(new BoardHealth(
+                        BoardHealthKind.SAME_WORKFLOW,
+                        board.serverPort(),
+                        Optional.of(board.workflowPath().toString()),
+                        Optional.of(board.boardId())));
+        when(fixture.platform.isAlive(42)).thenReturn(true);
+        when(fixture.platform.isManaged(42, fixture.paths.appHome(), board.workflowPath()))
+                .thenReturn(true);
+
+        // when
+        WorkerRunResult result = fixture.start(new StartWorkerRequest(
+                Optional.of("Queue"),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.of(fixture.paths.appHome()),
+                Optional.of(fixture.paths.configDir()),
+                Optional.of(fixture.paths.workspaceRoot()),
+                Optional.of(fixture.paths.stateHome())));
+
+        // then
+        result.assertSuccess().stdoutContains("Started Symphony for Trello");
+        verify(fixture.platform).start(any(), eq(fixture.paths.appHome()), any(), any(), any());
+    }
+
+    @Test
     void startIsIdempotentWhenExpectedWorkerIsAlreadyHealthy() throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
@@ -372,6 +563,7 @@ class LocalWorkerManagerTest {
         ConnectedBoard board = fixture.connectedBoard("board-1", "Docs Queue");
         Path envPath = fixture.paths.configDir().resolve(".env.override");
         int overridePort = 19090;
+        fixture.writeEnv(envPath);
         fixture.save(board);
         when(fixture.healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), envPath))
                 .thenReturn(overridePort);
@@ -444,6 +636,186 @@ class LocalWorkerManagerTest {
         // then
         assertThat(thrown).isInstanceOf(TrelloBoardSetupException.class).hasMessageContaining("did not report");
         verify(fixture.platform).start(any(), eq(fixture.paths.appHome()), any(), any(), any());
+    }
+
+    @Test
+    void startSurfacesTrelloAuthFailureFromWorkerStartupLogs() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        ManagedProcessStore.ManagedProcessFiles files =
+                new ManagedProcessStore(fixture.paths.stateHome()).files(board.workflowPath());
+        Files.createDirectories(fixture.paths.stateHome());
+        when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
+                .thenAnswer(invocation -> {
+                    Files.writeString(
+                            files.stdoutLog(),
+                            """
+                            Caused by: ch.fmartin.symphony.trello.tracker.TrelloException: Trello authentication failed
+                            \tat ch.fmartin.symphony.trello.tracker.TrelloClient.statusException(TrelloClient.java:600)
+                            """,
+                            StandardCharsets.UTF_8);
+                    return new ManagedProcessHandle(42);
+                });
+        when(fixture.healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), board.envPath()))
+                .thenReturn(board.serverPort());
+        when(fixture.healthChecker.waitForSameWorkflow(board, board.serverPort()))
+                .thenReturn(new BoardHealth(
+                        BoardHealthKind.STOPPED, board.serverPort(), Optional.empty(), Optional.empty()));
+        when(fixture.platform.stop(42, Duration.ofSeconds(15), Duration.ofSeconds(5)))
+                .thenReturn(true);
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.start(new StartWorkerRequest(
+                Optional.of("Queue"),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.of(fixture.paths.appHome()),
+                Optional.of(fixture.paths.configDir()),
+                Optional.of(fixture.paths.workspaceRoot()),
+                Optional.of(fixture.paths.stateHome()))));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("trello_auth_failed");
+            assertThat(failure).hasMessage("Trello authentication failed while starting Symphony.");
+        });
+    }
+
+    @Test
+    void startIgnoresStaleTrelloAuthFailureFromPreviousStartupLogs() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        ManagedProcessStore.ManagedProcessFiles files =
+                new ManagedProcessStore(fixture.paths.stateHome()).files(board.workflowPath());
+        Files.createDirectories(fixture.paths.stateHome());
+        Files.writeString(
+                files.stdoutLog(),
+                """
+                Caused by: ch.fmartin.symphony.trello.tracker.TrelloException: Trello authentication failed
+                """,
+                StandardCharsets.UTF_8);
+        when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
+                .thenReturn(new ManagedProcessHandle(42));
+        when(fixture.healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), board.envPath()))
+                .thenReturn(board.serverPort());
+        when(fixture.healthChecker.waitForSameWorkflow(board, board.serverPort()))
+                .thenReturn(new BoardHealth(
+                        BoardHealthKind.STOPPED, board.serverPort(), Optional.empty(), Optional.empty()));
+        when(fixture.platform.stop(42, Duration.ofSeconds(15), Duration.ofSeconds(5)))
+                .thenReturn(true);
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.start(new StartWorkerRequest(
+                Optional.of("Queue"),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.of(fixture.paths.appHome()),
+                Optional.of(fixture.paths.configDir()),
+                Optional.of(fixture.paths.workspaceRoot()),
+                Optional.of(fixture.paths.stateHome()))));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_start_unhealthy");
+            assertThat(failure).hasMessageContaining("did not report the expected workflow and board");
+        });
+    }
+
+    @Test
+    void startSurfacesTrelloAuthFailureWhenWorkerTruncatesPreviousLogs() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        ManagedProcessStore.ManagedProcessFiles files =
+                new ManagedProcessStore(fixture.paths.stateHome()).files(board.workflowPath());
+        Files.createDirectories(fixture.paths.stateHome());
+        Files.writeString(
+                files.stdoutLog(),
+                """
+                Stale startup log content that is longer than the next worker startup failure.
+                This simulates redirect targets left behind by an earlier managed process start.
+                """,
+                StandardCharsets.UTF_8);
+        when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
+                .thenAnswer(invocation -> {
+                    Files.writeString(files.stdoutLog(), "Trello authentication failed\n", StandardCharsets.UTF_8);
+                    return new ManagedProcessHandle(42);
+                });
+        when(fixture.healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), board.envPath()))
+                .thenReturn(board.serverPort());
+        when(fixture.healthChecker.waitForSameWorkflow(board, board.serverPort()))
+                .thenReturn(new BoardHealth(
+                        BoardHealthKind.STOPPED, board.serverPort(), Optional.empty(), Optional.empty()));
+        when(fixture.platform.stop(42, Duration.ofSeconds(15), Duration.ofSeconds(5)))
+                .thenReturn(true);
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.start(new StartWorkerRequest(
+                Optional.of("Queue"),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.of(fixture.paths.appHome()),
+                Optional.of(fixture.paths.configDir()),
+                Optional.of(fixture.paths.workspaceRoot()),
+                Optional.of(fixture.paths.stateHome()))));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("trello_auth_failed");
+            assertThat(failure).hasMessage("Trello authentication failed while starting Symphony.");
+        });
+    }
+
+    @Test
+    void startSurfacesTrelloAuthFailureWhenWorkerRewritesLogsToLargerFile() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        when(fixture.platform.appendsToExistingLogs()).thenReturn(false);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        ManagedProcessStore.ManagedProcessFiles files =
+                new ManagedProcessStore(fixture.paths.stateHome()).files(board.workflowPath());
+        Files.createDirectories(fixture.paths.stateHome());
+        Files.writeString(files.stdoutLog(), "stale log\n", StandardCharsets.UTF_8);
+        when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
+                .thenAnswer(invocation -> {
+                    Files.writeString(
+                            files.stdoutLog(),
+                            """
+                            Trello authentication failed
+                            Additional startup details that make this rewritten log longer than the previous file.
+                            """,
+                            StandardCharsets.UTF_8);
+                    return new ManagedProcessHandle(42);
+                });
+        when(fixture.healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), board.envPath()))
+                .thenReturn(board.serverPort());
+        when(fixture.healthChecker.waitForSameWorkflow(board, board.serverPort()))
+                .thenReturn(new BoardHealth(
+                        BoardHealthKind.STOPPED, board.serverPort(), Optional.empty(), Optional.empty()));
+        when(fixture.platform.stop(42, Duration.ofSeconds(15), Duration.ofSeconds(5)))
+                .thenReturn(true);
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.start(new StartWorkerRequest(
+                Optional.of("Queue"),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.of(fixture.paths.appHome()),
+                Optional.of(fixture.paths.configDir()),
+                Optional.of(fixture.paths.workspaceRoot()),
+                Optional.of(fixture.paths.stateHome()))));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("trello_auth_failed");
+            assertThat(failure).hasMessage("Trello authentication failed while starting Symphony.");
+        });
     }
 
     @Test
@@ -630,7 +1002,9 @@ class LocalWorkerManagerTest {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         Path workflow = fixture.paths.configDir().resolve("WORKFLOW.direct.md");
+        Path env = fixture.paths.defaultEnvPath();
         Files.createDirectories(fixture.paths.configDir());
+        fixture.writeEnv(env);
         Files.writeString(
                 workflow,
                 """

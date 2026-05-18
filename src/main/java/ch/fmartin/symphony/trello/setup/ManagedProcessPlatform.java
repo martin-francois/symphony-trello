@@ -18,4 +18,8 @@ interface ManagedProcessPlatform {
     boolean isManaged(long pid, Path appHome, Path workflowPath);
 
     boolean stop(long pid, Duration gracefulTimeout, Duration forcedTimeout);
+
+    default boolean appendsToExistingLogs() {
+        return true;
+    }
 }

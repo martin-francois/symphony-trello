@@ -635,7 +635,7 @@ public final class TrelloBoardSetup {
         if (Files.exists(absolute) && !force) {
             throw new TrelloBoardSetupException(
                     "setup_workflow_exists",
-                    "Workflow file already exists: " + absolute + ". Re-run with --force to overwrite it.");
+                    "Workflow file already exists: " + absolute + "\nRe-run with --force to overwrite it.");
         }
         return absolute;
     }

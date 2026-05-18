@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
+import ch.fmartin.symphony.trello.setup.SetupDiagnosticReporter.DiagnosticsRequest;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.GitHubIntegration;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.ImportBoardRequest;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.NewBoardRequest;
@@ -8,18 +9,22 @@ import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.TrelloCredentials;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.WorkspaceListRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.function.Supplier;
 import picocli.CommandLine;
+import picocli.CommandLine.ArgGroup;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Mixin;
 import picocli.CommandLine.Model.CommandSpec;
@@ -40,11 +45,13 @@ import picocli.CommandLine.Spec;
             TrelloBoardSetupMain.StartCommand.class,
             TrelloBoardSetupMain.StopCommand.class,
             TrelloBoardSetupMain.StatusCommand.class,
-            TrelloBoardSetupMain.LogsCommand.class
+            TrelloBoardSetupMain.LogsCommand.class,
+            TrelloBoardSetupMain.DiagnosticsCommand.class
         })
 public final class TrelloBoardSetupMain implements Callable<Integer> {
     private static final String CONFIG_DIR_PROPERTY = "symphony.trello.config.dir";
     private static final String SHELL_PROPERTY = "symphony.trello.shell";
+    private static final String CLI_COMMAND_PROPERTY = "symphony.trello.command";
 
     private final TrelloBoardSetupService boardSetup;
     private final LocalSetup localSetup;
@@ -92,11 +99,12 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             Supplier<TrelloBoardSetup.CodexModelDefaults> codexModelDefaults) {
         ObjectMapper json = new ObjectMapper();
         TrelloBoardSetup boardSetup = new TrelloBoardSetup(json, codexModelDefaults);
+        LocalWorkerManager workerManager = new LocalWorkerManager(System.getenv());
         return run(
                 args,
-                new TrelloBoardSetupService(boardSetup),
+                new TrelloBoardSetupService(boardSetup, workerManager, System.getenv()),
                 new LocalSetup(boardSetup, new ProcessCommandRunner()),
-                new LocalWorkerManager(System.getenv()),
+                workerManager,
                 out,
                 err);
     }
@@ -123,6 +131,8 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                 .setExecutionExceptionHandler((exception, ignored, parseResult) -> {
                     err.println(
                             "setup_failed code=%s message=%s".formatted(errorCode(exception), exception.getMessage()));
+                    SetupDiagnosticReporter.userActionHint(exception)
+                            .ifPresent(hint -> err.println("Next step: " + hint));
                     if (!(exception instanceof ParameterException)) {
                         SetupDiagnosticReporter.reportFailure(exception, args, input, out, err);
                     }
@@ -157,26 +167,6 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         }
     }
 
-    static final class TrelloBoardSetupService {
-        private final TrelloBoardSetup setup;
-
-        TrelloBoardSetupService(TrelloBoardSetup setup) {
-            this.setup = setup;
-        }
-
-        void createRecommendedBoard(NewBoardRequest request, PrintStream out) {
-            printNewBoardResult(out, setup.createRecommendedBoard(request));
-        }
-
-        void importExistingBoard(ImportBoardRequest request, PrintStream out) {
-            printImportBoardResult(out, setup.importExistingBoard(request));
-        }
-
-        void listWorkspaces(WorkspaceListRequest request, PrintStream out) {
-            printWorkspaces(out, setup.listWorkspaces(request));
-        }
-    }
-
     @Command(
             name = "new-board",
             description = "Create the recommended Trello board and workflow.",
@@ -196,9 +186,24 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         String workspaceId;
 
         @Override
-        public Integer call() {
-            parent.boardSetup.createRecommendedBoard(options.newBoardRequest(boardName, workspaceId), parent.out);
-            return 0;
+        public Integer call() throws IOException {
+            try {
+                options.validateRuntimeEnvTarget();
+                parent.boardSetup.preflightConnectedBoardManifest(options.manifestPath());
+                NewBoardRequest request = options.newBoardRequest(boardName, workspaceId);
+                TrelloBoardSetup.NewBoardResult result = parent.boardSetup.createRecommendedBoard(request);
+                options.persistRuntimeCredentials(parent.input, parent.out, parent.err);
+                parent.boardSetup.persistConnectedBoard(
+                        result,
+                        options.runtimeEnvPath(),
+                        options.workspaceRoot,
+                        options.gitHubIntegration(),
+                        options.manifestPath());
+                printNewBoardResult(parent.out, result, options.runtimeEnvPath());
+                return 0;
+            } catch (TrelloBoardSetupException exception) {
+                throw options.withRuntimeEnvHint(exception);
+            }
         }
     }
 
@@ -236,20 +241,33 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         CommandSpec spec;
 
         @Override
-        public Integer call() {
+        public Integer call() throws IOException {
             if (noInProgress && inProgressState != null) {
                 throw new ParameterException(spec.commandLine(), "--in-progress cannot be used with --no-in-progress.");
             }
-            parent.boardSetup.importExistingBoard(
-                    options.importBoardRequest(
-                            TrelloBoardIds.parse(boardId),
-                            activeStates,
-                            terminalStates,
-                            inProgressState,
-                            !noInProgress && inProgressState == null,
-                            blockedState),
-                    parent.out);
-            return 0;
+            try {
+                options.validateRuntimeEnvTarget();
+                parent.boardSetup.preflightConnectedBoardManifest(options.manifestPath());
+                ImportBoardRequest request = options.importBoardRequest(
+                        TrelloBoardIds.parse(boardId),
+                        activeStates,
+                        terminalStates,
+                        inProgressState,
+                        !noInProgress && inProgressState == null,
+                        blockedState);
+                TrelloBoardSetup.ImportBoardResult result = parent.boardSetup.importExistingBoard(request);
+                options.persistRuntimeCredentials(parent.input, parent.out, parent.err);
+                parent.boardSetup.persistConnectedBoard(
+                        result,
+                        options.runtimeEnvPath(),
+                        options.workspaceRoot,
+                        options.gitHubIntegration(),
+                        options.manifestPath());
+                printImportBoardResult(parent.out, result, options.runtimeEnvPath());
+                return 0;
+            } catch (TrelloBoardSetupException exception) {
+                throw options.withRuntimeEnvHint(exception);
+            }
         }
     }
 
@@ -391,6 +409,94 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         }
     }
 
+    @Command(
+            name = "diagnostics",
+            description = "Print sanitized diagnostics for issue reports.",
+            versionProvider = TrelloBoardSetupMain.ProjectVersion.class,
+            mixinStandardHelpOptions = true)
+    static final class DiagnosticsCommand implements Callable<Integer> {
+        @ParentCommand
+        TrelloBoardSetupMain parent;
+
+        @Mixin
+        DiagnosticsOptions options = new DiagnosticsOptions();
+
+        @Option(names = "--output", description = "Write diagnostics to this file instead of stdout.")
+        Optional<Path> output = Optional.empty();
+
+        @Option(names = "--json", description = "Write a JSON object containing the sanitized diagnostics.")
+        boolean json;
+
+        @Option(
+                names = "--deep",
+                description = "Run deeper public-safe diagnostics, including Codex and GitHub auth-status commands.")
+        boolean deep;
+
+        @Option(
+                names = "--show-private-context",
+                description = "Show private Trello identifiers, URLs, and local paths for local troubleshooting.")
+        boolean privateContext;
+
+        @Spec
+        CommandSpec spec;
+
+        @Override
+        public Integer call() throws Exception {
+            var reporter = new SetupDiagnosticReporter(System.getenv(), new ProcessCommandRunner());
+            var request = new DiagnosticsRequest(
+                    options.board(),
+                    output,
+                    json,
+                    deep,
+                    options.appHome,
+                    options.configDir,
+                    options.workspaceRoot,
+                    options.stateHome,
+                    options.manifest,
+                    options.workflow());
+            String report = reporter.renderReport(request, privateContext);
+            String body = json ? jsonReport(report) : report;
+            output.ifPresentOrElse(path -> writeOutputFile(path, body), () -> printDiagnostics(body));
+            return 0;
+        }
+
+        private void writeOutputFile(Path path, String body) {
+            try {
+                writeOutput(path, body);
+            } catch (IOException e) {
+                throw new ParameterException(
+                        spec.commandLine(), "Could not write diagnostics output. Choose a writable file.");
+            }
+            parent.out.println("Diagnostics written.");
+            if (privateContext) {
+                parent.out.println("Review it before sharing. It contains private diagnostics context.");
+            } else {
+                parent.out.println("Review it before sharing. It is intended to omit secrets and private identifiers.");
+            }
+        }
+
+        private void printDiagnostics(String body) {
+            parent.out.print(body);
+            if (!body.endsWith("\n")) {
+                parent.out.println();
+            }
+        }
+
+        private static String jsonReport(String report) throws IOException {
+            return new ObjectMapper().writeValueAsString(Map.of("format", "markdown", "report", report))
+                    + System.lineSeparator();
+        }
+
+        private static void writeOutput(Path path, String body) throws IOException {
+            Path absolute = path.toAbsolutePath().normalize();
+            Path parent = absolute.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            Files.writeString(absolute, body, StandardCharsets.UTF_8);
+        }
+    }
+
     static final class LifecycleOptions {
         @Option(names = "--board", description = "Connected Trello board name, id, or short link.")
         Optional<String> board = Optional.empty();
@@ -409,6 +515,42 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
 
         @Option(names = "--app-home", hidden = true)
         Optional<Path> appHome = Optional.empty();
+    }
+
+    static final class DiagnosticsOptions {
+        @ArgGroup(exclusive = true, multiplicity = "0..1")
+        DiagnosticsSelector selector = new DiagnosticsSelector();
+
+        @Option(names = "--config-dir", description = "Directory for local .env, workflows, and board manifest.")
+        Optional<Path> configDir = Optional.empty();
+
+        @Option(names = "--workspace-root", description = "Directory for per-card workspaces.")
+        Optional<Path> workspaceRoot = Optional.empty();
+
+        @Option(names = "--state-home", description = "Directory for managed worker PID and log files.")
+        Optional<Path> stateHome = Optional.empty();
+
+        @Option(names = "--manifest", description = "Connected-board manifest path.")
+        Optional<Path> manifest = Optional.empty();
+
+        @Option(names = "--app-home", hidden = true)
+        Optional<Path> appHome = Optional.empty();
+
+        Optional<String> board() {
+            return selector.board;
+        }
+
+        Optional<Path> workflow() {
+            return selector.workflow;
+        }
+    }
+
+    static final class DiagnosticsSelector {
+        @Option(names = "--board", description = "Connected Trello board name, id, or short link.")
+        Optional<String> board = Optional.empty();
+
+        @Option(names = "--workflow", description = "Workflow file to include.")
+        Optional<Path> workflow = Optional.empty();
     }
 
     static final class BoardSetupOptions {
@@ -434,6 +576,9 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         @Option(names = "--workspace-root", description = "Directory for per-card workspaces.")
         Path workspaceRoot = TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT;
 
+        @Option(names = "--env", description = "Dotenv file to save Trello credentials for the generated worker.")
+        Optional<Path> envPath = Optional.empty();
+
         @Option(names = "--server-port", description = "Local HTTP status port.")
         Integer serverPort;
 
@@ -447,7 +592,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             validate();
             return new NewBoardRequest(
                     endpoint,
-                    auth.credentials(),
+                    auth.credentials(runtimeEnvPath()),
                     boardName,
                     workspaceId,
                     workflowPath,
@@ -469,7 +614,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             validate();
             return new ImportBoardRequest(
                     endpoint,
-                    auth.credentials(),
+                    auth.credentials(runtimeEnvPath()),
                     boardId,
                     CliValueNormalizer.nonBlankTrimmed(activeStates),
                     CliValueNormalizer.nonBlankTrimmed(terminalStates),
@@ -486,6 +631,68 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
 
         private GitHubIntegration gitHubIntegration() {
             return github.selected().orElse(true) ? GitHubIntegration.ENABLED : GitHubIntegration.DISABLED;
+        }
+
+        private void validateRuntimeEnvTarget() throws IOException {
+            if (!shouldUseRuntimeEnvTarget()) {
+                return;
+            }
+            TrelloCredentialStore.validateEnvPath(runtimeEnvPath());
+            TrelloCredentialStore.CredentialSelection credentials = auth.credentialSelection(runtimeEnvPath());
+            if (credentials.persist()) {
+                try {
+                    TrelloCredentialStore.validateWritableEnvUpdate(credentials, runtimeEnvPath(), true);
+                } catch (IOException exception) {
+                    throw new TrelloBoardSetupException(
+                            "setup_env_write_failed",
+                            "Could not write Trello credentials to the selected .env file. Choose a writable .env or .env.NAME file.",
+                            exception);
+                }
+            }
+        }
+
+        private void persistRuntimeCredentials(BufferedReader input, PrintStream out, PrintStream err)
+                throws IOException {
+            if (!shouldUseRuntimeEnvTarget()) {
+                return;
+            }
+            TrelloCredentialStore.CredentialSelection credentials = auth.credentialSelection(runtimeEnvPath());
+            if (!credentials.persist()) {
+                return;
+            }
+            try {
+                new TrelloCredentialStore(System.getenv())
+                        .write(credentials, runtimeEnvPath(), new StreamTerminal(input, out, err), true);
+            } catch (IOException exception) {
+                throw new TrelloBoardSetupException(
+                        "setup_env_write_failed",
+                        "Could not write Trello credentials to the selected .env file. Choose a writable .env or .env.NAME file.",
+                        exception);
+            }
+        }
+
+        private Path manifestPath() {
+            return workflowPath.toAbsolutePath().normalize().getParent().resolve("connected-boards.json");
+        }
+
+        private boolean shouldUseRuntimeEnvTarget() {
+            return envPath.isPresent()
+                    || LocalEnvironment.configuredDotenv().isPresent()
+                    || auth.hasDirectCredentials();
+        }
+
+        private Path runtimeEnvPath() {
+            return envPath.orElseGet(LocalEnvironment::defaultDotenv)
+                    .toAbsolutePath()
+                    .normalize();
+        }
+
+        private TrelloBoardSetupException withRuntimeEnvHint(TrelloBoardSetupException exception) {
+            return switch (exception.code()) {
+                case "setup_missing_api_key", "setup_missing_api_token", "setup_missing_trello_credentials" ->
+                    exception.withDotenvPath(runtimeEnvPath());
+                default -> exception;
+            };
         }
 
         private void validate() {
@@ -506,14 +713,42 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         String token;
 
         TrelloCredentials credentials() {
-            return new TrelloCredentials(
-                    Optional.ofNullable(key).or(() -> env("TRELLO_API_KEY")).orElse(null),
-                    Optional.ofNullable(token).or(() -> env("TRELLO_API_TOKEN")).orElse(null));
+            return credentials(LocalEnvironment.defaultDotenv());
+        }
+
+        TrelloCredentials credentials(Path dotenv) {
+            TrelloCredentialStore.CredentialSelection selection = credentialSelection(dotenv);
+            return selection.credentials();
+        }
+
+        TrelloCredentialStore.CredentialSelection credentialSelection() {
+            return credentialSelection(LocalEnvironment.defaultDotenv());
+        }
+
+        TrelloCredentialStore.CredentialSelection credentialSelection(Path dotenv) {
+            return new TrelloCredentialStore.CredentialSelection(
+                    credentialValue(key, "TRELLO_API_KEY", dotenv), credentialValue(token, "TRELLO_API_TOKEN", dotenv));
+        }
+
+        boolean hasDirectCredentials() {
+            return CliValueNormalizer.trimmedOrNull(key) != null || CliValueNormalizer.trimmedOrNull(token) != null;
+        }
+
+        private static TrelloCredentialStore.CredentialValue credentialValue(
+                String directValue, String envName, Path dotenv) {
+            if (directValue != null) {
+                return TrelloCredentialStore.CredentialValue.direct(directValue);
+            }
+            return processEnv(envName)
+                    .map(TrelloCredentialStore.CredentialValue::environment)
+                    .orElseGet(() -> TrelloCredentialStore.CredentialValue.dotenv(
+                            LocalEnvironment.get(envName, dotenv).orElse(null)));
         }
     }
 
-    private static Optional<String> env(String name) {
-        return LocalEnvironment.get(name);
+    private static Optional<String> processEnv(String name) {
+        String value = System.getenv(name);
+        return value == null || value.isBlank() ? Optional.empty() : Optional.of(value);
     }
 
     private static Path defaultWorkflowPath() {
@@ -524,37 +759,27 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         return Path.of(configDir).resolve(TrelloBoardSetup.DEFAULT_WORKFLOW_PATH);
     }
 
-    private static void printNewBoardResult(PrintStream out, TrelloBoardSetup.NewBoardResult result) {
+    private static void printNewBoardResult(PrintStream out, TrelloBoardSetup.NewBoardResult result, Path envPath) {
         out.println("Created Trello board: " + result.boardName());
         if (result.boardUrl() != null && !result.boardUrl().isBlank()) {
             out.println("Board URL: " + result.boardUrl());
         }
-        out.println("Board ID for WORKFLOW.md: " + result.boardKey());
+        out.println("Board identifier for WORKFLOW.md: " + result.boardKey());
         out.println("Created lists: " + String.join(", ", result.lists()));
         out.println("Wrote workflow: " + result.workflowPath().toAbsolutePath().normalize());
         out.println("HTTP status port: " + result.serverPort());
         out.println();
         out.println("Next:");
-        printInstalledCliNextSteps(out, result.workflowPath());
+        printInstalledCliNextSteps(out, envPath, result.workflowPath());
     }
 
-    private static void printWorkspaces(PrintStream out, List<TrelloBoardSetup.WorkspaceInfo> workspaces) {
-        if (workspaces.isEmpty()) {
-            out.println("No Trello workspaces found for this token.");
-            return;
-        }
-        out.println("Trello workspaces:");
-        for (TrelloBoardSetup.WorkspaceInfo workspace : workspaces) {
-            out.println("  %s  %s".formatted(workspace.id(), workspace.displayName()));
-        }
-    }
-
-    private static void printImportBoardResult(PrintStream out, TrelloBoardSetup.ImportBoardResult result) {
+    private static void printImportBoardResult(
+            PrintStream out, TrelloBoardSetup.ImportBoardResult result, Path envPath) {
         out.println("Imported Trello board: " + result.boardName());
         if (result.boardUrl() != null && !result.boardUrl().isBlank()) {
             out.println("Board URL: " + result.boardUrl());
         }
-        out.println("Board ID for WORKFLOW.md: " + result.boardKey());
+        out.println("Board identifier for WORKFLOW.md: " + result.boardKey());
         out.println("Open lists: " + String.join(", ", result.openLists()));
         out.println("Active lists: " + String.join(", ", result.activeStates()));
         out.println("In-progress list: " + optionalListName(result.inProgressState()));
@@ -564,15 +789,31 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         out.println("HTTP status port: " + result.serverPort());
         out.println();
         out.println("Next:");
-        printInstalledCliNextSteps(out, result.workflowPath());
+        printInstalledCliNextSteps(out, envPath, result.workflowPath());
     }
 
-    private static void printInstalledCliNextSteps(PrintStream out, Path workflowPath) {
-        Path dotenv = LocalEnvironment.defaultDotenv().toAbsolutePath().normalize();
+    private static void printInstalledCliNextSteps(PrintStream out, Path envPath, Path workflowPath) {
+        Path dotenv = envPath.toAbsolutePath().normalize();
         Path workflow = workflowPath.toAbsolutePath().normalize();
-        out.println("  symphony-trello start --env " + shellQuote(dotenv.toString()) + " --workflow "
+        String command = shellCommand(installedCliCommand());
+        out.println("  " + command + " start --env " + shellQuote(dotenv.toString()) + " --workflow "
                 + shellQuote(workflow.toString()));
-        out.println("  symphony-trello logs --workflow " + shellQuote(workflow.toString()));
+        out.println("  " + command + " logs --workflow " + shellQuote(workflow.toString()));
+    }
+
+    private static String installedCliCommand() {
+        String configured = System.getProperty(CLI_COMMAND_PROPERTY);
+        if (configured == null || configured.isBlank()) {
+            return "symphony-trello";
+        }
+        return configured;
+    }
+
+    private static String shellCommand(String command) {
+        if ("powershell".equalsIgnoreCase(System.getProperty(SHELL_PROPERTY)) && !"symphony-trello".equals(command)) {
+            return "& " + shellQuote(command);
+        }
+        return "symphony-trello".equals(command) ? command : shellQuote(command);
     }
 
     private static String shellQuote(String value) {

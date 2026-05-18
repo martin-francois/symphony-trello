@@ -95,6 +95,46 @@ Typical troubleshooting flow:
 6. If Codex cannot read a host path, check the Trello blocked comment and the deployment's allowed
    host path settings.
 
+## Diagnostics Identifiers
+
+`symphony-trello diagnostics` is safe to paste into public issues by default. It hides Trello board
+names, board ids, short links, Trello URLs, local paths, and secret-looking values. To keep the
+report useful, it replaces hidden values with stable local tokens such as `board_hash`, `key_hash`,
+and `<path:...>`. Those tokens use a random diagnostics key stored on your machine. They let
+maintainers tell whether two rows refer to the same board, workflow, env file, workspace, state
+directory, or log file without seeing the private value or being able to guess it easily.
+
+If the default report does not include enough context, run:
+
+```bash
+symphony-trello diagnostics --deep
+```
+
+Deep diagnostics still keeps output public-safe, but it may run active checks such as Codex and
+GitHub auth-status commands.
+
+If a maintainer asks what one of those identifiers means on your machine, run:
+
+```bash
+symphony-trello diagnostics --show-private-context
+```
+
+Use `--board` or `--workflow` with `--show-private-context` when you only need one connected Trello
+board or workflow. The command prints private diagnostics context that maps diagnostics tokens to
+local Trello identifiers, URLs, and paths. A coding agent running locally can use the same command to
+understand which installed board, workflow, env file, workspace, state directory, or log file a
+sanitized diagnostics row refers to before inspecting files or reproducing a failure. It can help you
+or a local coding agent answer questions such as:
+
+- which Trello board a `board_hash` refers to.
+- which workflow file a `<path:...>` token refers to.
+- which worker log file matches a diagnostics log section.
+- which env file, workspace root, or state directory the installed wrapper used.
+
+Do not paste `--show-private-context` output into public issues. It intentionally contains private
+Trello board identifiers and local paths. It does not print Trello API keys, Trello tokens, GitHub
+tokens, Codex auth files, or worker log contents.
+
 ## Token Totals
 
 Symphony uses Codex app-server token usage events for live totals.

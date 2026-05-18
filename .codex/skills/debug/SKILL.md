@@ -26,18 +26,31 @@ description: >
 ## Triage Flow
 
 1. Confirm the service is reading the intended workflow file and Trello board.
-2. Open `/api/v1/state` and check:
+2. Run `symphony-trello diagnostics` when the installed command is available.
+   This gives a public-safe overview of connected boards, workflows, health
+   probes, and recent logs.
+3. If the failure depends on information the default report intentionally omits,
+   run `symphony-trello diagnostics --deep` to add deeper public-safe checks such
+   as Codex and GitHub auth-status probes.
+4. If the diagnostics output contains `board_hash`, `key_hash`, or `<path:...>`
+   tokens that you need to map back to local objects, run
+   `symphony-trello diagnostics --show-private-context` locally. Add `--board` or
+   `--workflow` when you can narrow the scope. Treat this output as private
+   investigation data: use it to inspect the right board, workflow, env file,
+   workspace, state directory, or log file, but do not paste it into GitHub,
+   Trello, committed files, or user-facing summaries.
+5. Open `/api/v1/state` and check:
    - queued candidates
    - running cards
    - retrying cards
    - last Codex event and message
    - token totals and rate-limit data
-3. Check the card's current Trello list. Cards in non-active lists are not
+6. Check the card's current Trello list. Cards in non-active lists are not
    dispatched.
-4. Read recent Trello comments on the card. Blocker comments often contain the
+7. Read recent Trello comments on the card. Blocker comments often contain the
    exact missing path, auth, or permission problem.
-5. Search logs by card identifier, worker identity, and session id. Prefer `rg`.
-6. Classify the failure:
+8. Search logs by card identifier, worker identity, and session id. Prefer `rg`.
+9. Classify the failure:
    - Trello credentials or board access.
    - Workflow parse or invalid config.
    - No eligible active cards.
@@ -45,12 +58,15 @@ description: >
    - Codex turn timeout or stall.
    - Filesystem sandbox or allowed-root blocker.
    - Trello handoff tool failure.
-7. Fix the smallest cause, then rerun a local or deployed live verification that
+10. Fix the smallest cause, then rerun a local or deployed live verification that
    exercises the same path.
 
 ## Useful Commands
 
 ```bash
+symphony-trello diagnostics
+symphony-trello diagnostics --deep
+symphony-trello diagnostics --show-private-context
 curl -fsS http://127.0.0.1:18080/api/v1/state | jq
 rg -n "card_identifier=<redacted>|worker_identity=|session_id=" log/ target/ /var/log 2>/dev/null
 systemctl status 'symphony-trello@*'

@@ -59,13 +59,13 @@ body:
     id: logs
     attributes:
       label: Relevant output
-      description: Paste the smallest useful log, CLI output, Trello comment text, or status response. Redact secrets, account names, board links, and private paths.
+      description: If you can run the local command, run `symphony-trello diagnostics` and paste the sanitized output here. Use `symphony-trello diagnostics --deep` for Codex or GitHub authentication issues. Review output first and remove anything private before submitting.
       render: text
   - type: textarea
     id: setup-context
     attributes:
       label: Setup path or configuration used, if known
-      description: List only the setup details you know. If you edited config files manually, include only the smallest redacted file or setting needed to reproduce it.
+      description: List only the setup details not already covered by diagnostics output. If you edited config files manually, include only the smallest redacted file or setting needed to reproduce it.
       placeholder: |
         Install/run context, if relevant:
         - one-line install, Docker/container, Ansible deployment, VM, WSL, source checkout, or other:

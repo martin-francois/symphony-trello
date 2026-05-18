@@ -159,6 +159,33 @@ absolutize_path() {
   esac
 }
 
+normalize_path() {
+  local path="$1"
+  local -a parts=()
+  local -a normalized=()
+  local part
+  path="$(absolutize_path "$path")"
+  path="${path#/}"
+  IFS=/ read -r -a parts <<<"$path"
+  for part in "${parts[@]}"; do
+    case "$part" in
+    "" | .) ;;
+    ..)
+      if ((${#normalized[@]} > 0)); then
+        unset "normalized[$((${#normalized[@]} - 1))]"
+      fi
+      ;;
+    *) normalized+=("$part") ;;
+    esac
+  done
+  if ((${#normalized[@]} == 0)); then
+    printf '/\n'
+  else
+    local IFS=/
+    printf '/%s\n' "${normalized[*]}"
+  fi
+}
+
 remote_has_branch() {
   git ls-remote --exit-code --heads "$1" "$2" >/dev/null 2>&1
 }
@@ -234,6 +261,55 @@ activate_managed_codex_path() {
 
 has_managed_pid_files() {
   [[ -d "$STATE_HOME" ]] && find "$STATE_HOME" -maxdepth 1 -type f -name '*.pid' -print -quit | grep -q .
+}
+
+pid_command_line() {
+  local pid="$1"
+  if [[ -r "/proc/$pid/cmdline" ]]; then
+    tr '\0' ' ' <"/proc/$pid/cmdline"
+  else
+    ps -ww -p "$pid" -o command= 2>/dev/null || true
+  fi
+}
+
+is_live_managed_pid() {
+  local pid="$1"
+  local command_line marker jar normalized_app_dir
+  if [[ ! "$pid" =~ ^[0-9]+$ || "$pid" =~ ^0+$ ]] || ! kill -0 "$pid" >/dev/null 2>&1; then
+    return 1
+  fi
+  normalized_app_dir="$(normalize_path "$APP_DIR")"
+  marker="-Dsymphony.trello.managed.app_home=$normalized_app_dir"
+  jar="$normalized_app_dir/target/quarkus-app/quarkus-run.jar"
+  command_line="$(pid_command_line "$pid")"
+  [[ "$command_line" == *"$marker"* && "$command_line" == *"$jar"* ]]
+}
+
+has_live_managed_pid_files() {
+  local pid_file pid
+  if [[ ! -d "$STATE_HOME" ]]; then
+    return 1
+  fi
+  while IFS= read -r -d '' pid_file; do
+    pid="$(tr -d '[:space:]' <"$pid_file" 2>/dev/null || true)"
+    if is_live_managed_pid "$pid"; then
+      return 0
+    fi
+  done < <(find "$STATE_HOME" -maxdepth 1 -type f -name '*.pid' -print0)
+  return 1
+}
+
+remove_stale_managed_pid_files() {
+  local pid_file pid
+  if [[ ! -d "$STATE_HOME" ]]; then
+    return
+  fi
+  while IFS= read -r -d '' pid_file; do
+    pid="$(tr -d '[:space:]' <"$pid_file" 2>/dev/null || true)"
+    if ! is_live_managed_pid "$pid"; then
+      rm -f "$pid_file"
+    fi
+  done < <(find "$STATE_HOME" -maxdepth 1 -type f -name '*.pid' -print0)
 }
 
 platform_name() {
@@ -717,9 +793,20 @@ if [[ -d "$APP_DIR/.git" ]]; then
 fi
 RESTART_MANAGED_WORKERS=false
 if [[ "$UPDATING_EXISTING_CHECKOUT" == true ]] && has_managed_pid_files; then
-  RESTART_MANAGED_WORKERS=true
-  echo "Stopping managed workers before update..."
-  run "$BIN_DIR/symphony-trello" stop
+  if [[ -x "$BIN_DIR/symphony-trello" ]]; then
+    RESTART_MANAGED_WORKERS=true
+    echo "Stopping managed workers before update..."
+    run "$BIN_DIR/symphony-trello" stop
+  elif has_live_managed_pid_files; then
+    echo "Cannot stop managed workers because the installed command is missing: $BIN_DIR/symphony-trello" >&2
+    echo "Stop the running Symphony worker processes manually, then rerun the installer." >&2
+    exit 2
+  else
+    echo "Removing stale managed worker pid files before update..."
+    if [[ "$DRY_RUN" == false ]]; then
+      remove_stale_managed_pid_files
+    fi
+  fi
 fi
 install_or_update_checkout
 run "$APP_DIR/mvnw" -q -f "$APP_DIR/pom.xml" -DskipTests clean package
@@ -784,16 +871,16 @@ exec_setup_cli() {
     has_cli_option "--workspace-root" "\${args[@]}" || defaults+=(--workspace-root "\$WORKSPACE_ROOT")
   elif [[ "\$command" == "new-board" || "\$command" == "import-board" ]]; then
     has_cli_option "--workspace-root" "\${args[@]}" || defaults+=(--workspace-root "\$WORKSPACE_ROOT")
-  elif [[ "\$command" == "start" || "\$command" == "stop" || "\$command" == "status" || "\$command" == "logs" ]]; then
+  elif [[ "\$command" == "start" || "\$command" == "stop" || "\$command" == "status" || "\$command" == "logs" || "\$command" == "diagnostics" ]]; then
     has_cli_option "--config-dir" "\${args[@]}" || defaults+=(--config-dir "\$CONFIG_DIR")
     has_cli_option "--workspace-root" "\${args[@]}" || defaults+=(--workspace-root "\$WORKSPACE_ROOT")
     has_cli_option "--state-home" "\${args[@]}" || defaults+=(--state-home "\$STATE_HOME")
     has_cli_option "--app-home" "\${args[@]}" || defaults+=(--app-home "\$APP_HOME")
   fi
   if [[ "\${#defaults[@]}" -gt 0 ]]; then
-    exec java -Dsymphony.trello.app.home="\$APP_HOME" -Dsymphony.trello.config.dir="\$CONFIG_DIR" -Dsymphony.trello.shell=posix -cp "\$classpath" ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain "\$command" "\${defaults[@]}" "\${args[@]:1}"
+    exec java -Dsymphony.trello.app.home="\$APP_HOME" -Dsymphony.trello.config.dir="\$CONFIG_DIR" -Dsymphony.trello.shell=posix -Dsymphony.trello.command="\$SYMPHONY_TRELLO_COMMAND" -cp "\$classpath" ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain "\$command" "\${defaults[@]}" "\${args[@]:1}"
   fi
-  exec java -Dsymphony.trello.app.home="\$APP_HOME" -Dsymphony.trello.config.dir="\$CONFIG_DIR" -Dsymphony.trello.shell=posix -cp "\$classpath" ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain "\${args[@]}"
+  exec java -Dsymphony.trello.app.home="\$APP_HOME" -Dsymphony.trello.config.dir="\$CONFIG_DIR" -Dsymphony.trello.shell=posix -Dsymphony.trello.command="\$SYMPHONY_TRELLO_COMMAND" -cp "\$classpath" ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain "\${args[@]}"
 }
 exec_setup_cli "\$@"
 EOF
