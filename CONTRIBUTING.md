@@ -23,7 +23,7 @@ requests, reviews, and other project spaces.
    The repository also includes `.sdkmanrc`, so `sdk env install` can install the pinned runtime
    when SDKMAN's environment feature is enabled.
 
-3. Use the Maven wrapper: `./mvnw verify`.
+3. Use the Maven wrapper: `./mvnw -q spotless:check verify`.
 4. Install Codex CLI if you want to run real worker sessions.
 5. Create a local `WORKFLOW.md` from `WORKFLOW.example.md`.
 6. Copy `.env.example` to `.env`, set Trello credentials there, and keep `.env` uncommitted:
@@ -78,10 +78,10 @@ java -jar target/quarkus-app/quarkus-run.jar ./WORKFLOW.md --port 18081
 
 Before submitting changes:
 
-- Run `./mvnw spotless:check`.
-- Run `./mvnw verify`; CI enforces the same PMD, ArchUnit, test, build, and JaCoCo checks. ArchUnit
-  rejects circular dependencies between production top-level packages. Coverage currently requires
-  at least 80% line coverage.
+- Run `./mvnw -q spotless:check verify`; CI enforces the same Spotless formatting checks, curated
+  PMD checks, ArchUnit rules, test suite, build, and JaCoCo checks. ArchUnit rejects circular
+  dependencies between production top-level packages. Coverage currently requires at least 80% line
+  coverage.
 - Add or update tests for scheduler, Trello normalization, workspace safety, prompt rendering, or
   Codex protocol behavior when those areas change.
 - Use imports instead of inline fully qualified Java type names in code. PMD enforces this so helpers
@@ -92,10 +92,32 @@ Before submitting changes:
   automation uses those titles to choose the next SemVer version and update
   [CHANGELOG.md](CHANGELOG.md).
 
-`./mvnw verify` runs PMD's narrow source check, the deterministic test suite, ArchUnit architecture
+`./mvnw -q spotless:check verify` remains the default local validation command. It runs Spotless
+formatting checks, curated PMD source checks, the deterministic test suite, ArchUnit architecture
 checks, the application build, and the JaCoCo coverage gate. The ArchUnit checks reject circular
 dependencies between production top-level packages. `verify` also fails if line coverage drops below
 80%. The test suite does not call Trello.
+
+Static-analysis findings are meant to be actionable in a local feedback loop. Prefer fixing a
+finding, then rerunning the analyzer and the relevant build or test command. If a rule is useful but
+too broad, tune the rule before suppressing individual findings. Suppress only true false positives,
+use the narrowest source or versioned-configuration scope available, and include a clear reason for
+every suppression. Do not disable an analyzer, package, source tree, or rule category only to make a
+check pass.
+
+PMD is a curated source-level analyzer in this repository, not a one-off narrow check. New PMD rules
+or broad third-party rulesets should first run in report-only or candidate mode so maintainers can
+remove noisy rules before making them blocking. Use `@SuppressWarnings("PMD.RuleName")` for
+code-local suppressions and `// NOPMD - reason` only for truly line-local cases.
+
+Future analyzer additions should follow the same suppression policy. SpotBugs and FindSecBugs
+project-level false positives belong in `config/spotbugs/exclude.xml`; code-local exceptions should
+use `@SuppressFBWarnings(value = "...", justification = "...")`. Error Prone and Picnic Error Prone
+Support should start in a non-blocking profile and use stable `-Xep:<CheckName>:OFF|WARN|ERROR`
+flags for rule control. Semgrep suppressions should be rule-specific `nosemgrep` comments with a
+reason, and private-repository local runs should use `--metrics=off`. CodeQL is a later
+public-repository code-scanning layer and is not part of normal local `verify`. Hosted dashboards can
+add signal, but they must not replace local checks contributors can run, fix, and rerun.
 
 PowerShell installer tests use native `pwsh` when it is installed. CI also runs them through
 Microsoft's .NET SDK container:

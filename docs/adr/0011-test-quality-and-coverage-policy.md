@@ -24,15 +24,15 @@ linters, or review-only conventions for basic rules?
 * Avoid tests that only restate POJO accessors, constants, or generated behavior.
 * Make failing tests easy to understand from the failure output.
 * Use ArchUnit for architecture rules that are naturally expressed against compiled classes.
-* Use PMD only when a narrow source rule is clearer than custom source parsing and cannot be handled
-  by Spotless or ArchUnit.
+* Use PMD as a curated source-level analyzer when its rules are clearer than custom source parsing
+  and complement Spotless, ArchUnit, tests, and other static analyzers.
 * Use Mockito for simple mocks while keeping protocol fakes where they better model stateful
   external behavior.
 * Keep test conventions enforceable by the build.
 
 ## Considered Options
 
-* Enforce JaCoCo, ArchUnit, narrow PMD source rules, and focused custom convention tests.
+* Enforce JaCoCo, ArchUnit, curated PMD source rules, and focused custom convention tests.
 * Use custom JUnit source scans for all conventions.
 * Add Checkstyle for Java source conventions.
 * Rely on reviewer discipline without automated coverage or test-style checks.
@@ -41,7 +41,7 @@ linters, or review-only conventions for basic rules?
 
 ## Decision Outcome
 
-Chosen option: "Enforce JaCoCo, ArchUnit, narrow PMD source rules, and focused custom convention
+Chosen option: "Enforce JaCoCo, ArchUnit, curated PMD source rules, and focused custom convention
 tests", because it uses purpose-built tools where they fit while keeping custom checks only for
 project-specific conventions that standard tools cannot see cleanly.
 
@@ -54,7 +54,7 @@ project-specific conventions that standard tools cannot see cleanly.
 * Good, because unit tests must use readable `// given`, `// when`, and `// then` sections.
 * Good, because simple mocks use Mockito instead of hand-written one-off doubles.
 * Good, because maintainers are still expected to avoid low-value POJO/getter/setter tests.
-* Bad, because the build now has one more test dependency and one narrow PMD plugin configuration.
+* Bad, because the build now has one more test dependency and one curated PMD plugin configuration.
 * Bad, because broad refactors may need test updates before behavior changes are complete.
 * Bad, because a bundle-level coverage threshold can hide uneven coverage across packages.
 
@@ -62,21 +62,24 @@ project-specific conventions that standard tools cannot see cleanly.
 
 Run `./mvnw -q spotless:check verify`. Review new tests to ensure they cover behavior, edge cases,
 policy enforcement, or external-boundary contracts instead of only increasing the coverage number.
-Review new ArchUnit and PMD rules for likely false positives before adding them.
+Review new ArchUnit and PMD rules for likely false positives before adding them. Run new PMD rules in
+report-only or candidate mode before making them blocking when baseline impact is unknown.
 
 ## Pros and Cons of the Options
 
-### Enforce JaCoCo, ArchUnit, narrow PMD source rules, and focused custom convention tests
+### Enforce JaCoCo, ArchUnit, curated PMD source rules, and focused custom convention tests
 
 Use JaCoCo's Maven check in `verify`, ArchUnit for compiled architecture rules such as top-level
-package cycle detection, PMD for the narrow `UnnecessaryFullyQualifiedName` source rule, and custom
-JUnit tests for conventions that need source comments or Markdown parsing.
+package cycle detection, PMD for curated source-level rules such as
+`UnnecessaryFullyQualifiedName`, and custom JUnit tests for conventions that need source comments or
+Markdown parsing.
 
 * Good, because the same command works locally and in CI.
 * Good, because the coverage gate catches accidental test deletion or large untested additions.
 * Good, because architecture checks are expressed with ArchUnit instead of ad hoc reflection or text
   scans.
-* Good, because PMD handles the Java source rule without broad lint noise.
+* Good, because PMD handles Java source rules without broad lint noise when rules are measured and
+  curated before they become blocking.
 * Good, because the section structure makes tests easier to scan and failure causes easier to find.
 * Neutral, because purpose-built fakes remain acceptable for stateful protocol and concurrency
   behavior.
