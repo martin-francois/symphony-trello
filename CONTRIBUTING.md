@@ -150,6 +150,11 @@ Before opening a pull request, search the existing issues and pull requests. Ope
 the change is not trivial, then wait for maintainer feedback or assignment before starting larger
 work.
 
+Symphony for Trello should use only Trello features available on the Trello Free plan by default.
+Any exception needs a clear use case and maintainer approval in an issue before implementation. If an
+approved feature requires a paid Trello plan, the user-facing README must mark that feature clearly
+and name the required Trello plan.
+
 Use the issue templates and include enough detail for another person to reproduce the problem or
 evaluate the proposal. Do not include Trello credentials, Codex auth files, GitHub tokens, private
 Trello board links, or unrelated host paths.
