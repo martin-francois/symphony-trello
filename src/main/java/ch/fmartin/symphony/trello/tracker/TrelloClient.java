@@ -8,6 +8,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.ws.rs.core.Response.Status;
+import jakarta.ws.rs.core.Response.Status.Family;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.net.URI;
@@ -193,7 +194,7 @@ public class TrelloClient implements TrackerClient {
                                 .orElseGet(() -> new CardLookupResult.Failed(
                                         cardId, "trello_unknown_payload", "Card payload could not be normalized")));
             } catch (TrelloException e) {
-                if (e.statusCode() == 404) {
+                if (isNotFound(e)) {
                     results.put(cardId, new CardLookupResult.Missing(cardId));
                 } else {
                     results.put(cardId, new CardLookupResult.Failed(cardId, e.code(), e.getMessage()));
@@ -212,7 +213,7 @@ public class TrelloClient implements TrackerClient {
                     .orElseGet(() -> new CardLookupResult.Failed(
                             cardId, "trello_unknown_payload", "Card payload could not be normalized"));
         } catch (TrelloException e) {
-            if (e.statusCode() == 404) {
+            if (isNotFound(e)) {
                 return new CardLookupResult.Missing(cardId);
             }
             return new CardLookupResult.Failed(cardId, e.code(), e.getMessage());
@@ -249,7 +250,7 @@ public class TrelloClient implements TrackerClient {
         try {
             deepPayload = cardWithComments(config, cardId, WORKPAD_COMMENT_ACTION_LIMIT);
         } catch (TrelloException e) {
-            if (e.statusCode() == 404) {
+            if (isNotFound(e)) {
                 throw e;
             }
             return recentPayload;
@@ -564,7 +565,7 @@ public class TrelloClient implements TrackerClient {
                             default -> throw new IllegalArgumentException("Unsupported Trello method: " + method);
                         };
                 HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-                if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                if (isSuccessfulStatus(response.statusCode())) {
                     return json.readValue(response.body(), type);
                 }
                 if (isRateLimited(response.statusCode()) && attempt < maxAttempts) {
@@ -593,16 +594,28 @@ public class TrelloClient implements TrackerClient {
         if (isRateLimited(statusCode)) {
             return new TrelloException("trello_api_rate_limited", "Trello rate limit exceeded", statusCode);
         }
-        return switch (statusCode) {
-            case 401 -> new TrelloException("trello_auth_failed", "Trello authentication failed", statusCode);
-            case 403 -> new TrelloException("trello_permission_denied", "Trello permission denied", statusCode);
-            case 404 -> new TrelloException("trello_card_not_found", "Trello resource not found", statusCode);
+        Status status = Status.fromStatusCode(statusCode);
+        if (status == null) {
+            return new TrelloException("trello_api_status", "Trello returned HTTP " + statusCode, statusCode);
+        }
+        return switch (status) {
+            case UNAUTHORIZED -> new TrelloException("trello_auth_failed", "Trello authentication failed", statusCode);
+            case FORBIDDEN -> new TrelloException("trello_permission_denied", "Trello permission denied", statusCode);
+            case NOT_FOUND -> new TrelloException("trello_card_not_found", "Trello resource not found", statusCode);
             default -> new TrelloException("trello_api_status", "Trello returned HTTP " + statusCode, statusCode);
         };
     }
 
     private static boolean isRateLimited(int statusCode) {
         return statusCode == Status.TOO_MANY_REQUESTS.getStatusCode();
+    }
+
+    private static boolean isNotFound(TrelloException exception) {
+        return exception.statusCode() == Status.NOT_FOUND.getStatusCode();
+    }
+
+    private static boolean isSuccessfulStatus(int statusCode) {
+        return Family.SUCCESSFUL == Family.familyOf(statusCode);
     }
 
     static String rateLimitWarning(EffectiveConfig config) {
