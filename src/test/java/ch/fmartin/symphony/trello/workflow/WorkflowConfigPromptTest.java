@@ -62,9 +62,13 @@ class WorkflowConfigPromptTest {
 
         // then
         assertThat(config.tracker().activeStates()).containsExactly("Todo", "In Progress");
-        assertThat(config.tracker().priorityLabels()).containsEntry("urgent", 1).doesNotContainKey("invalid");
+        assertThat(config.tracker().priorityLabels())
+                .containsEntry("p1", 1)
+                .containsEntry("urgent", 1)
+                .doesNotContainKey("invalid");
         assertThat(config.agent().maxConcurrentAgentsByState())
                 .containsEntry("ready for codex", 2)
+                .hasSize(1)
                 .doesNotContainKeys("ignored", "invalid");
         assertThat(config.agent().maxConcurrentAgents()).isEqualTo(ConfigDefaults.DEFAULT_MAX_CONCURRENT_AGENTS);
         assertThat(config.polling().interval()).isEqualTo(ConfigDefaults.DEFAULT_POLLING_INTERVAL);
