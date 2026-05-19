@@ -4,6 +4,12 @@ Status: Final Trello-compatible, language-agnostic
 
 Purpose: Define a service that orchestrates coding agents to get project work done from Trello cards.
 
+This specification is the normative contract for Symphony for Trello. It adapts the upstream
+Symphony specification from Linear to Trello while keeping shared Symphony concepts as close as
+practical to the upstream spec. The upstream reference implementation is useful context for intent
+and edge cases. A difference from it is acceptable when the Java behavior still follows this
+specification, fits Trello, and is covered by project ADRs.
+
 ## Normative Language
 
 The key words `MUST`, `MUST NOT`, `REQUIRED`, `SHOULD`, `SHOULD NOT`, `RECOMMENDED`, `MAY`, and

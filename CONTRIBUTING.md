@@ -74,6 +74,13 @@ Packaged runs also accept a positional workflow path and `--port`:
 java -jar target/quarkus-app/quarkus-run.jar ./WORKFLOW.md --port 18081
 ```
 
+## Specification Alignment
+
+`SPEC.md` is the project contract. It adapts OpenAI Symphony from Linear to Trello while keeping
+shared Symphony concepts close to the upstream spec where practical. The upstream reference
+implementation is useful context for intent and edge cases. A difference from it is acceptable when
+the Java behavior still follows `SPEC.md`, fits Trello, and is covered by project ADRs.
+
 ## Quality Bar
 
 Before submitting changes:
