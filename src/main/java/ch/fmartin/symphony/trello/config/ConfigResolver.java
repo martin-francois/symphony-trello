@@ -71,9 +71,12 @@ public class ConfigResolver {
                         list(tracker, "terminal_list_ids", List.of()),
                         priorityLabels(object(tracker, "priority_labels")),
                         string(tracker, "card_identifier_prefix", "TRELLO"),
-                        millis(tracker, "request_timeout_ms", 30_000),
-                        integer(tracker, "max_api_retries", 3),
-                        millis(tracker, "api_retry_base_delay_ms", 1_000)),
+                        millis(tracker, "request_timeout_ms", ConfigDefaults.DEFAULT_TRACKER_REQUEST_TIMEOUT_MS),
+                        integer(tracker, "max_api_retries", ConfigDefaults.DEFAULT_TRACKER_MAX_API_RETRIES),
+                        millis(
+                                tracker,
+                                "api_retry_base_delay_ms",
+                                ConfigDefaults.DEFAULT_TRACKER_API_RETRY_BASE_DELAY_MS)),
                 new EffectiveConfig.PollingConfig(
                         millis(polling, "interval_ms", ConfigDefaults.DEFAULT_POLLING_INTERVAL_MS)),
                 new EffectiveConfig.WorkspaceConfig(
@@ -85,12 +88,12 @@ public class ConfigResolver {
                         string(hooks, "before_remove", null),
                         millis(hooks, "timeout_ms", 60_000)),
                 new EffectiveConfig.AgentConfig(
-                        positive(agent, "max_concurrent_agents", 10),
+                        positive(agent, "max_concurrent_agents", ConfigDefaults.DEFAULT_RUNTIME_MAX_CONCURRENT_AGENTS),
                         positive(agent, "max_turns", 20),
-                        millis(agent, "max_retry_backoff_ms", 300_000),
+                        millis(agent, "max_retry_backoff_ms", ConfigDefaults.DEFAULT_AGENT_MAX_RETRY_BACKOFF_MS),
                         positiveStateMap(object(agent, "max_concurrent_agents_by_state"))),
                 new EffectiveConfig.CodexConfig(
-                        string(codex, "command", "codex app-server"),
+                        string(codex, "command", ConfigDefaults.DEFAULT_CODEX_COMMAND),
                         optionalString(codex, "model"),
                         optionalString(codex, "reasoning_effort"),
                         codex.get("approval_policy"),
@@ -100,9 +103,9 @@ public class ConfigResolver {
                         LocalEnvironment.get("SYMPHONY_CODEX_DANGER_FULL_ACCESS")
                                 .map(Boolean::parseBoolean)
                                 .orElse(false),
-                        millis(codex, "turn_timeout_ms", 3_600_000),
-                        millis(codex, "read_timeout_ms", 5_000),
-                        millis(codex, "stall_timeout_ms", 300_000)),
+                        millis(codex, "turn_timeout_ms", ConfigDefaults.DEFAULT_CODEX_TURN_TIMEOUT_MS),
+                        millis(codex, "read_timeout_ms", ConfigDefaults.DEFAULT_CODEX_READ_TIMEOUT_MS),
+                        millis(codex, "stall_timeout_ms", ConfigDefaults.DEFAULT_CODEX_STALL_TIMEOUT_MS)),
                 new EffectiveConfig.TrelloToolsConfig(
                         bool(trelloTools, "enabled", false),
                         writes,
