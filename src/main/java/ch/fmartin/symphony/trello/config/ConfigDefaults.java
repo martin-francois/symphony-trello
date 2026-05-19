@@ -13,7 +13,8 @@ public final class ConfigDefaults {
     public static final Duration DEFAULT_TRACKER_API_RETRY_BASE_DELAY = Duration.ofSeconds(1);
     public static final long DEFAULT_TRACKER_API_RETRY_BASE_DELAY_MS = DEFAULT_TRACKER_API_RETRY_BASE_DELAY.toMillis();
 
-    public static final int DEFAULT_RUNTIME_MAX_CONCURRENT_AGENTS = 10;
+    public static final int DEFAULT_MAX_CONCURRENT_AGENTS = 1;
+    public static final int DEFAULT_RUNTIME_MAX_CONCURRENT_AGENTS = DEFAULT_MAX_CONCURRENT_AGENTS;
     public static final Duration DEFAULT_AGENT_MAX_RETRY_BACKOFF = Duration.ofMinutes(5);
     public static final long DEFAULT_AGENT_MAX_RETRY_BACKOFF_MS = DEFAULT_AGENT_MAX_RETRY_BACKOFF.toMillis();
 
@@ -25,7 +26,11 @@ public final class ConfigDefaults {
     public static final Duration DEFAULT_CODEX_STALL_TIMEOUT = Duration.ofMinutes(5);
     public static final long DEFAULT_CODEX_STALL_TIMEOUT_MS = DEFAULT_CODEX_STALL_TIMEOUT.toMillis();
 
-    public static final int DEFAULT_SETUP_MAX_CONCURRENT_AGENTS = 1;
+    /*
+     * Concurrency is per workflow/board. Separate connected Trello boards may run in parallel, but
+     * each board starts with one active card unless the workflow opts into a higher value.
+     */
+    public static final int DEFAULT_SETUP_MAX_CONCURRENT_AGENTS = DEFAULT_MAX_CONCURRENT_AGENTS;
 
     private ConfigDefaults() {}
 }
