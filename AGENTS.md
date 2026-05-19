@@ -33,7 +33,9 @@ matters, and easy for another engineer to understand without asking the original
 6. When the user corrects an agent mistake, says something was not done the way they wanted, or
    explicitly asks for a durable preference to persist, update this file in the same change when
    reasonable so future sessions do not repeat the issue. Do not add new rules only because the agent
-   independently chose a reasonable improvement.
+   independently chose a reasonable improvement. If the correction is about a concrete preference,
+   add or update the concrete rule for that preference; do not replace it with only a generic process
+   reminder.
 7. When a new user preference changes how this file itself should be maintained, review existing
    agent-added rules for conflicts with that new preference in the same turn.
 8. When fixing a documentation pattern, search the relevant file or docs set for similar instances
@@ -48,6 +50,9 @@ matters, and easy for another engineer to understand without asking the original
    for similar occurrences before finishing. Fix matching cases that are in the current branch scope
    or directly touched by the change. For matching cases outside scope, create or suggest a focused
    follow-up issue instead of silently leaving them for rediscovery.
+   In the final response, state the related files or pattern set you checked, what you changed, and
+   whether a follow-up issue was created or intentionally not created. This is required even when the
+   direct fix is small.
 11. When you notice a potential improvement that is outside the current task scope, keep the current
    work focused and create or suggest a GitHub issue instead of adding "future improvement",
    "convenience gap", or similar sections to user-facing documentation.
@@ -451,6 +456,20 @@ matters, and easy for another engineer to understand without asking the original
 - Before making code changes, check the relevant `SPEC.md` contract. If the requested change would
   break or narrow conformance to the adapted Symphony-for-Trello spec or the original upstream
   Symphony intent, stop and ask the user for explicit confirmation before implementing it.
+- Treat `SPEC.md` as the normative contract for this project. Keep spec-defined concepts as close
+  as practical to the upstream Symphony specification, adapted only where Trello requires a
+  different tracker model. The upstream reference implementation is useful evidence for intent and
+  edge cases. A difference from it is acceptable when the Java behavior still follows `SPEC.md`, fits
+  Trello, and is covered by project ADRs. Do not copy reference behavior merely because it exists.
+- Use `SPEC.md` for normative behavior and compatibility requirements. Use ADRs to explain why a
+  decision was made, which alternatives were considered, and how to confirm the decision still
+  holds. When a decision changes required behavior, update both: `SPEC.md` for the contract and an
+  ADR for the rationale. If `SPEC.md` and an ADR conflict, treat `SPEC.md` as authoritative and
+  update the ADR or create an issue for the mismatch.
+- If Symphony for Trello intentionally differs from the upstream Symphony specification for a reason
+  other than Trello adaptation, update `SPEC.md` with the local contract and add or update an ADR
+  that labels the decision as an intentional upstream divergence, explains why it is needed, and
+  states what would need to change before realigning with upstream.
 - When the spec is ambiguous, compare plausible options and choose the least surprising option that
   preserves conformance.
 - If a decision explains why an obvious alternative was not chosen, record it in `docs/adr/` using
@@ -470,6 +489,12 @@ matters, and easy for another engineer to understand without asking the original
   create or update an ADR that records the rejected approach and why. The goal is to prevent future
   maintainers or agents from repeating attractive but unsuitable work and rediscovering the same
   problem.
+- Before adding an ADR, inspect `docs/adr/` and use the next unused numeric prefix for the target
+  branch. Do not create duplicate ADR numbers.
+- Write ADRs in simple, factual language. Avoid flowery wording, vague emphasis, and unnecessarily
+  long sentences. Use words and sentence structures that are clear for non-native English speakers,
+  while still following the MADR template exactly. Prefer clear, unambiguous user-manual style over
+  polished prose; readers should not have to infer what the decision means.
 - When adding or updating ADRs, document the options that were seriously considered, why the chosen
   option won, what becomes easier, what becomes worse, and how future maintainers can confirm the
   decision is still implemented.
