@@ -66,8 +66,7 @@ class WorkflowConfigPromptTest {
         assertThat(config.agent().maxConcurrentAgentsByState())
                 .containsEntry("ready for codex", 2)
                 .doesNotContainKeys("ignored", "invalid");
-        assertThat(config.agent().maxConcurrentAgents())
-                .isEqualTo(ConfigDefaults.DEFAULT_RUNTIME_MAX_CONCURRENT_AGENTS);
+        assertThat(config.agent().maxConcurrentAgents()).isEqualTo(ConfigDefaults.DEFAULT_MAX_CONCURRENT_AGENTS);
         assertThat(config.polling().interval()).isEqualTo(ConfigDefaults.DEFAULT_POLLING_INTERVAL);
         assertThat(config.codex().model()).isEqualTo("gpt-5.5");
         assertThat(config.codex().reasoningEffort()).isEqualTo("xhigh");
