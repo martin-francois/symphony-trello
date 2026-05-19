@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
@@ -32,11 +33,19 @@ final class LocalWorkerManagerTestFixture {
         this.platform = mock(ManagedProcessPlatform.class);
         this.healthChecker = mock(LocalHealthChecker.class);
         when(healthChecker.boardHealth(any()))
-                .thenReturn(new BoardHealth(BoardHealthKind.STOPPED, 18080, Optional.empty(), Optional.empty()));
+                .thenReturn(new BoardHealth(
+                        BoardHealthKind.STOPPED,
+                        ConfigDefaults.DEFAULT_SERVER_PORT,
+                        Optional.empty(),
+                        Optional.empty()));
         when(healthChecker.managedHealthPort(any(), anyInt(), nullable(Path.class)))
-                .thenReturn(18080);
+                .thenReturn(ConfigDefaults.DEFAULT_SERVER_PORT);
         when(healthChecker.workflowHealth(any(), nullable(String.class), nullable(String.class), anyInt()))
-                .thenReturn(new BoardHealth(BoardHealthKind.STOPPED, 18080, Optional.empty(), Optional.empty()));
+                .thenReturn(new BoardHealth(
+                        BoardHealthKind.STOPPED,
+                        ConfigDefaults.DEFAULT_SERVER_PORT,
+                        Optional.empty(),
+                        Optional.empty()));
         this.manager = new LocalWorkerManager(
                 Map.of(), new WorkflowConfigEditor(), healthChecker, platform, new LocalLogTailer());
     }
@@ -70,11 +79,11 @@ final class LocalWorkerManagerTestFixture {
                 tracker:
                   board_id: %s
                 server:
-                  port: 18080
+                  port: %d
                 ---
                 # %s
                 """
-                        .formatted(boardId, boardName),
+                        .formatted(boardId, ConfigDefaults.DEFAULT_SERVER_PORT, boardName),
                 StandardCharsets.UTF_8);
         return new ConnectedBoard(
                 boardId,
@@ -84,7 +93,7 @@ final class LocalWorkerManagerTestFixture {
                 workflow.toAbsolutePath().normalize(),
                 paths.defaultEnvPath(),
                 paths.workspaceRoot(),
-                18080,
+                ConfigDefaults.DEFAULT_SERVER_PORT,
                 false,
                 List.of(),
                 false);

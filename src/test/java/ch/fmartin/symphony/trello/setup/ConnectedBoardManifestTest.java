@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.setup;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -18,7 +19,7 @@ class ConnectedBoardManifestTest {
                 Path.of("WORKFLOW.md"),
                 Path.of(".env"),
                 Path.of("workspaces"),
-                18080,
+                ConfigDefaults.DEFAULT_SERVER_PORT,
                 false,
                 List.of(),
                 false);

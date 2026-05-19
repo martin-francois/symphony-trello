@@ -251,17 +251,22 @@ class TrelloBoardSetupTest {
                 .contains("undeclared host paths")
                 .contains("symphony_trello_allowed_host_paths")
                 .contains("server:")
-                .contains("port: 18080")
+                .contains("port: " + ConfigDefaults.DEFAULT_SERVER_PORT)
+                .contains("command: " + ConfigDefaults.DEFAULT_CODEX_COMMAND)
                 .contains("model: \"gpt-5.5\"")
                 .contains("reasoning_effort: \"medium\"")
                 .contains("polling:")
                 .contains("interval_ms: " + ConfigDefaults.DEFAULT_POLLING_INTERVAL_MS)
-                .contains("max_concurrent_agents: 1");
-        assertThat(result.serverPort()).isEqualTo(18080);
+                .contains("max_concurrent_agents: " + ConfigDefaults.DEFAULT_SETUP_MAX_CONCURRENT_AGENTS);
+        assertThat(result.serverPort()).isEqualTo(ConfigDefaults.DEFAULT_SERVER_PORT);
         EffectiveConfig config = resolve(workflow);
         assertThat(config.tracker().boardId()).isEqualTo("abc123");
+        assertThat(config.codex().command()).isEqualTo(ConfigDefaults.DEFAULT_CODEX_COMMAND);
         assertThat(config.codex().model()).isEqualTo("gpt-5.5");
         assertThat(config.codex().reasoningEffort()).isEqualTo("medium");
+        assertThat(config.codex().turnTimeout()).isEqualTo(ConfigDefaults.DEFAULT_CODEX_TURN_TIMEOUT);
+        assertThat(config.codex().readTimeout()).isEqualTo(ConfigDefaults.DEFAULT_CODEX_READ_TIMEOUT);
+        assertThat(config.codex().stallTimeout()).isEqualTo(ConfigDefaults.DEFAULT_CODEX_STALL_TIMEOUT);
         assertThat(config.tracker().activeStates()).containsExactly("Ready for Codex", "In Progress", "Merging");
         assertThat(config.tracker().terminalStates())
                 .contains("done", "archived", "archivedlist", "archivedboard", "deleted");
@@ -383,7 +388,7 @@ class TrelloBoardSetupTest {
                 .content(StandardCharsets.UTF_8)
                 .contains("board_id: \"existing\"")
                 .contains("root: \"./agent-workspaces\"")
-                .contains("port: 18080")
+                .contains("port: " + ConfigDefaults.DEFAULT_SERVER_PORT)
                 .contains("model: \"gpt-5.5\"")
                 .contains("reasoning_effort: \"medium\"")
                 .contains("polling:")
@@ -442,7 +447,7 @@ class TrelloBoardSetupTest {
                 .contains("## Completion Bar Before \"Human Review\"")
                 .contains("move the card to \"Done\"")
                 .contains("max_concurrent_agents: 2");
-        assertThat(result.serverPort()).isEqualTo(18080);
+        assertThat(result.serverPort()).isEqualTo(ConfigDefaults.DEFAULT_SERVER_PORT);
         EffectiveConfig config = resolve(workflow);
         assertThat(config.tracker().boardId()).isEqualTo("existing");
         assertThat(config.codex().model()).isEqualTo("gpt-5.5");
@@ -473,7 +478,7 @@ class TrelloBoardSetupTest {
         // then
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
-                .contains("command: codex app-server")
+                .contains("command: " + ConfigDefaults.DEFAULT_CODEX_COMMAND)
                 .doesNotContain("model:")
                 .doesNotContain("reasoning_effort:");
         EffectiveConfig config = resolve(workflow);
@@ -560,12 +565,37 @@ class TrelloBoardSetupTest {
         // then
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
-                .contains("command: codex app-server")
+                .contains("command: " + ConfigDefaults.DEFAULT_CODEX_COMMAND)
                 .doesNotContain("model:")
                 .doesNotContain("reasoning_effort:");
         EffectiveConfig config = resolve(workflow);
         assertThat(config.codex().model()).isNull();
         assertThat(config.codex().reasoningEffort()).isNull();
+    }
+
+    @Test
+    void resolvesDefaultCodexCommandWhenWorkflowOmitsCommand() throws IOException {
+        // given
+        Path workflow = tempDir.resolve("workflow-without-codex-command.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: abc123
+                codex:
+                  approval_policy: never
+                ---
+                # Workflow
+                """,
+                StandardCharsets.UTF_8);
+
+        // when
+        EffectiveConfig config = resolve(workflow);
+
+        // then
+        assertThat(config.codex().command()).isEqualTo(ConfigDefaults.DEFAULT_CODEX_COMMAND);
     }
 
     @Test
@@ -1173,8 +1203,8 @@ class TrelloBoardSetupTest {
                 true));
 
         // then
-        assertThat(result.serverPort()).isEqualTo(18080);
-        assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: 18080");
+        assertThat(result.serverPort()).isEqualTo(ConfigDefaults.DEFAULT_SERVER_PORT);
+        assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: " + ConfigDefaults.DEFAULT_SERVER_PORT);
     }
 
     @Test
@@ -1257,8 +1287,8 @@ class TrelloBoardSetupTest {
                 true));
 
         // then
-        assertThat(result.serverPort()).isEqualTo(18080);
-        assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: 18080");
+        assertThat(result.serverPort()).isEqualTo(ConfigDefaults.DEFAULT_SERVER_PORT);
+        assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: " + ConfigDefaults.DEFAULT_SERVER_PORT);
     }
 
     @Test
@@ -1290,8 +1320,8 @@ class TrelloBoardSetupTest {
                 true));
 
         // then
-        assertThat(result.serverPort()).isEqualTo(18080);
-        assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: 18080");
+        assertThat(result.serverPort()).isEqualTo(ConfigDefaults.DEFAULT_SERVER_PORT);
+        assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: " + ConfigDefaults.DEFAULT_SERVER_PORT);
     }
 
     @Test
@@ -1378,11 +1408,11 @@ class TrelloBoardSetupTest {
                 server:
                   port: 18080
                 codex:
-                  command: codex app-server
+                  command: %s
                 %s---
                 # Existing workflow
                 """
-                        .formatted(codexFields),
+                        .formatted(ConfigDefaults.DEFAULT_CODEX_COMMAND, codexFields),
                 StandardCharsets.UTF_8);
     }
 

@@ -33,8 +33,8 @@ public final class TrelloBoardSetup {
     public static final URI DEFAULT_ENDPOINT = URI.create("https://api.trello.com/1");
     public static final Path DEFAULT_WORKFLOW_PATH = Path.of("WORKFLOW.md");
     public static final Path DEFAULT_WORKSPACE_ROOT = Path.of("./workspaces");
-    public static final int DEFAULT_MAX_CONCURRENT_AGENTS = 1;
-    public static final int DEFAULT_SERVER_PORT = 18080;
+    public static final int DEFAULT_MAX_CONCURRENT_AGENTS = ConfigDefaults.DEFAULT_SETUP_MAX_CONCURRENT_AGENTS;
+    public static final int DEFAULT_SERVER_PORT = ConfigDefaults.DEFAULT_SERVER_PORT;
     public static final String DEFAULT_CODEX_MODEL = "gpt-5.5";
     public static final String DEFAULT_CODEX_REASONING_EFFORT = "medium";
     private static final String CODEX_MODEL_DEFAULTS_LABEL = "codexModelDefaults";
@@ -683,12 +683,12 @@ public final class TrelloBoardSetup {
                 agent:
                   max_concurrent_agents: %d
                 codex:
-                  command: codex app-server
+                  command: %s
                 %s
                   approval_policy: never
-                  turn_timeout_ms: 3600000
-                  read_timeout_ms: 5000
-                  stall_timeout_ms: 300000
+                  turn_timeout_ms: %d
+                  read_timeout_ms: %d
+                  stall_timeout_ms: %d
                 ---
                 # Trello Card
 
@@ -770,7 +770,11 @@ public final class TrelloBoardSetup {
                         ConfigDefaults.DEFAULT_POLLING_INTERVAL_MS,
                         trelloToolsYaml(handoffStates),
                         maxAgents,
+                        ConfigDefaults.DEFAULT_CODEX_COMMAND,
                         codexModelYaml(codexModelDefaults),
+                        ConfigDefaults.DEFAULT_CODEX_TURN_TIMEOUT_MS,
+                        ConfigDefaults.DEFAULT_CODEX_READ_TIMEOUT_MS,
+                        ConfigDefaults.DEFAULT_CODEX_STALL_TIMEOUT_MS,
                         workpadPrompt(!handoffStates.isEmpty()),
                         repositorySkillsPrompt(githubEnabled),
                         operatingPosturePrompt(!handoffStates.isEmpty()),
