@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 
+import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -1009,7 +1010,7 @@ class LocalSetupTest extends LocalSetupFixtureSupport {
                       "workflowPath": "%s",
                       "envPath": "%s",
                       "workspaceRoot": "%s",
-                      "serverPort": 18080,
+                      "serverPort": %d,
                       "githubEnabled": false,
                       "additionalWritableRoots": [],
                       "dangerFullAccess": false
@@ -1017,7 +1018,11 @@ class LocalSetupTest extends LocalSetupFixtureSupport {
                   ]
                 }
                 """
-                        .formatted(workflow, tempDir.resolve(".env.old"), tempDir.resolve("workspaces")),
+                        .formatted(
+                                workflow,
+                                tempDir.resolve(".env.old"),
+                                tempDir.resolve("workspaces"),
+                                ConfigDefaults.DEFAULT_SERVER_PORT),
                 StandardCharsets.UTF_8);
         Path env = tempDir.resolve(".env");
 
@@ -1070,7 +1075,7 @@ class LocalSetupTest extends LocalSetupFixtureSupport {
                       "workflowPath": "%s",
                       "envPath": "%s",
                       "workspaceRoot": "%s",
-                      "serverPort": 18080,
+                      "serverPort": %d,
                       "githubEnabled": false,
                       "additionalWritableRoots": [],
                       "dangerFullAccess": false
@@ -1078,7 +1083,11 @@ class LocalSetupTest extends LocalSetupFixtureSupport {
                   ]
                 }
                 """
-                        .formatted(workflow, tempDir.resolve(".env.old"), tempDir.resolve("workspaces")),
+                        .formatted(
+                                workflow,
+                                tempDir.resolve(".env.old"),
+                                tempDir.resolve("workspaces"),
+                                ConfigDefaults.DEFAULT_SERVER_PORT),
                 StandardCharsets.UTF_8);
         Path env = tempDir.resolve(".env");
 
