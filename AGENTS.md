@@ -30,12 +30,13 @@ matters, and easy for another engineer to understand without asking the original
    refactoring, formatting, dependency updates, or tooling changes in a separate issue, branch, or
    pull request.
 5. Update documentation and ADRs when behavior, setup, architecture, or tradeoffs change.
-6. When the user corrects an agent mistake, says something was not done the way they wanted, or
-   explicitly asks for a durable preference to persist, update this file in the same change when
-   reasonable so future sessions do not repeat the issue. Do not add new rules only because the agent
-   independently chose a reasonable improvement. If the correction is about a concrete preference,
-   add or update the concrete rule for that preference; do not replace it with only a generic process
-   reminder.
+6. When the user states a generally useful working preference, corrects an agent mistake, says
+   something was not done the way they wanted, or explicitly asks for a durable preference to persist,
+   update this file in the same change when reasonable so future sessions do not repeat the issue. If
+   the user explicitly scopes the instruction to the current session, do not make it durable. Do not
+   add new rules only because the agent independently chose a reasonable improvement. If the
+   correction is about a concrete preference, add or update the concrete rule for that preference; do
+   not replace it with only a generic process reminder.
 7. When a new user preference changes how this file itself should be maintained, review existing
    agent-added rules for conflicts with that new preference in the same turn.
 8. When fixing a documentation pattern, search the relevant file or docs set for similar instances
