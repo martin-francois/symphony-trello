@@ -121,6 +121,13 @@ matters, and easy for another engineer to understand without asking the original
 17. When fixing a bug that was observed during live deployed execution, and live verification is
    reasonably possible from the current environment, deploy with Ansible and perform the relevant
    live deployed verification before claiming the fix is complete.
+16. When the user provides a GitHub issue that was automatically posted from a local setup failure,
+   first debug from the issue as an outside maintainer would. Decide whether the sanitized issue body
+   has enough information to identify the root cause. If it does not, improve the diagnostics or
+   issue-posting data while keeping secrets, private paths, Trello identifiers, account names, and
+   host-specific details redacted. Reproduce locally when feasible, fix the underlying issue once
+   enough information is available, add regression coverage, and update expected-vs-unexpected setup
+   failure classification when the failure was misclassified.
 
 ## Design Preferences
 
