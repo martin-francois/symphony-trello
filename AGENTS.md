@@ -536,11 +536,15 @@ matters, and easy for another engineer to understand without asking the original
   intentionally scoped, not as historical chat notes. Remove stale dependency wording once blockers
   are closed, add missing useful links, fix incorrect links, update labels and milestones, maintain
   bidirectional dependency lines, and add or remove `blocked` based on unresolved
-  `Must be implemented after:` dependencies. Prefer editing issue descriptions over adding comments
-  unless a historical note or external artifact link must be preserved. Run the audit in cycles:
-  after making changes, fetch the open issue set again and repeat the body/label/milestone/link/
-  dependency review until one full pass finds nothing else to change. Summarize which issues were
-  changed, how many cycles ran, and which issues were intentionally left unchanged.
+  `Must be implemented after:` dependencies. Issue-to-issue relationship links must be
+  bidirectional: if an open issue says it is related to, coordinates with, follows up from, or is a
+  prerequisite for another open issue, the other issue should link back with the matching
+  relationship unless the reference is only historical provenance for closed work. Prefer editing
+  issue descriptions over adding comments unless a historical note or external artifact link must be
+  preserved. Run the audit in cycles: after making changes, fetch the open issue set again and
+  repeat the body/label/milestone/link/dependency review until one full pass finds nothing else to
+  change. Summarize which issues were changed, how many cycles ran, and which issues were
+  intentionally left unchanged.
 - When adding or changing behavior that extends beyond `SPEC.md` but does not conflict with it,
   append the extension contract to `SPEC.md` in the same change. Keep implementation-specific
   extensions clearly labeled as optional or Java implementation extensions so the core adapted
