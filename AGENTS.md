@@ -553,6 +553,14 @@ matters, and easy for another engineer to understand without asking the original
   proceed without asking the maintainer first; remove `not-ready` at the same time unless another
   not-ready reason remains. Do not use this label for ordinary technical decisions that the issue
   already asks the implementer to evaluate and document.
+- During issue triage, keep labels aligned with implementability. Use `not-ready` when the issue is
+  an idea/research note, lacks enough accepted scope to implement, or needs a prior non-dependency
+  decision/action before work can start. Use `idea` for speculative product or design options that
+  are not ready to implement. Use `help wanted` for open implementable issues except dependency
+  dashboard issues and issues marked `not-ready`. Use `good first issue` only when the scoped work
+  is small, well-described, low-risk, and suitable for a contributor new to the repository. Use
+  `already-implemented` when the issue appears to describe behavior that already exists, but do not
+  close it unless the user asks or the implementation is verified.
 - When adding or changing behavior that extends beyond `SPEC.md` but does not conflict with it,
   append the extension contract to `SPEC.md` in the same change. Keep implementation-specific
   extensions clearly labeled as optional or Java implementation extensions so the core adapted
