@@ -545,6 +545,12 @@ matters, and easy for another engineer to understand without asking the original
   repeat the body/label/milestone/link/dependency review until one full pass finds nothing else to
   change. Summarize which issues were changed, how many cycles ran, and which issues were
   intentionally left unchanged.
+- During issue triage, add `needs-human-review` when an issue needs a maintainer decision,
+  owner-only repository action, external account/form submission, secret provisioning, or explicit
+  human review before implementation should proceed. Remove the label once the decision/action is
+  captured in the issue and an implementer can proceed without asking the maintainer first. Do not
+  use this label for ordinary technical decisions that the issue already asks the implementer to
+  evaluate and document.
 - When adding or changing behavior that extends beyond `SPEC.md` but does not conflict with it,
   append the extension contract to `SPEC.md` in the same change. Keep implementation-specific
   extensions clearly labeled as optional or Java implementation extensions so the core adapted
