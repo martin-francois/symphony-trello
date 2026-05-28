@@ -537,8 +537,10 @@ matters, and easy for another engineer to understand without asking the original
   are closed, add missing useful links, fix incorrect links, update labels and milestones, maintain
   bidirectional dependency lines, and add or remove `blocked` based on unresolved
   `Must be implemented after:` dependencies. Prefer editing issue descriptions over adding comments
-  unless a historical note or external artifact link must be preserved. Summarize which issues were
-  changed and which were intentionally left unchanged.
+  unless a historical note or external artifact link must be preserved. Run the audit in cycles:
+  after making changes, fetch the open issue set again and repeat the body/label/milestone/link/
+  dependency review until one full pass finds nothing else to change. Summarize which issues were
+  changed, how many cycles ran, and which issues were intentionally left unchanged.
 - When adding or changing behavior that extends beyond `SPEC.md` but does not conflict with it,
   append the extension contract to `SPEC.md` in the same change. Keep implementation-specific
   extensions clearly labeled as optional or Java implementation extensions so the core adapted
