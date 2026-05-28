@@ -557,10 +557,11 @@ matters, and easy for another engineer to understand without asking the original
   an idea/research note, lacks enough accepted scope to implement, or needs a prior non-dependency
   decision/action before work can start. Use `idea` for speculative product or design options that
   are not ready to implement. Use `help wanted` for open implementable issues except dependency
-  dashboard issues and issues marked `not-ready`. Use `good first issue` only when a coding agent or
-  developer who is new to the repository could implement the issue and submit a PR that would need
-  no maintainer PR comments and receive LGTM in roughly 80% of attempts. That means the issue must
-  be small, well-scoped, low-risk, independent of unresolved decisions or external timing, and
+  dashboard issues and issues marked `not-ready`. Use `good first issue` only when a coding agent
+  could be given only "implement this issue <url>" and, in one shot without an elaborate extra
+  prompt, submit a PR that would need no maintainer PR comments and receive LGTM in roughly 80% of
+  attempts. The same bar applies to a developer who is new to the repository. That means the issue
+  must be small, well-scoped, low-risk, independent of unresolved decisions or external timing, and
   specific enough that the expected implementation is clear. Use `already-implemented` when the
   issue appears to describe behavior that already exists, but do not close it unless the user asks
   or the implementation is verified.
