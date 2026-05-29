@@ -22,20 +22,30 @@ jobs:
         run: |
           corepack enable
           corepack prepare pnpm@11.3.0 --activate
+      - name: Prepare commitlint
+        # commitlint resolves `extends` from the config file's directory. Keep a
+        # runner-local config copy next to the installed packages instead of
+        # adding a package.json to this Java repository.
+        run: |
+          set -euo pipefail
+          COMMITLINT_HOME="$RUNNER_TEMP/commitlint"
+          mkdir -p "$COMMITLINT_HOME"
+          printf '{"private":true}\n' > "$COMMITLINT_HOME/package.json"
+          cp commitlint.config.cjs "$COMMITLINT_HOME/commitlint.config.cjs"
+          pnpm --dir "$COMMITLINT_HOME" add --silent \
+            @commitlint/cli@21.0.1 \
+            @commitlint/config-conventional@21.0.1
+          echo "COMMITLINT_BIN=$COMMITLINT_HOME/node_modules/.bin/commitlint" >> "$GITHUB_ENV"
+          echo "COMMITLINT_CONFIG=$COMMITLINT_HOME/commitlint.config.cjs" >> "$GITHUB_ENV"
       - name: Lint pull request title
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          printf '%s\n' "$PR_TITLE" | pnpm dlx \
-            --package @commitlint/cli@21.0.1 \
-            --package @commitlint/config-conventional@21.0.1 \
-            commitlint --config commitlint.config.cjs
+          printf '%s\n' "$PR_TITLE" | "$COMMITLINT_BIN" --config "$COMMITLINT_CONFIG"
       - name: Lint pull request commits
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          pnpm dlx \
-            --package @commitlint/cli@21.0.1 \
-            --package @commitlint/config-conventional@21.0.1 \
-            commitlint --config commitlint.config.cjs --from "$PR_BASE_SHA" --to "$PR_HEAD_SHA" --verbose
+          "$COMMITLINT_BIN" --config "$COMMITLINT_CONFIG" \
+            --from "$PR_BASE_SHA" --to "$PR_HEAD_SHA" --verbose

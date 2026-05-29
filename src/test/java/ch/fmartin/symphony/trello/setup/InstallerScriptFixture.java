@@ -468,13 +468,22 @@ final class InstallerScriptFixture {
                   exit 0
                 }
                 if (($args -join " ") -like "* -jar *") {
-                  "jar-start args=$($args -join ' ') dotenv=$env:SYMPHONY_TRELLO_DOTENV" |
+                  [ordered]@{
+                    event = "jar-start"
+                    args = $args
+                    dotenv = $env:SYMPHONY_TRELLO_DOTENV
+                  } | ConvertTo-Json -Compress -Depth 4 |
                     Add-Content -Path $env:SYMPHONY_FAKE_LOG
                   Write-Output "fake wrapper log"
                   while ($true) { Start-Sleep -Seconds 1 }
                 }
                 if (($args -join " ") -like "*ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain*") {
-                  "setup-cli cwd=$((Get-Location).Path) $($args -join ' ') dotenv=$env:SYMPHONY_TRELLO_DOTENV" |
+                  [ordered]@{
+                    event = "setup-cli"
+                    cwd = (Get-Location).Path
+                    args = $args
+                    dotenv = $env:SYMPHONY_TRELLO_DOTENV
+                  } | ConvertTo-Json -Compress -Depth 4 |
                     Add-Content -Path $env:SYMPHONY_FAKE_LOG
                   if (($args -join " ") -like "*definitely-not-a-command*") {
                     [Console]::Error.WriteLine("setup_failed code=setup_invalid_arguments message=Unmatched argument at index 0: 'definitely-not-a-command'")
@@ -569,6 +578,17 @@ final class InstallerScriptFixture {
         command[3] = script;
         System.arraycopy(arguments, 0, command, 4, arguments.length);
         return command;
+    }
+
+    static String[] commandPromptCommand(String executable, String[] arguments) {
+        String commandLine = Stream.concat(Stream.of(executable), Stream.of(arguments))
+                .map(InstallerScriptFixture::commandPromptLiteral)
+                .collect(java.util.stream.Collectors.joining(" "));
+        return new String[] {"cmd.exe", "/d", "/s", "/c", "\"" + commandLine + "\""};
+    }
+
+    private static String commandPromptLiteral(String value) {
+        return "\"" + value.replace("\"", "\"\"") + "\"";
     }
 
     record ProcessResult(int exitCode, String output) {
