@@ -21,7 +21,7 @@ jobs:
       - name: Enable pnpm
         run: |
           corepack enable
-          corepack prepare pnpm@11.1.2 --activate
+          corepack prepare pnpm@11.3.0 --activate
       - name: Lint pull request title
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
