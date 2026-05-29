@@ -2,7 +2,11 @@
 status: accepted
 date: 2026-05-05
 decision-makers: [François Martin, Codex]
-consulted: [SPEC.md, README.md, GitHub issues #11 and #12]
+consulted:
+  - SPEC.md
+  - README.md
+  - "[GitHub issue #11](https://github.com/martin-francois/symphony-trello/issues/11)"
+  - "[GitHub issue #12](https://github.com/martin-francois/symphony-trello/issues/12)"
 informed: [Future maintainers]
 ---
 
@@ -102,5 +106,7 @@ Keep the previous prompt behavior and require humans to notice blocker comments 
 
 Related issues:
 
-* #11: make blocked Codex work visible on the Trello board.
-* #12: prevent repeated blocker comments when blocked cards remain active.
+* [GitHub issue #11](https://github.com/martin-francois/symphony-trello/issues/11):
+  make blocked Codex work visible on the Trello board.
+* [GitHub issue #12](https://github.com/martin-francois/symphony-trello/issues/12):
+  prevent repeated blocker comments when blocked cards remain active.

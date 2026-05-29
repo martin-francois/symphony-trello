@@ -1351,7 +1351,7 @@ final class SetupDiagnosticReporter {
                     "issue",
                     "create",
                     "--repo",
-                    "martinfrancois/symphony-trello",
+                    "martin-francois/symphony-trello",
                     "--title",
                     "Local setup failed",
                     "--body-file",

@@ -78,7 +78,7 @@ macOS, Linux, and Windows through WSL2:
 <!-- x-release-please-start-version -->
 ```bash
 export SYMPHONY_TRELLO_REF=v0.2.0
-curl -fsSL "https://raw.githubusercontent.com/martinfrancois/symphony-trello/${SYMPHONY_TRELLO_REF}/install.sh" | bash
+curl -fsSL "https://raw.githubusercontent.com/martin-francois/symphony-trello/${SYMPHONY_TRELLO_REF}/install.sh" | bash
 ```
 <!-- x-release-please-end -->
 
@@ -90,7 +90,7 @@ Native Windows PowerShell is implemented as best effort:
 <!-- x-release-please-start-version -->
 ```powershell
 $env:SYMPHONY_TRELLO_REF = "v0.2.0"
-& ([scriptblock]::Create((irm "https://raw.githubusercontent.com/martinfrancois/symphony-trello/$env:SYMPHONY_TRELLO_REF/install.ps1"))) --ref $env:SYMPHONY_TRELLO_REF
+& ([scriptblock]::Create((irm "https://raw.githubusercontent.com/martin-francois/symphony-trello/$env:SYMPHONY_TRELLO_REF/install.ps1"))) --ref $env:SYMPHONY_TRELLO_REF
 ```
 <!-- x-release-please-end -->
 
@@ -130,7 +130,7 @@ If you want to inspect the installer first:
 <!-- x-release-please-start-version -->
 ```bash
 export SYMPHONY_TRELLO_REF=v0.2.0
-curl -fsSL "https://raw.githubusercontent.com/martinfrancois/symphony-trello/${SYMPHONY_TRELLO_REF}/install.sh" -o install.sh
+curl -fsSL "https://raw.githubusercontent.com/martin-francois/symphony-trello/${SYMPHONY_TRELLO_REF}/install.sh" -o install.sh
 less install.sh
 bash install.sh
 ```
@@ -139,7 +139,7 @@ bash install.sh
 <!-- x-release-please-start-version -->
 ```powershell
 $env:SYMPHONY_TRELLO_REF = "v0.2.0"
-irm "https://raw.githubusercontent.com/martinfrancois/symphony-trello/$env:SYMPHONY_TRELLO_REF/install.ps1" -OutFile install.ps1
+irm "https://raw.githubusercontent.com/martin-francois/symphony-trello/$env:SYMPHONY_TRELLO_REF/install.ps1" -OutFile install.ps1
 notepad install.ps1
 powershell -ExecutionPolicy Bypass -File .\install.ps1 --ref $env:SYMPHONY_TRELLO_REF
 ```
@@ -150,14 +150,14 @@ Pass installer flags like this:
 <!-- x-release-please-start-version -->
 ```bash
 export SYMPHONY_TRELLO_REF=v0.2.0
-curl -fsSL "https://raw.githubusercontent.com/martinfrancois/symphony-trello/${SYMPHONY_TRELLO_REF}/install.sh" | bash -s -- --dry-run
+curl -fsSL "https://raw.githubusercontent.com/martin-francois/symphony-trello/${SYMPHONY_TRELLO_REF}/install.sh" | bash -s -- --dry-run
 ```
 <!-- x-release-please-end -->
 
 <!-- x-release-please-start-version -->
 ```powershell
 $env:SYMPHONY_TRELLO_REF = "v0.2.0"
-& ([scriptblock]::Create((irm "https://raw.githubusercontent.com/martinfrancois/symphony-trello/$env:SYMPHONY_TRELLO_REF/install.ps1"))) --ref $env:SYMPHONY_TRELLO_REF --dry-run --no-onboard
+& ([scriptblock]::Create((irm "https://raw.githubusercontent.com/martin-francois/symphony-trello/$env:SYMPHONY_TRELLO_REF/install.ps1"))) --ref $env:SYMPHONY_TRELLO_REF --dry-run --no-onboard
 ```
 <!-- x-release-please-end -->
 
@@ -183,13 +183,13 @@ and Trello boards.
 
 <!-- x-release-please-start-version -->
 ```bash
-curl -fsSL https://raw.githubusercontent.com/martinfrancois/symphony-trello/v0.2.0/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/martin-francois/symphony-trello/v0.2.0/uninstall.sh | bash
 ```
 <!-- x-release-please-end -->
 
 <!-- x-release-please-start-version -->
 ```powershell
-powershell -c "irm https://raw.githubusercontent.com/martinfrancois/symphony-trello/v0.2.0/uninstall.ps1 | iex"
+powershell -c "irm https://raw.githubusercontent.com/martin-francois/symphony-trello/v0.2.0/uninstall.ps1 | iex"
 ```
 <!-- x-release-please-end -->
 
@@ -197,7 +197,7 @@ To inspect uninstall first or pass cleanup scopes:
 
 <!-- x-release-please-start-version -->
 ```bash
-curl -fsSL https://raw.githubusercontent.com/martinfrancois/symphony-trello/v0.2.0/uninstall.sh -o uninstall.sh
+curl -fsSL https://raw.githubusercontent.com/martin-francois/symphony-trello/v0.2.0/uninstall.sh -o uninstall.sh
 less uninstall.sh
 bash uninstall.sh --dry-run
 bash uninstall.sh --remove-config --remove-workspaces --remove-state

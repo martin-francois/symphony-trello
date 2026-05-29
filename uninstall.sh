@@ -18,8 +18,8 @@ REMOVE_STATE=false
 usage() {
   cat <<'USAGE'
 Usage:
-  curl -fsSL https://raw.githubusercontent.com/martinfrancois/symphony-trello/main/uninstall.sh | bash
-  curl -fsSL https://raw.githubusercontent.com/martinfrancois/symphony-trello/main/uninstall.sh | bash -s -- --dry-run
+  curl -fsSL https://raw.githubusercontent.com/martin-francois/symphony-trello/main/uninstall.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/martin-francois/symphony-trello/main/uninstall.sh | bash -s -- --dry-run
 
 Options:
   --dry-run                 Print planned actions without deleting files.

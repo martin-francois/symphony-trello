@@ -15,7 +15,7 @@ announces a different support window in the release notes.
 Do not open a public issue for a suspected vulnerability.
 
 Use GitHub private vulnerability reporting through
-[Report a Vulnerability](https://github.com/martinfrancois/symphony-trello/security/advisories/new)
+[Report a Vulnerability](https://github.com/martin-francois/symphony-trello/security/advisories/new)
 if it is available for this repository. If that is not available, contact the maintainers privately
 through GitHub and share only the minimum information needed to start triage.
 
