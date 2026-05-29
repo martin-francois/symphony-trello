@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
@@ -11,15 +12,992 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Pattern;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 class SetupDiagnosticReporterTest {
     @TempDir
     Path tempDir;
+
+    @Test
+    void reportsOnlyUnexpectedSetupFailures() {
+        // given
+        List<String> expectedFailureCodes = List.of(
+                "setup_invalid_arguments",
+                "setup_missing_api_key",
+                "setup_missing_api_token",
+                "setup_prerequisite_missing",
+                "setup_codex_auth_required",
+                "setup_codex_login_failed",
+                "setup_github_cli_required",
+                "setup_github_auth_required",
+                "setup_github_cli_install_failed",
+                "setup_workspace_id_required",
+                "setup_worker_board_required",
+                "trello_auth_failed",
+                "trello_permission_denied");
+        List<String> unexpectedFailureCodes = List.of(
+                "setup_workflow_write_failed",
+                "setup_workflow_scan_failed",
+                "setup_start_unhealthy",
+                "setup_start_failed",
+                "setup_stop_failed",
+                "trello_api_request",
+                "trello_api_status",
+                "trello_unknown_payload");
+
+        // when
+        boolean reportsIoFailure = SetupDiagnosticReporter.shouldReport(new IOException("boom"));
+
+        // then
+        assertThat(expectedFailureCodes).allSatisfy(code -> assertThat(
+                        SetupDiagnosticReporter.shouldReport(new TrelloBoardSetupException(code, "expected failure")))
+                .as(code)
+                .isFalse());
+        assertThat(unexpectedFailureCodes).allSatisfy(code -> assertThat(
+                        SetupDiagnosticReporter.shouldReport(new TrelloBoardSetupException(code, "unexpected failure")))
+                .as(code)
+                .isTrue());
+        assertThat(reportsIoFailure).isTrue();
+    }
+
+    @Test
+    void givesActionableHintForMissingTrelloCredentials() {
+        // given
+        var missingApiToken = new TrelloBoardSetupException("setup_missing_api_token", "Missing Trello API token");
+
+        // when
+        Optional<String> hint = SetupDiagnosticReporter.userActionHint(missingApiToken);
+
+        // then
+        assertThat(hint).hasValueSatisfying(value -> assertThat(value)
+                .contains("Provide Trello credentials with --key and --token, set TRELLO_API_KEY and TRELLO_API_TOKEN")
+                .contains("this .env credential file:\n  ")
+                .contains(".env")
+                .doesNotContain("local .env file", "usually"));
+    }
+
+    @Test
+    void givesActionableHintWithExactWorkerCredentialNames() {
+        // given
+        var missingWorkerCredentials = new TrelloBoardSetupException(
+                        "setup_worker_missing_trello_credentials", "Missing Trello credentials for worker start.")
+                .withTrelloCredentialEnvironmentNames("CUSTOM_TRELLO_API_KEY", "CUSTOM_TRELLO_API_TOKEN");
+
+        // when
+        Optional<String> hint = SetupDiagnosticReporter.userActionHint(missingWorkerCredentials);
+
+        // then
+        assertThat(hint).hasValueSatisfying(value -> assertThat(value)
+                .contains(
+                        "Set these Trello credential variables",
+                        "CUSTOM_TRELLO_API_KEY=<your Trello API key>",
+                        "CUSTOM_TRELLO_API_TOKEN=<your Trello token>",
+                        "File:\n  ")
+                .doesNotContain("referenced by the workflow", "local .env file"));
+    }
+
+    @Test
+    void doesNotAddGenericHintWhenCodexAuthMessageAlreadyNamesRetryCommand() {
+        // given
+        var codexLoginFailed = new TrelloBoardSetupException(
+                "setup_codex_login_failed",
+                "Codex login did not complete successfully. Run `codex login --device-auth`, then rerun setup-local.");
+
+        // when
+        Optional<String> hint = SetupDiagnosticReporter.userActionHint(codexLoginFailed);
+
+        // then
+        assertThat(hint).isEmpty();
+    }
+
+    @Test
+    void rendersSanitizedDiagnosticsForSelectedBoardWithoutAuthProbe() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("config");
+        Path workspaceRoot = tempDir.resolve("workspaces");
+        Path stateHome = tempDir.resolve("state");
+        Path privateWorkflow = configDir.resolve("WORKFLOW.private.md");
+        Path otherWorkflow = configDir.resolve("WORKFLOW.other.md");
+        Path env = configDir.resolve(".env");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.writeString(privateWorkflow, workflowWithPort(19181), StandardCharsets.UTF_8);
+        Files.writeString(otherWorkflow, workflowWithPort(19182), StandardCharsets.UTF_8);
+        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(
+                        new ConnectedBoard(
+                                "private-board-id",
+                                "privatekey",
+                                "Sensitive Board Name",
+                                "https://trello.com/b/privatekey/sensitive-board",
+                                privateWorkflow,
+                                env,
+                                workspaceRoot,
+                                19181,
+                                true,
+                                List.of(tempDir.resolve("client repo")),
+                                true),
+                        new ConnectedBoard(
+                                "other-board-id",
+                                "other-key",
+                                "Other Board",
+                                "https://trello.com/b/other-key/other-board",
+                                otherWorkflow,
+                                env,
+                                workspaceRoot,
+                                19182,
+                                false,
+                                List.of(),
+                                false))));
+        ManagedProcessStore store = new ManagedProcessStore(stateHome);
+        Files.writeString(
+                store.files(privateWorkflow).stderrLog(),
+                """
+                TRELLO_API_TOKEN=trello-secret
+                board https://trello.com/b/privatekey/sensitive-board
+                repo /Users/Jane Doe/client/private-repo
+                selected-tail-line
+                """,
+                StandardCharsets.UTF_8);
+        Files.writeString(
+                store.files(otherWorkflow).stderrLog(),
+                """
+                other-board-secret
+                other-tail-line
+                """,
+                StandardCharsets.UTF_8);
+        FakeCommandRunner commands = new FakeCommandRunner()
+                .returns(0, "/usr/bin/codex\n", "sh", "-c", "command -v -- \"$1\"", "sh", "codex")
+                .returns(0, "codex-cli 1.2.3\n", "codex", "--version")
+                .returns(0, "/usr/bin/gh\n", "sh", "-c", "command -v -- \"$1\"", "sh", "gh")
+                .returns(0, "gh version 2.70.0\n", "gh", "--version");
+        var reporter = new SetupDiagnosticReporter(
+                Map.of(
+                        "SYMPHONY_TRELLO_CONFIG_DIR", configDir.toString(),
+                        "SYMPHONY_TRELLO_WORKSPACE_ROOT", workspaceRoot.toString(),
+                        "SYMPHONY_TRELLO_STATE_HOME", stateHome.toString(),
+                        "SYMPHONY_TRELLO_COMMAND",
+                                tempDir.resolve("bin/symphony-trello").toString(),
+                        "SHELL", "/bin/zsh"),
+                commands);
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.of("https://trello.com/b/privatekey/sensitive-board"),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.of(workspaceRoot),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.empty()));
+
+        // then
+        assertThat(report)
+                .contains(
+                        "# Symphony for Trello Diagnostics",
+                        "selector:** board",
+                        "selected_manifest_board_count:** 1",
+                        "selected_board_matched:** true",
+                        "command_context:** effective command after installer wrapper defaults",
+                        "deep:** disabled",
+                        "os_distribution:**",
+                        "board_count:** 1",
+                        "danger_full_access",
+                        "true",
+                        "codex-cli 1.2.3; login=not-probed",
+                        "gh version 2.70.0; auth=not-probed",
+                        "19181",
+                        "selected-tail-line")
+                .doesNotContain(
+                        "Sensitive Board Name",
+                        "private-board-id",
+                        "privatekey",
+                        "trello-secret",
+                        "https://trello.com/b/privatekey/sensitive-board",
+                        "Other Board",
+                        "other-board-id",
+                        "19182",
+                        "other-board-secret",
+                        "other-tail-line",
+                        "/Users/Jane Doe",
+                        "Jane Doe",
+                        "private-repo",
+                        tempDir.toString());
+    }
+
+    @Test
+    void redactsRelativeStateHomeArgumentFromRenderedCommand() throws IOException {
+        // given
+        Path configDir = tempDir.resolve("relative-state-config");
+        Files.createDirectories(configDir);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.empty(),
+                Optional.of(Path.of("Jane Doe/state")),
+                Optional.empty(),
+                Optional.empty()));
+
+        // then
+        assertThat(report).contains("--state-home <redacted>").doesNotContain("Jane Doe", "Jane Doe/state");
+    }
+
+    @Test
+    void deepDiagnosticsRunsAuthStatusProbes() throws IOException {
+        // given
+        Path configDir = tempDir.resolve("deep-config");
+        Files.createDirectories(configDir);
+        FakeCommandRunner commands = new FakeCommandRunner()
+                .returns(0, "/usr/bin/codex\n", "sh", "-c", "command -v -- \"$1\"", "sh", "codex")
+                .returns(0, "codex-cli 1.2.3\n", "codex", "--version")
+                .returns(0, "Logged in using ChatGPT\n", "codex", "login", "status")
+                .returns(0, "/usr/bin/gh\n", "sh", "-c", "command -v -- \"$1\"", "sh", "gh")
+                .returns(0, "gh version 2.70.0\n", "gh", "--version")
+                .returns(0, "github.com\n", "gh", "auth", "status");
+        var reporter = new SetupDiagnosticReporter(Map.of(), commands);
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                true,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty()));
+
+        // then
+        assertThat(report)
+                .contains(
+                        "command:** diagnostics --config-dir <redacted> --deep",
+                        "deep:** enabled",
+                        "codex-cli 1.2.3; login=ok",
+                        "gh version 2.70.0; auth=ok")
+                .doesNotContain("--probe-auth", "auth_probe");
+    }
+
+    @Test
+    void deepPrivateContextIncludesDeepDiagnosticsAndPrivateContext() throws IOException {
+        // given
+        Path configDir = tempDir.resolve("deep-private-config");
+        Files.createDirectories(configDir);
+        FakeCommandRunner commands = new FakeCommandRunner()
+                .returns(0, "/usr/bin/codex\n", "sh", "-c", "command -v -- \"$1\"", "sh", "codex")
+                .returns(0, "codex-cli 1.2.3\n", "codex", "--version")
+                .returns(0, "Logged in using ChatGPT\n", "codex", "login", "status")
+                .returns(0, "/usr/bin/gh\n", "sh", "-c", "command -v -- \"$1\"", "sh", "gh")
+                .returns(0, "gh version 2.70.0\n", "gh", "--version")
+                .returns(0, "github.com\n", "gh", "auth", "status");
+        var reporter = new SetupDiagnosticReporter(Map.of(), commands);
+        var request = new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                true,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty());
+
+        // when
+        String report = reporter.renderReport(request, true);
+
+        // then
+        assertThat(report)
+                .contains(
+                        "# Symphony for Trello Diagnostics",
+                        "deep:** enabled",
+                        "codex-cli 1.2.3; login=ok",
+                        "gh version 2.70.0; auth=ok",
+                        "# Symphony for Trello Private Context",
+                        "command:** diagnostics --show-private-context --config-dir "
+                                + configDir.normalize()
+                                + " --deep")
+                .doesNotContain("--probe-auth", "auth_probe");
+    }
+
+    @Test
+    void privateContextMapsDiagnosticsHashesAndPathTokensWithoutReadingSecrets() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("private-context-config");
+        Path workspaceRoot = tempDir.resolve("private-context-workspaces");
+        Path stateHome = tempDir.resolve("private-context-state");
+        Path workflow = configDir.resolve("WORKFLOW.private.md");
+        Path env = configDir.resolve(".env");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.writeString(workflow, workflowWithPort(19199), StandardCharsets.UTF_8);
+        Files.writeString(env, "TRELLO_API_TOKEN=secret-token\n", StandardCharsets.UTF_8);
+        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
+                        "private-board-id",
+                        "private-key",
+                        "Private Board",
+                        "https://trello.com/b/private-key/private-board",
+                        workflow,
+                        env,
+                        workspaceRoot,
+                        19199,
+                        false,
+                        List.of(tempDir.resolve("private checkout")),
+                        false))));
+        ManagedProcessStore.ManagedProcessFiles logs = new ManagedProcessStore(stateHome).files(workflow);
+        Files.writeString(logs.stdoutLog(), "secret log content\n", StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderPrivateContext(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.of("Private Board"),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.of(workspaceRoot),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.empty()));
+        byte[] diagnosticsKey = diagnosticsKey(configDir);
+        String diagnosticsKeyHex = HexFormat.of().formatHex(diagnosticsKey);
+
+        // then
+        assertThat(report)
+                .contains(
+                        "# Symphony for Trello Private Context",
+                        "Do not paste this output into public issues",
+                        "selector:** board",
+                        "selected_manifest_board_count:** 1",
+                        token(diagnosticsKey, "private-board-id"),
+                        token(diagnosticsKey, "private-key"),
+                        pathToken(diagnosticsKey, workflow),
+                        pathToken(diagnosticsKey, logs.stdoutLog()),
+                        "Private Board",
+                        "private-board-id",
+                        "private-key",
+                        "https://trello.com/b/private-key/private-board",
+                        workflow.toString(),
+                        env.toString(),
+                        workspaceRoot.toString(),
+                        logs.stdoutLog().toString(),
+                        "19199",
+                        "stdout")
+                .doesNotContain("secret-token", "secret log content", diagnosticsKeyHex);
+    }
+
+    @Test
+    void diagnosticsReportsTemporaryTokenKeyFallbackWithoutLeakingKeyFilePath() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("Jane Doe").resolve("temporary-key-config");
+        Files.createDirectories(configDir);
+        Files.writeString(
+                configDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME), "invalid-local-key", StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty()));
+
+        // then
+        assertThat(report)
+                .contains(
+                        "diagnostics_token_key:** temporary",
+                        "Diagnostics tokens are stable only for this run because the local diagnostics key could not be read or written.")
+                .doesNotContain(
+                        configDir.toString(), DiagnosticsTokenHasher.KEY_FILE_NAME, "Jane Doe", "invalid-local-key");
+    }
+
+    @Test
+    void deepPrivateContextReusesTemporaryTokenKeyAcrossCombinedReport() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("deep-private-temporary-key-config");
+        Path workspaceRoot = tempDir.resolve("deep-private-temporary-key-workspaces");
+        Path stateHome = tempDir.resolve("deep-private-temporary-key-state");
+        Path workflow = configDir.resolve("WORKFLOW.private.md");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.writeString(
+                configDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME), "invalid-local-key", StandardCharsets.UTF_8);
+        Files.writeString(workflow, workflowWithPort(19198), StandardCharsets.UTF_8);
+        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
+                        "private-board-id",
+                        "private-key",
+                        "Private Board",
+                        "https://trello.com/b/private-key/private-board",
+                        workflow,
+                        configDir.resolve(".env"),
+                        workspaceRoot,
+                        19198,
+                        false,
+                        List.of(),
+                        false))));
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderReport(
+                new SetupDiagnosticReporter.DiagnosticsRequest(
+                        Optional.empty(),
+                        Optional.empty(),
+                        false,
+                        true,
+                        Optional.empty(),
+                        Optional.of(configDir),
+                        Optional.of(workspaceRoot),
+                        Optional.of(stateHome),
+                        Optional.empty(),
+                        Optional.empty()),
+                true);
+
+        // then
+        String publicBoardToken =
+                firstMatch(report, Pattern.compile("\\| ([0-9a-f]{12}) \\| [0-9a-f]{12} \\| false \\| 19198 \\|"));
+        assertThat(report)
+                .contains(
+                        "# Symphony for Trello Diagnostics",
+                        "# Symphony for Trello Private Context",
+                        "diagnostics_token_key:** temporary",
+                        "Diagnostics tokens are stable only for this run because the local diagnostics key could not be read or written.",
+                        "| " + publicBoardToken + " |")
+                .containsPattern(
+                        "\\| " + publicBoardToken + " \\| [0-9a-f]{12} \\| Private Board \\| private-board-id \\|");
+    }
+
+    @Test
+    void setupFailureReportIncludesTemporaryTokenKeyFallback() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("setup-failure-temporary-key-config");
+        Path stateHome = tempDir.resolve("setup-failure-temporary-key-state");
+        Files.createDirectories(configDir);
+        Files.writeString(
+                configDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME), "invalid-local-key", StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        Path report = reporter.write(
+                        new RuntimeException("unexpected failure"),
+                        List.of(
+                                "setup-local",
+                                "--config-dir",
+                                configDir.toString(),
+                                "--state-home",
+                                stateHome.toString()))
+                .orElseThrow();
+
+        // then
+        assertThat(report)
+                .content(StandardCharsets.UTF_8)
+                .contains(
+                        "diagnostics_token_key:** temporary",
+                        "Diagnostics tokens are stable only for this run because the local diagnostics key could not be read or written.")
+                .doesNotContain(DiagnosticsTokenHasher.KEY_FILE_NAME, "invalid-local-key");
+    }
+
+    @Test
+    void renderDiagnosticsContinuesWhenRecentLogsCannotBeListedWithoutLeakingPath() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("safe-log-config");
+        Path workspaceRoot = tempDir.resolve("safe-log-workspaces");
+        Path stateHome = tempDir.resolve("Jane Doe").resolve("private-state");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner(), path -> {
+            throw new IOException("Access denied for " + path.resolve("secret-log.err"));
+        });
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.of(workspaceRoot),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.empty()));
+
+        // then
+        assertThat(report)
+                .contains("## Recent Logs", "Could not list recent worker logs.")
+                .doesNotContain(
+                        tempDir.toString(),
+                        stateHome.toString(),
+                        "Jane Doe",
+                        "private-state",
+                        "secret-log.err",
+                        "Access denied",
+                        "AccessDeniedException",
+                        "IOException",
+                        "Troubleshooting report written");
+    }
+
+    @Test
+    void diagnosticsExplainsMissingManifestWhileStillSummarizingLocalWorkflows() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("workflow-only-config");
+        Path workspaceRoot = tempDir.resolve("workflow-only-workspaces");
+        Path stateHome = tempDir.resolve("workflow-only-state");
+        Path firstWorkflow = configDir.resolve("WORKFLOW.first.md");
+        Path secondWorkflow = configDir.resolve("WORKFLOW.second.md");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.writeString(firstWorkflow, workflowWithPort(19194), StandardCharsets.UTF_8);
+        Files.writeString(secondWorkflow, workflowWithPort(19195), StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.of(workspaceRoot),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.empty()));
+
+        // then
+        assertThat(report)
+                .contains(
+                        "selected_manifest_board_count:** 0",
+                        "selected_workflow_file_count:** 2",
+                        "manifest_status:** missing",
+                        "board_count:** 0",
+                        "No connected-board manifest was found.",
+                        "http://127.0.0.1:19194/api/v1/local-status",
+                        "http://127.0.0.1:19195/api/v1/local-status")
+                .doesNotContain(tempDir.toString());
+    }
+
+    @Test
+    void diagnosticsOmitsEmptyLogsAndStripsStartupBannerFromLogTail() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("log-trim-config");
+        Path workspaceRoot = tempDir.resolve("log-trim-workspaces");
+        Path stateHome = tempDir.resolve("log-trim-state");
+        Path workflow = configDir.resolve("WORKFLOW.logs.md");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.writeString(workflow, workflowWithPort(19196), StandardCharsets.UTF_8);
+        ManagedProcessStore.ManagedProcessFiles logs = new ManagedProcessStore(stateHome).files(workflow);
+        Files.writeString(
+                logs.stdoutLog(),
+                """
+
+                2026-05-29 08:02:26,698 INFO  [app] previous worker event
+
+                __  ____  __  _____   ___  __ ____  ______
+                 --/ __ \\/ / / / _ | / _ \\/ //_/ / / / __/
+                 -/ /_/ / /_/ / __ |/ , _/ ,< / /_/ /\\ \\
+                --\\___\\_\\____/_/ |_/_/|_/_/|_|\\____/___/
+                2026-05-29 08:02:27,698 INFO  [app] worker started
+                 --/ legitimate command output
+                2026-05-29 08:03:29,223 INFO  [app] useful worker event
+                """,
+                StandardCharsets.UTF_8);
+        Files.writeString(logs.stderrLog(), "", StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.of(workspaceRoot),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.empty()));
+
+        // then
+        assertThat(report)
+                .contains(
+                        "previous worker event",
+                        "worker started",
+                        " --/ legitimate command output",
+                        "useful worker event")
+                .doesNotContain("__  ____", "--/ __ \\", "-/ /_/", "--\\___");
+    }
+
+    @Test
+    void diagnosticsPreservesPreTimestampLogOutputThatIsNotStartupBanner() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("pre-timestamp-log-config");
+        Path workspaceRoot = tempDir.resolve("pre-timestamp-log-workspaces");
+        Path stateHome = tempDir.resolve("pre-timestamp-log-state");
+        Path workflow = configDir.resolve("WORKFLOW.pre-timestamp.md");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.writeString(workflow, workflowWithPort(19197), StandardCharsets.UTF_8);
+        ManagedProcessStore.ManagedProcessFiles logs = new ManagedProcessStore(stateHome).files(workflow);
+        Files.writeString(
+                logs.stdoutLog(),
+                """
+                JVM startup failure before logging initialized
+                java.lang.IllegalStateException: useful pre-log failure
+                2026-05-29 08:02:27,698 INFO  [app] worker started
+                """,
+                StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.of(workspaceRoot),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.empty()));
+
+        // then
+        assertThat(report)
+                .contains(
+                        "JVM startup failure before logging initialized",
+                        "java.lang.IllegalStateException: useful pre-log failure",
+                        "worker started");
+    }
+
+    @Test
+    void diagnosticsStripsPartialStartupBannerAtStartOfLogTail() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("partial-banner-log-config");
+        Path workspaceRoot = tempDir.resolve("partial-banner-log-workspaces");
+        Path stateHome = tempDir.resolve("partial-banner-log-state");
+        Path workflow = configDir.resolve("WORKFLOW.partial-banner.md");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.writeString(workflow, workflowWithPort(19198), StandardCharsets.UTF_8);
+        ManagedProcessStore.ManagedProcessFiles logs = new ManagedProcessStore(stateHome).files(workflow);
+        Files.writeString(
+                logs.stdoutLog(),
+                """
+
+                 --/ __ \\/ / / / _ | / _ \\/ //_/ / / / __/
+                 -/ /_/ / /_/ / __ |/ , _/ ,< / /_/ /\\ \\
+                --\\___\\_\\____/_/ |_/_/|_/_/|_|\\____/___/
+                 --/ legitimate command output
+                2026-05-29 08:03:29,223 INFO  [app] useful worker event
+                """,
+                StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.of(workspaceRoot),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.empty()));
+
+        // then
+        assertThat(report)
+                .contains(" --/ legitimate command output", "useful worker event")
+                .doesNotContain("--/ __ \\", "-/ /_/", "--\\___");
+    }
+
+    @Test
+    void diagnosticsSelectsManifestBoardForRelativeWorkflowFromConfigDirectory() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("relative-config");
+        Path workspaceRoot = tempDir.resolve("relative-workspaces");
+        Path stateHome = tempDir.resolve("relative-state");
+        Path workflow = configDir.resolve("WORKFLOW.relative.md");
+        Path otherWorkflow = configDir.resolve("WORKFLOW.other-relative.md");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.writeString(workflow, workflowWithPort(19184), StandardCharsets.UTF_8);
+        Files.writeString(otherWorkflow, workflowWithPort(19185), StandardCharsets.UTF_8);
+        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(
+                        new ConnectedBoard(
+                                "relative-board-id",
+                                "relativekey",
+                                "Relative Board",
+                                "https://trello.com/b/relativekey/relative-board",
+                                workflow,
+                                configDir.resolve(".env"),
+                                workspaceRoot,
+                                19184,
+                                false,
+                                List.of(),
+                                false),
+                        new ConnectedBoard(
+                                "other-board-id",
+                                "otherkey",
+                                "Other Relative Board",
+                                "https://trello.com/b/otherkey/other-relative-board",
+                                otherWorkflow,
+                                configDir.resolve(".env"),
+                                workspaceRoot,
+                                19185,
+                                false,
+                                List.of(),
+                                false))));
+        ManagedProcessStore store = new ManagedProcessStore(stateHome);
+        Files.writeString(store.files(workflow).stdoutLog(), "selected workflow log\n", StandardCharsets.UTF_8);
+        Files.writeString(store.files(otherWorkflow).stdoutLog(), "other workflow log\n", StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.of(workspaceRoot),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.of(Path.of("WORKFLOW.relative.md"))));
+
+        // then
+        assertThat(report)
+                .contains(
+                        "selector:** workflow",
+                        "selected_workflow_in_manifest:** true",
+                        "selected_manifest_board_count:** 1",
+                        "board_count:** 1",
+                        "19184",
+                        "selected workflow log")
+                .doesNotContain(
+                        "Relative Board",
+                        "relative-board-id",
+                        "relativekey",
+                        "https://trello.com/b/relativekey/relative-board",
+                        "Other Relative Board",
+                        "other-board-id",
+                        "otherkey",
+                        "https://trello.com/b/otherkey/other-relative-board",
+                        "19185",
+                        "other workflow log",
+                        tempDir.toString());
+    }
+
+    @Test
+    void diagnosticsIncludesWorkflowOutsideManifestWithoutUnrelatedBoardContext() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("external-workflow-config");
+        Path workspaceRoot = tempDir.resolve("external-workspaces");
+        Path stateHome = tempDir.resolve("external-state");
+        Path manifestWorkflow = configDir.resolve("WORKFLOW.manifest.md");
+        Path requestedWorkflow = tempDir.resolve("external").resolve("WORKFLOW.requested.md");
+        Files.createDirectories(configDir);
+        Files.createDirectories(requestedWorkflow.getParent());
+        Files.createDirectories(stateHome);
+        Files.writeString(manifestWorkflow, workflowWithPort(19186), StandardCharsets.UTF_8);
+        Files.writeString(requestedWorkflow, workflowWithPort(19187), StandardCharsets.UTF_8);
+        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
+                        "manifest-board-id",
+                        "manifestkey",
+                        "Manifest Board",
+                        "https://trello.com/b/manifestkey/manifest-board",
+                        manifestWorkflow,
+                        configDir.resolve(".env"),
+                        workspaceRoot,
+                        19186,
+                        false,
+                        List.of(),
+                        false))));
+        ManagedProcessStore store = new ManagedProcessStore(stateHome);
+        Files.writeString(store.files(manifestWorkflow).stdoutLog(), "manifest workflow log\n", StandardCharsets.UTF_8);
+        Files.writeString(
+                store.files(requestedWorkflow).stdoutLog(), "requested workflow log\n", StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.of(workspaceRoot),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.of(requestedWorkflow)));
+
+        // then
+        assertThat(report)
+                .contains(
+                        "selector:** workflow",
+                        "selected_workflow_in_manifest:** false",
+                        "selected_manifest_board_count:** 0",
+                        "board_count:** 0",
+                        "19187",
+                        "requested workflow log")
+                .doesNotContain(
+                        "Manifest Board",
+                        "manifest-board-id",
+                        "manifestkey",
+                        "https://trello.com/b/manifestkey/manifest-board",
+                        "19186",
+                        "manifest workflow log",
+                        tempDir.toString());
+    }
+
+    @Test
+    void diagnosticsRejectsAmbiguousBoardSelectorWithoutLeakingPrivateContext() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("ambiguous-board-config");
+        Path workspaceRoot = tempDir.resolve("ambiguous-workspaces");
+        Path stateHome = tempDir.resolve("ambiguous-state");
+        Path workflowA = configDir.resolve("WORKFLOW.private-a.md");
+        Path workflowB = configDir.resolve("WORKFLOW.private-b.md");
+        String privateBoardName = "Private Duplicate Board";
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.writeString(workflowA, workflowWithPort(19188), StandardCharsets.UTF_8);
+        Files.writeString(workflowB, workflowWithPort(19189), StandardCharsets.UTF_8);
+        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(
+                        new ConnectedBoard(
+                                "private-board-a-id",
+                                "privateAKey",
+                                privateBoardName,
+                                "https://trello.com/b/privateAKey/private-a",
+                                workflowA,
+                                configDir.resolve(".env"),
+                                workspaceRoot,
+                                19188,
+                                false,
+                                List.of(),
+                                false),
+                        new ConnectedBoard(
+                                "private-board-b-id",
+                                "privateBKey",
+                                privateBoardName,
+                                "https://trello.com/b/privateBKey/private-b",
+                                workflowB,
+                                configDir.resolve(".env"),
+                                workspaceRoot,
+                                19189,
+                                false,
+                                List.of(),
+                                false))));
+        ManagedProcessStore store = new ManagedProcessStore(stateHome);
+        Files.writeString(store.files(workflowA).stdoutLog(), "private board A log\n", StandardCharsets.UTF_8);
+        Files.writeString(store.files(workflowB).stdoutLog(), "private board B log\n", StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        Throwable thrown =
+                catchThrowable(() -> reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                        Optional.of(privateBoardName),
+                        Optional.empty(),
+                        false,
+                        false,
+                        Optional.empty(),
+                        Optional.of(configDir),
+                        Optional.of(workspaceRoot),
+                        Optional.of(stateHome),
+                        Optional.empty(),
+                        Optional.empty())));
+
+        // then
+        assertThat(thrown)
+                .isInstanceOfSatisfying(TrelloBoardSetupException.class, exception -> assertThat(exception)
+                        .extracting(TrelloBoardSetupException::code, Throwable::getMessage)
+                        .containsExactly(
+                                "setup_invalid_arguments",
+                                "Multiple connected boards match --board. Re-run with a board id or short link."))
+                .hasMessageContaining("Multiple connected boards match --board")
+                .satisfies(exception -> assertThat(exception.getMessage())
+                        .doesNotContain(
+                                privateBoardName,
+                                "private-board-a-id",
+                                "private-board-b-id",
+                                "privateAKey",
+                                "privateBKey",
+                                "https://trello.com/b/privateAKey/private-a",
+                                "https://trello.com/b/privateBKey/private-b",
+                                workflowA.toString(),
+                                workflowB.toString(),
+                                "private board A log",
+                                "private board B log",
+                                tempDir.toString()));
+        assertThat(configDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME)).doesNotExist();
+    }
+
+    @Test
+    void diagnosticsRejectsBothBoardAndWorkflowSelectorsAtReporterBoundary() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("conflicting-selector-config");
+        Path workflow = configDir.resolve("WORKFLOW.private.md");
+        Files.createDirectories(configDir);
+        Files.writeString(workflow, workflowWithPort(19190), StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        Throwable thrown =
+                catchThrowable(() -> reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                        Optional.of("Private Board"),
+                        Optional.empty(),
+                        false,
+                        false,
+                        Optional.empty(),
+                        Optional.of(configDir),
+                        Optional.empty(),
+                        Optional.empty(),
+                        Optional.empty(),
+                        Optional.of(workflow))));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, exception -> assertThat(exception)
+                .extracting(TrelloBoardSetupException::code, Throwable::getMessage)
+                .containsExactly("setup_invalid_arguments", "--board and --workflow cannot be used together."));
+        assertThat(configDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME)).doesNotExist();
+    }
 
     @Test
     void writesSanitizedReportWithInstallerToolWorkflowAndLogContext() throws Exception {
@@ -87,6 +1065,9 @@ class SetupDiagnosticReporterTest {
                 repository git@github.com:private/repo.git
                 ssh remote ssh://git@github.com/private-org/client-repo.git
                 branch feature/private-ref
+                card_id=private-log-card-id
+                card_identifier=TRELLO-private-short
+                {"cardId":"private-json-card-id","cardIdentifier":"TRELLO-private-json"}
                 nested parent path %s
                 """)
                         .formatted(appHome.resolve("Secret Client").resolve("repo")),
@@ -190,6 +1171,10 @@ class SetupDiagnosticReporterTest {
                         "Internal Backlog v3.2",
                         "private-card-id",
                         "TRELLO-private",
+                        "private-log-card-id",
+                        "TRELLO-private-short",
+                        "private-json-card-id",
+                        "TRELLO-private-json",
                         "private runtime message",
                         "/home/alice/private-project",
                         "/Volumes/Client Work/repo",
@@ -488,6 +1473,36 @@ class SetupDiagnosticReporterTest {
                 Body
                 """
                 .formatted(port);
+    }
+
+    private static String pathToken(byte[] key, Path path) {
+        return "<path:" + token(key, path.toString()) + ">";
+    }
+
+    private static byte[] diagnosticsKey(Path configDir) throws IOException {
+        return HexFormat.of()
+                .parseHex(Files.readString(
+                                configDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME), StandardCharsets.UTF_8)
+                        .strip());
+    }
+
+    private static String token(byte[] key, String value) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA3-256");
+            mac.init(new SecretKeySpec(key, "HmacSHA3-256"));
+            byte[] bytes = mac.doFinal(value.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(bytes, 0, 6);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("HmacSHA3-256 is unavailable", e);
+        } catch (InvalidKeyException e) {
+            throw new IllegalStateException("Diagnostics token key is invalid", e);
+        }
+    }
+
+    private static String firstMatch(String value, Pattern pattern) {
+        java.util.regex.Matcher matcher = pattern.matcher(value);
+        assertThat(matcher.find()).as("expected pattern %s to match", pattern).isTrue();
+        return matcher.group(1);
     }
 
     private static String largeLog() {

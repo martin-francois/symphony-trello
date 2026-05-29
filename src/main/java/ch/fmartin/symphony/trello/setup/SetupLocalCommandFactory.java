@@ -27,6 +27,8 @@ final class SetupLocalCommandFactory {
                 .setExecutionExceptionHandler((exception, ignored, parseResult) -> {
                     err.println(
                             "setup_failed code=%s message=%s".formatted(errorCode(exception), exception.getMessage()));
+                    SetupDiagnosticReporter.userActionHint(exception)
+                            .ifPresent(hint -> err.println("Next step: " + hint));
                     if (!(exception instanceof ParameterException)) {
                         SetupDiagnosticReporter.reportSetupLocalFailure(exception, args, input, out, err);
                     }

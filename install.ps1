@@ -665,7 +665,7 @@ function Invoke-SetupCli {
       `$tail = if (`$CliArgs.Count -gt 1) { `$CliArgs[1..(`$CliArgs.Count - 1)] } else { @() }
       `$CliArgs = @(`$CliArgs[0]) + `$defaults + `$tail
     }
-  } elseif (`$CliArgs.Count -gt 0 -and (`$CliArgs[0] -eq "start" -or `$CliArgs[0] -eq "stop" -or `$CliArgs[0] -eq "status" -or `$CliArgs[0] -eq "logs")) {
+  } elseif (`$CliArgs.Count -gt 0 -and (`$CliArgs[0] -eq "start" -or `$CliArgs[0] -eq "stop" -or `$CliArgs[0] -eq "status" -or `$CliArgs[0] -eq "logs" -or `$CliArgs[0] -eq "diagnostics")) {
     `$defaults = @()
     if (-not (Test-CliOption `$CliArgs "--config-dir")) {
       `$defaults += @("--config-dir", `$ConfigDir)
@@ -685,7 +685,9 @@ function Invoke-SetupCli {
     }
   }
   `$shell = if (`$env:SYMPHONY_TRELLO_WRAPPER_SHELL -eq "cmd") { "cmd" } else { "powershell" }
-  & java "-Dsymphony.trello.app.home=`$AppHome" "-Dsymphony.trello.config.dir=`$ConfigDir" "-Dsymphony.trello.shell=`$shell" -cp `$classpath ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain @CliArgs
+  `$commandPath = if (`$env:SYMPHONY_TRELLO_WRAPPER_COMMAND) { `$env:SYMPHONY_TRELLO_WRAPPER_COMMAND } else { `$PSCommandPath }
+  `$env:SYMPHONY_TRELLO_COMMAND = `$commandPath
+  & java "-Dsymphony.trello.app.home=`$AppHome" "-Dsymphony.trello.config.dir=`$ConfigDir" "-Dsymphony.trello.shell=`$shell" "-Dsymphony.trello.command=`$commandPath" -cp `$classpath ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain @CliArgs
   exit `$LASTEXITCODE
 }
 Invoke-SetupCli @args
@@ -693,6 +695,7 @@ Invoke-SetupCli @args
 @"
 @echo off
 set "SYMPHONY_TRELLO_WRAPPER_SHELL=cmd"
+set "SYMPHONY_TRELLO_WRAPPER_COMMAND=%~f0"
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0symphony-trello.ps1" %*
 "@ | Set-Content -Encoding ASCII "$BinDir\symphony-trello.cmd"
 }

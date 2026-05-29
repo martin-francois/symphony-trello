@@ -3,6 +3,7 @@ package ch.fmartin.symphony.trello.setup;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.TrelloCredentials;
 import java.io.IOException;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -56,15 +57,15 @@ final class TrelloCredentialStore {
     }
 
     void write(CredentialSelection credentials, Path envPath, Terminal terminal) throws IOException {
-        List<String> lines =
-                Files.isRegularFile(envPath) ? Files.readAllLines(envPath, StandardCharsets.UTF_8) : new ArrayList<>();
-        if (credentials.persistApiKey()) {
-            lines = upsertEnv(lines, "TRELLO_API_KEY", credentials.apiKey());
+        write(credentials, envPath, terminal, true);
+    }
+
+    void write(CredentialSelection credentials, Path envPath, Terminal terminal, boolean validatePath)
+            throws IOException {
+        if (validatePath) {
+            validateEnvPath(envPath);
         }
-        if (credentials.persistApiToken()) {
-            lines = upsertEnv(lines, "TRELLO_API_TOKEN", credentials.apiToken());
-        }
-        writeEnvFile(envPath, lines);
+        writeEnvFile(envPath, updatedEnvLines(credentials, envPath));
         terminal.info("");
         terminal.info("Saving Trello credentials...");
         terminal.info("  OK  Credentials saved: " + envPath);
@@ -94,6 +95,40 @@ final class TrelloCredentialStore {
                 .orElseGet(() -> CredentialValue.dotenv(dotenvValue));
     }
 
+    static void validateWritableEnvUpdate(CredentialSelection credentials, Path envPath, boolean validatePath)
+            throws IOException {
+        if (validatePath) {
+            validateEnvPath(envPath);
+        }
+        validateWritableEnvPath(envPath);
+        updatedEnvLines(credentials, envPath);
+        Path absolute = envPath.toAbsolutePath().normalize();
+        if (Files.isRegularFile(absolute)) {
+            return;
+        }
+        Path parent = absolute.getParent();
+        Path probe = parent == null
+                ? Files.createTempFile(".env-write-probe-", ".tmp")
+                : Files.createTempFile(parent, ".env-write-probe-", ".tmp");
+        try {
+            writeEnvFile(probe, List.of("# Symphony for Trello dotenv write probe"));
+        } finally {
+            Files.deleteIfExists(probe);
+        }
+    }
+
+    private static List<String> updatedEnvLines(CredentialSelection credentials, Path envPath) throws IOException {
+        List<String> lines =
+                Files.isRegularFile(envPath) ? Files.readAllLines(envPath, StandardCharsets.UTF_8) : new ArrayList<>();
+        if (credentials.persistApiKey()) {
+            lines = upsertEnv(lines, "TRELLO_API_KEY", credentials.apiKey());
+        }
+        if (credentials.persistApiToken()) {
+            lines = upsertEnv(lines, "TRELLO_API_TOKEN", credentials.apiToken());
+        }
+        return lines;
+    }
+
     private static void writeEnvFile(Path envPath, List<String> lines) throws IOException {
         Path parent = envPath.toAbsolutePath().normalize().getParent();
         if (parent != null) {
@@ -111,6 +146,39 @@ final class TrelloCredentialStore {
             Files.write(envPath, lines, StandardCharsets.UTF_8, StandardOpenOption.TRUNCATE_EXISTING);
         }
         secureEnvPermissions(envPath);
+    }
+
+    static void validateEnvPath(Path envPath) {
+        Path fileName = envPath.getFileName();
+        String name = fileName == null ? "" : fileName.toString();
+        if (".env.example".equals(name)
+                || ".env.template".equals(name)
+                || (!".env".equals(name) && !name.startsWith(".env."))) {
+            throw new TrelloBoardSetupException(
+                    "setup_env_path_not_ignored",
+                    "--env must point to an ignored dotenv file named .env or .env.NAME, not a tracked template.");
+        }
+    }
+
+    static void validateWritableEnvPath(Path envPath) throws IOException {
+        Path absolute = envPath.toAbsolutePath().normalize();
+        if (Files.exists(absolute) && !Files.isRegularFile(absolute)) {
+            throw new IOException("Selected dotenv path is not a regular file.");
+        }
+        if (Files.isRegularFile(absolute)) {
+            try (FileChannel ignored = FileChannel.open(absolute, StandardOpenOption.WRITE)) {
+                return;
+            }
+        }
+        Path parent = absolute.getParent();
+        if (parent != null && Files.exists(parent) && !Files.isDirectory(parent)) {
+            throw new IOException("Selected dotenv parent is not a directory.");
+        }
+        if (parent != null) {
+            Files.createDirectories(parent);
+            Path probe = Files.createTempFile(parent, ".env-write-probe-", ".tmp");
+            Files.deleteIfExists(probe);
+        }
     }
 
     private static void secureEnvPermissions(Path envPath) throws IOException {

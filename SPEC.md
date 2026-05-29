@@ -777,14 +777,49 @@ This Java implementation provides:
   when no selector is provided
 - `status [--board NAME | --workflow PATH]`: reports managed local worker health
 - `logs [--board NAME | --workflow PATH] [--follow]`: prints or follows managed local worker logs
+- `diagnostics [--board NAME | --workflow PATH] [--output PATH] [--json] [--deep]
+  [--show-private-context]`:
+  prints sanitized issue-report diagnostics from local setup, connected-board metadata, workflow
+  summaries, loopback health probes, and recent managed-worker logs. `--deep` adds deeper
+  public-safe troubleshooting checks, including Codex and GitHub auth-status probes, and may include
+  more public-safe probes later. `--board` and `--workflow` are
+  mutually exclusive. If more than one connected board has the same name, use a board id or short
+  link with `--board` to avoid ambiguity. `--show-private-context` prints private diagnostics
+  context, including Trello board identifiers, board URLs, and local paths. It exists so operators
+  can map public-safe diagnostics rows back to local boards, workflows, env files, workspace roots,
+  state directories, and worker logs when a maintainer asks for clarification. That output is for
+  local troubleshooting only and MUST NOT be pasted into public issue reports.
 
 The installed Bash and PowerShell wrappers dispatch `--help`, `-h`, `--version`, `setup-local`,
-`new-board`, `import-board`, `list-workspaces`, `start`, `stop`, `status`, `logs`, and unknown
-commands to this Java command boundary. The wrappers bootstrap paths, classpath, managed Codex/npm
-paths, dotenv defaults, config/workspace/state locations, and caller directory context; Java owns
-managed worker process selection, PID/log files, health checks, start/stop/status/logs behavior, and
-usage errors. Unknown commands MUST fail through Java command usage handling instead of being
-treated as workflow paths.
+`new-board`, `import-board`, `list-workspaces`, `start`, `stop`, `status`, `logs`, `diagnostics`,
+and unknown commands to this Java command boundary. The wrappers bootstrap paths, classpath, managed
+Codex/npm paths, dotenv defaults, config/workspace/state locations, and caller directory context;
+Java owns managed worker process selection, PID/log files, health checks, start/stop/status/logs,
+diagnostics behavior, and usage errors. Unknown commands MUST fail through Java command usage
+handling instead of being treated as workflow paths.
+
+The diagnostics command MUST be safe for public issue reports by default. It MUST redact Trello API
+keys and tokens, Codex auth files or session data, GitHub tokens, private Trello board/card URLs,
+account names, private host paths, deployment-specific paths, and environment values that look like
+secrets. It SHOULD include setup/onboarding choices when available, such as new or existing Trello
+board path, GitHub integration, additional writable path count, `dangerFullAccess`, install/run
+context, workflow and state summaries, local loopback health, and recent sanitized logs. It MUST NOT
+call Trello, GitHub, or Codex network APIs by default. `--deep` is explicit because it may run Codex
+and GitHub auth-status commands. `--deep` output MUST remain public-safe unless combined with
+`--show-private-context`.
+
+`diagnostics --show-private-context` is an explicit exception to the public-safe diagnostics contract.
+It MUST NOT print credential values or log contents, but it MAY print private Trello board
+identifiers and local paths because its purpose is to help the local operator translate public-safe
+tokens into the real local board, workflow, env file, workspace, state directory, and
+worker log names. The command output MUST warn that it is local-only and not for public issue
+reports.
+
+Public-safe diagnostics tokens SHOULD be stable for a local installation and SHOULD be generated from
+private values with a local random diagnostics key using a keyed hash such as `HmacSHA3-256`. The
+local diagnostics key MUST NOT be printed in diagnostics output, private-context output, logs, issue
+reports, or generated workflow files. When persisted on a POSIX file system, the key file SHOULD be
+created with owner-only permissions.
 
 The Java command-line boundary uses a typed parser. Command classes parse arguments, validate command
 shape, map inputs to request objects, delegate to setup services, and return exit codes. Trello,

@@ -81,6 +81,22 @@ final class WorkflowConfigEditor {
         }
     }
 
+    Optional<TrackerCredentialReferences> trackerCredentialReferences(Path workflowPath) {
+        try {
+            SequencedMap<String, Object> yaml = parseYaml(read(workflowPath));
+            if (!(yaml.get("tracker") instanceof Map<?, ?> tracker)) {
+                return Optional.empty();
+            }
+            if (!isTrelloTracker(tracker)) {
+                return Optional.empty();
+            }
+            return Optional.of(new TrackerCredentialReferences(
+                    optionalString(tracker.get("api_key")), optionalString(tracker.get("api_token"))));
+        } catch (IOException | TrelloBoardSetupException ignored) {
+            return Optional.empty();
+        }
+    }
+
     Optional<Integer> maxAgents(Path workflowPath) {
         try {
             SequencedMap<String, Object> yaml = parseYaml(read(workflowPath));
@@ -221,6 +237,10 @@ final class WorkflowConfigEditor {
         return text == null || text.isBlank() ? Optional.empty() : Optional.of(text);
     }
 
+    private static boolean isTrelloTracker(Map<?, ?> tracker) {
+        return optionalString(tracker.get("kind")).map("trello"::equals).orElse(false);
+    }
+
     record FrontMatter(String yaml, String body) {
         static FrontMatter parse(String workflow) {
             var matcher = FRONT_MATTER.matcher(workflow);
@@ -231,4 +251,6 @@ final class WorkflowConfigEditor {
             return new FrontMatter(matcher.group("yaml"), matcher.group("body"));
         }
     }
+
+    record TrackerCredentialReferences(Optional<String> apiKey, Optional<String> apiToken) {}
 }

@@ -962,6 +962,9 @@ class InstallerScriptTest {
                         "Stopping managed workers before update",
                         "Restarting managed workers after update",
                         "start --all",
+                        "pid_command_line",
+                        "is_live_managed_pid",
+                        "-Dsymphony.trello.managed.app_home",
                         "exec_setup_cli \"\\$@\"")
                 .doesNotContain(
                         ",,}",
@@ -969,7 +972,6 @@ class InstallerScriptTest {
                         "workflow_state_name",
                         "default_workflow",
                         "wait_for_exit",
-                        "-Dsymphony.trello.managed.app_home",
                         "is_managed_pid",
                         "nohup");
         assertThat(posixInstaller).doesNotContain("[[:space:]");
@@ -1010,6 +1012,7 @@ class InstallerScriptTest {
                 .contains("$PrefixLiteral = ConvertTo-PowerShellLiteral $Prefix")
                 .contains("`$AppHome = $PrefixLiteral")
                 .contains("`$env:SYMPHONY_TRELLO_COMMAND = $CommandLiteral")
+                .contains("`$env:SYMPHONY_TRELLO_COMMAND = `$commandPath")
                 .doesNotContain(
                         "SHA256]::HashData",
                         "Get-WorkflowStateName",
@@ -1298,6 +1301,66 @@ class InstallerScriptTest {
             if (Files.exists(binDirectory.resolve("symphony-trello"))) {
                 run(environment, binDirectory.resolve("symphony-trello").toString(), "stop");
             }
+        }
+    }
+
+    @Test
+    void posixUpdateRemovesStalePidFilesWhenInstalledCommandIsMissing() throws Exception {
+        // given
+        Assumptions.assumeTrue(commandExists("bash"));
+        Assumptions.assumeTrue(commandExists("git"));
+        Assumptions.assumeTrue(commandExists("sleep"));
+        Path installScript = Path.of("install.sh").toAbsolutePath();
+        Path sourceRepository = createSourceRepository(temporaryDirectory);
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path symphonyHome = temporaryDirectory.resolve("stale-pid-missing-command-home");
+        Path binDirectory = temporaryDirectory.resolve("stale-pid-missing-command-bin");
+        Path fakeLog = temporaryDirectory.resolve("stale-pid-missing-command-fake-tools.log");
+        Files.createFile(temporaryDirectory.resolve("codex-authenticated"));
+        Map<String, String> environment = Map.of(
+                "PATH", fakeBin + System.getProperty("path.separator") + System.getenv("PATH"),
+                "SYMPHONY_TRELLO_REPO_URL", sourceRepository.toUri().toString(),
+                "SYMPHONY_HOME", symphonyHome.toString(),
+                "SYMPHONY_FAKE_LOG", fakeLog.toString());
+
+        ProcessResult install = run(
+                environment, "bash", installScript.toString(), "--no-onboard", "--bin-dir", binDirectory.toString());
+        Path command = binDirectory.resolve("symphony-trello");
+        Path stalePid = symphonyHome.resolve("state/WORKFLOW.stale.pid");
+        Path zeroPid = symphonyHome.resolve("state/WORKFLOW.zero.pid");
+        Path reusedPid = symphonyHome.resolve("state/WORKFLOW.reused.pid");
+        Files.writeString(stalePid, "999999\n", StandardCharsets.UTF_8);
+        Files.writeString(zeroPid, "0\n", StandardCharsets.UTF_8);
+        Files.delete(command);
+        addSourceRepositoryCommit(sourceRepository, "UPDATED", "updated\n");
+        Process unrelated = new ProcessBuilder("sleep", "60").start();
+
+        try {
+            Files.writeString(reusedPid, unrelated.pid() + "\n", StandardCharsets.UTF_8);
+
+            // when
+            ProcessResult update = run(
+                    environment,
+                    "bash",
+                    installScript.toString(),
+                    "--no-onboard",
+                    "--bin-dir",
+                    binDirectory.toString());
+
+            // then
+            assertThat(install.exitCode()).as(install.output()).isZero();
+            assertThat(update.exitCode()).as(update.output()).isZero();
+            assertThat(update.output())
+                    .contains("Removing stale managed worker pid files before update...")
+                    .doesNotContain("Stopping managed workers before update...")
+                    .doesNotContain("Stop the running Symphony worker processes manually");
+            assertThat(command).isExecutable();
+            assertThat(stalePid).doesNotExist();
+            assertThat(zeroPid).doesNotExist();
+            assertThat(reusedPid).doesNotExist();
+            assertThat(Files.readString(fakeLog, StandardCharsets.UTF_8)).doesNotContain("TrelloBoardSetupMain stop");
+        } finally {
+            unrelated.destroyForcibly();
         }
     }
 

@@ -259,6 +259,46 @@ matters, and easy for another engineer to understand without asking the original
 - For CLI commands, follow the principle of least surprise: avoid silent no-ops, print actionable
   success/error output, and prefer preserving existing user files with a clear alternate path over
   making repeated setup commands appear to do nothing.
+- Do not make users inspect workflow or config internals to recover from CLI errors. When the
+  program knows the relevant command, path, option, or environment variable names for this run,
+  print those exact values in the next step instead of saying that they are "referenced by the
+  workflow", "configured locally", or similar.
+- When user-facing text prints a path, command, URL, file name, environment variable, or other value
+  the user may copy, do not put sentence punctuation immediately after it. Put the value in
+  backticks, on its own line, or before explanatory text so punctuation cannot be mistaken as part of
+  the value.
+- When investigating local setup, diagnostics, worker, or board-routing failures on a machine where
+  the installed command is available, use `symphony-trello diagnostics` for the public-safe overview.
+  If the failure depends on information the default report intentionally omits, run
+  `symphony-trello diagnostics --deep` to add deeper public-safe checks such as Codex and GitHub
+  auth-status probes. If the sanitized report uses `board_hash`, `key_hash`, or `<path:...>` tokens
+  and you need to map them back to the real local board, workflow, env file, workspace, state
+  directory, or log file, run `symphony-trello diagnostics --show-private-context` locally,
+  optionally with `--board` or `--workflow` to narrow the scope. Treat that output as private
+  investigation data: do not paste it into GitHub issues, Trello comments, PR descriptions,
+  committed files, or final user summaries. Use it to decide what to inspect or fix, then report
+  only sanitized conclusions unless the user explicitly asks for local private values.
+- When adding setup, onboarding, installer, or lifecycle failure codes, decide whether the failure
+  is expected or unexpected while designing the failure path. Treat it as expected when the user can
+  fix it from the command output without a maintainer, such as invalid CLI shape, missing required
+  input, declined setup action, missing credentials, missing login, missing prerequisite, ambiguous
+  selector, or a known external authorization/permission/not-found response. Expected failures
+  should print an actionable error or next step and should not create diagnostics or GitHub issue
+  reports by default. Implement expected setup failures as `TrelloBoardSetupException` codes listed
+  in `SetupDiagnosticReporter.EXPECTED_SETUP_FAILURE_CODES`; add a `userActionHint(...)` case only
+  when the exception message itself does not already contain the exact recovery command. Treat a
+  failure as unexpected when it suggests a bug, unsafe state, tool/runtime failure, unreadable
+  generated state, failed workflow read/write, failed worker start/stop/health, transport failure,
+  rate limit, server error, malformed external payload, or any condition where a maintainer needs
+  sanitized system/workflow/log context to debug it. Unexpected setup failures should not be added
+  to `EXPECTED_SETUP_FAILURE_CODES`, so `SetupDiagnosticReporter.shouldReport(...)` can create a
+  sanitized report. When an apparently unexpected boundary failure wraps a known user-correctable
+  cause, such as local worker startup logs showing Trello authentication failure, map it to the
+  specific expected setup code before it reaches the CLI. If an unexpected exception message could
+  contain private paths, tokens, Trello identifiers, account names, or raw external payloads, wrap it
+  before it reaches the CLI boundary with a safe message and preserve the original cause. Tests must
+  prove expected failures do not write troubleshooting reports, unexpected failures still do, and any
+  printed next step is not misleading.
 - Avoid unclear normalization jargon in code and docs. Prefer simple words such as "default",
   "resolved", "configured", or "official".
 - For local Trello credentials, use ignored project-root `.env` files created from `.env.example`.
@@ -513,6 +553,10 @@ matters, and easy for another engineer to understand without asking the original
 - When a session contains multiple durable design decisions, review the recent conversation and
   commit history before finishing so relevant decisions are captured in ADRs instead of living only
   in chat.
+- Treat naming decisions for public CLI flags, commands, config fields, workflow fields, API fields,
+  labels, or other user-visible contract terms as ADR-worthy when multiple plausible names were
+  discussed or rejected. Capture the chosen name, rejected names, why each was rejected, and the
+  decision criteria in the same change.
 - Run markdownlint when changing Markdown, especially ADRs. The CI lint job is based on MADR's
   markdownlint workflow and uses `.markdownlint-cli2.yaml`; do not disable rules inline unless the
   exception is narrow and justified.
@@ -575,6 +619,28 @@ matters, and easy for another engineer to understand without asking the original
   contract. Stop only after a full pass finds nothing else to add. If the implementation violates
   the updated spec, create or update a GitHub issue with the exact mismatch, affected behavior, and
   acceptance criteria instead of silently changing the contract to fit the code.
+
+## GitHub Issue Triage
+
+- When asked for an issue triage sweep, review open issues in cycles. In each cycle, update stale
+  descriptions, labels, milestones, dependency links, and missing context directly. Stop only after a
+  full pass finds nothing else worth changing.
+- Use `needs-human-review` only when the issue is missing a human decision, required context, or an
+  external action that is not already represented by a dependency or clear issue step. Do not use it
+  for issues that are merely blocked by another issue or waiting for a clearly described timing
+  condition; use `blocked` and dependency notes for those. Do not add `needs-human-review` only
+  because the implementation step itself is a maintainer or owner/admin action, such as transferring
+  a repository, when that action is already the clear issue scope. Whenever adding
+  `needs-human-review`, also add `not-ready` and immediately add an issue comment that states
+  exactly what human decision, external action, or missing context is needed so the labels can be
+  removed in a later sweep.
+- Use `not-ready` when the issue scope, design, or acceptance criteria are not finalized enough to
+  implement, or when `needs-human-review` applies. Do not use `not-ready` for an otherwise actionable
+  issue that is only blocked by another issue, waiting for a clear timing condition, or waiting for
+  an owner/admin action. Do not add `needs-human-review` only because an issue has `not-ready`;
+  `needs-human-review` is only for the narrower cases above.
+- Apply `good first issue` only when a newcomer or one-shot coding agent could implement the issue
+  from the issue URL alone and the resulting pull request would likely need no maintainer comments.
 
 ## Autonomy And Escalation
 
