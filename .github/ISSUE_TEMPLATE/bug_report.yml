@@ -59,7 +59,7 @@ body:
     id: logs
     attributes:
       label: Relevant output
-      description: If you can run the local command, run `symphony-trello diagnostics` and paste the sanitized output here. Use `symphony-trello diagnostics --deep` for Codex or GitHub authentication issues. Review output first and remove anything private before submitting.
+      description: If you can, run `symphony-trello diagnostics` and paste the sanitized output here. Use `symphony-trello diagnostics --deep` for Codex or GitHub authentication issues. Review output first and remove anything private before submitting.
       render: text
   - type: textarea
     id: setup-context
