@@ -607,7 +607,11 @@ Invoke-Step "create $BinDir\symphony-trello.ps1" {
   $CommandLiteral = ConvertTo-PowerShellLiteral (Join-Path $BinDir "symphony-trello.cmd")
   $BinDirLiteral = ConvertTo-PowerShellLiteral $BinDir
   $CodexNpmPrefixLiteral = ConvertTo-PowerShellLiteral $CodexNpmPrefix
-  @"
+@"
+param(
+  [Parameter(ValueFromRemainingArguments=`$true)]
+  [string[]]`$ScriptArgs = @()
+)
 `$ErrorActionPreference = "Stop"
 `$AppHome = $PrefixLiteral
 `$ConfigDir = if (`$env:SYMPHONY_TRELLO_CONFIG_DIR) { `$env:SYMPHONY_TRELLO_CONFIG_DIR } else { $ConfigDirLiteral }
@@ -690,7 +694,7 @@ function Invoke-SetupCli {
   & java "-Dsymphony.trello.app.home=`$AppHome" "-Dsymphony.trello.config.dir=`$ConfigDir" "-Dsymphony.trello.shell=`$shell" "-Dsymphony.trello.command=`$commandPath" -cp `$classpath ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain @CliArgs
   exit `$LASTEXITCODE
 }
-Invoke-SetupCli @args
+Invoke-SetupCli `$ScriptArgs
 "@ | Set-Content -Encoding UTF8 "$BinDir\symphony-trello.ps1"
 @"
 @echo off

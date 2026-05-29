@@ -2,10 +2,14 @@ package ch.fmartin.symphony.trello;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -14,9 +18,11 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 
 class AdrConformanceTest {
-    private static final Pattern ADR_DATE = Pattern.compile("^date: \\d{4}-\\d{2}-\\d{2}$");
+    private static final ObjectMapper YAML = new ObjectMapper(new YAMLFactory());
+    private static final TypeReference<LinkedHashMap<String, Object>> YAML_METADATA = new TypeReference<>() {};
+    private static final Pattern ADR_DATE = Pattern.compile("^\\d{4}-\\d{2}-\\d{2}$");
     private static final List<String> ADR_METADATA =
-            List.of("status:", "date:", "decision-makers:", "consulted:", "informed:");
+            List.of("status", "date", "decision-makers", "consulted", "informed");
     private static final List<String> ADR_HEADINGS = List.of(
             "## Context and Problem Statement",
             "## Decision Drivers",
@@ -82,27 +88,37 @@ class AdrConformanceTest {
             violations.add("%s: expected YAML front matter end".formatted(file));
             return;
         }
-        Map<String, String> metadata = new LinkedHashMap<>();
-        for (String line : lines.subList(1, end)) {
-            int separator = line.indexOf(':');
-            if (separator > 0) {
-                metadata.put(line.substring(0, separator + 1), line);
-            }
+        Map<String, Object> metadata;
+        try {
+            metadata = YAML.readValue(String.join("\n", lines.subList(1, end)), YAML_METADATA);
+        } catch (IOException e) {
+            violations.add("%s: invalid ADR YAML metadata: %s".formatted(file, e.getMessage()));
+            return;
         }
         for (String key : ADR_METADATA) {
-            String value = metadata.get(key);
-            if (value == null || value.equals(key)) {
+            Object value = metadata.get(key);
+            if (metadataValueBlank(value)) {
                 violations.add("%s: expected filled ADR metadata field %s".formatted(file, key));
             }
         }
-        String status = metadata.get("status:");
-        if (status != null && !status.equals("status: accepted")) {
+        Object status = metadata.get("status");
+        if (status != null && !"accepted".equals(String.valueOf(status))) {
             violations.add("%s: expected accepted ADR status, found %s".formatted(file, status));
         }
-        String date = metadata.get("date:");
-        if (date != null && !ADR_DATE.matcher(date).matches()) {
+        Object date = metadata.get("date");
+        if (date != null && !ADR_DATE.matcher(String.valueOf(date)).matches()) {
             violations.add("%s: expected ADR date as YYYY-MM-DD, found %s".formatted(file, date));
         }
+    }
+
+    private static boolean metadataValueBlank(Object value) {
+        return switch (value) {
+            case null -> true;
+            case String string -> string.isBlank();
+            case Collection<?> collection -> collection.isEmpty();
+            case Map<?, ?> map -> map.isEmpty();
+            default -> false;
+        };
     }
 
     private static void assertAdrHeadings(Path file, List<String> lines, List<String> violations) {

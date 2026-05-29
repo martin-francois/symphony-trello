@@ -1444,8 +1444,9 @@ Execution contract:
 
 - Execute in a local shell context appropriate to the host OS, with the workspace directory as
   `cwd`.
-- On POSIX systems, `sh -lc <script>` or a stricter equivalent such as `bash -lc <script>` is a
-  conforming default.
+- On POSIX systems, run hooks through a non-login shell such as `bash -c <script>`. Do not use a
+  login shell as the default because profile startup can change the effective directory or otherwise
+  make hook behavior depend on host-specific shell initialization.
 - Hook timeout uses `hooks.timeout_ms`; default: `60000 ms`.
 - Log hook start, failures, and timeouts.
 
