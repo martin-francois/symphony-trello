@@ -528,7 +528,7 @@ Codex's sandbox needs; `RestrictAddressFamilies` must include `AF_NETLINK`.
 
 ### Regression Scenario: Deployed Project Root Access
 
-Use this when changing systemd hardening or Ansible deployment access.
+Use this when changing systemd hardening or manual deployment access.
 
 Use disposable external projects for this scenario. Do not reuse a private checkout. A suitable
 fixture is a temporary directory outside the Symphony workspace root with this Dockerfile:
@@ -550,13 +550,14 @@ Trello moves the card from `Ready for Codex` to `In Progress` before the final h
    inaccessible, why the deployed service could not access it, that files are available in the
    per-card workspace shown by `pwd`, and that deployment access can be relaxed with allowed host
    paths.
-4. Deploy again with that disposable path in `symphony_trello_allowed_host_paths`.
+4. Deploy again with that disposable path in the manual systemd `BindPaths`, `ReadWritePaths`, and
+   `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS` settings.
 5. Create a fresh card that asks Codex to read and write a harmless marker file in the allowed path.
 6. Verify the card moves to the review handoff list, the marker file changed as requested, and
    `/api/v1/state` drains to zero running and retrying entries.
 7. If the allowed path is a parent directory and Codex reports a sandbox error
-   for the parent, rerun with `symphony_trello_codex_danger_full_access: true` while keeping
-   `symphony_trello_allowed_host_paths` narrow.
+   for the parent, rerun with `SYMPHONY_CODEX_DANGER_FULL_ACCESS=true` while keeping the systemd
+   host paths narrow.
 8. Deploy again with a different allowed path and create a card for the previous path. It should
    block again, proving the allowlist did not become broad host access.
 
@@ -572,7 +573,7 @@ Use a disposable repository, not a private project checkout.
 
 1. Prepare a readable local repository checkout outside the Symphony workspace root and make it
    read-only for the service user.
-2. Deploy with the parent directory in `symphony_trello_allowed_host_paths`.
+2. Deploy with the parent directory in the manual systemd host path settings.
 3. Create one Trello card whose title names only the repository URL and asks for a small committed
    code or documentation change.
 4. Create another Trello card whose title names the read-only local checkout path and asks for the
@@ -625,7 +626,7 @@ assertion must inspect every commit on the resulting PR through GitHub, not only
 commit.
 
 1. Create a temporary recommended Trello board with the fast path command and deploy that workflow
-   with Ansible.
+   with the manual systemd guide.
 2. In a disposable repository or private test repository, create a temporary non-default branch with
    one harmless commit authored as `Codex <codex@openai.com>`, push it, and open a temporary PR.
 3. Create a Trello card in `Ready for Codex` that asks Codex to continue that existing PR and make

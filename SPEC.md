@@ -3196,14 +3196,13 @@ Required when the workflow expects the agent to perform Trello handoff transitio
   interface.
 - Repository-local agent skills follow Section 19.1 when generated workflows reference skills.
 - Manual systemd deployments follow Section 19.2 when this repository's deployment template is used.
-- Ansible desired-state deployments follow Section 19.3 when the optional playbook is used.
-- Deployment host path access follows Section 19.4 when operators expose files outside managed
+- Deployment host path access follows Section 19.3 when operators expose files outside managed
   workspaces.
-- The opt-in Java live E2E harness follows Section 19.5 when external Trello credentials are
+- The opt-in Java live E2E harness follows Section 19.4 when external Trello credentials are
   supplied.
-- Local installer and onboarding commands follow Section 19.6 when this repository's one-liner
+- Local installer and onboarding commands follow Section 19.5 when this repository's one-liner
   scripts or `setup-local` command are used.
-- Java repository quality gates follow Section 19.7 for this repository's maintained implementation.
+- Java repository quality gates follow Section 19.6 for this repository's maintained implementation.
 - `trello_rest` client-side tool extension exposes scoped Trello REST access through the app-server
   session using configured Symphony auth.
 - `trello_rest` client-side tool extension disallows destructive operations by default.
@@ -3349,46 +3348,7 @@ When this profile is used:
 The deployment profile is intentionally transparent. Operators can inspect and manage each workflow
 with normal `systemctl` and `journalctl` commands.
 
-### 19.3 Ansible Desired-State Deployment Profile
-
-The Ansible deployment profile automates the manual systemd layout from declared desired state. It is
-an optional deployment path, not a runtime dependency.
-
-When this profile is used:
-
-- `symphony_trello_workflows` is the desired state for deployed workflow services
-- each declared workflow has a local source file and a service name
-- the playbook MAY render a deployed workflow copy from the source workflow instead of copying it
-  verbatim, provided the rendered file remains a normal `WORKFLOW.md` contract for the runtime
-- rendered deployed workflow copies MAY overlay deployment-owned fields such as `tracker.api_key`,
-  `tracker.api_token`, `workspace.root`, and `server.port`
-- if the Ansible profile supports per-workflow `workspace.root` overrides, it SHOULD keep those
-  roots under the service state directory unless it also updates the service write policy for the
-  chosen paths
-- the playbook MAY expose variables for host-specific choices such as
-  `symphony_trello_service_environment`, `symphony_trello_codex_auth_src`,
-  `symphony_trello_allowed_host_paths`, and `symphony_trello_codex_danger_full_access`
-- rerunning the playbook SHOULD be idempotent when inputs have not changed
-- changed application inputs SHOULD rebuild the app on the controller before deployment
-- changed app artifacts or workflow files SHOULD restart only affected managed services
-- removing a workflow from desired state SHOULD stop and disable the matching service and remove the
-  managed workflow file
-- Trello secrets SHOULD be stored in Ansible Vault and installed as root-only systemd credential
-  files
-- real inventory, vault files, vault password files, `.env`, and private workflow files MUST remain
-  ignored and uncommitted
-- the playbook SHOULD validate systemd units and lint Ansible files in CI without requiring real
-  deployment secrets
-- when generated workflows publish pull requests, the deployment SHOULD make Git and GitHub CLI
-  authentication available to the service user without putting raw tokens in workflow files
-- the Java Ansible role MAY copy an existing GitHub CLI `hosts.yml` file to the service user's home
-  directory and configure Git's HTTPS credential helper to use `gh auth git-credential`
-
-This profile uses the same one-process-per-workflow model as the manual systemd profile. It adds
-repeatable installation, update, restart, and removal behavior for operators who manage more than one
-workflow or redeploy often.
-
-### 19.4 Deployment Host Path Access Profile
+### 19.3 Deployment Host Path Access Profile
 
 Deployed Symphony should expose host paths explicitly. The default posture is that Codex can read and
 write Symphony-managed workspace paths, but not arbitrary host files.
@@ -3396,13 +3356,9 @@ write Symphony-managed workspace paths, but not arbitrary host files.
 When this profile is used:
 
 - undeclared host paths are blocked by default for security reasons
-- an operator may allow one or more files or folders with documented systemd or Ansible settings
+- an operator may allow one or more files or folders with documented systemd settings
 - allowed host paths SHOULD be reflected in both the systemd filesystem policy and Codex's
   `workspaceWrite` writable roots when that sandbox mode is used
-- the Ansible profile maps allowed host paths from `symphony_trello_allowed_host_paths` into the
-  systemd drop-in and Codex writable-root environment for managed services
-- implementations MAY keep older deployment variable names as aliases, but new documentation SHOULD
-  use names that describe concrete files or folders rather than project roots
 - the manual systemd profile documents the equivalent `BindPaths`, `ReadWritePaths`, and
   `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS` settings
 - a less strict Codex inner sandbox MAY be enabled for trusted workflows while systemd still limits
@@ -3417,7 +3373,7 @@ preserves the security default while still allowing cards to use existing host r
 context when an operator has allowed read access, and it keeps the workspace root available for
 runtime-managed metadata such as Codex skills.
 
-### 19.5 Opt-In Java Live E2E Harness
+### 19.4 Opt-In Java Live E2E Harness
 
 Live Trello and real-Codex verification is environment-dependent. This repository therefore keeps
 normal CI deterministic while providing an opt-in Java integration-test harness and documented manual
@@ -3438,7 +3394,7 @@ When this profile is used:
 - live test output and committed documentation MUST avoid leaking Trello tokens, private board IDs,
   private card IDs, private project names, account names, or private host paths
 
-### 19.6 Local Installer And Plan B Onboarding Profile
+### 19.5 Local Installer And Plan B Onboarding Profile
 
 This Java repository ships an OpenClaw-inspired local onboarding profile. The repository-hosted
 install scripts are bootstrap wrappers; Java setup code owns Trello, Codex, GitHub, board, and
@@ -3519,7 +3475,8 @@ When this profile is used:
 - local uninstall MUST NOT treat the installer-managed app confirmation as confirmation to delete
   user data; unattended user-data cleanup MUST require a separate explicit confirmation option
 - local uninstall MUST require an installer marker before recursively deleting the app directory.
-  It is a local convenience profile and does not replace the Ansible server deployment profile.
+  It is a local convenience profile and does not replace the manual systemd server deployment
+  profile.
 - deterministic CI SHOULD exercise the POSIX installer lifecycle beyond syntax checks by driving
   interactive prompts through a pseudo-terminal, using test doubles for external tools/services,
   verifying install, update, managed start/status, and uninstall cleanup behavior without real Trello,
@@ -3528,7 +3485,7 @@ When this profile is used:
   Microsoft .NET SDK container image that includes PowerShell, so Linux CI and local Linux machines
   can run the same PowerShell checks without a host PowerShell installation
 
-### 19.7 Java Repository Quality Profile
+### 19.6 Java Repository Quality Profile
 
 This profile documents build and maintenance rules for this Java repository. These rules are not
 runtime conformance requirements for other Symphony-for-Trello implementations.

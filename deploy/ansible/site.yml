@@ -1,7 +1,0 @@
----
-- name: Deploy Symphony for Trello
-  hosts: symphony_trello
-  become: true
-  gather_facts: false
-  roles:
-    - role: symphony_trello

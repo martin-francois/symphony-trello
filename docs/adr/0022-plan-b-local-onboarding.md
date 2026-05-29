@@ -14,10 +14,10 @@ informed: [Future maintainers]
 
 ## Context and Problem Statement
 
-The project already had Java commands for Trello board creation and import, plus Ansible and systemd
-deployment documentation. That was enough for maintainers, but too much for first-time users who
-want a real local installation without learning Maven, Quarkus, Ansible, and workflow-file details
-up front.
+The project already had Java commands for Trello board creation and import, plus server deployment
+documentation. That was enough for maintainers, but too much for first-time users who want a real
+local installation without learning Maven, Quarkus, server deployment, and workflow-file details up
+front.
 
 How should Symphony for Trello add a simpler OpenClaw-inspired install and onboarding path without
 duplicating Trello, Codex, GitHub, board, and workflow decisions in shell scripts?
@@ -35,7 +35,7 @@ duplicating Trello, Codex, GitHub, board, and workflow decisions in shell script
 
 * Plan B: bootstrap scripts delegate product setup to Java.
 * Plan A: implement the whole first-run flow in Bash and PowerShell.
-* Keep only the existing README, Maven commands, and Ansible deployment path.
+* Keep only the existing README, Maven commands, and server deployment path.
 
 ## Decision Outcome
 
@@ -124,7 +124,7 @@ Scripts install or update the checkout and command wrapper, then Java performs p
 
 * Good, because Java tests cover board/workflow decisions.
 * Good, because shell and PowerShell stay focused on bootstrap mechanics.
-* Good, because Ansible and future deployment code can reuse the same setup concepts.
+* Good, because future deployment code can reuse the same setup concepts.
 * Bad, because it requires more Java command surface than a pure README change.
 
 ### Plan A: Implement the Whole First-Run Flow in Bash and PowerShell
@@ -136,7 +136,7 @@ Scripts would handle credentials, GitHub mode, board creation, workflow generati
 * Bad, because the script behavior would drift from Java setup and tests.
 * Bad, because cross-platform secret and path handling would become harder to maintain.
 
-### Keep Only Existing README, Maven Commands, and Ansible Deployment
+### Keep Only Existing README, Maven Commands, And Server Deployment
 
 The project would keep the existing operator-focused setup paths.
 
