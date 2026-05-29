@@ -37,6 +37,48 @@ record ConnectedBoard(
                 options.dangerFullAccess());
     }
 
+    static ConnectedBoard from(
+            TrelloBoardSetup.NewBoardResult result,
+            Path envPath,
+            Path workspaceRoot,
+            TrelloBoardSetup.GitHubIntegration githubIntegration) {
+        return new ConnectedBoard(
+                result.boardId(),
+                result.boardKey(),
+                result.boardName(),
+                result.boardUrl(),
+                absolute(result.workflowPath()),
+                absolute(envPath),
+                absolute(workspaceRoot),
+                result.serverPort(),
+                githubIntegration.enabled(),
+                List.of(),
+                false);
+    }
+
+    static ConnectedBoard from(
+            TrelloBoardSetup.ImportBoardResult result,
+            Path envPath,
+            Path workspaceRoot,
+            TrelloBoardSetup.GitHubIntegration githubIntegration) {
+        return new ConnectedBoard(
+                result.boardId(),
+                result.boardKey(),
+                result.boardName(),
+                result.boardUrl(),
+                absolute(result.workflowPath()),
+                absolute(envPath),
+                absolute(workspaceRoot),
+                result.serverPort(),
+                githubIntegration.enabled(),
+                List.of(),
+                false);
+    }
+
+    private static Path absolute(Path path) {
+        return path == null ? null : path.toAbsolutePath().normalize();
+    }
+
     ConnectedBoard withServerPort(int serverPort) {
         return new ConnectedBoard(
                 boardId,

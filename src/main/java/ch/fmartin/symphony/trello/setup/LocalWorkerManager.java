@@ -1,7 +1,11 @@
 package ch.fmartin.symphony.trello.setup;
 
+import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -11,6 +15,8 @@ import java.util.Map;
 import java.util.Optional;
 
 final class LocalWorkerManager {
+    private static final int STARTUP_LOG_BYTE_LIMIT = 128 * 1024;
+
     private final Map<String, String> environment;
     private final WorkflowConfigEditor workflowConfig;
     private final LocalHealthChecker healthChecker;
@@ -113,6 +119,8 @@ final class LocalWorkerManager {
             return;
         }
 
+        validateWorkerCredentials(board.workflowPath(), envPath);
+
         List<String> command = List.of(
                 javaExecutable(),
                 "-Dsymphony.trello.managed.app_home=" + paths.appHome(),
@@ -124,12 +132,14 @@ final class LocalWorkerManager {
                 "SYMPHONY_TRELLO_CONFIG_DIR", paths.configDir().toString(),
                 "SYMPHONY_TRELLO_WORKSPACE_ROOT", paths.workspaceRoot().toString(),
                 "SYMPHONY_TRELLO_STATE_HOME", paths.stateHome().toString());
+        StartupLogOffsets logOffsets = StartupLogOffsets.capture(files);
         ManagedProcessHandle handle =
                 platform.start(command, paths.appHome(), processEnvironment, files.stdoutLog(), files.stderrLog());
         store.writePid(files.pidFile(), handle.pid());
         BoardHealth health = healthChecker.waitForSameWorkflow(board, healthPort);
         if (health.kind() != BoardHealthKind.SAME_WORKFLOW) {
             stopPid(store, files, handle.pid());
+            throwKnownStartupFailure(files, logOffsets, platform.appendsToExistingLogs());
             throw new TrelloBoardSetupException(
                     "setup_start_unhealthy",
                     "Symphony start returned successfully, but " + LocalHealthChecker.localStateUrl(health.port())
@@ -147,6 +157,168 @@ final class LocalWorkerManager {
                             + files.stdoutLog() + " and " + files.stderrLog());
         }
         out.println("Started Symphony for Trello: \"" + board.boardName() + "\"");
+    }
+
+    private void validateWorkerCredentials(Path workflowPath, Path envPath) {
+        workflowConfig
+                .trackerCredentialReferences(workflowPath)
+                .ifPresent(references -> validateWorkerCredentials(
+                        envPath,
+                        requiredEnvironmentCredential(references.apiKey(), "TRELLO_API_KEY"),
+                        requiredEnvironmentCredential(references.apiToken(), "TRELLO_API_TOKEN")));
+    }
+
+    private void validateWorkerCredentials(
+            Path envPath, Optional<String> apiKeyEnvironment, Optional<String> apiTokenEnvironment) {
+        boolean hasApiKey = apiKeyEnvironment
+                .map(name -> LocalEnvironment.firstPresent(envPath, environment, name)
+                        .isPresent())
+                .orElse(true);
+        boolean hasApiToken = apiTokenEnvironment
+                .map(name -> LocalEnvironment.firstPresent(envPath, environment, name)
+                        .isPresent())
+                .orElse(true);
+        if (!hasApiKey && !hasApiToken) {
+            throw missingWorkerCredentialException(
+                    "setup_worker_missing_trello_credentials",
+                    "Missing Trello credentials for worker start.",
+                    envPath,
+                    apiKeyEnvironment,
+                    apiTokenEnvironment);
+        }
+        if (!hasApiKey) {
+            throw missingWorkerCredentialException(
+                    "setup_worker_missing_api_key",
+                    "Missing Trello API key for worker start.",
+                    envPath,
+                    apiKeyEnvironment,
+                    apiTokenEnvironment);
+        }
+        if (!hasApiToken) {
+            throw missingWorkerCredentialException(
+                    "setup_worker_missing_api_token",
+                    "Missing Trello API token for worker start.",
+                    envPath,
+                    apiKeyEnvironment,
+                    apiTokenEnvironment);
+        }
+    }
+
+    private static TrelloBoardSetupException missingWorkerCredentialException(
+            String code,
+            String message,
+            Path envPath,
+            Optional<String> apiKeyEnvironment,
+            Optional<String> apiTokenEnvironment) {
+        return new TrelloBoardSetupException(code, message)
+                .withDotenvPath(envPath)
+                .withTrelloCredentialEnvironmentNames(
+                        apiKeyEnvironment.orElse("TRELLO_API_KEY"), apiTokenEnvironment.orElse("TRELLO_API_TOKEN"));
+    }
+
+    private static Optional<String> requiredEnvironmentCredential(
+            Optional<String> configuredValue, String defaultEnvironmentName) {
+        return configuredValue
+                .map(String::trim)
+                .map(LocalWorkerManager::environmentCredentialName)
+                .orElseGet(() -> Optional.of(defaultEnvironmentName));
+    }
+
+    private static Optional<String> environmentCredentialName(String configuredValue) {
+        return configuredValue.startsWith("$") && configuredValue.length() > 1
+                ? Optional.of(configuredValue.substring(1))
+                : Optional.empty();
+    }
+
+    private static void throwKnownStartupFailure(
+            ManagedProcessStore.ManagedProcessFiles files,
+            StartupLogOffsets logOffsets,
+            boolean appendsToExistingLogs) {
+        String logs = startupLogs(files, logOffsets, appendsToExistingLogs);
+        if (logs.contains("Trello authentication failed")) {
+            throw new TrelloBoardSetupException(
+                    "trello_auth_failed", "Trello authentication failed while starting Symphony.");
+        }
+        if (logs.contains("Trello permission denied")) {
+            throw new TrelloBoardSetupException(
+                    "trello_permission_denied", "Trello permission denied while starting Symphony.");
+        }
+        if (logs.contains("Configured Trello board is closed") || logs.contains("Trello board is archived")) {
+            throw new TrelloBoardSetupException(
+                    "trello_board_closed", "Configured Trello board is archived while starting Symphony.");
+        }
+    }
+
+    private static String startupLogs(
+            ManagedProcessStore.ManagedProcessFiles files,
+            StartupLogOffsets logOffsets,
+            boolean appendsToExistingLogs) {
+        return startupLog(files.stdoutLog(), logOffsets.stdoutOffset(), appendsToExistingLogs) + "\n"
+                + startupLog(files.stderrLog(), logOffsets.stderrOffset(), appendsToExistingLogs);
+    }
+
+    private static String startupLog(Path path, StartupLogSnapshot snapshot, boolean appendsToExistingLogs) {
+        if (!Files.isRegularFile(path)) {
+            return "";
+        }
+        try {
+            long size = Files.size(path);
+            long start = startupLogStart(path, snapshot, size, appendsToExistingLogs);
+            if (start < 0L) {
+                return "";
+            }
+            try (FileChannel channel = FileChannel.open(path)) {
+                channel.position(start);
+                ByteBuffer buffer = ByteBuffer.allocate((int) (size - start));
+                channel.read(buffer);
+                buffer.flip();
+                return StandardCharsets.UTF_8.decode(buffer).toString();
+            }
+        } catch (IOException ignored) {
+            return "";
+        }
+    }
+
+    private static long startupLogStart(
+            Path path, StartupLogSnapshot snapshot, long size, boolean appendsToExistingLogs) throws IOException {
+        if (!appendsToExistingLogs) {
+            return size != snapshot.size() || modifiedAfterSnapshot(path, snapshot)
+                    ? Math.max(0L, size - STARTUP_LOG_BYTE_LIMIT)
+                    : -1L;
+        }
+        if (size > snapshot.size()) {
+            return Math.max(snapshot.size(), size - STARTUP_LOG_BYTE_LIMIT);
+        }
+        if (size < snapshot.size() || modifiedAfterSnapshot(path, snapshot)) {
+            return Math.max(0L, size - STARTUP_LOG_BYTE_LIMIT);
+        }
+        return -1L;
+    }
+
+    private static boolean modifiedAfterSnapshot(Path path, StartupLogSnapshot snapshot) throws IOException {
+        long modifiedMillis = Files.getLastModifiedTime(path).toMillis();
+        return modifiedMillis > snapshot.modifiedMillis();
+    }
+
+    private record StartupLogOffsets(StartupLogSnapshot stdoutOffset, StartupLogSnapshot stderrOffset) {
+        static StartupLogOffsets capture(ManagedProcessStore.ManagedProcessFiles files) {
+            return new StartupLogOffsets(
+                    StartupLogSnapshot.snapshot(files.stdoutLog()), StartupLogSnapshot.snapshot(files.stderrLog()));
+        }
+    }
+
+    private record StartupLogSnapshot(long size, long modifiedMillis) {
+        private static StartupLogSnapshot snapshot(Path path) {
+            try {
+                if (!Files.isRegularFile(path)) {
+                    return new StartupLogSnapshot(0L, 0L);
+                }
+                return new StartupLogSnapshot(
+                        Files.size(path), Files.getLastModifiedTime(path).toMillis());
+            } catch (IOException ignored) {
+                return new StartupLogSnapshot(0L, 0L);
+            }
+        }
     }
 
     private void stopStartedProcess(ManagedProcessStore store, ManagedProcessStore.ManagedProcessFiles files, long pid)

@@ -113,8 +113,9 @@ public final class LocalSetup {
     int run(LocalSetupRequest request, Terminal terminal) {
         PrintStream out = terminal.out();
         PrintStream err = terminal.err();
+        Options options = null;
         try {
-            Options options = Options.from(request, environment);
+            options = Options.from(request, environment);
 
             printHeader(out, options);
             Prerequisites prerequisites = prerequisites();
@@ -204,6 +205,8 @@ public final class LocalSetup {
             return 0;
         } catch (TrelloBoardSetupException | IllegalArgumentException | IOException e) {
             err.println("setup_failed code=%s message=%s".formatted(errorCode(e), e.getMessage()));
+            Optional<Path> hintEnvPath = options == null ? Optional.empty() : Optional.of(options.envPath());
+            SetupDiagnosticReporter.userActionHint(e, hintEnvPath).ifPresent(hint -> err.println("Next step: " + hint));
             diagnosticReporter.reportFailure(e, request, terminal);
             return 2;
         }
@@ -215,7 +218,7 @@ public final class LocalSetup {
                 && Files.exists(options.workflowPath().toAbsolutePath().normalize())) {
             throw new TrelloBoardSetupException(
                     "setup_workflow_exists",
-                    "Workflow file already exists: " + options.workflowPath() + ". Pass --force to replace it.");
+                    "Workflow file already exists: " + options.workflowPath() + "\nPass --force to replace it.");
         }
     }
 
@@ -1127,7 +1130,7 @@ public final class LocalSetup {
                 workflow = resolveUserDataPath(workflow, configDir);
             }
             boolean workspaceRootExplicit = request.workspaceRoot().isPresent();
-            validateEnvPath(envPath);
+            TrelloCredentialStore.validateEnvPath(envPath);
             String command = environment.getOrDefault(COMMAND_ENV, DEFAULT_COMMAND);
             return new Options(
                     check,
@@ -1234,18 +1237,6 @@ public final class LocalSetup {
                 return Path.of(configured);
             }
             return TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT;
-        }
-
-        private static void validateEnvPath(Path envPath) {
-            Path fileName = envPath.getFileName();
-            String name = fileName == null ? "" : fileName.toString();
-            if (".env.example".equals(name)
-                    || ".env.template".equals(name)
-                    || (!".env".equals(name) && !name.startsWith(".env."))) {
-                throw new TrelloBoardSetupException(
-                        "setup_env_path_not_ignored",
-                        "--env must point to an ignored dotenv file named .env or .env.NAME, not a tracked template.");
-            }
         }
 
         boolean hasExplicitBoardSetupRequest() {

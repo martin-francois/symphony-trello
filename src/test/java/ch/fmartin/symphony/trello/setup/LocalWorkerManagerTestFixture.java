@@ -31,6 +31,7 @@ final class LocalWorkerManagerTestFixture {
                 Optional.of(tempDir.resolve("state")),
                 Map.of());
         this.platform = mock(ManagedProcessPlatform.class);
+        when(platform.appendsToExistingLogs()).thenReturn(true);
         this.healthChecker = mock(LocalHealthChecker.class);
         when(healthChecker.boardHealth(any()))
                 .thenReturn(new BoardHealth(
@@ -77,6 +78,7 @@ final class LocalWorkerManagerTestFixture {
                 """
                 ---
                 tracker:
+                  kind: trello
                   board_id: %s
                 server:
                   port: %d
@@ -85,6 +87,7 @@ final class LocalWorkerManagerTestFixture {
                 """
                         .formatted(boardId, ConfigDefaults.DEFAULT_SERVER_PORT, boardName),
                 StandardCharsets.UTF_8);
+        writeEnv(paths.defaultEnvPath());
         return new ConnectedBoard(
                 boardId,
                 boardId,
@@ -97,6 +100,14 @@ final class LocalWorkerManagerTestFixture {
                 false,
                 List.of(),
                 false);
+    }
+
+    void writeEnv(Path envPath) throws Exception {
+        Path parent = envPath.toAbsolutePath().normalize().getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
+        Files.writeString(envPath, "TRELLO_API_KEY=test-key\nTRELLO_API_TOKEN=test-token\n", StandardCharsets.UTF_8);
     }
 
     void save(ConnectedBoard... boards) throws Exception {

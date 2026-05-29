@@ -130,6 +130,31 @@ class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void nonInteractiveSetupMissingCredentialsPrintsConfiguredEnvPath() {
+        // given
+        Path env = tempDir.resolve(".env.custom-credentials");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--board-name",
+                "Local Queue",
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_missing_trello_credentials",
+                        "Next step: Provide Trello credentials with --key and --token",
+                        "this .env credential file:\n  " + SetupDiagnosticReporter.displayPath(env));
+        assertThat(result.stderr()).doesNotContain("Troubleshooting report written", "usually", "local .env file");
+    }
+
+    @Test
     void nonInteractiveSetupReadsCredentialsFromSelectedEnvFile() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.custom-env.md");
@@ -2165,7 +2190,8 @@ class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--no-github");
 
         // then
-        result.assertFailure(2).stderrContains("setup_workflow_exists");
+        result.assertFailure(2).stderrContains("setup_workflow_exists", workflow.toString() + "\nPass --force");
+        assertThat(result.stderr()).doesNotContain(workflow + ".");
         assertThat(trello.memberLookups()).isEmpty();
         assertThat(trello.workspaceLookups()).isEmpty();
         assertThat(trello.boardLookups()).isEmpty();

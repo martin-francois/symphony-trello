@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
+import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -14,15 +15,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -32,16 +30,20 @@ import java.util.Optional;
 import java.util.SequencedSet;
 import java.util.Set;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 final class SetupDiagnosticReporter {
+    private static final String CONFIG_DIR_ENV = "SYMPHONY_TRELLO_CONFIG_DIR";
     private static final DateTimeFormatter FILE_TIMESTAMP =
             DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").withZone(ZoneOffset.UTC);
     private static final Duration PROBE_TIMEOUT = Duration.ofSeconds(2);
     private static final int BODY_LIMIT = 4_000;
     private static final int LOG_LINE_LIMIT = 80;
     private static final int LOG_BYTE_LIMIT = 128 * 1024;
-    private static final List<String> TOOL_COMMANDS = List.of(
+    private static final List<String> DIAGNOSTIC_TOOL_COMMANDS =
+            List.of("git", "java", "javac", "npm", "node", "codex", "gh", "docker");
+    private static final List<String> SETUP_FAILURE_TOOL_COMMANDS = List.of(
             "git", "java", "javac", "mvn", "npm", "node", "codex", "gh", "apt-get", "sudo", "doas", "brew", "winget",
             "dnf", "yum", "pacman", "zypper", "docker");
     private static final Pattern SECRET_ASSIGNMENT = Pattern.compile(
@@ -53,6 +55,8 @@ final class SetupDiagnosticReporter {
     private static final Pattern GITHUB_SSH_REMOTE =
             Pattern.compile("(?i)\\b(?:ssh://)?git@github\\.com[:/][^\\s)>'\"`]+");
     private static final Pattern TRELLO_URL = Pattern.compile("https://trello\\.com/\\S+");
+    private static final Pattern TRELLO_CARD_FIELD = Pattern.compile(
+            "(?i)([\"']?(?:card[_-]?id|card[_-]?identifier|cardId|cardIdentifier)[\"']?\\s*[:=]\\s*[\"']?)([^\\s,\"'}]+)");
     private static final Pattern PATH_ASSIGNMENT =
             Pattern.compile("(?i)(\\b(?:path|file|directory|dir|workspace|config|state|home)=)([^\\r\\n]+)");
     private static final Pattern QUOTED_POSIX_PATH = Pattern.compile("([\"'`])(/[^\"'`\\r\\n]+)\\1");
@@ -61,6 +65,63 @@ final class SetupDiagnosticReporter {
             Pattern.compile("(?<![A-Za-z0-9_.:/-])/(?:[^\\r\\n:'\"<>|]+/)*[^\\r\\n:'\"<>|]+");
     private static final Pattern WINDOWS_PATH = Pattern.compile("(?i)\\b[A-Z]:\\\\[^\\r\\n:'\"<>|]+");
     private static final Pattern TRELLO_OBJECT_ID = Pattern.compile("\\b[0-9a-f]{24}\\b", Pattern.CASE_INSENSITIVE);
+    private static final Set<String> EXPECTED_SETUP_FAILURE_CODES = Set.of(
+            "setup_active_state_required",
+            "setup_allow_all_paths_without_root",
+            "setup_board_selection_required",
+            "setup_broad_path_requires_confirmation",
+            "setup_codex_auth_required",
+            "setup_codex_login_failed",
+            "setup_env_path_not_ignored",
+            "setup_env_write_failed",
+            "setup_env_value_multiline",
+            "setup_github_auth_required",
+            "setup_github_cli_declined",
+            "setup_github_cli_install_failed",
+            "setup_github_cli_required",
+            "setup_github_import_list_declined",
+            "setup_github_upgrade_board_required",
+            "setup_github_upgrade_list_declined",
+            "setup_github_upgrade_not_found",
+            "setup_invalid_arguments",
+            "setup_invalid_http_port_override",
+            "setup_invalid_max_agents",
+            "setup_invalid_path",
+            "setup_invalid_port",
+            "setup_invalid_server_port",
+            "setup_logs_missing",
+            "setup_managed_port_required",
+            "setup_manifest_unavailable",
+            "setup_manifest_write_failed",
+            "setup_missing_api_key",
+            "setup_missing_api_token",
+            "setup_missing_board_id",
+            "setup_missing_board_name",
+            "setup_missing_trello_credentials",
+            "setup_mixed_codex_access_update",
+            "setup_prerequisite_missing",
+            "setup_repair_board_not_found",
+            "setup_repair_board_required",
+            "setup_repair_port_http_override",
+            "setup_server_port_conflict",
+            "setup_server_port_unavailable",
+            "setup_worker_board_not_found",
+            "setup_worker_board_required",
+            "setup_worker_missing_api_key",
+            "setup_worker_missing_api_token",
+            "setup_worker_missing_trello_credentials",
+            "setup_worker_selection_conflict",
+            "setup_worker_untracked",
+            "setup_workspace_id_required",
+            "setup_workspace_required",
+            "setup_workflow_codex_missing",
+            "setup_workflow_exists",
+            "setup_workflow_frontmatter_missing",
+            "trello_auth_failed",
+            "trello_board_closed",
+            "trello_invalid_request",
+            "trello_permission_denied",
+            "trello_resource_not_found");
     private static final Set<String> REDACTED_COMMAND_VALUE_OPTIONS = Set.of(
             "--key",
             "--token",
@@ -76,8 +137,10 @@ final class SetupDiagnosticReporter {
             "--workflow",
             "--workspace-root",
             "--config-dir",
+            "--state-home",
             "--manifest",
             "--env",
+            "--output",
             "--add-path",
             "--endpoint");
 
@@ -86,17 +149,43 @@ final class SetupDiagnosticReporter {
         CALLER_DIRECTORY
     }
 
+    private enum DiagnosticsSelectorKind {
+        NONE,
+        BOARD,
+        WORKFLOW
+    }
+
+    private enum ManifestStatus {
+        LOADED,
+        MISSING,
+        UNREADABLE
+    }
+
     private final Map<String, String> environment;
     private final CommandRunner commandRunner;
     private final HttpClient httpClient;
     private final ObjectMapper json;
+    private final RecentLogLister recentLogLister;
     private List<String> sensitiveValues = List.of();
+    private boolean deepDiagnostics;
+    private DiagnosticsTokenHasher tokenHasher = DiagnosticsTokenHasher.ephemeral();
 
     SetupDiagnosticReporter(Map<String, String> environment, CommandRunner commandRunner) {
+        this(environment, commandRunner, Files::list);
+    }
+
+    SetupDiagnosticReporter(
+            Map<String, String> environment, CommandRunner commandRunner, RecentLogLister recentLogLister) {
         this.environment = Map.copyOf(environment);
         this.commandRunner = commandRunner;
         this.httpClient = HttpClient.newBuilder().connectTimeout(PROBE_TIMEOUT).build();
         this.json = ConnectedBoardRepository.jsonMapper();
+        this.recentLogLister = recentLogLister;
+    }
+
+    @FunctionalInterface
+    interface RecentLogLister {
+        Stream<Path> list(Path stateHome) throws IOException;
     }
 
     static Optional<Path> reportFailure(
@@ -136,14 +225,90 @@ final class SetupDiagnosticReporter {
         if (!(exception instanceof TrelloBoardSetupException setupException)) {
             return true;
         }
+        return !setupException.code().startsWith("setup_unknown_")
+                && !EXPECTED_SETUP_FAILURE_CODES.contains(setupException.code());
+    }
+
+    static Optional<String> userActionHint(Exception exception) {
+        return userActionHint(exception, Optional.empty());
+    }
+
+    static Optional<String> userActionHint(Exception exception, Optional<Path> dotenvPath) {
+        if (!(exception instanceof TrelloBoardSetupException setupException)) {
+            return Optional.empty();
+        }
         return switch (setupException.code()) {
-            case "setup_invalid_arguments",
-                    "setup_invalid_max_agents",
-                    "setup_invalid_port",
-                    "setup_invalid_server_port",
-                    "setup_allow_all_paths_without_root" -> false;
-            default -> true;
+            case "setup_missing_api_key", "setup_missing_api_token", "setup_missing_trello_credentials" ->
+                Optional.of(trelloCredentialHint(
+                        setupException.dotenvPath().or(() -> dotenvPath).orElseGet(LocalEnvironment::defaultDotenv)));
+            case "setup_worker_missing_api_key",
+                    "setup_worker_missing_api_token",
+                    "setup_worker_missing_trello_credentials" ->
+                Optional.of(workerCredentialHint(
+                        setupException,
+                        setupException.dotenvPath().or(() -> dotenvPath).orElseGet(LocalEnvironment::defaultDotenv)));
+            case "setup_env_write_failed" -> Optional.of("Choose a writable .env or .env.NAME file, then rerun setup.");
+            case "setup_manifest_unavailable", "setup_manifest_write_failed" ->
+                Optional.of("Check that the workflow directory is writable and connected-boards.json is valid JSON.");
+            case "setup_prerequisite_missing" ->
+                Optional.of("Install the missing prerequisites shown above, then rerun setup.");
+            case "setup_github_cli_required", "setup_github_cli_install_failed" ->
+                Optional.of("Install the GitHub CLI `gh`, then rerun setup or disable GitHub integration.");
+            case "setup_github_auth_required" ->
+                Optional.of("Run `gh auth login`, then rerun setup or disable GitHub integration.");
+            case "trello_auth_failed" -> Optional.of("Check the Trello API key and token, then rerun the command.");
+            case "setup_workspace_id_required" ->
+                Optional.of(
+                        "Re-run with --workspace-id, or use setup-local to choose a Trello Workspace interactively.");
+            default -> Optional.empty();
         };
+    }
+
+    private static String trelloCredentialHint(Path dotenvPath) {
+        return "Provide Trello credentials with --key and --token, set TRELLO_API_KEY and TRELLO_API_TOKEN, or add them to this .env credential file:\n  "
+                + displayPath(dotenvPath);
+    }
+
+    private static String workerCredentialHint(TrelloBoardSetupException exception, Path dotenvPath) {
+        List<String> assignments = workerCredentialAssignments(exception);
+        String intro = assignments.size() == 1
+                ? "Set this Trello credential variable in your shell or in this .env credential file:"
+                : "Set these Trello credential variables in your shell or in this .env credential file:";
+        return intro + "\n" + String.join("\n", assignments) + "\nFile:\n  " + displayPath(dotenvPath);
+    }
+
+    private static List<String> workerCredentialAssignments(TrelloBoardSetupException exception) {
+        String apiKeyName = exception.trelloApiKeyEnvironmentName().orElse("TRELLO_API_KEY");
+        String apiTokenName = exception.trelloApiTokenEnvironmentName().orElse("TRELLO_API_TOKEN");
+        return switch (exception.code()) {
+            case "setup_worker_missing_api_key" -> List.of(credentialAssignment(apiKeyName, "your Trello API key"));
+            case "setup_worker_missing_api_token" -> List.of(credentialAssignment(apiTokenName, "your Trello token"));
+            default ->
+                List.of(
+                        credentialAssignment(apiKeyName, "your Trello API key"),
+                        credentialAssignment(apiTokenName, "your Trello token"));
+        };
+    }
+
+    private static String credentialAssignment(String name, String placeholder) {
+        return "  " + name + "=<" + placeholder + ">";
+    }
+
+    static String displayPath(Path path) {
+        Path resolved = path.toAbsolutePath().normalize();
+        String home = System.getProperty("user.home");
+        if (home == null || home.isBlank()) {
+            return resolved.toString();
+        }
+        Path homePath = Path.of(home).toAbsolutePath().normalize();
+        if (!resolved.startsWith(homePath)) {
+            return resolved.toString();
+        }
+        Path relative = homePath.relativize(resolved);
+        if (relative.toString().isBlank()) {
+            return "$HOME";
+        }
+        return "$HOME/" + relative.toString().replace('\\', '/');
     }
 
     Optional<Path> reportFailure(Exception exception, LocalSetupRequest request, Terminal terminal) {
@@ -183,6 +348,136 @@ final class SetupDiagnosticReporter {
 
     Optional<Path> write(Exception exception, List<String> args) {
         return write(exception, args, workflowPathResolution(args));
+    }
+
+    String renderReport(DiagnosticsRequest request, boolean privateContext) throws IOException {
+        if (privateContext && request.deep()) {
+            DiagnosticsTokenHasher sharedTokenHasher = diagnosticsTokenHasher(request);
+            return renderDiagnostics(request, Optional.of(sharedTokenHasher)) + "\n"
+                    + renderPrivateContext(request, Optional.of(sharedTokenHasher));
+        }
+        return privateContext ? renderPrivateContext(request) : renderDiagnostics(request);
+    }
+
+    String renderDiagnostics(DiagnosticsRequest request) throws IOException {
+        return renderDiagnostics(request, Optional.empty());
+    }
+
+    private String renderDiagnostics(DiagnosticsRequest request, Optional<DiagnosticsTokenHasher> sharedTokenHasher)
+            throws IOException {
+        LocalWorkerPaths paths = LocalWorkerPaths.from(
+                request.appHome(), request.configDir(), request.workspaceRoot(), request.stateHome(), environment);
+        Path manifestPath = request.manifestPath()
+                .map(path -> resolveUserDataPath(path, paths.configDir()))
+                .orElse(paths.manifestPath());
+        ManifestSnapshot manifestSnapshot = manifest(manifestPath);
+        ConnectedBoardManifest manifest = manifestSnapshot.manifest();
+        DiagnosticsSelection selection =
+                selectDiagnostics(manifest, request.board(), request.workflow(), paths.configDir());
+        tokenHasher = sharedTokenHasher.orElseGet(() -> DiagnosticsTokenHasher.load(paths.configDir()));
+        ConnectedBoardManifest selectedManifest = new ConnectedBoardManifest(selection.boards());
+        List<String> args = diagnosticsArguments(request, false);
+        sensitiveValues = sensitiveValues(manifest, paths, args);
+        deepDiagnostics = request.deep();
+        boolean selected = selection.kind() != DiagnosticsSelectorKind.NONE;
+        SequencedSet<Path> selectedWorkflowPaths =
+                reportWorkflowPaths(selectedManifest, selection.workflow(), paths.configDir(), !selected);
+
+        StringBuilder body = new StringBuilder();
+        body.append("# Symphony for Trello Diagnostics\n\n");
+        body.append("Review this output before sharing it. It is intended to omit secrets and private identifiers.\n");
+
+        section(body, "Command");
+        line(body, "time_utc", Instant.now().toString());
+        line(body, "command", sanitizeCommand(args));
+        line(body, "command_context", commandContext());
+        line(body, "selector", selection.kind().name().toLowerCase(Locale.ROOT));
+        line(body, "selected_manifest_board_count", selectedManifest.boards().size());
+        line(body, "selected_workflow_file_count", selectedWorkflowPaths.size());
+        appendSelectionMatch(body, selection);
+        line(body, "deep", deepDiagnostics ? "enabled" : "disabled");
+        appendDiagnosticsTokenKeyStatus(body);
+
+        section(body, "System");
+        appendSystemInfo(body, true);
+
+        section(body, "Installer Context");
+        appendInstallerContext(body, paths, manifestPath);
+
+        section(body, "Tool Availability");
+        appendToolStatus(body, DIAGNOSTIC_TOOL_COMMANDS);
+
+        section(body, "Connected Board Manifest");
+        appendManifest(body, selectedManifest, manifestSnapshot.status());
+
+        section(body, "Workflow Summary");
+        appendWorkflows(body, selectedWorkflowPaths);
+
+        section(body, "Local Health Probes");
+        appendHealthProbes(body, selectedManifest, selectedWorkflowPaths);
+
+        section(body, "Recent Logs");
+        appendRecentLogs(body, paths.stateHome(), selected ? Optional.of(selectedWorkflowPaths) : Optional.empty());
+
+        return body.toString();
+    }
+
+    String renderPrivateContext(DiagnosticsRequest request) throws IOException {
+        return renderPrivateContext(request, Optional.empty());
+    }
+
+    private String renderPrivateContext(DiagnosticsRequest request, Optional<DiagnosticsTokenHasher> sharedTokenHasher)
+            throws IOException {
+        LocalWorkerPaths paths = LocalWorkerPaths.from(
+                request.appHome(), request.configDir(), request.workspaceRoot(), request.stateHome(), environment);
+        Path manifestPath = request.manifestPath()
+                .map(path -> resolveUserDataPath(path, paths.configDir()))
+                .orElse(paths.manifestPath());
+        ManifestSnapshot manifestSnapshot = manifest(manifestPath);
+        ConnectedBoardManifest manifest = manifestSnapshot.manifest();
+        DiagnosticsSelection selection =
+                selectDiagnostics(manifest, request.board(), request.workflow(), paths.configDir());
+        tokenHasher = sharedTokenHasher.orElseGet(() -> DiagnosticsTokenHasher.load(paths.configDir()));
+        ConnectedBoardManifest selectedManifest = new ConnectedBoardManifest(selection.boards());
+        boolean selected = selection.kind() != DiagnosticsSelectorKind.NONE;
+        SequencedSet<Path> selectedWorkflowPaths =
+                reportWorkflowPaths(selectedManifest, selection.workflow(), paths.configDir(), !selected);
+
+        StringBuilder body = new StringBuilder();
+        body.append("# Symphony for Trello Private Context\n\n");
+        body.append("Private diagnostics context. Do not paste this output into public issues.\n");
+        body.append("It may include Trello board names, board ids, board URLs, and local paths.\n");
+        body.append("It does not include credential values or worker log contents.\n");
+
+        section(body, "Command");
+        line(body, "time_utc", Instant.now().toString());
+        line(body, "command", String.join(" ", diagnosticsArguments(request, true)));
+        line(body, "command_context", commandContext());
+        line(body, "selector", selection.kind().name().toLowerCase(Locale.ROOT));
+        line(body, "selected_manifest_board_count", selectedManifest.boards().size());
+        line(body, "selected_workflow_file_count", selectedWorkflowPaths.size());
+        appendSelectionMatch(body, selection);
+        appendDiagnosticsTokenKeyStatus(body);
+
+        section(body, "Local Paths");
+        appendLocalPathIdentifiers(body, paths, manifestPath);
+
+        section(body, "Connected Board Identifiers");
+        appendLocalManifestIdentifiers(body, selectedManifest, manifestSnapshot.status());
+
+        section(body, "Workflow Identifiers");
+        appendLocalWorkflowIdentifiers(body, selectedWorkflowPaths);
+
+        section(body, "Log Identifiers");
+        appendLocalLogIdentifiers(body, paths.stateHome(), selectedWorkflowPaths, selected);
+
+        return body.toString();
+    }
+
+    private DiagnosticsTokenHasher diagnosticsTokenHasher(DiagnosticsRequest request) {
+        LocalWorkerPaths paths = LocalWorkerPaths.from(
+                request.appHome(), request.configDir(), request.workspaceRoot(), request.stateHome(), environment);
+        return DiagnosticsTokenHasher.load(paths.configDir());
     }
 
     private Optional<Path> write(
@@ -244,7 +539,9 @@ final class SetupDiagnosticReporter {
             Path manifestPath,
             WorkflowPathResolution workflowPathResolution)
             throws IOException {
-        ConnectedBoardManifest manifest = manifest(manifestPath);
+        ManifestSnapshot manifestSnapshot = manifest(manifestPath);
+        ConnectedBoardManifest manifest = manifestSnapshot.manifest();
+        tokenHasher = DiagnosticsTokenHasher.load(paths.configDir());
         sensitiveValues = sensitiveValues(manifest, paths, args);
 
         StringBuilder body = new StringBuilder();
@@ -252,26 +549,23 @@ final class SetupDiagnosticReporter {
         section(body, "Failure");
         line(body, "time_utc", Instant.now().toString());
         line(body, "command", sanitizeCommand(args));
+        line(body, "command_context", commandContext());
         line(body, "error_code", errorCode(exception));
         line(body, "message", sanitizeExceptionMessage(exception));
+        appendDiagnosticsTokenKeyStatus(body);
 
         section(body, "System");
-        line(body, "os_name", System.getProperty("os.name"));
-        line(body, "os_version", System.getProperty("os.version"));
-        line(body, "os_arch", System.getProperty("os.arch"));
-        line(body, "java_version", System.getProperty("java.version"));
-        line(body, "java_vendor", System.getProperty("java.vendor"));
-        line(body, "container", Files.exists(Path.of("/.dockerenv")) || Files.exists(Path.of("/run/.containerenv")));
-        line(body, "shell", sanitize(environment.getOrDefault("SHELL", environment.getOrDefault("ComSpec", ""))));
+        appendSystemInfo(body, false);
 
         section(body, "Installer Context");
         appendInstallerContext(body, paths, manifestPath);
 
         section(body, "Tool Availability");
-        appendToolStatus(body);
+        deepDiagnostics = true;
+        appendToolStatus(body, SETUP_FAILURE_TOOL_COMMANDS);
 
-        section(body, "Connected Boards");
-        appendManifest(body, manifest);
+        section(body, "Connected Board Manifest");
+        appendManifest(body, manifest, manifestSnapshot.status());
 
         section(body, "Workflow Summary");
         appendWorkflows(body, manifest, paths, args, workflowPathResolution);
@@ -283,6 +577,74 @@ final class SetupDiagnosticReporter {
         appendRecentLogs(body, paths.stateHome());
 
         return body.toString();
+    }
+
+    private void appendSystemInfo(StringBuilder body, boolean includeProjectVersion) {
+        if (includeProjectVersion) {
+            line(body, "version", new TrelloBoardSetupMain.ProjectVersion().getVersion()[0]);
+        }
+        line(body, "os_name", System.getProperty("os.name"));
+        line(body, "os_version", System.getProperty("os.version"));
+        line(body, "os_distribution", sanitize(osDistribution()));
+        line(body, "os_arch", System.getProperty("os.arch"));
+        line(body, "java_version", System.getProperty("java.version"));
+        line(body, "java_vendor", System.getProperty("java.vendor"));
+        line(body, "container", Files.exists(Path.of("/.dockerenv")) || Files.exists(Path.of("/run/.containerenv")));
+        line(body, "shell", sanitize(environment.getOrDefault("SHELL", environment.getOrDefault("ComSpec", ""))));
+    }
+
+    private String commandContext() {
+        return environment.containsKey("SYMPHONY_TRELLO_COMMAND")
+                ? "effective command after installer wrapper defaults"
+                : "direct command";
+    }
+
+    private static String osDistribution() {
+        return Stream.of(Path.of("/etc/os-release"), Path.of("/usr/lib/os-release"))
+                .map(SetupDiagnosticReporter::readOsRelease)
+                .flatMap(Optional::stream)
+                .findFirst()
+                .orElse("");
+    }
+
+    private static Optional<String> readOsRelease(Path path) {
+        if (!Files.isRegularFile(path)) {
+            return Optional.empty();
+        }
+        try {
+            List<String> lines = Files.readAllLines(path, StandardCharsets.UTF_8);
+            return osReleaseValue(lines, "PRETTY_NAME").or(() -> osReleaseNameAndVersion(lines));
+        } catch (IOException ignored) {
+            return Optional.empty();
+        }
+    }
+
+    private static Optional<String> osReleaseNameAndVersion(List<String> lines) {
+        return osReleaseValue(lines, "NAME").map(name -> osReleaseValue(lines, "VERSION")
+                .map(version -> name + " " + version)
+                .orElse(name));
+    }
+
+    private static Optional<String> osReleaseValue(List<String> lines, String key) {
+        String prefix = key + "=";
+        return lines.stream()
+                .filter(line -> line.startsWith(prefix))
+                .map(line -> unquoteOsReleaseValue(line.substring(prefix.length())))
+                .filter(value -> !value.isBlank())
+                .findAny();
+    }
+
+    private static String unquoteOsReleaseValue(String value) {
+        String stripped = value.strip();
+        if (stripped.length() < 2) {
+            return stripped;
+        }
+        char first = stripped.charAt(0);
+        char last = stripped.charAt(stripped.length() - 1);
+        if ((first == '"' && last == '"') || (first == '\'' && last == '\'')) {
+            return stripped.substring(1, stripped.length() - 1);
+        }
+        return stripped;
     }
 
     private void appendInstallerContext(StringBuilder body, LocalWorkerPaths paths, Path manifestPath) {
@@ -310,19 +672,36 @@ final class SetupDiagnosticReporter {
         }
     }
 
-    private void appendToolStatus(StringBuilder body) {
-        body.append("| tool | status | detail |\n");
-        body.append("| --- | --- | --- |\n");
-        for (String tool : TOOL_COMMANDS) {
+    private void appendLocalPathIdentifiers(StringBuilder body, LocalWorkerPaths paths, Path manifestPath) {
+        MarkdownTable table = MarkdownTable.of(
+                List.of("name", "token", "value"),
+                List.of(MarkdownTable.Alignment.LEFT, MarkdownTable.Alignment.LEFT, MarkdownTable.Alignment.LEFT));
+        table.row("app_home", pathToken(paths.appHome().toString()), paths.appHome());
+        table.row("config_dir", pathToken(paths.configDir().toString()), paths.configDir());
+        table.row("workspace_root", pathToken(paths.workspaceRoot().toString()), paths.workspaceRoot());
+        table.row("state_home", pathToken(paths.stateHome().toString()), paths.stateHome());
+        table.row("manifest", pathToken(manifestPath.toString()), manifestPath);
+        Path dotenv = Path.of(environment.getOrDefault(
+                "SYMPHONY_TRELLO_DOTENV", paths.defaultEnvPath().toString()));
+        table.row("dotenv", pathToken(dotenv.toString()), dotenv);
+        Optional.ofNullable(environment.get("SYMPHONY_TRELLO_CALLER_DIR"))
+                .filter(value -> !value.isBlank())
+                .ifPresent(value -> table.row("caller_dir", pathToken(value), value));
+        Optional.ofNullable(environment.get("SYMPHONY_TRELLO_COMMAND"))
+                .filter(value -> !value.isBlank())
+                .ifPresent(value -> table.row("command", pathToken(value), value));
+        table.appendTo(body);
+    }
+
+    private void appendToolStatus(StringBuilder body, List<String> tools) {
+        MarkdownTable table = MarkdownTable.of(
+                List.of("tool", "status", "detail"),
+                List.of(MarkdownTable.Alignment.LEFT, MarkdownTable.Alignment.LEFT, MarkdownTable.Alignment.LEFT));
+        for (String tool : tools) {
             ToolProbe probe = toolProbe(tool);
-            body.append("| ")
-                    .append(tool)
-                    .append(" | ")
-                    .append(probe.available() ? "available" : "missing")
-                    .append(" | ")
-                    .append(escapeTable(sanitize(probe.detail())))
-                    .append(" |\n");
+            table.row(tool, probe.available() ? "available" : "missing", sanitize(probe.detail()));
         }
+        table.appendTo(body);
     }
 
     private ToolProbe toolProbe(String tool) {
@@ -334,8 +713,8 @@ final class SetupDiagnosticReporter {
                 switch (tool) {
                     case "java" -> commandRunner.run("java", "-version").output();
                     case "javac" -> commandRunner.run("javac", "-version").output();
-                    case "codex" -> codexStatus();
-                    case "gh" -> githubStatus();
+                    case "codex" -> codexStatus(deepDiagnostics);
+                    case "gh" -> githubStatus(deepDiagnostics);
                     default -> commandRunner.run(tool, "--version").output();
                 };
         return new ToolProbe(true, firstLine(detail));
@@ -348,48 +727,217 @@ final class SetupDiagnosticReporter {
         return new String[] {"sh", "-c", "command -v -- \"$1\"", "sh", tool};
     }
 
-    private String codexStatus() {
+    private String codexStatus(boolean deepDiagnostics) {
         CommandResult version = commandRunner.run("codex", "--version");
+        if (!deepDiagnostics) {
+            return firstLine(version.output()) + "; login=not-probed";
+        }
         CommandResult auth = commandRunner.run("codex", "login", "status");
         return firstLine(version.output()) + "; login=" + (auth.success() ? "ok" : "not-ok");
     }
 
-    private String githubStatus() {
+    private String githubStatus(boolean deepDiagnostics) {
         CommandResult version = commandRunner.run("gh", "--version");
+        if (!deepDiagnostics) {
+            return firstLine(version.output()) + "; auth=not-probed";
+        }
         CommandResult auth = commandRunner.run("gh", "auth", "status");
         return firstLine(version.output()) + "; auth=" + (auth.success() ? "ok" : "not-ok");
     }
 
-    private ConnectedBoardManifest manifest(Path manifestPath) {
+    private ManifestSnapshot manifest(Path manifestPath) {
+        if (!Files.isRegularFile(manifestPath)) {
+            return new ManifestSnapshot(new ConnectedBoardManifest(List.of()), ManifestStatus.MISSING);
+        }
         try {
-            return new ConnectedBoardRepository(manifestPath, json).load();
+            return new ManifestSnapshot(new ConnectedBoardRepository(manifestPath, json).load(), ManifestStatus.LOADED);
         } catch (IOException | RuntimeException ignored) {
-            return new ConnectedBoardManifest(List.of());
+            return new ManifestSnapshot(new ConnectedBoardManifest(List.of()), ManifestStatus.UNREADABLE);
         }
     }
 
-    private void appendManifest(StringBuilder body, ConnectedBoardManifest manifest) {
+    private void appendManifest(StringBuilder body, ConnectedBoardManifest manifest, ManifestStatus status) {
+        line(body, "manifest_status", status.name().toLowerCase(Locale.ROOT));
         line(body, "board_count", manifest.boards().size());
-        body.append("\n| board_hash | key_hash | github | port | roots | danger_full_access | workflow | env |\n");
-        body.append("| --- | --- | --- | ---: | ---: | --- | --- | --- |\n");
+        appendManifestStatusNote(body, status);
+        body.append('\n');
+        MarkdownTable table = MarkdownTable.of(
+                List.of(
+                        "board_hash",
+                        "key_hash",
+                        "github",
+                        "port",
+                        "roots",
+                        "danger_full_access",
+                        "workspace",
+                        "workflow",
+                        "env"),
+                List.of(
+                        MarkdownTable.Alignment.LEFT,
+                        MarkdownTable.Alignment.LEFT,
+                        MarkdownTable.Alignment.LEFT,
+                        MarkdownTable.Alignment.RIGHT,
+                        MarkdownTable.Alignment.RIGHT,
+                        MarkdownTable.Alignment.LEFT,
+                        MarkdownTable.Alignment.LEFT,
+                        MarkdownTable.Alignment.LEFT,
+                        MarkdownTable.Alignment.LEFT));
         for (ConnectedBoard board : manifest.boards()) {
-            body.append("| ")
-                    .append(hash(board.boardId()))
-                    .append(" | ")
-                    .append(hash(board.boardKey()))
-                    .append(" | ")
-                    .append(board.githubEnabled())
-                    .append(" | ")
-                    .append(board.serverPort())
-                    .append(" | ")
-                    .append(board.additionalWritableRoots().size())
-                    .append(" | ")
-                    .append(board.dangerFullAccess())
-                    .append(" | ")
-                    .append(escapeTable(sanitize(board.workflowPath().toString())))
-                    .append(" | ")
-                    .append(escapeTable(sanitize(board.envPath().toString())))
-                    .append(" |\n");
+            table.row(
+                    hash(board.boardId()),
+                    hash(board.boardKey()),
+                    board.githubEnabled(),
+                    board.serverPort(),
+                    board.additionalWritableRoots().size(),
+                    board.dangerFullAccess(),
+                    sanitize(board.workspaceRoot().toString()),
+                    sanitize(board.workflowPath().toString()),
+                    sanitize(board.envPath().toString()));
+        }
+        table.appendTo(body);
+    }
+
+    private void appendLocalManifestIdentifiers(
+            StringBuilder body, ConnectedBoardManifest manifest, ManifestStatus status) {
+        line(body, "manifest_status", status.name().toLowerCase(Locale.ROOT));
+        line(body, "board_count", manifest.boards().size());
+        appendManifestStatusNote(body, status);
+        body.append('\n');
+        MarkdownTable table = MarkdownTable.of(
+                List.of(
+                        "board_hash",
+                        "key_hash",
+                        "board_name",
+                        "board_id",
+                        "board_key",
+                        "trello_url",
+                        "port",
+                        "workflow_token",
+                        "workflow_path",
+                        "env_token",
+                        "env_path",
+                        "workspace_token",
+                        "workspace_root",
+                        "github",
+                        "danger_full_access",
+                        "writable_roots"),
+                List.of(
+                        MarkdownTable.Alignment.LEFT,
+                        MarkdownTable.Alignment.LEFT,
+                        MarkdownTable.Alignment.LEFT,
+                        MarkdownTable.Alignment.LEFT,
+                        MarkdownTable.Alignment.LEFT,
+                        MarkdownTable.Alignment.LEFT,
+                        MarkdownTable.Alignment.RIGHT,
+                        MarkdownTable.Alignment.LEFT,
+                        MarkdownTable.Alignment.LEFT,
+                        MarkdownTable.Alignment.LEFT,
+                        MarkdownTable.Alignment.LEFT,
+                        MarkdownTable.Alignment.LEFT,
+                        MarkdownTable.Alignment.LEFT,
+                        MarkdownTable.Alignment.LEFT,
+                        MarkdownTable.Alignment.LEFT,
+                        MarkdownTable.Alignment.RIGHT));
+        for (ConnectedBoard board : manifest.boards()) {
+            table.row(
+                    hash(board.boardId()),
+                    hash(board.boardKey()),
+                    board.boardName(),
+                    board.boardId(),
+                    board.boardKey(),
+                    board.boardUrl(),
+                    board.serverPort(),
+                    pathToken(board.workflowPath().toString()),
+                    board.workflowPath(),
+                    pathToken(board.envPath().toString()),
+                    board.envPath(),
+                    pathToken(board.workspaceRoot().toString()),
+                    board.workspaceRoot(),
+                    board.githubEnabled(),
+                    board.dangerFullAccess(),
+                    board.additionalWritableRoots().size());
+        }
+        table.appendTo(body);
+    }
+
+    private static void appendManifestStatusNote(StringBuilder body, ManifestStatus status) {
+        switch (status) {
+            case LOADED -> {}
+            case MISSING ->
+                body.append(
+                        "No connected-board manifest was found. Local workflow files may still be summarized below.\n");
+            case UNREADABLE ->
+                body.append(
+                        "The connected-board manifest could not be read. Local workflow files may still be summarized below.\n");
+        }
+    }
+
+    private static DiagnosticsSelection selectDiagnostics(
+            ConnectedBoardManifest manifest,
+            Optional<String> selectedBoard,
+            Optional<Path> selectedWorkflow,
+            Path configDir) {
+        if (selectedBoard.isPresent() && selectedWorkflow.isPresent()) {
+            throw new TrelloBoardSetupException(
+                    "setup_invalid_arguments", "--board and --workflow cannot be used together.");
+        }
+        return selectedBoard
+                .map(boardSelector -> selectBoardDiagnostics(manifest, boardSelector))
+                .orElseGet(() -> selectedWorkflow
+                        .map(workflow -> selectWorkflowDiagnostics(manifest, workflow, configDir))
+                        .orElseGet(() -> new DiagnosticsSelection(
+                                DiagnosticsSelectorKind.NONE, manifest.boards(), Optional.empty())));
+    }
+
+    private static DiagnosticsSelection selectBoardDiagnostics(ConnectedBoardManifest manifest, String boardSelector) {
+        List<ConnectedBoard> matches = manifest.boards().stream()
+                .filter(board -> matchesBoard(board, boardSelector))
+                .toList();
+        if (matches.size() > 1) {
+            throw new TrelloBoardSetupException(
+                    "setup_invalid_arguments",
+                    "Multiple connected boards match --board. Re-run with a board id or short link.");
+        }
+        return new DiagnosticsSelection(DiagnosticsSelectorKind.BOARD, matches, Optional.empty());
+    }
+
+    private static DiagnosticsSelection selectWorkflowDiagnostics(
+            ConnectedBoardManifest manifest, Path selectedWorkflow, Path configDir) {
+        Path workflow = resolveWorkflowPathOption(selectedWorkflow, configDir, WorkflowPathResolution.CONFIG_DIR);
+        List<ConnectedBoard> matches = manifest.boards().stream()
+                .filter(board -> PathsEqual.samePath(board.workflowPath(), workflow))
+                .toList();
+        return new DiagnosticsSelection(DiagnosticsSelectorKind.WORKFLOW, matches, Optional.of(workflow));
+    }
+
+    private static boolean matchesBoard(ConnectedBoard board, String selected) {
+        if (selected == null || selected.isBlank()) {
+            return false;
+        }
+        String normalized = selected.trim();
+        String parsed = TrelloBoardIds.parse(normalized);
+        return normalized.equalsIgnoreCase(board.boardName())
+                || normalized.equalsIgnoreCase(board.boardId())
+                || normalized.equalsIgnoreCase(board.boardKey())
+                || parsed.equalsIgnoreCase(board.boardId())
+                || parsed.equalsIgnoreCase(board.boardKey());
+    }
+
+    private static void appendSelectionMatch(StringBuilder body, DiagnosticsSelection selection) {
+        switch (selection.kind()) {
+            case BOARD ->
+                line(body, "selected_board_matched", selection.boards().size() == 1);
+            case WORKFLOW ->
+                line(body, "selected_workflow_in_manifest", selection.boards().size() == 1);
+            case NONE -> {}
+        }
+    }
+
+    private void appendDiagnosticsTokenKeyStatus(StringBuilder body) {
+        line(body, "diagnostics_token_key", tokenHasher.persisted() ? "local" : "temporary");
+        if (!tokenHasher.persisted()) {
+            body.append(
+                    "Diagnostics tokens are stable only for this run because the local diagnostics key could not be read or written.\n");
         }
     }
 
@@ -400,31 +948,92 @@ final class SetupDiagnosticReporter {
             List<String> args,
             WorkflowPathResolution workflowPathResolution) {
         WorkflowConfigEditor editor = new WorkflowConfigEditor();
-        SequencedSet<Path> workflowPaths = reportWorkflowPaths(manifest, paths, args, workflowPathResolution);
-        body.append("| workflow | board_hash | port | max_agents | active | terminal | in_progress | blocked |\n");
-        body.append("| --- | --- | ---: | ---: | ---: | ---: | --- | --- |\n");
+        SequencedSet<Path> workflowPaths =
+                reportWorkflowPaths(manifest, paths, args, workflowPathResolution, !hasBoardOption(args));
+        MarkdownTable table = workflowTable();
+        for (Path workflow : workflowPaths) {
+            appendWorkflowRow(table, editor, workflow);
+        }
+        table.appendTo(body);
+    }
+
+    private void appendWorkflows(StringBuilder body, SequencedSet<Path> workflowPaths) {
+        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+        MarkdownTable table = workflowTable();
+        for (Path workflow : workflowPaths) {
+            appendWorkflowRow(table, editor, workflow);
+        }
+        table.appendTo(body);
+    }
+
+    private static MarkdownTable workflowTable() {
+        return MarkdownTable.of(
+                List.of("workflow", "board_hash", "port", "max_agents", "active", "terminal", "in_progress", "blocked"),
+                List.of(
+                        MarkdownTable.Alignment.LEFT,
+                        MarkdownTable.Alignment.LEFT,
+                        MarkdownTable.Alignment.RIGHT,
+                        MarkdownTable.Alignment.RIGHT,
+                        MarkdownTable.Alignment.RIGHT,
+                        MarkdownTable.Alignment.RIGHT,
+                        MarkdownTable.Alignment.LEFT,
+                        MarkdownTable.Alignment.LEFT));
+    }
+
+    private void appendWorkflowRow(MarkdownTable table, WorkflowConfigEditor editor, Path workflow) {
+        WorkflowListConfiguration lists = editor.listConfiguration(workflow);
+        table.row(
+                sanitize(workflow.toString()),
+                editor.boardId(workflow).map(this::hash).orElse(""),
+                editor.serverPort(workflow).map(String::valueOf).orElse(""),
+                editor.maxAgents(workflow).map(String::valueOf).orElse(""),
+                lists.activeStates().size(),
+                lists.terminalStates().size(),
+                lists.inProgressState().isPresent(),
+                lists.blockedState().isPresent());
+    }
+
+    private void appendLocalWorkflowIdentifiers(StringBuilder body, SequencedSet<Path> workflowPaths) {
+        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+        MarkdownTable table = MarkdownTable.of(
+                List.of(
+                        "workflow_token",
+                        "workflow_path",
+                        "board_hash",
+                        "board_id",
+                        "port",
+                        "max_agents",
+                        "active",
+                        "terminal",
+                        "in_progress",
+                        "blocked"),
+                List.of(
+                        MarkdownTable.Alignment.LEFT,
+                        MarkdownTable.Alignment.LEFT,
+                        MarkdownTable.Alignment.LEFT,
+                        MarkdownTable.Alignment.LEFT,
+                        MarkdownTable.Alignment.RIGHT,
+                        MarkdownTable.Alignment.RIGHT,
+                        MarkdownTable.Alignment.RIGHT,
+                        MarkdownTable.Alignment.RIGHT,
+                        MarkdownTable.Alignment.LEFT,
+                        MarkdownTable.Alignment.LEFT));
         for (Path workflow : workflowPaths) {
             WorkflowListConfiguration lists = editor.listConfiguration(workflow);
-            body.append("| ")
-                    .append(escapeTable(sanitize(workflow.toString())))
-                    .append(" | ")
-                    .append(editor.boardId(workflow)
-                            .map(SetupDiagnosticReporter::hash)
-                            .orElse(""))
-                    .append(" | ")
-                    .append(editor.serverPort(workflow).map(String::valueOf).orElse(""))
-                    .append(" | ")
-                    .append(editor.maxAgents(workflow).map(String::valueOf).orElse(""))
-                    .append(" | ")
-                    .append(lists.activeStates().size())
-                    .append(" | ")
-                    .append(lists.terminalStates().size())
-                    .append(" | ")
-                    .append(lists.inProgressState().isPresent())
-                    .append(" | ")
-                    .append(lists.blockedState().isPresent())
-                    .append(" |\n");
+            String boardId = editor.boardId(workflow).orElse("");
+            table.row(
+                    pathToken(workflow.toString()),
+                    workflow,
+                    hash(boardId),
+                    boardId,
+                    editor.serverPort(workflow).map(String::valueOf).orElse(""),
+                    editor.maxAgents(workflow).map(String::valueOf).orElse(""),
+                    lists.activeStates().size(),
+                    lists.terminalStates().size(),
+                    lists.inProgressState().isPresent(),
+                    lists.blockedState().isPresent());
         }
+        table.appendTo(body);
     }
 
     private void appendHealthProbes(
@@ -436,10 +1045,26 @@ final class SetupDiagnosticReporter {
         WorkflowConfigEditor editor = new WorkflowConfigEditor();
         SequencedSet<Integer> ports = new LinkedHashSet<>();
         manifest.boards().stream().map(ConnectedBoard::serverPort).forEach(ports::add);
-        reportWorkflowPaths(manifest, paths, args, workflowPathResolution).stream()
+        reportWorkflowPaths(manifest, paths, args, workflowPathResolution, !hasBoardOption(args)).stream()
                 .map(editor::serverPort)
                 .flatMap(Optional::stream)
                 .forEach(ports::add);
+        if (ports.isEmpty()) {
+            body.append("No configured local ports found.\n");
+            return;
+        }
+        for (int port : ports) {
+            appendProbe(body, port, "/api/v1/local-status");
+            appendProbe(body, port, "/api/v1/state");
+        }
+    }
+
+    private void appendHealthProbes(
+            StringBuilder body, ConnectedBoardManifest manifest, SequencedSet<Path> workflowPaths) {
+        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+        SequencedSet<Integer> ports = new LinkedHashSet<>();
+        manifest.boards().stream().map(ConnectedBoard::serverPort).forEach(ports::add);
+        workflowPaths.stream().map(editor::serverPort).flatMap(Optional::stream).forEach(ports::add);
         if (ports.isEmpty()) {
             body.append("No configured local ports found.\n");
             return;
@@ -454,12 +1079,28 @@ final class SetupDiagnosticReporter {
             ConnectedBoardManifest manifest,
             LocalWorkerPaths paths,
             List<String> args,
-            WorkflowPathResolution workflowPathResolution) {
+            WorkflowPathResolution workflowPathResolution,
+            boolean scanConfigDir) {
+        return reportWorkflowPaths(
+                manifest,
+                workflowPathOption(args, paths.configDir(), workflowPathResolution),
+                paths.configDir(),
+                scanConfigDir);
+    }
+
+    private static SequencedSet<Path> reportWorkflowPaths(
+            ConnectedBoardManifest manifest, Optional<Path> selectedWorkflow, Path configDir, boolean scanConfigDir) {
         SequencedSet<Path> workflowPaths = new LinkedHashSet<>();
         manifest.boards().stream().map(ConnectedBoard::workflowPath).forEach(workflowPaths::add);
-        workflowPathOption(args, paths.configDir(), workflowPathResolution).ifPresent(workflowPaths::add);
-        workflowFilesIfReadable(paths.configDir()).forEach(workflowPaths::add);
+        selectedWorkflow.ifPresent(workflowPaths::add);
+        if (scanConfigDir) {
+            workflowFilesIfReadable(configDir).forEach(workflowPaths::add);
+        }
         return workflowPaths;
+    }
+
+    private static boolean hasBoardOption(List<String> args) {
+        return args.stream().anyMatch(arg -> arg.equals("--board") || arg.startsWith("--board="));
     }
 
     private static List<Path> workflowFilesIfReadable(Path configDir) {
@@ -520,25 +1161,46 @@ final class SetupDiagnosticReporter {
                 Thread.currentThread().interrupt();
             }
             line(body, "status", "unavailable");
-            line(body, "error", sanitize(e.getMessage()));
+            line(body, "error", sanitize(exceptionSummary(e)));
         }
     }
 
-    private void appendRecentLogs(StringBuilder body, Path stateHome) throws IOException {
+    private static String exceptionSummary(Exception exception) {
+        String message = exception.getMessage();
+        if (message == null || message.isBlank()) {
+            return exception.getClass().getSimpleName();
+        }
+        return exception.getClass().getSimpleName() + ": " + message;
+    }
+
+    private void appendRecentLogs(StringBuilder body, Path stateHome) {
+        appendRecentLogs(body, stateHome, Optional.empty());
+    }
+
+    private void appendRecentLogs(StringBuilder body, Path stateHome, Optional<SequencedSet<Path>> selectedWorkflows) {
         if (!Files.isDirectory(stateHome)) {
             body.append("State directory is missing.\n");
             return;
         }
+        Set<Path> selectedLogs = selectedWorkflows
+                .map(workflows -> expectedLogFiles(stateHome, workflows))
+                .orElse(Set.of());
         List<Path> logs;
-        try (Stream<Path> files = Files.list(stateHome)) {
+        try (Stream<Path> files = recentLogLister.list(stateHome)) {
             logs = files.filter(Files::isRegularFile)
                     .filter(path -> {
                         String name = path.getFileName().toString();
                         return name.endsWith(".log") || name.endsWith(".err");
                     })
+                    .filter(SetupDiagnosticReporter::nonEmptyOrUnreadable)
+                    .filter(path -> selectedWorkflows.isEmpty()
+                            || selectedLogs.contains(path.toAbsolutePath().normalize()))
                     .sorted(Comparator.comparing(this::lastModified).reversed())
                     .limit(6)
                     .toList();
+        } catch (IOException e) {
+            body.append("Could not list recent worker logs.\n");
+            return;
         }
         if (logs.isEmpty()) {
             body.append("No worker logs found.\n");
@@ -549,9 +1211,106 @@ final class SetupDiagnosticReporter {
                     .append(escapeBackticks(sanitize(log.toString())))
                     .append("`\n\n");
             body.append("```text\n");
-            body.append(sanitize(tail(log, LOG_LINE_LIMIT)));
+            body.append(sanitize(logTail(log, LOG_LINE_LIMIT)));
             body.append("\n```\n");
         }
+    }
+
+    private void appendLocalLogIdentifiers(
+            StringBuilder body, Path stateHome, SequencedSet<Path> workflowPaths, boolean selected) {
+        if (!Files.isDirectory(stateHome)) {
+            body.append("State directory is missing.\n");
+            return;
+        }
+        MarkdownTable table = MarkdownTable.of(
+                List.of("path_token", "log_path", "workflow_token", "workflow_path", "stream", "exists", "has_content"),
+                List.of(
+                        MarkdownTable.Alignment.LEFT,
+                        MarkdownTable.Alignment.LEFT,
+                        MarkdownTable.Alignment.LEFT,
+                        MarkdownTable.Alignment.LEFT,
+                        MarkdownTable.Alignment.LEFT,
+                        MarkdownTable.Alignment.LEFT,
+                        MarkdownTable.Alignment.LEFT));
+        Set<Path> rows = new LinkedHashSet<>();
+        rows.addAll(expectedLogFiles(stateHome, workflowPaths));
+        if (!selected) {
+            rows.addAll(existingLogFiles(stateHome));
+        }
+        for (Path log : rows) {
+            Optional<WorkflowLogMapping> mapping = workflowLogMapping(stateHome, workflowPaths, log);
+            table.row(
+                    pathToken(log.toString()),
+                    log,
+                    mapping.map(value -> pathToken(value.workflow().toString())).orElse(""),
+                    mapping.map(WorkflowLogMapping::workflow).orElse(null),
+                    logStream(log),
+                    Files.isRegularFile(log),
+                    logHasContent(log));
+        }
+        table.appendTo(body);
+    }
+
+    private List<Path> existingLogFiles(Path stateHome) {
+        try (Stream<Path> files = recentLogLister.list(stateHome)) {
+            return files.filter(Files::isRegularFile)
+                    .filter(path -> {
+                        String name = path.getFileName().toString();
+                        return name.endsWith(".log") || name.endsWith(".err");
+                    })
+                    .sorted()
+                    .toList();
+        } catch (IOException e) {
+            return List.of();
+        }
+    }
+
+    private static Optional<WorkflowLogMapping> workflowLogMapping(
+            Path stateHome, SequencedSet<Path> workflowPaths, Path log) {
+        return workflowPaths.stream()
+                .map(workflow -> new WorkflowLogMapping(workflow, new ManagedProcessStore(stateHome).files(workflow)))
+                .filter(mapping -> sameNormalizedPath(log, mapping.files().stdoutLog())
+                        || sameNormalizedPath(log, mapping.files().stderrLog()))
+                .findAny();
+    }
+
+    private static boolean sameNormalizedPath(Path first, Path second) {
+        return first.toAbsolutePath().normalize().equals(second.toAbsolutePath().normalize());
+    }
+
+    private static String logStream(Path log) {
+        String name = log.getFileName().toString();
+        if (name.endsWith(".log")) {
+            return "stdout";
+        }
+        if (name.endsWith(".err")) {
+            return "stderr";
+        }
+        return "";
+    }
+
+    private static boolean logHasContent(Path log) {
+        return Files.isRegularFile(log) && nonEmptyOrUnreadable(log);
+    }
+
+    private static boolean nonEmptyOrUnreadable(Path path) {
+        try {
+            return Files.size(path) > 0;
+        } catch (IOException ignored) {
+            // Keep unreadable logs visible so logTail can report a sanitized read failure.
+            return true;
+        }
+    }
+
+    private static Set<Path> expectedLogFiles(Path stateHome, SequencedSet<Path> workflowPaths) {
+        ManagedProcessStore store = new ManagedProcessStore(stateHome);
+        return workflowPaths.stream()
+                .flatMap(workflow -> {
+                    ManagedProcessStore.ManagedProcessFiles files = store.files(workflow);
+                    return Stream.of(files.stdoutLog(), files.stderrLog());
+                })
+                .map(path -> path.toAbsolutePath().normalize())
+                .collect(Collectors.toSet());
     }
 
     private Instant lastModified(Path path) {
@@ -644,6 +1403,22 @@ final class SetupDiagnosticReporter {
         return args;
     }
 
+    private static List<String> diagnosticsArguments(DiagnosticsRequest request, boolean privateContext) {
+        List<String> args = new ArrayList<>();
+        args.add("diagnostics");
+        addFlag(args, privateContext, "--show-private-context");
+        addOption(args, "--board", request.board());
+        request.output().ifPresent(path -> addOption(args, "--output", path.toString()));
+        request.configDir().ifPresent(path -> addOption(args, "--config-dir", path.toString()));
+        request.manifestPath().ifPresent(path -> addOption(args, "--manifest", path.toString()));
+        request.workspaceRoot().ifPresent(path -> addOption(args, "--workspace-root", path.toString()));
+        request.stateHome().ifPresent(path -> addOption(args, "--state-home", path.toString()));
+        request.workflow().ifPresent(path -> addOption(args, "--workflow", path.toString()));
+        addFlag(args, request.json(), "--json");
+        addFlag(args, request.deep(), "--deep");
+        return args;
+    }
+
     private static void addFlag(List<String> args, boolean enabled, String flag) {
         if (enabled) {
             args.add(flag);
@@ -681,6 +1456,7 @@ final class SetupDiagnosticReporter {
                 GITHUB_SSH_REMOTE.matcher(sanitized).replaceAll(match -> "<github-remote:" + hash(match.group()) + ">");
         sanitized = GITHUB_HTTPS_URL.matcher(sanitized).replaceAll(match -> "<github-url:" + hash(match.group()) + ">");
         sanitized = TRELLO_URL.matcher(sanitized).replaceAll(match -> "<trello-url:" + hash(match.group()) + ">");
+        sanitized = TRELLO_CARD_FIELD.matcher(sanitized).replaceAll(match -> match.group(1) + "<redacted>");
         sanitized = TRELLO_OBJECT_ID.matcher(sanitized).replaceAll(match -> "<id:" + hash(match.group()) + ">");
         sanitized = PATH_ASSIGNMENT.matcher(sanitized).replaceAll(match -> match.group(1) + pathToken(match.group(2)));
         sanitized = QUOTED_WINDOWS_PATH
@@ -871,7 +1647,7 @@ final class SetupDiagnosticReporter {
         addPath(paths, System.getProperty("user.home"));
         addPath(paths, environment.get("SYMPHONY_HOME"));
         addPath(paths, environment.get("SYMPHONY_TRELLO_APP_HOME"));
-        addPath(paths, environment.get("SYMPHONY_TRELLO_CONFIG_DIR"));
+        addPath(paths, environment.get(CONFIG_DIR_ENV));
         addPath(paths, environment.get("SYMPHONY_TRELLO_WORKSPACE_ROOT"));
         addPath(paths, environment.get("SYMPHONY_TRELLO_STATE_HOME"));
         addPath(paths, environment.get("SYMPHONY_TRELLO_DOTENV"));
@@ -898,21 +1674,64 @@ final class SetupDiagnosticReporter {
         }
     }
 
-    private static String pathToken(String path) {
+    private String pathToken(String path) {
         return "<path:" + hash(path) + ">";
     }
 
-    private static String hash(String value) {
-        if (value == null || value.isBlank()) {
-            return "";
+    private String hash(String value) {
+        return tokenHasher.token(value);
+    }
+
+    private static String logTail(Path path, int maxLines) {
+        return removeQuarkusBannerLines(tail(path, maxLines));
+    }
+
+    private static String removeQuarkusBannerLines(String text) {
+        List<String> lines = text.lines().toList();
+        List<String> kept = new ArrayList<>();
+        for (int index = 0; index < lines.size(); index++) {
+            if (isQuarkusBannerBlock(lines, index)) {
+                index += 3;
+            } else if (kept.isEmpty() && lines.get(index).isBlank()) {
+                // Ignore leading blanks so they do not prevent startup banner stripping.
+            } else if (kept.isEmpty() && isQuarkusBannerLine(lines.get(index))) {
+                // The bounded tail can start halfway through the Quarkus startup banner.
+            } else {
+                kept.add(lines.get(index));
+            }
         }
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] bytes = digest.digest(value.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(bytes, 0, 6);
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 is unavailable", e);
-        }
+        return String.join("\n", kept);
+    }
+
+    private static boolean isQuarkusBannerBlock(List<String> lines, int index) {
+        return index + 3 < lines.size()
+                && isQuarkusBannerLine1(lines.get(index))
+                && isQuarkusBannerLine2(lines.get(index + 1))
+                && isQuarkusBannerLine3(lines.get(index + 2))
+                && isQuarkusBannerLine4(lines.get(index + 3));
+    }
+
+    private static boolean isQuarkusBannerLine(String line) {
+        return isQuarkusBannerLine1(line)
+                || isQuarkusBannerLine2(line)
+                || isQuarkusBannerLine3(line)
+                || isQuarkusBannerLine4(line);
+    }
+
+    private static boolean isQuarkusBannerLine1(String line) {
+        return line.startsWith("__  ____");
+    }
+
+    private static boolean isQuarkusBannerLine2(String line) {
+        return line.startsWith(" --/ __ \\");
+    }
+
+    private static boolean isQuarkusBannerLine3(String line) {
+        return line.startsWith(" -/ /_/");
+    }
+
+    private static boolean isQuarkusBannerLine4(String line) {
+        return line.startsWith("--\\___");
     }
 
     private static String tail(Path path, int maxLines) {
@@ -964,10 +1783,6 @@ final class SetupDiagnosticReporter {
         return value.substring(0, maxLength) + "\n... truncated ...";
     }
 
-    private static String escapeTable(String value) {
-        return value.replace("|", "\\|").replace("\n", " ");
-    }
-
     private static String escapeBackticks(String value) {
         return value.replace("`", "'");
     }
@@ -991,4 +1806,23 @@ final class SetupDiagnosticReporter {
     }
 
     private record ToolProbe(boolean available, String detail) {}
+
+    private record ManifestSnapshot(ConnectedBoardManifest manifest, ManifestStatus status) {}
+
+    private record DiagnosticsSelection(
+            DiagnosticsSelectorKind kind, List<ConnectedBoard> boards, Optional<Path> workflow) {}
+
+    private record WorkflowLogMapping(Path workflow, ManagedProcessStore.ManagedProcessFiles files) {}
+
+    record DiagnosticsRequest(
+            Optional<String> board,
+            Optional<Path> output,
+            boolean json,
+            boolean deep,
+            Optional<Path> appHome,
+            Optional<Path> configDir,
+            Optional<Path> workspaceRoot,
+            Optional<Path> stateHome,
+            Optional<Path> manifestPath,
+            Optional<Path> workflow) {}
 }
