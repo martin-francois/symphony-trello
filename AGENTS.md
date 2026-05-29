@@ -189,7 +189,10 @@ matters, and easy for another engineer to understand without asking the original
   compatibility and baseline findings are understood. Prefer generated or in-place patches for
   mechanical fixes, promote checks from warning to error only after baseline cleanup, use stable
   `-Xep:<CheckName>:OFF|WARN|ERROR` flags for rule control, and keep rewrite/fix profiles explicit
-  so normal verification does not unexpectedly modify source files.
+  so normal verification does not unexpectedly modify source files. The current optional Error Prone
+  pass is `./mvnw -Perror-prone clean compile`; it is not part of normal
+  `./mvnw -q spotless:check verify`. Do not run the optional Error Prone command with Maven `-q`
+  because this profile reports findings as warnings while the baseline is evaluated.
 - For Semgrep, use custom rules for cross-language guardrails and security patterns that are not
   already covered by specialized linters. Prefer fixing findings, use rule-specific `nosemgrep`
   comments only with a reason, use `.semgrepignore` only for generated, vendored, or irrelevant
@@ -666,15 +669,20 @@ matters, and easy for another engineer to understand without asking the original
 - When Codex makes repository changes, run the Codex review/fix loop after every completed change
   unless the user explicitly says not to. This requirement is specific to Codex sessions; do not
   impose it on Claude or other AI tools.
-- For `codex review`, choose the scope explicitly on the first run and do not pass a positional
-  prompt with scoped review flags. The installed Codex CLI rejects that combination even when its
-  usage text implies `[PROMPT]` might work. Correct forms are:
-  `codex review --uncommitted --title "Short review title"` for staged, unstaged, or untracked local
-  changes; `codex review --base origin/main --title "Short review title"` for an already committed
-  feature branch; and `codex review --commit SHA --title "Short review title"` for one specific
-  commit. Never run `codex review --uncommitted "prompt"`, `codex review "prompt" --uncommitted`,
-  `printf "prompt" | codex review --uncommitted -`, bare `codex review`, or a mismatched scope and
-  then correct it later.
+- For this repository's trusted local Codex review/fix loop, choose the scope explicitly on the
+  first run and use `codex --dangerously-bypass-approvals-and-sandbox review ...` when the review
+  needs to run the same local tests and socket-binding checks that normal verification uses. Do not
+  use the bypass form for untrusted third-party diffs or repositories outside this checkout. Do not
+  pass a positional prompt with scoped review flags. The installed Codex CLI rejects that
+  combination even when its usage text implies `[PROMPT]` might work. Correct forms are:
+  `codex --dangerously-bypass-approvals-and-sandbox review --uncommitted --title "Short review title"`
+  for staged, unstaged, or untracked local changes;
+  `codex --dangerously-bypass-approvals-and-sandbox review --base origin/main --title "Short review title"`
+  for an already committed feature branch; and
+  `codex --dangerously-bypass-approvals-and-sandbox review --commit SHA --title "Short review title"`
+  for one specific commit. Never run `codex review --uncommitted "prompt"`,
+  `codex review "prompt" --uncommitted`, `printf "prompt" | codex review --uncommitted -`, bare
+  `codex review`, or a mismatched scope and then correct it later.
 
 # Agent Rules <!-- tessl-managed -->
 
