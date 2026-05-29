@@ -40,7 +40,7 @@ public class HookRunner {
         LOG.infof("hook=%s cwd=%s outcome=started", name, cwd);
         Process process;
         try {
-            ProcessBuilder processBuilder = new ProcessBuilder(List.of("bash", "-lc", script))
+            ProcessBuilder processBuilder = new ProcessBuilder(List.of("bash", "-c", script))
                     .directory(cwd.toFile())
                     .redirectErrorStream(true);
             ProcessEnvironment.removeDefaultSecrets(processBuilder);

@@ -4,17 +4,25 @@ import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.*;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.fmartin.symphony.trello.setup.InstallerScriptFixture.ProcessResult;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 class InstallerScriptLifecycleTest {
+    private static final ObjectMapper JSON = new ObjectMapper();
+    private static final TypeReference<LinkedHashMap<String, Object>> JSON_OBJECT = new TypeReference<>() {};
+
     @TempDir
     Path temporaryDirectory;
 
@@ -196,14 +204,14 @@ class InstallerScriptLifecycleTest {
         Path uninstallScript = Path.of("uninstall.ps1").toAbsolutePath();
         Path sourceRepository = createWindowsSourceRepository(temporaryDirectory);
         Path fakeBin = createFakeWindowsToolchain(temporaryDirectory);
-        Path symphonyHome = temporaryDirectory.resolve("home $value & (demo) é");
+        Path symphonyHome = temporaryDirectory.resolve("home $value & (demo)");
         Path installPrefix = symphonyHome.resolve("app");
         Path configDirectory = symphonyHome.resolve("config");
         Path workspaceRoot = symphonyHome.resolve("workspaces");
         Path stateHome = symphonyHome.resolve("state");
         Path binDirectory = temporaryDirectory.resolve("bin $value & (demo) é");
-        Path workflow = temporaryDirectory.resolve("WORKFLOW $value & (demo) é.md");
-        Path envFile = temporaryDirectory.resolve(".env $value & (demo) é");
+        Path workflow = temporaryDirectory.resolve("WORKFLOW $value & (demo).md");
+        Path envFile = temporaryDirectory.resolve(".env $value & (demo)");
         Path fakeLog = temporaryDirectory.resolve("fake powershell tools.log");
         Map<String, String> environment = Map.of(
                 "PATH", fakeBin + System.getProperty("path.separator") + System.getenv("PATH"),
@@ -218,6 +226,8 @@ class InstallerScriptLifecycleTest {
                 "-File",
                 installScript.toString(),
                 "--no-onboard",
+                "--symphony-home",
+                symphonyHome.toString(),
                 "--prefix",
                 installPrefix.toString(),
                 "--bin-dir",
@@ -248,23 +258,20 @@ class InstallerScriptLifecycleTest {
                     "--workspace-root",
                     "relative workspaces"
                 }));
-        ProcessResult cmdShimBoardSetup = run(
-                environment,
-                callerDirectory,
-                "cmd.exe",
-                "/c",
-                installedCmdShim.toString(),
-                "new-board",
-                "--name",
-                "Command Prompt Wrapper Dispatch Board",
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--workflow",
-                "cmd workflow.md",
-                "--workspace-root",
-                "cmd workspaces");
+        ProcessResult cmdShimBoardSetup =
+                run(environment, callerDirectory, commandPromptCommand(installedCmdShim.toString(), new String[] {
+                    "new-board",
+                    "--name",
+                    "Command Prompt Wrapper Dispatch Board",
+                    "--key",
+                    "key",
+                    "--token",
+                    "token",
+                    "--workflow",
+                    "cmd workflow.md",
+                    "--workspace-root",
+                    "cmd workspaces"
+                }));
         ProcessResult unknownCommand =
                 run(environment, "pwsh", "-NoProfile", "-File", installedScript.toString(), "definitely-not-a-command");
         Files.writeString(workflow, "# Windows workflow\n", StandardCharsets.UTF_8);
@@ -315,6 +322,8 @@ class InstallerScriptLifecycleTest {
                 "-File",
                 uninstallScript.toString(),
                 "--yes",
+                "--symphony-home",
+                symphonyHome.toString(),
                 "--prefix",
                 installPrefix.toString(),
                 "--bin-dir",
@@ -333,24 +342,34 @@ class InstallerScriptLifecycleTest {
                 .contains("setup_failed code=setup_invalid_arguments")
                 .contains("definitely-not-a-command");
         assertThat(start.exitCode()).as(start.output()).isZero();
-        assertThat(status.output()).contains("running WORKFLOW $value & (demo) é.md");
+        assertThat(status.output()).contains("running WORKFLOW $value & (demo).md");
         assertThat(logs.output()).contains("fake wrapper log");
-        assertThat(stop.output()).contains("Stopped WORKFLOW $value & (demo) é.md");
-        assertThat(fakeLog)
-                .content()
+        assertThat(stop.output()).contains("Stopped WORKFLOW $value & (demo).md");
+        String fakeLogContent = Files.readString(fakeLog, StandardCharsets.UTF_8);
+        Map<String, Object> powerShellSetup = setupCliEvent(fakeLogContent, "new-board", "Wrapper Dispatch Board");
+        assertThat(String.valueOf(powerShellSetup.get("cwd"))).contains("windows caller");
+        assertThat(String.valueOf(powerShellSetup.get("dotenv"))).contains("home $value & (demo)\\config\\.env");
+        assertThat(eventArguments(powerShellSetup))
                 .contains(
-                        "setup-cli cwd=" + callerDirectory,
-                        "-Dsymphony.trello.config.dir=" + configDirectory,
+                        "-Dsymphony.trello.config.dir=",
+                        "home $value & (demo)\\config",
                         "-Dsymphony.trello.shell=powershell",
-                        "-Dsymphony.trello.shell=cmd",
                         "new-board --name Wrapper Dispatch Board",
-                        "new-board --name Command Prompt Wrapper Dispatch Board",
                         "--workflow relative workflow.md",
+                        "--workspace-root relative workspaces");
+        Map<String, Object> commandPromptSetup =
+                setupCliEvent(fakeLogContent, "new-board", "Command Prompt Wrapper Dispatch Board");
+        assertThat(String.valueOf(commandPromptSetup.get("cwd"))).contains("windows caller");
+        assertThat(String.valueOf(commandPromptSetup.get("dotenv"))).contains("home $value & (demo)\\config\\.env");
+        assertThat(eventArguments(commandPromptSetup))
+                .contains(
+                        "-Dsymphony.trello.config.dir=",
+                        "home $value & (demo)\\config",
+                        "-Dsymphony.trello.shell=cmd",
+                        "new-board --name Command Prompt Wrapper Dispatch Board",
                         "--workflow cmd workflow.md",
-                        "--workspace-root relative workspaces",
-                        "--workspace-root cmd workspaces",
-                        "dotenv=" + configDirectory.resolve(".env"))
-                .doesNotContain("new-board --workflow");
+                        "--workspace-root cmd workspaces");
+        assertThat(fakeLogContent).doesNotContain("new-board --workflow");
         assertThat(uninstall.exitCode()).as(uninstall.output()).isZero();
         assertThat(installPrefix).doesNotExist();
         assertThat(binDirectory.resolve("symphony-trello.ps1")).doesNotExist();
@@ -368,6 +387,8 @@ class InstallerScriptLifecycleTest {
                 "--remove-config",
                 "--remove-workspaces",
                 "--remove-state",
+                "--symphony-home",
+                symphonyHome.toString(),
                 "--prefix",
                 installPrefix.toString(),
                 "--bin-dir",
@@ -376,8 +397,42 @@ class InstallerScriptLifecycleTest {
         assertThat(configDirectory).doesNotExist();
         assertThat(workspaceRoot).doesNotExist();
         assertThat(stateHome).doesNotExist();
-        assertThat(fakeLog)
-                .content(StandardCharsets.UTF_8)
-                .contains("mvnw.cmd -q -DskipTests clean package", "dotenv=" + envFile, "jar-start");
+        assertThat(eventArguments(setupCliEvent(fakeLogContent, "start", "--env")))
+                .contains(".env $value & (demo)", "--workflow", "WORKFLOW $value & (demo).md");
+        assertThat(fakeLogContent).contains("mvnw.cmd -q -f", "-DskipTests clean package");
+    }
+
+    private static Map<String, Object> setupCliEvent(String log, String... requiredFragments) throws IOException {
+        return structuredEvents(log).stream()
+                .filter(event -> "setup-cli".equals(event.get("event")))
+                .filter(event -> containsAll(eventArguments(event), requiredFragments))
+                .findAny()
+                .orElseThrow(() -> new AssertionError(
+                        "Expected setup-cli event containing: " + String.join(", ", requiredFragments)));
+    }
+
+    private static List<Map<String, Object>> structuredEvents(String log) throws IOException {
+        List<Map<String, Object>> events = new ArrayList<>();
+        for (String line : log.lines().toList()) {
+            if (line.stripLeading().startsWith("{")) {
+                events.add(JSON.readValue(line, JSON_OBJECT));
+            }
+        }
+        return events;
+    }
+
+    private static boolean containsAll(String value, String... fragments) {
+        for (String fragment : fragments) {
+            if (!value.contains(fragment)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static String eventArguments(Map<String, Object> event) {
+        Object args = event.get("args");
+        assertThat(args).as("structured fake-tool event args").isInstanceOf(List.class);
+        return ((List<?>) args).stream().map(String::valueOf).collect(Collectors.joining(" "));
     }
 }

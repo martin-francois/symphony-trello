@@ -45,7 +45,7 @@
         "/^CONTRIBUTING\\.md$/"
       ],
       "matchStrings": [
-        "--package (?<depName>@commitlint/(?:cli|config-conventional))@(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+        "(?:--package\\s+|\\s+)(?<depName>@commitlint/(?:cli|config-conventional))@(?<currentValue>\\d+\\.\\d+\\.\\d+)"
       ],
       "datasourceTemplate": "npm",
       "versioningTemplate": "semver"
