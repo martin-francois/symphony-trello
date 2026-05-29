@@ -838,8 +838,9 @@ class TrelloBoardSetupMainTest {
         new ConnectedBoardRepository(tempDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(oldBoard)));
         LocalWorkerManager workerManager = mock(LocalWorkerManager.class);
-        TrelloBoardSetup boardSetup =
-                new TrelloBoardSetup(new ObjectMapper(), () -> TrelloBoardSetup.CodexModelDefaults.fallback());
+        TrelloBoardSetup boardSetup = new TrelloBoardSetup(
+                new ObjectMapper(),
+                () -> CodexModelSelectionDefaults.of(TrelloBoardSetup.CodexModelDefaults.fallback()));
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
 
@@ -1473,6 +1474,67 @@ class TrelloBoardSetupMainTest {
     }
 
     @Test
+    void newBoardWritesExplicitCodexModelOverrides() {
+        // given
+        Path workflow = tempDir.resolve("explicit-new-board-model.WORKFLOW.md");
+
+        // when
+        CliRunResult result = runCli(
+                () -> new TrelloBoardSetup.CodexModelDefaults("gpt-default", "medium"),
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--name",
+                "Explicit New Board Model",
+                "--workflow",
+                workflow.toString(),
+                "--codex-model",
+                "gpt-explicit",
+                "--codex-reasoning-effort",
+                "high");
+
+        // then
+        result.assertSuccess();
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-explicit\"", "reasoning_effort: \"high\"")
+                .doesNotContain("gpt-default");
+    }
+
+    @Test
+    void newBoardWritesFallbackReasoningForExplicitModelWhenDiscoveryDoesNotSupportFirstClassFields() {
+        // given
+        Path workflow = tempDir.resolve("unsupported-explicit-new-board-model.WORKFLOW.md");
+
+        // when
+        CliRunResult result = runCli(
+                () -> TrelloBoardSetup.CodexModelDefaults.unsupportedFirstClassFields(),
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--name",
+                "Unsupported Explicit New Board Model",
+                "--workflow",
+                workflow.toString(),
+                "--codex-model",
+                "gpt-explicit");
+
+        // then
+        result.assertSuccess();
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-explicit\"", "reasoning_effort: \"medium\"");
+    }
+
+    @Test
     void usesConfiguredDefaultWorkflowDirectoryWithoutDisablingBoardNameFallback() throws IOException {
         // given
         Path configDirectory = tempDir.resolve("config");
@@ -1799,6 +1861,181 @@ class TrelloBoardSetupMainTest {
         assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
     }
 
+    @Test
+    void importBoardWritesExplicitCodexReasoningOverride() {
+        // given
+        Path workflow = tempDir.resolve("explicit-import-model.WORKFLOW.md");
+
+        // when
+        CliRunResult result = runCli(
+                () -> new TrelloBoardSetup.CodexModelDefaults("gpt-default", "medium"),
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "https://trello.com/b/input/existing-board",
+                "--active",
+                "Queue for Codex",
+                "--terminal",
+                "Released",
+                "--workflow",
+                workflow.toString(),
+                "--codex-reasoning-effort",
+                "high");
+
+        // then
+        result.assertSuccess();
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-default\"", "reasoning_effort: \"high\"");
+    }
+
+    @Test
+    void importBoardWritesFallbackReasoningForExplicitModelWhenUnsupportedDiscoveryPreservesExistingOmission()
+            throws IOException {
+        // given
+        Path workflow = tempDir.resolve("explicit-import-unsupported-existing-omitted.WORKFLOW.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                codex:
+                  command: codex app-server
+                ---
+                Old body
+                """,
+                StandardCharsets.UTF_8);
+
+        // when
+        CliRunResult result = runCli(
+                () -> TrelloBoardSetup.CodexModelDefaults.unsupportedFirstClassFields(),
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "https://trello.com/b/input/existing-board",
+                "--active",
+                "Queue for Codex",
+                "--terminal",
+                "Released",
+                "--workflow",
+                workflow.toString(),
+                "--force",
+                "--codex-model",
+                "gpt-explicit");
+
+        // then
+        result.assertSuccess();
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-explicit\"", "reasoning_effort: \"medium\"");
+    }
+
+    @Test
+    void importBoardPreservesExistingReasoningForExplicitModelOverride() throws IOException {
+        // given
+        Path workflow = tempDir.resolve("explicit-import-preserve-existing-reasoning.WORKFLOW.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                codex:
+                  command: codex app-server
+                  model: "gpt-old"
+                  reasoning_effort: "low"
+                ---
+                Old body
+                """,
+                StandardCharsets.UTF_8);
+
+        // when
+        CliRunResult result = runCliWithSelectionDefaults(
+                new CodexModelSelectionDefaults(
+                        new TrelloBoardSetup.CodexModelDefaults("gpt-default", "medium"),
+                        Map.of("gpt-default", "medium", "gpt-new", "high")),
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "https://trello.com/b/input/existing-board",
+                "--active",
+                "Queue for Codex",
+                "--terminal",
+                "Released",
+                "--workflow",
+                workflow.toString(),
+                "--force",
+                "--codex-model",
+                "gpt-new");
+
+        // then
+        result.assertSuccess();
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-new\"", "reasoning_effort: \"low\"")
+                .doesNotContain("model: \"gpt-old\"", "reasoning_effort: \"high\"");
+    }
+
+    @Test
+    void importBoardPreservesReasoningOmissionForUnknownExplicitModelWhenDiscoverySupportsFirstClassFields()
+            throws IOException {
+        // given
+        Path workflow = tempDir.resolve("explicit-import-supported-existing-omitted.WORKFLOW.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                codex:
+                  command: codex app-server
+                ---
+                Old body
+                """,
+                StandardCharsets.UTF_8);
+
+        // when
+        CliRunResult result = runCliWithSelectionDefaults(
+                new CodexModelSelectionDefaults(
+                        new TrelloBoardSetup.CodexModelDefaults("gpt-default", "medium"),
+                        Map.of("gpt-default", "medium", "gpt-known", "high")),
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "https://trello.com/b/input/existing-board",
+                "--active",
+                "Queue for Codex",
+                "--terminal",
+                "Released",
+                "--workflow",
+                workflow.toString(),
+                "--force",
+                "--codex-model",
+                "gpt-custom");
+
+        // then
+        result.assertSuccess();
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-custom\"")
+                .doesNotContain("reasoning_effort:");
+    }
+
     @ParameterizedTest(name = "{0}")
     @MethodSource("invalidCliArgumentScenarios")
     void rejectsInvalidCliArguments(String name, String[] command, int exitCode, String[] expectedError) {
@@ -1909,6 +2146,22 @@ class TrelloBoardSetupMainTest {
                 new PrintStream(stdout, true, StandardCharsets.UTF_8),
                 new PrintStream(stderr, true, StandardCharsets.UTF_8),
                 codexModelDefaults);
+        return new CliRunResult(
+                exitCode, stdout.toString(StandardCharsets.UTF_8), stderr.toString(StandardCharsets.UTF_8));
+    }
+
+    private CliRunResult runCliWithSelectionDefaults(
+            CodexModelSelectionDefaults codexModelSelectionDefaults, String... args) {
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+        TrelloBoardSetup setup = new TrelloBoardSetup(new ObjectMapper(), codexModelSelectionDefaults);
+        int exitCode = TrelloBoardSetupMain.run(
+                args,
+                new TrelloBoardSetupService(setup),
+                new LocalSetup(setup, new ProcessCommandRunner()),
+                new LocalWorkerManager(System.getenv()),
+                new PrintStream(stdout, true, StandardCharsets.UTF_8),
+                new PrintStream(stderr, true, StandardCharsets.UTF_8));
         return new CliRunResult(
                 exitCode, stdout.toString(StandardCharsets.UTF_8), stderr.toString(StandardCharsets.UTF_8));
     }

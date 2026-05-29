@@ -83,13 +83,14 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
     }
 
     static int run(String[] args, PrintStream out, PrintStream err) {
-        return run(args, out, err, (TrelloBoardSetup.CodexModelDefaults) null);
+        ObjectMapper json = new ObjectMapper();
+        return runWithSelectionDefaults(
+                args, out, err, () -> new CodexModelDefaultsResolver(json).resolveSelectionDefaults());
     }
 
     static int run(
             String[] args, PrintStream out, PrintStream err, TrelloBoardSetup.CodexModelDefaults codexModelDefaults) {
-        ObjectMapper json = new ObjectMapper();
-        return run(args, out, err, () -> codexModelDefaults(json, codexModelDefaults));
+        return runWithSelectionDefaults(args, out, err, () -> codexModelSelectionDefaults(codexModelDefaults));
     }
 
     static int run(
@@ -97,8 +98,16 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             PrintStream out,
             PrintStream err,
             Supplier<TrelloBoardSetup.CodexModelDefaults> codexModelDefaults) {
+        return runWithSelectionDefaults(args, out, err, () -> CodexModelSelectionDefaults.of(codexModelDefaults.get()));
+    }
+
+    private static int runWithSelectionDefaults(
+            String[] args,
+            PrintStream out,
+            PrintStream err,
+            Supplier<CodexModelSelectionDefaults> codexModelSelectionDefaults) {
         ObjectMapper json = new ObjectMapper();
-        TrelloBoardSetup boardSetup = new TrelloBoardSetup(json, codexModelDefaults);
+        TrelloBoardSetup boardSetup = new TrelloBoardSetup(json, codexModelSelectionDefaults);
         LocalWorkerManager workerManager = new LocalWorkerManager(System.getenv());
         return run(
                 args,
@@ -109,9 +118,9 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                 err);
     }
 
-    private static TrelloBoardSetup.CodexModelDefaults codexModelDefaults(
-            ObjectMapper json, TrelloBoardSetup.CodexModelDefaults codexModelDefaults) {
-        return codexModelDefaults != null ? codexModelDefaults : new CodexModelDefaultsResolver(json).resolve();
+    private static CodexModelSelectionDefaults codexModelSelectionDefaults(
+            TrelloBoardSetup.CodexModelDefaults codexModelDefaults) {
+        return CodexModelSelectionDefaults.of(codexModelDefaults);
     }
 
     static int run(
@@ -191,7 +200,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                 options.validateRuntimeEnvTarget();
                 parent.boardSetup.preflightConnectedBoardManifest(options.manifestPath());
                 NewBoardRequest request = options.newBoardRequest(boardName, workspaceId);
-                TrelloBoardSetup.NewBoardResult result = parent.boardSetup.createRecommendedBoard(request);
+                TrelloBoardSetup.NewBoardResult result = parent.boardSetup.createRecommendedBoard(request, options);
                 options.persistRuntimeCredentials(parent.input, parent.out, parent.err);
                 parent.boardSetup.persistConnectedBoard(
                         result,
@@ -255,7 +264,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                         inProgressState,
                         !noInProgress && inProgressState == null,
                         blockedState);
-                TrelloBoardSetup.ImportBoardResult result = parent.boardSetup.importExistingBoard(request);
+                TrelloBoardSetup.ImportBoardResult result = parent.boardSetup.importExistingBoard(request, options);
                 options.persistRuntimeCredentials(parent.input, parent.out, parent.err);
                 parent.boardSetup.persistConnectedBoard(
                         result,
@@ -585,6 +594,14 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         @Option(names = "--max-agents", description = "Maximum cards from this board that may run at once.")
         int maxConcurrentAgents = TrelloBoardSetup.DEFAULT_MAX_CONCURRENT_AGENTS;
 
+        @Option(names = "--codex-model", description = "Codex model to write into generated workflows.")
+        Optional<String> codexModel = Optional.empty();
+
+        @Option(
+                names = "--codex-reasoning-effort",
+                description = "Codex reasoning effort to write into generated workflows.")
+        Optional<String> codexReasoningEffort = Optional.empty();
+
         @Option(names = "--force", description = "Overwrite the workflow file when needed.")
         boolean force;
 
@@ -693,6 +710,18 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                     exception.withDotenvPath(runtimeEnvPath());
                 default -> exception;
             };
+        }
+
+        boolean hasExplicitCodexModelRequest() {
+            return codexModel().isPresent() || codexReasoningEffort().isPresent();
+        }
+
+        Optional<String> codexModel() {
+            return codexModel.map(String::strip).filter(value -> !value.isBlank());
+        }
+
+        Optional<String> codexReasoningEffort() {
+            return codexReasoningEffort.map(String::strip).filter(value -> !value.isBlank());
         }
 
         private void validate() {

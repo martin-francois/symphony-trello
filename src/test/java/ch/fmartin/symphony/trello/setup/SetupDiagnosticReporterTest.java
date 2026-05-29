@@ -1547,6 +1547,8 @@ class SetupDiagnosticReporterTest {
                 Optional.empty(),
                 1,
                 false,
+                Optional.empty(),
+                Optional.empty(),
                 Optional.of(env),
                 List.of(),
                 false,

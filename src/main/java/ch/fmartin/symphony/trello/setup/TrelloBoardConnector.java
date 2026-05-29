@@ -17,10 +17,12 @@ final class TrelloBoardConnector {
 
     private final TrelloBoardSetup boardSetup;
     private final WorkflowConfigEditor workflowConfig;
+    private final CodexModelSelectionFlow codexModelSelectionFlow;
 
     TrelloBoardConnector(TrelloBoardSetup boardSetup, WorkflowConfigEditor workflowConfig) {
         this.boardSetup = boardSetup;
         this.workflowConfig = workflowConfig;
+        this.codexModelSelectionFlow = new CodexModelSelectionFlow();
     }
 
     LocalSetup.SetupResult createOrConnectBoard(
@@ -61,8 +63,9 @@ final class TrelloBoardConnector {
                 new TrelloBoardSetup.BoardInfoRequest(options.endpoint(), credentials, boardInfo.boardId()));
         ExistingBoardLists configuredLists = existingBoardLists(options, terminal, openLists, githubIntegration);
         Path workflowPath = resolveWorkflowPath(options, slug(boardInfo.boardName()));
-        TrelloBoardSetup.ImportBoardResult result =
-                boardSetup.importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
+        options = configureCodexModel(options, workflowPath, terminal);
+        TrelloBoardSetup.ImportBoardResult result = boardSetup(options)
+                .importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
                         options.endpoint(),
                         credentials,
                         boardInfo.boardId(),
@@ -100,18 +103,38 @@ final class TrelloBoardConnector {
                 boardSetup.listWorkspaces(new TrelloBoardSetup.WorkspaceListRequest(options.endpoint(), credentials));
         String workspaceId = workspaceId(options, workspaces, terminal);
         Path workflowPath = resolveWorkflowPath(options, slug(boardName));
-        return LocalSetup.SetupResult.from(boardSetup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
-                options.endpoint(),
-                credentials,
-                boardName,
-                workspaceId,
-                workflowPath,
-                options.workspaceRoot(),
-                localSetupServerPort(options, manifest, workflowPath),
-                options.maxAgents(),
-                options.force(),
-                !options.workflowPathExplicit(),
-                githubIntegration)));
+        options = configureCodexModel(options, workflowPath, terminal);
+        return LocalSetup.SetupResult.from(boardSetup(options)
+                .createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                        options.endpoint(),
+                        credentials,
+                        boardName,
+                        workspaceId,
+                        workflowPath,
+                        options.workspaceRoot(),
+                        localSetupServerPort(options, manifest, workflowPath),
+                        options.maxAgents(),
+                        options.force(),
+                        !options.workflowPathExplicit(),
+                        githubIntegration)));
+    }
+
+    private LocalSetup.Options configureCodexModel(LocalSetup.Options options, Path workflowPath, Terminal terminal)
+            throws IOException {
+        CodexModelSelectionFlow.Selection selected = codexModelSelectionFlow.resolve(
+                options, boardSetup.codexModelSelectionDefaultsForWorkflow(workflowPath), terminal);
+        return options.withCodexModelSelection(selected);
+    }
+
+    private TrelloBoardSetup boardSetup(LocalSetup.Options options) {
+        if (options.codexModelDefaults().isEmpty()) {
+            return boardSetup;
+        }
+        TrelloBoardSetup.CodexModelDefaults defaults =
+                options.codexModelDefaults().orElseThrow();
+        return options.hasExplicitCodexModelRequest()
+                ? boardSetup.withCodexModelOverrides(defaults, options.codexModel(), options.codexReasoningEffort())
+                : boardSetup.withCodexModelDefaults(defaults);
     }
 
     private static String workspaceId(
