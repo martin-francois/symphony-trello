@@ -1,6 +1,6 @@
 [Unit]
 Description=Symphony for Trello workflow %i
-Documentation=https://github.com/martinfrancois/symphony-trello
+Documentation=https://github.com/martin-francois/symphony-trello
 After=network-online.target
 Wants=network-online.target
 

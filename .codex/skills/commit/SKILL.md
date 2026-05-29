@@ -91,7 +91,7 @@ description: >
 7. If implementing a GitHub issue, include a footer:
 
    ```text
-   Refs: https://github.com/martinfrancois/symphony-trello/issues/<number>
+   Refs: https://github.com/martin-francois/symphony-trello/issues/<number>
    ```
 
 8. Commit with `git commit -F <message-file>` so the message is exactly what was

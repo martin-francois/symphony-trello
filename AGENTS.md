@@ -36,7 +36,10 @@ matters, and easy for another engineer to understand without asking the original
    the user explicitly scopes the instruction to the current session, do not make it durable. Do not
    add new rules only because the agent independently chose a reasonable improvement. If the
    correction is about a concrete preference, add or update the concrete rule for that preference; do
-   not replace it with only a generic process reminder.
+   not replace it with only a generic process reminder. When the correction is about a repeatable
+   code, documentation, issue-triage, PR, ADR, or workflow pattern, treat the durable update as part
+   of the fix: make the immediate correction, add or update the specific rule that would have
+   prevented it, and check nearby rules for conflicts before finishing.
 7. When a new user preference changes how this file itself should be maintained, review existing
    agent-added rules for conflicts with that new preference in the same turn.
 8. When fixing a documentation pattern, search the relevant file or docs set for similar instances
@@ -543,6 +546,11 @@ matters, and easy for another engineer to understand without asking the original
   long sentences. Use words and sentence structures that are clear for non-native English speakers,
   while still following the MADR template exactly. Prefer clear, unambiguous user-manual style over
   polished prose; readers should not have to infer what the decision means.
+- In ADRs, reference GitHub issues and pull requests with descriptive full Markdown links, not
+  shorthand references. Use `[GitHub issue #6](https://github.com/martin-francois/symphony-trello/issues/6)`
+  or `[GitHub PR #116](https://github.com/martin-francois/symphony-trello/pull/116)`.
+  Apply the same format in ADR front matter such as `consulted`; quote Markdown links in YAML
+  arrays. Do not use bare `#6`, `issue #6`, `PR #116`, or bare GitHub URLs in ADRs.
 - When adding or updating ADRs, document the options that were seriously considered, why the chosen
   option won, what becomes easier, what becomes worse, and how future maintainers can confirm the
   decision is still implemented.

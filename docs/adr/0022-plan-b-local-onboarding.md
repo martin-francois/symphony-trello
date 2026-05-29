@@ -2,7 +2,11 @@
 status: accepted
 date: 2026-05-08
 decision-makers: [François Martin, Codex]
-consulted: [SPEC.md, GitHub issue #35, README.md, docs/adr/0005-trello-setup-and-local-configuration.md]
+consulted:
+  - SPEC.md
+  - "[GitHub issue #35](https://github.com/martin-francois/symphony-trello/issues/35)"
+  - README.md
+  - docs/adr/0005-trello-setup-and-local-configuration.md
 informed: [Future maintainers]
 ---
 
@@ -144,5 +148,6 @@ The project would keep the existing operator-focused setup paths.
 
 ## More Information
 
-GitHub issue #35 contains the detailed Plan B UX target implemented here. Release artifacts and
-runtime-bundled distributions remain future Plan C/Plan D work.
+[GitHub issue #35](https://github.com/martin-francois/symphony-trello/issues/35) contains the
+detailed Plan B UX target implemented here. Release artifacts and runtime-bundled distributions
+remain future Plan C/Plan D work.

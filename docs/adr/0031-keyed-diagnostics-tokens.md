@@ -137,5 +137,5 @@ This decision covers diagnostics correlation tokens only. It is not a password-s
 does not change the rule that credential values, Codex auth data, GitHub tokens, and worker log
 contents must not be printed.
 
-Follow-up issue #112 tracks a possible local-only recovery path for rare reports generated with a
-temporary token key.
+[GitHub issue #112](https://github.com/martin-francois/symphony-trello/issues/112) tracks a
+possible local-only recovery path for rare reports generated with a temporary token key.
