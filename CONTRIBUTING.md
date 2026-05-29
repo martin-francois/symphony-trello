@@ -129,6 +129,19 @@ reason, and private-repository local runs should use `--metrics=off`. CodeQL is 
 public-repository code-scanning layer and is not part of normal local `verify`. Hosted dashboards can
 add signal, but they must not replace local checks contributors can run, fix, and rerun.
 
+An optional Error Prone pass is available for local source-level feedback:
+
+```bash
+./mvnw -Perror-prone clean compile
+```
+
+This profile is intentionally not part of the default `./mvnw -q spotless:check verify` command. It
+uses Error Prone as a warning-oriented candidate pass while maintainers watch baseline findings and
+rule usefulness. The profile explicitly enables `OptionalNotPresent` so Optional presence checks that
+read the value unsafely are visible during local review. The `clean` phase is part of the command so
+Maven recompiles sources instead of skipping analysis when classes are already up to date. Do not add
+`-q` to this command because the profile currently reports findings as warnings.
+
 PowerShell installer tests use native `pwsh` when it is installed. CI also runs them through
 Microsoft's .NET SDK container:
 
