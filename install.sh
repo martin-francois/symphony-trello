@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ORIGINAL_PATH="$PATH"
-REPO_URL="${SYMPHONY_TRELLO_REPO_URL:-https://github.com/martinfrancois/symphony-trello.git}"
+REPO_URL="${SYMPHONY_TRELLO_REPO_URL:-https://github.com/martin-francois/symphony-trello.git}"
 DEFAULT_REF="v0.2.0" # x-release-please-version
 REF="${SYMPHONY_TRELLO_REF:-$DEFAULT_REF}"
 SYMPHONY_HOME="${SYMPHONY_HOME:-$HOME/.local/share/symphony-trello}"
@@ -23,8 +23,8 @@ usage() {
   cat <<USAGE
 Usage:
   export SYMPHONY_TRELLO_REF=${DEFAULT_REF}
-  curl -fsSL "https://raw.githubusercontent.com/martinfrancois/symphony-trello/\${SYMPHONY_TRELLO_REF}/install.sh" | bash
-  curl -fsSL "https://raw.githubusercontent.com/martinfrancois/symphony-trello/\${SYMPHONY_TRELLO_REF}/install.sh" | bash -s -- --dry-run
+  curl -fsSL "https://raw.githubusercontent.com/martin-francois/symphony-trello/\${SYMPHONY_TRELLO_REF}/install.sh" | bash
+  curl -fsSL "https://raw.githubusercontent.com/martin-francois/symphony-trello/\${SYMPHONY_TRELLO_REF}/install.sh" | bash -s -- --dry-run
 
 Options:
   --dry-run          Print planned actions without changing files.

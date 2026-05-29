@@ -1053,9 +1053,9 @@ public final class LocalSetup {
         }
         out.println();
         out.println("Read more:");
-        out.println("  Features: https://github.com/martinfrancois/symphony-trello#current-capabilities");
-        out.println("  How it works: https://github.com/martinfrancois/symphony-trello#how-it-works");
-        out.println("  Concurrency: https://github.com/martinfrancois/symphony-trello#workflow-contract");
+        out.println("  Features: https://github.com/martin-francois/symphony-trello#current-capabilities");
+        out.println("  How it works: https://github.com/martin-francois/symphony-trello#how-it-works");
+        out.println("  Concurrency: https://github.com/martin-francois/symphony-trello#workflow-contract");
     }
 
     private static String tutorialQueueTarget(WorkflowListConfiguration listConfiguration) {

@@ -10,7 +10,7 @@ param(
   [Alias("-bin-dir", "bin-dir", "--bin-dir")]
   [string]$BinDir = "$env:USERPROFILE\.local\bin",
   [Alias("-repo", "--repo")]
-  [string]$Repo = "https://github.com/martinfrancois/symphony-trello.git",
+  [string]$Repo = "https://github.com/martin-francois/symphony-trello.git",
   [Alias("-ref", "--ref")]
   [string]$Ref = "v0.2.0", # x-release-please-version
   [switch]$Help,
@@ -23,7 +23,7 @@ $OriginalPath = $env:PATH
 $DefaultSymphonyHome = if ($env:SYMPHONY_HOME) { $env:SYMPHONY_HOME } else { "$env:LOCALAPPDATA\SymphonyTrello" }
 $DefaultPrefix = ""
 $DefaultBinDir = "$env:USERPROFILE\.local\bin"
-$DefaultRepo = "https://github.com/martinfrancois/symphony-trello.git"
+$DefaultRepo = "https://github.com/martin-francois/symphony-trello.git"
 $DefaultRef = "v0.2.0" # x-release-please-version
 
 function Apply-PositionalFlag([string]$Token) {
@@ -145,7 +145,7 @@ if ($Help) {
   @"
 Usage:
   `$env:SYMPHONY_TRELLO_REF = "$DefaultRef"
-  & ([scriptblock]::Create((irm "https://raw.githubusercontent.com/martinfrancois/symphony-trello/`$env:SYMPHONY_TRELLO_REF/install.ps1"))) --ref `$env:SYMPHONY_TRELLO_REF
+  & ([scriptblock]::Create((irm "https://raw.githubusercontent.com/martin-francois/symphony-trello/`$env:SYMPHONY_TRELLO_REF/install.ps1"))) --ref `$env:SYMPHONY_TRELLO_REF
 
 Options:
   --dry-run     Print planned actions without changing files.

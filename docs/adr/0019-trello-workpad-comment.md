@@ -2,7 +2,9 @@
 status: accepted
 date: 2026-05-05
 decision-makers: [François Martin, Codex]
-consulted: [SPEC.md, GitHub issue #22]
+consulted:
+  - SPEC.md
+  - "[GitHub issue #22](https://github.com/martin-francois/symphony-trello/issues/22)"
 informed: [Future maintainers]
 ---
 

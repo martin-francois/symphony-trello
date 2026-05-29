@@ -2,7 +2,10 @@
 status: accepted
 date: 2026-05-05
 decision-makers: [François Martin, Codex]
-consulted: [SPEC.md, docs/live-e2e.md, GitHub issue #1]
+consulted:
+  - SPEC.md
+  - docs/live-e2e.md
+  - "[GitHub issue #1](https://github.com/martin-francois/symphony-trello/issues/1)"
 informed: [Future maintainers]
 ---
 

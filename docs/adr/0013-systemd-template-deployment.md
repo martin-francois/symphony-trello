@@ -107,7 +107,7 @@ Document only direct Java commands for every workflow.
 ## More Information
 
 Future deployment automation work is tracked in
-[GitHub issue #6](https://github.com/martinfrancois/symphony-trello/issues/6) instead of
+[GitHub issue #6](https://github.com/martin-francois/symphony-trello/issues/6) instead of
 user-facing setup documentation.
 
 Production secrets use systemd credentials with `file:$CREDENTIALS_DIRECTORY/...` workflow values.
