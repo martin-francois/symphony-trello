@@ -22,20 +22,38 @@ jobs:
         run: |
           corepack enable
           corepack prepare pnpm@11.3.0 --activate
+      - name: Install commitlint
+        # commitlint resolves `extends` from the config file's directory, so the
+        # config-conventional package must be reachable via Node's module
+        # resolution there. `pnpm dlx` installs both packages into an isolated
+        # cache dir that the workspace cwd cannot resolve from, which produced
+        # `Cannot find module "@commitlint/config-conventional"`. Install both
+        # packages into a runner-local directory and expose it via NODE_PATH
+        # instead of committing a package.json to this Java project.
+        run: |
+          set -euo pipefail
+          COMMITLINT_HOME="$RUNNER_TEMP/commitlint"
+          mkdir -p "$COMMITLINT_HOME"
+          (
+            cd "$COMMITLINT_HOME"
+            echo '{"private":true}' > package.json
+            pnpm add --silent \
+              @commitlint/cli@21.0.1 \
+              @commitlint/config-conventional@21.0.1
+          )
+          echo "COMMITLINT_HOME=$COMMITLINT_HOME" >> "$GITHUB_ENV"
+          echo "NODE_PATH=$COMMITLINT_HOME/node_modules" >> "$GITHUB_ENV"
       - name: Lint pull request title
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          printf '%s\n' "$PR_TITLE" | pnpm dlx \
-            --package @commitlint/cli@21.0.1 \
-            --package @commitlint/config-conventional@21.0.1 \
-            commitlint --config commitlint.config.cjs
+          printf '%s\n' "$PR_TITLE" \
+            | "$COMMITLINT_HOME/node_modules/.bin/commitlint" --config commitlint.config.cjs
       - name: Lint pull request commits
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          pnpm dlx \
-            --package @commitlint/cli@21.0.1 \
-            --package @commitlint/config-conventional@21.0.1 \
-            commitlint --config commitlint.config.cjs --from "$PR_BASE_SHA" --to "$PR_HEAD_SHA" --verbose
+          "$COMMITLINT_HOME/node_modules/.bin/commitlint" \
+            --config commitlint.config.cjs \
+            --from "$PR_BASE_SHA" --to "$PR_HEAD_SHA" --verbose
