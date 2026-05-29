@@ -86,22 +86,63 @@ public final class TrelloBoardSetup {
     private final ObjectMapper json;
     private final ObjectMapper yaml;
     private final HttpClient httpClient;
-    private final Supplier<CodexModelDefaults> codexModelDefaults;
+    private final Supplier<CodexModelSelectionDefaults> codexModelSelectionDefaults;
+    private final Optional<String> codexModelOverride;
+    private final Optional<String> codexReasoningEffortOverride;
 
     public TrelloBoardSetup(ObjectMapper json) {
         this(json, CodexModelDefaults.fallback());
     }
 
     public TrelloBoardSetup(ObjectMapper json, CodexModelDefaults codexModelDefaults) {
-        this(json, codexModelDefaultsSupplier(codexModelDefaults));
+        this(json, CodexModelSelectionDefaults.of(codexModelDefaults));
     }
 
-    TrelloBoardSetup(ObjectMapper json, Supplier<CodexModelDefaults> codexModelDefaults) {
+    TrelloBoardSetup(ObjectMapper json, CodexModelSelectionDefaults codexModelSelectionDefaults) {
+        this(json, codexModelSelectionDefaultsSupplier(codexModelSelectionDefaults));
+    }
+
+    TrelloBoardSetup(ObjectMapper json, Supplier<CodexModelSelectionDefaults> codexModelSelectionDefaults) {
+        this(json, codexModelSelectionDefaults, Optional.empty(), Optional.empty());
+    }
+
+    private TrelloBoardSetup(
+            ObjectMapper json,
+            Supplier<CodexModelSelectionDefaults> codexModelSelectionDefaults,
+            Optional<String> codexModelOverride,
+            Optional<String> codexReasoningEffortOverride) {
         this.json = json;
         this.yaml = new ObjectMapper(new YAMLFactory());
         this.httpClient =
                 HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
-        this.codexModelDefaults = Objects.requireNonNull(codexModelDefaults, CODEX_MODEL_DEFAULTS_LABEL);
+        this.codexModelSelectionDefaults =
+                Objects.requireNonNull(codexModelSelectionDefaults, CODEX_MODEL_DEFAULTS_LABEL);
+        this.codexModelOverride = Objects.requireNonNull(codexModelOverride, "codexModelOverride");
+        this.codexReasoningEffortOverride =
+                Objects.requireNonNull(codexReasoningEffortOverride, "codexReasoningEffortOverride");
+    }
+
+    TrelloBoardSetup withCodexModelDefaults(CodexModelDefaults codexModelDefaults) {
+        return new TrelloBoardSetup(json, CodexModelSelectionDefaults.of(codexModelDefaults));
+    }
+
+    TrelloBoardSetup withCodexModelOverrides(
+            CodexModelDefaults codexModelDefaults,
+            Optional<String> codexModelOverride,
+            Optional<String> codexReasoningEffortOverride) {
+        return withCodexModelOverrides(
+                CodexModelSelectionDefaults.of(codexModelDefaults), codexModelOverride, codexReasoningEffortOverride);
+    }
+
+    TrelloBoardSetup withCodexModelOverrides(
+            CodexModelSelectionDefaults codexModelSelectionDefaults,
+            Optional<String> codexModelOverride,
+            Optional<String> codexReasoningEffortOverride) {
+        return new TrelloBoardSetup(
+                json,
+                codexModelSelectionDefaultsSupplier(codexModelSelectionDefaults),
+                codexModelOverride,
+                codexReasoningEffortOverride);
     }
 
     public NewBoardResult createRecommendedBoard(NewBoardRequest request) {
@@ -332,38 +373,98 @@ public final class TrelloBoardSetup {
         return request("GET", endpoint, path, query, credentials, MAP_TYPE);
     }
 
-    private CodexModelDefaults codexModelDefaults() {
-        return Objects.requireNonNull(codexModelDefaults.get(), CODEX_MODEL_DEFAULTS_LABEL);
+    private CodexModelSelectionDefaults codexModelSelectionDefaults() {
+        return Objects.requireNonNull(codexModelSelectionDefaults.get(), CODEX_MODEL_DEFAULTS_LABEL);
     }
 
-    private CodexModelDefaults codexModelDefaultsForWorkflow(Path workflowPath) {
-        CodexModelDefaults defaults = codexModelDefaults();
+    private CodexModelDefaults codexModelDefaults() {
+        return codexModelSelectionDefaults().defaults();
+    }
+
+    CodexModelDefaults resolvedCodexModelDefaults() {
+        return codexModelDefaults();
+    }
+
+    CodexModelSelectionDefaults resolvedCodexModelSelectionDefaults() {
+        return codexModelSelectionDefaults();
+    }
+
+    CodexModelDefaults codexModelDefaultsForWorkflow(Path workflowPath) {
+        return workflowCodexModelDefaults(workflowPath, codexModelSelectionDefaults())
+                .defaults();
+    }
+
+    private WorkflowCodexModelDefaults workflowCodexModelDefaults(
+            Path workflowPath, CodexModelSelectionDefaults selectionDefaults) {
+        CodexModelDefaults defaults = selectionDefaults.defaults();
+        boolean hasOverrides = codexModelOverride.isPresent() || codexReasoningEffortOverride.isPresent();
         try {
-            return readWorkflowFrontMatter(workflowPath)
+            WorkflowCodexModelDefaults effective = readWorkflowFrontMatter(workflowPath)
                     .map(frontMatter -> preserveExistingCodexModelDefaults(frontMatter, defaults))
-                    .orElse(defaults);
+                    .orElse(new WorkflowCodexModelDefaults(defaults, false, false));
+            return hasOverrides
+                    ? new WorkflowCodexModelDefaults(
+                            applyCodexModelOverrides(
+                                    effective.defaults(),
+                                    selectionDefaults,
+                                    effective.preserveConfiguredReasoningEffort()),
+                            effective.preserveConfiguredReasoningEffort(),
+                            effective.preserveReasoningEffortOmission())
+                    : effective;
         } catch (TrelloBoardSetupException e) {
-            return defaults;
+            CodexModelDefaults effective =
+                    hasOverrides ? applyCodexModelOverrides(defaults, selectionDefaults, false) : defaults;
+            return new WorkflowCodexModelDefaults(effective, false, false);
         }
     }
 
-    private static CodexModelDefaults preserveExistingCodexModelDefaults(
+    CodexModelSelectionDefaults codexModelSelectionDefaultsForWorkflow(Path workflowPath) {
+        CodexModelSelectionDefaults selectionDefaults = codexModelSelectionDefaults();
+        WorkflowCodexModelDefaults workflowDefaults = workflowCodexModelDefaults(workflowPath, selectionDefaults);
+        return selectionDefaults.withDefaults(
+                workflowDefaults.defaults(),
+                workflowDefaults.preserveConfiguredReasoningEffort(),
+                workflowDefaults.preserveReasoningEffortOmission());
+    }
+
+    private CodexModelDefaults applyCodexModelOverrides(
+            CodexModelDefaults defaults,
+            CodexModelSelectionDefaults selectionDefaults,
+            boolean preserveConfiguredReasoningEffort) {
+        String model = codexModelOverride.orElse(defaults.model());
+        return CodexModelDefaults.partial(
+                model,
+                codexReasoningEffortOverride
+                        .or(() -> codexModelOverride.flatMap(
+                                modelOverride -> selectionDefaults.reasoningEffortForExplicitModelOverride(
+                                        modelOverride, defaults, preserveConfiguredReasoningEffort)))
+                        .orElse(defaults.reasoningEffort()));
+    }
+
+    private static WorkflowCodexModelDefaults preserveExistingCodexModelDefaults(
             Map<String, Object> frontMatter, CodexModelDefaults defaults) {
         Object codex = frontMatter.get("codex");
         if (!(codex instanceof Map<?, ?> codexMap)) {
-            return defaults;
+            return new WorkflowCodexModelDefaults(defaults, false, false);
         }
         String model = string(codexMap.get("model"));
         String reasoningEffort = string(codexMap.get("reasoning_effort"));
         if (blank(model) && blank(reasoningEffort)) {
-            return CodexModelDefaults.omittedFirstClassFields();
+            return new WorkflowCodexModelDefaults(CodexModelDefaults.omittedFirstClassFields(), false, true);
         }
-        return CodexModelDefaults.partial(model, reasoningEffort);
+        return new WorkflowCodexModelDefaults(
+                CodexModelDefaults.partial(model, reasoningEffort), !blank(reasoningEffort), blank(reasoningEffort));
     }
 
-    private static Supplier<CodexModelDefaults> codexModelDefaultsSupplier(CodexModelDefaults codexModelDefaults) {
-        Objects.requireNonNull(codexModelDefaults, CODEX_MODEL_DEFAULTS_LABEL);
-        return () -> codexModelDefaults;
+    private record WorkflowCodexModelDefaults(
+            CodexModelDefaults defaults,
+            boolean preserveConfiguredReasoningEffort,
+            boolean preserveReasoningEffortOmission) {}
+
+    private static Supplier<CodexModelSelectionDefaults> codexModelSelectionDefaultsSupplier(
+            CodexModelSelectionDefaults codexModelSelectionDefaults) {
+        Objects.requireNonNull(codexModelSelectionDefaults, CODEX_MODEL_DEFAULTS_LABEL);
+        return () -> codexModelSelectionDefaults;
     }
 
     private List<Map<String, Object>> getList(

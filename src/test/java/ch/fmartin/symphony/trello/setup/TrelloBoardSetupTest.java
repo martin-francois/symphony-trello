@@ -22,6 +22,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.AfterEach;
@@ -624,6 +626,69 @@ class TrelloBoardSetupTest {
         EffectiveConfig config = resolve(workflow);
         assertThat(config.codex().model()).isNull();
         assertThat(config.codex().reasoningEffort()).isNull();
+    }
+
+    @Test
+    void modelOnlyOverridePreservesExistingReasoningWhenCatalogHasSelectedModelDefault() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("existing-codex-reasoning-model-override.md");
+        writeExistingWorkflow(
+                workflow,
+                """
+                  model: "gpt-existing"
+                  reasoning_effort: "low"
+                """);
+        CodexModelSelectionDefaults catalog = new CodexModelSelectionDefaults(
+                new TrelloBoardSetup.CodexModelDefaults("gpt-5.5", "medium"),
+                Map.of("gpt-5.5", "medium", "gpt-new", "high"));
+        TrelloBoardSetup setupWithModelOverride = new TrelloBoardSetup(new ObjectMapper(), catalog)
+                .withCodexModelOverrides(catalog, Optional.of("gpt-new"), Optional.empty());
+
+        // when
+        setupWithModelOverride.importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "input",
+                List.of(),
+                List.of(),
+                null,
+                workflow,
+                Path.of("./agent-workspaces"),
+                2,
+                true));
+
+        // then
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-new\"", "reasoning_effort: \"low\"")
+                .doesNotContain("model: \"gpt-existing\"", "reasoning_effort: \"high\"");
+        EffectiveConfig config = resolve(workflow);
+        assertThat(config.codex().model()).isEqualTo("gpt-new");
+        assertThat(config.codex().reasoningEffort()).isEqualTo("low");
+    }
+
+    @Test
+    void reusesResolvedModelCatalogWhenDerivingWorkflowSelectionDefaults() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("existing-codex-model-only-for-catalog.md");
+        writeExistingWorkflow(workflow, """
+                  model: "gpt-existing"
+                """);
+        AtomicInteger resolutions = new AtomicInteger();
+        TrelloBoardSetup catalogBackedSetup = new TrelloBoardSetup(new ObjectMapper(), () -> {
+            resolutions.incrementAndGet();
+            return new CodexModelSelectionDefaults(
+                    new TrelloBoardSetup.CodexModelDefaults("gpt-5.5", "medium"),
+                    Map.of("gpt-5.5", "medium", "gpt-6", "high"));
+        });
+
+        // when
+        CodexModelSelectionDefaults defaults = catalogBackedSetup.codexModelSelectionDefaultsForWorkflow(workflow);
+
+        // then
+        assertThat(resolutions.get()).isOne();
+        assertThat(defaults.defaults()).isEqualTo(TrelloBoardSetup.CodexModelDefaults.partial("gpt-existing", null));
+        assertThat(defaults.reasoningEffortForModel("gpt-6")).contains("high");
     }
 
     @Test

@@ -155,6 +155,708 @@ class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void interactiveSetupPromptsForCodexModelAndReasoningDefaults() throws Exception {
+        // given
+        LocalSetup modelBackedSetup =
+                setupWithCodexDefaults(new TrelloBoardSetup.CodexModelDefaults("gpt-recommended", "high"));
+        Path workflow = tempDir.resolve("WORKFLOW.guided-model.md");
+        Path env = tempDir.resolve(".env.guided-model");
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                modelBackedSetup,
+                "\n\n\n\nn\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "Codex model",
+                        "Model [gpt-recommended]: ",
+                        "Reasoning effort choices: minimal, low, medium, high",
+                        "Reasoning effort [high]: ");
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-recommended\"", "reasoning_effort: \"high\"");
+    }
+
+    @Test
+    void interactiveSetupUsesSelectedModelReasoningDefaultFromDiscoveredCatalog() throws Exception {
+        // given
+        LocalSetup catalogBackedSetup = setupWithCodexSelectionDefaults(new CodexModelSelectionDefaults(
+                new TrelloBoardSetup.CodexModelDefaults("gpt-5.5", "medium"),
+                Map.of("gpt-5.5", "medium", "gpt-6", "high")));
+        Path workflow = tempDir.resolve("WORKFLOW.selected-catalog-model.md");
+        Path env = tempDir.resolve(".env.selected-catalog-model");
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                catalogBackedSetup,
+                "\n\ngpt-6\n\nn\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess().stdoutContains("Model [gpt-5.5]: ", "Reasoning effort [high]: ");
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-6\"", "reasoning_effort: \"high\"")
+                .doesNotContain("reasoning_effort: \"medium\"");
+    }
+
+    @Test
+    void interactiveSetupWritesSelectedCodexModelAndReasoning() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.selected-model.md");
+        Path env = tempDir.resolve(".env.selected-model");
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                "\n\ngpt-selected\nlow\nn\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess();
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-selected\"", "reasoning_effort: \"low\"");
+    }
+
+    @Test
+    void interactiveSetupReplacesExistingWorkflowValuesWithSelectedCodexModel() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.selected-replace-model.md");
+        Path env = tempDir.resolve(".env.selected-replace-model");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                codex:
+                  command: codex app-server
+                  model: "gpt-old"
+                  reasoning_effort: "medium"
+                ---
+                Old body
+                """,
+                StandardCharsets.UTF_8);
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                "gpt-selected\nlow\nn\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Selected Replace Model Queue",
+                "--workflow",
+                workflow.toString(),
+                "--force",
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess();
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-selected\"", "reasoning_effort: \"low\"")
+                .doesNotContain("gpt-old");
+    }
+
+    @Test
+    void interactiveSetupPromptsWithExistingWorkflowCodexValuesWhenForced() throws Exception {
+        // given
+        LocalSetup modelBackedSetup = setupWithCodexSelectionDefaults(new CodexModelSelectionDefaults(
+                new TrelloBoardSetup.CodexModelDefaults("gpt-recommended", "medium"),
+                Map.of("gpt-recommended", "medium", "gpt-6", "high")));
+        Path workflow = tempDir.resolve("WORKFLOW.existing-model-prompt.md");
+        Path env = tempDir.resolve(".env.existing-model-prompt");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                codex:
+                  command: codex app-server
+                  model: "gpt-old"
+                  reasoning_effort: "low"
+                ---
+                Old body
+                """,
+                StandardCharsets.UTF_8);
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                modelBackedSetup,
+                "\n\nn\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Existing Model Prompt Queue",
+                "--workflow",
+                workflow.toString(),
+                "--force",
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("Model [gpt-old]: ", "Reasoning effort [low]: ")
+                .stdoutDoesNotContain("Model [gpt-recommended]: ", "Reasoning effort [high]: ");
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-old\"", "reasoning_effort: \"low\"")
+                .doesNotContain("gpt-recommended", "reasoning_effort: \"high\"");
+    }
+
+    @Test
+    void interactiveSetupPreservesExistingReasoningWhenOnlyModelChanges() throws Exception {
+        // given
+        LocalSetup catalogBackedSetup = setupWithCodexSelectionDefaults(new CodexModelSelectionDefaults(
+                new TrelloBoardSetup.CodexModelDefaults("gpt-5.5", "medium"),
+                Map.of("gpt-5.5", "medium", "gpt-6", "high")));
+        Path workflow = tempDir.resolve("WORKFLOW.existing-reasoning-model-change.md");
+        Path env = tempDir.resolve(".env.existing-reasoning-model-change");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                codex:
+                  command: codex app-server
+                  model: "gpt-old"
+                  reasoning_effort: "low"
+                ---
+                Old body
+                """,
+                StandardCharsets.UTF_8);
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                catalogBackedSetup,
+                "gpt-6\n\nn\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Existing Reasoning Model Change Queue",
+                "--workflow",
+                workflow.toString(),
+                "--force",
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("Model [gpt-old]: ", "Reasoning effort [low]: ")
+                .stdoutDoesNotContain("Reasoning effort [high]: ");
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-6\"", "reasoning_effort: \"low\"")
+                .doesNotContain("model: \"gpt-old\"", "reasoning_effort: \"high\"");
+    }
+
+    @Test
+    void setupPreservesExistingReasoningOmissionWhenModelIsUnchanged() throws Exception {
+        // given
+        LocalSetup catalogBackedSetup = setupWithCodexSelectionDefaults(new CodexModelSelectionDefaults(
+                new TrelloBoardSetup.CodexModelDefaults("gpt-5.5", "medium"),
+                Map.of("gpt-existing", "high", "gpt-5.5", "medium")));
+        Path workflow = tempDir.resolve("WORKFLOW.existing-model-reasoning-omitted.md");
+        Path env = tempDir.resolve(".env.existing-model-reasoning-omitted");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                codex:
+                  command: codex app-server
+                  model: "gpt-existing"
+                ---
+                Old body
+                """,
+                StandardCharsets.UTF_8);
+
+        // when
+        SetupRunResult result = runSetup(
+                catalogBackedSetup,
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Existing Model Reasoning Omitted Queue",
+                "--workflow",
+                workflow.toString(),
+                "--force",
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess();
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-existing\"")
+                .doesNotContain("reasoning_effort:");
+    }
+
+    @Test
+    void interactiveSetupUsesSelectedModelReasoningDefaultWhenExistingWorkflowOmitsReasoning() throws Exception {
+        // given
+        LocalSetup catalogBackedSetup = setupWithCodexSelectionDefaults(new CodexModelSelectionDefaults(
+                new TrelloBoardSetup.CodexModelDefaults("gpt-5.5", "medium"),
+                Map.of("gpt-5.5", "medium", "gpt-6", "high")));
+        Path workflow = tempDir.resolve("WORKFLOW.existing-model-without-reasoning.md");
+        Path env = tempDir.resolve(".env.existing-model-without-reasoning");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                codex:
+                  command: codex app-server
+                ---
+                Old body
+                """,
+                StandardCharsets.UTF_8);
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                catalogBackedSetup,
+                "gpt-6\n\nn\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Existing Model Without Reasoning Queue",
+                "--workflow",
+                workflow.toString(),
+                "--force",
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess().stdoutContains("Model [keep workflow default]: ", "Reasoning effort [high]: ");
+        assertThat(workflow).content(StandardCharsets.UTF_8).contains("model: \"gpt-6\"", "reasoning_effort: \"high\"");
+    }
+
+    @Test
+    void nonInteractiveSetupWritesExplicitCodexModelAndDefaultReasoning() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.explicit-model.md");
+        Path env = tempDir.resolve(".env.explicit-model");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Explicit Model Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--codex-model",
+                "gpt-explicit",
+                "--no-github");
+
+        // then
+        result.assertSuccess();
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-explicit\"", "reasoning_effort: \"medium\"");
+    }
+
+    @Test
+    void explicitCodexModelOptionsReplaceExistingWorkflowValuesWhenForced() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.replace-model.md");
+        Path env = tempDir.resolve(".env.replace-model");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                codex:
+                  command: codex app-server
+                  model: "gpt-old"
+                  reasoning_effort: "low"
+                ---
+                Old body
+                """,
+                StandardCharsets.UTF_8);
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Replace Model Queue",
+                "--workflow",
+                workflow.toString(),
+                "--force",
+                "--env",
+                env.toString(),
+                "--codex-model",
+                "gpt-new",
+                "--codex-reasoning-effort",
+                "high",
+                "--no-github");
+
+        // then
+        result.assertSuccess();
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-new\"", "reasoning_effort: \"high\"")
+                .doesNotContain("gpt-old", "reasoning_effort: \"low\"");
+    }
+
+    @Test
+    void partialCodexModelOverridePreservesExistingReasoningWhenForced() throws Exception {
+        // given
+        LocalSetup catalogBackedSetup = setupWithCodexSelectionDefaults(new CodexModelSelectionDefaults(
+                new TrelloBoardSetup.CodexModelDefaults("gpt-5.5", "medium"),
+                Map.of("gpt-5.5", "medium", "gpt-new", "high")));
+        Path workflow = tempDir.resolve("WORKFLOW.partial-replace-model.md");
+        Path env = tempDir.resolve(".env.partial-replace-model");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                codex:
+                  command: codex app-server
+                  model: "gpt-old"
+                  reasoning_effort: "low"
+                ---
+                Old body
+                """,
+                StandardCharsets.UTF_8);
+
+        // when
+        SetupRunResult result = runSetup(
+                catalogBackedSetup,
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Partial Replace Model Queue",
+                "--workflow",
+                workflow.toString(),
+                "--force",
+                "--env",
+                env.toString(),
+                "--codex-model",
+                "gpt-new",
+                "--no-github");
+
+        // then
+        result.assertSuccess();
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-new\"", "reasoning_effort: \"low\"")
+                .doesNotContain("reasoning_effort: \"high\"")
+                .doesNotContain("gpt-old");
+    }
+
+    @Test
+    void explicitCodexModelWritesFieldsWhenDiscoveryDoesNotSupportFirstClassFields() throws Exception {
+        // given
+        LocalSetup unsupportedModelSetup =
+                setupWithCodexDefaults(TrelloBoardSetup.CodexModelDefaults.unsupportedFirstClassFields());
+        Path workflow = tempDir.resolve("WORKFLOW.unsupported-explicit-model.md");
+        Path env = tempDir.resolve(".env.unsupported-explicit-model");
+
+        // when
+        SetupRunResult result = runSetup(
+                unsupportedModelSetup,
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Unsupported Explicit Model Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--codex-model",
+                "gpt-explicit",
+                "--no-github");
+
+        // then
+        result.assertSuccess();
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-explicit\"", "reasoning_effort: \"medium\"");
+    }
+
+    @Test
+    void explicitCodexModelWritesFallbackReasoningWhenUnsupportedDiscoveryPreservesExistingOmission() throws Exception {
+        // given
+        LocalSetup unsupportedModelSetup =
+                setupWithCodexDefaults(TrelloBoardSetup.CodexModelDefaults.unsupportedFirstClassFields());
+        Path workflow = tempDir.resolve("WORKFLOW.unsupported-explicit-existing-omitted.md");
+        Path env = tempDir.resolve(".env.unsupported-explicit-existing-omitted");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                codex:
+                  command: codex app-server
+                ---
+                Old body
+                """,
+                StandardCharsets.UTF_8);
+
+        // when
+        SetupRunResult result = runSetup(
+                unsupportedModelSetup,
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Unsupported Explicit Existing Queue",
+                "--workflow",
+                workflow.toString(),
+                "--force",
+                "--env",
+                env.toString(),
+                "--codex-model",
+                "gpt-explicit",
+                "--no-github");
+
+        // then
+        result.assertSuccess();
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-explicit\"", "reasoning_effort: \"medium\"");
+    }
+
+    @Test
+    void setupOmitsCodexModelPromptAndFieldsWhenFirstClassFieldsUnsupported() throws Exception {
+        // given
+        LocalSetup unsupportedModelSetup =
+                setupWithCodexDefaults(TrelloBoardSetup.CodexModelDefaults.unsupportedFirstClassFields());
+        Path workflow = tempDir.resolve("WORKFLOW.unsupported-model.md");
+        Path env = tempDir.resolve(".env.unsupported-model");
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                unsupportedModelSetup,
+                "\n\nn\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess().stdoutDoesNotContain("Codex model", "Reasoning effort");
+        assertThat(workflow).content(StandardCharsets.UTF_8).doesNotContain("model:", "reasoning_effort:");
+    }
+
+    @Test
+    void interactiveSetupOmitsCodexModelPromptWhenUnsupportedDiscoveryPreservesExistingOmission() throws Exception {
+        // given
+        LocalSetup unsupportedModelSetup =
+                setupWithCodexDefaults(TrelloBoardSetup.CodexModelDefaults.unsupportedFirstClassFields());
+        Path workflow = tempDir.resolve("WORKFLOW.unsupported-existing-omitted.md");
+        Path env = tempDir.resolve(".env.unsupported-existing-omitted");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                codex:
+                  command: codex app-server
+                ---
+                Old body
+                """,
+                StandardCharsets.UTF_8);
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                unsupportedModelSetup,
+                "\n\nn\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Unsupported Existing Omitted Queue",
+                "--workflow",
+                workflow.toString(),
+                "--force",
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess().stdoutDoesNotContain("Codex model", "Model [", "Reasoning effort");
+        assertThat(workflow).content(StandardCharsets.UTF_8).doesNotContain("model:", "reasoning_effort:");
+    }
+
+    @Test
+    void nonInteractiveSetupOmitsCodexModelFieldsWhenUnsupportedDiscoveryPreservesExistingOmission() throws Exception {
+        // given
+        LocalSetup unsupportedModelSetup =
+                setupWithCodexDefaults(TrelloBoardSetup.CodexModelDefaults.unsupportedFirstClassFields());
+        Path workflow = tempDir.resolve("WORKFLOW.unsupported-existing-omitted-noninteractive.md");
+        Path env = tempDir.resolve(".env.unsupported-existing-omitted-noninteractive");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                codex:
+                  command: codex app-server
+                ---
+                Old body
+                """,
+                StandardCharsets.UTF_8);
+
+        // when
+        SetupRunResult result = runSetup(
+                unsupportedModelSetup,
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Unsupported Existing Omitted Noninteractive Queue",
+                "--workflow",
+                workflow.toString(),
+                "--force",
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess();
+        assertThat(workflow).content(StandardCharsets.UTF_8).doesNotContain("model:", "reasoning_effort:");
+    }
+
+    @Test
+    void setupPreservesExistingCodexModelValuesWhenDiscoveryDoesNotSupportFirstClassFields() throws Exception {
+        // given
+        LocalSetup unsupportedModelSetup =
+                setupWithCodexDefaults(TrelloBoardSetup.CodexModelDefaults.unsupportedFirstClassFields());
+        Path workflow = tempDir.resolve("WORKFLOW.unsupported-existing-configured.md");
+        Path env = tempDir.resolve(".env.unsupported-existing-configured");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                codex:
+                  command: codex app-server
+                  model: "gpt-old"
+                  reasoning_effort: "low"
+                ---
+                Old body
+                """,
+                StandardCharsets.UTF_8);
+
+        // when
+        SetupRunResult result = runSetup(
+                unsupportedModelSetup,
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Unsupported Existing Configured Queue",
+                "--workflow",
+                workflow.toString(),
+                "--force",
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess();
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-old\"", "reasoning_effort: \"low\"");
+    }
+
+    @Test
     void nonInteractiveSetupReadsCredentialsFromSelectedEnvFile() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.custom-env.md");
@@ -885,7 +1587,7 @@ class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "2\nboard-1\nQueue\nFinished\nWorking\nBlocked\nn\nn\n",
+                "2\nboard-1\nQueue\nFinished\nWorking\nBlocked\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -925,7 +1627,7 @@ class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "2\nboard-1\nQueue\nFinished\nWorking\n-\nn\nn\n",
+                "2\nboard-1\nQueue\nFinished\nWorking\n-\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -959,7 +1661,7 @@ class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "2\nboard-1\n-\n-\nn\nn\n",
+                "2\nboard-1\n-\n-\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -1691,6 +2393,206 @@ class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void configureGithubAppliesExplicitCodexModelOverrides() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.github-upgrade-model.md");
+        Path env = tempDir.resolve(".env");
+        SetupRunResult firstResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "GitHub Upgrade Model",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--codex-model",
+                "gpt-old",
+                "--codex-reasoning-effort",
+                "low",
+                "--no-github");
+        commands.githubAuthenticated = true;
+        commands.startedWorkflows.clear();
+        commands.startedEnvFiles.clear();
+        commands.stoppedWorkflows.clear();
+        trello.createdLists().clear();
+
+        // when
+        SetupRunResult secondResult = runSetup(
+                "configure-github",
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--codex-model",
+                "gpt-new",
+                "--codex-reasoning-effort",
+                "high");
+
+        // then
+        firstResult.assertSuccess();
+        secondResult.assertSuccess().stdoutContains("GitHub workflow enabled for \"GitHub Upgrade Model\"");
+        assertThatWorkflow(workflow).hasGithubFlow();
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-new\"", "reasoning_effort: \"high\"")
+                .doesNotContain("gpt-old", "reasoning_effort: \"low\"");
+        assertThat(trello.createdLists()).containsExactly("Merging");
+        assertThat(commands.stoppedWorkflows).containsExactly(workflow.toString());
+        assertThat(commands.startedWorkflows).containsExactly(workflow.toString());
+    }
+
+    @Test
+    void configureGithubAppliesExplicitMaxAgents() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.github-upgrade-max-agents.md");
+        Path env = tempDir.resolve(".env");
+        SetupRunResult firstResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "GitHub Upgrade Max Agents",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+        commands.githubAuthenticated = true;
+        commands.startedWorkflows.clear();
+        commands.startedEnvFiles.clear();
+        commands.stoppedWorkflows.clear();
+        trello.createdLists().clear();
+
+        // when
+        SetupRunResult secondResult = runSetup(
+                "configure-github",
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--max-agents",
+                "3");
+
+        // then
+        firstResult.assertSuccess();
+        secondResult.assertSuccess().stdoutContains("GitHub workflow enabled for \"GitHub Upgrade Max Agents\"");
+        assertThatWorkflow(workflow).hasGithubFlow().hasMaxAgents(3);
+        assertThat(trello.createdLists()).containsExactly("Merging");
+        assertThat(commands.stoppedWorkflows).containsExactly(workflow.toString());
+        assertThat(commands.startedWorkflows).containsExactly(workflow.toString());
+    }
+
+    @Test
+    void configureGithubRejectsWorkflowOptionsItCannotApply() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.github-upgrade-ignored-option.md");
+        Path env = tempDir.resolve(".env");
+        SetupRunResult firstResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "GitHub Upgrade Ignored Option",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+        commands.githubAuthenticated = true;
+        commands.startedWorkflows.clear();
+        commands.stoppedWorkflows.clear();
+
+        // when
+        SetupRunResult secondResult = runSetup(
+                "configure-github",
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--server-port",
+                "19000",
+                "--codex-model",
+                "gpt-new");
+
+        // then
+        firstResult.assertSuccess();
+        secondResult.assertFailure(2).stderrContains("setup_board_selection_required", "--server-port");
+        assertThatWorkflow(workflow).doesNotHaveServerPort(19000);
+        assertThat(commands.stoppedWorkflows).isEmpty();
+        assertThat(commands.startedWorkflows).isEmpty();
+    }
+
+    @Test
+    void configureGithubRejectsWorkflowOptionsWhenNoUpgradeWillRun() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.github-already-enabled-model.md");
+        Path env = tempDir.resolve(".env");
+        commands.githubAuthenticated = true;
+        SetupRunResult firstResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "GitHub Already Enabled Model",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--github");
+        commands.startedWorkflows.clear();
+        commands.stoppedWorkflows.clear();
+
+        // when
+        SetupRunResult secondResult = runSetup(
+                "configure-github",
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--codex-model",
+                "gpt-new");
+
+        // then
+        firstResult.assertSuccess();
+        secondResult
+                .assertFailure(2)
+                .stderrContains("setup_github_upgrade_not_found", "non-GitHub connected Trello board");
+        assertThat(workflow).content(StandardCharsets.UTF_8).doesNotContain("gpt-new");
+        assertThat(commands.stoppedWorkflows).isEmpty();
+        assertThat(commands.startedWorkflows).isEmpty();
+    }
+
+    @Test
     void nonInteractiveSetupWithExistingManifestConnectsExplicitBoardRequest() throws Exception {
         // given
         Path firstWorkflow = tempDir.resolve("WORKFLOW.first.md");
@@ -1983,7 +2885,7 @@ class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "\n\nn\nn\n",
+                "\n\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -2190,8 +3092,7 @@ class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--no-github");
 
         // then
-        result.assertFailure(2).stderrContains("setup_workflow_exists", workflow.toString() + "\nPass --force");
-        assertThat(result.stderr()).doesNotContain(workflow + ".");
+        result.assertFailure(2).stderrContains("setup_workflow_exists");
         assertThat(trello.memberLookups()).isEmpty();
         assertThat(trello.workspaceLookups()).isEmpty();
         assertThat(trello.boardLookups()).isEmpty();

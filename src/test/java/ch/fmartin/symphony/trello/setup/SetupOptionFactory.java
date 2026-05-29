@@ -45,6 +45,8 @@ final class SetupOptionFactory {
                         Optional.empty(),
                         1,
                         false,
+                        Optional.empty(),
+                        Optional.empty(),
                         Optional.of(configDir.resolve(".env")),
                         additionalWritableRoots,
                         allowAllPaths,

@@ -437,6 +437,10 @@ Common setup command options:
 - `--max-agents N`: choose how many cards from this board may run at the same time. Start with `1`
   if you want one-at-a-time review, or raise it when your machine and workflow can handle parallel
   Codex sessions.
+- `--codex-model MODEL`: write a Codex model into generated workflows without prompting. Omit it
+  during guided setup to accept or edit the recommended model interactively.
+- `--codex-reasoning-effort EFFORT`: write a Codex reasoning effort into generated workflows
+  without prompting. Omit it during guided setup to accept or edit the recommended reasoning effort.
 - `--force`: replace an existing workflow file. Use this only when you are fine losing the current
   generated workflow content.
 - `--key` and `--token`: pass Trello credentials directly for this one command instead of reading
@@ -927,17 +931,21 @@ it starts a Codex app-server on stdio for the same OS user that runs Symphony. E
 absolute path such as `/opt/codex/bin/codex app-server` or a small wrapper script that sets up the
 environment before starting `codex app-server`.
 
-Generated workflows also make model selection explicit. During setup, Symphony asks the installed
-Codex CLI which model and reasoning effort it recommends, then writes those values to the workflow.
-If the model list is available but does not name a default, setup uses the first returned model. If
-the model list is empty or lacks usable model details, setup writes the fallback values shown above.
-If the installed Codex app-server cannot answer the model-list request at all, setup omits the
-first-class model fields so the generated workflow remains compatible with older app-server versions.
+Generated workflows also make model selection explicit. During guided setup, Symphony asks the
+installed Codex CLI which model and reasoning effort it recommends, then lets you press Enter to use
+those defaults or type different values. Non-interactive setup writes the recommended values unless
+you pass `--codex-model` or `--codex-reasoning-effort`. If the model list is available but does not
+name a default, setup uses the first returned model. If the model list is empty or lacks usable model
+details, setup writes the fallback values shown above. If the installed Codex app-server cannot
+answer the model-list request at all, setup omits the first-class model fields so the generated
+workflow remains compatible with older app-server versions.
 
 `codex.model` maps to the app-server `model` request field. `codex.reasoning_effort` maps to the
 app-server turn `effort` field. Edit those workflow values to choose a different model or reasoning
-level. If either field is omitted, the installed Codex CLI/app-server default or `codex.command`
-configuration decides the value.
+level. Existing workflow values remain the source of truth for that Trello board; setup preserves
+them when regenerating a workflow unless you pass `--codex-model`, pass
+`--codex-reasoning-effort`, or edit the workflow value. If either field is omitted, the installed
+Codex CLI/app-server default or `codex.command` configuration decides the value.
 
 ### Workspace-Local Skills
 

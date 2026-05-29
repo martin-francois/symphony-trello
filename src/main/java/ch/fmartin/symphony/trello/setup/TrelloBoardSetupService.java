@@ -32,8 +32,18 @@ final class TrelloBoardSetupService {
         return setup.createRecommendedBoard(request);
     }
 
+    TrelloBoardSetup.NewBoardResult createRecommendedBoard(
+            NewBoardRequest request, TrelloBoardSetupMain.BoardSetupOptions options) {
+        return setup(options).createRecommendedBoard(request);
+    }
+
     TrelloBoardSetup.ImportBoardResult importExistingBoard(ImportBoardRequest request) {
         return setup.importExistingBoard(request);
+    }
+
+    TrelloBoardSetup.ImportBoardResult importExistingBoard(
+            ImportBoardRequest request, TrelloBoardSetupMain.BoardSetupOptions options) {
+        return setup(options).importExistingBoard(request);
     }
 
     void preflightConnectedBoardManifest(Path manifestPath) {
@@ -117,6 +127,14 @@ final class TrelloBoardSetupService {
                 Optional.of(workspaceRoot),
                 Optional.empty(),
                 environment);
+    }
+
+    private TrelloBoardSetup setup(TrelloBoardSetupMain.BoardSetupOptions options) {
+        if (!options.hasExplicitCodexModelRequest()) {
+            return setup;
+        }
+        return setup.withCodexModelOverrides(
+                setup.resolvedCodexModelSelectionDefaults(), options.codexModel(), options.codexReasoningEffort());
     }
 
     private static void printWorkspaces(PrintStream out, List<TrelloBoardSetup.WorkspaceInfo> workspaces) {

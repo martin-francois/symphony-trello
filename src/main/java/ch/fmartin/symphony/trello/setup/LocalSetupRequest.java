@@ -29,6 +29,8 @@ public record LocalSetupRequest(
         Optional<Integer> serverPort,
         int maxAgents,
         boolean maxAgentsExplicit,
+        Optional<String> codexModel,
+        Optional<String> codexReasoningEffort,
         Optional<Path> envPath,
         List<Path> additionalWritableRoots,
         boolean allowAllPaths,

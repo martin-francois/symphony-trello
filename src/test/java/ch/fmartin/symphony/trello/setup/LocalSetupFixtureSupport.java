@@ -77,6 +77,23 @@ abstract class LocalSetupFixtureSupport {
                 workerManager);
     }
 
+    protected LocalSetup setupWithCodexDefaults(TrelloBoardSetup.CodexModelDefaults codexDefaults) {
+        return setupWithCodexSelectionDefaults(CodexModelSelectionDefaults.of(codexDefaults));
+    }
+
+    protected LocalSetup setupWithCodexSelectionDefaults(CodexModelSelectionDefaults codexDefaults) {
+        return new LocalSetup(
+                new TrelloBoardSetup(new ObjectMapper(), codexDefaults),
+                commands,
+                Map.of(
+                        "SYMPHONY_TRELLO_CONFIG_DIR",
+                        tempDir.resolve("config").toString(),
+                        "SYMPHONY_TRELLO_COMMAND",
+                        "symphony-trello"),
+                new WorkflowConfigEditor(),
+                workerManager);
+    }
+
     protected void writeWorkflow(Path workflow, String boardId, int port) throws IOException {
         fixture.givenWorkflow(workflow, boardId, port);
     }
