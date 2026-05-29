@@ -118,6 +118,12 @@ environment variables or an existing `.env` file, setup uses them without copyin
 file. Workflows, connected-board metadata, workspaces, and logs live under `SYMPHONY_HOME` by
 default, separate from the installer-managed app checkout.
 
+The installer writes the command to `$HOME/.local/bin/symphony-trello` on macOS, Linux, and WSL2, or
+`$HOME\.local\bin\symphony-trello.ps1` on native Windows PowerShell. If that directory is not on
+`PATH`, the installer updates the shell profile or current user PATH when it can. Pass
+`--no-update-path` if you want to manage `PATH` yourself. Open a new terminal after PATH setup. If
+`symphony-trello` is still not found, add the printed directory to `PATH` manually.
+
 During setup, you can keep the default Codex workspace access or allow extra local files/folders.
 Extra paths are opt-in because Trello cards should not make Codex read or edit unrelated files by
 accident. You can also opt into `danger-full-access`, but setup asks for confirmation because that
@@ -173,7 +179,7 @@ a board's local HTTP port is already used by another process.
 
 Uninstall removes only the installer-managed command and app checkout by default. It preserves local
 `.env` files, workflows, connected-board metadata, workspaces, logs/state, Codex auth, GitHub auth,
-and Trello boards.
+Trello boards, and any PATH entry you accepted during install.
 
 <!-- x-release-please-start-version -->
 ```bash
