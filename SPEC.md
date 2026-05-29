@@ -625,11 +625,15 @@ these fields locally if they want stricter startup checks.
 
 The Java setup flow writes explicit `model` and `reasoning_effort` values into generated workflows.
 It queries the installed Codex CLI with the app-server `model/list` method and uses the default
-model's recommended reasoning effort. If the model list is available but does not mark a default,
-setup uses the first returned model. If the list is empty or lacks usable model details, setup writes
-`gpt-5.5` and `medium`. If the installed app-server cannot answer the model-list request, setup
-omits the first-class fields so the generated workflow remains compatible with Codex versions that
-do not expose them.
+model's recommended reasoning effort. Guided setup prompts for the model and reasoning effort and
+accepts the recommended values when the operator presses Enter. Non-interactive setup writes the
+recommended values unless explicit setup options provide different values. Existing workflow values
+remain the source of truth for a Trello board and take precedence over discovered defaults during
+workflow regeneration. If the model list is available but does not mark a default, setup uses the
+first returned model. If the list is empty or lacks usable model details, setup writes `gpt-5.5` and
+`medium`. If the installed app-server cannot answer the model-list request, setup omits the
+first-class fields so the generated workflow remains compatible with Codex versions that do not
+expose them.
 
 - `command` (string shell command)
   - Default: `codex app-server`

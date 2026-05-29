@@ -14,6 +14,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
@@ -57,17 +58,21 @@ final class CodexModelDefaultsResolver {
     }
 
     CodexModelDefaults resolve() {
+        return resolveSelectionDefaults().defaults();
+    }
+
+    CodexModelSelectionDefaults resolveSelectionDefaults() {
         try {
             return queryAppServer();
         } catch (IOException | InterruptedException | RuntimeException e) {
             if (e instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
-            return CodexModelDefaults.unsupportedFirstClassFields();
+            return CodexModelSelectionDefaults.of(CodexModelDefaults.unsupportedFirstClassFields());
         }
     }
 
-    private CodexModelDefaults queryAppServer() throws IOException, InterruptedException {
+    private CodexModelSelectionDefaults queryAppServer() throws IOException, InterruptedException {
         ProcessBuilder processBuilder = new ProcessBuilder(command).redirectError(ProcessBuilder.Redirect.DISCARD);
         processBuilder.environment().putAll(environment);
         ProcessEnvironment.removeDefaultSecrets(processBuilder);
@@ -121,26 +126,36 @@ final class CodexModelDefaultsResolver {
         return params;
     }
 
-    private CodexModelDefaults fromModelList(JsonNode models) {
+    private CodexModelSelectionDefaults fromModelList(JsonNode models) {
         if (!models.isArray() || models.isEmpty()) {
-            return CodexModelDefaults.fallback();
+            return CodexModelSelectionDefaults.of(CodexModelDefaults.fallback());
         }
+        Map<String, String> reasoningEffortsByModel = new LinkedHashMap<>();
         JsonNode selected = null;
+        boolean selectedIsDefault = false;
         for (JsonNode model : models) {
-            if (model.path("isDefault").asBoolean(false)) {
+            String modelName = model.path("model").asText(null);
+            String reasoningEffort = model.path("defaultReasoningEffort").asText(null);
+            if (blank(modelName) || blank(reasoningEffort)) {
+                continue;
+            }
+            reasoningEffortsByModel.put(modelName, reasoningEffort);
+            boolean modelIsDefault = model.path("isDefault").asBoolean(false);
+            if (selected == null || (!selectedIsDefault && modelIsDefault)) {
                 selected = model;
-                break;
+                selectedIsDefault = modelIsDefault;
             }
         }
         if (selected == null) {
-            selected = models.get(0);
+            return CodexModelSelectionDefaults.of(CodexModelDefaults.fallback());
         }
         String modelName = selected.path("model").asText(null);
         String reasoningEffort = selected.path("defaultReasoningEffort").asText(null);
         if (blank(modelName) || blank(reasoningEffort)) {
-            return CodexModelDefaults.fallback();
+            return CodexModelSelectionDefaults.of(CodexModelDefaults.fallback());
         }
-        return new CodexModelDefaults(modelName, reasoningEffort);
+        return new CodexModelSelectionDefaults(
+                new CodexModelDefaults(modelName, reasoningEffort), reasoningEffortsByModel);
     }
 
     private JsonNode readResponse(AppServerResponseReader reader, int id) throws IOException {

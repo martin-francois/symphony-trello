@@ -46,6 +46,33 @@ class CodexModelDefaultsResolverTest {
     }
 
     @Test
+    void keepsModelSpecificReasoningEffortsFromCodexAppServer() throws Exception {
+        // given
+        Path appServer = appServerScript(
+                """
+                while IFS= read -r line; do
+                  case "$line" in
+                    *'"method":"initialize"'*)
+                      printf '%s\\n' '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1}}'
+                      ;;
+                    *'"method":"model/list"'*)
+                      printf '%s\\n' '{"jsonrpc":"2.0","id":2,"result":{"data":[{"model":"gpt-5.4","defaultReasoningEffort":"medium","isDefault":false},{"model":"gpt-6","defaultReasoningEffort":"high","isDefault":true}]}}'
+                      ;;
+                  esac
+                done
+                """);
+
+        // when
+        CodexModelSelectionDefaults defaults =
+                new CodexModelDefaultsResolver(json, List.of(appServer.toString())).resolveSelectionDefaults();
+
+        // then
+        assertThat(defaults.defaults()).isEqualTo(new CodexModelDefaults("gpt-6", "high"));
+        assertThat(defaults.reasoningEffortForModel("gpt-5.4")).contains("medium");
+        assertThat(defaults.reasoningEffortForModel("gpt-6")).contains("high");
+    }
+
+    @Test
     void usesFirstModelWhenCodexAppServerDoesNotFlagDefaultModel() throws Exception {
         // given
         Path appServer = appServerScript(

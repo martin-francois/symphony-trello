@@ -216,6 +216,14 @@ final class SetupLocalCommandFactory {
         @Option(names = "--max-agents", description = "Maximum cards from this board that may run at once.")
         Optional<Integer> maxAgents = Optional.empty();
 
+        @Option(names = "--codex-model", description = "Codex model to write into generated workflows.")
+        Optional<String> codexModel = Optional.empty();
+
+        @Option(
+                names = "--codex-reasoning-effort",
+                description = "Codex reasoning effort to write into generated workflows.")
+        Optional<String> codexReasoningEffort = Optional.empty();
+
         @Option(names = "--env", description = "Ignored dotenv file for Trello credentials.")
         Optional<Path> envPath = Optional.empty();
 
@@ -290,6 +298,8 @@ final class SetupLocalCommandFactory {
                     serverPort,
                     maxAgents.orElse(TrelloBoardSetup.DEFAULT_MAX_CONCURRENT_AGENTS),
                     maxAgents.isPresent(),
+                    codexModel.map(String::strip).filter(value -> !value.isBlank()),
+                    codexReasoningEffort.map(String::strip).filter(value -> !value.isBlank()),
                     envPath,
                     writableRoots,
                     allowAllPaths,
@@ -338,6 +348,8 @@ final class SetupLocalCommandFactory {
             merged.manifestPath = child.manifestPath.or(() -> merged.manifestPath);
             merged.serverPort = child.serverPort.or(() -> merged.serverPort);
             merged.maxAgents = child.maxAgents.or(() -> merged.maxAgents);
+            merged.codexModel = child.codexModel.or(() -> merged.codexModel);
+            merged.codexReasoningEffort = child.codexReasoningEffort.or(() -> merged.codexReasoningEffort);
             merged.envPath = child.envPath.or(() -> merged.envPath);
             merged.additionalWritableRoots.addAll(child.additionalWritableRoots);
             merged.allowAllPaths = merged.allowAllPaths || child.allowAllPaths;
@@ -371,6 +383,8 @@ final class SetupLocalCommandFactory {
             copy.manifestPath = source.manifestPath;
             copy.serverPort = source.serverPort;
             copy.maxAgents = source.maxAgents;
+            copy.codexModel = source.codexModel;
+            copy.codexReasoningEffort = source.codexReasoningEffort;
             copy.envPath = source.envPath;
             copy.additionalWritableRoots = new ArrayList<>(source.additionalWritableRoots);
             copy.allowAllPaths = source.allowAllPaths;

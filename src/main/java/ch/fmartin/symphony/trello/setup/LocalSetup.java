@@ -83,7 +83,7 @@ public final class LocalSetup {
 
     public static int run(String[] args, InputStream in, PrintStream out, PrintStream err) {
         ObjectMapper json = new ObjectMapper();
-        return run(args, in, out, err, () -> new CodexModelDefaultsResolver(json).resolve());
+        return run(args, in, out, err, () -> new CodexModelDefaultsResolver(json).resolveSelectionDefaults());
     }
 
     static int run(
@@ -91,12 +91,13 @@ public final class LocalSetup {
             InputStream in,
             PrintStream out,
             PrintStream err,
-            Supplier<TrelloBoardSetup.CodexModelDefaults> codexModelDefaults) {
+            Supplier<CodexModelSelectionDefaults> codexModelSelectionDefaults) {
         ObjectMapper json = new ObjectMapper();
         return new SetupLocalCommandFactory()
                 .execute(
                         args,
-                        new LocalSetup(new TrelloBoardSetup(json, codexModelDefaults), new ProcessCommandRunner()),
+                        new LocalSetup(
+                                new TrelloBoardSetup(json, codexModelSelectionDefaults), new ProcessCommandRunner()),
                         new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8)),
                         out,
                         err);
@@ -423,6 +424,23 @@ public final class LocalSetup {
         return options.withCodexAccess(allowedPaths, dangerFullAccess);
     }
 
+    private Options configureCodexModel(Options options, Path workflowPath, Terminal terminal) throws IOException {
+        CodexModelSelectionFlow.Selection selected = new CodexModelSelectionFlow()
+                .resolve(options, boardSetup.codexModelSelectionDefaultsForWorkflow(workflowPath), terminal);
+        return options.withCodexModelSelection(selected);
+    }
+
+    private TrelloBoardSetup boardSetupWithCodexModel(Options options) {
+        if (options.codexModelDefaults().isEmpty()) {
+            return boardSetup;
+        }
+        TrelloBoardSetup.CodexModelDefaults defaults =
+                options.codexModelDefaults().orElseThrow();
+        return options.hasExplicitCodexModelRequest()
+                ? boardSetup.withCodexModelOverrides(defaults, options.codexModel(), options.codexReasoningEffort())
+                : boardSetup.withCodexModelDefaults(defaults);
+    }
+
     private static ExistingSetupAction existingSetupAction(
             ConnectedBoardManifest manifest, Terminal terminal, Options options) throws IOException {
         PrintStream out = terminal.out();
@@ -430,7 +448,11 @@ public final class LocalSetup {
             rejectMixedCodexAccessUpdate(options);
         }
         if (options.nonInteractive()) {
-            rejectNonInteractiveIgnoredWorkflowUpdate(options);
+            if (options.configureGithub()) {
+                rejectNonInteractiveIgnoredConfigureGithubUpdate(options);
+            } else {
+                rejectNonInteractiveIgnoredWorkflowUpdate(options);
+            }
         }
         if (options.githubMode().orElse(false)) {
             if (hasSelectedGithubBoardCodexAccessTarget(manifest, options)) {
@@ -440,6 +462,7 @@ public final class LocalSetup {
                 if (manifest.boards().stream().anyMatch(board -> !board.githubEnabled())) {
                     return ExistingSetupAction.UPGRADE_GITHUB;
                 }
+                rejectConfigureGithubUpdateWithoutUpgrade(options);
                 if (hasConnectedBoardCodexAccessTarget(manifest, options)) {
                     return ExistingSetupAction.UPDATE_CODEX_ACCESS;
                 }
@@ -639,6 +662,22 @@ public final class LocalSetup {
         }
     }
 
+    private static void rejectNonInteractiveIgnoredConfigureGithubUpdate(Options options) {
+        if (options.hasNonCodexModelWorkflowUpdateRequest()) {
+            throw new TrelloBoardSetupException(
+                    "setup_board_selection_required",
+                    "setup-local configure-github can apply --max-agents, --codex-model, and --codex-reasoning-effort to the upgraded workflow, but other workflow setup options such as --server-port, --active, --terminal, --workspace-root, or --workflow are not applied on this path.");
+        }
+    }
+
+    private static void rejectConfigureGithubUpdateWithoutUpgrade(Options options) {
+        if (options.configureGithub() && options.hasConfigureGithubWorkflowUpdateRequest()) {
+            throw new TrelloBoardSetupException(
+                    "setup_github_upgrade_not_found",
+                    "setup-local configure-github can apply --max-agents, --codex-model, and --codex-reasoning-effort only while upgrading a non-GitHub connected Trello board.");
+        }
+    }
+
     private void upgradeExistingBoardToGithub(Options options, ConnectedBoardManifest manifest, Terminal terminal)
             throws IOException {
         PrintStream out = terminal.out();
@@ -662,9 +701,13 @@ public final class LocalSetup {
         }
 
         resolveGitHubIntegration(options, prerequisites(), terminal);
+        if (options.hasExplicitCodexModelRequest()) {
+            options = configureCodexModel(options, board.workflowPath(), terminal);
+        }
         BoardHealth previousHealth = healthChecker.boardHealth(board);
         ensureManagedRestartPossible(options, board, previousHealth);
-        List<String> openLists = boardSetup.getOpenBoardListNames(
+        TrelloBoardSetup selectedBoardSetup = boardSetupWithCodexModel(options);
+        List<String> openLists = selectedBoardSetup.getOpenBoardListNames(
                 new TrelloBoardSetup.BoardInfoRequest(options.endpoint(), credentials, board.boardId()));
         WorkflowListConfiguration existingLists =
                 workflowConfig.listConfiguration(board.workflowPath()).onlyOpenLists(openLists);
@@ -681,7 +724,7 @@ public final class LocalSetup {
         }
 
         TrelloBoardSetup.ImportBoardResult result =
-                boardSetup.importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
+                selectedBoardSetup.importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
                         options.endpoint(),
                         credentials,
                         board.boardId(),
@@ -1090,6 +1133,9 @@ public final class LocalSetup {
             Optional<Integer> serverPort,
             int maxAgents,
             boolean maxAgentsExplicit,
+            Optional<String> codexModel,
+            Optional<String> codexReasoningEffort,
+            Optional<TrelloBoardSetup.CodexModelDefaults> codexModelDefaults,
             Path envPath,
             List<Path> additionalWritableRoots,
             boolean allowAllPaths,
@@ -1160,6 +1206,9 @@ public final class LocalSetup {
                     request.serverPort(),
                     request.maxAgents(),
                     request.maxAgentsExplicit(),
+                    request.codexModel(),
+                    request.codexReasoningEffort(),
+                    Optional.empty(),
                     envPath,
                     List.copyOf(additionalWritableRoots),
                     request.allowAllPaths(),
@@ -1199,6 +1248,9 @@ public final class LocalSetup {
                     serverPort,
                     maxAgents,
                     maxAgentsExplicit,
+                    codexModel,
+                    codexReasoningEffort,
+                    codexModelDefaults,
                     envPath,
                     additionalWritableRoots,
                     allowAllPaths,
@@ -1261,11 +1313,75 @@ public final class LocalSetup {
                     || workflowPathExplicit
                     || workspaceRootExplicit
                     || serverPort.isPresent()
-                    || maxAgentsExplicit;
+                    || maxAgentsExplicit
+                    || codexModel.isPresent()
+                    || codexReasoningEffort.isPresent();
+        }
+
+        private boolean hasNonCodexModelWorkflowUpdateRequest() {
+            return workspaceId.isPresent()
+                    || !activeStates.isEmpty()
+                    || !terminalStates.isEmpty()
+                    || inProgressState != null
+                    || !detectInProgressState
+                    || !blank(blockedState)
+                    || workflowPathExplicit
+                    || workspaceRootExplicit
+                    || serverPort.isPresent();
+        }
+
+        private boolean hasConfigureGithubWorkflowUpdateRequest() {
+            return maxAgentsExplicit || codexModel.isPresent() || codexReasoningEffort.isPresent();
         }
 
         Optional<String> repairBoardName() {
             return existingBoardId;
+        }
+
+        boolean hasExplicitCodexModelRequest() {
+            return codexModel.isPresent() || codexReasoningEffort.isPresent();
+        }
+
+        Options withCodexModelSelection(CodexModelSelectionFlow.Selection selected) {
+            return new Options(
+                    check,
+                    dryRun,
+                    repairPort,
+                    nonInteractive,
+                    force,
+                    forceNewSetup,
+                    configureGithub,
+                    githubMode,
+                    apiKey,
+                    apiToken,
+                    boardName,
+                    existingBoardId,
+                    workspaceId,
+                    activeStates,
+                    terminalStates,
+                    inProgressState,
+                    detectInProgressState,
+                    blockedState,
+                    workflowPath,
+                    workflowPathExplicit,
+                    workspaceRoot,
+                    workspaceRootExplicit,
+                    configDir,
+                    manifestPath,
+                    serverPort,
+                    maxAgents,
+                    maxAgentsExplicit,
+                    codexModel.or(selected::modelOverride),
+                    codexReasoningEffort.or(selected::reasoningEffortOverride),
+                    Optional.of(selected.defaults()),
+                    envPath,
+                    additionalWritableRoots,
+                    allowAllPaths,
+                    dangerFullAccess,
+                    noStart,
+                    command,
+                    endpoint,
+                    callerDirectory);
         }
     }
 
