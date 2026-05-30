@@ -41,14 +41,14 @@ final class InstallerScriptFixture {
     static ProcessResult runWithPseudoTerminal(Map<String, String> environment, String input, String command)
             throws IOException, InterruptedException {
         ProcessBuilder processBuilder = new ProcessBuilder("script", "-q", "-e", "-c", command, "/dev/null");
-        processBuilder.environment().putAll(environment);
+        applyTestEnvironment(processBuilder, environment);
         return run(processBuilder, input, 60);
     }
 
     static ProcessResult run(Map<String, String> environment, String... command)
             throws IOException, InterruptedException {
         ProcessBuilder processBuilder = new ProcessBuilder(command);
-        processBuilder.environment().putAll(environment);
+        applyTestEnvironment(processBuilder, environment);
         return run(processBuilder, "", 60);
     }
 
@@ -56,8 +56,18 @@ final class InstallerScriptFixture {
             throws IOException, InterruptedException {
         ProcessBuilder processBuilder = new ProcessBuilder(command);
         processBuilder.directory(workingDirectory.toFile());
-        processBuilder.environment().putAll(environment);
+        applyTestEnvironment(processBuilder, environment);
         return run(processBuilder, "", 60);
+    }
+
+    private static void applyTestEnvironment(ProcessBuilder processBuilder, Map<String, String> environment)
+            throws IOException {
+        processBuilder.environment().putAll(environment);
+        if (!environment.containsKey("HOME") && !isWindows()) {
+            Path home = Path.of("target", "installer-script-test-home").toAbsolutePath();
+            Files.createDirectories(home);
+            processBuilder.environment().put("HOME", home.toString());
+        }
     }
 
     static ProcessResult run(ProcessBuilder processBuilder, String input, int timeoutSeconds)

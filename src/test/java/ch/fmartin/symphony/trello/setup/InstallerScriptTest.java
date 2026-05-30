@@ -60,7 +60,12 @@ class InstallerScriptTest {
                 Arguments.of(
                         "install dry-run",
                         new String[] {"bash", "install.sh", "--dry-run", "--no-onboard"},
-                        new String[] {"Symphony for Trello installer", "Dry run: no files changed."}),
+                        new String[] {
+                            "Symphony for Trello installer",
+                            "Dry run: no files changed.",
+                            "Symphony would install the command here:",
+                            "Command PATH setup"
+                        }),
                 Arguments.of("uninstall dry-run", new String[] {"bash", "uninstall.sh", "--dry-run"}, new String[] {
                     "Symphony for Trello uninstall", "Trello boards were not deleted or archived."
                 }));
@@ -86,6 +91,314 @@ class InstallerScriptTest {
                         "WOULD offer to install Java 25+ JDK",
                         "WOULD offer to install Codex CLI with Symphony-managed npm:",
                         "Node.js/npm installed: no");
+    }
+
+    @Test
+    void posixInstallerRejectsRemovedUpdatePathOption() throws Exception {
+        // given
+        Assumptions.assumeTrue(Files.exists(Path.of("/bin/bash")));
+
+        // when
+        ProcessResult result = run(Map.of(), "/bin/bash", "install.sh", "--dry-run", "--update-path", "--no-onboard");
+
+        // then
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.output()).contains("Unknown option: --update-path");
+    }
+
+    @Test
+    void posixInstallerDoesNotOfferPathSetupWhenBinDirIsAlreadyOnPath() throws Exception {
+        // given
+        Assumptions.assumeTrue(commandExists("bash"));
+        Assumptions.assumeTrue(commandExists("git"));
+        Path sourceRepository = createSourceRepository(temporaryDirectory);
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path symphonyHome = temporaryDirectory.resolve("path-present-home");
+        Path binDirectory = temporaryDirectory.resolve("path-present-bin");
+        Path fakeLog = temporaryDirectory.resolve("path-present.log");
+        Map<String, String> environment = Map.of(
+                "PATH", fakeBin + File.pathSeparator + binDirectory + File.pathSeparator + System.getenv("PATH"),
+                "SYMPHONY_TRELLO_REPO_URL", sourceRepository.toUri().toString(),
+                "SYMPHONY_HOME", symphonyHome.toString(),
+                "SYMPHONY_FAKE_LOG", fakeLog.toString());
+
+        // when
+        ProcessResult result =
+                run(environment, "bash", "install.sh", "--no-onboard", "--bin-dir", binDirectory.toString());
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output()).doesNotContain("Command PATH setup", "not on PATH");
+    }
+
+    @Test
+    void posixInstallerAddsPathSetupByDefaultWithoutDuplicates() throws Exception {
+        // given
+        Assumptions.assumeTrue(commandExists("bash"));
+        Assumptions.assumeTrue(commandExists("git"));
+        Assumptions.assumeTrue(commandExists("script"));
+        Path installScript = Path.of("install.sh").toAbsolutePath();
+        Path sourceRepository = createSourceRepository(temporaryDirectory);
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path home = temporaryDirectory.resolve("path-accepted-home");
+        Path symphonyHome = temporaryDirectory.resolve("path-accepted-symphony-home");
+        Path binDirectory = temporaryDirectory.resolve("path-accepted-bin");
+        Path fakeLog = temporaryDirectory.resolve("path-accepted.log");
+        Files.createDirectories(home);
+        Map<String, String> environment = Map.of(
+                "PATH", fakeBin + File.pathSeparator + System.getenv("PATH"),
+                "HOME", home.toString(),
+                "SHELL", "/bin/bash",
+                "SYMPHONY_TRELLO_REPO_URL", sourceRepository.toUri().toString(),
+                "SYMPHONY_HOME", symphonyHome.toString(),
+                "SYMPHONY_FAKE_LOG", fakeLog.toString());
+
+        // when
+        ProcessResult firstInstall = runWithPseudoTerminal(
+                environment,
+                "",
+                "bash " + shellQuote(installScript.toString()) + " --no-onboard --bin-dir "
+                        + shellQuote(binDirectory.toString()));
+        ProcessResult secondInstall = runWithPseudoTerminal(
+                environment,
+                "",
+                "bash " + shellQuote(installScript.toString()) + " --no-onboard --bin-dir "
+                        + shellQuote(binDirectory.toString()));
+
+        // then
+        firstInstall.assertSuccess();
+        secondInstall.assertSuccess();
+        Path profile = home.resolve(".bashrc");
+        Path loginProfile = home.resolve(".profile");
+        String expectedLine = "export PATH='" + binDirectory + "':\"$PATH\"";
+        assertThat(firstInstall.output())
+                .contains(
+                        "Command PATH setup",
+                        "Added " + binDirectory + " to PATH in " + profile,
+                        "Added " + binDirectory + " to PATH in " + loginProfile);
+        assertThat(secondInstall.output()).contains("PATH setup already exists in " + profile);
+        assertThat(Files.readString(profile, StandardCharsets.UTF_8))
+                .contains("# Symphony for Trello", expectedLine)
+                .containsOnlyOnce(expectedLine);
+        assertThat(Files.readString(loginProfile, StandardCharsets.UTF_8))
+                .contains("# Symphony for Trello", expectedLine)
+                .containsOnlyOnce(expectedLine);
+    }
+
+    @Test
+    void posixPipedInstallerAddsPathSetupByDefault() throws Exception {
+        // given
+        Assumptions.assumeTrue(commandExists("bash"));
+        Assumptions.assumeTrue(commandExists("git"));
+        Assumptions.assumeTrue(commandExists("script"));
+        Path installScript = Path.of("install.sh").toAbsolutePath();
+        Path sourceRepository = createSourceRepository(temporaryDirectory);
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path home = temporaryDirectory.resolve("path-piped-home");
+        Path symphonyHome = temporaryDirectory.resolve("path-piped-symphony-home");
+        Path binDirectory = temporaryDirectory.resolve("path-piped-bin");
+        Path fakeLog = temporaryDirectory.resolve("path-piped.log");
+        Files.createDirectories(home);
+        Map<String, String> environment = Map.of(
+                "PATH", fakeBin + File.pathSeparator + System.getenv("PATH"),
+                "HOME", home.toString(),
+                "SHELL", "/bin/bash",
+                "SYMPHONY_TRELLO_REPO_URL", sourceRepository.toUri().toString(),
+                "SYMPHONY_HOME", symphonyHome.toString(),
+                "SYMPHONY_FAKE_LOG", fakeLog.toString());
+
+        // when
+        ProcessResult result = runWithPseudoTerminal(
+                environment,
+                "",
+                "/bin/cat " + shellQuote(installScript.toString()) + " | bash -s -- --no-onboard --bin-dir "
+                        + shellQuote(binDirectory.toString()));
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output()).contains("Command PATH setup", "Added " + binDirectory + " to PATH");
+        assertThat(home.resolve(".bashrc"))
+                .content(StandardCharsets.UTF_8)
+                .contains("export PATH='" + binDirectory + "':\"$PATH\"");
+        assertThat(home.resolve(".profile"))
+                .content(StandardCharsets.UTF_8)
+                .contains("export PATH='" + binDirectory + "':\"$PATH\"");
+    }
+
+    @Test
+    void posixInstallerAddsPathSetupBeforeGuidedSetupFailure() throws Exception {
+        // given
+        Assumptions.assumeTrue(commandExists("bash"));
+        Assumptions.assumeTrue(commandExists("git"));
+        Assumptions.assumeTrue(commandExists("script"));
+        Path installScript = Path.of("install.sh").toAbsolutePath();
+        Path sourceRepository = createSourceRepository(temporaryDirectory);
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        writeExecutable(
+                fakeBin.resolve("java"),
+                """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                if [[ "${1:-}" == "-version" ]]; then
+                  echo 'openjdk version "25.0.1" 2026-04-21' >&2
+                  exit 0
+                fi
+                if [[ "$*" == *"ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain setup-local"* ]]; then
+                  echo "setup-local failed before PATH test" >&2
+                  exit 7
+                fi
+                echo "java $*" >> "${SYMPHONY_FAKE_LOG:?}"
+                exit 0
+                """);
+        Path home = temporaryDirectory.resolve("path-before-setup-failure-home");
+        Path symphonyHome = temporaryDirectory.resolve("path-before-setup-failure-symphony-home");
+        Path binDirectory = temporaryDirectory.resolve("path-before-setup-failure-bin");
+        Path fakeLog = temporaryDirectory.resolve("path-before-setup-failure.log");
+        Files.createFile(temporaryDirectory.resolve("codex-authenticated"));
+        Files.createDirectories(home);
+        Map<String, String> environment = Map.of(
+                "PATH", fakeBin + File.pathSeparator + System.getenv("PATH"),
+                "HOME", home.toString(),
+                "SHELL", "/bin/bash",
+                "SYMPHONY_TRELLO_REPO_URL", sourceRepository.toUri().toString(),
+                "SYMPHONY_HOME", symphonyHome.toString(),
+                "SYMPHONY_FAKE_LOG", fakeLog.toString());
+
+        // when
+        ProcessResult result = runWithPseudoTerminal(
+                environment,
+                "",
+                "bash " + shellQuote(installScript.toString()) + " --bin-dir " + shellQuote(binDirectory.toString()));
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isEqualTo(7);
+        assertThat(result.output())
+                .containsSubsequence(
+                        "OK  Command installed: " + binDirectory.resolve("symphony-trello"),
+                        "Added " + binDirectory + " to PATH in " + home.resolve(".bashrc"),
+                        "Added " + binDirectory + " to PATH in " + home.resolve(".profile"),
+                        "Starting setup...",
+                        "setup-local failed before PATH test");
+        assertThat(home.resolve(".bashrc"))
+                .content(StandardCharsets.UTF_8)
+                .contains("export PATH='" + binDirectory + "':\"$PATH\"");
+        assertThat(home.resolve(".profile"))
+                .content(StandardCharsets.UTF_8)
+                .contains("export PATH='" + binDirectory + "':\"$PATH\"");
+    }
+
+    @Test
+    void posixInstallerLeavesProfileUnchangedWhenPathSetupIsDisabled() throws Exception {
+        // given
+        Assumptions.assumeTrue(commandExists("bash"));
+        Assumptions.assumeTrue(commandExists("git"));
+        Assumptions.assumeTrue(commandExists("script"));
+        Path installScript = Path.of("install.sh").toAbsolutePath();
+        Path sourceRepository = createSourceRepository(temporaryDirectory);
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path home = temporaryDirectory.resolve("path-declined-home");
+        Path symphonyHome = temporaryDirectory.resolve("path-declined-symphony-home");
+        Path binDirectory = temporaryDirectory.resolve("path-declined-bin");
+        Path fakeLog = temporaryDirectory.resolve("path-declined.log");
+        Files.createDirectories(home);
+        Map<String, String> environment = Map.of(
+                "PATH", fakeBin + File.pathSeparator + System.getenv("PATH"),
+                "HOME", home.toString(),
+                "SHELL", "/bin/bash",
+                "SYMPHONY_TRELLO_REPO_URL", sourceRepository.toUri().toString(),
+                "SYMPHONY_HOME", symphonyHome.toString(),
+                "SYMPHONY_FAKE_LOG", fakeLog.toString());
+
+        // when
+        ProcessResult result = runWithPseudoTerminal(
+                environment,
+                "",
+                "bash " + shellQuote(installScript.toString()) + " --no-onboard --no-update-path --bin-dir "
+                        + shellQuote(binDirectory.toString()));
+        ProcessResult status =
+                run(environment, binDirectory.resolve("symphony-trello").toString(), "status");
+
+        // then
+        result.assertSuccess();
+        status.assertSuccess();
+        assertThat(result.output())
+                .contains(
+                        "NOTE  " + binDirectory + " is not on PATH for this shell.",
+                        "Suggested profile files:",
+                        home.resolve(".bashrc").toString());
+        assertThat(home.resolve(".bashrc")).doesNotExist();
+        assertThat(home.resolve(".profile")).doesNotExist();
+    }
+
+    @Test
+    void posixNonInteractiveInstallerUpdatesProfileByDefault() throws Exception {
+        // given
+        Assumptions.assumeTrue(commandExists("bash"));
+        Assumptions.assumeTrue(commandExists("git"));
+        Path sourceRepository = createSourceRepository(temporaryDirectory);
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path home = temporaryDirectory.resolve("path-noninteractive-home");
+        Path symphonyHome = temporaryDirectory.resolve("path-noninteractive-symphony-home");
+        Path binDirectory = temporaryDirectory.resolve("path-noninteractive-bin");
+        Path fakeLog = temporaryDirectory.resolve("path-noninteractive.log");
+        Files.createDirectories(home);
+        Map<String, String> environment = Map.of(
+                "PATH", fakeBin + File.pathSeparator + System.getenv("PATH"),
+                "HOME", home.toString(),
+                "SHELL", "/bin/bash",
+                "SYMPHONY_TRELLO_REPO_URL", sourceRepository.toUri().toString(),
+                "SYMPHONY_HOME", symphonyHome.toString(),
+                "SYMPHONY_FAKE_LOG", fakeLog.toString());
+
+        // when
+        ProcessResult result =
+                run(environment, "bash", "install.sh", "--no-onboard", "--bin-dir", binDirectory.toString());
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output())
+                .contains(
+                        "Added " + binDirectory + " to PATH in " + home.resolve(".bashrc"),
+                        "Added " + binDirectory + " to PATH in " + home.resolve(".profile"));
+        assertThat(home.resolve(".bashrc"))
+                .content(StandardCharsets.UTF_8)
+                .contains("export PATH='" + binDirectory + "':\"$PATH\"");
+        assertThat(home.resolve(".profile"))
+                .content(StandardCharsets.UTF_8)
+                .contains("export PATH='" + binDirectory + "':\"$PATH\"");
+    }
+
+    @Test
+    void posixInstallerContinuesWhenAutomaticPathSetupCannotWriteProfile() throws Exception {
+        // given
+        Assumptions.assumeTrue(commandExists("bash"));
+        Assumptions.assumeTrue(commandExists("git"));
+        Path sourceRepository = createSourceRepository(temporaryDirectory);
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path homeFile = temporaryDirectory.resolve("not-a-directory-home");
+        Path symphonyHome = temporaryDirectory.resolve("path-unwritable-symphony-home");
+        Path binDirectory = temporaryDirectory.resolve("path-unwritable-bin");
+        Path fakeLog = temporaryDirectory.resolve("path-unwritable.log");
+        Files.writeString(homeFile, "not a directory\n", StandardCharsets.UTF_8);
+        Map<String, String> environment = Map.of(
+                "PATH", fakeBin + File.pathSeparator + System.getenv("PATH"),
+                "HOME", homeFile.toString(),
+                "SHELL", "/bin/bash",
+                "SYMPHONY_TRELLO_REPO_URL", sourceRepository.toUri().toString(),
+                "SYMPHONY_HOME", symphonyHome.toString(),
+                "SYMPHONY_FAKE_LOG", fakeLog.toString());
+
+        // when
+        ProcessResult result =
+                run(environment, "bash", "install.sh", "--no-onboard", "--bin-dir", binDirectory.toString());
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output())
+                .contains(
+                        "NOTE  Could not update PATH in " + homeFile.resolve(".bashrc"),
+                        "Add this line to a shell profile file so future shells can run symphony-trello:",
+                        "export PATH='" + binDirectory + "':\"$PATH\"");
     }
 
     @Test
@@ -518,6 +831,23 @@ class InstallerScriptTest {
     }
 
     @Test
+    void powershellInstallerRejectsRemovedUpdatePathOptionWhenAvailable() throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        Assumptions.assumeFalse(pwsh.isEmpty());
+
+        // when
+        ProcessResult result = run(
+                nonWindowsPowerShellEnvironment(),
+                command(pwsh, "-NoProfile", "-File", "./install.ps1", "--dry-run", "--update-path", "--no-onboard")
+                        .toArray(String[]::new));
+
+        // then
+        assertThat(result.exitCode()).isNotZero();
+        assertThat(result.output()).contains("Unknown option: --update-path");
+    }
+
+    @Test
     void powershellInstallerAcceptsPublicFlagsThroughScriptblockWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
@@ -575,8 +905,63 @@ class InstallerScriptTest {
                         "WOULD clone or update: " + home.resolve("app"),
                         "WOULD build packaged Quarkus app with Maven wrapper",
                         "WOULD install CLI executable: " + bin + "\\symphony-trello.ps1",
-                        "Dry run: no files changed.")
+                        "Dry run: no files changed.",
+                        "Symphony would install the command here:")
                 .doesNotContain("Unknown option");
+    }
+
+    @Test
+    void powershellInstallerDryRunReportsDefaultUserPathSetupWhenAvailable() throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        Assumptions.assumeFalse(pwsh.isEmpty());
+        Path bin = temporaryDirectory.resolve("ps default path bin");
+
+        // when
+        ProcessResult result = run(
+                nonWindowsPowerShellEnvironment(),
+                command(
+                                pwsh,
+                                "-NoProfile",
+                                "-File",
+                                "./install.ps1",
+                                "--dry-run",
+                                "--no-onboard",
+                                "--bin-dir",
+                                bin.toString())
+                        .toArray(String[]::new));
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output()).contains("WOULD add " + bin + " to the current user PATH.");
+    }
+
+    @Test
+    void powershellInstallerDryRunSkipsPathSetupWhenBinDirIsAlreadyOnPathWhenAvailable() throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        Assumptions.assumeFalse(pwsh.isEmpty());
+        Path bin = temporaryDirectory.resolve("ps path present bin");
+        Map<String, String> environment = new LinkedHashMap<>(nonWindowsPowerShellEnvironment());
+        environment.put("PATH", bin + File.pathSeparator + System.getenv("PATH"));
+
+        // when
+        ProcessResult result = run(
+                environment,
+                command(
+                                pwsh,
+                                "-NoProfile",
+                                "-File",
+                                "./install.ps1",
+                                "--dry-run",
+                                "--no-onboard",
+                                "--bin-dir",
+                                bin.toString())
+                        .toArray(String[]::new));
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output()).doesNotContain("WOULD offer to add", "not on PATH");
     }
 
     @Test
@@ -956,7 +1341,7 @@ class InstallerScriptTest {
                         "--state-home",
                         "--app-home",
                         "absolutize_path",
-                        "Add $BIN_DIR to PATH",
+                        "append_path_setup_to_profile",
                         "TrelloBoardSetupMain",
                         "-DskipTests clean package",
                         "Stopping managed workers before update",
@@ -973,6 +1358,7 @@ class InstallerScriptTest {
                         "default_workflow",
                         "wait_for_exit",
                         "is_managed_pid",
+                        "mapfile",
                         "nohup");
         assertThat(posixInstaller).doesNotContain("[[:space:]");
         assertThat(powershellInstaller)
@@ -1000,7 +1386,7 @@ class InstallerScriptTest {
                         "Invoke-Step \"$BinDir\\symphony-trello.ps1 setup-local\"",
                         "--state-home",
                         "--app-home",
-                        "Add $BinDir to PATH",
+                        "Add-BinDirToUserPath",
                         "Join-Path `$ConfigDir \".env\"",
                         "Assert-AvailableAfterInstall",
                         "Open a new PowerShell window with the Symphony bin directory on PATH.",
@@ -1074,7 +1460,26 @@ class InstallerScriptTest {
     }
 
     @Test
-    void posixInstallerStillPrintsPathNoteAfterInstallingCodexWithUserLocalNpm() throws Exception {
+    void installersOfferPathSetupBeforeGuidedSetupCanAbort() throws Exception {
+        // given
+        String posixInstaller = Files.readString(Path.of("install.sh"), StandardCharsets.UTF_8);
+        String powershellInstaller = Files.readString(Path.of("install.ps1"), StandardCharsets.UTF_8);
+
+        // when
+        int posixPathSetup = posixInstaller.indexOf("\noffer_path_setup\n\nif [[ \"$NO_ONBOARD\" == false ]]");
+        int powershellPathSetup = powershellInstaller.indexOf("\nOffer-PathSetup\n\nif (-not $NoOnboard)");
+
+        // then
+        assertThat(posixPathSetup)
+                .as("POSIX installer must offer PATH setup before setup-local or restart can abort")
+                .isNotNegative();
+        assertThat(powershellPathSetup)
+                .as("PowerShell installer must offer PATH setup before setup-local or restart can abort")
+                .isNotNegative();
+    }
+
+    @Test
+    void posixInstallerAddsPathSetupAfterInstallingCodexWithUserLocalNpm() throws Exception {
         // given
         Assumptions.assumeTrue(commandExists("bash"));
         Assumptions.assumeTrue(commandExists("git"));
@@ -1106,6 +1511,7 @@ class InstallerScriptTest {
         writeCommandProxy(fakeBin, "basename", "/usr/bin/basename");
         writeCommandProxy(fakeBin, "sha256sum", "/usr/bin/sha256sum");
         writeCommandProxy(fakeBin, "awk", "/usr/bin/awk");
+        writeCommandProxy(fakeBin, "grep", "/bin/grep");
         writeExecutable(
                 fakeBin.resolve("npm"),
                 """
@@ -1127,8 +1533,10 @@ class InstallerScriptTest {
         Path binDirectory = temporaryDirectory.resolve("npm-codex-bin");
         Path fakeLog = temporaryDirectory.resolve("npm-codex-fake-tools.log");
         Path uninstallScript = Path.of("uninstall.sh").toAbsolutePath();
+        Path home = temporaryDirectory.resolve("npm-codex-user-home");
         Map<String, String> environment = Map.of(
                 "PATH", fakeBin.toString(),
+                "HOME", home.toString(),
                 "SYMPHONY_TRELLO_REPO_URL", sourceRepository.toUri().toString(),
                 "SYMPHONY_HOME", symphonyHome.toString(),
                 "SYMPHONY_FAKE_LOG", fakeLog.toString());
@@ -1136,7 +1544,7 @@ class InstallerScriptTest {
         // when
         ProcessResult install = runWithPseudoTerminal(
                 environment,
-                "y\napi-key\napi-token\nNpm Codex Board\n",
+                "y\napi-key\napi-token\nNpm Codex Board\n\n\n",
                 "bash " + shellQuote(installScript.toString()) + " --bin-dir " + shellQuote(binDirectory.toString()));
         Map<String, String> uninstallEnvironment = new LinkedHashMap<>(environment);
         uninstallEnvironment.put("PATH", fakeBin + ":/bin:/usr/bin");
@@ -1156,7 +1564,8 @@ class InstallerScriptTest {
                         "Install Codex CLI with Symphony-managed npm.",
                         "Install location: " + symphonyHome.resolve("npm"),
                         "This keeps system-wide npm packages unchanged.",
-                        "NOTE  Add " + binDirectory + " to PATH so you can run symphony-trello from a new shell.");
+                        "Added " + binDirectory + " to PATH in " + home.resolve(".bashrc"),
+                        "Added " + binDirectory + " to PATH in " + home.resolve(".profile"));
         assertThat(binDirectory.resolve("codex")).doesNotExist();
         assertThat(symphonyHome.resolve("npm")).doesNotExist();
     }
@@ -1219,13 +1628,13 @@ class InstallerScriptTest {
             // when
             ProcessResult install = runWithPseudoTerminal(
                     environment,
-                    "api-key\napi-token\nDocs Queue\n",
+                    "api-key\napi-token\nDocs Queue\n\n\n",
                     "bash " + shellQuote(installScript.toString()) + " --bin-dir "
                             + shellQuote(binDirectory.toString()));
             addSourceRepositoryCommit(sourceRepository, "UPDATED", "updated\n");
             ProcessResult update = runWithPseudoTerminal(
                     environment,
-                    "api-key\napi-token\nDocs Queue\n",
+                    "api-key\napi-token\nDocs Queue\n\n\n",
                     "bash " + shellQuote(installScript.toString()) + " --bin-dir "
                             + shellQuote(binDirectory.toString()));
 
@@ -1275,7 +1684,7 @@ class InstallerScriptTest {
         try {
             ProcessResult install = runWithPseudoTerminal(
                     environment,
-                    "api-key\napi-token\nDocs Queue\n",
+                    "n\napi-key\napi-token\nDocs Queue\n",
                     "bash " + shellQuote(installScript.toString()) + " --bin-dir "
                             + shellQuote(binDirectory.toString()));
             addSourceRepositoryCommit(sourceRepository, "UPDATED", "updated\n");
