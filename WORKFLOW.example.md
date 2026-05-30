@@ -304,9 +304,7 @@ make Codex read or edit unrelated host files, that accessible files are availabl
 per-card workspace shown by `pwd`, and that an operator can allow one or more files or folders with
 the manual deployment settings `BindPaths`, `ReadWritePaths`, and
 `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS`, as documented in
-`docs/deployment.md#allow-host-path-access`, or with the Ansible list setting
-`symphony_trello_allowed_host_paths`, as documented in
-`docs/ansible-deployment.md#host-path-access`.
+`docs/deployment.md#allow-host-path-access`.
 
 Card URL: {{ card.url }}
 

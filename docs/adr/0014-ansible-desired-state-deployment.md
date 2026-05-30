@@ -1,12 +1,16 @@
 ---
-status: accepted
+status: superseded by [ADR 0036](0036-remove-ansible-deployment-before-oss-release.md)
 date: 2026-05-05
 decision-makers: [François Martin, Codex]
-consulted: [docs/deployment.md, docs/ansible-deployment.md, docs/adr/0013-systemd-template-deployment.md]
+consulted: [docs/deployment.md, docs/adr/0013-systemd-template-deployment.md]
 informed: [Future maintainers]
 ---
 
 # Add Ansible Desired-State Deployment Beside Manual systemd Instructions
+
+This ADR records the historical decision to add Ansible. It is superseded by
+[ADR 0036](0036-remove-ansible-deployment-before-oss-release.md), which removes Ansible from the
+supported OSS release surface.
 
 ## Context and Problem Statement
 
@@ -97,5 +101,7 @@ Keep only the manual deployment guide.
 
 ## More Information
 
-The Ansible guide is documented in [docs/ansible-deployment.md](../ansible-deployment.md). The
-manual systemd guide remains in [docs/deployment.md](../deployment.md).
+The Ansible guide and playbook were removed before the OSS release. The manual systemd guide remains
+in [docs/deployment.md](../deployment.md). The removal decision is tracked by
+[GitHub issue #115](https://github.com/martin-francois/symphony-trello/issues/115) and
+[ADR 0036](0036-remove-ansible-deployment-before-oss-release.md).

@@ -119,12 +119,11 @@ matters, and easy for another engineer to understand without asking the original
 15. When the user asks for a concrete repo change, commit and push the completed change unless they
    explicitly ask not to.
 16. When a change affects runtime behavior and the user is likely to verify it manually afterward,
-   deploy it with the Ansible workflow before finishing when the deployment inputs are available.
-   If unsure, ask at the end whether to deploy with Ansible next. Do not deploy or suggest
-   deployment for docs-only changes.
+   ask at the end whether to run the manual deployment verification next when deployment inputs are
+   available. Do not deploy or suggest deployment for docs-only changes.
 17. When fixing a bug that was observed during live deployed execution, and live verification is
-   reasonably possible from the current environment, deploy with Ansible and perform the relevant
-   live deployed verification before claiming the fix is complete.
+   reasonably possible from the current environment, perform the relevant live deployed verification
+   before claiming the fix is complete.
 18. When the user provides a GitHub issue that was automatically posted from a local setup failure,
    first debug from the issue as an outside maintainer would. Decide whether the sanitized issue body
    has enough information to identify the root cause. If it does not, improve the diagnostics or
@@ -360,14 +359,12 @@ matters, and easy for another engineer to understand without asking the original
 - Keep legacy workflows compatible: install workspace-local shipped skills only when the rendered
   prompt references the namespaced Symphony skill paths, so older workflows that clone into an empty
   workspace root stay empty until Codex runs.
-- For deployment filesystem access, describe the concept as "allowed host paths". Use
-  `symphony_trello_allowed_host_paths` for Ansible and treat
-  `symphony_trello_allowed_project_roots` as a compatibility alias only. The allowed entries can be
-  multiple files or folders; do not imply they must be repository or project roots. Explain that
-  undeclared host paths are blocked by default for security reasons so Trello cards cannot make Codex
-  read or edit unrelated files. Blocker comments for filesystem access must name the inaccessible
-  path, explain the security default, and point to the exact manual or Ansible setting that relaxes
-  access.
+- For deployment filesystem access, describe the concept as "allowed host paths". The allowed
+  entries can be multiple files or folders; do not imply they must be repository or project roots.
+  Explain that undeclared host paths are blocked by default for security reasons so Trello cards
+  cannot make Codex read or edit unrelated files. Blocker comments for filesystem access must name
+  the inaccessible path, explain the security default, and point to the exact manual systemd setting
+  that relaxes access.
 - For docs with multiple setup paths, read the flow once from each path's perspective and avoid
   wording that assumes the reader chose a different path.
 - Put "who this path is for" guidance next to the commands for that path. Do not make readers
@@ -545,6 +542,10 @@ matters, and easy for another engineer to understand without asking the original
   problem.
 - Before adding an ADR, inspect `docs/adr/` and use the next unused numeric prefix for the target
   branch. Do not create duplicate ADR numbers.
+- Follow MADR status semantics. New decisions normally use `status: accepted`. When a later ADR
+  supersedes an earlier accepted decision, update the earlier ADR status to
+  `superseded by [ADR 0000](0000-short-name.md)` and add a short note near the top explaining what
+  superseded it. Do not leave an ADR as simply `accepted` when the decision is no longer current.
 - Write ADRs in simple, factual language. Avoid flowery wording, vague emphasis, and unnecessarily
   long sentences. Use words and sentence structures that are clear for non-native English speakers,
   while still following the MADR template exactly. Prefer clear, unambiguous user-manual style over

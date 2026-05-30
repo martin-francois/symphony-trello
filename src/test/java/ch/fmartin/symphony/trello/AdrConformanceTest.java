@@ -13,6 +13,7 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
@@ -21,6 +22,9 @@ class AdrConformanceTest {
     private static final ObjectMapper YAML = new ObjectMapper(new YAMLFactory());
     private static final TypeReference<LinkedHashMap<String, Object>> YAML_METADATA = new TypeReference<>() {};
     private static final Pattern ADR_DATE = Pattern.compile("^\\d{4}-\\d{2}-\\d{2}$");
+    private static final Pattern ADR_FILE = Pattern.compile("^(\\d{4})-.+\\.md$");
+    private static final Pattern SUPERSEDED_STATUS =
+            Pattern.compile("^superseded by \\[ADR \\d{4}]\\(([^)]+\\.md)\\)$");
     private static final List<String> ADR_METADATA =
             List.of("status", "date", "decision-makers", "consulted", "informed");
     private static final List<String> ADR_HEADINGS = List.of(
@@ -52,9 +56,11 @@ class AdrConformanceTest {
 
         // when
         try (Stream<Path> files = Files.list(Path.of("docs/adr"))) {
-            for (Path file : files.filter(path -> path.toString().endsWith(".md"))
+            List<Path> adrFiles = files.filter(path -> path.toString().endsWith(".md"))
                     .sorted()
-                    .toList()) {
+                    .toList();
+            assertUniqueAdrNumbers(adrFiles, violations);
+            for (Path file : adrFiles) {
                 collectAdrShapeViolations(file, violations);
             }
         }
@@ -76,6 +82,23 @@ class AdrConformanceTest {
         assertAdrMetadata(file, lines, violations);
         assertAdrHeadings(file, lines, violations);
         assertNoAdrTemplatePlaceholders(file, lines, violations);
+    }
+
+    private static void assertUniqueAdrNumbers(List<Path> files, List<String> violations) {
+        Map<String, List<Path>> filesByNumber = new LinkedHashMap<>();
+        for (Path file : files) {
+            String filename = file.getFileName().toString();
+            Matcher matcher = ADR_FILE.matcher(filename);
+            if (matcher.matches()) {
+                filesByNumber
+                        .computeIfAbsent(matcher.group(1), ignored -> new ArrayList<>())
+                        .add(file);
+            }
+        }
+        filesByNumber.entrySet().stream()
+                .filter(entry -> entry.getValue().size() > 1)
+                .forEach(entry -> violations.add(
+                        "ADR number %s is used by multiple files: %s".formatted(entry.getKey(), entry.getValue())));
     }
 
     private static void assertAdrMetadata(Path file, List<String> lines, List<String> violations) {
@@ -102,12 +125,28 @@ class AdrConformanceTest {
             }
         }
         Object status = metadata.get("status");
-        if (status != null && !"accepted".equals(String.valueOf(status))) {
-            violations.add("%s: expected accepted ADR status, found %s".formatted(file, status));
+        if (status != null) {
+            assertAdrStatus(file, String.valueOf(status), violations);
         }
         Object date = metadata.get("date");
         if (date != null && !ADR_DATE.matcher(String.valueOf(date)).matches()) {
             violations.add("%s: expected ADR date as YYYY-MM-DD, found %s".formatted(file, date));
+        }
+    }
+
+    private static void assertAdrStatus(Path file, String status, List<String> violations) {
+        if ("accepted".equals(status)) {
+            return;
+        }
+        Matcher superseded = SUPERSEDED_STATUS.matcher(status);
+        if (!superseded.matches()) {
+            violations.add(
+                    "%s: expected ADR status accepted or MADR superseded-by link, found %s".formatted(file, status));
+            return;
+        }
+        Path supersedingAdr = file.getParent().resolve(superseded.group(1)).normalize();
+        if (!Files.isRegularFile(supersedingAdr)) {
+            violations.add("%s: superseding ADR does not exist: %s".formatted(file, supersedingAdr));
         }
     }
 
