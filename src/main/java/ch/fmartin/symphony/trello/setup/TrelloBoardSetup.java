@@ -2046,6 +2046,11 @@ public final class TrelloBoardSetup {
             boolean force,
             GitHubIntegration githubIntegration,
             boolean createMissingGithubLists) {
+        public ImportBoardRequest {
+            activeStates = List.copyOf(activeStates);
+            terminalStates = List.copyOf(terminalStates);
+        }
+
         public ImportBoardRequest(
                 URI endpoint,
                 TrelloCredentials credentials,
@@ -2227,7 +2232,11 @@ public final class TrelloBoardSetup {
             String boardUrl,
             List<String> lists,
             Path workflowPath,
-            int serverPort) {}
+            int serverPort) {
+        public NewBoardResult {
+            lists = List.copyOf(lists);
+        }
+    }
 
     public record MemberInfo(String id, String username, String displayName) {}
 
@@ -2285,7 +2294,13 @@ public final class TrelloBoardSetup {
             String inProgressState,
             String blockedState,
             Path workflowPath,
-            int serverPort) {}
+            int serverPort) {
+        public ImportBoardResult {
+            openLists = List.copyOf(openLists);
+            activeStates = List.copyOf(activeStates);
+            terminalStates = List.copyOf(terminalStates);
+        }
+    }
 
     private record BoardList(String id, String name, boolean closed) {}
 

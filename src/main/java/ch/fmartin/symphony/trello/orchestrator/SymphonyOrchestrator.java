@@ -36,7 +36,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -66,7 +65,7 @@ public class SymphonyOrchestrator {
     private final LinkedHashMap<String, Instant> ignoredWorkers = new LinkedHashMap<>();
     private final Map<String, ArrayDeque<CardDebugDetails.EventInfo>> recentEvents = new HashMap<>();
 
-    private EffectiveConfig config;
+    private volatile EffectiveConfig config;
     private WorkflowDefinition workflow;
     private Instant workflowLastModified;
     private ScheduledFuture<?> tickTimer;
@@ -424,12 +423,11 @@ public class SymphonyOrchestrator {
             scheduleRetry(dispatchCard.id(), nextAttempt(attempt), dispatchCard.identifier(), e.getMessage(), false);
             return;
         }
-        Future<?> future = workers.submit(() -> {
+        workers.submit(() -> {
             AgentRunResult result = agentRunner.run(new AgentRunner.AgentRunRequest(
                     dispatchCard, attempt, prompt, config, workerIdentity, this::onAgentEvent));
             onWorkerExit(dispatchCard.id(), workerIdentity, result);
         });
-        entry.workerHandle = future;
         LOG.infof(
                 "card_id=%s card_identifier=%s worker_identity=%s outcome=dispatched",
                 dispatchCard.id(), dispatchCard.identifier(), workerIdentity);
@@ -488,7 +486,6 @@ public class SymphonyOrchestrator {
         entry.lastEvent = event.event();
         entry.lastMessage = event.message();
         entry.lastEventAt = event.timestamp();
-        entry.codexAppServerPid = event.codexAppServerPid();
         entry.threadId = event.threadId() == null ? entry.threadId : event.threadId();
         entry.turnId = event.turnId() == null ? entry.turnId : event.turnId();
         if (entry.threadId != null && entry.turnId != null) {

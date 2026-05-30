@@ -5,6 +5,7 @@ import java.io.BufferedReader;
 import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -22,8 +23,8 @@ import picocli.CommandLine.Spec;
 final class SetupLocalCommandFactory {
     int execute(String[] args, LocalSetup setup, BufferedReader input, PrintStream out, PrintStream err) {
         CommandLine commandLine = new CommandLine(new SetupLocalCommand(setup, input, out, err))
-                .setOut(new PrintWriter(out, true))
-                .setErr(new PrintWriter(err, true))
+                .setOut(new PrintWriter(out, true, StandardCharsets.UTF_8))
+                .setErr(new PrintWriter(err, true, StandardCharsets.UTF_8))
                 .setExecutionExceptionHandler((exception, ignored, parseResult) -> {
                     err.println(
                             "setup_failed code=%s message=%s".formatted(errorCode(exception), exception.getMessage()));

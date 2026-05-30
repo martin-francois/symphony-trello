@@ -12,10 +12,20 @@ public record RuntimeSnapshot(
         List<RetryRow> retrying,
         TokenTotals codexTotals,
         Object rateLimits) {
+    public RuntimeSnapshot {
+        running = List.copyOf(running);
+        retrying = List.copyOf(retrying);
+    }
 
     public record Counts(int running, int retrying) {}
 
-    public record Routing(List<String> activeLists, List<String> terminalLists, List<String> handoffLists) {}
+    public record Routing(List<String> activeLists, List<String> terminalLists, List<String> handoffLists) {
+        public Routing {
+            activeLists = List.copyOf(activeLists);
+            terminalLists = List.copyOf(terminalLists);
+            handoffLists = List.copyOf(handoffLists);
+        }
+    }
 
     public record RunningRow(
             String cardId,
@@ -27,7 +37,11 @@ public record RuntimeSnapshot(
             String lastMessage,
             Instant startedAt,
             Instant lastEventAt,
-            Map<String, Long> tokens) {}
+            Map<String, Long> tokens) {
+        public RunningRow {
+            tokens = tokens == null ? null : Map.copyOf(tokens);
+        }
+    }
 
     public record RetryRow(String cardId, String cardIdentifier, int attempt, Instant dueAt, String error) {}
 

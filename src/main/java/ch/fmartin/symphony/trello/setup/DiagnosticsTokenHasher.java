@@ -23,6 +23,7 @@ final class DiagnosticsTokenHasher {
     private static final String ALGORITHM = "HmacSHA3-256";
     private static final int KEY_BYTES = 32;
     private static final int DISPLAY_BYTES = 6;
+    private static final SecureRandom RANDOM = new SecureRandom();
 
     private final SecretKeySpec key;
     private final boolean persisted;
@@ -126,7 +127,7 @@ final class DiagnosticsTokenHasher {
 
     private static byte[] randomKey() {
         byte[] key = new byte[KEY_BYTES];
-        new SecureRandom().nextBytes(key);
+        RANDOM.nextBytes(key);
         return key;
     }
 

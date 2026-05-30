@@ -1056,6 +1056,9 @@ class SetupDiagnosticReporterTest {
                 Authorization: token ghp-secret
                 Authorization: OAuth oauth_consumer_key="oauth-key-secret", oauth_token="oauth-token-secret"
                 path=/home/alice/private-project
+                trailing slash path /home/alice/private-project/: denied
+                backtick path /mnt/client`name/repo failed
+                non-ascii path é/home/alice/nonascii-path failed
                 path=/Volumes/Client Work/repo
                 unquoted workflow /Volumes/Client Work/repo/WORKFLOW.md failed
                 quoted="/Users/Jane Doe/project"
@@ -1063,6 +1066,9 @@ class SetupDiagnosticReporterTest {
                 pr url https://github.com/private-org/client-repo/pull/123
                 https remote https://github.com/private-org/client-repo.git
                 repository git@github.com:private/repo.git
+                prefixed remote repo:git@github.com:private/punctuated.git
+                non-ascii remote égit@github.com:private/nonascii.git
+                bare remote host git@github.com
                 ssh remote ssh://git@github.com/private-org/client-repo.git
                 branch feature/private-ref
                 card_id=private-log-card-id
@@ -1177,6 +1183,10 @@ class SetupDiagnosticReporterTest {
                         "TRELLO-private-json",
                         "private runtime message",
                         "/home/alice/private-project",
+                        "/mnt/client`name/repo",
+                        "client`name",
+                        "/home/alice/nonascii-path",
+                        "nonascii-path",
                         "/Volumes/Client Work/repo",
                         "/Users/Jane Doe/project",
                         "C:\\Users\\Jane Doe\\repo",
@@ -1184,6 +1194,8 @@ class SetupDiagnosticReporterTest {
                         "Jane Doe",
                         "private-org",
                         "client-repo",
+                        "punctuated",
+                        "nonascii",
                         "Secret Client",
                         tempDir.toString());
     }
