@@ -51,19 +51,6 @@ jobs:
               exit 1
             }
           '
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
-        with:
-          python-version: "3.14"
-          cache: pip
-          cache-dependency-path: deploy/ansible/requirements-lint.txt
-      - name: Install Ansible lint tooling
-        run: python -m pip install --disable-pip-version-check -r deploy/ansible/requirements-lint.txt
-      - name: Install Ansible collections
-        run: ansible-galaxy collection install -r deploy/ansible/requirements.yml
-      - name: Ansible syntax check
-        run: ansible-playbook -i deploy/ansible/inventory.example.yml deploy/ansible/site.yml --syntax-check
-      - name: Ansible lint
-        run: ansible-lint deploy/ansible
 
   renovate:
     runs-on: blacksmith-2vcpu-ubuntu-2404

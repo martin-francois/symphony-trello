@@ -595,9 +595,7 @@ Codex read or edit unrelated host files, that accessible files are available in 
 workspace shown by `pwd`, and that an operator can allow one or more files or folders with the manual
 deployment settings `BindPaths`, `ReadWritePaths`, and
 `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS`, as documented in
-`docs/deployment.md#allow-host-path-access`, or with the Ansible list setting
-`symphony_trello_allowed_host_paths`, as documented in
-`docs/ansible-deployment.md#host-path-access`.
+`docs/deployment.md#allow-host-path-access`.
 
 Card URL: {{ card.url }}
 ```
@@ -804,9 +802,7 @@ Codex read or edit unrelated host files, that accessible files are available in 
 workspace shown by `pwd`, and that an operator can allow one or more files or folders with the manual
 deployment settings `BindPaths`, `ReadWritePaths`, and
 `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS`, as documented in
-`docs/deployment.md#allow-host-path-access`, or with the Ansible list setting
-`symphony_trello_allowed_host_paths`, as documented in
-`docs/ansible-deployment.md#host-path-access`.
+`docs/deployment.md#allow-host-path-access`.
 
 Card URL: {{ card.url }}
 ```
@@ -1092,11 +1088,9 @@ indefinitely.
 
 ## Production Deployment
 
-For a server deployment with one or more workflow files, use the systemd guide in
-[docs/deployment.md](docs/deployment.md). For repeatable server setup with Ansible Vault secrets and
-declared workflow files, use [docs/ansible-deployment.md](docs/ansible-deployment.md). The Ansible
-path renders deployed workflow copies with server-safe credentials and workspace paths, so generated
-local workflows do not need manual edits before deployment.
+For a server deployment with one or more workflow files, use the manual systemd guide in
+[docs/deployment.md](docs/deployment.md). The primary public setup path remains the installer and
+managed local worker; manual systemd deployment is the advanced server path.
 
 ## Contributing and Security
 

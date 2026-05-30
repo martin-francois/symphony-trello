@@ -251,7 +251,7 @@ class TrelloBoardSetupTest {
                 .contains("inaccessible path")
                 .contains("by default for security reasons")
                 .contains("undeclared host paths")
-                .contains("symphony_trello_allowed_host_paths")
+                .contains("docs/deployment.md#allow-host-path-access")
                 .contains("server:")
                 .contains("port: " + ConfigDefaults.DEFAULT_SERVER_PORT)
                 .contains("command: " + ConfigDefaults.DEFAULT_CODEX_COMMAND)
