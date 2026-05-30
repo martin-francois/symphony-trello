@@ -86,9 +86,9 @@ the Java behavior still follows `SPEC.md`, fits Trello, and is covered by projec
 Before submitting changes:
 
 - Run `./mvnw -q spotless:check verify`; CI enforces the same Spotless formatting checks, curated
-  PMD checks, ArchUnit rules, test suite, build, and JaCoCo checks. ArchUnit rejects circular
-  dependencies between production top-level packages. Coverage currently requires at least 80% line
-  coverage.
+  PMD checks, SpotBugs bytecode checks, FindSecBugs security checks, ArchUnit rules, test suite,
+  build, and JaCoCo checks. ArchUnit rejects circular dependencies between production top-level
+  packages. Coverage currently requires at least 80% line coverage.
 - Add or update tests for scheduler, Trello normalization, workspace safety, prompt rendering, or
   Codex protocol behavior when those areas change.
 - Use imports instead of inline fully qualified Java type names in code. PMD enforces this so helpers
@@ -103,10 +103,10 @@ Before submitting changes:
   [CHANGELOG.md](CHANGELOG.md).
 
 `./mvnw -q spotless:check verify` remains the default local validation command. It runs Spotless
-formatting checks, curated PMD source checks, the deterministic test suite, ArchUnit architecture
-checks, the application build, and the JaCoCo coverage gate. The ArchUnit checks reject circular
-dependencies between production top-level packages. `verify` also fails if line coverage drops below
-80%. The test suite does not call Trello.
+formatting checks, curated PMD source checks, SpotBugs bytecode checks, FindSecBugs security checks,
+the deterministic test suite, ArchUnit architecture checks, the application build, and the JaCoCo
+coverage gate. The ArchUnit checks reject circular dependencies between production top-level
+packages. `verify` also fails if line coverage drops below 80%. The test suite does not call Trello.
 
 Static-analysis findings are meant to be actionable in a local feedback loop. Prefer fixing a
 finding, then rerunning the analyzer and the relevant build or test command. If a rule is useful but
@@ -120,14 +120,14 @@ or broad third-party rulesets should first run in report-only or candidate mode 
 remove noisy rules before making them blocking. Use `@SuppressWarnings("PMD.RuleName")` for
 code-local suppressions and `// NOPMD - reason` only for truly line-local cases.
 
-Future analyzer additions should follow the same suppression policy. SpotBugs and FindSecBugs
-project-level false positives belong in `config/spotbugs/exclude.xml`; code-local exceptions should
-use `@SuppressFBWarnings(value = "...", justification = "...")`. Error Prone and Picnic Error Prone
-Support should start in a non-blocking profile and use stable `-Xep:<CheckName>:OFF|WARN|ERROR`
-flags for rule control. Semgrep suppressions should be rule-specific `nosemgrep` comments with a
-reason, and private-repository local runs should use `--metrics=off`. CodeQL is a later
-public-repository code-scanning layer and is not part of normal local `verify`. Hosted dashboards can
-add signal, but they must not replace local checks contributors can run, fix, and rerun.
+SpotBugs and FindSecBugs project-level false positives belong in `config/spotbugs/exclude.xml`;
+code-local exceptions should use `@SuppressFBWarnings(value = "...", justification = "...")`. Error
+Prone and Picnic Error Prone Support should start in a non-blocking profile and use stable
+`-Xep:<CheckName>:OFF|WARN|ERROR` flags for rule control. Semgrep suppressions should be
+rule-specific `nosemgrep` comments with a reason, and private-repository local runs should use
+`--metrics=off`. CodeQL is a later public-repository code-scanning layer and is not part of normal
+local `verify`. Hosted dashboards can add signal, but they must not replace local checks
+contributors can run, fix, and rerun.
 
 An optional Error Prone pass is available for local source-level feedback:
 

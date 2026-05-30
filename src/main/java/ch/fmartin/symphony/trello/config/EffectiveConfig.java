@@ -64,7 +64,16 @@ public record EffectiveConfig(
             String cardIdentifierPrefix,
             Duration requestTimeout,
             int maxApiRetries,
-            Duration apiRetryBaseDelay) {}
+            Duration apiRetryBaseDelay) {
+        public TrackerConfig {
+            activeStates = List.copyOf(activeStates);
+            activeListIds = List.copyOf(activeListIds);
+            blockerEnforcedStates = List.copyOf(blockerEnforcedStates);
+            terminalStates = List.copyOf(terminalStates);
+            terminalListIds = List.copyOf(terminalListIds);
+            priorityLabels = Map.copyOf(priorityLabels);
+        }
+    }
 
     public record PollingConfig(Duration interval) {}
 
@@ -77,7 +86,11 @@ public record EffectiveConfig(
             int maxConcurrentAgents,
             int maxTurns,
             Duration maxRetryBackoff,
-            Map<String, Integer> maxConcurrentAgentsByState) {}
+            Map<String, Integer> maxConcurrentAgentsByState) {
+        public AgentConfig {
+            maxConcurrentAgentsByState = Map.copyOf(maxConcurrentAgentsByState);
+        }
+    }
 
     public record CodexConfig(
             String command,
@@ -90,7 +103,11 @@ public record EffectiveConfig(
             boolean forceDangerFullAccess,
             Duration turnTimeout,
             Duration readTimeout,
-            Duration stallTimeout) {}
+            Duration stallTimeout) {
+        public CodexConfig {
+            additionalWritableRoots = List.copyOf(additionalWritableRoots);
+        }
+    }
 
     public record TrelloToolsConfig(
             boolean enabled,
@@ -101,7 +118,12 @@ public record EffectiveConfig(
             boolean allowChecklists,
             boolean allowUrlAttachments,
             boolean allowDestructiveOperations,
-            boolean assumeWriteScope) {}
+            boolean assumeWriteScope) {
+        public TrelloToolsConfig {
+            allowedMoveListIds = List.copyOf(allowedMoveListIds);
+            allowedMoveListNames = List.copyOf(allowedMoveListNames);
+        }
+    }
 
     public record ServerConfig(OptionalInt port) {}
 }

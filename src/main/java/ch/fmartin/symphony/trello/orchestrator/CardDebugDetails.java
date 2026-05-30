@@ -17,12 +17,25 @@ public record CardDebugDetails(
         List<EventInfo> recentEvents,
         String lastError,
         Map<String, Object> tracked) {
+    public CardDebugDetails {
+        recentEvents = List.copyOf(recentEvents);
+        tracked = Map.copyOf(tracked);
+    }
 
     public record WorkspaceInfo(Path path) {}
 
     public record AttemptInfo(int restartCount, Integer currentRetryAttempt) {}
 
-    public record LogInfo(List<Map<String, Object>> codexSessionLogs) {}
+    public record LogInfo(List<Map<String, Object>> codexSessionLogs) {
+        public LogInfo {
+            codexSessionLogs = codexSessionLogs.stream().map(Map::copyOf).toList();
+        }
+
+        @Override
+        public List<Map<String, Object>> codexSessionLogs() {
+            return codexSessionLogs.stream().map(Map::copyOf).toList();
+        }
+    }
 
     public record EventInfo(Instant at, String event, String message) {}
 }

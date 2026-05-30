@@ -401,10 +401,6 @@ public final class LocalSetup {
         return credentialStore.loadOrPrompt(options, envPath, terminal);
     }
 
-    private CredentialSelection credentials(Options options, Terminal terminal) throws IOException {
-        return credentials(options, options.envPath(), terminal);
-    }
-
     private void writeEnv(CredentialSelection credentials, Path envPath, Terminal terminal) throws IOException {
         credentialStore.write(credentials, envPath, terminal);
     }
@@ -894,8 +890,8 @@ public final class LocalSetup {
         ConnectedBoard board = connectedBoardsUnchecked(options)
                 .findByWorkflow(workflowPath)
                 .orElse(new ConnectedBoard(
-                        workflowPath.getFileName().toString(),
-                        workflowPath.getFileName().toString(),
+                        PathNames.fileName(workflowPath),
+                        PathNames.fileName(workflowPath),
                         boardName,
                         "",
                         workflowPath,
@@ -906,7 +902,10 @@ public final class LocalSetup {
                         List.of(),
                         false));
         try {
-            workerManager.stop(localWorkerPaths(options), board, new PrintStream(OutputStream.nullOutputStream()));
+            workerManager.stop(
+                    localWorkerPaths(options),
+                    board,
+                    new PrintStream(OutputStream.nullOutputStream(), true, StandardCharsets.UTF_8));
         } catch (IOException e) {
             throw new TrelloBoardSetupException(
                     "setup_stop_failed", "Could not stop Symphony for \"" + boardName + "\": " + e.getMessage());

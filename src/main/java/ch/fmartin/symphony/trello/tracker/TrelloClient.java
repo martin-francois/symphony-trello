@@ -318,7 +318,7 @@ public class TrelloClient implements TrackerClient {
 
     public static Comparator<Card> dispatchComparator(EffectiveConfig config) {
         return Comparator.comparingInt((Card card) -> activeOrder(card, config))
-                .thenComparing(card -> card.priority() == null ? Integer.MAX_VALUE : card.priority())
+                .thenComparingInt(card -> card.priority() == null ? Integer.MAX_VALUE : card.priority())
                 .thenComparing(card -> card.position() == null ? BigDecimal.valueOf(Long.MAX_VALUE) : card.position())
                 .thenComparing(card -> card.createdAt() == null ? Instant.MAX : card.createdAt())
                 .thenComparing(Card::identifier);

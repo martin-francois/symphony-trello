@@ -1,12 +1,8 @@
 package ch.fmartin.symphony.trello.setup;
 
 import java.util.Optional;
-import java.util.regex.Pattern;
 
 final class PrerequisiteChecker {
-    private static final Pattern JAVA_VERSION = Pattern.compile(
-            "(?m)^\\s*(?:openjdk|java|javac)\\b[^\\r\\n]*?(?:version\\s+\"?)?(?<version>[0-9]+)(?:\\.[0-9]+)?");
-
     private final CommandRunner commands;
 
     PrerequisiteChecker(CommandRunner commands) {
@@ -40,10 +36,36 @@ final class PrerequisiteChecker {
     }
 
     static Optional<Integer> javaMajor(String output) {
-        var matcher = JAVA_VERSION.matcher(output);
-        if (!matcher.find()) {
-            return Optional.empty();
+        return output.lines()
+                .map(String::stripLeading)
+                .filter(PrerequisiteChecker::startsWithJavaCommand)
+                .map(PrerequisiteChecker::firstInteger)
+                .flatMap(Optional::stream)
+                .findFirst();
+    }
+
+    private static boolean startsWithJavaCommand(String line) {
+        return startsWithWord(line, "openjdk") || startsWithWord(line, "java") || startsWithWord(line, "javac");
+    }
+
+    private static boolean startsWithWord(String line, String word) {
+        return line.equals(word) || line.startsWith(word + " ") || line.startsWith(word + "\t");
+    }
+
+    private static Optional<Integer> firstInteger(String line) {
+        for (int index = 0; index < line.length(); index++) {
+            if (Character.isDigit(line.charAt(index))) {
+                return Optional.of(parseIntegerPrefix(line, index));
+            }
         }
-        return Optional.of(Integer.parseInt(matcher.group("version")));
+        return Optional.empty();
+    }
+
+    private static int parseIntegerPrefix(String line, int start) {
+        int end = start + 1;
+        while (end < line.length() && Character.isDigit(line.charAt(end))) {
+            end++;
+        }
+        return Integer.parseInt(line.substring(start, end));
     }
 }

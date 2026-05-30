@@ -37,6 +37,12 @@ public record LocalSetupRequest(
         boolean dangerFullAccess,
         boolean noStart,
         URI endpoint) {
+    public LocalSetupRequest {
+        activeStates = List.copyOf(activeStates);
+        terminalStates = List.copyOf(terminalStates);
+        additionalWritableRoots = List.copyOf(additionalWritableRoots);
+    }
+
     public enum Action {
         SETUP,
         CHECK,

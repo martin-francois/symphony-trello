@@ -8,12 +8,13 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Objects;
 
 final class ManagedProcessStore {
     private final Path stateHome;
 
     ManagedProcessStore(Path stateHome) {
-        this.stateHome = stateHome;
+        this.stateHome = Objects.requireNonNull(stateHome, "stateHome");
     }
 
     ManagedProcessFiles files(Path workflowPath) {
@@ -34,9 +35,12 @@ final class ManagedProcessStore {
     }
 
     ManagedProcessFiles filesFromPidFile(Path pidFile) {
-        String fileName = pidFile.getFileName().toString();
+        String fileName = PathNames.fileName(pidFile);
         String name = fileName.substring(0, fileName.length() - ".pid".length());
-        Path parent = pidFile.getParent() == null ? stateHome : pidFile.getParent();
+        Path parent = pidFile.getParent();
+        if (parent == null) {
+            parent = stateHome;
+        }
         return new ManagedProcessFiles(pidFile, parent.resolve(name + ".log"), parent.resolve(name + ".err"));
     }
 
@@ -64,7 +68,7 @@ final class ManagedProcessStore {
     private static String workflowStateName(Path workflowPath) {
         Path resolved = resolvedWorkflowPath(workflowPath);
         String hash = sha256(resolved.toString()).substring(0, 12);
-        return workflowPath.getFileName() + "." + hash;
+        return PathNames.fileName(workflowPath) + "." + hash;
     }
 
     private static Path resolvedWorkflowPath(Path workflowPath) {
@@ -91,7 +95,7 @@ final class ManagedProcessStore {
 
     record ManagedProcessFiles(Path pidFile, Path stdoutLog, Path stderrLog) {
         String displayName() {
-            String fileName = pidFile.getFileName().toString();
+            String fileName = PathNames.fileName(pidFile);
             return fileName.substring(0, fileName.length() - ".pid".length());
         }
     }

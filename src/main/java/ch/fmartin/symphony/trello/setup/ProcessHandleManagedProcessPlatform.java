@@ -16,8 +16,8 @@ abstract class ProcessHandleManagedProcessPlatform implements ManagedProcessPlat
     public ManagedProcessHandle start(
             List<String> command, Path workingDirectory, Map<String, String> environment, Path stdout, Path stderr)
             throws IOException {
-        Files.createDirectories(stdout.toAbsolutePath().normalize().getParent());
-        Files.createDirectories(stderr.toAbsolutePath().normalize().getParent());
+        createParentDirectories(stdout);
+        createParentDirectories(stderr);
         ProcessBuilder builder = new ProcessBuilder(launchCommand(command))
                 .directory(workingDirectory.toFile())
                 .redirectOutput(ProcessBuilder.Redirect.appendTo(stdout.toFile()))
@@ -93,6 +93,13 @@ abstract class ProcessHandleManagedProcessPlatform implements ManagedProcessPlat
 
     protected Optional<Path> standardInputRedirect() {
         return Optional.empty();
+    }
+
+    private static void createParentDirectories(Path path) throws IOException {
+        Path parent = path.toAbsolutePath().normalize().getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
     }
 
     private static Optional<List<String>> commandArguments(long pid) {

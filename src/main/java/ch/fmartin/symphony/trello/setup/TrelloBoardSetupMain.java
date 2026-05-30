@@ -135,8 +135,8 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                         new TrelloBoardSetupMain(boardSetup, localSetup, workerManager, input, out, err))
                 .addSubcommand(
                         "setup-local", new SetupLocalCommandFactory.SetupLocalCommand(localSetup, input, out, err))
-                .setOut(new PrintWriter(out, true))
-                .setErr(new PrintWriter(err, true))
+                .setOut(new PrintWriter(out, true, StandardCharsets.UTF_8))
+                .setErr(new PrintWriter(err, true, StandardCharsets.UTF_8))
                 .setExecutionExceptionHandler((exception, ignored, parseResult) -> {
                     err.println(
                             "setup_failed code=%s message=%s".formatted(errorCode(exception), exception.getMessage()));
@@ -689,7 +689,10 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         }
 
         private Path manifestPath() {
-            return workflowPath.toAbsolutePath().normalize().getParent().resolve("connected-boards.json");
+            Path workflow = workflowPath.toAbsolutePath().normalize();
+            Path parent = workflow.getParent();
+            return (parent == null ? Path.of(".").toAbsolutePath().normalize() : parent)
+                    .resolve("connected-boards.json");
         }
 
         private boolean shouldUseRuntimeEnvTarget() {

@@ -13,4 +13,8 @@ public record AgentEvent(
         String turnId,
         String message,
         Map<String, Long> usage,
-        JsonNode payload) {}
+        JsonNode payload) {
+    public AgentEvent {
+        usage = usage == null ? null : Map.copyOf(usage);
+    }
+}
