@@ -26,6 +26,8 @@ linters, or review-only conventions for basic rules?
 * Use ArchUnit for architecture rules that are naturally expressed against compiled classes.
 * Use PMD as a curated source-level analyzer when its rules are clearer than custom source parsing
   and complement Spotless, ArchUnit, tests, and other static analyzers.
+* Use SpotBugs and FindSecBugs for bytecode and security findings that complement source-level
+  checks.
 * Use Mockito for simple mocks while keeping protocol fakes where they better model stateful
   external behavior.
 * Keep test conventions enforceable by the build.
@@ -41,9 +43,10 @@ linters, or review-only conventions for basic rules?
 
 ## Decision Outcome
 
-Chosen option: "Enforce JaCoCo, ArchUnit, curated PMD source rules, and focused custom convention
-tests", because it uses purpose-built tools where they fit while keeping custom checks only for
-project-specific conventions that standard tools cannot see cleanly.
+Chosen option: "Enforce JaCoCo, ArchUnit, curated PMD source rules, SpotBugs and FindSecBugs
+bytecode rules, and focused custom convention tests", because it uses purpose-built tools where they
+fit while keeping custom checks only for project-specific conventions that standard tools cannot see
+cleanly.
 
 ### Consequences
 
@@ -51,6 +54,8 @@ project-specific conventions that standard tools cannot see cleanly.
 * Good, because ArchUnit checks circular dependencies between production top-level packages and
   important dependency boundaries.
 * Good, because PMD replaces a hand-written source regex for inline fully qualified Java type names.
+* Good, because SpotBugs and FindSecBugs add bytecode and security checks to the same local
+  validation command.
 * Good, because unit tests must use readable `// given`, `// when`, and `// then` sections.
 * Good, because simple mocks use Mockito instead of hand-written one-off doubles.
 * Good, because maintainers are still expected to avoid low-value POJO/getter/setter tests.
@@ -62,17 +67,18 @@ project-specific conventions that standard tools cannot see cleanly.
 
 Run `./mvnw -q spotless:check verify`. Review new tests to ensure they cover behavior, edge cases,
 policy enforcement, or external-boundary contracts instead of only increasing the coverage number.
-Review new ArchUnit and PMD rules for likely false positives before adding them. Run new PMD rules in
-report-only or candidate mode before making them blocking when baseline impact is unknown.
+Review new ArchUnit, PMD, SpotBugs, and FindSecBugs rules for likely false positives before adding
+them. Run broad new rule sets in report-only or candidate mode before making them blocking when
+baseline impact is unknown.
 
 ## Pros and Cons of the Options
 
 ### Enforce JaCoCo, ArchUnit, curated PMD source rules, and focused custom convention tests
 
 Use JaCoCo's Maven check in `verify`, ArchUnit for compiled architecture rules such as top-level
-package cycle detection, PMD for curated source-level rules such as
-`UnnecessaryFullyQualifiedName`, and custom JUnit tests for conventions that need source comments or
-Markdown parsing.
+package cycle detection, PMD for curated source-level rules such as `UnnecessaryFullyQualifiedName`,
+SpotBugs and FindSecBugs for bytecode and security checks, and custom JUnit tests for conventions
+that need source comments or Markdown parsing.
 
 * Good, because the same command works locally and in CI.
 * Good, because the coverage gate catches accidental test deletion or large untested additions.
@@ -80,6 +86,8 @@ Markdown parsing.
   scans.
 * Good, because PMD handles Java source rules without broad lint noise when rules are measured and
   curated before they become blocking.
+* Good, because SpotBugs and FindSecBugs catch compiled-code and security patterns without requiring
+  a hosted scanner.
 * Good, because the section structure makes tests easier to scan and failure causes easier to find.
 * Neutral, because purpose-built fakes remain acceptable for stateful protocol and concurrency
   behavior.

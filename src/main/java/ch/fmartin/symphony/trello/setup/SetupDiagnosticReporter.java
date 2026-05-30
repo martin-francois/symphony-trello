@@ -2,6 +2,8 @@ package ch.fmartin.symphony.trello.setup;
 
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.base.Ascii;
+import com.google.common.base.CharMatcher;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -38,6 +40,10 @@ final class SetupDiagnosticReporter {
     private static final DateTimeFormatter FILE_TIMESTAMP =
             DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").withZone(ZoneOffset.UTC);
     private static final Duration PROBE_TIMEOUT = Duration.ofSeconds(2);
+    private static final String HTTP_SCHEME = "http://";
+    private static final String HTTPS_SCHEME = "https://";
+    private static final String SSH_SCHEME = "ssh://";
+    private static final String GITHUB_SSH_HOST = "git@github.com";
     private static final int BODY_LIMIT = 4_000;
     private static final int LOG_LINE_LIMIT = 80;
     private static final int LOG_BYTE_LIMIT = 128 * 1024;
@@ -50,10 +56,7 @@ final class SetupDiagnosticReporter {
             "(?i)([\"']?(?:key|token|secret|password|api[_-]?key|api[_-]?token|oauth_consumer_key|oauth_token|authorization|bearer)[\"']?\\s*[:=]\\s*[\"']?)([^\\s,\"'}]+)");
     private static final Pattern AUTHORIZATION_HEADER = Pattern.compile("(?i)(Authorization\\s*[:=]\\s*)[^\\r\\n]+");
     private static final Pattern BEARER_TOKEN = Pattern.compile("(?i)(Bearer\\s+)[A-Za-z0-9._~+/=-]+");
-    private static final Pattern URL_USER_INFO = Pattern.compile("(?i)(https?://)[^\\s/@]+(?::[^\\s/@]*)?@");
     private static final Pattern GITHUB_HTTPS_URL = Pattern.compile("(?i)\\bhttps?://github\\.com/[^\\s)>'\"`]+");
-    private static final Pattern GITHUB_SSH_REMOTE =
-            Pattern.compile("(?i)\\b(?:ssh://)?git@github\\.com[:/][^\\s)>'\"`]+");
     private static final Pattern TRELLO_URL = Pattern.compile("https://trello\\.com/\\S+");
     private static final Pattern TRELLO_CARD_FIELD = Pattern.compile(
             "(?i)([\"']?(?:card[_-]?id|card[_-]?identifier|cardId|cardIdentifier)[\"']?\\s*[:=]\\s*[\"']?)([^\\s,\"'}]+)");
@@ -61,10 +64,22 @@ final class SetupDiagnosticReporter {
             Pattern.compile("(?i)(\\b(?:path|file|directory|dir|workspace|config|state|home)=)([^\\r\\n]+)");
     private static final Pattern QUOTED_POSIX_PATH = Pattern.compile("([\"'`])(/[^\"'`\\r\\n]+)\\1");
     private static final Pattern QUOTED_WINDOWS_PATH = Pattern.compile("(?i)([\"'`])([A-Z]:\\\\[^\"'`\\r\\n]+)\\1");
-    private static final Pattern ABSOLUTE_POSIX_PATH =
-            Pattern.compile("(?<![A-Za-z0-9_.:/-])/(?:[^\\r\\n:'\"<>|]+/)*[^\\r\\n:'\"<>|]+");
     private static final Pattern WINDOWS_PATH = Pattern.compile("(?i)\\b[A-Z]:\\\\[^\\r\\n:'\"<>|]+");
     private static final Pattern TRELLO_OBJECT_ID = Pattern.compile("\\b[0-9a-f]{24}\\b", Pattern.CASE_INSENSITIVE);
+    private static final CharMatcher POSIX_PATH_START = CharMatcher.is('/');
+    private static final CharMatcher URL_AUTHORITY_TERMINATOR =
+            CharMatcher.whitespace().or(CharMatcher.anyOf("/?#")).precomputed();
+    private static final CharMatcher TOKEN_TERMINATOR =
+            CharMatcher.whitespace().or(CharMatcher.anyOf(")>'\"`")).precomputed();
+    private static final CharMatcher ASCII_WORD_CHARACTER = CharMatcher.inRange('a', 'z')
+            .or(CharMatcher.inRange('A', 'Z'))
+            .or(CharMatcher.inRange('0', '9'))
+            .or(CharMatcher.is('_'))
+            .precomputed();
+    private static final CharMatcher PATH_LIKE_TOKEN_BOUNDARY_BLOCKER =
+            ASCII_WORD_CHARACTER.or(CharMatcher.anyOf(".:/-")).precomputed();
+    private static final CharMatcher POSIX_PATH_TERMINATOR =
+            CharMatcher.anyOf("\r\n:'\"<>|").precomputed();
     private static final Set<String> EXPECTED_SETUP_FAILURE_CODES = Set.of(
             "setup_active_state_required",
             "setup_allow_all_paths_without_root",
@@ -1279,7 +1294,7 @@ final class SetupDiagnosticReporter {
     }
 
     private static String logStream(Path log) {
-        String name = log.getFileName().toString();
+        String name = PathNames.fileName(log);
         if (name.endsWith(".log")) {
             return "stdout";
         }
@@ -1451,9 +1466,8 @@ final class SetupDiagnosticReporter {
         sanitized = AUTHORIZATION_HEADER.matcher(sanitized).replaceAll("$1<redacted>");
         sanitized = BEARER_TOKEN.matcher(sanitized).replaceAll("$1<redacted>");
         sanitized = SECRET_ASSIGNMENT.matcher(sanitized).replaceAll("$1<redacted>");
-        sanitized = URL_USER_INFO.matcher(sanitized).replaceAll("$1<redacted>@");
-        sanitized =
-                GITHUB_SSH_REMOTE.matcher(sanitized).replaceAll(match -> "<github-remote:" + hash(match.group()) + ">");
+        sanitized = redactUrlUserInfo(sanitized);
+        sanitized = redactGithubSshRemotes(sanitized);
         sanitized = GITHUB_HTTPS_URL.matcher(sanitized).replaceAll(match -> "<github-url:" + hash(match.group()) + ">");
         sanitized = TRELLO_URL.matcher(sanitized).replaceAll(match -> "<trello-url:" + hash(match.group()) + ">");
         sanitized = TRELLO_CARD_FIELD.matcher(sanitized).replaceAll(match -> match.group(1) + "<redacted>");
@@ -1466,8 +1480,177 @@ final class SetupDiagnosticReporter {
                 .matcher(sanitized)
                 .replaceAll(match -> match.group(1) + pathToken(match.group(2)) + match.group(1));
         sanitized = WINDOWS_PATH.matcher(sanitized).replaceAll(match -> pathToken(match.group()));
-        sanitized = ABSOLUTE_POSIX_PATH.matcher(sanitized).replaceAll(match -> pathToken(match.group()));
+        sanitized = redactAbsolutePosixPaths(sanitized);
         return sanitized;
+    }
+
+    private String redactUrlUserInfo(String value) {
+        StringBuilder redacted = new StringBuilder(value.length());
+        int cursor = 0;
+        while (cursor < value.length()) {
+            int schemeStart = nextHttpScheme(value, cursor);
+            if (schemeStart < 0) {
+                redacted.append(value, cursor, value.length());
+                break;
+            }
+            int authorityStart = schemeStart + httpSchemeLength(value, schemeStart);
+            int authorityEnd = urlAuthorityEnd(value, authorityStart);
+            int at = indexOf(value, '@', authorityStart, authorityEnd);
+            if (at < 0) {
+                redacted.append(value, cursor, authorityEnd);
+            } else {
+                redacted.append(value, cursor, authorityStart)
+                        .append("<redacted>@")
+                        .append(value, at + 1, authorityEnd);
+            }
+            cursor = authorityEnd;
+        }
+        return redacted.toString();
+    }
+
+    private int nextHttpScheme(String value, int start) {
+        int maxStart = value.length() - HTTP_SCHEME.length();
+        for (int index = Math.max(0, start); index <= maxStart; index++) {
+            if (startsWithAsciiIgnoreCase(value, index, HTTP_SCHEME)
+                    || startsWithAsciiIgnoreCase(value, index, HTTPS_SCHEME)) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    private static int httpSchemeLength(String value, int schemeStart) {
+        return startsWithAsciiIgnoreCase(value, schemeStart, HTTPS_SCHEME)
+                ? HTTPS_SCHEME.length()
+                : HTTP_SCHEME.length();
+    }
+
+    private static int urlAuthorityEnd(String value, int start) {
+        int terminator = URL_AUTHORITY_TERMINATOR.indexIn(value, start);
+        return terminator < 0 ? value.length() : terminator;
+    }
+
+    private String redactGithubSshRemotes(String value) {
+        StringBuilder redacted = new StringBuilder(value.length());
+        int cursor = 0;
+        while (cursor < value.length()) {
+            int git = indexOfIgnoreCase(value, GITHUB_SSH_HOST, cursor);
+            if (git < 0) {
+                redacted.append(value, cursor, value.length());
+                break;
+            }
+            int remoteStart = githubSshRemoteStart(value, git);
+            int separator = git + GITHUB_SSH_HOST.length();
+            int remoteEnd = tokenEnd(value, separator + 1);
+            if (!isGithubSshRemote(value, remoteStart, separator, remoteEnd)) {
+                redacted.append(value, cursor, git + 1);
+                cursor = git + 1;
+                continue;
+            }
+            redacted.append(value, cursor, remoteStart)
+                    .append("<github-remote:")
+                    .append(hash(value.substring(remoteStart, remoteEnd)))
+                    .append(">");
+            cursor = remoteEnd;
+        }
+        return redacted.toString();
+    }
+
+    private static int githubSshRemoteStart(String value, int git) {
+        int sshStart = git - SSH_SCHEME.length();
+        return startsWithAsciiIgnoreCase(value, sshStart, SSH_SCHEME) && hasRegexWordBoundaryBefore(value, sshStart)
+                ? sshStart
+                : git;
+    }
+
+    private static boolean isGithubSshRemote(String value, int remoteStart, int separator, int remoteEnd) {
+        return hasRegexWordBoundaryBefore(value, remoteStart)
+                && separator < value.length()
+                && (value.charAt(separator) == ':' || value.charAt(separator) == '/')
+                && remoteEnd > separator + 1;
+    }
+
+    private static boolean hasRegexWordBoundaryBefore(String value, int index) {
+        return index == 0 || !ASCII_WORD_CHARACTER.matches(value.charAt(index - 1));
+    }
+
+    private static int tokenEnd(String value, int start) {
+        if (start >= value.length()) {
+            return value.length();
+        }
+        int terminator = TOKEN_TERMINATOR.indexIn(value, start);
+        return terminator < 0 ? value.length() : terminator;
+    }
+
+    private String redactAbsolutePosixPaths(String value) {
+        StringBuilder redacted = new StringBuilder(value.length());
+        int cursor = 0;
+        while (cursor < value.length()) {
+            int start = nextAbsolutePosixPathStart(value, cursor);
+            if (start < 0) {
+                redacted.append(value, cursor, value.length());
+                break;
+            }
+            int end = absolutePosixPathEnd(value, start);
+            redacted.append(value, cursor, start).append(pathToken(value.substring(start, end)));
+            cursor = end;
+        }
+        return redacted.toString();
+    }
+
+    private static int nextAbsolutePosixPathStart(String value, int cursor) {
+        int index = POSIX_PATH_START.indexIn(value, cursor);
+        while (index >= 0) {
+            if (isPosixPathStartBoundary(value, index)) {
+                return index;
+            }
+            index = POSIX_PATH_START.indexIn(value, index + 1);
+        }
+        return -1;
+    }
+
+    private static boolean isPosixPathStartBoundary(String value, int index) {
+        return index == 0 || !isPosixPathBoundaryBlocker(value.charAt(index - 1));
+    }
+
+    private static boolean isPosixPathBoundaryBlocker(char ch) {
+        return PATH_LIKE_TOKEN_BOUNDARY_BLOCKER.matches(ch);
+    }
+
+    private static int absolutePosixPathEnd(String value, int start) {
+        int terminator = POSIX_PATH_TERMINATOR.indexIn(value, start + 1);
+        return terminator < 0 ? value.length() : terminator;
+    }
+
+    private static int indexOf(String value, char needle, int start, int end) {
+        for (int index = start; index < end; index++) {
+            if (value.charAt(index) == needle) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    private static int indexOfIgnoreCase(String value, String needle, int start) {
+        int maxStart = value.length() - needle.length();
+        for (int index = Math.max(0, start); index <= maxStart; index++) {
+            if (startsWithAsciiIgnoreCase(value, index, needle)) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    private static boolean startsWithAsciiIgnoreCase(String value, int start, String prefix) {
+        if (start < 0 || start + prefix.length() > value.length()) {
+            return false;
+        }
+        for (int index = 0; index < prefix.length(); index++) {
+            if (Ascii.toLowerCase(value.charAt(start + index)) != Ascii.toLowerCase(prefix.charAt(index))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private String sanitizeInstallerContextValue(String key, String value) {

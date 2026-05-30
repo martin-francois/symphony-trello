@@ -454,7 +454,7 @@ final class LocalWorkerManager {
         }
         for (Path pidFile : pidFiles) {
             Long pid = store.readPid(pidFile);
-            String name = pidFile.getFileName().toString().replaceFirst("\\.pid$", "");
+            String name = PathNames.fileName(pidFile).replaceFirst("\\.pid$", "");
             if (pid != null && platform.isAlive(pid) && platform.isManaged(pid, paths.appHome())) {
                 stopPid(store, store.filesFromPidFile(pidFile), pid);
                 out.println("Stopped " + name);
@@ -475,7 +475,7 @@ final class LocalWorkerManager {
         }
         for (Path pidFile : pidFiles) {
             Long pid = store.readPid(pidFile);
-            String name = pidFile.getFileName().toString().replaceFirst("\\.pid$", "");
+            String name = PathNames.fileName(pidFile).replaceFirst("\\.pid$", "");
             if (pid != null && platform.isAlive(pid) && platform.isManaged(pid, paths.appHome())) {
                 out.println("running " + name + " pid=" + pid);
             } else if (pid != null && platform.isAlive(pid)) {
@@ -540,14 +540,12 @@ final class LocalWorkerManager {
     }
 
     private ConnectedBoard workflowBoard(Path workflowPath) {
-        String boardId = workflowConfig
-                .boardId(workflowPath)
-                .orElseGet(() -> workflowPath.getFileName().toString());
+        String boardId = workflowConfig.boardId(workflowPath).orElseGet(() -> PathNames.fileName(workflowPath));
         int serverPort = workflowConfig.serverPort(workflowPath).orElse(TrelloBoardSetup.DEFAULT_SERVER_PORT);
         return new ConnectedBoard(
                 boardId,
                 boardId,
-                workflowPath.getFileName().toString(),
+                PathNames.fileName(workflowPath),
                 "",
                 workflowPath,
                 null,

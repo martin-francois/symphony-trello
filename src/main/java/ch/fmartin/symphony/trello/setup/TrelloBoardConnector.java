@@ -286,13 +286,17 @@ final class TrelloBoardConnector {
             return requested;
         }
         Path parent = requested.getParent();
-        String fileName = requested.getFileName().toString();
+        String fileName = PathNames.fileName(requested);
         String prefix = fileName.substring(0, fileName.length() - ".md".length());
-        Path candidate = parent.resolve(prefix + "-2.md");
+        Path candidate = parentOrCurrent(parent).resolve(prefix + "-2.md");
         for (int suffix = 3; Files.exists(candidate.toAbsolutePath().normalize()); suffix++) {
-            candidate = parent.resolve(prefix + "-" + suffix + ".md");
+            candidate = parentOrCurrent(parent).resolve(prefix + "-" + suffix + ".md");
         }
         return candidate;
+    }
+
+    private static Path parentOrCurrent(Path parent) {
+        return parent == null ? Path.of(".") : parent;
     }
 
     static int localSetupServerPort(

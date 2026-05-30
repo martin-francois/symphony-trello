@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+  <!-- CDI/service constructors intentionally retain injected collaborators. They are application components, not caller-owned mutable value objects. -->
+  <Match>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+    <Class name="~ch\.fmartin\.symphony\.trello\.(SymphonyLifecycle|agent\.(CodexAppServerClient|LocalAgentRunner|TrelloHandoffToolHandler)|orchestrator\.SymphonyOrchestrator|tracker\.TrelloClient)"/>
+  </Match>
+
+  <!-- Running external commands is the product boundary for Codex, hooks, worker startup, and setup probes. Command lists are constructed explicitly and reviewed at call sites. -->
+  <Match>
+    <Bug pattern="COMMAND_INJECTION"/>
+    <Class name="~ch\.fmartin\.symphony\.trello\.(agent\.CodexAppServerClient|setup\.(CodexModelDefaultsResolver|ProcessCommandRunner|ProcessHandleManagedProcessPlatform|WindowsManagedProcessPlatform)|workspace\.HookRunner)"/>
+  </Match>
+
+  <!-- These methods generate stable HTML, Markdown, YAML, or prompt text that must use LF separators independent of the host platform. -->
+  <Match>
+    <Bug pattern="VA_FORMAT_STRING_USES_NEWLINE"/>
+    <Class name="~ch\.fmartin\.symphony\.trello\.(api\.StatusResource|prompt\.PromptRenderer|setup\.TrelloBoardSetup)"/>
+  </Match>
+
+  <!-- The health checker only probes loopback HTTP ports exposed by this local process. TLS is not expected for that local availability check. -->
+  <Match>
+    <Bug pattern="UNENCRYPTED_SOCKET"/>
+    <Class name="ch.fmartin.symphony.trello.setup.LocalHealthChecker"/>
+    <Method name="portAcceptsConnections"/>
+  </Match>
+
+  <!-- POSIX process management and diagnostics intentionally inspect standard Unix sentinel files. -->
+  <Match>
+    <Bug pattern="DMI_HARDCODED_ABSOLUTE_FILENAME"/>
+    <Class name="~ch\.fmartin\.symphony\.trello\.setup\.(PosixManagedProcessPlatform|SetupDiagnosticReporter)"/>
+  </Match>
+
+  <!-- Retry jitter is not a security token. It only spreads repeated Trello API retries. -->
+  <Match>
+    <Bug pattern="PREDICTABLE_RANDOM"/>
+    <Class name="ch.fmartin.symphony.trello.tracker.TrelloClient"/>
+    <Method name="exponentialBackoffWithJitter"/>
+  </Match>
+</FindBugsFilter>

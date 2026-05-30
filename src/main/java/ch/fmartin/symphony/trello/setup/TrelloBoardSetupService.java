@@ -7,6 +7,7 @@ import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.WorkspaceListRequest;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -108,7 +109,8 @@ final class TrelloBoardSetupService {
                 continue;
             }
             try {
-                workerManager.stop(paths, board, new PrintStream(OutputStream.nullOutputStream()));
+                workerManager.stop(
+                        paths, board, new PrintStream(OutputStream.nullOutputStream(), true, StandardCharsets.UTF_8));
             } catch (IOException exception) {
                 throw new TrelloBoardSetupException(
                         "setup_stop_failed",

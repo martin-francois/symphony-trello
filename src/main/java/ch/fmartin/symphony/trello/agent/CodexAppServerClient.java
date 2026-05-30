@@ -329,11 +329,10 @@ public class CodexAppServerClient {
         private final Map<String, JsonNode> completedTurns = new ConcurrentHashMap<>();
         private final Map<String, Throwable> terminalTurnFailures = new ConcurrentHashMap<>();
         private final Object turnCompletionLock = new Object();
+        private final Object writerLock = new Object();
         private final AtomicReference<Throwable> readerFailure = new AtomicReference<>();
         private final CountDownLatch readerStarted = new CountDownLatch(1);
-        private BufferedWriter writer;
-        private Thread stdoutReader;
-        private Thread stderrReader;
+        private final BufferedWriter writer;
 
         private AppServerSession(
                 Process process,
@@ -346,13 +345,15 @@ public class CodexAppServerClient {
             this.card = card;
             this.workerIdentity = workerIdentity;
             this.listener = listener;
+            this.writer = new BufferedWriter(new OutputStreamWriter(process.getOutputStream(), StandardCharsets.UTF_8));
         }
 
         void start() throws IOException, InterruptedException {
-            writer = new BufferedWriter(new OutputStreamWriter(process.getOutputStream(), StandardCharsets.UTF_8));
-            stdoutReader = Thread.ofVirtual().name("codex-app-server-stdout").start(this::readStdout);
-            stderrReader = Thread.ofVirtual().name("codex-app-server-stderr").start(this::readStderr);
-            readerStarted.await(5, TimeUnit.SECONDS);
+            Thread.ofVirtual().name("codex-app-server-stdout").start(this::readStdout);
+            Thread.ofVirtual().name("codex-app-server-stderr").start(this::readStderr);
+            if (!readerStarted.await(5, TimeUnit.SECONDS)) {
+                throw new IOException("codex app-server stdout reader did not start");
+            }
         }
 
         JsonNode request(String method, ObjectNode params, Duration timeout) throws Exception {
@@ -412,10 +413,12 @@ public class CodexAppServerClient {
             }
         }
 
-        private synchronized void write(ObjectNode message) throws IOException {
-            writer.write(json.writeValueAsString(message));
-            writer.newLine();
-            writer.flush();
+        private void write(ObjectNode message) throws IOException {
+            synchronized (writerLock) {
+                writer.write(json.writeValueAsString(message));
+                writer.newLine();
+                writer.flush();
+            }
         }
 
         private void readStdout() {
@@ -594,6 +597,7 @@ public class CodexAppServerClient {
 
         @Override
         public void close() {
+            closeWriter();
             process.destroy();
             try {
                 if (!process.waitFor(2, TimeUnit.SECONDS)) {
@@ -602,6 +606,16 @@ public class CodexAppServerClient {
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 process.destroyForcibly();
+            }
+        }
+
+        private void closeWriter() {
+            synchronized (writerLock) {
+                try {
+                    writer.close();
+                } catch (IOException e) {
+                    LOG.debugf("codex_stdin pid=%d outcome=close_failed reason=%s", process.pid(), e.getMessage());
+                }
             }
         }
     }

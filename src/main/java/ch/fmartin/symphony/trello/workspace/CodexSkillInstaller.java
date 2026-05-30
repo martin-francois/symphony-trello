@@ -42,7 +42,7 @@ public class CodexSkillInstaller {
                         "workspace_skill_missing", "Bundled Codex skill is missing: " + resourcePath);
             }
             createSafeDirectory(skillsRoot);
-            createSafeDirectory(target.getParent());
+            createSafeParentDirectory(target);
             writeSafeSkill(target, namespacedSkillBody(skillName, input.readAllBytes()));
         } catch (IOException e) {
             throw new WorkspaceException(
@@ -57,7 +57,7 @@ public class CodexSkillInstaller {
                 return;
             }
             Path exclude = gitDir.resolve("info").resolve("exclude");
-            createSafeDirectory(exclude.getParent());
+            createSafeParentDirectory(exclude);
             String existing = readSafeFile(exclude);
             if (existing.lines().noneMatch(GIT_EXCLUDE_PATTERN::equals)) {
                 writeSafeFile(exclude, existing + linePrefix(existing) + GIT_EXCLUDE_PATTERN + "\n");
@@ -75,6 +75,13 @@ public class CodexSkillInstaller {
             return "";
         }
         return "\n";
+    }
+
+    private static void createSafeParentDirectory(Path path) throws IOException {
+        Path parent = path.getParent();
+        if (parent != null) {
+            createSafeDirectory(parent);
+        }
     }
 
     private static Path gitDir(Path workspacePath) throws IOException {
@@ -210,9 +217,13 @@ public class CodexSkillInstaller {
     }
 
     private static void writeSafeFile(Path target, String body) throws IOException {
+        writeSafeFile(target, body, "Refusing to overwrite non-regular file: " + target);
+    }
+
+    private static void writeSafeFile(Path target, String body, String nonRegularPathMessage) throws IOException {
         if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)
                 && !Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)) {
-            throw new IOException("Refusing to overwrite non-regular file: " + target);
+            throw new IOException(nonRegularPathMessage);
         }
         Files.writeString(
                 target,
@@ -225,17 +236,6 @@ public class CodexSkillInstaller {
     }
 
     private static void writeSafeSkill(Path target, String body) throws IOException {
-        if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)
-                && !Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)) {
-            throw new IOException("Refusing to overwrite non-regular skill file: " + target);
-        }
-        Files.writeString(
-                target,
-                body,
-                StandardCharsets.UTF_8,
-                StandardOpenOption.CREATE,
-                StandardOpenOption.TRUNCATE_EXISTING,
-                StandardOpenOption.WRITE,
-                LinkOption.NOFOLLOW_LINKS);
+        writeSafeFile(target, body, "Refusing to overwrite non-regular skill file: " + target);
     }
 }
