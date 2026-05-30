@@ -29,6 +29,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -69,8 +70,7 @@ class LiveTrelloE2eIT {
         LiveTrelloClient trello = new LiveTrelloClient(credentials);
         String workspaceId = workspaceIdOrFail(credentials);
         List<String> disposableBoardIds = new ArrayList<>();
-        Exception bodyException = null;
-        AssertionError bodyAssertion = null;
+        Throwable bodyFailure = null;
 
         try {
             TrelloBoardSetup setup = new TrelloBoardSetup(json);
@@ -215,23 +215,13 @@ class LiveTrelloE2eIT {
                 assertSuccessfulFakeCodexTurns(completions, 8);
             }
         } catch (Exception e) {
-            bodyException = e;
+            bodyFailure = e;
             throw e;
         } catch (AssertionError e) {
-            bodyAssertion = e;
+            bodyFailure = e;
             throw e;
         } finally {
-            try {
-                cleanupDisposableBoards(trello, workspaceId, runId, disposableBoardIds);
-            } catch (AssertionError e) {
-                if (bodyException != null) {
-                    bodyException.addSuppressed(e);
-                } else if (bodyAssertion != null) {
-                    bodyAssertion.addSuppressed(e);
-                } else {
-                    throw e;
-                }
-            }
+            cleanupDisposableBoardsAfterTest(trello, workspaceId, runId, disposableBoardIds, bodyFailure);
         }
     }
 
@@ -254,8 +244,7 @@ class LiveTrelloE2eIT {
         LiveTrelloClient trello = new LiveTrelloClient(credentials);
         String workspaceId = workspaceIdOrFail(credentials);
         List<String> disposableBoardIds = new ArrayList<>();
-        Exception bodyException = null;
-        AssertionError bodyAssertion = null;
+        Throwable bodyFailure = null;
 
         try {
             TrelloBoardSetup setup = new TrelloBoardSetup(json);
@@ -288,23 +277,13 @@ class LiveTrelloE2eIT {
                 assertSuccessfulFakeCodexTurns(completions, 1);
             }
         } catch (Exception e) {
-            bodyException = e;
+            bodyFailure = e;
             throw e;
         } catch (AssertionError e) {
-            bodyAssertion = e;
+            bodyFailure = e;
             throw e;
         } finally {
-            try {
-                cleanupDisposableBoards(trello, workspaceId, runId, disposableBoardIds);
-            } catch (AssertionError e) {
-                if (bodyException != null) {
-                    bodyException.addSuppressed(e);
-                } else if (bodyAssertion != null) {
-                    bodyAssertion.addSuppressed(e);
-                } else {
-                    throw e;
-                }
-            }
+            cleanupDisposableBoardsAfterTest(trello, workspaceId, runId, disposableBoardIds, bodyFailure);
         }
     }
 
@@ -332,8 +311,7 @@ class LiveTrelloE2eIT {
         LiveTrelloClient trello = new LiveTrelloClient(credentials);
         String workspaceId = workspaceIdOrFail(credentials);
         List<String> disposableBoardIds = new ArrayList<>();
-        Exception bodyException = null;
-        AssertionError bodyAssertion = null;
+        Throwable bodyFailure = null;
 
         try {
             TrelloBoardSetup setup = new TrelloBoardSetup(json);
@@ -365,23 +343,30 @@ class LiveTrelloE2eIT {
                 assertThat(Files.readString(expectedOutput)).contains(runId);
             }
         } catch (Exception e) {
-            bodyException = e;
+            bodyFailure = e;
             throw e;
         } catch (AssertionError e) {
-            bodyAssertion = e;
+            bodyFailure = e;
             throw e;
         } finally {
-            try {
-                cleanupDisposableBoards(trello, workspaceId, runId, disposableBoardIds);
-            } catch (AssertionError e) {
-                if (bodyException != null) {
-                    bodyException.addSuppressed(e);
-                } else if (bodyAssertion != null) {
-                    bodyAssertion.addSuppressed(e);
-                } else {
-                    throw e;
-                }
+            cleanupDisposableBoardsAfterTest(trello, workspaceId, runId, disposableBoardIds, bodyFailure);
+        }
+    }
+
+    private void cleanupDisposableBoardsAfterTest(
+            LiveTrelloClient trello,
+            String workspaceId,
+            String runId,
+            List<String> disposableBoardIds,
+            Throwable bodyFailure) {
+        try {
+            cleanupDisposableBoards(trello, workspaceId, runId, disposableBoardIds);
+        } catch (AssertionError e) {
+            if (bodyFailure != null) {
+                bodyFailure.addSuppressed(e);
+                return;
             }
+            throw e;
         }
     }
 
@@ -563,7 +548,7 @@ class LiveTrelloE2eIT {
     }
 
     private static String dockerTagSuffix(String runId) {
-        return runId.toLowerCase().replaceAll("[^a-z0-9_.-]", "-");
+        return runId.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_.-]", "-");
     }
 
     private static boolean commandSucceeds(String... command) {
@@ -582,7 +567,7 @@ class LiveTrelloE2eIT {
     }
 
     private static String executable(String name) {
-        return System.getProperty("os.name").toLowerCase().contains("win") ? name + ".exe" : name;
+        return System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("win") ? name + ".exe" : name;
     }
 
     private static String yamlScalar(String value) {

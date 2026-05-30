@@ -28,13 +28,11 @@ public final class LocalSetup {
     private static final Path DEFAULT_ENV_PATH = Path.of(".env");
     private static final String DEFAULT_COMMAND = "symphony-trello";
     private static final String CONFIG_DIR_ENV = "SYMPHONY_TRELLO_CONFIG_DIR";
-    private static final String STATE_HOME_ENV = "SYMPHONY_TRELLO_STATE_HOME";
     private static final String COMMAND_ENV = "SYMPHONY_TRELLO_COMMAND";
     private static final String CALLER_DIR_ENV = "SYMPHONY_TRELLO_CALLER_DIR";
     private static final Duration LOCAL_STATUS_TIMEOUT = Duration.ofMillis(500);
 
     private final TrelloBoardSetup boardSetup;
-    private final CommandRunner commands;
     private final Map<String, String> environment;
     private final WorkflowConfigEditor workflowConfig;
     private final LocalHealthChecker healthChecker;
@@ -63,7 +61,6 @@ public final class LocalSetup {
             WorkflowConfigEditor workflowConfig,
             LocalWorkerManager workerManager) {
         this.boardSetup = boardSetup;
-        this.commands = commands;
         this.environment = Map.copyOf(environment);
         this.workflowConfig = workflowConfig;
         HttpClient httpClient =

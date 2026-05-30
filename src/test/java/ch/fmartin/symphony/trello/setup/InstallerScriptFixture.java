@@ -153,7 +153,7 @@ final class InstallerScriptFixture {
     }
 
     static boolean isWindows() {
-        return System.getProperty("os.name", "").toLowerCase().contains("win");
+        return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
     }
 
     static List<String> powershellCommand() {
@@ -175,7 +175,7 @@ final class InstallerScriptFixture {
     }
 
     static Map<String, String> nonWindowsPowerShellEnvironment() {
-        if (System.getProperty("os.name", "").toLowerCase().contains("win")) {
+        if (System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win")) {
             return Map.of();
         }
         return Map.of("SYMPHONY_TRELLO_ALLOW_NON_WINDOWS_PWSH_FOR_TEST", "1");

@@ -425,9 +425,10 @@ public class CodexAppServerClient {
             readerStarted.countDown();
             try (BufferedReader reader = new BufferedReader(
                     new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8), 10 * 1024 * 1024)) {
-                String line;
-                while ((line = reader.readLine()) != null) {
+                String line = reader.readLine();
+                while (line != null) {
                     handleMessage(json.readTree(line));
+                    line = reader.readLine();
                 }
                 failPending(new CodexAppServerTerminalException(
                         "process_exit", "codex app-server stdout closed before active turn completed"));
@@ -439,9 +440,10 @@ public class CodexAppServerClient {
         private void readStderr() {
             try (BufferedReader reader =
                     new BufferedReader(new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
+                String line = reader.readLine();
+                while (line != null) {
                     LOG.debugf("codex_stderr pid=%d message=%s", process.pid(), line);
+                    line = reader.readLine();
                 }
             } catch (IOException e) {
                 LOG.debugf("codex_stderr pid=%d outcome=reader_failed reason=%s", process.pid(), e.getMessage());

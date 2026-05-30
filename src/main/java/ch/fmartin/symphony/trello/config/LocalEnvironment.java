@@ -131,13 +131,15 @@ public final class LocalEnvironment {
 
     private static String unescapeDoubleQuoted(String value) {
         StringBuilder unescaped = new StringBuilder(value.length());
-        for (int i = 0; i < value.length(); i++) {
-            char current = value.charAt(i);
-            if (current != '\\' || i == value.length() - 1) {
+        int index = 0;
+        while (index < value.length()) {
+            char current = value.charAt(index);
+            if (current != '\\' || index == value.length() - 1) {
                 unescaped.append(current);
+                index++;
                 continue;
             }
-            char escaped = value.charAt(++i);
+            char escaped = value.charAt(index + 1);
             switch (escaped) {
                 case '"' -> unescaped.append('"');
                 case '\\' -> unescaped.append('\\');
@@ -148,6 +150,7 @@ public final class LocalEnvironment {
                 case 't' -> unescaped.append('\t');
                 default -> unescaped.append('\\').append(escaped);
             }
+            index += 2;
         }
         return unescaped.toString();
     }

@@ -1600,7 +1600,6 @@ public final class TrelloBoardSetup {
     private static String completionBarPrompt(
             String reviewState, String blockedDestination, boolean workpadToolEnabled, boolean githubEnabled) {
         String planRecord = workpadToolEnabled ? "workpad plan" : "final-response plan";
-        String prRecord = workpadToolEnabled ? "the workpad and handoff comment" : "the final response";
         if (blank(reviewState)) {
             String publicationText = githubEnabled ? "PR publication" : "local repository handoff";
             return """

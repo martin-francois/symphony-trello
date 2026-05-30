@@ -50,7 +50,8 @@ class PackagedAppSmokeIT {
         Path stderr = tempDir.resolve("symphony.err");
         Files.writeString(workflow, workflow(trelloPort, appPort, workspaceRoot), StandardCharsets.UTF_8);
 
-        try (FakeTrelloEndpoint trello = FakeTrelloEndpoint.start(trelloPort)) {
+        FakeTrelloEndpoint trello = FakeTrelloEndpoint.start(trelloPort);
+        try (trello) {
             Process process = startPackagedRunner(workflow, stdout, stderr);
             try {
 

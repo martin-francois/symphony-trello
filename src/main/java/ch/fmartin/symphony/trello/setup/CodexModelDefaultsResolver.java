@@ -290,9 +290,10 @@ final class CodexModelDefaultsResolver {
 
         private void readStdout() {
             try {
-                String line;
-                while ((line = reader.readLine()) != null) {
+                String line = reader.readLine();
+                while (line != null) {
                     lines.add(line);
+                    line = reader.readLine();
                 }
             } catch (Throwable e) {
                 failure.set(e);

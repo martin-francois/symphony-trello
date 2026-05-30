@@ -14,8 +14,8 @@ The service coordinates Trello state, local workspaces, Codex app-server session
 and dynamic Trello handoff tools. Regressions are often easier to prevent with focused tests than to
 debug through live Trello and Codex runs after the fact.
 
-How should the project keep test and source quality high without adding low-value tests, noisy
-linters, or review-only conventions for basic rules?
+How should the project keep test and source quality high without adding low-value tests,
+false-positive-heavy linters, or review-only conventions for basic rules?
 
 ## Decision Drivers
 
@@ -53,7 +53,8 @@ cleanly.
 * Good, because `./mvnw verify` and CI fail when line coverage drops below 80 percent.
 * Good, because ArchUnit checks circular dependencies between production top-level packages and
   important dependency boundaries.
-* Good, because PMD replaces a hand-written source regex for inline fully qualified Java type names.
+* Good, because curated PMD rules catch source-level correctness, maintainability, and performance
+  issues that are clearer to enforce with PMD than with hand-written source scans.
 * Good, because SpotBugs and FindSecBugs add bytecode and security checks to the same local
   validation command.
 * Good, because unit tests must use readable `// given`, `// when`, and `// then` sections.
@@ -69,23 +70,23 @@ Run `./mvnw -q spotless:check verify`. Review new tests to ensure they cover beh
 policy enforcement, or external-boundary contracts instead of only increasing the coverage number.
 Review new ArchUnit, PMD, SpotBugs, and FindSecBugs rules for likely false positives before adding
 them. Run broad new rule sets in report-only or candidate mode before making them blocking when
-baseline impact is unknown.
+baseline impact is unknown. For PMD candidates, use `./mvnw -q -Ppmd-candidate pmd:pmd`.
 
 ## Pros and Cons of the Options
 
 ### Enforce JaCoCo, ArchUnit, curated PMD source rules, and focused custom convention tests
 
 Use JaCoCo's Maven check in `verify`, ArchUnit for compiled architecture rules such as top-level
-package cycle detection, PMD for curated source-level rules such as `UnnecessaryFullyQualifiedName`,
-SpotBugs and FindSecBugs for bytecode and security checks, and custom JUnit tests for conventions
-that need source comments or Markdown parsing.
+package cycle detection, PMD for curated source-level rules, SpotBugs and FindSecBugs for bytecode
+and security checks, and custom JUnit tests for conventions that need source comments or Markdown
+parsing.
 
 * Good, because the same command works locally and in CI.
 * Good, because the coverage gate catches accidental test deletion or large untested additions.
 * Good, because architecture checks are expressed with ArchUnit instead of ad hoc reflection or text
   scans.
-* Good, because PMD handles Java source rules without broad lint noise when rules are measured and
-  curated before they become blocking.
+* Good, because PMD handles Java source rules without false-positive-heavy lint gates when rules are
+  measured and curated before they become blocking.
 * Good, because SpotBugs and FindSecBugs catch compiled-code and security patterns without requiring
   a hosted scanner.
 * Good, because the section structure makes tests easier to scan and failure causes easier to find.

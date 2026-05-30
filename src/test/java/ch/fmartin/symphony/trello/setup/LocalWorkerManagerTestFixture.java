@@ -14,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
@@ -70,7 +71,7 @@ final class LocalWorkerManagerTestFixture {
     }
 
     ConnectedBoard connectedBoard(String boardId, String boardName) throws Exception {
-        String slug = boardName.toLowerCase();
+        String slug = boardName.toLowerCase(Locale.ROOT);
         Path workflow = paths.configDir().resolve("WORKFLOW." + slug + ".md");
         Files.createDirectories(paths.configDir());
         Files.writeString(
