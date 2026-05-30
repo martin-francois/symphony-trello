@@ -326,6 +326,15 @@ matters, and easy for another engineer to understand without asking the original
   avoid labels that can be mistaken for commands to execute, avoid internal shorthand in prompts,
   show exact paths for this run when deletion is possible, and keep follow-up instructions to one
   clear next action.
+- For installer/onboarding UX, prefer the smooth default path over extra confirmation prompts when
+  the action has a clear opt-out or safe fallback. Do not add prompts only to make a choice feel more
+  explicit. If the choice follows another mature OSS installer precedent, document that precedent and
+  the tradeoff in an ADR.
+- Do not add positive installer or CLI flags that only restate default behavior. Before adding a
+  positive flag, check whether the command behaves differently with the flag than without it. If the
+  flag does not change behavior, keep the default behavior implicit and expose only the opt-out flag
+  or real alternate mode. A positive flag is appropriate only when it selects a distinct behavior,
+  resolves ambiguity, preserves needed compatibility, or is part of a real multi-mode choice.
 - In prerequisites, name only tools the reader must install or provide. Do not list the Maven wrapper
   as a prerequisite when it is already committed. For command-line tools such as Codex, state exactly
   how the service finds them, such as `PATH` lookup or a configurable command path.

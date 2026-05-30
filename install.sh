@@ -13,6 +13,7 @@ STATE_HOME="${SYMPHONY_TRELLO_STATE_HOME:-$SYMPHONY_HOME/state}"
 BIN_DIR="$HOME/.local/bin"
 DRY_RUN=false
 NO_ONBOARD=false
+SKIP_PATH_SETUP=false
 OS_NAME=""
 OS_ARCH=""
 BREW_OPENJDK_BIN=""
@@ -29,6 +30,7 @@ Usage:
 Options:
   --dry-run          Print planned actions without changing files.
   --no-onboard      Install or update the command without running setup-local.
+  --no-update-path   Do not edit shell profile files.
   --prefix PATH     App checkout path. Default: \$SYMPHONY_HOME/app
   --bin-dir PATH    Command directory. Default: ~/.local/bin
   --repo URL        Git repository URL.
@@ -44,6 +46,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
   --dry-run) DRY_RUN=true ;;
   --no-onboard) NO_ONBOARD=true ;;
+  --no-update-path) SKIP_PATH_SETUP=true ;;
   --prefix)
     if [[ $# -lt 2 ]]; then
       echo "Missing value for --prefix" >&2
@@ -248,6 +251,119 @@ path_contains() {
   *":$1:"*) return 0 ;;
   *) return 1 ;;
   esac
+}
+
+path_setup_line() {
+  local current_path
+  current_path="\"\$PATH\""
+  printf 'export PATH=%s:%s\n' "$(shell_literal "$BIN_DIR")" "$current_path"
+}
+
+likely_shell_profiles() {
+  local shell_name
+  shell_name="${SHELL##*/}"
+  case "$shell_name" in
+  bash)
+    local login_profile candidate
+    printf '%s/.bashrc\n' "$HOME"
+    for candidate in "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
+      if [[ -e "$candidate" ]]; then
+        login_profile="$candidate"
+        break
+      fi
+    done
+    login_profile="${login_profile:-$HOME/.profile}"
+    if [[ "$login_profile" != "$HOME/.bashrc" ]]; then
+      printf '%s\n' "$login_profile"
+    fi
+    ;;
+  zsh) printf '%s/.zshrc\n' "$HOME" ;;
+  sh | dash | ksh) printf '%s/.profile\n' "$HOME" ;;
+  *) return 1 ;;
+  esac
+}
+
+print_path_setup_instructions() {
+  local profile profiles=()
+  echo "  NOTE  $BIN_DIR is not on PATH for this shell."
+  echo "        Add this line to a shell profile file so future shells can run symphony-trello:"
+  echo "        $(path_setup_line)"
+  if [[ -n "${HOME:-}" ]]; then
+    while IFS= read -r profile; do
+      profiles+=("$profile")
+    done < <(likely_shell_profiles 2>/dev/null || true)
+  fi
+  if [[ "${#profiles[@]}" -gt 0 ]]; then
+    echo "        Suggested profile files:"
+    printf '        %s\n' "${profiles[@]}"
+  elif [[ -n "${HOME:-}" ]]; then
+    echo "        Profile file candidates:"
+    echo "        $HOME/.bashrc"
+    echo "        $HOME/.zshrc"
+    echo "        $HOME/.profile"
+  else
+    echo "        The installer could not determine HOME, so it did not choose a profile file."
+  fi
+}
+
+append_path_setup_to_profile() {
+  local line profile profiles=()
+  if [[ -n "${HOME:-}" ]]; then
+    while IFS= read -r profile; do
+      profiles+=("$profile")
+    done < <(likely_shell_profiles 2>/dev/null || true)
+  fi
+  if [[ -z "${HOME:-}" ]] || [[ "${#profiles[@]}" -eq 0 ]]; then
+    echo "  NOTE  Could not safely choose a shell profile file."
+    print_path_setup_instructions
+    return
+  fi
+  line="$(path_setup_line)"
+  for profile in "${profiles[@]}"; do
+    if [[ -f "$profile" ]] && grep -Fqx "$line" "$profile"; then
+      echo "  OK  PATH setup already exists in $profile"
+      continue
+    fi
+    if [[ "$DRY_RUN" == true ]]; then
+      echo "  WOULD add $BIN_DIR to PATH in $profile"
+      echo "        Line: $line"
+      continue
+    fi
+    if ! mkdir -p "$(dirname "$profile")"; then
+      echo "  NOTE  Could not update PATH in $profile."
+      print_path_setup_instructions
+      continue
+    fi
+    if {
+      printf '\n'
+      printf '# Symphony for Trello\n'
+      printf '%s\n' "$line"
+    } >>"$profile"; then
+      echo "  OK  Added $BIN_DIR to PATH in $profile"
+    else
+      echo "  NOTE  Could not update PATH in $profile."
+      print_path_setup_instructions
+    fi
+  done
+}
+
+offer_path_setup() {
+  if path_contains "$BIN_DIR" "$ORIGINAL_PATH"; then
+    return
+  fi
+  if [[ "$SKIP_PATH_SETUP" == true ]]; then
+    print_path_setup_instructions
+    return
+  fi
+  echo
+  echo "Command PATH setup"
+  if [[ "$DRY_RUN" == true ]]; then
+    echo "Symphony would install the command here:"
+  else
+    echo "Symphony installed the command here:"
+  fi
+  echo "  $BIN_DIR/symphony-trello"
+  append_path_setup_to_profile
 }
 
 activate_managed_codex_path() {
@@ -746,6 +862,7 @@ if [[ "$DRY_RUN" == true ]]; then
   echo "  WOULD clone or update: $APP_DIR"
   echo "  WOULD build packaged Quarkus app with Maven wrapper"
   echo "  WOULD install command: $BIN_DIR/symphony-trello"
+  offer_path_setup
   if [[ "$NO_ONBOARD" == false ]]; then
     echo "  WOULD run guided setup and start Symphony automatically."
   fi
@@ -887,10 +1004,8 @@ EOF
   chmod +x "$BIN_DIR/symphony-trello"
 fi
 echo "  OK  Command installed: $BIN_DIR/symphony-trello"
-if ! path_contains "$BIN_DIR" "$ORIGINAL_PATH"; then
-  echo "  NOTE  Add $BIN_DIR to PATH so you can run symphony-trello from a new shell."
-  echo "        For bash/zsh, add this to your shell profile: export PATH=\"$BIN_DIR:\$PATH\""
-fi
+
+offer_path_setup
 
 if [[ "$NO_ONBOARD" == false ]]; then
   echo

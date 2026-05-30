@@ -3,6 +3,8 @@ param(
   [switch]$DryRun,
   [Alias("-no-onboard", "no-onboard", "--no-onboard")]
   [switch]$NoOnboard,
+  [Alias("-no-update-path", "no-update-path", "--no-update-path")]
+  [switch]$NoUpdatePath,
   [Alias("-symphony-home", "symphony-home", "--symphony-home")]
   [string]$SymphonyHome = $(if ($env:SYMPHONY_HOME) { $env:SYMPHONY_HOME } else { "$env:LOCALAPPDATA\SymphonyTrello" }),
   [Alias("-prefix", "--prefix")]
@@ -36,6 +38,10 @@ function Apply-PositionalFlag([string]$Token) {
       Set-Variable -Name NoOnboard -Value $true -Scope 1
       return $true
     }
+    { $_ -in @("-no-update-path", "--no-update-path") } {
+      Set-Variable -Name NoUpdatePath -Value $true -Scope 1
+      return $true
+    }
     { $_ -in @("-help", "--help", "-h") } {
       Set-Variable -Name Help -Value $true -Scope 1
       return $true
@@ -56,6 +62,10 @@ function Apply-PublicArgs([string[]]$Tokens) {
       }
       { $_ -in @("-no-onboard", "--no-onboard") } {
         Set-Variable -Name NoOnboard -Value $true -Scope 1
+        break
+      }
+      { $_ -in @("-no-update-path", "--no-update-path") } {
+        Set-Variable -Name NoUpdatePath -Value $true -Scope 1
         break
       }
       { $_ -in @("-help", "--help", "-h") } {
@@ -150,6 +160,8 @@ Usage:
 Options:
   --dry-run     Print planned actions without changing files.
   --no-onboard  Install or update the command without running setup-local.
+  --no-update-path
+                 Do not edit the current user PATH.
   -DryRun       Alias for --dry-run.
   -NoOnboard    Alias for --no-onboard.
   -Prefix PATH  App checkout path. Default: <SYMPHONY_HOME>\app.
@@ -238,6 +250,70 @@ function Test-Java25 {
 function Test-PathContains([string]$Directory, [string]$PathValue = $env:PATH) {
   $separator = [System.IO.Path]::PathSeparator
   return ($PathValue -split [regex]::Escape($separator)) -contains $Directory
+}
+
+function Test-InteractiveInput {
+  try {
+    return [Environment]::UserInteractive -and (-not [Console]::IsInputRedirected)
+  } catch {
+    return $false
+  }
+}
+
+function Get-UserPathValue {
+  $value = [Environment]::GetEnvironmentVariable("Path", "User")
+  if ($null -eq $value) {
+    return ""
+  }
+  return $value
+}
+
+function Write-PathSetupInstructions {
+  Write-Host "  NOTE  $BinDir is not on PATH for this PowerShell session."
+  Write-Host "        Future PowerShell windows can run symphony-trello after this directory is in the current user PATH:"
+  Write-Host "        $BinDir"
+}
+
+function Add-BinDirToUserPath {
+  $userPath = Get-UserPathValue
+  if (Test-PathContains $BinDir $userPath) {
+    Write-Host "  OK  PATH setup already exists for the current user:"
+    Write-Host "      $BinDir"
+    return
+  }
+  if ($DryRun) {
+    Write-Host "  WOULD add $BinDir to the current user PATH."
+    return
+  }
+  $separator = [System.IO.Path]::PathSeparator
+  $newPath = if ([string]::IsNullOrWhiteSpace($userPath)) { $BinDir } else { "$BinDir$separator$userPath" }
+  try {
+    [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
+    Add-PathPrefix $BinDir
+    Write-Host "  OK  Added $BinDir to the current user PATH."
+  } catch {
+    Write-Host "  NOTE  Could not update the current user PATH."
+    Write-PathSetupInstructions
+  }
+}
+
+function Offer-PathSetup {
+  if (Test-PathContains $BinDir $OriginalPath) {
+    return
+  }
+  if ($NoUpdatePath) {
+    Write-PathSetupInstructions
+    return
+  }
+  Write-Host
+  Write-Host "Command PATH setup"
+  if ($DryRun) {
+    Write-Host "Symphony would install the command here:"
+  } else {
+    Write-Host "Symphony installed the command here:"
+  }
+  Write-Host "  $BinDir\symphony-trello.ps1"
+  Add-BinDirToUserPath
 }
 
 function Add-PathPrefix([string]$Directory) {
@@ -524,6 +600,7 @@ if ($DryRun) {
   Write-Host "  WOULD clone or update: $Prefix"
   Write-Host "  WOULD build packaged Quarkus app with Maven wrapper"
   Write-Host "  WOULD install CLI executable: $BinDir\symphony-trello.ps1"
+  Offer-PathSetup
   if (-not $NoOnboard) {
     Write-Host "  WOULD run guided setup after install."
   }
@@ -704,10 +781,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0symphony-trello.ps
 "@ | Set-Content -Encoding ASCII "$BinDir\symphony-trello.cmd"
 }
 Write-Host "  OK  Command installed: $BinDir\symphony-trello.ps1"
-if (-not (Test-PathContains $BinDir $OriginalPath)) {
-  Write-Host "  NOTE  Add $BinDir to PATH so you can run symphony-trello.ps1 from a new shell."
-  Write-Host "        For PowerShell, add it to the user PATH environment variable or your profile."
-}
+
+Offer-PathSetup
 
 if (-not $NoOnboard) {
   Write-Host
