@@ -165,8 +165,10 @@ matters, and easy for another engineer to understand without asking the original
   Checkstyle for this repository. Use PMD as a curated source-level analyzer for correctness,
   security, performance, duplication, and maintainability rules that complement Spotless, ArchUnit,
   tests, and other static analyzers. Do not import broad PMD categories or third-party PMD rulesets
-  into the blocking gate without first measuring findings against this repository and removing noisy
-  rules.
+  into the blocking gate without first measuring findings against this repository. A static-analysis
+  rule is noisy when its findings are false positives, already cleaner to leave as they are, or
+  lower-value than the churn needed to satisfy the rule. A rule is not noisy only because it finds many
+  justified problems; high justified counts should become cleanup work or a staged candidate profile.
 - Use static analysis as a local, deterministic agent feedback loop. Fix findings when reasonable,
   rerun the analyzer, rerun the relevant build or test command, and keep changes scoped to the
   current issue. New static-analysis rules should start in report-only, candidate, or otherwise
