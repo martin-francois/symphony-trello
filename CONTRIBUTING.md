@@ -177,6 +177,18 @@ read the value unsafely are visible during local review. The `clean` phase is pa
 Maven recompiles sources instead of skipping analysis when classes are already up to date. Do not add
 `-q` to this command because the profile currently reports findings as warnings.
 
+Optional Picnic Error Prone Support passes are available for measured follow-up cleanup:
+
+```bash
+./mvnw -Ppicnic-error-prone clean compile
+./mvnw -Ppicnic-refaster clean compile
+```
+
+`picnic-error-prone` runs Picnic bug checkers through Error Prone. `picnic-refaster` also loads
+Picnic Refaster rewrite rules so those suggestions stay explicit and reviewable. Both profiles are
+warning-oriented and are not part of `./mvnw -q spotless:check verify`. Keep the commands non-quiet
+so warning output is visible, and promote individual checks only after focused baseline cleanup.
+
 PowerShell installer tests use native `pwsh` when it is installed. CI also runs them through
 Microsoft's .NET SDK container:
 

@@ -213,7 +213,10 @@ matters, and easy for another engineer to understand without asking the original
   so normal verification does not unexpectedly modify source files. The current optional Error Prone
   pass is `./mvnw -Perror-prone clean compile`; it is not part of normal
   `./mvnw -q spotless:check verify`. Do not run the optional Error Prone command with Maven `-q`
-  because this profile reports findings as warnings while the baseline is evaluated.
+  because this profile reports findings as warnings while the baseline is evaluated. Picnic can be
+  measured with `./mvnw -Ppicnic-error-prone clean compile`; Refaster rewrite suggestions can be
+  measured separately with `./mvnw -Ppicnic-refaster clean compile`. Do not make either Picnic
+  profile blocking until the specific rule family has a clean or deliberately accepted baseline.
 - For Semgrep, use custom rules for cross-language guardrails and security patterns that are not
   already covered by specialized linters. Prefer fixing findings, use rule-specific `nosemgrep`
   comments only with a reason, use `.semgrepignore` only for generated, vendored, or irrelevant
