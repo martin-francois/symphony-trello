@@ -363,5 +363,32 @@
         <pmd.ruleset>config/pmd/candidate-ruleset.xml</pmd.ruleset>
       </properties>
     </profile>
+    <profile>
+      <id>jpinpoint</id>
+      <build>
+        <plugins>
+          <plugin>
+            <artifactId>maven-pmd-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>jpinpoint-report</id>
+                <goals>
+                  <goal>pmd</goal>
+                </goals>
+                <configuration>
+                  <failOnViolation>false</failOnViolation>
+                  <includeTests>true</includeTests>
+                  <printFailingErrors>true</printFailingErrors>
+                  <rulesets>
+                    <ruleset>config/pmd/jpinpoint-ruleset.xml</ruleset>
+                  </rulesets>
+                  <targetDirectory>${project.build.directory}/jpinpoint-pmd</targetDirectory>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
   </profiles>
 </project>

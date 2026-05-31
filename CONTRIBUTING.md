@@ -119,7 +119,9 @@ PMD is a curated source-level analyzer in this repository, not a one-off narrow 
 or broad third-party rulesets should first run in report-only or candidate mode so maintainers can
 classify findings before making them blocking. A rule is noisy when its findings are false positives,
 already cleaner to leave as they are, or lower-value than the churn needed to satisfy the rule. A
-rule is not noisy only because it finds many justified problems. Use
+rule is not noisy only because it finds many justified problems. A finding is justified when fixing
+it would make the code meaningfully better, cleaner, safer, faster, or more maintainable; compiling
+successfully does not by itself make a supplementary static-analysis finding unjustified. Use
 `@SuppressWarnings("PMD.RuleName")` for code-local suppressions and `// NOPMD - reason` only for
 truly line-local cases.
 
@@ -134,6 +136,24 @@ Review `target/pmd.xml` after running it. Candidate findings must be fixed, tune
 left as candidate-only before any rule moves into the blocking `verify` gate. CPD duplication checks
 are still measured separately with `./mvnw -q pmd:cpd`; they are not blocking until the current
 duplication baseline is cleaned up or deliberately accepted.
+
+An optional jPinpoint PMD pass is available for measuring third-party PMD 7 XPath rules for
+performance, logging, concurrency, data-mixup, and sustainability concerns:
+
+```bash
+./mvnw -q -Pjpinpoint test-compile pmd:pmd@jpinpoint-report
+```
+
+This profile loads a vendored, pinned snapshot of the upstream `PMD-jPinpoint-rules` PMD 7 Java
+ruleset and writes the PMD XML report to `target/jpinpoint-pmd/pmd.xml`. The local wrapper keeps
+jPinpoint's `UnresolvedType` rule enabled, but adds a narrow ruleset-level suppression for a known
+false positive where the type-resolution rule does not resolve valid record accessor calls in
+handwritten source. The profile is report-only and intentionally separate from both
+`./mvnw -q spotless:check verify` and `-Ppmd-candidate`. Classify jPinpoint findings before
+promoting individual rules, and prefer small follow-up issues for cross-cutting rule families. A
+jPinpoint rule is not noisy only because it reports many justified findings. The jPinpoint report
+uses a separate PMD execution so the `verify`-bound PMD check keeps using the curated blocking
+ruleset.
 
 SpotBugs and FindSecBugs project-level false positives belong in `config/spotbugs/exclude.xml`;
 code-local exceptions should use `@SuppressFBWarnings(value = "...", justification = "...")`. Error
