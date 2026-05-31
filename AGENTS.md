@@ -181,10 +181,13 @@ matters, and easy for another engineer to understand without asking the original
   profile, not a noisy-rule classification.
 - Do not treat a report-only or candidate static-analysis profile as finished while it still
   contains known justified findings. If the current branch cannot fix every finding, make the
-  remaining work explicit in GitHub issues before finishing. Keep a tracking issue current until the
-  final end state is reached: every useful non-noisy rule is enforced by
-  `./mvnw -q spotless:check verify`, every justified finding is fixed, every true false positive has
-  a targeted suppression with a reason, and deferred or rejected rules have documented rationale.
+  remaining work explicit in GitHub issues before finishing and link every follow-up issue from the
+  relevant meta or tracking issue. Keep that meta issue complete and current until the final end
+  state is reached: every useful non-noisy rule is enforced by `./mvnw -q spotless:check verify`,
+  every justified finding is fixed, every true false positive has a targeted suppression with a
+  reason, and deferred or rejected rules have documented rationale. Implementing the meta issue
+  should be sufficient to reach the stated static-analysis end state without rediscovering hidden
+  follow-up work.
 - Handle static-analysis findings in this order: fix justified findings; tune the rule if it is
   valid but too broad; suppress false positives with the narrowest possible scope; include a reason
   for every suppression. Do not disable a whole analyzer, package, source tree, or rule category only
