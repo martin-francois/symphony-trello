@@ -123,6 +123,12 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         return CodexModelSelectionDefaults.of(codexModelDefaults);
     }
 
+    private static BufferedReader standardInputReader() {
+        // System.in is process-owned. Picocli/setup commands borrow it and must not close it.
+        return new BufferedReader(
+                new InputStreamReader(System.in, StandardCharsets.UTF_8)); // NOPMD - borrows System.in.
+    }
+
     static int run(
             String[] args,
             TrelloBoardSetupService boardSetup,
@@ -130,7 +136,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             LocalWorkerManager workerManager,
             PrintStream out,
             PrintStream err) {
-        BufferedReader input = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
+        BufferedReader input = standardInputReader(); // NOPMD - System.in is process-owned.
         CommandLine commandLine = new CommandLine(
                         new TrelloBoardSetupMain(boardSetup, localSetup, workerManager, input, out, err))
                 .addSubcommand(
@@ -474,7 +480,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                 writeOutput(path, body);
             } catch (IOException e) {
                 throw new ParameterException(
-                        spec.commandLine(), "Could not write diagnostics output. Choose a writable file.");
+                        spec.commandLine(), "Could not write diagnostics output. Choose a writable file.", e);
             }
             parent.out.println("Diagnostics written.");
             if (privateContext) {

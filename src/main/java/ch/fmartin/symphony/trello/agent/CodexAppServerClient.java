@@ -74,8 +74,7 @@ public class CodexAppServerClient {
             return AgentRunResult.fail("codex_not_found: " + e.getMessage());
         }
 
-        AppServerSession session = new AppServerSession(process, config, card, workerIdentity, listener);
-        try {
+        try (AppServerSession session = new AppServerSession(process, config, card, workerIdentity, listener)) {
             ObjectNode capabilities = object();
             if (trelloTools.shouldEnableExperimentalApi(config)) {
                 capabilities.put("experimentalApi", true);
@@ -164,8 +163,6 @@ public class CodexAppServerClient {
         } catch (Exception e) {
             process.destroyForcibly();
             return AgentRunResult.fail("codex_protocol_error: " + e.getMessage());
-        } finally {
-            session.close();
         }
     }
 
@@ -374,7 +371,7 @@ public class CodexAppServerClient {
             try {
                 return future.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
             } catch (ExecutionException e) {
-                throw unwrapResponseFailure(e.getCause());
+                throw unwrapResponseFailure(e);
             } finally {
                 responses.remove(id);
             }
@@ -405,7 +402,7 @@ public class CodexAppServerClient {
             try {
                 return future.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
             } catch (ExecutionException e) {
-                throw unwrapReaderFailure(e.getCause());
+                throw unwrapReaderFailure(e);
             } finally {
                 synchronized (turnCompletionLock) {
                     turnCompletions.remove(turnId);
@@ -432,7 +429,7 @@ public class CodexAppServerClient {
                 }
                 failPending(new CodexAppServerTerminalException(
                         "process_exit", "codex app-server stdout closed before active turn completed"));
-            } catch (Throwable e) {
+            } catch (Exception e) {
                 failPending(e);
             }
         }
@@ -562,21 +559,39 @@ public class CodexAppServerClient {
             return nestedTurnId == null ? params.path("turnId").asText(null) : nestedTurnId;
         }
 
-        private Exception unwrapReaderFailure(Throwable failure) {
-            if (failure instanceof CodexAppServerTerminalException terminalFailure) {
-                return terminalFailure;
-            }
-            return new IOException("app-server reader failed", failure);
+        private Exception unwrapReaderFailure(ExecutionException failure) {
+            return unwrapReaderFailure(failure.getCause(), failure);
         }
 
-        private Exception unwrapResponseFailure(Throwable failure) {
+        private Exception unwrapReaderFailure(Throwable failure) {
+            return unwrapReaderFailure(failure, null);
+        }
+
+        private Exception unwrapReaderFailure(Throwable failure, Throwable wrapper) {
             if (failure instanceof CodexAppServerTerminalException terminalFailure) {
+                addSuppressedWrapper(terminalFailure, wrapper);
                 return terminalFailure;
             }
-            if (failure instanceof Exception exception) {
+            return new IOException("app-server reader failed", wrapper == null ? failure : wrapper);
+        }
+
+        private Exception unwrapResponseFailure(ExecutionException failure) {
+            Throwable cause = failure.getCause();
+            if (cause instanceof CodexAppServerTerminalException terminalFailure) {
+                terminalFailure.addSuppressed(failure);
+                return terminalFailure;
+            }
+            if (cause instanceof Exception exception) {
+                exception.addSuppressed(failure);
                 return exception;
             }
             return new IOException("app-server request failed", failure);
+        }
+
+        private void addSuppressedWrapper(Exception exception, Throwable wrapper) {
+            if (wrapper != null) {
+                exception.addSuppressed(wrapper);
+            }
         }
 
         private Map<String, Long> extractUsage(String method, JsonNode params) {

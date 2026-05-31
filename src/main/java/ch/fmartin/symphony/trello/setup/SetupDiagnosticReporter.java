@@ -1350,7 +1350,7 @@ final class SetupDiagnosticReporter {
                 return;
             }
             String body = Files.readString(reportPath, StandardCharsets.UTF_8);
-            PrintStream out = terminal.out();
+            PrintStream out = borrowedOut(terminal); // NOPMD - Terminal owns the stream.
             out.println();
             out.println("Issue title:");
             out.println("Local setup failed");
@@ -1859,6 +1859,11 @@ final class SetupDiagnosticReporter {
 
     private String pathToken(String path) {
         return "<path:" + hash(path) + ">";
+    }
+
+    private static PrintStream borrowedOut(Terminal terminal) {
+        // Terminal owns the stream. Diagnostics can write to it but must not close it.
+        return terminal.out();
     }
 
     private String hash(String value) {
