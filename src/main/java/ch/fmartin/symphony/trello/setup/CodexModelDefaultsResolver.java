@@ -295,7 +295,7 @@ final class CodexModelDefaultsResolver {
                     lines.add(line);
                     line = reader.readLine();
                 }
-            } catch (Throwable e) {
+            } catch (Exception e) {
                 failure.set(e);
             } finally {
                 lines.add(END_OF_STREAM);

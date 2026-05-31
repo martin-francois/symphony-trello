@@ -8,6 +8,11 @@ public final class ConfigException extends RuntimeException {
         this.code = code;
     }
 
+    public ConfigException(String code, String message, Throwable cause) {
+        super(message, cause);
+        this.code = code;
+    }
+
     public String code() {
         return code;
     }

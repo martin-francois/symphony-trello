@@ -127,17 +127,22 @@ class StatusResourceTest {
         var mapper = new ApiExceptionMapper();
 
         // when
-        Response refresh = resource.refresh();
-        Response notFound = mapper.toResponse(new NotFoundException("missing"));
-        Response internal = mapper.toResponse(new IllegalStateException("boom"));
+        try (Response refresh = resource.refresh();
+                Response notFound = mapper.toResponse(new NotFoundException("missing"));
+                Response internal = mapper.toResponse(new IllegalStateException("boom"))) {
 
-        // then
-        verify(orchestrator).requestRefresh();
-        assertThat(refresh.getStatus()).isEqualTo(202);
-        assertThat(notFound.getStatus()).isEqualTo(404);
-        assertThat(notFound.getEntity().toString()).contains("card_not_found").contains("missing");
-        assertThat(internal.getStatus()).isEqualTo(500);
-        assertThat(internal.getEntity().toString()).contains("internal_error").contains("boom");
+            // then
+            verify(orchestrator).requestRefresh();
+            assertThat(refresh.getStatus()).isEqualTo(202);
+            assertThat(notFound.getStatus()).isEqualTo(404);
+            assertThat(notFound.getEntity().toString())
+                    .contains("card_not_found")
+                    .contains("missing");
+            assertThat(internal.getStatus()).isEqualTo(500);
+            assertThat(internal.getEntity().toString())
+                    .contains("internal_error")
+                    .contains("boom");
+        }
     }
 
     private static RuntimeSnapshot snapshotWithRunningCard() {

@@ -194,7 +194,7 @@ public class ConfigResolver {
             return stripTrailingLineBreaks(Files.readString(secretPath, StandardCharsets.UTF_8));
         } catch (IOException e) {
             throw new ConfigException(
-                    "secret_file_read_error", displayName + " secret file cannot be read: " + secretPath);
+                    "secret_file_read_error", displayName + " secret file cannot be read: " + secretPath, e);
         }
     }
 
