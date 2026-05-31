@@ -165,18 +165,35 @@ matters, and easy for another engineer to understand without asking the original
   Checkstyle for this repository. Use PMD as a curated source-level analyzer for correctness,
   security, performance, duplication, and maintainability rules that complement Spotless, ArchUnit,
   tests, and other static analyzers. Do not import broad PMD categories or third-party PMD rulesets
-  into the blocking gate without first measuring findings against this repository. A static-analysis
-  rule is noisy when its findings are false positives, already cleaner to leave as they are, or
-  lower-value than the churn needed to satisfy the rule. A rule is not noisy only because it finds many
-  justified problems; high justified counts should become cleanup work or a staged candidate profile.
+  into the blocking gate without first measuring findings against this repository.
 - Use static analysis as a local, deterministic agent feedback loop. Fix findings when reasonable,
   rerun the analyzer, rerun the relevant build or test command, and keep changes scoped to the
   current issue. New static-analysis rules should start in report-only, candidate, or otherwise
   non-blocking mode until baseline findings are understood and useful.
-- Handle static-analysis findings in this order: fix the finding; tune the rule if it is valid but
-  too broad; suppress the finding with the narrowest possible scope; include a reason for every
-  suppression. Do not disable a whole analyzer, package, source tree, or rule category only to make
-  a check pass. Hosted dashboards may add signal, but they must not replace local checks that an
+- Apply the same triage policy to every static-analysis tool, including PMD, CPD, SpotBugs,
+  FindSecBugs, Error Prone, Picnic Error Prone Support, Semgrep, CodeQL, linters, and dependency
+  analyzers. Do not call a rule noisy only because it reports many findings. A finding is justified
+  when fixing it would make the code meaningfully better, cleaner, safer, faster, or more
+  maintainable. Code compiling successfully does not by itself make a supplementary
+  static-analysis finding unjustified. A rule is noisy only when representative findings are false
+  positives, already cleaner to leave as they are, or lower-value than the churn needed to satisfy
+  the rule. High counts of justified findings should become staged cleanup work or a candidate
+  profile, not a noisy-rule classification.
+- Do not treat a report-only or candidate static-analysis profile as finished while it still
+  contains known justified findings. If the current branch cannot fix every finding, make the
+  remaining work explicit in GitHub issues before finishing. Keep a tracking issue current until the
+  final end state is reached: every useful non-noisy rule is enforced by
+  `./mvnw -q spotless:check verify`, every justified finding is fixed, every true false positive has
+  a targeted suppression with a reason, and deferred or rejected rules have documented rationale.
+- Handle static-analysis findings in this order: fix justified findings; tune the rule if it is
+  valid but too broad; suppress false positives with the narrowest possible scope; include a reason
+  for every suppression. Do not disable a whole analyzer, package, source tree, or rule category only
+  to make a check pass. When describing false-positive evidence, tie the evidence to the rule's
+  semantics. For example, successful compilation is relevant evidence for a type-resolution rule
+  that reports an unresolved type, but it is not relevant evidence against most supplementary
+  maintainability, correctness, security, performance, or style findings. Exclude generated code
+  only when the affected path is actually generated, vendored, or otherwise outside the intended
+  analysis scope. Hosted dashboards may add signal, but they must not replace local checks that an
   agent can run, fix, and rerun.
 - For PMD, prefer fixing or rule tuning. Use `@SuppressWarnings("PMD.RuleName")` for code-local
   suppressions, `// NOPMD - reason` only for truly line-local cases, and ruleset-level suppression

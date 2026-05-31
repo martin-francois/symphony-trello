@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset
+    name="Symphony for Trello jPinpoint PMD rules"
+    xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.github.io/schema/ruleset_2_0_0.xsd">
+  <description>
+    Report-only jPinpoint rules loaded from the vendored PMD-jPinpoint-rules snapshot.
+    Use with ./mvnw -q -Pjpinpoint test-compile pmd:pmd@jpinpoint-report.
+  </description>
+
+  <rule ref="config/pmd/vendor/jpinpoint-java-rules.xml">
+    <exclude name="UnresolvedType"/>
+  </rule>
+  <rule ref="config/pmd/vendor/jpinpoint-java-rules.xml/UnresolvedType">
+    <!-- PMD resolves the project, but this rule false-positives on this valid nested-record copy method. -->
+    <properties>
+      <property
+          name="violationSuppressXPath"
+          value="ancestor::MethodDeclaration[@Name='withResolvedBoardId' and ancestor::RecordDeclaration[@SimpleName='EffectiveConfig']]"/>
+    </properties>
+  </rule>
+</ruleset>
