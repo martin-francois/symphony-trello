@@ -5,6 +5,7 @@ decision-makers: [François Martin, Codex]
 consulted:
   - "[GitHub issue #78](https://github.com/martin-francois/symphony-trello/issues/78)"
   - "[GitHub issue #87](https://github.com/martin-francois/symphony-trello/issues/87)"
+  - "[GitHub issue #128](https://github.com/martin-francois/symphony-trello/issues/128)"
   - "pom.xml"
   - "config/pmd/ruleset.xml"
   - "config/pmd/candidate-ruleset.xml"
@@ -28,11 +29,10 @@ duplication reports fail the build before the baseline is understood?
 * Promote only PMD rules that are high-signal on the current codebase.
 * Fix justified findings before making a rule blocking.
 * Keep broad or unclassified rules available for measurement without failing normal verification.
-* Treat "noisy" precisely: noisy means false positives, findings that are cleaner to leave as they
-  are, or findings whose cleanup cost is higher than their value. A rule is not noisy only because it
-  finds many justified problems.
-* Evaluate CPD, but do not make it blocking while the current baseline still needs cleanup or a
-  deliberate acceptance decision.
+* Treat "noisy" precisely: noisy means false positives or findings that are cleaner to leave as
+  they are. A rule is not noisy only because it finds many justified problems. A large diff is
+  acceptable when the resulting code is better.
+* Make CPD blocking after the current justified duplication baseline is cleaned up.
 * Keep PMD configuration Maven-native and easy to run locally.
 
 ## Considered Options
@@ -40,7 +40,7 @@ duplication reports fail the build before the baseline is understood?
 * Curate blocking PMD rules and keep additional rules in a candidate profile.
 * Import broad PMD categories directly into the blocking ruleset.
 * Keep PMD permanently narrow.
-* Add CPD `cpd-check` to `verify` immediately.
+* Add CPD `cpd-check` to `verify` after cleaning the baseline.
 * Defer CPD while documenting the measured baseline.
 
 ## Decision Outcome
@@ -49,10 +49,10 @@ Chosen option: "Curate blocking PMD rules and keep additional rules in a candida
 it improves the default source-level feedback loop while keeping unclassified rules out of the
 blocking gate.
 
-Chosen option for CPD: "Defer CPD while documenting the measured baseline", because the default CPD
-report currently finds 46 duplications, mostly in setup and live-test fixtures. That is useful
-cleanup input, but it has not yet been cleaned up or deliberately accepted as an enforceable
-baseline.
+Chosen option for CPD: "Add CPD `cpd-check` to `verify` after cleaning the baseline", because the
+default CPD report found 46 duplications and those findings were useful cleanup input. The baseline
+has now been cleaned up, so CPD can fail the normal validation command instead of remaining a
+separate report-only check.
 
 ### Consequences
 
@@ -62,9 +62,9 @@ baseline.
 * Good, because the PMD ruleset path is configurable through the Maven `pmd.ruleset` property.
 * Good, because candidate rules such as `AvoidDuplicateLiterals` and `UseConcurrentHashMap` can stay
   visible until their findings are fixed, tuned, or deliberately left candidate-only.
-* Good, because CPD was measured before deciding whether it should block the build.
+* Good, because CPD was measured and cleaned up before it became blocking.
 * Bad, because future PMD updates may change rule behavior and require tuning.
-* Bad, because CPD duplication is not yet enforced automatically.
+* Bad, because every `verify` run now pays the CPD analysis cost.
 
 ### Confirmation
 
@@ -80,14 +80,14 @@ Run the PMD candidate report:
 ./mvnw -q -Ppmd-candidate pmd:pmd
 ```
 
-Run the CPD report:
+Run the standalone CPD report when investigating duplication:
 
 ```bash
 ./mvnw -q pmd:cpd
 ```
 
-Do not promote candidate rules or CPD to the blocking gate until current findings are fixed, tuned,
-or accepted with a clear reason.
+Do not promote candidate rules to the blocking gate until current findings are fixed, tuned, or
+accepted with a clear reason.
 
 ## Pros and Cons of the Options
 
@@ -117,13 +117,13 @@ Leave only `UnnecessaryFullyQualifiedName` in the blocking PMD ruleset.
 * Bad, because it ignores high-signal standard rules that already found justified cleanup.
 * Bad, because it conflicts with PMD's intended role as a curated source-level analyzer.
 
-### Add CPD `cpd-check` to `verify` Immediately
+### Add CPD `cpd-check` to `verify` After Cleaning the Baseline
 
-Bind PMD CPD duplication checks to Maven `verify`.
+Clean up the measured duplication baseline, then bind PMD CPD duplication checks to Maven `verify`.
 
 * Good, because duplicated code would fail the build.
-* Bad, because the current default CPD report finds 46 duplications.
-* Bad, because most findings are test fixture repetition that needs a separate cleanup plan.
+* Good, because the initial findings were addressed before turning the rule into a gate.
+* Bad, because CPD adds another source analysis step to normal validation.
 
 ### Defer CPD While Documenting the Measured Baseline
 
@@ -142,5 +142,6 @@ The first candidate PMD run after the promoted-rule fixes reported 556 remaining
 `IdenticalCatchBranches`, 3 `SimplifyBooleanReturns`, 2 `AvoidCatchingThrowable`, 1
 `UnnecessaryConstructor`, and 1 `UseTryWithResources`.
 
-The CPD report with PMD's default `minimumTokens` value found 46 duplications. It should be revisited
-after setup and live-test fixture duplication has a focused cleanup issue or PR.
+The original CPD report with PMD's default `minimumTokens` value found 46 duplications.
+[GitHub issue #128](https://github.com/martin-francois/symphony-trello/issues/128) revisited CPD,
+cleaned that baseline to zero duplications, and added `cpd-check` to the Maven `verify` gate.

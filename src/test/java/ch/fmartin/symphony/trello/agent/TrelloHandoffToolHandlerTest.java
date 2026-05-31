@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.agent;
 
+import static ch.fmartin.symphony.trello.TestHttpExchange.query;
+import static ch.fmartin.symphony.trello.TestHttpExchange.respond;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.fmartin.symphony.trello.TestCards;
@@ -7,13 +9,11 @@ import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
-import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
@@ -199,12 +199,7 @@ class TrelloHandoffToolHandlerTest {
                 """));
 
         // when
-        var result = handler.handle(
-                config(List.of("Review"), List.of()),
-                TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
-                json.createObjectNode()
-                        .put("tool", TrelloHandoffToolHandler.UPSERT_WORKPAD)
-                        .set("arguments", json.createObjectNode().put("text", "## Codex Workpad\n\nUpdated plan")));
+        JsonNode result = upsertWorkpad(handler);
 
         // then
         assertThat(result.path("success").asBoolean()).isTrue();
@@ -237,12 +232,7 @@ class TrelloHandoffToolHandlerTest {
                 """));
 
         // when
-        var result = handler.handle(
-                config(List.of("Review"), List.of()),
-                TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
-                json.createObjectNode()
-                        .put("tool", TrelloHandoffToolHandler.UPSERT_WORKPAD)
-                        .set("arguments", json.createObjectNode().put("text", "## Codex Workpad\n\nUpdated plan")));
+        JsonNode result = upsertWorkpad(handler);
 
         // then
         assertThat(result.path("success").asBoolean()).isTrue();
@@ -365,6 +355,15 @@ class TrelloHandoffToolHandlerTest {
         return new TrelloHandoffToolHandler(json, new TrelloClient(json));
     }
 
+    private JsonNode upsertWorkpad(TrelloHandoffToolHandler handler) {
+        return handler.handle(
+                config(List.of("Review"), List.of()),
+                TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
+                json.createObjectNode()
+                        .put("tool", TrelloHandoffToolHandler.UPSERT_WORKPAD)
+                        .set("arguments", json.createObjectNode().put("text", "## Codex Workpad\n\nUpdated plan")));
+    }
+
     private EffectiveConfig config(List<String> allowedMoveListNames, List<String> allowedMoveListIds) {
         return config(true, allowedMoveListNames, allowedMoveListIds);
     }
@@ -406,19 +405,6 @@ class TrelloHandoffToolHandlerTest {
                 .withResolvedBoardId("board-1");
     }
 
-    private static Map<String, String> query(HttpExchange exchange) {
-        String query = exchange.getRequestURI().getRawQuery();
-        if (query == null || query.isBlank()) {
-            return Map.of();
-        }
-        return Arrays.stream(query.split("&"))
-                .map(pair -> pair.split("=", 2))
-                .collect(Collectors.toMap(
-                        pair -> decode(pair[0]),
-                        pair -> pair.length == 1 ? "" : decode(pair[1]),
-                        (left, right) -> right));
-    }
-
     private String cardResponseForRequestedFields(HttpExchange exchange) {
         String response = cardResponse.get();
         String actionFields = query(exchange).getOrDefault("action_fields", "");
@@ -426,23 +412,6 @@ class TrelloHandoffToolHandlerTest {
             return response;
         }
         return response.replace("\"id\":\"action-workpad\",", "");
-    }
-
-    private static String decode(String value) {
-        return URLDecoder.decode(value, StandardCharsets.UTF_8);
-    }
-
-    private static void respond(HttpExchange exchange, String body) throws IOException {
-        respond(exchange, 200, body);
-    }
-
-    private static void respond(HttpExchange exchange, int statusCode, String body) throws IOException {
-        byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
-        exchange.getResponseHeaders().add("Content-Type", "application/json");
-        exchange.sendResponseHeaders(statusCode, bytes.length);
-        try (var output = exchange.getResponseBody()) {
-            output.write(bytes);
-        }
     }
 
     private static String cardJson(String actionsJson) {

@@ -15,25 +15,8 @@ class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
         // given
         Path firstWorkflow = tempDir.resolve("WORKFLOW.local-first.md");
         Path env = tempDir.resolve(".env");
-        SetupRunResult firstResult = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Local First",
-                "--workflow",
-                firstWorkflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
-        commands.githubAuthenticated = true;
-        commands.startedWorkflows.clear();
-        commands.startedEnvFiles.clear();
-        trello.createdLists().clear();
+        SetupRunResult firstResult = connectLocalBoardWithoutGithub(firstWorkflow, env, "Local First");
+        prepareNextSetupRunWithGithubAuth();
 
         // when
         SetupRunResult secondResult = runSetup(
@@ -66,25 +49,8 @@ class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
         // given
         Path firstWorkflow = tempDir.resolve("WORKFLOW.local-first.md");
         Path env = tempDir.resolve(".env");
-        SetupRunResult firstResult = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Local First",
-                "--workflow",
-                firstWorkflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
-        commands.githubAuthenticated = true;
-        commands.startedWorkflows.clear();
-        commands.startedEnvFiles.clear();
-        trello.createdLists().clear();
+        SetupRunResult firstResult = connectLocalBoardWithoutGithub(firstWorkflow, env, "Local First");
+        prepareNextSetupRunWithGithubAuth();
 
         // when
         SetupRunResult secondResult = runSetup("--non-interactive", "--endpoint", endpoint(), "--github");

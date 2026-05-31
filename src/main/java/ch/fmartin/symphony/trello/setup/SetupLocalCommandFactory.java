@@ -26,10 +26,7 @@ final class SetupLocalCommandFactory {
                 .setOut(new PrintWriter(out, true, StandardCharsets.UTF_8))
                 .setErr(new PrintWriter(err, true, StandardCharsets.UTF_8))
                 .setExecutionExceptionHandler((exception, ignored, parseResult) -> {
-                    err.println(
-                            "setup_failed code=%s message=%s".formatted(errorCode(exception), exception.getMessage()));
-                    SetupDiagnosticReporter.userActionHint(exception)
-                            .ifPresent(hint -> err.println("Next step: " + hint));
+                    printExecutionFailure(err, exception, errorCode(exception));
                     if (!(exception instanceof ParameterException)) {
                         SetupDiagnosticReporter.reportSetupLocalFailure(exception, args, input, out, err);
                     }
@@ -39,6 +36,20 @@ final class SetupLocalCommandFactory {
         return commandLine.execute(args);
     }
 
+    static void printExecutionFailure(PrintStream err, Exception exception, String errorCode) {
+        err.println("setup_failed code=%s message=%s".formatted(errorCode, exception.getMessage()));
+        SetupDiagnosticReporter.userActionHint(exception).ifPresent(hint -> err.println("Next step: " + hint));
+    }
+
+    static IParameterExceptionHandler usageErrors() {
+        return (ParameterException exception, String[] ignored) -> {
+            CommandLine commandLine = exception.getCommandLine();
+            commandLine.getErr().println("setup_failed code=setup_invalid_arguments message=" + exception.getMessage());
+            commandLine.getErr().println("Try '" + commandLine.getCommandName() + " --help' for usage.");
+            return 2;
+        };
+    }
+
     private static String errorCode(Exception exception) {
         if (exception instanceof ParameterException) {
             return "setup_invalid_arguments";
@@ -46,15 +57,6 @@ final class SetupLocalCommandFactory {
         return exception instanceof TrelloBoardSetupException setupException
                 ? setupException.code()
                 : "setup_local_failed";
-    }
-
-    private static IParameterExceptionHandler usageErrors() {
-        return (ParameterException exception, String[] ignored) -> {
-            CommandLine commandLine = exception.getCommandLine();
-            commandLine.getErr().println("setup_failed code=setup_invalid_arguments message=" + exception.getMessage());
-            commandLine.getErr().println("Try '" + commandLine.getCommandName() + " --help' for usage.");
-            return 2;
-        };
     }
 
     @Command(

@@ -254,15 +254,7 @@ class CodexAppServerClientTest {
 
         // then
         assertThat(result).isEqualTo(AgentRunResult.ok());
-        List<JsonNode> requests = Files.readAllLines(capture).stream()
-                .map(line -> {
-                    try {
-                        return json.readTree(line);
-                    } catch (Exception e) {
-                        throw new IllegalStateException(e);
-                    }
-                })
-                .toList();
+        List<JsonNode> requests = capturedRequests(capture);
         assertThat(requests)
                 .extracting(request -> request.path("method").asText())
                 .containsExactly("thread/start", "turn/start");
@@ -316,15 +308,7 @@ class CodexAppServerClientTest {
 
         // then
         assertThat(result).isEqualTo(AgentRunResult.ok());
-        List<JsonNode> requests = Files.readAllLines(capture).stream()
-                .map(line -> {
-                    try {
-                        return json.readTree(line);
-                    } catch (Exception e) {
-                        throw new IllegalStateException(e);
-                    }
-                })
-                .toList();
+        List<JsonNode> requests = capturedRequests(capture);
         assertThat(requests)
                 .extracting(request -> request.path("method").asText())
                 .containsExactly("thread/start", "turn/start");
@@ -646,6 +630,18 @@ class CodexAppServerClientTest {
 
     private EffectiveConfig config(Path appServer) {
         return config(Map.of("command", appServer.toString(), "read_timeout_ms", 1000, "turn_timeout_ms", 1000));
+    }
+
+    private List<JsonNode> capturedRequests(Path capture) throws Exception {
+        return Files.readAllLines(capture).stream().map(this::readJsonLine).toList();
+    }
+
+    private JsonNode readJsonLine(String line) {
+        try {
+            return json.readTree(line);
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     private EffectiveConfig config(Map<String, Object> codexConfig) {

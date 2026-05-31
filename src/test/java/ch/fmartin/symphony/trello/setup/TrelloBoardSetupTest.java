@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static ch.fmartin.symphony.trello.TestHttpExchange.query;
+import static ch.fmartin.symphony.trello.TestHttpExchange.respond;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
@@ -9,17 +11,14 @@ import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
-import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -1548,31 +1547,5 @@ class TrelloBoardSetupTest {
                 Path.of("./agent-workspaces"),
                 2,
                 true));
-    }
-
-    private static Map<String, String> query(HttpExchange exchange) {
-        Map<String, String> values = new LinkedHashMap<>();
-        String rawQuery = exchange.getRequestURI().getRawQuery();
-        if (rawQuery == null || rawQuery.isBlank()) {
-            return values;
-        }
-        for (String part : rawQuery.split("&")) {
-            String[] pair = part.split("=", 2);
-            values.put(decode(pair[0]), pair.length == 1 ? "" : decode(pair[1]));
-        }
-        return values;
-    }
-
-    private static String decode(String value) {
-        return URLDecoder.decode(value, StandardCharsets.UTF_8);
-    }
-
-    private static void respond(HttpExchange exchange, String body) throws IOException {
-        byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
-        exchange.getResponseHeaders().add("Content-Type", "application/json");
-        exchange.sendResponseHeaders(200, bytes.length);
-        try (var output = exchange.getResponseBody()) {
-            output.write(bytes);
-        }
     }
 }

@@ -47,14 +47,7 @@ class SymphonyOrchestratorTest {
         FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
         AgentRunner runner = mock(AgentRunner.class);
         when(runner.run(any())).thenReturn(AgentRunResult.ok());
-        SymphonyOrchestrator orchestrator = new SymphonyOrchestrator(
-                new WorkflowLoader(),
-                new ConfigResolver(),
-                tracker,
-                runner,
-                new PromptRenderer(),
-                new WorkspaceManager(new HookRunner()));
-        orchestrator.workflowPath = workflow;
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
 
         // when
         orchestrator.start();
@@ -79,14 +72,7 @@ class SymphonyOrchestratorTest {
         writeWorkflow(workflow, "60000");
         FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Human Review")));
         AgentRunner runner = mock(AgentRunner.class);
-        SymphonyOrchestrator orchestrator = new SymphonyOrchestrator(
-                new WorkflowLoader(),
-                new ConfigResolver(),
-                tracker,
-                runner,
-                new PromptRenderer(),
-                new WorkspaceManager(new HookRunner()));
-        orchestrator.workflowPath = workflow;
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
 
         // when
         orchestrator.start();
@@ -128,14 +114,7 @@ class SymphonyOrchestratorTest {
                 })
                 .when(runner)
                 .run(any());
-        SymphonyOrchestrator orchestrator = new SymphonyOrchestrator(
-                new WorkflowLoader(),
-                new ConfigResolver(),
-                tracker,
-                runner,
-                new PromptRenderer(),
-                new WorkspaceManager(new HookRunner()));
-        orchestrator.workflowPath = workflow;
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
 
         // when
         orchestrator.start();
@@ -181,14 +160,7 @@ class SymphonyOrchestratorTest {
                 })
                 .when(runner)
                 .run(any());
-        SymphonyOrchestrator orchestrator = new SymphonyOrchestrator(
-                new WorkflowLoader(),
-                new ConfigResolver(),
-                tracker,
-                runner,
-                new PromptRenderer(),
-                new WorkspaceManager(new HookRunner()));
-        orchestrator.workflowPath = workflow;
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
 
         // when
         orchestrator.start();
@@ -239,14 +211,7 @@ class SymphonyOrchestratorTest {
                 })
                 .when(runner)
                 .run(any());
-        SymphonyOrchestrator orchestrator = new SymphonyOrchestrator(
-                new WorkflowLoader(),
-                new ConfigResolver(),
-                tracker,
-                runner,
-                new PromptRenderer(),
-                new WorkspaceManager(new HookRunner()));
-        orchestrator.workflowPath = workflow;
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
 
         // when
         orchestrator.start();
@@ -301,14 +266,7 @@ class SymphonyOrchestratorTest {
                 })
                 .when(runner)
                 .run(any());
-        SymphonyOrchestrator orchestrator = new SymphonyOrchestrator(
-                new WorkflowLoader(),
-                new ConfigResolver(),
-                tracker,
-                runner,
-                new PromptRenderer(),
-                new WorkspaceManager(new HookRunner()));
-        orchestrator.workflowPath = workflow;
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
 
         // when
         orchestrator.start();
@@ -328,40 +286,12 @@ class SymphonyOrchestratorTest {
     void releasesFailedInProgressCardBeforeRetryBackoff() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
-                ---
-                tracker:
-                  kind: trello
-                  api_key: key
-                  api_token: token
-                  board_id: board-1
-                  active_states: [Todo, In Progress]
-                  in_progress_state: In Progress
-                workspace:
-                  root: work
-                polling:
-                  interval_ms: 60000
-                agent:
-                  max_retry_backoff_ms: 60000
-                codex:
-                  command: fake
-                ---
-                {{ card.state }}
-                """);
+        writeRetryableInProgressWorkflow(workflow);
         FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
         tracker.preparedCard = TestCards.card("card-1", "TRELLO-abc", "In Progress");
         AgentRunner runner = mock(AgentRunner.class);
         when(runner.run(any())).thenReturn(AgentRunResult.fail("codex failed"));
-        SymphonyOrchestrator orchestrator = new SymphonyOrchestrator(
-                new WorkflowLoader(),
-                new ConfigResolver(),
-                tracker,
-                runner,
-                new PromptRenderer(),
-                new WorkspaceManager(new HookRunner()));
-        orchestrator.workflowPath = workflow;
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
 
         // when
         orchestrator.start();
@@ -370,49 +300,18 @@ class SymphonyOrchestratorTest {
         orchestrator.stop();
 
         // then
-        assertThat(snapshot.retrying()).singleElement().satisfies(row -> assertThat(row.cardIdentifier())
-                .isEqualTo("TRELLO-abc"));
-        assertThat(tracker.releasedCards).containsExactly("TRELLO-abc");
-        assertThat(tracker.cardState("card-1").state()).isEqualTo("Todo");
+        assertCardReleasedForRetry(snapshot, tracker);
     }
 
     @Test
     void releasesCurrentCardWhenPrepareForDispatchFailsAfterPickupMove() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
-                """
-                ---
-                tracker:
-                  kind: trello
-                  api_key: key
-                  api_token: token
-                  board_id: board-1
-                  active_states: [Todo, In Progress]
-                  in_progress_state: In Progress
-                workspace:
-                  root: work
-                polling:
-                  interval_ms: 60000
-                agent:
-                  max_retry_backoff_ms: 60000
-                codex:
-                  command: fake
-                ---
-                {{ card.state }}
-                """);
+        writeRetryableInProgressWorkflow(workflow);
         FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
         tracker.preparedCard = TestCards.card("card-1", "TRELLO-abc", "In Progress");
         tracker.prepareForDispatchFailure = new IllegalStateException("post-move refresh failed");
-        SymphonyOrchestrator orchestrator = new SymphonyOrchestrator(
-                new WorkflowLoader(),
-                new ConfigResolver(),
-                tracker,
-                mock(AgentRunner.class),
-                new PromptRenderer(),
-                new WorkspaceManager(new HookRunner()));
-        orchestrator.workflowPath = workflow;
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, mock(AgentRunner.class));
 
         // when
         orchestrator.start();
@@ -421,10 +320,7 @@ class SymphonyOrchestratorTest {
         orchestrator.stop();
 
         // then
-        assertThat(snapshot.retrying()).singleElement().satisfies(row -> assertThat(row.cardIdentifier())
-                .isEqualTo("TRELLO-abc"));
-        assertThat(tracker.releasedCards).containsExactly("TRELLO-abc");
-        assertThat(tracker.cardState("card-1").state()).isEqualTo("Todo");
+        assertCardReleasedForRetry(snapshot, tracker);
     }
 
     @Test
@@ -459,14 +355,7 @@ class SymphonyOrchestratorTest {
             tracker.setCardState(TestCards.card("card-1", "TRELLO-abc", "Blocked"));
             return AgentRunResult.fail("handoff failed after move");
         });
-        SymphonyOrchestrator orchestrator = new SymphonyOrchestrator(
-                new WorkflowLoader(),
-                new ConfigResolver(),
-                tracker,
-                runner,
-                new PromptRenderer(),
-                new WorkspaceManager(new HookRunner()));
-        orchestrator.workflowPath = workflow;
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
 
         // when
         orchestrator.start();
@@ -488,14 +377,7 @@ class SymphonyOrchestratorTest {
         writeWorkflow(workflow, "60000");
         FakeTracker tracker = new FakeTracker(List.of());
         AgentRunner runner = mock(AgentRunner.class);
-        SymphonyOrchestrator orchestrator = new SymphonyOrchestrator(
-                new WorkflowLoader(),
-                new ConfigResolver(),
-                tracker,
-                runner,
-                new PromptRenderer(),
-                new WorkspaceManager(new HookRunner()));
-        orchestrator.workflowPath = workflow;
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
 
         // when
         orchestrator.start();
@@ -516,14 +398,7 @@ class SymphonyOrchestratorTest {
         writeWorkflow(workflow, "60000");
         BlockingTracker tracker = new BlockingTracker();
         AgentRunner runner = mock(AgentRunner.class);
-        SymphonyOrchestrator orchestrator = new SymphonyOrchestrator(
-                new WorkflowLoader(),
-                new ConfigResolver(),
-                tracker,
-                runner,
-                new PromptRenderer(),
-                new WorkspaceManager(new HookRunner()));
-        orchestrator.workflowPath = workflow;
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
 
         // when
         orchestrator.start();
@@ -561,14 +436,7 @@ class SymphonyOrchestratorTest {
                 })
                 .when(runner)
                 .run(any());
-        SymphonyOrchestrator orchestrator = new SymphonyOrchestrator(
-                new WorkflowLoader(),
-                new ConfigResolver(),
-                tracker,
-                runner,
-                new PromptRenderer(),
-                new WorkspaceManager(new HookRunner()));
-        orchestrator.workflowPath = workflow;
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
 
         // when
         orchestrator.start();
@@ -615,14 +483,7 @@ class SymphonyOrchestratorTest {
                 })
                 .when(runner)
                 .run(any());
-        SymphonyOrchestrator orchestrator = new SymphonyOrchestrator(
-                new WorkflowLoader(),
-                new ConfigResolver(),
-                tracker,
-                runner,
-                new PromptRenderer(),
-                new WorkspaceManager(new HookRunner()));
-        orchestrator.workflowPath = workflow;
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
 
         // when
         orchestrator.start();
@@ -675,14 +536,7 @@ class SymphonyOrchestratorTest {
                 })
                 .when(runner)
                 .run(any());
-        SymphonyOrchestrator orchestrator = new SymphonyOrchestrator(
-                new WorkflowLoader(),
-                new ConfigResolver(),
-                tracker,
-                runner,
-                new PromptRenderer(),
-                new WorkspaceManager(new HookRunner()));
-        orchestrator.workflowPath = workflow;
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
 
         // when
         orchestrator.start();
@@ -720,14 +574,7 @@ class SymphonyOrchestratorTest {
                 })
                 .when(runner)
                 .run(any());
-        SymphonyOrchestrator orchestrator = new SymphonyOrchestrator(
-                new WorkflowLoader(),
-                new ConfigResolver(),
-                tracker,
-                runner,
-                new PromptRenderer(),
-                new WorkspaceManager(new HookRunner()));
-        orchestrator.workflowPath = workflow;
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
 
         // when
         orchestrator.start();
@@ -770,14 +617,7 @@ class SymphonyOrchestratorTest {
                         runs.incrementAndGet() == 1 ? AgentRunResult.fail("temporary failure") : AgentRunResult.ok())
                 .when(runner)
                 .run(any());
-        SymphonyOrchestrator orchestrator = new SymphonyOrchestrator(
-                new WorkflowLoader(),
-                new ConfigResolver(),
-                tracker,
-                runner,
-                new PromptRenderer(),
-                new WorkspaceManager(new HookRunner()));
-        orchestrator.workflowPath = workflow;
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
 
         // when
         orchestrator.start();
@@ -819,14 +659,7 @@ class SymphonyOrchestratorTest {
                 })
                 .when(runner)
                 .cancel(any());
-        SymphonyOrchestrator orchestrator = new SymphonyOrchestrator(
-                new WorkflowLoader(),
-                new ConfigResolver(),
-                tracker,
-                runner,
-                new PromptRenderer(),
-                new WorkspaceManager(new HookRunner()));
-        orchestrator.workflowPath = workflow;
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
 
         // when
         orchestrator.start();
@@ -874,6 +707,50 @@ class SymphonyOrchestratorTest {
                 %s
                 """
                         .formatted(pollIntervalMs, extraConfig, prompt));
+    }
+
+    private static void writeRetryableInProgressWorkflow(Path workflow) throws Exception {
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: key
+                  api_token: token
+                  board_id: board-1
+                  active_states: [Todo, In Progress]
+                  in_progress_state: In Progress
+                workspace:
+                  root: work
+                polling:
+                  interval_ms: 60000
+                agent:
+                  max_retry_backoff_ms: 60000
+                codex:
+                  command: fake
+                ---
+                {{ card.state }}
+                """);
+    }
+
+    private static void assertCardReleasedForRetry(RuntimeSnapshot snapshot, FakeTracker tracker) {
+        assertThat(snapshot.retrying()).singleElement().satisfies(row -> assertThat(row.cardIdentifier())
+                .isEqualTo("TRELLO-abc"));
+        assertThat(tracker.releasedCards).containsExactly("TRELLO-abc");
+        assertThat(tracker.cardState("card-1").state()).isEqualTo("Todo");
+    }
+
+    private static SymphonyOrchestrator orchestrator(Path workflow, TrackerClient tracker, AgentRunner runner) {
+        SymphonyOrchestrator orchestrator = new SymphonyOrchestrator(
+                new WorkflowLoader(),
+                new ConfigResolver(),
+                tracker,
+                runner,
+                new PromptRenderer(),
+                new WorkspaceManager(new HookRunner()));
+        orchestrator.workflowPath = workflow;
+        return orchestrator;
     }
 
     private static void waitUntil(Condition condition) throws Exception {
