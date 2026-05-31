@@ -144,21 +144,13 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                 .setOut(new PrintWriter(out, true, StandardCharsets.UTF_8))
                 .setErr(new PrintWriter(err, true, StandardCharsets.UTF_8))
                 .setExecutionExceptionHandler((exception, ignored, parseResult) -> {
-                    err.println(
-                            "setup_failed code=%s message=%s".formatted(errorCode(exception), exception.getMessage()));
-                    SetupDiagnosticReporter.userActionHint(exception)
-                            .ifPresent(hint -> err.println("Next step: " + hint));
+                    SetupLocalCommandFactory.printExecutionFailure(err, exception, errorCode(exception));
                     if (!(exception instanceof ParameterException)) {
                         SetupDiagnosticReporter.reportFailure(exception, args, input, out, err);
                     }
                     return 2;
                 })
-                .setParameterExceptionHandler((ParameterException exception, String[] ignored) -> {
-                    CommandLine failed = exception.getCommandLine();
-                    err.println("setup_failed code=setup_invalid_arguments message=" + exception.getMessage());
-                    err.println("Try '" + failed.getCommandName() + " --help' for usage.");
-                    return 2;
-                });
+                .setParameterExceptionHandler(SetupLocalCommandFactory.usageErrors());
         return commandLine.execute(args);
     }
 

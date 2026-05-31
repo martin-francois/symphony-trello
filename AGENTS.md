@@ -176,9 +176,9 @@ matters, and easy for another engineer to understand without asking the original
   when fixing it would make the code meaningfully better, cleaner, safer, faster, or more
   maintainable. Code compiling successfully does not by itself make a supplementary
   static-analysis finding unjustified. A rule is noisy only when representative findings are false
-  positives, already cleaner to leave as they are, or lower-value than the churn needed to satisfy
-  the rule. High counts of justified findings should become staged cleanup work or a candidate
-  profile, not a noisy-rule classification.
+  positives or already cleaner to leave as they are. A large diff is acceptable when the resulting
+  code is meaningfully better. High counts of justified findings should become staged cleanup work
+  or a candidate profile, not a noisy-rule classification.
 - Do not treat a report-only or candidate static-analysis profile as finished while it still
   contains known justified findings. If the current branch cannot fix every finding, make the
   remaining work explicit in GitHub issues before finishing and link every follow-up issue from the

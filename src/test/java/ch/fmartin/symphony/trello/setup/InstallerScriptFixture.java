@@ -212,16 +212,7 @@ final class InstallerScriptFixture {
                 """,
                 StandardCharsets.UTF_8);
         repository.resolve("mvnw").toFile().setExecutable(true);
-        run(Map.of(), "git", "-C", repository.toString(), "init", "-b", "main").assertSuccess();
-        run(Map.of(), "git", "-C", repository.toString(), "config", "user.name", "Test User")
-                .assertSuccess();
-        run(Map.of(), "git", "-C", repository.toString(), "config", "user.email", "test@example.invalid")
-                .assertSuccess();
-        run(Map.of(), "git", "-C", repository.toString(), "add", ".").assertSuccess();
-        run(Map.of(), "git", "-C", repository.toString(), "commit", "-m", "Initial test source")
-                .assertSuccess();
-        run(Map.of(), "git", "-C", repository.toString(), "tag", installerDefaultRef())
-                .assertSuccess();
+        initializeSourceRepository(repository);
         return repository;
     }
 
@@ -241,6 +232,11 @@ final class InstallerScriptFixture {
                 type nul > target\\quarkus-app\\quarkus-run.jar
                 """,
                 StandardCharsets.UTF_8);
+        initializeSourceRepository(repository);
+        return repository;
+    }
+
+    private static void initializeSourceRepository(Path repository) throws Exception {
         run(Map.of(), "git", "-C", repository.toString(), "init", "-b", "main").assertSuccess();
         run(Map.of(), "git", "-C", repository.toString(), "config", "user.name", "Test User")
                 .assertSuccess();
@@ -251,7 +247,6 @@ final class InstallerScriptFixture {
                 .assertSuccess();
         run(Map.of(), "git", "-C", repository.toString(), "tag", installerDefaultRef())
                 .assertSuccess();
-        return repository;
     }
 
     static void addSourceRepositoryCommit(Path repository, String relativePath, String content) throws Exception {

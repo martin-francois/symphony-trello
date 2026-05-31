@@ -267,13 +267,7 @@ class SetupDiagnosticReporterTest {
         // given
         Path configDir = tempDir.resolve("deep-config");
         Files.createDirectories(configDir);
-        FakeCommandRunner commands = new FakeCommandRunner()
-                .returns(0, "/usr/bin/codex\n", "sh", "-c", "command -v -- \"$1\"", "sh", "codex")
-                .returns(0, "codex-cli 1.2.3\n", "codex", "--version")
-                .returns(0, "Logged in using ChatGPT\n", "codex", "login", "status")
-                .returns(0, "/usr/bin/gh\n", "sh", "-c", "command -v -- \"$1\"", "sh", "gh")
-                .returns(0, "gh version 2.70.0\n", "gh", "--version")
-                .returns(0, "github.com\n", "gh", "auth", "status");
+        FakeCommandRunner commands = authProbeCommandRunner();
         var reporter = new SetupDiagnosticReporter(Map.of(), commands);
 
         // when
@@ -304,13 +298,7 @@ class SetupDiagnosticReporterTest {
         // given
         Path configDir = tempDir.resolve("deep-private-config");
         Files.createDirectories(configDir);
-        FakeCommandRunner commands = new FakeCommandRunner()
-                .returns(0, "/usr/bin/codex\n", "sh", "-c", "command -v -- \"$1\"", "sh", "codex")
-                .returns(0, "codex-cli 1.2.3\n", "codex", "--version")
-                .returns(0, "Logged in using ChatGPT\n", "codex", "login", "status")
-                .returns(0, "/usr/bin/gh\n", "sh", "-c", "command -v -- \"$1\"", "sh", "gh")
-                .returns(0, "gh version 2.70.0\n", "gh", "--version")
-                .returns(0, "github.com\n", "gh", "auth", "status");
+        FakeCommandRunner commands = authProbeCommandRunner();
         var reporter = new SetupDiagnosticReporter(Map.of(), commands);
         var request = new SetupDiagnosticReporter.DiagnosticsRequest(
                 Optional.empty(),
@@ -1485,6 +1473,16 @@ class SetupDiagnosticReporterTest {
                 Body
                 """
                 .formatted(port);
+    }
+
+    private static FakeCommandRunner authProbeCommandRunner() {
+        return new FakeCommandRunner()
+                .returns(0, "/usr/bin/codex\n", "sh", "-c", "command -v -- \"$1\"", "sh", "codex")
+                .returns(0, "codex-cli 1.2.3\n", "codex", "--version")
+                .returns(0, "Logged in using ChatGPT\n", "codex", "login", "status")
+                .returns(0, "/usr/bin/gh\n", "sh", "-c", "command -v -- \"$1\"", "sh", "gh")
+                .returns(0, "gh version 2.70.0\n", "gh", "--version")
+                .returns(0, "github.com\n", "gh", "auth", "status");
     }
 
     private static String pathToken(byte[] key, Path path) {

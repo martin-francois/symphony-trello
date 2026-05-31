@@ -118,12 +118,12 @@ check pass.
 PMD is a curated source-level analyzer in this repository, not a one-off narrow check. New PMD rules
 or broad third-party rulesets should first run in report-only or candidate mode so maintainers can
 classify findings before making them blocking. A rule is noisy when its findings are false positives,
-already cleaner to leave as they are, or lower-value than the churn needed to satisfy the rule. A
-rule is not noisy only because it finds many justified problems. A finding is justified when fixing
-it would make the code meaningfully better, cleaner, safer, faster, or more maintainable; compiling
-successfully does not by itself make a supplementary static-analysis finding unjustified. Use
-`@SuppressWarnings("PMD.RuleName")` for code-local suppressions and `// NOPMD - reason` only for
-truly line-local cases.
+already cleaner to leave as they are. A large diff is acceptable when the resulting code is
+meaningfully better. A rule is not noisy only because it finds many justified problems. A finding is
+justified when fixing it would make the code meaningfully better, cleaner, safer, faster, or more
+maintainable; compiling successfully does not by itself make a supplementary static-analysis finding
+unjustified. Use `@SuppressWarnings("PMD.RuleName")` for code-local suppressions and
+`// NOPMD - reason` only for truly line-local cases.
 
 An optional PMD candidate pass is available for measuring additional source rules before they become
 blocking:
@@ -133,9 +133,9 @@ blocking:
 ```
 
 Review `target/pmd.xml` after running it. Candidate findings must be fixed, tuned, or explicitly
-left as candidate-only before any rule moves into the blocking `verify` gate. CPD duplication checks
-are still measured separately with `./mvnw -q pmd:cpd`; they are not blocking until the current
-duplication baseline is cleaned up or deliberately accepted.
+left as candidate-only before any rule moves into the blocking `verify` gate. PMD CPD duplication
+checks are part of `./mvnw -q spotless:check verify`; run `./mvnw -q pmd:cpd` when you need the
+standalone duplication report.
 
 An optional jPinpoint PMD pass is available for measuring third-party PMD 7 XPath rules for
 performance, logging, concurrency, data-mixup, and sustainability concerns:

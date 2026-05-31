@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static ch.fmartin.symphony.trello.TestHttpExchange.query;
+import static ch.fmartin.symphony.trello.TestHttpExchange.respond;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -8,19 +10,16 @@ import static org.mockito.Mockito.verify;
 
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.net.InetSocketAddress;
-import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -1182,34 +1181,16 @@ class TrelloBoardSetupMainTest {
         Files.writeString(notDirectory, "not a directory", StandardCharsets.UTF_8);
         Path env = notDirectory.resolve(".env.runtime");
         Path workflow = tempDir.resolve("unwritable-runtime-env.WORKFLOW.md");
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode = run(
-                stdout,
-                stderr,
-                "new-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "direct-key",
-                "--token",
-                "direct-token",
-                "--name",
-                "Runtime Env Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString());
+        CliRunResult result = runNewBoardWithRuntimeEnv(workflow, env, true);
 
         // then
-        assertThat(exitCode).isEqualTo(2);
+        assertThat(result.exitCode()).isEqualTo(2);
         assertThat(createdBoardName.get()).isNull();
         assertThat(workflow).doesNotExist();
-        assertThat(stdout.toString(StandardCharsets.UTF_8))
-                .doesNotContain("Created Trello board", "Troubleshooting report written");
-        assertThat(stderr.toString(StandardCharsets.UTF_8))
+        assertThat(result.stdout()).doesNotContain("Created Trello board", "Troubleshooting report written");
+        assertThat(result.stderr())
                 .contains("setup_failed code=setup_env_write_failed", "Choose a writable .env or .env.NAME file")
                 .doesNotContain(env.toString(), notDirectory.toString(), tempDir.toString());
     }
@@ -1220,35 +1201,17 @@ class TrelloBoardSetupMainTest {
         Path env = tempDir.resolve("README.md");
         Path workflow = tempDir.resolve("unsafe-runtime-env.WORKFLOW.md");
         Files.writeString(env, "readme", StandardCharsets.UTF_8);
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode = run(
-                stdout,
-                stderr,
-                "new-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "direct-key",
-                "--token",
-                "direct-token",
-                "--name",
-                "Runtime Env Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString());
+        CliRunResult result = runNewBoardWithRuntimeEnv(workflow, env, true);
 
         // then
-        assertThat(exitCode).isEqualTo(2);
+        assertThat(result.exitCode()).isEqualTo(2);
         assertThat(createdBoardName.get()).isNull();
         assertThat(workflow).doesNotExist();
         assertThat(env).content(StandardCharsets.UTF_8).isEqualTo("readme");
-        assertThat(stdout.toString(StandardCharsets.UTF_8))
-                .doesNotContain("Created Trello board", "Troubleshooting report written");
-        assertThat(stderr.toString(StandardCharsets.UTF_8))
+        assertThat(result.stdout()).doesNotContain("Created Trello board", "Troubleshooting report written");
+        assertThat(result.stderr())
                 .contains("setup_failed code=setup_env_path_not_ignored", ".env or .env.NAME")
                 .doesNotContain("direct-key", "direct-token");
     }
@@ -1259,31 +1222,17 @@ class TrelloBoardSetupMainTest {
         Path env = tempDir.resolve("README.md");
         Path workflow = tempDir.resolve("unsafe-runtime-env-without-direct-credentials.WORKFLOW.md");
         Files.writeString(env, "readme", StandardCharsets.UTF_8);
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode = run(
-                stdout,
-                stderr,
-                "new-board",
-                "--endpoint",
-                endpoint(),
-                "--name",
-                "Runtime Env Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString());
+        CliRunResult result = runNewBoardWithRuntimeEnv(workflow, env, false);
 
         // then
-        assertThat(exitCode).isEqualTo(2);
+        assertThat(result.exitCode()).isEqualTo(2);
         assertThat(createdBoardName.get()).isNull();
         assertThat(workflow).doesNotExist();
         assertThat(env).content(StandardCharsets.UTF_8).isEqualTo("readme");
-        assertThat(stdout.toString(StandardCharsets.UTF_8))
-                .doesNotContain("Created Trello board", "Troubleshooting report written");
-        assertThat(stderr.toString(StandardCharsets.UTF_8))
+        assertThat(result.stdout()).doesNotContain("Created Trello board", "Troubleshooting report written");
+        assertThat(result.stderr())
                 .contains("setup_failed code=setup_env_path_not_ignored", ".env or .env.NAME")
                 .doesNotContain("setup_missing_api_key");
     }
@@ -1294,34 +1243,16 @@ class TrelloBoardSetupMainTest {
         Path env = tempDir.resolve(".env.runtime");
         Files.write(env, new byte[] {(byte) 0xc3, (byte) 0x28});
         Path workflow = tempDir.resolve("malformed-runtime-env.WORKFLOW.md");
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode = run(
-                stdout,
-                stderr,
-                "new-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "direct-key",
-                "--token",
-                "direct-token",
-                "--name",
-                "Runtime Env Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString());
+        CliRunResult result = runNewBoardWithRuntimeEnv(workflow, env, true);
 
         // then
-        assertThat(exitCode).isEqualTo(2);
+        assertThat(result.exitCode()).isEqualTo(2);
         assertThat(createdBoardName.get()).isNull();
         assertThat(workflow).doesNotExist();
-        assertThat(stdout.toString(StandardCharsets.UTF_8))
-                .doesNotContain("Created Trello board", "Troubleshooting report written");
-        assertThat(stderr.toString(StandardCharsets.UTF_8))
+        assertThat(result.stdout()).doesNotContain("Created Trello board", "Troubleshooting report written");
+        assertThat(result.stderr())
                 .contains("setup_failed code=setup_env_write_failed", "Choose a writable .env or .env.NAME file")
                 .doesNotContain(env.toString(), tempDir.toString(), "direct-key", "direct-token");
     }
@@ -2139,6 +2070,15 @@ class TrelloBoardSetupMainTest {
         return runCli(() -> TrelloBoardSetup.CodexModelDefaults.fallback(), args);
     }
 
+    private CliRunResult runNewBoardWithRuntimeEnv(Path workflow, Path env, boolean includeCredentials) {
+        List<String> args = new ArrayList<>(List.of("new-board", "--endpoint", endpoint()));
+        if (includeCredentials) {
+            args.addAll(List.of("--key", "direct-key", "--token", "direct-token"));
+        }
+        args.addAll(List.of("--name", "Runtime Env Queue", "--workflow", workflow.toString(), "--env", env.toString()));
+        return runCli(args.toArray(String[]::new));
+    }
+
     private CliRunResult runCli(Supplier<TrelloBoardSetup.CodexModelDefaults> codexModelDefaults, String... args) {
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
@@ -2315,31 +2255,5 @@ class TrelloBoardSetupMainTest {
 
     private String endpoint() {
         return "http://127.0.0.1:" + server.getAddress().getPort() + "/1";
-    }
-
-    private static Map<String, String> query(HttpExchange exchange) {
-        Map<String, String> values = new LinkedHashMap<>();
-        String rawQuery = exchange.getRequestURI().getRawQuery();
-        if (rawQuery == null || rawQuery.isBlank()) {
-            return values;
-        }
-        for (String part : rawQuery.split("&")) {
-            String[] pair = part.split("=", 2);
-            values.put(decode(pair[0]), pair.length == 1 ? "" : decode(pair[1]));
-        }
-        return values;
-    }
-
-    private static String decode(String value) {
-        return URLDecoder.decode(value, StandardCharsets.UTF_8);
-    }
-
-    private static void respond(HttpExchange exchange, String body) throws IOException {
-        byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
-        exchange.getResponseHeaders().add("Content-Type", "application/json");
-        exchange.sendResponseHeaders(200, bytes.length);
-        try (var output = exchange.getResponseBody()) {
-            output.write(bytes);
-        }
     }
 }
