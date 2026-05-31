@@ -44,9 +44,10 @@ final class LocalLogTailer {
                 }
                 try (RandomAccessFile file = new RandomAccessFile(logFile.toFile(), "r")) {
                     file.seek(Math.min(positions[i], file.length()));
-                    String line;
-                    while ((line = file.readLine()) != null) {
+                    String line = file.readLine();
+                    while (line != null) {
                         out.println(new String(line.getBytes(StandardCharsets.ISO_8859_1), StandardCharsets.UTF_8));
+                        line = file.readLine();
                     }
                     positions[i] = file.getFilePointer();
                 }

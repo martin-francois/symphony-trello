@@ -1048,7 +1048,7 @@ class SetupDiagnosticReporterTest {
                         false))));
         Files.writeString(
                 stateHome.resolve("WORKFLOW.private-board.md.abc.err"),
-                ("""
+                """
                 token=secret-value
                 "api_token":"json-secret"
                 Authorization: Bearer bearer-secret
@@ -1075,7 +1075,7 @@ class SetupDiagnosticReporterTest {
                 card_identifier=TRELLO-private-short
                 {"cardId":"private-json-card-id","cardIdentifier":"TRELLO-private-json"}
                 nested parent path %s
-                """)
+                """
                         .formatted(appHome.resolve("Secret Client").resolve("repo")),
                 StandardCharsets.UTF_8);
         Files.writeString(

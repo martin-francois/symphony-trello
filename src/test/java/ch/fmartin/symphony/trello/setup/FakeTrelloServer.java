@@ -10,6 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -99,10 +100,14 @@ final class FakeTrelloServer implements AutoCloseable {
         return givenWorkspaces(
                 """
                 [
-                  {"id":"%s","name":"%s","displayName":"%s","url":"https://trello.com/w/%s"}
+                        {"id":"%s","name":"%s","displayName":"%s","url":"https://trello.com/w/%s"}
                 ]
                 """
-                        .formatted(id, displayName.toLowerCase().replaceAll("[^a-z0-9]+", "-"), displayName, id));
+                        .formatted(
+                                id,
+                                displayName.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-"),
+                                displayName,
+                                id));
     }
 
     FakeTrelloServer givenWorkspaces(String json) {

@@ -117,8 +117,23 @@ check pass.
 
 PMD is a curated source-level analyzer in this repository, not a one-off narrow check. New PMD rules
 or broad third-party rulesets should first run in report-only or candidate mode so maintainers can
-remove noisy rules before making them blocking. Use `@SuppressWarnings("PMD.RuleName")` for
-code-local suppressions and `// NOPMD - reason` only for truly line-local cases.
+classify findings before making them blocking. A rule is noisy when its findings are false positives,
+already cleaner to leave as they are, or lower-value than the churn needed to satisfy the rule. A
+rule is not noisy only because it finds many justified problems. Use
+`@SuppressWarnings("PMD.RuleName")` for code-local suppressions and `// NOPMD - reason` only for
+truly line-local cases.
+
+An optional PMD candidate pass is available for measuring additional source rules before they become
+blocking:
+
+```bash
+./mvnw -q -Ppmd-candidate pmd:pmd
+```
+
+Review `target/pmd.xml` after running it. Candidate findings must be fixed, tuned, or explicitly
+left as candidate-only before any rule moves into the blocking `verify` gate. CPD duplication checks
+are still measured separately with `./mvnw -q pmd:cpd`; they are not blocking until the current
+duplication baseline is cleaned up or deliberately accepted.
 
 SpotBugs and FindSecBugs project-level false positives belong in `config/spotbugs/exclude.xml`;
 code-local exceptions should use `@SuppressFBWarnings(value = "...", justification = "...")`. Error

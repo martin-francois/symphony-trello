@@ -70,18 +70,22 @@ class TestConventionTest {
 
     private static void collectTestSectionViolations(Path file, List<String> violations) throws IOException {
         List<String> lines = Files.readAllLines(file);
-        for (int index = 0; index < lines.size(); index++) {
+        int index = 0;
+        while (index < lines.size()) {
             if (!TEST_ANNOTATION.matcher(lines.get(index)).find()) {
+                index++;
                 continue;
             }
             int methodStart = findMethodStart(lines, index + 1);
             int methodEnd = findMethodEnd(lines, methodStart);
             if (methodStart < 0 || methodEnd < 0) {
                 violations.add("%s:%d: could not parse test method".formatted(file, index + 1));
+                index++;
                 continue;
             }
             assertTestSections(file, methodStart, lines.subList(methodStart + 1, methodEnd), violations);
             index = methodEnd;
+            index++;
         }
     }
 

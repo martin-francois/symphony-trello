@@ -1550,7 +1550,7 @@ final class SetupDiagnosticReporter {
             redacted.append(value, cursor, remoteStart)
                     .append("<github-remote:")
                     .append(hash(value.substring(remoteStart, remoteEnd)))
-                    .append(">");
+                    .append('>');
             cursor = remoteEnd;
         }
         return redacted.toString();
@@ -1872,15 +1872,19 @@ final class SetupDiagnosticReporter {
     private static String removeQuarkusBannerLines(String text) {
         List<String> lines = text.lines().toList();
         List<String> kept = new ArrayList<>();
-        for (int index = 0; index < lines.size(); index++) {
+        int index = 0;
+        while (index < lines.size()) {
             if (isQuarkusBannerBlock(lines, index)) {
-                index += 3;
+                index += 4;
             } else if (kept.isEmpty() && lines.get(index).isBlank()) {
                 // Ignore leading blanks so they do not prevent startup banner stripping.
+                index++;
             } else if (kept.isEmpty() && isQuarkusBannerLine(lines.get(index))) {
                 // The bounded tail can start halfway through the Quarkus startup banner.
+                index++;
             } else {
                 kept.add(lines.get(index));
+                index++;
             }
         }
         return String.join("\n", kept);

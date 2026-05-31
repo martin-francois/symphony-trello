@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -2282,7 +2283,7 @@ class TrelloBoardSetupMainTest {
     }
 
     private static String javaExecutable() {
-        return System.getProperty("os.name", "").toLowerCase().contains("win") ? "java.exe" : "java";
+        return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win") ? "java.exe" : "java";
     }
 
     private static String workflowWithBoardAndPort(String boardId, int port) {

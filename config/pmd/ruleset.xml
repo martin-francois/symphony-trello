@@ -5,8 +5,55 @@
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.github.io/schema/ruleset_2_0_0.xsd">
   <description>
-    Narrow source rules that Spotless and ArchUnit cannot enforce.
+    Curated source rules that complement Spotless, ArchUnit, tests, SpotBugs, and FindSecBugs.
   </description>
 
+  <rule ref="category/java/bestpractices.xml/AvoidReassigningCatchVariables"/>
+  <rule ref="category/java/bestpractices.xml/AvoidReassigningLoopVariables"/>
+  <rule ref="category/java/bestpractices.xml/PrimitiveWrapperInstantiation"/>
+  <rule ref="category/java/bestpractices.xml/UnusedLocalVariable"/>
+  <rule ref="category/java/bestpractices.xml/UnusedPrivateField"/>
+  <rule ref="category/java/bestpractices.xml/UseCollectionIsEmpty"/>
+  <rule ref="category/java/bestpractices.xml/UseStandardCharsets"/>
+  <rule ref="category/java/codestyle.xml/UnnecessaryCast"/>
   <rule ref="category/java/codestyle.xml/UnnecessaryFullyQualifiedName"/>
+  <rule ref="category/java/codestyle.xml/UnnecessaryImport"/>
+  <rule ref="category/java/codestyle.xml/UselessParentheses"/>
+  <rule ref="category/java/errorprone.xml/AssignmentInOperand"/>
+  <rule ref="category/java/errorprone.xml/AvoidCatchingNPE"/>
+  <rule ref="category/java/errorprone.xml/BrokenNullCheck"/>
+  <rule ref="category/java/errorprone.xml/ClassCastExceptionWithToArray"/>
+  <rule ref="category/java/errorprone.xml/CompareObjectsWithEquals"/>
+  <rule ref="category/java/errorprone.xml/DoNotCallGarbageCollectionExplicitly"/>
+  <rule ref="category/java/errorprone.xml/DoNotExtendJavaLangThrowable"/>
+  <rule ref="category/java/errorprone.xml/DoNotThrowExceptionInFinally"/>
+  <rule ref="category/java/errorprone.xml/DontImportSun"/>
+  <rule ref="category/java/errorprone.xml/EmptyCatchBlock"/>
+  <rule ref="category/java/errorprone.xml/EqualsNull"/>
+  <rule ref="category/java/errorprone.xml/JumbledIncrementer"/>
+  <rule ref="category/java/errorprone.xml/NonCaseLabelInSwitch"/>
+  <rule ref="category/java/errorprone.xml/OverrideBothEqualsAndHashcode"/>
+  <rule ref="category/java/errorprone.xml/ReturnFromFinallyBlock"/>
+  <rule ref="category/java/errorprone.xml/SuspiciousEqualsMethodName"/>
+  <rule ref="category/java/errorprone.xml/SuspiciousHashcodeMethodName"/>
+  <rule ref="category/java/errorprone.xml/UnconditionalIfStatement"/>
+  <rule ref="category/java/errorprone.xml/UnnecessaryBooleanAssertion"/>
+  <rule ref="category/java/errorprone.xml/UnnecessaryCaseChange"/>
+  <rule ref="category/java/errorprone.xml/UnusedNullCheckInEquals"/>
+  <rule ref="category/java/errorprone.xml/UseEqualsToCompareStrings"/>
+  <rule ref="category/java/errorprone.xml/UseLocaleWithCaseConversions"/>
+  <rule ref="category/java/errorprone.xml/UselessOperationOnImmutable"/>
+  <rule ref="category/java/multithreading.xml/AvoidThreadGroup"/>
+  <rule ref="category/java/multithreading.xml/DontCallThreadRun"/>
+  <rule ref="category/java/multithreading.xml/UnsynchronizedStaticFormatter"/>
+  <rule ref="category/java/performance.xml/AddEmptyString"/>
+  <rule ref="category/java/performance.xml/AppendCharacterWithChar"/>
+  <rule ref="category/java/performance.xml/BigIntegerInstantiation"/>
+  <rule ref="category/java/performance.xml/InefficientEmptyStringCheck"/>
+  <rule ref="category/java/performance.xml/StringInstantiation"/>
+  <rule ref="category/java/performance.xml/StringToString"/>
+  <rule ref="category/java/performance.xml/UseArraysAsList"/>
+  <rule ref="category/java/performance.xml/UseIndexOfChar"/>
+  <rule ref="category/java/security.xml/HardCodedCryptoKey"/>
+  <rule ref="category/java/security.xml/InsecureCryptoIv"/>
 </ruleset>
