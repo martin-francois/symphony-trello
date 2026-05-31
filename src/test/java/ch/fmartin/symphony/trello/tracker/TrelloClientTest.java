@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.tracker;
 
+import static ch.fmartin.symphony.trello.TestHttpExchange.respond;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
@@ -9,12 +10,9 @@ import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.net.InetSocketAddress;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -674,19 +672,6 @@ class TrelloClientTest {
                 null,
                 null,
                 BigDecimal.ONE);
-    }
-
-    private static void respond(HttpExchange exchange, String body) throws IOException {
-        respond(exchange, 200, body);
-    }
-
-    private static void respond(HttpExchange exchange, int statusCode, String body) throws IOException {
-        byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
-        exchange.getResponseHeaders().add("Content-Type", "application/json");
-        exchange.sendResponseHeaders(statusCode, bytes.length);
-        try (var output = exchange.getResponseBody()) {
-            output.write(bytes);
-        }
     }
 
     private static String cardWithActions(String cardId, String actionsJson) {

@@ -380,23 +380,10 @@ final class SetupDiagnosticReporter {
 
     private String renderDiagnostics(DiagnosticsRequest request, Optional<DiagnosticsTokenHasher> sharedTokenHasher)
             throws IOException {
-        LocalWorkerPaths paths = LocalWorkerPaths.from(
-                request.appHome(), request.configDir(), request.workspaceRoot(), request.stateHome(), environment);
-        Path manifestPath = request.manifestPath()
-                .map(path -> resolveUserDataPath(path, paths.configDir()))
-                .orElse(paths.manifestPath());
-        ManifestSnapshot manifestSnapshot = manifest(manifestPath);
-        ConnectedBoardManifest manifest = manifestSnapshot.manifest();
-        DiagnosticsSelection selection =
-                selectDiagnostics(manifest, request.board(), request.workflow(), paths.configDir());
-        tokenHasher = sharedTokenHasher.orElseGet(() -> DiagnosticsTokenHasher.load(paths.configDir()));
-        ConnectedBoardManifest selectedManifest = new ConnectedBoardManifest(selection.boards());
+        DiagnosticsContext context = diagnosticsContext(request, sharedTokenHasher);
         List<String> args = diagnosticsArguments(request, false);
-        sensitiveValues = sensitiveValues(manifest, paths, args);
+        sensitiveValues = sensitiveValues(context.manifest(), context.paths(), args);
         deepDiagnostics = request.deep();
-        boolean selected = selection.kind() != DiagnosticsSelectorKind.NONE;
-        SequencedSet<Path> selectedWorkflowPaths =
-                reportWorkflowPaths(selectedManifest, selection.workflow(), paths.configDir(), !selected);
 
         StringBuilder body = new StringBuilder();
         body.append("# Symphony for Trello Diagnostics\n\n");
@@ -406,10 +393,7 @@ final class SetupDiagnosticReporter {
         line(body, "time_utc", Instant.now().toString());
         line(body, "command", sanitizeCommand(args));
         line(body, "command_context", commandContext());
-        line(body, "selector", selection.kind().name().toLowerCase(Locale.ROOT));
-        line(body, "selected_manifest_board_count", selectedManifest.boards().size());
-        line(body, "selected_workflow_file_count", selectedWorkflowPaths.size());
-        appendSelectionMatch(body, selection);
+        appendSelectionMetadata(body, context);
         line(body, "deep", deepDiagnostics ? "enabled" : "disabled");
         appendDiagnosticsTokenKeyStatus(body);
 
@@ -417,22 +401,26 @@ final class SetupDiagnosticReporter {
         appendSystemInfo(body, true);
 
         section(body, "Installer Context");
-        appendInstallerContext(body, paths, manifestPath);
+        appendInstallerContext(body, context.paths(), context.manifestPath());
 
         section(body, "Tool Availability");
         appendToolStatus(body, DIAGNOSTIC_TOOL_COMMANDS);
 
         section(body, "Connected Board Manifest");
-        appendManifest(body, selectedManifest, manifestSnapshot.status());
+        appendManifest(
+                body, context.selectedManifest(), context.manifestSnapshot().status());
 
         section(body, "Workflow Summary");
-        appendWorkflows(body, selectedWorkflowPaths);
+        appendWorkflows(body, context.selectedWorkflowPaths());
 
         section(body, "Local Health Probes");
-        appendHealthProbes(body, selectedManifest, selectedWorkflowPaths);
+        appendHealthProbes(body, context.selectedManifest(), context.selectedWorkflowPaths());
 
         section(body, "Recent Logs");
-        appendRecentLogs(body, paths.stateHome(), selected ? Optional.of(selectedWorkflowPaths) : Optional.empty());
+        appendRecentLogs(
+                body,
+                context.paths().stateHome(),
+                context.selected() ? Optional.of(context.selectedWorkflowPaths()) : Optional.empty());
 
         return body.toString();
     }
@@ -443,20 +431,7 @@ final class SetupDiagnosticReporter {
 
     private String renderPrivateContext(DiagnosticsRequest request, Optional<DiagnosticsTokenHasher> sharedTokenHasher)
             throws IOException {
-        LocalWorkerPaths paths = LocalWorkerPaths.from(
-                request.appHome(), request.configDir(), request.workspaceRoot(), request.stateHome(), environment);
-        Path manifestPath = request.manifestPath()
-                .map(path -> resolveUserDataPath(path, paths.configDir()))
-                .orElse(paths.manifestPath());
-        ManifestSnapshot manifestSnapshot = manifest(manifestPath);
-        ConnectedBoardManifest manifest = manifestSnapshot.manifest();
-        DiagnosticsSelection selection =
-                selectDiagnostics(manifest, request.board(), request.workflow(), paths.configDir());
-        tokenHasher = sharedTokenHasher.orElseGet(() -> DiagnosticsTokenHasher.load(paths.configDir()));
-        ConnectedBoardManifest selectedManifest = new ConnectedBoardManifest(selection.boards());
-        boolean selected = selection.kind() != DiagnosticsSelectorKind.NONE;
-        SequencedSet<Path> selectedWorkflowPaths =
-                reportWorkflowPaths(selectedManifest, selection.workflow(), paths.configDir(), !selected);
+        DiagnosticsContext context = diagnosticsContext(request, sharedTokenHasher);
 
         StringBuilder body = new StringBuilder();
         body.append("# Symphony for Trello Private Context\n\n");
@@ -468,25 +443,57 @@ final class SetupDiagnosticReporter {
         line(body, "time_utc", Instant.now().toString());
         line(body, "command", String.join(" ", diagnosticsArguments(request, true)));
         line(body, "command_context", commandContext());
-        line(body, "selector", selection.kind().name().toLowerCase(Locale.ROOT));
-        line(body, "selected_manifest_board_count", selectedManifest.boards().size());
-        line(body, "selected_workflow_file_count", selectedWorkflowPaths.size());
-        appendSelectionMatch(body, selection);
+        appendSelectionMetadata(body, context);
         appendDiagnosticsTokenKeyStatus(body);
 
         section(body, "Local Paths");
-        appendLocalPathIdentifiers(body, paths, manifestPath);
+        appendLocalPathIdentifiers(body, context.paths(), context.manifestPath());
 
         section(body, "Connected Board Identifiers");
-        appendLocalManifestIdentifiers(body, selectedManifest, manifestSnapshot.status());
+        appendLocalManifestIdentifiers(
+                body, context.selectedManifest(), context.manifestSnapshot().status());
 
         section(body, "Workflow Identifiers");
-        appendLocalWorkflowIdentifiers(body, selectedWorkflowPaths);
+        appendLocalWorkflowIdentifiers(body, context.selectedWorkflowPaths());
 
         section(body, "Log Identifiers");
-        appendLocalLogIdentifiers(body, paths.stateHome(), selectedWorkflowPaths, selected);
+        appendLocalLogIdentifiers(
+                body, context.paths().stateHome(), context.selectedWorkflowPaths(), context.selected());
 
         return body.toString();
+    }
+
+    private DiagnosticsContext diagnosticsContext(
+            DiagnosticsRequest request, Optional<DiagnosticsTokenHasher> sharedTokenHasher) throws IOException {
+        LocalWorkerPaths paths = LocalWorkerPaths.from(
+                request.appHome(), request.configDir(), request.workspaceRoot(), request.stateHome(), environment);
+        Path manifestPath = request.manifestPath()
+                .map(path -> resolveUserDataPath(path, paths.configDir()))
+                .orElse(paths.manifestPath());
+        ManifestSnapshot manifestSnapshot = manifest(manifestPath);
+        ConnectedBoardManifest manifest = manifestSnapshot.manifest();
+        DiagnosticsSelection selection =
+                selectDiagnostics(manifest, request.board(), request.workflow(), paths.configDir());
+        tokenHasher = sharedTokenHasher.orElseGet(() -> DiagnosticsTokenHasher.load(paths.configDir()));
+        ConnectedBoardManifest selectedManifest = new ConnectedBoardManifest(selection.boards());
+        boolean selected = selection.kind() != DiagnosticsSelectorKind.NONE;
+        SequencedSet<Path> selectedWorkflowPaths =
+                reportWorkflowPaths(selectedManifest, selection.workflow(), paths.configDir(), !selected);
+        return new DiagnosticsContext(
+                paths, manifestPath, manifestSnapshot, manifest, selection, selectedManifest, selectedWorkflowPaths);
+    }
+
+    private void appendSelectionMetadata(StringBuilder body, DiagnosticsContext context) {
+        line(body, "selector", context.selection().kind().name().toLowerCase(Locale.ROOT));
+        line(
+                body,
+                "selected_manifest_board_count",
+                context.selectedManifest().boards().size());
+        line(
+                body,
+                "selected_workflow_file_count",
+                context.selectedWorkflowPaths().size());
+        appendSelectionMatch(body, context.selection());
     }
 
     private DiagnosticsTokenHasher diagnosticsTokenHasher(DiagnosticsRequest request) {
@@ -2003,6 +2010,19 @@ final class SetupDiagnosticReporter {
 
     private record DiagnosticsSelection(
             DiagnosticsSelectorKind kind, List<ConnectedBoard> boards, Optional<Path> workflow) {}
+
+    private record DiagnosticsContext(
+            LocalWorkerPaths paths,
+            Path manifestPath,
+            ManifestSnapshot manifestSnapshot,
+            ConnectedBoardManifest manifest,
+            DiagnosticsSelection selection,
+            ConnectedBoardManifest selectedManifest,
+            SequencedSet<Path> selectedWorkflowPaths) {
+        private boolean selected() {
+            return selection.kind() != DiagnosticsSelectorKind.NONE;
+        }
+    }
 
     private record WorkflowLogMapping(Path workflow, ManagedProcessStore.ManagedProcessFiles files) {}
 

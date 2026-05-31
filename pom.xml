@@ -228,6 +228,13 @@
             </goals>
             <phase>verify</phase>
           </execution>
+          <execution>
+            <id>cpd-check</id>
+            <goals>
+              <goal>cpd-check</goal>
+            </goals>
+            <phase>verify</phase>
+          </execution>
         </executions>
       </plugin>
       <plugin>

@@ -31,29 +31,10 @@ class LocalWorkerManagerTest {
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
-        when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
-                .thenReturn(new ManagedProcessHandle(42));
-        when(fixture.healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), board.envPath()))
-                .thenReturn(board.serverPort());
-        when(fixture.healthChecker.waitForSameWorkflow(board, board.serverPort()))
-                .thenReturn(new BoardHealth(
-                        BoardHealthKind.SAME_WORKFLOW,
-                        board.serverPort(),
-                        Optional.of(board.workflowPath().toString()),
-                        Optional.of(board.boardId())));
-        when(fixture.platform.isAlive(42)).thenReturn(true);
-        when(fixture.platform.isManaged(42, fixture.paths.appHome(), board.workflowPath()))
-                .thenReturn(true);
+        fixture.stubHealthyStartedWorker(board, 42);
 
         // when
-        WorkerRunResult result = fixture.start(new StartWorkerRequest(
-                Optional.of("Queue"),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.of(fixture.paths.appHome()),
-                Optional.of(fixture.paths.configDir()),
-                Optional.of(fixture.paths.workspaceRoot()),
-                Optional.of(fixture.paths.stateHome())));
+        WorkerRunResult result = fixture.start(fixture.startRequest("Queue"));
 
         // then
         result.assertSuccess()
@@ -105,11 +86,7 @@ class LocalWorkerManagerTest {
         when(fixture.healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), expectedEnv))
                 .thenReturn(board.serverPort());
         when(fixture.healthChecker.waitForSameWorkflow(board, board.serverPort()))
-                .thenReturn(new BoardHealth(
-                        BoardHealthKind.SAME_WORKFLOW,
-                        board.serverPort(),
-                        Optional.of(board.workflowPath().toString()),
-                        Optional.of(board.boardId())));
+                .thenReturn(fixture.sameWorkflow(board));
         when(fixture.platform.isAlive(42)).thenReturn(true);
         when(fixture.platform.isManaged(42, fixture.paths.appHome(), board.workflowPath()))
                 .thenReturn(true);
@@ -152,15 +129,7 @@ class LocalWorkerManagerTest {
                 .thenReturn(true);
 
         // when
-        WorkerRunResult result = fixture.start(new StartWorkerRequest(
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.of(fixture.paths.appHome()),
-                Optional.of(fixture.paths.configDir()),
-                Optional.of(fixture.paths.workspaceRoot()),
-                Optional.of(fixture.paths.stateHome()),
-                true));
+        WorkerRunResult result = fixture.start(fixture.startAllRequest());
 
         // then
         result.assertSuccess().stdoutContains("\"First Queue\"", "\"Second Queue\"");
@@ -173,27 +142,10 @@ class LocalWorkerManagerTest {
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
-        when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
-                .thenReturn(new ManagedProcessHandle(42));
-        when(fixture.healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), board.envPath()))
-                .thenReturn(board.serverPort());
-        when(fixture.healthChecker.waitForSameWorkflow(board, board.serverPort()))
-                .thenReturn(new BoardHealth(
-                        BoardHealthKind.SAME_WORKFLOW,
-                        board.serverPort(),
-                        Optional.of(board.workflowPath().toString()),
-                        Optional.of(board.boardId())));
-        when(fixture.platform.isAlive(42)).thenReturn(false);
+        fixture.stubStartedWorkerProcessValidation(board, 42, false, false);
 
         // when
-        Throwable thrown = catchThrowable(() -> fixture.start(new StartWorkerRequest(
-                Optional.of("Queue"),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.of(fixture.paths.appHome()),
-                Optional.of(fixture.paths.configDir()),
-                Optional.of(fixture.paths.workspaceRoot()),
-                Optional.of(fixture.paths.stateHome()))));
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
 
         // then
         assertThat(thrown)
@@ -210,31 +162,12 @@ class LocalWorkerManagerTest {
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
-        when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
-                .thenReturn(new ManagedProcessHandle(42));
-        when(fixture.healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), board.envPath()))
-                .thenReturn(board.serverPort());
-        when(fixture.healthChecker.waitForSameWorkflow(board, board.serverPort()))
-                .thenReturn(new BoardHealth(
-                        BoardHealthKind.SAME_WORKFLOW,
-                        board.serverPort(),
-                        Optional.of(board.workflowPath().toString()),
-                        Optional.of(board.boardId())));
-        when(fixture.platform.isAlive(42)).thenReturn(true);
-        when(fixture.platform.isManaged(42, fixture.paths.appHome(), board.workflowPath()))
-                .thenReturn(false);
+        fixture.stubStartedWorkerProcessValidation(board, 42, true, false);
         when(fixture.platform.stop(42, Duration.ofSeconds(15), Duration.ofSeconds(5)))
                 .thenReturn(true);
 
         // when
-        Throwable thrown = catchThrowable(() -> fixture.start(new StartWorkerRequest(
-                Optional.of("Queue"),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.of(fixture.paths.appHome()),
-                Optional.of(fixture.paths.configDir()),
-                Optional.of(fixture.paths.workspaceRoot()),
-                Optional.of(fixture.paths.stateHome()))));
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
 
         // then
         assertThat(thrown)
@@ -257,14 +190,7 @@ class LocalWorkerManagerTest {
                         "setup_managed_port_required", "Managed local setup needs a stable HTTP port."));
 
         // when
-        Throwable thrown = catchThrowable(() -> fixture.start(new StartWorkerRequest(
-                Optional.of("Queue"),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.of(fixture.paths.appHome()),
-                Optional.of(fixture.paths.configDir()),
-                Optional.of(fixture.paths.workspaceRoot()),
-                Optional.of(fixture.paths.stateHome()))));
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
 
         // then
         assertThat(thrown).isInstanceOf(TrelloBoardSetupException.class).hasMessageContaining("stable HTTP port");
@@ -280,14 +206,7 @@ class LocalWorkerManagerTest {
         fixture.save(board);
 
         // when
-        Throwable thrown = catchThrowable(() -> fixture.start(new StartWorkerRequest(
-                Optional.of("Queue"),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.of(fixture.paths.appHome()),
-                Optional.of(fixture.paths.configDir()),
-                Optional.of(fixture.paths.workspaceRoot()),
-                Optional.of(fixture.paths.stateHome()))));
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
 
         // then
         assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
@@ -326,29 +245,10 @@ class LocalWorkerManagerTest {
                 StandardCharsets.UTF_8);
         Files.deleteIfExists(board.envPath());
         fixture.save(board);
-        when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
-                .thenReturn(new ManagedProcessHandle(42));
-        when(fixture.healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), board.envPath()))
-                .thenReturn(board.serverPort());
-        when(fixture.healthChecker.waitForSameWorkflow(board, board.serverPort()))
-                .thenReturn(new BoardHealth(
-                        BoardHealthKind.SAME_WORKFLOW,
-                        board.serverPort(),
-                        Optional.of(board.workflowPath().toString()),
-                        Optional.of(board.boardId())));
-        when(fixture.platform.isAlive(42)).thenReturn(true);
-        when(fixture.platform.isManaged(42, fixture.paths.appHome(), board.workflowPath()))
-                .thenReturn(true);
+        fixture.stubHealthyStartedWorker(board, 42);
 
         // when
-        WorkerRunResult result = fixture.start(new StartWorkerRequest(
-                Optional.of("Queue"),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.of(fixture.paths.appHome()),
-                Optional.of(fixture.paths.configDir()),
-                Optional.of(fixture.paths.workspaceRoot()),
-                Optional.of(fixture.paths.stateHome())));
+        WorkerRunResult result = fixture.start(fixture.startRequest("Queue"));
 
         // then
         result.assertSuccess().stdoutContains("Started Symphony for Trello");
@@ -379,14 +279,7 @@ class LocalWorkerManagerTest {
         fixture.save(board);
 
         // when
-        Throwable thrown = catchThrowable(() -> fixture.start(new StartWorkerRequest(
-                Optional.of("Queue"),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.of(fixture.paths.appHome()),
-                Optional.of(fixture.paths.configDir()),
-                Optional.of(fixture.paths.workspaceRoot()),
-                Optional.of(fixture.paths.stateHome()))));
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
 
         // then
         assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
@@ -418,29 +311,10 @@ class LocalWorkerManagerTest {
                 StandardCharsets.UTF_8);
         Files.deleteIfExists(board.envPath());
         fixture.save(board);
-        when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
-                .thenReturn(new ManagedProcessHandle(42));
-        when(fixture.healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), board.envPath()))
-                .thenReturn(board.serverPort());
-        when(fixture.healthChecker.waitForSameWorkflow(board, board.serverPort()))
-                .thenReturn(new BoardHealth(
-                        BoardHealthKind.SAME_WORKFLOW,
-                        board.serverPort(),
-                        Optional.of(board.workflowPath().toString()),
-                        Optional.of(board.boardId())));
-        when(fixture.platform.isAlive(42)).thenReturn(true);
-        when(fixture.platform.isManaged(42, fixture.paths.appHome(), board.workflowPath()))
-                .thenReturn(true);
+        fixture.stubHealthyStartedWorker(board, 42);
 
         // when
-        WorkerRunResult result = fixture.start(new StartWorkerRequest(
-                Optional.of("Queue"),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.of(fixture.paths.appHome()),
-                Optional.of(fixture.paths.configDir()),
-                Optional.of(fixture.paths.workspaceRoot()),
-                Optional.of(fixture.paths.stateHome())));
+        WorkerRunResult result = fixture.start(fixture.startRequest("Queue"));
 
         // then
         result.assertSuccess().stdoutContains("Started Symphony for Trello");
@@ -453,10 +327,7 @@ class LocalWorkerManagerTest {
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
-        ManagedProcessStore.ManagedProcessFiles files =
-                new ManagedProcessStore(fixture.paths.stateHome()).files(board.workflowPath());
-        Files.createDirectories(fixture.paths.stateHome());
-        new ManagedProcessStore(fixture.paths.stateHome()).writePid(files.pidFile(), 42);
+        fixture.writeManagedPid(board, 42);
         when(fixture.platform.isAlive(42)).thenReturn(true);
         when(fixture.platform.isManaged(42, fixture.paths.appHome(), board.workflowPath()))
                 .thenReturn(true);
@@ -464,21 +335,10 @@ class LocalWorkerManagerTest {
                 .thenReturn(board.serverPort());
         when(fixture.healthChecker.workflowHealth(
                         board.workflowPath(), board.boardId(), board.boardKey(), board.serverPort()))
-                .thenReturn(new BoardHealth(
-                        BoardHealthKind.SAME_WORKFLOW,
-                        board.serverPort(),
-                        Optional.of(board.workflowPath().toString()),
-                        Optional.of(board.boardId())));
+                .thenReturn(fixture.sameWorkflow(board));
 
         // when
-        WorkerRunResult result = fixture.start(new StartWorkerRequest(
-                Optional.of("Queue"),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.of(fixture.paths.appHome()),
-                Optional.of(fixture.paths.configDir()),
-                Optional.of(fixture.paths.workspaceRoot()),
-                Optional.of(fixture.paths.stateHome())));
+        WorkerRunResult result = fixture.start(fixture.startRequest("Queue"));
 
         // then
         result.assertSuccess().stdoutContains("already running");
@@ -492,22 +352,8 @@ class LocalWorkerManagerTest {
         Path envPath = fixture.paths.configDir().resolve(".env.override");
         int overridePort = 19090;
         fixture.save(board);
-        ManagedProcessStore.ManagedProcessFiles files =
-                new ManagedProcessStore(fixture.paths.stateHome()).files(board.workflowPath());
-        Files.createDirectories(fixture.paths.stateHome());
-        new ManagedProcessStore(fixture.paths.stateHome()).writePid(files.pidFile(), 42);
-        when(fixture.platform.isAlive(42)).thenReturn(true);
-        when(fixture.platform.isManaged(42, fixture.paths.appHome(), board.workflowPath()))
-                .thenReturn(true);
-        when(fixture.healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), envPath))
-                .thenReturn(overridePort);
-        when(fixture.healthChecker.workflowHealth(
-                        board.workflowPath(), board.boardId(), board.boardKey(), overridePort))
-                .thenReturn(new BoardHealth(
-                        BoardHealthKind.SAME_WORKFLOW,
-                        overridePort,
-                        Optional.of(board.workflowPath().toString()),
-                        Optional.of(board.boardId())));
+        fixture.stubManagedPid(board, 42);
+        fixture.stubWorkflowHealth(board, envPath, overridePort, fixture.sameWorkflow(board, overridePort));
 
         // when
         WorkerRunResult result = fixture.start(new StartWorkerRequest(
@@ -535,21 +381,10 @@ class LocalWorkerManagerTest {
         fixture.save(board);
         when(fixture.healthChecker.workflowHealth(
                         board.workflowPath(), board.boardId(), board.boardKey(), board.serverPort()))
-                .thenReturn(new BoardHealth(
-                        BoardHealthKind.SAME_WORKFLOW,
-                        board.serverPort(),
-                        Optional.of(board.workflowPath().toString()),
-                        Optional.of(board.boardId())));
+                .thenReturn(fixture.sameWorkflow(board));
 
         // when
-        WorkerRunResult result = fixture.start(new StartWorkerRequest(
-                Optional.of("Docs Queue"),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.of(fixture.paths.appHome()),
-                Optional.of(fixture.paths.configDir()),
-                Optional.of(fixture.paths.workspaceRoot()),
-                Optional.of(fixture.paths.stateHome())));
+        WorkerRunResult result = fixture.start(fixture.startRequest("Docs Queue"));
 
         // then
         result.assertSuccess().stdoutContains("already running", "http://127.0.0.1:" + board.serverPort());
@@ -565,25 +400,10 @@ class LocalWorkerManagerTest {
         int overridePort = 19090;
         fixture.writeEnv(envPath);
         fixture.save(board);
-        when(fixture.healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), envPath))
-                .thenReturn(overridePort);
-        when(fixture.healthChecker.workflowHealth(
-                        board.workflowPath(), board.boardId(), board.boardKey(), overridePort))
-                .thenReturn(new BoardHealth(
-                        BoardHealthKind.SAME_WORKFLOW,
-                        overridePort,
-                        Optional.of(board.workflowPath().toString()),
-                        Optional.of(board.boardId())));
+        fixture.stubWorkflowHealth(board, envPath, overridePort, fixture.sameWorkflow(board, overridePort));
 
         // when
-        WorkerRunResult result = fixture.start(new StartWorkerRequest(
-                Optional.of("Docs Queue"),
-                Optional.empty(),
-                Optional.of(envPath),
-                Optional.of(fixture.paths.appHome()),
-                Optional.of(fixture.paths.configDir()),
-                Optional.of(fixture.paths.workspaceRoot()),
-                Optional.of(fixture.paths.stateHome())));
+        WorkerRunResult result = fixture.start(fixture.startRequest("Docs Queue", envPath));
 
         // then
         result.assertSuccess().stdoutContains("already running", "http://127.0.0.1:" + overridePort);
@@ -597,41 +417,11 @@ class LocalWorkerManagerTest {
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
-        when(fixture.healthChecker.workflowHealth(
-                        board.workflowPath(), board.boardId(), board.boardKey(), board.serverPort()))
-                .thenReturn(new BoardHealth(
-                        BoardHealthKind.WRONG_WORKFLOW,
-                        board.serverPort(),
-                        Optional.of(fixture.paths
-                                .configDir()
-                                .resolve("WORKFLOW.other.md")
-                                .toString()),
-                        Optional.of(board.boardId())));
-        when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
-                .thenReturn(new ManagedProcessHandle(42));
-        when(fixture.healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), board.envPath()))
-                .thenReturn(board.serverPort());
-        when(fixture.healthChecker.waitForSameWorkflow(board, board.serverPort()))
-                .thenReturn(new BoardHealth(
-                        BoardHealthKind.WRONG_WORKFLOW,
-                        board.serverPort(),
-                        Optional.of(fixture.paths
-                                .configDir()
-                                .resolve("WORKFLOW.other.md")
-                                .toString()),
-                        Optional.of(board.boardId())));
-        when(fixture.platform.stop(42, Duration.ofSeconds(15), Duration.ofSeconds(5)))
-                .thenReturn(true);
+        fixture.stubWorkflowHealth(board, fixture.wrongWorkflow(board));
+        fixture.stubStartedWorkerHealth(board, 42, fixture.wrongWorkflow(board));
 
         // when
-        Throwable thrown = catchThrowable(() -> fixture.start(new StartWorkerRequest(
-                Optional.of("Queue"),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.of(fixture.paths.appHome()),
-                Optional.of(fixture.paths.configDir()),
-                Optional.of(fixture.paths.workspaceRoot()),
-                Optional.of(fixture.paths.stateHome()))));
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
 
         // then
         assertThat(thrown).isInstanceOf(TrelloBoardSetupException.class).hasMessageContaining("did not report");
@@ -644,9 +434,8 @@ class LocalWorkerManagerTest {
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
-        ManagedProcessStore.ManagedProcessFiles files =
-                new ManagedProcessStore(fixture.paths.stateHome()).files(board.workflowPath());
-        Files.createDirectories(fixture.paths.stateHome());
+        ManagedProcessStore.ManagedProcessFiles files = fixture.managedFiles(board);
+        fixture.stubStoppedStartedWorker(board, 42);
         when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
                 .thenAnswer(invocation -> {
                     Files.writeString(
@@ -658,23 +447,9 @@ class LocalWorkerManagerTest {
                             StandardCharsets.UTF_8);
                     return new ManagedProcessHandle(42);
                 });
-        when(fixture.healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), board.envPath()))
-                .thenReturn(board.serverPort());
-        when(fixture.healthChecker.waitForSameWorkflow(board, board.serverPort()))
-                .thenReturn(new BoardHealth(
-                        BoardHealthKind.STOPPED, board.serverPort(), Optional.empty(), Optional.empty()));
-        when(fixture.platform.stop(42, Duration.ofSeconds(15), Duration.ofSeconds(5)))
-                .thenReturn(true);
 
         // when
-        Throwable thrown = catchThrowable(() -> fixture.start(new StartWorkerRequest(
-                Optional.of("Queue"),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.of(fixture.paths.appHome()),
-                Optional.of(fixture.paths.configDir()),
-                Optional.of(fixture.paths.workspaceRoot()),
-                Optional.of(fixture.paths.stateHome()))));
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
 
         // then
         assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
@@ -689,34 +464,17 @@ class LocalWorkerManagerTest {
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
-        ManagedProcessStore.ManagedProcessFiles files =
-                new ManagedProcessStore(fixture.paths.stateHome()).files(board.workflowPath());
-        Files.createDirectories(fixture.paths.stateHome());
+        ManagedProcessStore.ManagedProcessFiles files = fixture.managedFiles(board);
         Files.writeString(
                 files.stdoutLog(),
                 """
                 Caused by: ch.fmartin.symphony.trello.tracker.TrelloException: Trello authentication failed
                 """,
                 StandardCharsets.UTF_8);
-        when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
-                .thenReturn(new ManagedProcessHandle(42));
-        when(fixture.healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), board.envPath()))
-                .thenReturn(board.serverPort());
-        when(fixture.healthChecker.waitForSameWorkflow(board, board.serverPort()))
-                .thenReturn(new BoardHealth(
-                        BoardHealthKind.STOPPED, board.serverPort(), Optional.empty(), Optional.empty()));
-        when(fixture.platform.stop(42, Duration.ofSeconds(15), Duration.ofSeconds(5)))
-                .thenReturn(true);
+        fixture.stubStoppedStartedWorker(board, 42);
 
         // when
-        Throwable thrown = catchThrowable(() -> fixture.start(new StartWorkerRequest(
-                Optional.of("Queue"),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.of(fixture.paths.appHome()),
-                Optional.of(fixture.paths.configDir()),
-                Optional.of(fixture.paths.workspaceRoot()),
-                Optional.of(fixture.paths.stateHome()))));
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
 
         // then
         assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
@@ -731,9 +489,7 @@ class LocalWorkerManagerTest {
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
-        ManagedProcessStore.ManagedProcessFiles files =
-                new ManagedProcessStore(fixture.paths.stateHome()).files(board.workflowPath());
-        Files.createDirectories(fixture.paths.stateHome());
+        ManagedProcessStore.ManagedProcessFiles files = fixture.managedFiles(board);
         Files.writeString(
                 files.stdoutLog(),
                 """
@@ -741,28 +497,15 @@ class LocalWorkerManagerTest {
                 This simulates redirect targets left behind by an earlier managed process start.
                 """,
                 StandardCharsets.UTF_8);
+        fixture.stubStoppedStartedWorker(board, 42);
         when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
                 .thenAnswer(invocation -> {
                     Files.writeString(files.stdoutLog(), "Trello authentication failed\n", StandardCharsets.UTF_8);
                     return new ManagedProcessHandle(42);
                 });
-        when(fixture.healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), board.envPath()))
-                .thenReturn(board.serverPort());
-        when(fixture.healthChecker.waitForSameWorkflow(board, board.serverPort()))
-                .thenReturn(new BoardHealth(
-                        BoardHealthKind.STOPPED, board.serverPort(), Optional.empty(), Optional.empty()));
-        when(fixture.platform.stop(42, Duration.ofSeconds(15), Duration.ofSeconds(5)))
-                .thenReturn(true);
 
         // when
-        Throwable thrown = catchThrowable(() -> fixture.start(new StartWorkerRequest(
-                Optional.of("Queue"),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.of(fixture.paths.appHome()),
-                Optional.of(fixture.paths.configDir()),
-                Optional.of(fixture.paths.workspaceRoot()),
-                Optional.of(fixture.paths.stateHome()))));
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
 
         // then
         assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
@@ -778,10 +521,9 @@ class LocalWorkerManagerTest {
         when(fixture.platform.appendsToExistingLogs()).thenReturn(false);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
-        ManagedProcessStore.ManagedProcessFiles files =
-                new ManagedProcessStore(fixture.paths.stateHome()).files(board.workflowPath());
-        Files.createDirectories(fixture.paths.stateHome());
+        ManagedProcessStore.ManagedProcessFiles files = fixture.managedFiles(board);
         Files.writeString(files.stdoutLog(), "stale log\n", StandardCharsets.UTF_8);
+        fixture.stubStoppedStartedWorker(board, 42);
         when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
                 .thenAnswer(invocation -> {
                     Files.writeString(
@@ -793,23 +535,9 @@ class LocalWorkerManagerTest {
                             StandardCharsets.UTF_8);
                     return new ManagedProcessHandle(42);
                 });
-        when(fixture.healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), board.envPath()))
-                .thenReturn(board.serverPort());
-        when(fixture.healthChecker.waitForSameWorkflow(board, board.serverPort()))
-                .thenReturn(new BoardHealth(
-                        BoardHealthKind.STOPPED, board.serverPort(), Optional.empty(), Optional.empty()));
-        when(fixture.platform.stop(42, Duration.ofSeconds(15), Duration.ofSeconds(5)))
-                .thenReturn(true);
 
         // when
-        Throwable thrown = catchThrowable(() -> fixture.start(new StartWorkerRequest(
-                Optional.of("Queue"),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.of(fixture.paths.appHome()),
-                Optional.of(fixture.paths.configDir()),
-                Optional.of(fixture.paths.workspaceRoot()),
-                Optional.of(fixture.paths.stateHome()))));
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
 
         // then
         assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
@@ -824,31 +552,10 @@ class LocalWorkerManagerTest {
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
-        ManagedProcessStore.ManagedProcessFiles files =
-                new ManagedProcessStore(fixture.paths.stateHome()).files(board.workflowPath());
-        Files.createDirectories(fixture.paths.stateHome());
-        new ManagedProcessStore(fixture.paths.stateHome()).writePid(files.pidFile(), 42);
-        when(fixture.platform.isAlive(42)).thenReturn(true);
-        when(fixture.platform.isManaged(42, fixture.paths.appHome(), board.workflowPath()))
-                .thenReturn(true);
-        when(fixture.healthChecker.boardHealth(board))
-                .thenReturn(new BoardHealth(
-                        BoardHealthKind.WRONG_WORKFLOW,
-                        board.serverPort(),
-                        Optional.of(fixture.paths
-                                .configDir()
-                                .resolve("WORKFLOW.other.md")
-                                .toString()),
-                        Optional.of(board.boardId())));
+        fixture.stubManagedPidWithHealth(board, 42, fixture.wrongWorkflow(board));
 
         // when
-        WorkerRunResult result = fixture.status(new WorkerStatusRequest(
-                Optional.of("Queue"),
-                Optional.empty(),
-                Optional.of(fixture.paths.appHome()),
-                Optional.of(fixture.paths.configDir()),
-                Optional.of(fixture.paths.workspaceRoot()),
-                Optional.of(fixture.paths.stateHome())));
+        WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
 
         // then
         result.assertSuccess()
@@ -862,21 +569,10 @@ class LocalWorkerManagerTest {
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
-        when(fixture.healthChecker.boardHealth(board))
-                .thenReturn(new BoardHealth(
-                        BoardHealthKind.SAME_WORKFLOW,
-                        board.serverPort(),
-                        Optional.of(board.workflowPath().toString()),
-                        Optional.of(board.boardId())));
+        when(fixture.healthChecker.boardHealth(board)).thenReturn(fixture.sameWorkflow(board));
 
         // when
-        WorkerRunResult result = fixture.status(new WorkerStatusRequest(
-                Optional.of("Queue"),
-                Optional.empty(),
-                Optional.of(fixture.paths.appHome()),
-                Optional.of(fixture.paths.configDir()),
-                Optional.of(fixture.paths.workspaceRoot()),
-                Optional.of(fixture.paths.stateHome())));
+        WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
 
         // then
         result.assertSuccess()
@@ -890,21 +586,10 @@ class LocalWorkerManagerTest {
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
-        when(fixture.healthChecker.boardHealth(board))
-                .thenReturn(new BoardHealth(
-                        BoardHealthKind.SAME_WORKFLOW,
-                        board.serverPort(),
-                        Optional.of(board.workflowPath().toString()),
-                        Optional.of(board.boardId())));
+        when(fixture.healthChecker.boardHealth(board)).thenReturn(fixture.sameWorkflow(board));
 
         // when
-        var thrown = catchThrowable(() -> fixture.stop(new StopWorkerRequest(
-                Optional.of("Queue"),
-                Optional.empty(),
-                Optional.of(fixture.paths.appHome()),
-                Optional.of(fixture.paths.configDir()),
-                Optional.of(fixture.paths.workspaceRoot()),
-                Optional.of(fixture.paths.stateHome()))));
+        var thrown = catchThrowable(() -> fixture.stop(fixture.stopRequest("Queue")));
 
         // then
         assertThat(thrown).isInstanceOf(TrelloBoardSetupException.class).hasMessageContaining("no managed pid");
@@ -932,13 +617,7 @@ class LocalWorkerManagerTest {
                 .thenReturn(true);
 
         // when
-        WorkerRunResult result = fixture.stop(new StopWorkerRequest(
-                Optional.empty(),
-                Optional.empty(),
-                Optional.of(fixture.paths.appHome()),
-                Optional.of(fixture.paths.configDir()),
-                Optional.of(fixture.paths.workspaceRoot()),
-                Optional.of(fixture.paths.stateHome())));
+        WorkerRunResult result = fixture.stop(fixture.stopAllRequest());
 
         // then
         result.assertSuccess().stdoutContains("Stopped WORKFLOW.first.md", "Stopped WORKFLOW.second.md");
@@ -962,13 +641,7 @@ class LocalWorkerManagerTest {
                 .thenReturn(true);
 
         // when
-        WorkerRunResult result = fixture.stop(new StopWorkerRequest(
-                Optional.empty(),
-                Optional.empty(),
-                Optional.of(fixture.paths.appHome()),
-                Optional.of(fixture.paths.configDir()),
-                Optional.of(fixture.paths.workspaceRoot()),
-                Optional.of(fixture.paths.stateHome())));
+        WorkerRunResult result = fixture.stop(fixture.stopAllRequest());
 
         // then
         result.assertSuccess().stdoutContains("Stopped WORKFLOW.direct.md");
@@ -982,14 +655,7 @@ class LocalWorkerManagerTest {
         fixture.save(fixture.connectedBoard("board-1", "First"), fixture.connectedBoard("board-2", "Second"));
 
         // when
-        Throwable thrown = catchThrowable(() -> fixture.start(new StartWorkerRequest(
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.of(fixture.paths.appHome()),
-                Optional.of(fixture.paths.configDir()),
-                Optional.of(fixture.paths.workspaceRoot()),
-                Optional.of(fixture.paths.stateHome()))));
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest()));
 
         // then
         assertThat(thrown)
@@ -1033,14 +699,7 @@ class LocalWorkerManagerTest {
                 .thenReturn(true);
 
         // when
-        WorkerRunResult result = fixture.start(new StartWorkerRequest(
-                Optional.empty(),
-                Optional.of(workflow),
-                Optional.empty(),
-                Optional.of(fixture.paths.appHome()),
-                Optional.of(fixture.paths.configDir()),
-                Optional.of(fixture.paths.workspaceRoot()),
-                Optional.of(fixture.paths.stateHome())));
+        WorkerRunResult result = fixture.start(fixture.startWorkflowRequest(workflow));
 
         // then
         result.assertSuccess();
@@ -1056,22 +715,13 @@ class LocalWorkerManagerTest {
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
-        ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
-        Files.createDirectories(fixture.paths.stateHome());
-        store.writePid(store.files(board.workflowPath()).pidFile(), 42);
+        fixture.writeManagedPid(board, 42);
         when(fixture.platform.isAlive(42)).thenReturn(true);
         when(fixture.platform.isManaged(42, fixture.paths.appHome(), board.workflowPath()))
                 .thenReturn(false);
 
         // when
-        Throwable thrown = catchThrowable(() -> fixture.start(new StartWorkerRequest(
-                Optional.of("Queue"),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.of(fixture.paths.appHome()),
-                Optional.of(fixture.paths.configDir()),
-                Optional.of(fixture.paths.workspaceRoot()),
-                Optional.of(fixture.paths.stateHome()))));
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
 
         // then
         assertThat(thrown)
@@ -1086,21 +736,13 @@ class LocalWorkerManagerTest {
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
-        ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
-        Files.createDirectories(fixture.paths.stateHome());
-        store.writePid(store.files(board.workflowPath()).pidFile(), 42);
+        fixture.writeManagedPid(board, 42);
         when(fixture.platform.isAlive(42)).thenReturn(true);
         when(fixture.platform.isManaged(42, fixture.paths.appHome(), board.workflowPath()))
                 .thenReturn(false);
 
         // when
-        WorkerRunResult result = fixture.stop(new StopWorkerRequest(
-                Optional.of("Queue"),
-                Optional.empty(),
-                Optional.of(fixture.paths.appHome()),
-                Optional.of(fixture.paths.configDir()),
-                Optional.of(fixture.paths.workspaceRoot()),
-                Optional.of(fixture.paths.stateHome())));
+        WorkerRunResult result = fixture.stop(fixture.stopRequest("Queue"));
 
         // then
         result.assertSuccess().stdoutContains("Skipped unmanaged stale pid");

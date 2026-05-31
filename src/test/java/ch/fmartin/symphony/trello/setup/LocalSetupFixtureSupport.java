@@ -56,6 +56,31 @@ abstract class LocalSetupFixtureSupport {
         return runSetupWithInput(localSetup, "", args);
     }
 
+    protected SetupRunResult connectLocalBoardWithoutGithub(Path workflow, Path env, String boardName) {
+        return runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                boardName,
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+    }
+
+    protected void prepareNextSetupRunWithGithubAuth() {
+        commands.githubAuthenticated = true;
+        commands.startedWorkflows.clear();
+        commands.startedEnvFiles.clear();
+        trello.createdLists().clear();
+    }
+
     protected SetupRunResult runSetupWithInput(LocalSetup localSetup, String input, String... args) {
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();

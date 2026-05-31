@@ -1724,33 +1724,7 @@ class LocalSetupTest extends LocalSetupFixtureSupport {
         Path workflow = config.resolve("WORKFLOW.shared.md");
         Files.writeString(workflow, "existing", StandardCharsets.UTF_8);
         Path manifest = config.resolve("connected-boards.json");
-        Files.writeString(
-                manifest,
-                """
-                {
-                  "boards": [
-                    {
-                      "boardId": "old-board",
-                      "boardKey": "old",
-                      "boardName": "Old Board",
-                      "boardUrl": "https://trello.example/old",
-                      "workflowPath": "%s",
-                      "envPath": "%s",
-                      "workspaceRoot": "%s",
-                      "serverPort": %d,
-                      "githubEnabled": false,
-                      "additionalWritableRoots": [],
-                      "dangerFullAccess": false
-                    }
-                  ]
-                }
-                """
-                        .formatted(
-                                workflow,
-                                tempDir.resolve(".env.old"),
-                                tempDir.resolve("workspaces"),
-                                ConfigDefaults.DEFAULT_SERVER_PORT),
-                StandardCharsets.UTF_8);
+        writeOldBoardManifest(manifest, workflow);
         Path env = tempDir.resolve(".env");
 
         // when
@@ -1789,33 +1763,7 @@ class LocalSetupTest extends LocalSetupFixtureSupport {
         Path workflow = config.resolve("WORKFLOW.shared-no-start.md");
         Files.writeString(workflow, "existing", StandardCharsets.UTF_8);
         Path manifest = config.resolve("connected-boards.json");
-        Files.writeString(
-                manifest,
-                """
-                {
-                  "boards": [
-                    {
-                      "boardId": "old-board",
-                      "boardKey": "old",
-                      "boardName": "Old Board",
-                      "boardUrl": "https://trello.example/old",
-                      "workflowPath": "%s",
-                      "envPath": "%s",
-                      "workspaceRoot": "%s",
-                      "serverPort": %d,
-                      "githubEnabled": false,
-                      "additionalWritableRoots": [],
-                      "dangerFullAccess": false
-                    }
-                  ]
-                }
-                """
-                        .formatted(
-                                workflow,
-                                tempDir.resolve(".env.old"),
-                                tempDir.resolve("workspaces"),
-                                ConfigDefaults.DEFAULT_SERVER_PORT),
-                StandardCharsets.UTF_8);
+        writeOldBoardManifest(manifest, workflow);
         Path env = tempDir.resolve(".env");
 
         // when
@@ -2291,78 +2239,8 @@ class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path firstWorkflow = tempDir.resolve("WORKFLOW.local-first.md");
         Path env = tempDir.resolve(".env");
-        SetupRunResult firstResult = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Local First",
-                "--workflow",
-                firstWorkflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
-        commands.githubAuthenticated = true;
-        commands.startedWorkflows.clear();
-        commands.startedEnvFiles.clear();
-        trello.createdLists().clear();
-
-        // when
-        SetupRunResult secondResult = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "GitHub Explicit",
-                "--env",
-                env.toString(),
-                "--github");
-
-        // then
-        Path secondWorkflow = tempDir.resolve("config").resolve("WORKFLOW.github-explicit.md");
-        firstResult.assertSuccess();
-        secondResult.assertSuccess().stdoutContains("Board connected: \"GitHub Explicit\"");
-        assertThatWorkflow(firstWorkflow).hasNoGithubFlow();
-        assertThatWorkflow(secondWorkflow).hasGithubFlow();
-        assertThat(trello.createdLists())
-                .containsExactly(
-                        "Inbox", "Ready for Codex", "In Progress", "Blocked", "Human Review", "Merging", "Done");
-        assertThat(commands.stoppedWorkflows).containsExactly(firstWorkflow.toString());
-        assertThat(commands.startedWorkflows).containsExactly(secondWorkflow.toString());
-    }
-
-    @Test
-    void setupWithExplicitGithubBoardConnectsNewBoardInsteadOfUpgradingExistingBoard() throws Exception {
-        // given
-        Path firstWorkflow = tempDir.resolve("WORKFLOW.local-first.md");
-        Path env = tempDir.resolve(".env");
-        SetupRunResult firstResult = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Local First",
-                "--workflow",
-                firstWorkflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
-        commands.githubAuthenticated = true;
-        commands.startedWorkflows.clear();
-        commands.startedEnvFiles.clear();
-        trello.createdLists().clear();
+        SetupRunResult firstResult = connectLocalBoardWithoutGithub(firstWorkflow, env, "Local First");
+        prepareNextSetupRunWithGithubAuth();
 
         // when
         SetupRunResult secondResult = runSetup(
@@ -3359,6 +3237,36 @@ class LocalSetupTest extends LocalSetupFixtureSupport {
                         false,
                         new String[] {"setup_github_cli_required", "Install the GitHub CLI"},
                         new String[] {"setup_github_auth_required"}));
+    }
+
+    private void writeOldBoardManifest(Path manifest, Path workflow) throws IOException {
+        Files.writeString(
+                manifest,
+                """
+                {
+                  "boards": [
+                    {
+                      "boardId": "old-board",
+                      "boardKey": "old",
+                      "boardName": "Old Board",
+                      "boardUrl": "https://trello.example/old",
+                      "workflowPath": "%s",
+                      "envPath": "%s",
+                      "workspaceRoot": "%s",
+                      "serverPort": %d,
+                      "githubEnabled": false,
+                      "additionalWritableRoots": [],
+                      "dangerFullAccess": false
+                    }
+                  ]
+                }
+                """
+                        .formatted(
+                                workflow,
+                                tempDir.resolve(".env.old"),
+                                tempDir.resolve("workspaces"),
+                                ConfigDefaults.DEFAULT_SERVER_PORT),
+                StandardCharsets.UTF_8);
     }
 
     private record NonInteractiveGithubFailureScenario(
