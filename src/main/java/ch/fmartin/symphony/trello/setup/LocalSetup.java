@@ -63,8 +63,7 @@ public final class LocalSetup {
         this.boardSetup = boardSetup;
         this.environment = Map.copyOf(environment);
         this.workflowConfig = workflowConfig;
-        HttpClient httpClient =
-                HttpClient.newBuilder().connectTimeout(LOCAL_STATUS_TIMEOUT).build();
+        HttpClient httpClient = localStatusHttpClient(); // NOPMD - LocalSetup owns this client for its lifetime.
         this.healthChecker = new LocalHealthChecker(environment, workflowConfig, httpClient);
         this.workerManager =
                 workerManager == null ? new LocalWorkerManager(environment, workflowConfig) : workerManager;
@@ -109,8 +108,8 @@ public final class LocalSetup {
     }
 
     int run(LocalSetupRequest request, Terminal terminal) {
-        PrintStream out = terminal.out();
-        PrintStream err = terminal.err();
+        PrintStream out = borrowedOut(terminal); // NOPMD - Terminal owns the stream.
+        PrintStream err = borrowedErr(terminal); // NOPMD - Terminal owns the stream.
         Options options = null;
         try {
             options = Options.from(request, environment);
@@ -436,7 +435,7 @@ public final class LocalSetup {
 
     private static ExistingSetupAction existingSetupAction(
             ConnectedBoardManifest manifest, Terminal terminal, Options options) throws IOException {
-        PrintStream out = terminal.out();
+        PrintStream out = borrowedOut(terminal); // NOPMD - Terminal owns the stream.
         if (hasPotentialConnectedBoardCodexAccessTarget(manifest, options)) {
             rejectMixedCodexAccessUpdate(options);
         }
@@ -523,7 +522,7 @@ public final class LocalSetup {
 
     private void updateExistingCodexAccess(Options options, ConnectedBoardManifest manifest, Terminal terminal)
             throws IOException {
-        PrintStream out = terminal.out();
+        PrintStream out = borrowedOut(terminal); // NOPMD - Terminal owns the stream.
         ConnectedBoard board = selectBoardForCodexAccessUpdate(options, manifest, terminal);
         ConnectedBoard updated = withRequestedCodexAccess(options, board, terminal);
         BoardHealth health = healthChecker.boardHealth(board);
@@ -557,7 +556,7 @@ public final class LocalSetup {
 
     private ConnectedBoard withRequestedCodexAccess(Options options, ConnectedBoard board, Terminal terminal)
             throws IOException {
-        PrintStream out = terminal.out();
+        PrintStream out = borrowedOut(terminal); // NOPMD - Terminal owns the stream.
         List<Path> requestedRoots = new ArrayList<>();
         for (Path root : options.additionalWritableRoots()) {
             if (WorkspaceAccessFlow.isBroadAccessPath(root) && !options.allowAllPaths() && !options.nonInteractive()) {
@@ -611,7 +610,7 @@ public final class LocalSetup {
 
     private static ConnectedBoard selectBoardForCodexAccessUpdateWithoutSelector(
             Options options, ConnectedBoardManifest manifest, Terminal terminal) throws IOException {
-        PrintStream out = terminal.out();
+        PrintStream out = borrowedOut(terminal); // NOPMD - Terminal owns the stream.
         if (manifest.boards().size() == 1) {
             return manifest.boards().getFirst();
         }
@@ -673,7 +672,7 @@ public final class LocalSetup {
 
     private void upgradeExistingBoardToGithub(Options options, ConnectedBoardManifest manifest, Terminal terminal)
             throws IOException {
-        PrintStream out = terminal.out();
+        PrintStream out = borrowedOut(terminal); // NOPMD - Terminal owns the stream.
         ConnectedBoard board = selectNonGithubBoardForUpgrade(options, manifest, terminal);
         if (!options.nonInteractive()
                 && !PromptSupport.yesDefaultTrue(
@@ -787,7 +786,7 @@ public final class LocalSetup {
 
     private static ConnectedBoard selectNonGithubBoardForUpgradeWithoutSelector(
             Options options, List<ConnectedBoard> candidates, Terminal terminal) throws IOException {
-        PrintStream out = terminal.out();
+        PrintStream out = borrowedOut(terminal); // NOPMD - Terminal owns the stream.
         if (candidates.size() == 1) {
             return candidates.getFirst();
         }
@@ -820,7 +819,7 @@ public final class LocalSetup {
 
     private void disconnectBoard(Options options, ConnectedBoardManifest manifest, Terminal terminal)
             throws IOException {
-        PrintStream out = terminal.out();
+        PrintStream out = borrowedOut(terminal); // NOPMD - Terminal owns the stream.
         out.println();
         out.println("Disconnecting a Trello board from Symphony only removes it from Symphony's local config.");
         out.println("Note: this will NOT delete or archive the Trello board.");
@@ -860,7 +859,8 @@ public final class LocalSetup {
         } catch (IOException e) {
             throw new TrelloBoardSetupException(
                     "setup_start_failed",
-                    "Could not start Symphony for \"" + board.boardName() + "\": " + e.getMessage());
+                    "Could not start Symphony for \"" + board.boardName() + "\": " + e.getMessage(),
+                    e);
         }
         out.println("  OK  Symphony is connected to \"" + board.boardName() + "\"");
     }
@@ -899,13 +899,12 @@ public final class LocalSetup {
                         List.of(),
                         false));
         try {
-            workerManager.stop(
-                    localWorkerPaths(options),
-                    board,
-                    new PrintStream(OutputStream.nullOutputStream(), true, StandardCharsets.UTF_8));
+            try (PrintStream out = new PrintStream(OutputStream.nullOutputStream(), true, StandardCharsets.UTF_8)) {
+                workerManager.stop(localWorkerPaths(options), board, out);
+            }
         } catch (IOException e) {
             throw new TrelloBoardSetupException(
-                    "setup_stop_failed", "Could not stop Symphony for \"" + boardName + "\": " + e.getMessage());
+                    "setup_stop_failed", "Could not stop Symphony for \"" + boardName + "\": " + e.getMessage(), e);
         }
     }
 
@@ -920,7 +919,8 @@ public final class LocalSetup {
         } catch (IOException e) {
             throw new TrelloBoardSetupException(
                     "setup_worker_state_unreadable",
-                    "Could not inspect managed worker state for \"" + board.boardName() + "\": " + e.getMessage());
+                    "Could not inspect managed worker state for \"" + board.boardName() + "\": " + e.getMessage(),
+                    e);
         }
         throw new TrelloBoardSetupException(
                 "setup_worker_untracked",
@@ -929,6 +929,22 @@ public final class LocalSetup {
                         + "\" at "
                         + LocalHealthChecker.localServerUrl(health.port())
                         + ", but this checkout has no managed pid for it. Stop that process manually, then rerun the setup command so Symphony can apply the workflow change and restart it.");
+    }
+
+    private static HttpClient localStatusHttpClient() {
+        // LocalSetup owns LocalHealthChecker for the process lifetime; closing this client after a run would break
+        // reuse.
+        return HttpClient.newBuilder().connectTimeout(LOCAL_STATUS_TIMEOUT).build(); // NOPMD - owned by LocalSetup.
+    }
+
+    private static PrintStream borrowedOut(Terminal terminal) {
+        // Terminal owns the stream. Setup code must write to it but must not close it.
+        return terminal.out();
+    }
+
+    private static PrintStream borrowedErr(Terminal terminal) {
+        // Terminal owns the stream. Setup code must write to it but must not close it.
+        return terminal.err();
     }
 
     private void stopReplacedBoards(Options options, List<ConnectedBoard> replacedBoards) {

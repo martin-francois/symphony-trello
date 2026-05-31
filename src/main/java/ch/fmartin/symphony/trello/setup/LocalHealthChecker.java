@@ -174,7 +174,8 @@ final class LocalHealthChecker {
                     } catch (NumberFormatException e) {
                         throw new TrelloBoardSetupException(
                                 "setup_invalid_http_port_override",
-                                "SYMPHONY_HTTP_PORT/QUARKUS_HTTP_PORT must be an integer.");
+                                "SYMPHONY_HTTP_PORT/QUARKUS_HTTP_PORT must be an integer.",
+                                e);
                     }
                 });
     }
