@@ -29,7 +29,7 @@ record LocalWorkerPaths(Path appHome, Path configDir, Path workspaceRoot, Path s
                 .normalize();
         Path resolvedStateHome = stateHome
                 .or(() -> envPath(environment, STATE_HOME_ENV))
-                .orElse(resolvedConfigDir.resolveSibling("state"))
+                .orElseGet(() -> resolvedConfigDir.resolveSibling("state"))
                 .toAbsolutePath()
                 .normalize();
         Path resolvedAppHome = appHome.or(LocalWorkerPaths::propertyAppHome)

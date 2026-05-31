@@ -5,6 +5,7 @@ import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.TrelloCredentials;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -182,10 +183,10 @@ final class TrelloBoardConnector {
         List<String> activeStates = options.activeStates().isEmpty()
                 ? detectedList(openListNames, TrelloBoardSetup.RECOMMENDED_ACTIVE_STATE)
                         .map(List::of)
-                        .orElse(List.of())
+                        .orElseGet(List::of)
                 : options.activeStates();
         List<String> terminalStates = options.terminalStates().isEmpty()
-                ? detectedList(openListNames, "Done").map(List::of).orElse(List.of())
+                ? detectedList(openListNames, "Done").map(List::of).orElseGet(List::of)
                 : options.terminalStates();
         String inProgressState = options.detectInProgressState()
                 ? detectedList(openListNames, TrelloBoardSetup.RECOMMENDED_IN_PROGRESS_STATE)
@@ -341,7 +342,7 @@ final class TrelloBoardConnector {
         Set<Integer> reservedPorts = manifest.boards().stream()
                 .filter(board -> !PathsEqual.samePath(board.workflowPath(), workflowPath))
                 .map(ConnectedBoard::serverPort)
-                .collect(Collectors.toSet());
+                .collect(Collectors.toCollection(HashSet::new));
         reservedPorts.addAll(siblingWorkflowServerPorts(workflowPath, replacingTarget, editor));
         return reservedPorts;
     }
@@ -359,7 +360,7 @@ final class TrelloBoardConnector {
                     .map(Path::normalize)
                     .filter(path -> !replacingTarget || !path.equals(absolute))
                     .flatMap(path -> editor.serverPort(path).stream())
-                    .collect(Collectors.toSet());
+                    .collect(Collectors.toUnmodifiableSet());
         } catch (IOException ignored) {
             return Set.of();
         }
