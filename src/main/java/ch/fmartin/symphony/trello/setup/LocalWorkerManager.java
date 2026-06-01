@@ -59,7 +59,7 @@ final class LocalWorkerManager {
         }
         ConnectedBoard board = selectOne(manifest, request.board(), request.workflow(), "start");
         Path envPath = request.envPath()
-                .orElse(board.envPath() == null ? paths.defaultEnvPath() : board.envPath())
+                .orElseGet(() -> board.envPath() == null ? paths.defaultEnvPath() : board.envPath())
                 .toAbsolutePath()
                 .normalize();
         start(paths, board, envPath, out);
@@ -218,10 +218,10 @@ final class LocalWorkerManager {
 
     private static Optional<String> requiredEnvironmentCredential(
             Optional<String> configuredValue, String defaultEnvironmentName) {
-        return configuredValue
-                .map(String::trim)
-                .map(LocalWorkerManager::environmentCredentialName)
-                .orElseGet(() -> Optional.of(defaultEnvironmentName));
+        if (configuredValue.isEmpty()) {
+            return Optional.of(defaultEnvironmentName);
+        }
+        return configuredValue.map(String::trim).flatMap(LocalWorkerManager::environmentCredentialName);
     }
 
     private static Optional<String> environmentCredentialName(String configuredValue) {
@@ -506,7 +506,7 @@ final class LocalWorkerManager {
 
     private ConnectedBoard selectedWorkflow(ConnectedBoardManifest manifest, Path workflowSelector) {
         Path workflowPath = workflowSelector.toAbsolutePath().normalize();
-        return manifest.findByWorkflow(workflowPath).orElse(workflowBoard(workflowPath));
+        return manifest.findByWorkflow(workflowPath).orElseGet(() -> workflowBoard(workflowPath));
     }
 
     private ConnectedBoard defaultSelectedBoard(ConnectedBoardManifest manifest, String command) {

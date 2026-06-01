@@ -469,7 +469,7 @@ final class SetupDiagnosticReporter {
                 request.appHome(), request.configDir(), request.workspaceRoot(), request.stateHome(), environment);
         Path manifestPath = request.manifestPath()
                 .map(path -> resolveUserDataPath(path, paths.configDir()))
-                .orElse(paths.manifestPath());
+                .orElseGet(paths::manifestPath);
         ManifestSnapshot manifestSnapshot = manifest(manifestPath);
         ConnectedBoardManifest manifest = manifestSnapshot.manifest();
         DiagnosticsSelection selection =
@@ -513,7 +513,7 @@ final class SetupDiagnosticReporter {
                     environment);
             Path manifestPath = pathOption(args, "--manifest")
                     .map(path -> resolveUserDataPath(path, paths.configDir()))
-                    .orElse(paths.manifestPath());
+                    .orElseGet(paths::manifestPath);
             return write(exception, args, paths, manifestPath, workflowPathResolution);
         } catch (RuntimeException | IOException ignored) {
             return Optional.empty();
@@ -526,7 +526,7 @@ final class SetupDiagnosticReporter {
                     Optional.empty(), request.configDir(), request.workspaceRoot(), Optional.empty(), environment);
             Path manifestPath = request.manifestPath()
                     .map(path -> resolveUserDataPath(path, paths.configDir()))
-                    .orElse(paths.manifestPath());
+                    .orElseGet(paths::manifestPath);
             return write(exception, requestArguments(request), paths, manifestPath, WorkflowPathResolution.CONFIG_DIR);
         } catch (RuntimeException | IOException ignored) {
             return Optional.empty();
@@ -1206,7 +1206,7 @@ final class SetupDiagnosticReporter {
         }
         Set<Path> selectedLogs = selectedWorkflows
                 .map(workflows -> expectedLogFiles(stateHome, workflows))
-                .orElse(Set.of());
+                .orElseGet(Set::of);
         List<Path> logs;
         try (Stream<Path> files = recentLogLister.list(stateHome)) {
             logs = files.filter(Files::isRegularFile)
@@ -1332,7 +1332,7 @@ final class SetupDiagnosticReporter {
                     return Stream.of(files.stdoutLog(), files.stderrLog());
                 })
                 .map(path -> path.toAbsolutePath().normalize())
-                .collect(Collectors.toSet());
+                .collect(Collectors.toUnmodifiableSet());
     }
 
     private Instant lastModified(Path path) {
@@ -1487,8 +1487,7 @@ final class SetupDiagnosticReporter {
                 .matcher(sanitized)
                 .replaceAll(match -> match.group(1) + pathToken(match.group(2)) + match.group(1));
         sanitized = WINDOWS_PATH.matcher(sanitized).replaceAll(match -> pathToken(match.group()));
-        sanitized = redactAbsolutePosixPaths(sanitized);
-        return sanitized;
+        return redactAbsolutePosixPaths(sanitized);
     }
 
     private String redactUrlUserInfo(String value) {
@@ -1768,6 +1767,8 @@ final class SetupDiagnosticReporter {
     }
 
     private String sanitizeExceptionMessage(Exception exception) {
+        // Preserve the previous diagnostics text for null exception messages.
+        @SuppressWarnings("IdentityConversion")
         String message = sanitize(String.valueOf(exception.getMessage()));
         message = message.replaceAll(
                 "(?i)(Unknown [a-z-]+ list\\(s\\): ).*(\\. Open lists: ).*", "$1<redacted>$2<redacted>");

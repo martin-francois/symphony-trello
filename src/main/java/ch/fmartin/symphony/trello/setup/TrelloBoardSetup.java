@@ -399,7 +399,7 @@ public final class TrelloBoardSetup {
         try {
             WorkflowCodexModelDefaults effective = readWorkflowFrontMatter(workflowPath)
                     .map(frontMatter -> preserveExistingCodexModelDefaults(frontMatter, defaults))
-                    .orElse(new WorkflowCodexModelDefaults(defaults, false, false));
+                    .orElseGet(() -> new WorkflowCodexModelDefaults(defaults, false, false));
             return hasOverrides
                     ? new WorkflowCodexModelDefaults(
                             applyCodexModelOverrides(
@@ -429,14 +429,14 @@ public final class TrelloBoardSetup {
             CodexModelDefaults defaults,
             CodexModelSelectionDefaults selectionDefaults,
             boolean preserveConfiguredReasoningEffort) {
-        String model = codexModelOverride.orElse(defaults.model());
+        String model = codexModelOverride.orElseGet(defaults::model);
         return CodexModelDefaults.partial(
                 model,
                 codexReasoningEffortOverride
                         .or(() -> codexModelOverride.flatMap(
                                 modelOverride -> selectionDefaults.reasoningEffortForExplicitModelOverride(
                                         modelOverride, defaults, preserveConfiguredReasoningEffort)))
-                        .orElse(defaults.reasoningEffort()));
+                        .orElseGet(defaults::reasoningEffort));
     }
 
     private static WorkflowCodexModelDefaults preserveExistingCodexModelDefaults(
@@ -1788,7 +1788,7 @@ public final class TrelloBoardSetup {
 
     private static void validateConfiguredLists(String label, List<String> configured, List<String> openListNames) {
         Set<String> normalizedOpenNames =
-                openListNames.stream().map(TrelloBoardSetup::normalize).collect(Collectors.toSet());
+                openListNames.stream().map(TrelloBoardSetup::normalize).collect(Collectors.toUnmodifiableSet());
         List<String> missing = configured.stream()
                 .filter(name -> !normalizedOpenNames.contains(normalize(name)))
                 .toList();

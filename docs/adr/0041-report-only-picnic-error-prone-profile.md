@@ -61,6 +61,11 @@ Run the Refaster measurement profile with:
 Both profiles include the same Java 25 Error Prone compiler flags as the base `error-prone` profile.
 `picnic-error-prone` adds `tech.picnic.error-prone-support:error-prone-contrib:0.29.0`.
 `picnic-refaster` also adds `tech.picnic.error-prone-support:refaster-runner:0.29.0`.
+Both profiles disable `StaticImport` and `LexicographicalAnnotationAttributeListing`. `StaticImport`
+is a broad style preference that does not improve correctness and would make the code less
+consistent with the current style.
+`LexicographicalAnnotationAttributeListing` conflicts with keeping picocli subcommand order aligned
+with user-facing help output.
 
 The `clean` phase is part of both commands so Maven recompiles sources and does not skip analysis
 when classes are already up to date. Do not run these commands with Maven `-q`; the profiles report
@@ -126,17 +131,17 @@ across 15 rule names:
 
 | Count | Rule | Classification |
 | ---: | --- | --- |
-| 94 | `StaticImport` | Style-only; not a blocking candidate unless the project adopts a broad static-import convention. |
-| 16 | `OptionalOrElseGet` | Useful and likely fixable; should be handled with the Java Optional best-practices guidance. |
+| 94 | `StaticImport` | Style-only; disabled because the project is not adopting a broad static-import convention. |
+| 16 | `OptionalOrElseGet` | Useful and handled by [GitHub issue #136](https://github.com/martin-francois/symphony-trello/issues/136) follow-up work. |
 | 13 | `TimeZoneUsage` | Potentially useful; needs a focused clock-injection design before source changes. |
 | 6 | `CollectorMutability` | Useful in some locations; needs mutability-by-contract review before promotion. |
 | 2 | `UnusedVariable` | Existing base Error Prone warning; not Picnic-specific. |
 | 2 | `UnusedNestedClass` | Existing base Error Prone warning; not Picnic-specific. |
 | 2 | `SystemConsoleNull` | Existing base Error Prone warning; not Picnic-specific. |
 | 1 | `SelfAssignment` | Existing base Error Prone warning; not Picnic-specific. |
-| 1 | `NestedOptionals` | Useful and should be handled with Optional cleanup. |
+| 1 | `NestedOptionals` | Useful and handled by [GitHub issue #136](https://github.com/martin-francois/symphony-trello/issues/136) follow-up work. |
 | 1 | `LexicographicalPermitsListing` | Style-only; low priority. |
-| 1 | `LexicographicalAnnotationAttributeListing` | Style-only; low priority. |
+| 1 | `LexicographicalAnnotationAttributeListing` | Disabled because picocli subcommand order is user-facing. |
 | 1 | `IdentityConversion` | Useful and low-risk; good cleanup candidate. |
 | 1 | `FutureReturnValueIgnored` | Existing base Error Prone warning; not Picnic-specific. |
 | 1 | `DirectReturn` | Useful and low-risk; good cleanup candidate. |

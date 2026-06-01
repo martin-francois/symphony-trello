@@ -105,7 +105,7 @@ final class DiagnosticsTokenHasher {
 
     private static boolean supportsPosixFilePermissions(Path path) throws IOException {
         Path existing = Optional.ofNullable(path.getParent())
-                .orElse(path.toAbsolutePath().normalize());
+                .orElseGet(() -> path.toAbsolutePath().normalize());
         return Files.getFileStore(existing).supportsFileAttributeView("posix");
     }
 

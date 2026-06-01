@@ -17,6 +17,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -380,7 +381,7 @@ public final class LocalSetup {
         Set<Integer> reserved = manifest.boards().stream()
                 .filter(board -> !board.boardId().equals(ignoredBoard.boardId()))
                 .map(ConnectedBoard::serverPort)
-                .collect(Collectors.toSet());
+                .collect(Collectors.toCollection(HashSet::new));
         for (int port = TrelloBoardSetup.DEFAULT_SERVER_PORT; port <= 65535; port++) {
             if (!reserved.contains(port) && !LocalHealthChecker.portAcceptsConnections(port)) {
                 return port;
@@ -730,7 +731,7 @@ public final class LocalSetup {
                         board.serverPort(),
                         options.maxAgentsExplicit()
                                 ? options.maxAgents()
-                                : workflowConfig.maxAgents(board.workflowPath()).orElse(options.maxAgents()),
+                                : workflowConfig.maxAgents(board.workflowPath()).orElseGet(options::maxAgents),
                         true,
                         GitHubIntegration.ENABLED,
                         true));
@@ -886,7 +887,7 @@ public final class LocalSetup {
     private void stopBoard(Options options, String boardName, Path workflowPath) {
         ConnectedBoard board = connectedBoardsUnchecked(options)
                 .findByWorkflow(workflowPath)
-                .orElse(new ConnectedBoard(
+                .orElseGet(() -> new ConnectedBoard(
                         PathNames.fileName(workflowPath),
                         PathNames.fileName(workflowPath),
                         boardName,
