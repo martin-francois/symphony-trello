@@ -10,6 +10,7 @@ import static org.mockito.Mockito.doThrow;
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
@@ -24,8 +25,9 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
-class LocalSetupTest extends LocalSetupFixtureSupport {
+final class LocalSetupTest extends LocalSetupFixtureSupport {
     @Test
     void dryRunReportsPlannedWorkflowWithoutChangingTrello() {
         // given
@@ -44,8 +46,8 @@ class LocalSetupTest extends LocalSetupFixtureSupport {
         assertThat(trello.createdLists()).isEmpty();
     }
 
-    @ParameterizedTest
     @MethodSource("githubAuthCheckScenarios")
+    @ParameterizedTest
     void checkReportsGithubAuthState(GithubAuthCheckScenario scenario) {
         // given
 
@@ -997,8 +999,8 @@ class LocalSetupTest extends LocalSetupFixtureSupport {
         assertThatTranscript(result.stdout()).doesNotLeak("real-key").doesNotLeak("prompt-token");
     }
 
-    @ParameterizedTest
     @MethodSource("dotenvCredentialEscapingScenarios")
+    @ParameterizedTest
     void setupEscapesCredentialsWhenWritingDotenv(DotenvCredentialEscapingScenario scenario) throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW." + scenario.fileSuffix() + ".md");
@@ -1150,7 +1152,8 @@ class LocalSetupTest extends LocalSetupFixtureSupport {
         Path env = tempDir.resolve(".env");
         try (ServerSocket occupiedPort = new ServerSocket()) {
             try {
-                occupiedPort.bind(new InetSocketAddress("127.0.0.1", TrelloBoardSetup.DEFAULT_SERVER_PORT));
+                occupiedPort.bind(
+                        new InetSocketAddress(InetAddress.getLoopbackAddress(), TrelloBoardSetup.DEFAULT_SERVER_PORT));
             } catch (IOException e) {
                 Assumptions.abort(
                         "Default setup port is already unavailable before the test can bind it: " + e.getMessage());
@@ -1943,7 +1946,7 @@ class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @ParameterizedTest
-    @MethodSource("repairPortBoardSelectors")
+    @ValueSource(strings = {"Repair Selector Queue", "board-1", "abc123", "https://trello.com/b/abc123/board"})
     void repairPortAcceptsConnectedBoardNameIdKeyOrUrl(String selector) throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.repair-selector.md");
@@ -1976,10 +1979,6 @@ class LocalSetupTest extends LocalSetupFixtureSupport {
         // then
         firstResult.assertSuccess();
         result.assertSuccess().stdoutContains("Updated \"Repair Selector Queue\"");
-    }
-
-    private static Stream<String> repairPortBoardSelectors() {
-        return Stream.of("Repair Selector Queue", "board-1", "abc123", "https://trello.com/b/abc123/board");
     }
 
     @Test
@@ -2785,8 +2784,8 @@ class LocalSetupTest extends LocalSetupFixtureSupport {
         assertThat(trello.boardLookups()).anySatisfy(path -> assertThat(path).contains("/1/boards/abc123"));
     }
 
-    @ParameterizedTest
     @MethodSource("broadWorkspacePathScenarios")
+    @ParameterizedTest
     void setupHandlesBroadWorkspacePathConfirmation(BroadWorkspacePathScenario scenario) throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW." + scenario.fileSuffix() + ".md");
@@ -2901,8 +2900,8 @@ class LocalSetupTest extends LocalSetupFixtureSupport {
                 .doesNotContain("old-key", "old-token", "export TRELLO_API_KEY", "TRELLO_API_TOKEN =");
     }
 
-    @ParameterizedTest
     @MethodSource("unsafeEnvPathScenarios")
+    @ParameterizedTest
     void setupRejectsEnvPathsThatWouldPersistSecrets(UnsafeEnvPathScenario scenario) {
         // given
         Path workflow = tempDir.resolve("WORKFLOW." + scenario.fileSuffix() + ".md");
@@ -2938,7 +2937,16 @@ class LocalSetupTest extends LocalSetupFixtureSupport {
                         "template", ".env.example", "setup_env_path_not_ignored", "tracked template"));
     }
 
-    private record UnsafeEnvPathScenario(String fileSuffix, String envFileName, String... expectedErrorFragments) {
+    private record UnsafeEnvPathScenario(
+            String fileSuffix, String envFileName, List<String> expectedErrorFragmentList) {
+        private UnsafeEnvPathScenario(String fileSuffix, String envFileName, String... expectedErrorFragments) {
+            this(fileSuffix, envFileName, List.of(expectedErrorFragments));
+        }
+
+        String[] expectedErrorFragments() {
+            return expectedErrorFragmentList.toArray(String[]::new);
+        }
+
         @Override
         public String toString() {
             return fileSuffix;
@@ -3191,8 +3199,8 @@ class LocalSetupTest extends LocalSetupFixtureSupport {
         assertThat(commands.codexLoginCommands).containsExactly("codex login --device-auth");
     }
 
-    @ParameterizedTest
     @MethodSource("nonInteractiveGithubFailureScenarios")
+    @ParameterizedTest
     void setupWithGithubFailsBeforeCreatingBoardWhenCliOrAuthIsMissing(NonInteractiveGithubFailureScenario scenario) {
         // given
         commands.githubCliAvailable = scenario.githubCliAvailable();
@@ -3272,8 +3280,24 @@ class LocalSetupTest extends LocalSetupFixtureSupport {
     private record NonInteractiveGithubFailureScenario(
             String fileSuffix,
             boolean githubCliAvailable,
-            String[] expectedErrorFragments,
-            String[] forbiddenErrorFragments) {
+            List<String> expectedErrorFragmentList,
+            List<String> forbiddenErrorFragmentList) {
+        private NonInteractiveGithubFailureScenario(
+                String fileSuffix,
+                boolean githubCliAvailable,
+                String[] expectedErrorFragments,
+                String[] forbiddenErrorFragments) {
+            this(fileSuffix, githubCliAvailable, List.of(expectedErrorFragments), List.of(forbiddenErrorFragments));
+        }
+
+        String[] expectedErrorFragments() {
+            return expectedErrorFragmentList.toArray(String[]::new);
+        }
+
+        String[] forbiddenErrorFragments() {
+            return forbiddenErrorFragmentList.toArray(String[]::new);
+        }
+
         @Override
         public String toString() {
             return fileSuffix;

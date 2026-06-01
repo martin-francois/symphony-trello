@@ -31,14 +31,14 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.ArgumentCaptor;
 
-class LocalAgentRunnerTest {
+final class LocalAgentRunnerTest {
     @TempDir
     Path tempDir;
 
     @Test
     void createsWorkspaceRunsHooksAndPassesPromptToCodexClient() throws Exception {
         // given
-        CodexAppServerClient codex = mock(CodexAppServerClient.class);
+        CodexAppServerClient codex = mock();
         when(codex.runSession(any(), any(), any(), any(), any(), any(), any())).thenReturn(AgentRunResult.ok());
         var runner = runner(codex, CardLookupResult.Found::new);
         EffectiveConfig config = config(Map.of(
@@ -77,7 +77,7 @@ class LocalAgentRunnerTest {
     @Test
     void leavesLegacyWorkspaceEmptyWhenPromptDoesNotReferenceBundledSkills() throws Exception {
         // given
-        CodexAppServerClient codex = mock(CodexAppServerClient.class);
+        CodexAppServerClient codex = mock();
         when(codex.runSession(any(), any(), any(), any(), any(), any(), any())).thenReturn(AgentRunResult.ok());
         var runner = runner(codex, CardLookupResult.Found::new);
         EffectiveConfig config = config(Map.of());
@@ -96,7 +96,7 @@ class LocalAgentRunnerTest {
     @Test
     void returnsFailureWhenRequiredHookFailsAndStillRemovesWorkerFromActiveSet() throws Exception {
         // given
-        CodexAppServerClient codex = mock(CodexAppServerClient.class);
+        CodexAppServerClient codex = mock();
         var runner = runner(codex, CardLookupResult.Found::new);
         EffectiveConfig config = config(Map.of("before_run", "echo broken && exit 9"));
 
@@ -119,7 +119,7 @@ class LocalAgentRunnerTest {
     @Test
     void cancelInterruptsActiveWorkerThread() throws Exception {
         // given
-        CodexAppServerClient codex = mock(CodexAppServerClient.class);
+        CodexAppServerClient codex = mock();
         CountDownLatch entered = new CountDownLatch(1);
         AtomicReference<Boolean> interrupted = new AtomicReference<>(false);
         doAnswer(invocation -> {
@@ -161,7 +161,7 @@ class LocalAgentRunnerTest {
     @Test
     void continuesSameSessionWhileCardRemainsActiveAndMaxTurnsAllowsIt() throws Exception {
         // given
-        CodexAppServerClient codex = mock(CodexAppServerClient.class);
+        CodexAppServerClient codex = mock();
         AtomicReference<CodexAppServerClient.TurnController> controller = new AtomicReference<>();
         when(codex.runSession(any(), any(), any(), any(), any(), any(), any())).thenAnswer(invocation -> {
             controller.set(invocation.getArgument(6));
@@ -188,7 +188,7 @@ class LocalAgentRunnerTest {
     @Test
     void stopsSameSessionWhenCardLeavesActiveStates() throws Exception {
         // given
-        CodexAppServerClient codex = mock(CodexAppServerClient.class);
+        CodexAppServerClient codex = mock();
         AtomicReference<CodexAppServerClient.TurnController> controller = new AtomicReference<>();
         when(codex.runSession(any(), any(), any(), any(), any(), any(), any())).thenAnswer(invocation -> {
             controller.set(invocation.getArgument(6));

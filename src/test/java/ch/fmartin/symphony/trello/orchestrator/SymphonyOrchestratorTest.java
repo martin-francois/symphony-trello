@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.orchestrator;
 
+import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
@@ -31,11 +32,12 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-class SymphonyOrchestratorTest {
+final class SymphonyOrchestratorTest {
+    private static final Instant COMMENT_TIME = Instant.parse("2026-01-01T00:00:00Z");
+
     @TempDir
     Path tempDir;
 
@@ -45,7 +47,7 @@ class SymphonyOrchestratorTest {
         Path workflow = tempDir.resolve("WORKFLOW.md");
         writeWorkflow(workflow, "60000");
         FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
-        AgentRunner runner = mock(AgentRunner.class);
+        AgentRunner runner = mock();
         when(runner.run(any())).thenReturn(AgentRunResult.ok());
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
 
@@ -71,7 +73,7 @@ class SymphonyOrchestratorTest {
         Path workflow = tempDir.resolve("WORKFLOW.md");
         writeWorkflow(workflow, "60000");
         FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Human Review")));
-        AgentRunner runner = mock(AgentRunner.class);
+        AgentRunner runner = mock();
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
 
         // when
@@ -102,11 +104,11 @@ class SymphonyOrchestratorTest {
                 "card-1",
                 "TRELLO-abc",
                 "Todo",
-                List.of(new Card.Comment("comment-1", "Review the edge case.", "Reviewer", Instant.now())));
+                List.of(new Card.Comment("comment-1", "Review the edge case.", "Reviewer", COMMENT_TIME)));
         FakeTracker tracker = new FakeTracker(List.of(listedCard));
         tracker.setCardState(refreshedCard);
         AtomicReference<String> prompt = new AtomicReference<>();
-        AgentRunner runner = mock(AgentRunner.class);
+        AgentRunner runner = mock();
         doAnswer(invocation -> {
                     AgentRunner.AgentRunRequest request = invocation.getArgument(0);
                     prompt.set(request.prompt());
@@ -153,7 +155,7 @@ class SymphonyOrchestratorTest {
         FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
         tracker.preparedCard = TestCards.card("card-1", "TRELLO-abc", "In Progress");
         AtomicReference<AgentRunner.AgentRunRequest> request = new AtomicReference<>();
-        AgentRunner runner = mock(AgentRunner.class);
+        AgentRunner runner = mock();
         doAnswer(invocation -> {
                     request.set(invocation.getArgument(0));
                     return AgentRunResult.ok();
@@ -203,7 +205,7 @@ class SymphonyOrchestratorTest {
         tracker.preparedCard = TestCards.card("card-1", "TRELLO-abc", "In Progress");
         AtomicInteger runs = new AtomicInteger();
         List<String> requestedStates = new ArrayList<>();
-        AgentRunner runner = mock(AgentRunner.class);
+        AgentRunner runner = mock();
         doAnswer(invocation -> {
                     AgentRunner.AgentRunRequest request = invocation.getArgument(0);
                     requestedStates.add(request.card().state());
@@ -258,7 +260,7 @@ class SymphonyOrchestratorTest {
         FakeTracker tracker = new FakeTracker(List.of(first, second));
         CountDownLatch workerStarted = new CountDownLatch(1);
         CountDownLatch releaseWorker = new CountDownLatch(1);
-        AgentRunner runner = mock(AgentRunner.class);
+        AgentRunner runner = mock();
         doAnswer(invocation -> {
                     workerStarted.countDown();
                     releaseWorker.await(5, TimeUnit.SECONDS);
@@ -289,7 +291,7 @@ class SymphonyOrchestratorTest {
         writeRetryableInProgressWorkflow(workflow);
         FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
         tracker.preparedCard = TestCards.card("card-1", "TRELLO-abc", "In Progress");
-        AgentRunner runner = mock(AgentRunner.class);
+        AgentRunner runner = mock();
         when(runner.run(any())).thenReturn(AgentRunResult.fail("codex failed"));
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
 
@@ -350,7 +352,7 @@ class SymphonyOrchestratorTest {
                 {{ card.state }}
                 """);
         FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "In Progress")));
-        AgentRunner runner = mock(AgentRunner.class);
+        AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             tracker.setCardState(TestCards.card("card-1", "TRELLO-abc", "Blocked"));
             return AgentRunResult.fail("handoff failed after move");
@@ -376,7 +378,7 @@ class SymphonyOrchestratorTest {
         Path workflow = tempDir.resolve("WORKFLOW.md");
         writeWorkflow(workflow, "60000");
         FakeTracker tracker = new FakeTracker(List.of());
-        AgentRunner runner = mock(AgentRunner.class);
+        AgentRunner runner = mock();
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
 
         // when
@@ -397,7 +399,7 @@ class SymphonyOrchestratorTest {
         Path workflow = tempDir.resolve("WORKFLOW.md");
         writeWorkflow(workflow, "60000");
         BlockingTracker tracker = new BlockingTracker();
-        AgentRunner runner = mock(AgentRunner.class);
+        AgentRunner runner = mock();
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
 
         // when
@@ -418,13 +420,13 @@ class SymphonyOrchestratorTest {
         Path workflow = tempDir.resolve("WORKFLOW.md");
         writeWorkflow(workflow, "60000");
         FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
-        AgentRunner runner = mock(AgentRunner.class);
+        AgentRunner runner = mock();
         doAnswer(invocation -> {
                     AgentRunner.AgentRunRequest request = invocation.getArgument(0);
                     request.listener()
                             .onEvent(new AgentEvent(
                                     "account/rateLimits/updated",
-                                    Instant.now(),
+                                    COMMENT_TIME,
                                     request.workerIdentity(),
                                     123L,
                                     "thread-1",
@@ -454,13 +456,13 @@ class SymphonyOrchestratorTest {
         Path workflow = tempDir.resolve("WORKFLOW.md");
         writeWorkflow(workflow, "60000");
         FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
-        AgentRunner runner = mock(AgentRunner.class);
+        AgentRunner runner = mock();
         doAnswer(invocation -> {
                     AgentRunner.AgentRunRequest request = invocation.getArgument(0);
                     request.listener()
                             .onEvent(new AgentEvent(
                                     "thread/tokenUsage/updated",
-                                    Instant.now(),
+                                    COMMENT_TIME,
                                     request.workerIdentity(),
                                     123L,
                                     "thread-1",
@@ -471,7 +473,7 @@ class SymphonyOrchestratorTest {
                     request.listener()
                             .onEvent(new AgentEvent(
                                     "thread/tokenUsage/updated",
-                                    Instant.now(),
+                                    COMMENT_TIME,
                                     request.workerIdentity(),
                                     123L,
                                     "thread-1",
@@ -503,7 +505,7 @@ class SymphonyOrchestratorTest {
         Path workflow = tempDir.resolve("WORKFLOW.md");
         writeWorkflow(workflow, "60000");
         FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
-        AgentRunner runner = mock(AgentRunner.class);
+        AgentRunner runner = mock();
         CountDownLatch eventsEmitted = new CountDownLatch(1);
         CountDownLatch releaseWorker = new CountDownLatch(1);
         doAnswer(invocation -> {
@@ -511,7 +513,7 @@ class SymphonyOrchestratorTest {
                     request.listener()
                             .onEvent(new AgentEvent(
                                     "session_started",
-                                    Instant.now(),
+                                    COMMENT_TIME,
                                     request.workerIdentity(),
                                     123L,
                                     "thread-1",
@@ -522,7 +524,7 @@ class SymphonyOrchestratorTest {
                     request.listener()
                             .onEvent(new AgentEvent(
                                     "session_continued",
-                                    Instant.now(),
+                                    COMMENT_TIME,
                                     request.workerIdentity(),
                                     123L,
                                     "thread-1",
@@ -556,13 +558,13 @@ class SymphonyOrchestratorTest {
         Path workflow = tempDir.resolve("WORKFLOW.md");
         writeWorkflow(workflow, "60000", "");
         FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
-        AgentRunner runner = mock(AgentRunner.class);
+        AgentRunner runner = mock();
         doAnswer(invocation -> {
                     AgentRunner.AgentRunRequest request = invocation.getArgument(0);
                     request.listener()
                             .onEvent(new AgentEvent(
                                     "turn/started",
-                                    Instant.now(),
+                                    COMMENT_TIME,
                                     request.workerIdentity(),
                                     123L,
                                     "thread-1",
@@ -612,7 +614,7 @@ class SymphonyOrchestratorTest {
         Card card = TestCards.card("card-1", "TRELLO-abc", "Todo");
         FakeTracker tracker = new FakeTracker(List.of(card));
         AtomicInteger runs = new AtomicInteger();
-        AgentRunner runner = mock(AgentRunner.class);
+        AgentRunner runner = mock();
         doAnswer(invocation ->
                         runs.incrementAndGet() == 1 ? AgentRunResult.fail("temporary failure") : AgentRunResult.ok())
                 .when(runner)
@@ -639,7 +641,7 @@ class SymphonyOrchestratorTest {
         writeWorkflow(workflow, "60000");
         Card active = TestCards.card("card-1", "TRELLO-abc", "Todo");
         FakeTracker tracker = new FakeTracker(List.of(active));
-        AgentRunner runner = mock(AgentRunner.class);
+        AgentRunner runner = mock();
         CountDownLatch started = new CountDownLatch(1);
         AtomicInteger cancelled = new AtomicInteger();
         doAnswer(invocation -> {
@@ -785,7 +787,7 @@ class SymphonyOrchestratorTest {
 
         private void setCandidates(List<Card> candidates) {
             this.candidates = new ArrayList<>(candidates);
-            this.cardStates = candidates.stream().collect(Collectors.toMap(Card::id, CardLookupResult.Found::new));
+            this.cardStates = candidates.stream().collect(toImmutableMap(Card::id, CardLookupResult.Found::new));
         }
 
         private void setCardState(Card card) {
@@ -818,7 +820,7 @@ class SymphonyOrchestratorTest {
         public Map<String, CardLookupResult> fetchCardStatesByIds(EffectiveConfig config, List<String> cardIds) {
             return cardStates.entrySet().stream()
                     .filter(entry -> cardIds.contains(entry.getKey()))
-                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                    .collect(toImmutableMap(Map.Entry::getKey, Map.Entry::getValue));
         }
 
         @Override

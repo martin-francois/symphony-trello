@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
-class CodexAuthFlowTest {
+final class CodexAuthFlowTest {
     @Test
     void browserLoginRunsCodexLoginAndVerifiesStatus() throws Exception {
         // given

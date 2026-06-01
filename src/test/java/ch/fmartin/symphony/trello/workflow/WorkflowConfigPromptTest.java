@@ -15,7 +15,7 @@ import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-class WorkflowConfigPromptTest {
+final class WorkflowConfigPromptTest {
     private final WorkflowLoader loader = new WorkflowLoader();
     private final ConfigResolver configs = new ConfigResolver();
     private final PromptRenderer prompts = new PromptRenderer();

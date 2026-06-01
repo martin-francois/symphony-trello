@@ -12,6 +12,7 @@ import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
 import java.math.BigDecimal;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -31,7 +32,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
-class TrelloClientTest {
+final class TrelloClientTest {
     private HttpServer server;
     private final AtomicReference<String> authorization = new AtomicReference<>();
     private final List<String> readRequests = new ArrayList<>();
@@ -42,7 +43,7 @@ class TrelloClientTest {
 
     @BeforeEach
     void startServer() throws Exception {
-        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
         server.createContext(
                 "/1/boards/input",
                 exchange -> respond(exchange, "{\"id\":\"board-1\",\"name\":\"Board\",\"closed\":false}"));
@@ -528,8 +529,8 @@ class TrelloClientTest {
         assertThat(sorted).extracting(Card::identifier).containsExactly("TRELLO-d", "TRELLO-b", "TRELLO-c", "TRELLO-a");
     }
 
-    @ParameterizedTest(name = "{0} remains terminal even with terminal list IDs configured")
     @MethodSource("specialTerminalCards")
+    @ParameterizedTest(name = "{0} remains terminal even with terminal list IDs configured")
     void terminalListIdsDoNotOverrideSpecialTerminalStates(String displayName, Card card) {
         // given
         var config = config("board-1", Map.of("terminal_list_ids", List.of("done")));

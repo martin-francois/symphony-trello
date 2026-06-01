@@ -6,7 +6,7 @@ import java.util.HashMap;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
-class ProcessEnvironmentTest {
+final class ProcessEnvironmentTest {
 
     @Test
     void removesDefaultTrelloSecretsWithoutChangingOtherEnvironment() {

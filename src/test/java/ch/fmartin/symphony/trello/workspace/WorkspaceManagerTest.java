@@ -11,7 +11,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-class WorkspaceManagerTest {
+final class WorkspaceManagerTest {
     private final WorkspaceManager manager = new WorkspaceManager(new HookRunner());
 
     @TempDir

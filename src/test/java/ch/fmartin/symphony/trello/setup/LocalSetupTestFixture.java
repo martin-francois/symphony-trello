@@ -12,6 +12,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.io.StringReader;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -26,7 +27,7 @@ final class LocalSetupTestFixture implements AutoCloseable {
     private final Path tempDir;
     private final FakeTrelloServer trello;
     private final FakeCommands commands = new FakeCommands();
-    private final LocalWorkerManager workerManager = mock(LocalWorkerManager.class);
+    private final LocalWorkerManager workerManager = mock();
     private final LocalSetup setup;
 
     LocalSetupTestFixture(Path tempDir) throws IOException {
@@ -355,7 +356,8 @@ final class LocalSetupTestFixture implements AutoCloseable {
             int port = healthPortOverride == null ? workflowPort(workflowPath) : healthPortOverride;
             try {
                 stopHealthServer(workflowPath.toString());
-                HttpServer healthServer = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
+                HttpServer healthServer =
+                        HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 0);
                 String workflow = workflowPath.toAbsolutePath().normalize().toString();
                 healthServer.createContext(
                         "/api/v1/local-status",

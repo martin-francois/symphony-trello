@@ -33,9 +33,9 @@ final class LocalWorkerManagerTestFixture {
                 Optional.of(tempDir.resolve("workspaces")),
                 Optional.of(tempDir.resolve("state")),
                 Map.of());
-        this.platform = mock(ManagedProcessPlatform.class);
+        this.platform = mock();
         when(platform.appendsToExistingLogs()).thenReturn(true);
-        this.healthChecker = mock(LocalHealthChecker.class);
+        this.healthChecker = mock();
         when(healthChecker.boardHealth(any()))
                 .thenReturn(new BoardHealth(
                         BoardHealthKind.STOPPED,

@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.URI;
@@ -24,7 +25,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-class PackagedAppSmokeIT {
+final class PackagedAppSmokeIT {
     private static final Path QUARKUS_RUNNER = Path.of("target/quarkus-app/quarkus-run.jar");
     private static final String BOARD_ID = "smoke-board-id";
     private static final Duration STARTUP_TIMEOUT = Duration.ofSeconds(45);
@@ -84,9 +85,9 @@ class PackagedAppSmokeIT {
         URI uri = URI.create("http://127.0.0.1:" + port + "/api/v1/local-status");
         HttpRequest request =
                 HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(2)).GET().build();
-        Instant deadline = Instant.now().plus(STARTUP_TIMEOUT);
+        Instant deadline = now().plus(STARTUP_TIMEOUT);
         Throwable lastFailure = null;
-        while (Instant.now().isBefore(deadline)) {
+        while (now().isBefore(deadline)) {
             try {
                 HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
                 if (response.statusCode() == 200) {
@@ -166,6 +167,10 @@ class PackagedAppSmokeIT {
         return System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("win") ? name + ".exe" : name;
     }
 
+    private static Instant now() {
+        return Instant.ofEpochMilli(System.currentTimeMillis());
+    }
+
     private static final class FakeTrelloEndpoint implements AutoCloseable {
         private final HttpServer server;
 
@@ -174,7 +179,7 @@ class PackagedAppSmokeIT {
         }
 
         static FakeTrelloEndpoint start(int port) throws IOException {
-            HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
+            HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 0);
             server.createContext("/1/boards/" + BOARD_ID, exchange -> {
                 byte[] body = json(Map.of("id", BOARD_ID, "name", "Smoke Board", "closed", false));
                 exchange.getResponseHeaders().add("Content-Type", "application/json");

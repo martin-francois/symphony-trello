@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
-class CodexSkillStructureTest {
+final class CodexSkillStructureTest {
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
     private static final Path SKILLS_ROOT = Path.of(".codex", "skills");
 

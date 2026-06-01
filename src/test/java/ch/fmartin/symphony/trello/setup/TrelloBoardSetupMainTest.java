@@ -14,6 +14,7 @@ import com.sun.net.httpserver.HttpServer;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -36,7 +37,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
-class TrelloBoardSetupMainTest {
+final class TrelloBoardSetupMainTest {
     private static final String CONFIG_DIR_PROPERTY = "symphony.trello.config.dir";
     private static final String SHELL_PROPERTY = "symphony.trello.shell";
     private static final String CLI_COMMAND_PROPERTY = "symphony.trello.command";
@@ -50,7 +51,7 @@ class TrelloBoardSetupMainTest {
 
     @BeforeEach
     void startServer() throws Exception {
-        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
         server.createContext(
                 "/1/members/me/organizations",
                 exchange -> respond(
@@ -120,8 +121,8 @@ class TrelloBoardSetupMainTest {
         assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
     }
 
-    @ParameterizedTest(name = "{0}")
     @MethodSource("commandsThatDoNotWriteWorkflows")
+    @ParameterizedTest(name = "{0}")
     void doesNotResolveCodexModelDefaultsForCommandsThatDoNotWriteWorkflows(String name, String[] args) {
         // given
         AtomicBoolean resolved = new AtomicBoolean();
@@ -139,11 +140,11 @@ class TrelloBoardSetupMainTest {
         assertThat(resolved).as(name).isFalse();
     }
 
-    @ParameterizedTest(name = "{0}")
     @MethodSource("mainProcessExitCases")
+    @ParameterizedTest(name = "{0}")
     void exitsWithMainProcessStatus(MainProcessCase testCase) throws Exception {
         // given
-        String[] arguments = testCase.arguments();
+        String[] arguments = testCase.argumentsArray();
 
         // when
         MainProcessResult result = runMainProcess(arguments);
@@ -583,8 +584,8 @@ class TrelloBoardSetupMainTest {
                 .doesNotContain("--key", "--token", "referenced by the workflow");
     }
 
-    @ParameterizedTest(name = "{0} help")
     @MethodSource("directCommandHelp")
+    @ParameterizedTest(name = "{0} help")
     void printsDirectCommandHelp(String command, String expectedUsage) {
         // given
         var stdout = new ByteArrayOutputStream();
@@ -599,8 +600,8 @@ class TrelloBoardSetupMainTest {
         assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
     }
 
-    @ParameterizedTest(name = "{0} version")
     @MethodSource("versionCommands")
+    @ParameterizedTest(name = "{0} version")
     void printsVersionForCommands(String[] command) {
         // given
         var stdout = new ByteArrayOutputStream();
@@ -837,7 +838,7 @@ class TrelloBoardSetupMainTest {
                 false);
         new ConnectedBoardRepository(tempDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(oldBoard)));
-        LocalWorkerManager workerManager = mock(LocalWorkerManager.class);
+        LocalWorkerManager workerManager = mock();
         TrelloBoardSetup boardSetup = new TrelloBoardSetup(
                 new ObjectMapper(),
                 () -> CodexModelSelectionDefaults.of(TrelloBoardSetup.CodexModelDefaults.fallback()));
@@ -1968,8 +1969,8 @@ class TrelloBoardSetupMainTest {
                 .doesNotContain("reasoning_effort:");
     }
 
-    @ParameterizedTest(name = "{0}")
     @MethodSource("invalidCliArgumentScenarios")
+    @ParameterizedTest(name = "{0}")
     void rejectsInvalidCliArguments(String name, String[] command, int exitCode, String[] expectedError) {
         // given
 
@@ -2240,7 +2241,15 @@ class TrelloBoardSetupMainTest {
                 .formatted(boardId, port);
     }
 
-    private record MainProcessCase(String[] arguments, int expectedExitCode, String expectedOutput) {
+    private record MainProcessCase(List<String> arguments, int expectedExitCode, String expectedOutput) {
+        private MainProcessCase(String[] arguments, int expectedExitCode, String expectedOutput) {
+            this(List.of(arguments), expectedExitCode, expectedOutput);
+        }
+
+        String[] argumentsArray() {
+            return arguments.toArray(String[]::new);
+        }
+
         @Override
         public String toString() {
             return String.join(" ", arguments);

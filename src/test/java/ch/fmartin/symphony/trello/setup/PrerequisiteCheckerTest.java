@@ -8,9 +8,9 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
-class PrerequisiteCheckerTest {
-    @ParameterizedTest(name = "{0}")
+final class PrerequisiteCheckerTest {
     @MethodSource("javaVersions")
+    @ParameterizedTest(name = "{0}")
     void javaStatusRequiresJava25Jdk(String name, String javaOutput, String javacOutput, boolean expectedAvailable) {
         // given
         FakeCommandRunner commands = baseCommands()

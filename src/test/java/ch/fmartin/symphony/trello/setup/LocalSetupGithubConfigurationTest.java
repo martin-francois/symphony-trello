@@ -9,7 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
-class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
+final class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
     @Test
     void configureGithubWithExistingManifestUpgradesMatchingBoard() throws Exception {
         // given

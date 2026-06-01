@@ -18,7 +18,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 
-class AdrConformanceTest {
+final class AdrConformanceTest {
     private static final ObjectMapper YAML = new ObjectMapper(new YAMLFactory());
     private static final TypeReference<LinkedHashMap<String, Object>> YAML_METADATA = new TypeReference<>() {};
     private static final Pattern ADR_DATE = Pattern.compile("^\\d{4}-\\d{2}-\\d{2}$");

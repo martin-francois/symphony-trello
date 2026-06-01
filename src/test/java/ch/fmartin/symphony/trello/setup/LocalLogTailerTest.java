@@ -12,7 +12,7 @@ import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-class LocalLogTailerTest {
+final class LocalLogTailerTest {
     @TempDir
     Path tempDir;
 

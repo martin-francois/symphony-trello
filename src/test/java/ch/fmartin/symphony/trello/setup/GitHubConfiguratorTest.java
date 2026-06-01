@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
-class GitHubConfiguratorTest {
+final class GitHubConfiguratorTest {
     @Test
     void alreadyAuthenticatedGitHubIsEnabledAutomatically() throws Exception {
         // given

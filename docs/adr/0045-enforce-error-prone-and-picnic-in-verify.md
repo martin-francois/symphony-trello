@@ -19,7 +19,7 @@ informed: [Future maintainers, Contributors]
 The static-analysis rollout first added Error Prone and Picnic Error Prone Support as optional
 profiles. The baselines have now been cleaned and triaged:
 
-* Base Error Prone warnings are clean.
+* Base Error Prone warnings are clean for production and test sources.
 * Useful Picnic bug-check findings are fixed or intentionally disabled.
 * Useful Picnic Refaster rule families are applied and narrowed to an accepted set.
 * Rejected Refaster families have documented reasons.
@@ -55,8 +55,13 @@ uses the same Java 25 module export flags that were proven in the optional profi
 
 The blocking compiler configuration:
 
-* enables Error Prone during normal production-source compilation;
+* enables Error Prone during normal production and test-source compilation;
 * enables `OptionalNotPresent` as an error;
+* promotes the cleaned `AddressSelection`, `ArrayRecordComponent`, `CollectorMutability`,
+  `ConstantNaming`, `FormatStringConcatenation`, `FormatStringShouldUsePlaceholders`,
+  `JUnitClassModifiers`, `JUnitMethodDeclaration`, `JUnitValueSource`,
+  `LexicographicalAnnotationListing`, `MockitoMockClassReference`, `StreamResourceLeak`,
+  `StringSplitter`, and `TimeZoneUsage` findings to errors;
 * keeps `StaticImport` disabled because it is a style preference for this project;
 * keeps `LexicographicalAnnotationAttributeListing` disabled because picocli attribute order can be
   user-facing;
@@ -70,17 +75,17 @@ The old `error-prone`, `picnic-error-prone`, and `picnic-refaster` profiles are 
 would duplicate the default compiler path. PMD candidate and jPinpoint remain separate report-only
 profiles because their remaining rule sets are not accepted as blocking checks.
 
-Applying the same selected Picnic configuration to test compilation exposed a separate test-source
-baseline. [GitHub issue #145](https://github.com/martin-francois/symphony-trello/issues/145) tracks
-that work so justified test-source findings are not hidden or broadly suppressed.
+[GitHub issue #145](https://github.com/martin-francois/symphony-trello/issues/145) cleaned the
+test-source baseline before the selected compiler checks were applied to test compilation. The
+test-source findings were fixed instead of broadly suppressing test sources.
 
 ### Consequences
 
-* Good, because normal validation now enforces the selected production-source compiler-level
+* Good, because normal validation now enforces the selected production and test-source compiler-level
   static-analysis checks.
 * Good, because agents and contributors do not need to remember extra profile commands for accepted
   checks.
-* Good, because future production-source violations fail at compile time.
+* Good, because future production and test-source violations fail at compile time.
 * Good, because selected Refaster suggestions are constrained to reviewed rule families.
 * Bad, because every normal compile pays the Error Prone and Picnic compiler-plugin cost.
 * Bad, because future Java, Maven Compiler Plugin, Error Prone, or Picnic upgrades may require
@@ -96,7 +101,7 @@ Run:
 ```
 
 Both commands should pass with Error Prone, Picnic bug checks, and selected Refaster rules enabled
-for production sources.
+for production and test sources.
 
 ## Pros and Cons of the Options
 
@@ -119,9 +124,9 @@ Run base Error Prone during normal production-source compile and keep Picnic opt
 
 ### Promote Selected Error Prone, Picnic, and Refaster Checks
 
-Run the cleaned selected checks in normal production-source compiler configuration.
+Run the cleaned selected checks in normal production and test-source compiler configuration.
 
-* Good, because `./mvnw -q spotless:check verify` enforces the accepted production-source Java
+* Good, because `./mvnw -q spotless:check verify` enforces the accepted Java
   static-analysis gate.
 * Good, because the configuration uses already-triaged rule flags and Refaster patterns.
 * Bad, because normal compile becomes heavier.
@@ -141,6 +146,5 @@ This decision does not make every possible Error Prone, Picnic, or Refaster rule
 rule families must still be measured, fixed, tuned, suppressed, or rejected before they become
 blocking.
 
-Test-source Picnic findings, PMD candidate, and jPinpoint remain tracked separately because their
-remaining rule sets are not yet accepted as blocking checks. Semgrep and CodeQL remain separate
-later work.
+PMD candidate and jPinpoint remain tracked separately because their remaining rule sets are not yet
+accepted as blocking checks. Semgrep and CodeQL remain separate later work.
