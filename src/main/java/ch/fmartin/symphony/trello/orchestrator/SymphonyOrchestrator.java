@@ -74,7 +74,6 @@ public class SymphonyOrchestrator {
     private Instant workflowLastModified;
     private ScheduledFuture<?> tickTimer;
     private WatchService workflowWatchService;
-    private Thread workflowWatcher;
     private long endedRuntimeMillis;
     private long totalInputTokens;
     private long totalOutputTokens;
@@ -132,7 +131,10 @@ public class SymphonyOrchestrator {
             tickTimer.cancel(false);
         }
         stopWorkflowWatcher();
-        running.values().forEach(entry -> agentRunner.cancel(entry.workerIdentity));
+        running.values().forEach(entry -> {
+            agentRunner.cancel(entry.workerIdentity);
+            cancelWorkerTask(entry);
+        });
         scheduler.shutdownNow();
         workers.shutdownNow();
         started = false;
@@ -285,7 +287,7 @@ public class SymphonyOrchestrator {
                     StandardWatchEventKinds.ENTRY_CREATE,
                     StandardWatchEventKinds.ENTRY_MODIFY,
                     StandardWatchEventKinds.ENTRY_DELETE);
-            workflowWatcher = Thread.ofVirtual().name("symphony-workflow-watch").start(this::watchWorkflowChanges);
+            Thread.ofVirtual().name("symphony-workflow-watch").start(this::watchWorkflowChanges);
         } catch (IOException e) {
             LOG.warnf("workflow=%s watcher=disabled reason=%s", config.workflowPath(), e.getMessage());
         }
@@ -400,6 +402,7 @@ public class SymphonyOrchestrator {
         ignoredWorkers.put(entry.workerIdentity, clock.instant().plus(IGNORED_WORKER_TTL));
         trimIgnoredWorkers();
         agentRunner.cancel(entry.workerIdentity);
+        cancelWorkerTask(entry);
         addRuntime(entry);
         if (cleanupWorkspace) {
             workspaces.removeForIdentifierIfPresent(entry.identifier(), config);
@@ -440,7 +443,7 @@ public class SymphonyOrchestrator {
             scheduleRetry(dispatchCard.id(), nextAttempt(attempt), dispatchCard.identifier(), e.getMessage(), false);
             return;
         }
-        workers.submit(() -> {
+        entry.workerTask = workers.submit(() -> {
             AgentRunResult result = agentRunner.run(new AgentRunner.AgentRunRequest(
                     dispatchCard, attempt, prompt, config, workerIdentity, this::onAgentEvent));
             onWorkerExit(dispatchCard.id(), workerIdentity, result);
@@ -483,6 +486,12 @@ public class SymphonyOrchestrator {
         } else {
             releaseCurrentFromDispatch(entry.card, result.reason());
             scheduleRetry(cardId, nextAttempt(entry.retryAttempt), entry.identifier(), result.reason(), false);
+        }
+    }
+
+    private static void cancelWorkerTask(RunningEntry entry) {
+        if (entry.workerTask != null) {
+            entry.workerTask.cancel(true);
         }
     }
 

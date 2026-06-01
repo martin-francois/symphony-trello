@@ -24,7 +24,7 @@ final class StreamTerminal implements Terminal {
 
     @Override
     public char[] readSecret(String prompt) throws IOException {
-        Console console = System.console();
+        Console console = SystemConsole.current();
         if (console != null) {
             char[] password = console.readPassword(prompt);
             return password == null ? null : password;

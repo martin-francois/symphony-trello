@@ -1356,7 +1356,7 @@ final class SetupDiagnosticReporter {
     }
 
     private void offerGithubIssue(Path reportPath, Terminal terminal) {
-        if (System.console() == null) {
+        if (SystemConsole.current() == null) {
             return;
         }
         if (!commandRunner.run("gh", "auth", "status").success()) {

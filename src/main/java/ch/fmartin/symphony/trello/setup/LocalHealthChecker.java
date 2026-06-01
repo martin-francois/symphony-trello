@@ -5,9 +5,11 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.ws.rs.core.Response.Status;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URI;
+import java.net.UnknownHostException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -21,6 +23,7 @@ final class LocalHealthChecker {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final TypeReference<Map<String, Object>> JSON_MAP_TYPE = new TypeReference<>() {};
     private static final Duration LOCAL_STATUS_TIMEOUT = Duration.ofMillis(500);
+    private static final InetAddress LOOPBACK_IPV4 = loopbackIpv4();
 
     private final Map<String, String> environment;
     private final HttpClient httpClient;
@@ -139,10 +142,22 @@ final class LocalHealthChecker {
             return false;
         }
         try (Socket socket = new Socket()) {
-            socket.connect(new InetSocketAddress("127.0.0.1", port), 150);
+            socket.connect(new InetSocketAddress(LOOPBACK_IPV4, port), 150);
             return true;
         } catch (IOException e) {
             return false;
+        }
+    }
+
+    static InetAddress loopbackIpv4ForTests() {
+        return LOOPBACK_IPV4;
+    }
+
+    private static InetAddress loopbackIpv4() {
+        try {
+            return InetAddress.getByAddress(new byte[] {127, 0, 0, 1});
+        } catch (UnknownHostException e) {
+            throw new ExceptionInInitializerError(e);
         }
     }
 

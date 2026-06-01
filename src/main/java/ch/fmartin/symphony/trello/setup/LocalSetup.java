@@ -1429,24 +1429,11 @@ public final class LocalSetup {
         }
     }
 
-    private record ExistingBoardLists(
-            List<String> activeStates,
-            List<String> terminalStates,
-            String inProgressState,
-            boolean detectInProgressState,
-            String blockedState,
-            boolean createMissingGithubLists) {}
-
     private enum ExistingSetupAction {
         KEEP,
         CONNECT,
         DISCONNECT,
         UPGRADE_GITHUB,
         UPDATE_CODEX_ACCESS
-    }
-
-    private enum BoardSetupChoice {
-        NEW,
-        EXISTING
     }
 }
