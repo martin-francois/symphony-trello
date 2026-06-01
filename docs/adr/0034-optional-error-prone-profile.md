@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded by [ADR 0045](0045-enforce-error-prone-and-picnic-in-verify.md)
 date: 2026-05-29
 decision-makers: [François Martin, Codex]
 consulted:
@@ -11,6 +11,10 @@ informed: [Future maintainers]
 ---
 
 # Add Error Prone as an Optional Compiler Profile
+
+This ADR records the historical decision to introduce Error Prone as an optional profile. It is
+superseded by [ADR 0045](0045-enforce-error-prone-and-picnic-in-verify.md), which promotes the clean
+production-source baseline into normal verification.
 
 ## Context and Problem Statement
 

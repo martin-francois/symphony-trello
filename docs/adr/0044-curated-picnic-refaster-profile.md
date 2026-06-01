@@ -71,14 +71,15 @@ The following families are rejected for this project at this time:
   `ComparatorRules`: the suggested rewrites are not clearly more readable in the current call
   sites.
 
-The profile remains report-only and separate from normal `verify`.
+[ADR 0045](0045-enforce-error-prone-and-picnic-in-verify.md) later promotes the selected Refaster
+rule families into normal verification.
 
 ### Consequences
 
-* Good, because the Refaster profile is now clean for the accepted rule families.
+* Good, because the accepted Refaster rule families are now clean.
 * Good, because future drift in the accepted families remains visible.
 * Good, because rejected style families no longer bury useful signal.
-* Bad, because rejected families will not be reported by this profile unless the pattern is changed.
+* Bad, because rejected families will not be reported unless the pattern is changed.
 * Bad, because broader Guava collection style adoption would need a new decision if the project
   wants it later.
 
@@ -87,11 +88,10 @@ The profile remains report-only and separate from normal `verify`.
 Run:
 
 ```bash
-./mvnw -Ppicnic-refaster clean compile
 ./mvnw -q spotless:check verify
 ```
 
-The Refaster profile should complete without rewrite suggestions for the accepted rule families.
+Normal verification should complete without Refaster suggestions for the accepted rule families.
 
 ## Pros and Cons of the Options
 
@@ -126,7 +126,7 @@ Remove or stop using the Refaster profile.
 Apply only the useful rewrites and include only those rule families in the profile.
 
 * Good, because each accepted rewrite improves readability or directness.
-* Good, because the profile stays actionable.
+* Good, because the selected Refaster rule set stays actionable.
 * Bad, because future maintainers must update the `NamePattern` before evaluating new Refaster
   families.
 

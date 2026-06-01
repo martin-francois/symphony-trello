@@ -55,21 +55,20 @@ returns `null`, and both console-sensitive call sites use the same boundary.
 
 * Good, because the base Error Prone warning baseline becomes clean.
 * Good, because the console suppression has one place and one reason.
-* Good, because normal validation behavior does not change before the remaining rollout work is
+* Good, because normal validation behavior did not change before the remaining rollout work was
   done.
-* Bad, because the optional Error Prone profile is still not part of normal `verify`.
+* Bad, because Error Prone was still outside normal `verify` until the final rollout decision.
 
 ### Confirmation
 
 Run:
 
 ```bash
-./mvnw -Perror-prone clean compile
-./mvnw -Ppicnic-error-prone clean compile
+./mvnw clean compile
 ./mvnw -q spotless:check verify
 ```
 
-The two Error Prone profile commands should complete without warnings.
+Normal compile should pass with Error Prone enabled by the default compiler configuration.
 
 ## Pros and Cons of the Options
 
@@ -111,3 +110,6 @@ Make normal Maven verification run the base Error Prone profile.
 This decision does not reject making Error Prone blocking. It only keeps that promotion out of the
 #140 cleanup PR. The final static-analysis rollout remains tracked by
 [GitHub issue #130](https://github.com/martin-francois/symphony-trello/issues/130).
+
+[ADR 0045](0045-enforce-error-prone-and-picnic-in-verify.md) later promotes the clean Error Prone
+baseline into normal verification.

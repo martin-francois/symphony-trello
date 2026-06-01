@@ -61,11 +61,12 @@ is the intended production clock source.
 Run:
 
 ```bash
-./mvnw -Ppicnic-error-prone clean compile
+./mvnw clean compile
 ./mvnw -q spotless:check verify
 ```
 
-`TimeZoneUsage` should not appear in the Picnic output.
+Normal compile should pass with `TimeZoneUsage` enforced by the default Error Prone/Picnic compiler
+configuration.
 
 ## Pros and Cons of the Options
 
