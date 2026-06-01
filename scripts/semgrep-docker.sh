@@ -24,4 +24,16 @@ if [[ "$git_common_dir" != "$repo_root/.git" && "$git_common_dir" != "$git_dir" 
 fi
 
 exec docker "${docker_args[@]}" "$image" \
-  semgrep scan --config config/semgrep --error --metrics=off "$@"
+  semgrep scan \
+  --config p/owasp-top-ten \
+  --config p/security-audit \
+  --config p/ci \
+  --config p/github-actions \
+  --config p/secrets \
+  --config p/gitleaks \
+  --config p/supply-chain \
+  --config config/semgrep \
+  --exclude-rule java.lang.security.audit.crypto.unencrypted-socket.unencrypted-socket \
+  --error \
+  --metrics=off \
+  "$@"
