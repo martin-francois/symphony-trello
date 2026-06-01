@@ -59,6 +59,15 @@
       "matchStrings": ["(?<depName>mcr\\.microsoft\\.com/dotnet/sdk):(?<currentValue>\\d+\\.\\d+)"],
       "datasourceTemplate": "docker",
       "versioningTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^scripts/semgrep-docker\\.sh$/"
+      ],
+      "matchStrings": ["(?<depName>semgrep/semgrep):(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
     }
   ],
   "customDatasources": {

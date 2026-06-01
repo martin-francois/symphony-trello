@@ -1,0 +1,38 @@
+rules:
+  - id: symphony.github-actions.full-length-action-sha
+    languages: [yaml]
+    severity: ERROR
+    message: GitHub Actions must be pinned to full 40-character commit SHAs with a tracked version comment.
+    paths:
+      include:
+        - /.github/workflows/*.yml
+    patterns:
+      - pattern-regex: 'uses:\s*[^#\n]+@[^\s#]+'
+      - pattern-not-regex: 'uses:\s*[^#\n]+@[0-9a-f]{40}\s+#\s*v[0-9]+(?:\.[0-9]+){0,2}\b'
+
+  - id: symphony.maven.no-ad-hoc-java-env
+    languages: [generic]
+    severity: ERROR
+    message: Do not prefix Maven wrapper commands with ad hoc JAVA_HOME or PATH assignments.
+    paths:
+      include:
+        - "**/*.md"
+        - "**/*.sh"
+        - "**/*.yml"
+        - "**/*.yaml"
+    pattern-regex: '(?:^|[;&|]\s*|\s)(?:JAVA_HOME|PATH)=[^\n]*(?:\.\/mvnw|mvnw(?:\.cmd)?)'
+
+  - id: symphony.readme.no-contributor-validation-command
+    languages: [generic]
+    severity: ERROR
+    message: Keep contributor validation commands out of README.md; put them in CONTRIBUTING.md or agent docs.
+    paths:
+      include:
+        - /README.md
+    pattern-regex: '(?:\./mvnw|mvnw\.cmd|spotless:check|pmd:pmd|spotbugs:check|jacoco)'
+
+  - id: symphony.helpers.no-non-java-helper-shebang
+    languages: [generic]
+    severity: ERROR
+    message: Do not add reusable Python, Perl, Ruby, Node, Deno, or Bun helper scripts without a documented project exception.
+    pattern-regex: '^#!.*\b(?:python(?:3)?|perl|ruby|node|deno|bun)\b'

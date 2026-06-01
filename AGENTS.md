@@ -217,7 +217,10 @@ matters, and easy for another engineer to understand without asking the original
 - For Semgrep, use custom rules for cross-language guardrails and security patterns that are not
   already covered by specialized linters. Prefer fixing findings, use rule-specific `nosemgrep`
   comments only with a reason, use `.semgrepignore` only for generated, vendored, or irrelevant
-  paths, and run private-repository local checks with `--metrics=off`.
+  paths, and run private-repository local checks with `--metrics=off`. The accepted repository
+  Semgrep rules live in `config/semgrep` and run in the dedicated `Semgrep` workflow. Before adding
+  or promoting another Semgrep rule, measure the baseline locally, fix justified findings, and
+  document any rejected rule in the relevant issue or ADR.
 - Treat CodeQL as a later public-repository code-scanning layer. Keep local Maven-based checks as
   the primary agent feedback loop, and do not require CodeQL as part of normal local `verify`.
 - Keep automation config minimal. Do not restate inherited defaults or duplicate global Renovate
