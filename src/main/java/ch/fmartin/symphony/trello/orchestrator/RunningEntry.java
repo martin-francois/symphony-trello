@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.orchestrator;
 
 import ch.fmartin.symphony.trello.domain.Card;
 import java.time.Instant;
+import java.util.concurrent.Future;
 
 final class RunningEntry {
     final String cardId;
@@ -21,6 +22,7 @@ final class RunningEntry {
     volatile long lastReportedInputTokens;
     volatile long lastReportedOutputTokens;
     volatile long lastReportedTotalTokens;
+    volatile Future<?> workerTask;
     int turnCount;
 
     RunningEntry(Card card, String workerIdentity, Integer retryAttempt, Instant startedAt) {

@@ -14,7 +14,7 @@ record CodexModelSelectionDefaults(
         boolean preserveConfiguredReasoningEffort,
         boolean preserveReasoningEffortOmission) {
     CodexModelSelectionDefaults {
-        defaults = Objects.requireNonNull(defaults, "defaults");
+        Objects.requireNonNull(defaults, "defaults");
         reasoningEffortsByModel = sanitize(reasoningEffortsByModel);
         fallbackReasoningEffort = blank(fallbackReasoningEffort) ? null : fallbackReasoningEffort.strip();
     }
