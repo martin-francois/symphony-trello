@@ -164,11 +164,19 @@ code-local exceptions should use `@SuppressFBWarnings(value = "...", justificati
 Prone and the selected Picnic Error Prone Support rule families run as blocking production and
 test-source compiler checks in normal validation. New Error Prone or Picnic checks should still
 start in a non-blocking branch or profile until their baseline is understood, then use stable
-`-Xep:<CheckName>:OFF|WARN|ERROR` flags for rule control. Semgrep suppressions should be
-rule-specific `nosemgrep` comments with a reason, and private-repository local runs should use
-`--metrics=off`. CodeQL is a later public-repository code-scanning layer and is not part of normal
-local `verify`. Hosted dashboards can add signal, but they must not replace local checks
-contributors can run, fix, and rerun.
+`-Xep:<CheckName>:OFF|WARN|ERROR` flags for rule control.
+
+Semgrep covers focused cross-language repository guardrails under `config/semgrep`. CI runs the
+same local rules with:
+
+```bash
+./scripts/semgrep-docker.sh
+```
+
+Use rule-specific `nosemgrep` comments only for true false positives and include a reason. CodeQL is
+a later public-repository code-scanning layer and is not part of normal local `verify`. Hosted
+dashboards can add signal, but they must not replace local checks contributors can run, fix, and
+rerun.
 
 PowerShell installer tests use native `pwsh` when it is installed. CI also runs them through
 Microsoft's .NET SDK container:
