@@ -21,6 +21,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -93,7 +94,7 @@ public class TrelloClient implements TrackerClient {
         Set<String> archivedListIds = context.lists().values().stream()
                 .filter(BoardList::closed)
                 .map(BoardList::id)
-                .collect(Collectors.toSet());
+                .collect(Collectors.toCollection(HashSet::new));
         for (String listId : archivedListIds) {
             List<Map<String, Object>> listCards = getList(
                     config,

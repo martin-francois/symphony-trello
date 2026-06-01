@@ -77,7 +77,7 @@ final class CodexModelSelectionFlow {
             return selectionDefaults
                     .reasoningEffortForExplicitModelOverride(
                             model, defaults, selectionDefaults.preserveConfiguredReasoningEffort())
-                    .orElse(defaults.reasoningEffort());
+                    .orElseGet(defaults::reasoningEffort);
         }
         return defaults.reasoningEffort();
     }
