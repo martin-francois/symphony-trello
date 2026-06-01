@@ -149,7 +149,9 @@ across 15 rule names:
 
 The first `picnic-refaster` run completed successfully and reported 198 rewrite suggestions. The
 largest groups were immutable collection factory rewrites, precondition helper rewrites,
-Optional-related rewrites, file-reading rewrites, and small stream/string-builder rewrites.
+Optional-related rewrites, file-reading rewrites, and small stream/string-builder rewrites. The
+Refaster profile was later narrowed by
+[ADR 0044](0044-curated-picnic-refaster-profile.md) after those families were triaged.
 
 These findings are real cleanup input, not noise only because there are many of them. They remain
 outside `verify` until focused follow-up issues fix, tune, suppress, or reject each useful rule

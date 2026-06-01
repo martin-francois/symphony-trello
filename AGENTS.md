@@ -94,11 +94,12 @@ matters, and easy for another engineer to understand without asking the original
    request only when the issues are cohesive or merging them together is materially easier. A single
    issue may still use multiple focused commits when requested or when that improves review, but do
    not collapse separate issue work into one mixed commit unless the user explicitly asks.
-   When the user asks to address another round of review comments on an existing pull request and
-   wants an easy review delta, first squash the already-pushed PR commits into one base commit when
-   they ask for that, then make the new review-response changes in a separate follow-up commit. Run
-   the Codex review/fix loop before pushing, reply to the handled review threads, and push the
-   updated branch.
+   When the user asks to address review comments on an existing pull request, make the
+   review-response changes in a separate follow-up commit so the review delta is easy to inspect.
+   Do not amend those changes into the existing PR commit unless the user explicitly asks. Run the
+   Codex review/fix loop before pushing, reply on GitHub to every handled review comment or thread,
+   and push the updated branch. If the user also asks to squash the already-pushed PR commits first,
+   squash them into one base commit before adding the separate review-response commit.
    Keep `feat/issue-35-plan-b-onboarding` as a single commit on top of `main`; amend or squash and
    force-push when changing that branch.
    The pull request title is linted in CI because the repository normally squash-merges with that

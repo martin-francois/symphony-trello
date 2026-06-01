@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -9,12 +11,10 @@ final class MarkdownTable {
     private final List<List<String>> rows;
 
     private MarkdownTable(List<String> headers, List<Alignment> alignments) {
-        if (headers == null || headers.isEmpty()) {
-            throw new IllegalArgumentException("Markdown table must have at least one header");
-        }
-        if (alignments == null || alignments.size() != headers.size()) {
-            throw new IllegalArgumentException("Markdown table alignment count must match header count");
-        }
+        checkArgument(headers != null && !headers.isEmpty(), "Markdown table must have at least one header");
+        checkArgument(
+                alignments != null && alignments.size() == headers.size(),
+                "Markdown table alignment count must match header count");
         this.headers = List.copyOf(headers);
         this.alignments = List.copyOf(alignments);
         this.rows = new ArrayList<>();
@@ -25,11 +25,11 @@ final class MarkdownTable {
     }
 
     MarkdownTable row(Object... cells) {
-        if (cells.length != headers.size()) {
-            throw new IllegalArgumentException(
-                    "Markdown table row cell count must match header count: expected %d but got %d"
-                            .formatted(headers.size(), cells.length));
-        }
+        checkArgument(
+                cells.length == headers.size(),
+                "Markdown table row cell count must match header count: expected %s but got %s",
+                headers.size(),
+                cells.length);
         List<String> row = new ArrayList<>(cells.length);
         for (Object cell : cells) {
             row.add(escape(cell));

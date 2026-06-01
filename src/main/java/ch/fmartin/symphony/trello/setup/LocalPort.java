@@ -1,13 +1,13 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 record LocalPort(int value) {
     static final int MIN = 1;
     static final int MAX = 65_535;
 
     LocalPort {
-        if (!isValid(value)) {
-            throw new IllegalArgumentException("Local port must be between " + MIN + " and " + MAX + ": " + value);
-        }
+        checkArgument(isValid(value), "Local port must be between %s and %s: %s", MIN, MAX, value);
     }
 
     static boolean isValid(int value) {

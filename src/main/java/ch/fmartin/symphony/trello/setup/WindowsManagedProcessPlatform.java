@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -45,9 +47,7 @@ final class WindowsManagedProcessPlatform extends ProcessHandleManagedProcessPla
 
     static String encodedStartProcessScript(
             List<String> command, Path workingDirectory, Map<String, String> environment, Path stdout, Path stderr) {
-        if (command.isEmpty()) {
-            throw new IllegalArgumentException("command must not be empty");
-        }
+        checkArgument(!command.isEmpty(), "command must not be empty");
         StringBuilder script = new StringBuilder();
         script.append("$ErrorActionPreference = 'Stop'\n");
         environment.forEach((key, value) -> script.append("[System.Environment]::SetEnvironmentVariable(")
@@ -122,14 +122,14 @@ final class WindowsManagedProcessPlatform extends ProcessHandleManagedProcessPla
             if (character == '\\') {
                 backslashes++;
             } else if (character == '"') {
-                quoted.append("\\".repeat(backslashes * 2 + 1)).append('"');
+                quoted.repeat("\\", backslashes * 2 + 1).append('"');
                 backslashes = 0;
             } else {
-                quoted.append("\\".repeat(backslashes)).append(character);
+                quoted.repeat("\\", backslashes).append(character);
                 backslashes = 0;
             }
         }
-        quoted.append("\\".repeat(backslashes * 2)).append('"');
+        quoted.repeat("\\", backslashes * 2).append('"');
         return quoted.toString();
     }
 }

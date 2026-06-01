@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 import java.io.IOException;
 import java.util.Locale;
 
@@ -23,9 +25,7 @@ final class PromptSupport {
             return defaultChoice;
         }
         int parsed = Integer.parseInt(answer.strip());
-        if (parsed < 1 || parsed > maxChoice) {
-            throw new IllegalArgumentException("Choice must be between 1 and " + maxChoice);
-        }
+        checkArgument(parsed >= 1 && parsed <= maxChoice, "Choice must be between 1 and %s", maxChoice);
         return parsed;
     }
 }
