@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.catchThrowable;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.URI;
@@ -27,7 +28,7 @@ import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-class SetupDiagnosticReporterTest {
+final class SetupDiagnosticReporterTest {
     @TempDir
     Path tempDir;
 
@@ -1451,7 +1452,7 @@ class SetupDiagnosticReporterTest {
     }
 
     private static HttpServer fakeLocalServer(int port) throws IOException {
-        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
+        HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 0);
         server.createContext(
                 "/api/v1/local-status",
                 exchange -> writeJson(

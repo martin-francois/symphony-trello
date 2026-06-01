@@ -18,13 +18,14 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
-class InstallerScriptTest {
+final class InstallerScriptTest {
     @TempDir
     Path temporaryDirectory;
 
     @ParameterizedTest(name = "{0} syntax")
-    @MethodSource("posixScripts")
+    @ValueSource(strings = {"install.sh", "uninstall.sh"})
     void posixInstallAndUninstallScriptsHaveValidBashSyntax(String script) throws Exception {
         // given
         Assumptions.assumeTrue(commandExists("bash"));
@@ -36,12 +37,8 @@ class InstallerScriptTest {
         result.assertSuccess();
     }
 
-    private static Stream<String> posixScripts() {
-        return Stream.of("install.sh", "uninstall.sh");
-    }
-
-    @ParameterizedTest(name = "{0}")
     @MethodSource("posixPublicDryRunScenarios")
+    @ParameterizedTest(name = "{0}")
     void posixPublicDryRunCommandsStopBeforeChangingFiles(String name, String[] command, String[] expectedOutput)
             throws Exception {
         // given
@@ -545,8 +542,8 @@ class InstallerScriptTest {
                 .doesNotContain("sudo apt-get", "doas apt-get");
     }
 
-    @ParameterizedTest(name = "{0}")
     @MethodSource("codexInstallDryRunCases")
+    @ParameterizedTest(name = "{0}")
     void posixInstallerDryRunReportsSelectedCodexInstallPath(
             String name, Map<String, String> commandStubs, Map<String, String> extraEnvironment, String expected)
             throws Exception {
@@ -1571,7 +1568,7 @@ class InstallerScriptTest {
     }
 
     @ParameterizedTest(name = "pinned ref type: {0}")
-    @MethodSource("pinnedRefTypes")
+    @ValueSource(strings = {"tag", "sha"})
     void posixInstallerRerunsPinnedNonBranchRefsWithoutPulling(String refType) throws Exception {
         // given
         Assumptions.assumeTrue(commandExists("bash"));
@@ -2056,10 +2053,6 @@ class InstallerScriptTest {
                         "setup-cli cwd=" + callerDirectory,
                         callerDirectory.resolve("WORKFLOW.relative.md").toString(),
                         "dotenv=" + callerDirectory.resolve(".env.relative"));
-    }
-
-    private static Stream<Arguments> pinnedRefTypes() {
-        return Stream.of(Arguments.of("tag"), Arguments.of("sha"));
     }
 
     private Path createUnmarkedCheckout(String name) throws Exception {

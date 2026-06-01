@@ -11,13 +11,13 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 
-class TestConventionTest {
+final class TestConventionTest {
     private static final Pattern SIMPLE_MANUAL_MOCK = Pattern.compile(
             "\\b(new\\s+AgentRunner\\s*\\(\\)|extends\\s+(SymphonyOrchestrator|CodexAppServerClient)|implements\\s+AgentRunner)");
     private static final Pattern TEST_ANNOTATION = Pattern.compile("^\\s*@(Test|ParameterizedTest)\\b");
 
     @Test
-    void testMethodsUseGivenWhenThenSections() throws IOException {
+    void methodsUseGivenWhenThenSections() throws IOException {
         // given
         List<String> violations = new ArrayList<>();
 
@@ -83,7 +83,8 @@ class TestConventionTest {
                 index++;
                 continue;
             }
-            assertTestSections(file, methodStart, lines.subList(methodStart + 1, methodEnd), violations);
+            List<String> body = methodEnd > methodStart ? lines.subList(methodStart + 1, methodEnd) : List.of();
+            assertTestSections(file, methodStart, body, violations);
             index = methodEnd;
             index++;
         }
@@ -91,7 +92,11 @@ class TestConventionTest {
 
     private static int findMethodStart(List<String> lines, int start) {
         for (int index = start; index < lines.size(); index++) {
-            if (lines.get(index).contains("{")) {
+            String line = lines.get(index);
+            if (line.stripLeading().startsWith("@")) {
+                continue;
+            }
+            if (line.contains("{")) {
                 return index;
             }
         }

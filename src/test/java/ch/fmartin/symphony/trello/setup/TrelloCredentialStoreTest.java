@@ -14,7 +14,7 @@ import org.junit.jupiter.api.condition.EnabledOnOs;
 import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 
-class TrelloCredentialStoreTest {
+final class TrelloCredentialStoreTest {
     @TempDir
     Path tempDir;
 

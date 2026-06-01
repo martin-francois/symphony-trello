@@ -8,7 +8,7 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-class WorkflowConfigEditorTest {
+final class WorkflowConfigEditorTest {
     @TempDir
     Path tempDir;
 

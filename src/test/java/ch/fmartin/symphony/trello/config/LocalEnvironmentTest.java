@@ -5,14 +5,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
-import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
-class LocalEnvironmentTest {
+final class LocalEnvironmentTest {
     @TempDir
     Path tempDir;
 
@@ -103,7 +101,7 @@ class LocalEnvironmentTest {
     }
 
     @ParameterizedTest(name = "{0}")
-    @MethodSource("ignoredDotenvLines")
+    @ValueSource(strings = {"", "# comment", "MISSING_SEPARATOR", "1INVALID=value", "INVALID-NAME=value"})
     void ignoresInvalidDotenvLines(String ignoredLine) throws Exception {
         // given
         Path dotenv = tempDir.resolve(".env");
@@ -118,14 +116,5 @@ class LocalEnvironmentTest {
 
         // then
         assertThat(values).containsExactly(Map.entry("VALID", "value"));
-    }
-
-    private static Stream<Arguments> ignoredDotenvLines() {
-        return Stream.of(
-                Arguments.of(""),
-                Arguments.of("# comment"),
-                Arguments.of("MISSING_SEPARATOR"),
-                Arguments.of("1INVALID=value"),
-                Arguments.of("INVALID-NAME=value"));
     }
 }

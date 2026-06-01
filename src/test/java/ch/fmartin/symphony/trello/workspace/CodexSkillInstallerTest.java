@@ -8,7 +8,7 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-class CodexSkillInstallerTest {
+final class CodexSkillInstallerTest {
     private final CodexSkillInstaller installer = new CodexSkillInstaller();
 
     @TempDir

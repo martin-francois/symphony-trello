@@ -9,7 +9,7 @@ import java.util.Map;
 import org.assertj.core.api.InstanceOfAssertFactories;
 import org.junit.jupiter.api.Test;
 
-class CardTemplateMapTest {
+final class CardTemplateMapTest {
     @Test
     void exposesBlockersAsTemplateFriendlyMaps() {
         // given

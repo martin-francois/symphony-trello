@@ -13,6 +13,7 @@ import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -30,7 +31,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-class TrelloBoardSetupTest {
+final class TrelloBoardSetupTest {
     private HttpServer server;
     private TrelloBoardSetup setup;
     private final List<String> createdLists = new ArrayList<>();
@@ -43,7 +44,7 @@ class TrelloBoardSetupTest {
 
     @BeforeEach
     void startServer() throws Exception {
-        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
         setup = new TrelloBoardSetup(new ObjectMapper());
         workspaceResponse.set(
                 """

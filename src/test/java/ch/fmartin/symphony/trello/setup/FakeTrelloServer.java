@@ -6,6 +6,7 @@ import ch.fmartin.symphony.trello.TestHttpExchange;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
@@ -46,7 +47,7 @@ final class FakeTrelloServer implements AutoCloseable {
     private HttpServer server;
 
     FakeTrelloServer start() throws IOException {
-        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
         server.createContext("/1/members/me", exchange -> {
             memberLookups.add(exchange.getRequestURI().getPath());
             respond(exchange, memberResponse.get());

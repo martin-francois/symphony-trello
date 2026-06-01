@@ -8,7 +8,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-class ProcessHandleManagedProcessPlatformTest {
+final class ProcessHandleManagedProcessPlatformTest {
     @TempDir
     Path tempDir;
 

@@ -23,7 +23,7 @@ import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
-class StatusResourceTest {
+final class StatusResourceTest {
     @Test
     void productionConstructorIsMarkedForCdiInjection() throws Exception {
         // given
@@ -40,7 +40,7 @@ class StatusResourceTest {
     @Test
     void rendersEscapedHtmlStatusRows() {
         // given
-        SymphonyOrchestrator orchestrator = mock(SymphonyOrchestrator.class);
+        SymphonyOrchestrator orchestrator = mock();
         when(orchestrator.snapshot()).thenReturn(snapshotWithRunningCard());
         var resource = new StatusResource(orchestrator);
 
@@ -59,7 +59,7 @@ class StatusResourceTest {
     void returnsSnapshotFromStateEndpoint() {
         // given
         RuntimeSnapshot snapshot = snapshotWithRunningCard();
-        SymphonyOrchestrator orchestrator = mock(SymphonyOrchestrator.class);
+        SymphonyOrchestrator orchestrator = mock();
         when(orchestrator.snapshot()).thenReturn(snapshot);
         var resource = new StatusResource(orchestrator);
 
@@ -73,7 +73,7 @@ class StatusResourceTest {
     @Test
     void localStatusIncludesWorkflowPathAndBoardIdForLoopbackClientsOnly() {
         // given
-        SymphonyOrchestrator orchestrator = mock(SymphonyOrchestrator.class);
+        SymphonyOrchestrator orchestrator = mock();
         when(orchestrator.selectedBoardId()).thenReturn("board-1");
         when(orchestrator.selectedConfiguredBoardId()).thenReturn("abc123");
         when(orchestrator.selectedWorkflowPath()).thenReturn(Path.of("/private/workflow.md"));
@@ -107,7 +107,7 @@ class StatusResourceTest {
                 List.of(),
                 null,
                 Map.of());
-        SymphonyOrchestrator orchestrator = mock(SymphonyOrchestrator.class);
+        SymphonyOrchestrator orchestrator = mock();
         when(orchestrator.cardDetails("TRELLO-abc")).thenReturn(Optional.of(details));
         when(orchestrator.cardDetails("missing")).thenReturn(Optional.empty());
         var resource = new StatusResource(orchestrator);
@@ -125,7 +125,7 @@ class StatusResourceTest {
     @Test
     void queuesRefreshAndMapsErrorsToJsonResponses() {
         // given
-        SymphonyOrchestrator orchestrator = mock(SymphonyOrchestrator.class);
+        SymphonyOrchestrator orchestrator = mock();
         Instant requestedAt = Instant.parse("2026-05-05T12:34:56Z");
         var resource = new StatusResource(orchestrator, null, Clock.fixed(requestedAt, ZoneOffset.UTC));
         var mapper = new ApiExceptionMapper();

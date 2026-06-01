@@ -211,9 +211,9 @@ matters, and easy for another engineer to understand without asking the original
   build compatibility and baseline findings are understood. Prefer generated or in-place patches for
   mechanical fixes, promote checks from warning to error only after baseline cleanup, and use stable
   `-Xep:<CheckName>:OFF|WARN|ERROR` flags for rule control. The current selected Error Prone, Picnic
-  bug-check, and Refaster rule families run as blocking production-source compiler checks in
-  `./mvnw -q spotless:check verify`; keep any future rewrite/fix exploration explicit so normal
-  verification does not unexpectedly modify source files.
+  bug-check, JUnit, Mockito, and Refaster rule families run as blocking production and test-source
+  compiler checks in `./mvnw -q spotless:check verify`; keep any future rewrite/fix exploration
+  explicit so normal verification does not unexpectedly modify source files.
 - For Semgrep, use custom rules for cross-language guardrails and security patterns that are not
   already covered by specialized linters. Prefer fixing findings, use rule-specific `nosemgrep`
   comments only with a reason, use `.semgrepignore` only for generated, vendored, or irrelevant

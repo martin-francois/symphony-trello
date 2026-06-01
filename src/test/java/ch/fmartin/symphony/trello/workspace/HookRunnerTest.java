@@ -11,7 +11,7 @@ import java.time.Duration;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-class HookRunnerTest {
+final class HookRunnerTest {
     private final HookRunner hooks = new HookRunner();
 
     @TempDir

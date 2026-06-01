@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello;
 
+import com.google.common.base.Splitter;
 import com.sun.net.httpserver.HttpExchange;
 import java.io.IOException;
 import java.net.URLDecoder;
@@ -16,7 +17,7 @@ public final class TestHttpExchange {
         if (rawQuery == null || rawQuery.isBlank()) {
             return values;
         }
-        for (String part : rawQuery.split("&")) {
+        for (String part : Splitter.on('&').split(rawQuery)) {
             String[] pair = part.split("=", 2);
             values.put(decode(pair[0]), pair.length == 1 ? "" : decode(pair[1]));
         }
