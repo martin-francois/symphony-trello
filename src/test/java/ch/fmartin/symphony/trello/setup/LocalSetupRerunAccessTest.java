@@ -10,7 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
-class LocalSetupRerunAccessTest extends LocalSetupFixtureSupport {
+final class LocalSetupRerunAccessTest extends LocalSetupFixtureSupport {
     @Test
     void rerunWithExistingSingleBoardAndAddPathUpdatesWorkflowAndManifest() throws Exception {
         // given

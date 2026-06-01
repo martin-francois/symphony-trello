@@ -3,19 +3,21 @@ package ch.fmartin.symphony.trello.setup;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.sun.net.httpserver.HttpServer;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
-class LocalSetupHealthTest extends LocalSetupFixtureSupport {
-    @ParameterizedTest
+final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
     @MethodSource("workerHealthScenarios")
+    @ParameterizedTest
     void checkReportsWorkerHealthState(WorkerHealthScenario scenario) throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW." + scenario.fileSuffix() + ".md");
@@ -45,7 +47,7 @@ class LocalSetupHealthTest extends LocalSetupFixtureSupport {
             result.assertFailure(2)
                     .stderrEmpty()
                     .stdoutContains(scenario.expectedOutput(this, workflow, env))
-                    .stdoutDoesNotContain(scenario.forbiddenOutput());
+                    .stdoutDoesNotContain(scenario.forbiddenOutputFragments());
         }
     }
 
@@ -98,7 +100,8 @@ class LocalSetupHealthTest extends LocalSetupFixtureSupport {
                             test.commands.stopHealthServer(workflow.toString());
                             HttpServer otherServer = HttpServer.create(
                                     new InetSocketAddress(
-                                            "127.0.0.1", LocalSetupTestFixture.FakeCommands.workflowPort(workflow)),
+                                            InetAddress.getLoopbackAddress(),
+                                            LocalSetupTestFixture.FakeCommands.workflowPort(workflow)),
                                     0);
                             otherServer.createContext("/api/v1/local-status", exchange -> {
                                 byte[] bytes = "{}".getBytes(StandardCharsets.UTF_8);
@@ -137,13 +140,26 @@ class LocalSetupHealthTest extends LocalSetupFixtureSupport {
             String boardName,
             WorkerHealthPreparation preparation,
             WorkerHealthExpectation expectation,
-            String... forbiddenOutput) {
+            List<String> forbiddenOutput) {
+        private WorkerHealthScenario(
+                String fileSuffix,
+                String boardName,
+                WorkerHealthPreparation preparation,
+                WorkerHealthExpectation expectation,
+                String... forbiddenOutput) {
+            this(fileSuffix, boardName, preparation, expectation, List.of(forbiddenOutput));
+        }
+
         AutoCloseable prepare(LocalSetupHealthTest test, Path workflow, Path env) throws Exception {
             return preparation.prepare(test, workflow, env);
         }
 
         String[] expectedOutput(LocalSetupHealthTest test, Path workflow, Path env) {
             return expectation.fragments(test, workflow, env);
+        }
+
+        String[] forbiddenOutputFragments() {
+            return forbiddenOutput.toArray(String[]::new);
         }
 
         @Override

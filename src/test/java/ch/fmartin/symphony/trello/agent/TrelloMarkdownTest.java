@@ -7,9 +7,9 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
-class TrelloMarkdownTest {
-    @ParameterizedTest(name = "{0}")
+final class TrelloMarkdownTest {
     @MethodSource("leadingHashtagCases")
+    @ParameterizedTest(name = "{0}")
     void escapesLeadingHashtagsThatTrelloWouldRenderAsHeadings(String displayName, String markdown, String expected) {
         // given
         String inputMarkdown = markdown;

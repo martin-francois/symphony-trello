@@ -14,7 +14,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-class CodexModelDefaultsResolverTest {
+final class CodexModelDefaultsResolverTest {
     private final ObjectMapper json = new ObjectMapper();
 
     @TempDir

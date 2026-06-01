@@ -9,7 +9,7 @@ import java.nio.file.attribute.PosixFilePermission;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-class DiagnosticsTokenHasherTest {
+final class DiagnosticsTokenHasherTest {
     @TempDir
     Path tempDir;
 

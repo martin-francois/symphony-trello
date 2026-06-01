@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
-class CodexSandboxFlowTest {
+final class CodexSandboxFlowTest {
     @Test
     void defaultNoKeepsSandboxEnabled() throws Exception {
         // given

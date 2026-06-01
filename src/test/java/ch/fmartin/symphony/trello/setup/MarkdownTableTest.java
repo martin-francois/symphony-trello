@@ -6,7 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-class MarkdownTableTest {
+final class MarkdownTableTest {
     @Test
     void rendersBasicTable() {
         // given

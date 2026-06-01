@@ -86,7 +86,8 @@ the Java behavior still follows `SPEC.md`, fits Trello, and is covered by projec
 Before submitting changes:
 
 - Run `./mvnw -q spotless:check verify`; CI enforces the same Spotless formatting checks, curated
-  PMD checks, CPD duplication checks, production-source Error Prone and Picnic compiler checks,
+  PMD checks, CPD duplication checks, selected Error Prone and Picnic compiler checks for production
+  and test sources,
   SpotBugs bytecode checks, FindSecBugs security checks, ArchUnit rules, test suite, build, and
   JaCoCo checks.
   ArchUnit rejects circular dependencies between production top-level packages. Coverage currently
@@ -105,11 +106,11 @@ Before submitting changes:
   [CHANGELOG.md](CHANGELOG.md).
 
 `./mvnw -q spotless:check verify` remains the default local validation command. It runs Spotless
-formatting checks, curated PMD source checks, CPD duplication checks, production-source Error Prone
-and Picnic compiler checks, SpotBugs bytecode checks, FindSecBugs security checks, the deterministic
-test suite, ArchUnit architecture checks, the application build, and the JaCoCo coverage gate. The
-ArchUnit checks reject circular dependencies between production top-level packages. `verify` also
-fails if line coverage drops below 80%. The test suite does not call Trello.
+formatting checks, curated PMD source checks, CPD duplication checks, selected Error Prone and Picnic
+compiler checks for production and test sources, SpotBugs bytecode checks, FindSecBugs security
+checks, the deterministic test suite, ArchUnit architecture checks, the application build, and the
+JaCoCo coverage gate. The ArchUnit checks reject circular dependencies between production top-level
+packages. `verify` also fails if line coverage drops below 80%. The test suite does not call Trello.
 
 Static-analysis findings are meant to be actionable in a local feedback loop. Prefer fixing a
 finding, then rerunning the analyzer and the relevant build or test command. If a rule is useful but
@@ -160,9 +161,9 @@ ruleset.
 
 SpotBugs and FindSecBugs project-level false positives belong in `config/spotbugs/exclude.xml`;
 code-local exceptions should use `@SuppressFBWarnings(value = "...", justification = "...")`. Error
-Prone and the selected Picnic Error Prone Support rule families run as blocking production-source
-compiler checks in normal validation. New Error Prone or Picnic checks should still start in a
-non-blocking branch or profile until their baseline is understood, then use stable
+Prone and the selected Picnic Error Prone Support rule families run as blocking production and
+test-source compiler checks in normal validation. New Error Prone or Picnic checks should still
+start in a non-blocking branch or profile until their baseline is understood, then use stable
 `-Xep:<CheckName>:OFF|WARN|ERROR` flags for rule control. Semgrep suppressions should be
 rule-specific `nosemgrep` comments with a reason, and private-repository local runs should use
 `--metrics=off`. CodeQL is a later public-repository code-scanning layer and is not part of normal

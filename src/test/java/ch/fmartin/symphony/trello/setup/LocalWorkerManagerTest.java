@@ -17,11 +17,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-class LocalWorkerManagerTest {
+final class LocalWorkerManagerTest {
     @TempDir
     Path tempDir;
 
@@ -51,11 +53,7 @@ class LocalWorkerManagerTest {
                         any(),
                         any(),
                         any());
-        assertThat(Files.readString(Files.list(fixture.paths.stateHome())
-                        .filter(path -> path.getFileName().toString().endsWith(".pid"))
-                        .findAny()
-                        .orElseThrow()))
-                .isEqualTo("42");
+        assertThat(Files.readString(onlyPidFile(fixture.paths.stateHome()))).isEqualTo("42");
     }
 
     @Test
@@ -151,9 +149,7 @@ class LocalWorkerManagerTest {
         assertThat(thrown)
                 .isInstanceOf(TrelloBoardSetupException.class)
                 .hasMessageContaining("newly started managed process is not running");
-        assertThat(Files.list(fixture.paths.stateHome())
-                        .filter(path -> path.getFileName().toString().endsWith(".pid")))
-                .isEmpty();
+        assertThat(pidFiles(fixture.paths.stateHome())).isEmpty();
     }
 
     @Test
@@ -174,9 +170,7 @@ class LocalWorkerManagerTest {
                 .isInstanceOf(TrelloBoardSetupException.class)
                 .hasMessageContaining("newly started managed process is not running");
         verify(fixture.platform).stop(42, Duration.ofSeconds(15), Duration.ofSeconds(5));
-        assertThat(Files.list(fixture.paths.stateHome())
-                        .filter(path -> path.getFileName().toString().endsWith(".pid")))
-                .isEmpty();
+        assertThat(pidFiles(fixture.paths.stateHome())).isEmpty();
     }
 
     @Test
@@ -621,9 +615,7 @@ class LocalWorkerManagerTest {
 
         // then
         result.assertSuccess().stdoutContains("Stopped WORKFLOW.first.md", "Stopped WORKFLOW.second.md");
-        assertThat(Files.list(fixture.paths.stateHome())
-                        .filter(path -> path.getFileName().toString().endsWith(".pid")))
-                .isEmpty();
+        assertThat(pidFiles(fixture.paths.stateHome())).isEmpty();
     }
 
     @Test
@@ -747,5 +739,18 @@ class LocalWorkerManagerTest {
         // then
         result.assertSuccess().stdoutContains("Skipped unmanaged stale pid");
         verify(fixture.platform, never()).stop(anyLong(), any(Duration.class), any(Duration.class));
+    }
+
+    private static Path onlyPidFile(Path stateHome) throws Exception {
+        List<Path> files = pidFiles(stateHome);
+        assertThat(files).hasSize(1);
+        return files.getFirst();
+    }
+
+    private static List<Path> pidFiles(Path stateHome) throws Exception {
+        try (Stream<Path> paths = Files.list(stateHome)) {
+            return paths.filter(path -> path.getFileName().toString().endsWith(".pid"))
+                    .toList();
+        }
     }
 }

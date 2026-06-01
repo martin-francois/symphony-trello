@@ -13,6 +13,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -26,7 +27,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-class TrelloHandoffToolHandlerTest {
+final class TrelloHandoffToolHandlerTest {
     private final ObjectMapper json = new ObjectMapper();
     private final AtomicReference<String> commentText = new AtomicReference<>();
     private final AtomicReference<String> updatedCommentText = new AtomicReference<>();
@@ -40,7 +41,7 @@ class TrelloHandoffToolHandlerTest {
 
     @BeforeEach
     void startServer() throws Exception {
-        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
         server.createContext(
                 "/1/boards/board-1",
                 exchange -> respond(exchange, "{\"id\":\"board-1\",\"name\":\"Test Board\",\"closed\":false}"));

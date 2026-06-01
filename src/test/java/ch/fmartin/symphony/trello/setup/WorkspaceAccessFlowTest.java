@@ -13,12 +13,12 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
-class WorkspaceAccessFlowTest {
+final class WorkspaceAccessFlowTest {
     @TempDir
     Path tempDir;
 
-    @ParameterizedTest(name = "{0}")
     @MethodSource("pathInputs")
+    @ParameterizedTest(name = "{0}")
     void parsesWorkspaceAccessPaths(String name, String input) throws Exception {
         // given
         LocalSetup.Options options = SetupOptionFactory.options(tempDir);

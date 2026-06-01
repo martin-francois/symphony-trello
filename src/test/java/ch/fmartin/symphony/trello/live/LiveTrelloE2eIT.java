@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.live;
 
+import static com.google.common.base.Preconditions.checkState;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -38,7 +39,7 @@ import java.util.function.BooleanSupplier;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 
-class LiveTrelloE2eIT {
+final class LiveTrelloE2eIT {
     private static final URI TRELLO_ENDPOINT = TrelloBoardSetup.DEFAULT_ENDPOINT;
     private static final Path QUARKUS_RUNNER = Path.of("target/quarkus-app/quarkus-run.jar");
     private static final Duration STARTUP_TIMEOUT = Duration.ofSeconds(90);
@@ -62,7 +63,7 @@ class LiveTrelloE2eIT {
                 .as("Run this through Maven verify so the Quarkus runner exists.")
                 .isTrue();
 
-        String runId = "live-e2e-it-" + RUN_ID_FORMAT.format(Instant.now()) + "-"
+        String runId = "live-e2e-it-" + RUN_ID_FORMAT.format(now()) + "-"
                 + UUID.randomUUID().toString().substring(0, 8);
         Path runDir = Path.of("target/live-e2e-it", runId);
         Path workspaceRoot = runDir.resolve("workspaces");
@@ -234,7 +235,7 @@ class LiveTrelloE2eIT {
                 .as("Run this through Maven verify so the Quarkus runner exists.")
                 .isTrue();
 
-        String runId = "live-e2e-external-" + RUN_ID_FORMAT.format(Instant.now()) + "-"
+        String runId = "live-e2e-external-" + RUN_ID_FORMAT.format(now()) + "-"
                 + UUID.randomUUID().toString().substring(0, 8);
         Path runDir = Path.of("target/live-e2e-it", runId);
         Path workspaceRoot = runDir.resolve("workspaces");
@@ -300,7 +301,7 @@ class LiveTrelloE2eIT {
                 .as("Run this through Maven verify so the Quarkus runner exists.")
                 .isTrue();
 
-        String runId = "real-codex-docker-" + RUN_ID_FORMAT.format(Instant.now()) + "-"
+        String runId = "real-codex-docker-" + RUN_ID_FORMAT.format(now()) + "-"
                 + UUID.randomUUID().toString().substring(0, 8);
         Path runDir = Path.of("target/live-e2e-it", runId);
         Path workspaceRoot = runDir.resolve("workspaces");
@@ -671,9 +672,9 @@ class LiveTrelloE2eIT {
     }
 
     private static void waitUntil(Duration timeout, BooleanSupplier condition, String description) {
-        Instant deadline = Instant.now().plus(timeout);
+        Instant deadline = now().plus(timeout);
         AssertionError lastFailure = null;
-        while (Instant.now().isBefore(deadline)) {
+        while (now().isBefore(deadline)) {
             try {
                 if (condition.getAsBoolean()) {
                     return;
@@ -959,9 +960,7 @@ class LiveTrelloE2eIT {
                             .POST(HttpRequest.BodyPublishers.noBody())
                             .build(),
                     HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw new IllegalStateException("HTTP " + response.statusCode());
-            }
+            checkState(response.statusCode() >= 200 && response.statusCode() < 300, "HTTP %s", response.statusCode());
         } catch (IOException e) {
             throw new IllegalStateException("Status refresh failed", e);
         } catch (InterruptedException e) {
@@ -975,6 +974,10 @@ class LiveTrelloE2eIT {
                 .map(entry -> encode(entry.getKey()) + "=" + encode(entry.getValue()))
                 .collect(Collectors.joining("&"));
         return URI.create(TRELLO_ENDPOINT + "/" + path + (queryString.isBlank() ? "" : "?" + queryString));
+    }
+
+    private static Instant now() {
+        return Instant.ofEpochMilli(System.currentTimeMillis());
     }
 
     private static Map<String, String> orderedMap(String... entries) {
