@@ -122,14 +122,14 @@ final class WindowsManagedProcessPlatform extends ProcessHandleManagedProcessPla
             if (character == '\\') {
                 backslashes++;
             } else if (character == '"') {
-                quoted.append("\\".repeat(backslashes * 2 + 1)).append('"');
+                quoted.repeat("\\", backslashes * 2 + 1).append('"');
                 backslashes = 0;
             } else {
-                quoted.append("\\".repeat(backslashes)).append(character);
+                quoted.repeat("\\", backslashes).append(character);
                 backslashes = 0;
             }
         }
-        quoted.append("\\".repeat(backslashes * 2)).append('"');
+        quoted.repeat("\\", backslashes * 2).append('"');
         return quoted.toString();
     }
 }

@@ -752,7 +752,7 @@ public class SymphonyOrchestrator {
     }
 
     private Duration backoff(int attempt) {
-        long delay = 10_000L * (1L << Math.min(Math.max(attempt - 1, 0), 16));
+        long delay = 10_000L * (1L << Math.clamp(attempt - 1, 0, 16));
         return Duration.ofMillis(
                 Math.min(delay, config.agent().maxRetryBackoff().toMillis()));
     }
