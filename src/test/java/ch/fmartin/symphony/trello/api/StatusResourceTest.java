@@ -15,7 +15,9 @@ import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
 import java.lang.reflect.Constructor;
 import java.nio.file.Path;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -25,7 +27,8 @@ class StatusResourceTest {
     @Test
     void productionConstructorIsMarkedForCdiInjection() throws Exception {
         // given
-        Constructor<StatusResource> constructor = StatusResource.class.getConstructor(SymphonyOrchestrator.class);
+        Constructor<StatusResource> constructor =
+                StatusResource.class.getConstructor(SymphonyOrchestrator.class, Clock.class);
 
         // when
         boolean hasInjectAnnotation = constructor.isAnnotationPresent(Inject.class);
@@ -123,7 +126,8 @@ class StatusResourceTest {
     void queuesRefreshAndMapsErrorsToJsonResponses() {
         // given
         SymphonyOrchestrator orchestrator = mock(SymphonyOrchestrator.class);
-        var resource = new StatusResource(orchestrator);
+        Instant requestedAt = Instant.parse("2026-05-05T12:34:56Z");
+        var resource = new StatusResource(orchestrator, null, Clock.fixed(requestedAt, ZoneOffset.UTC));
         var mapper = new ApiExceptionMapper();
 
         // when
@@ -134,6 +138,8 @@ class StatusResourceTest {
             // then
             verify(orchestrator).requestRefresh();
             assertThat(refresh.getStatus()).isEqualTo(202);
+            assertThat(refresh.getEntity()).isInstanceOfSatisfying(Map.class, entity -> assertThat(entity)
+                    .containsEntry("requested_at", requestedAt));
             assertThat(notFound.getStatus()).isEqualTo(404);
             assertThat(notFound.getEntity().toString())
                     .contains("card_not_found")

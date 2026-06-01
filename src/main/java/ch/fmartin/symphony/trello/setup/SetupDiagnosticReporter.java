@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
+import ch.fmartin.symphony.trello.time.ApplicationClock;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Ascii;
 import com.google.common.base.CharMatcher;
@@ -17,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -181,6 +183,7 @@ final class SetupDiagnosticReporter {
     private final HttpClient httpClient;
     private final ObjectMapper json;
     private final RecentLogLister recentLogLister;
+    private final Clock clock;
     private List<String> sensitiveValues = List.of();
     private boolean deepDiagnostics;
     private DiagnosticsTokenHasher tokenHasher = DiagnosticsTokenHasher.ephemeral();
@@ -191,11 +194,20 @@ final class SetupDiagnosticReporter {
 
     SetupDiagnosticReporter(
             Map<String, String> environment, CommandRunner commandRunner, RecentLogLister recentLogLister) {
+        this(environment, commandRunner, recentLogLister, ApplicationClock.systemUtc());
+    }
+
+    SetupDiagnosticReporter(
+            Map<String, String> environment,
+            CommandRunner commandRunner,
+            RecentLogLister recentLogLister,
+            Clock clock) {
         this.environment = Map.copyOf(environment);
         this.commandRunner = commandRunner;
         this.httpClient = HttpClient.newBuilder().connectTimeout(PROBE_TIMEOUT).build();
         this.json = ConnectedBoardRepository.jsonMapper();
         this.recentLogLister = recentLogLister;
+        this.clock = clock;
     }
 
     @FunctionalInterface
@@ -390,7 +402,7 @@ final class SetupDiagnosticReporter {
         body.append("Review this output before sharing it. It is intended to omit secrets and private identifiers.\n");
 
         section(body, "Command");
-        line(body, "time_utc", Instant.now().toString());
+        line(body, "time_utc", now().toString());
         line(body, "command", sanitizeCommand(args));
         line(body, "command_context", commandContext());
         appendSelectionMetadata(body, context);
@@ -440,7 +452,7 @@ final class SetupDiagnosticReporter {
         body.append("It does not include credential values or worker log contents.\n");
 
         section(body, "Command");
-        line(body, "time_utc", Instant.now().toString());
+        line(body, "time_utc", now().toString());
         line(body, "command", String.join(" ", diagnosticsArguments(request, true)));
         line(body, "command_context", commandContext());
         appendSelectionMetadata(body, context);
@@ -543,7 +555,7 @@ final class SetupDiagnosticReporter {
         try {
             Path reportDir = paths.stateHome().resolve("troubleshooting");
             Files.createDirectories(reportDir);
-            Path report = reportDir.resolve("setup-failure-" + FILE_TIMESTAMP.format(Instant.now()) + ".md");
+            Path report = reportDir.resolve("setup-failure-" + FILE_TIMESTAMP.format(now()) + ".md");
             Files.writeString(
                     report,
                     render(exception, args, paths, manifestPath, workflowPathResolution),
@@ -569,7 +581,7 @@ final class SetupDiagnosticReporter {
         StringBuilder body = new StringBuilder();
         body.append("# Symphony for Trello Setup Failure\n\n");
         section(body, "Failure");
-        line(body, "time_utc", Instant.now().toString());
+        line(body, "time_utc", now().toString());
         line(body, "command", sanitizeCommand(args));
         line(body, "command_context", commandContext());
         line(body, "error_code", errorCode(exception));
@@ -1997,6 +2009,10 @@ final class SetupDiagnosticReporter {
 
     private static void line(StringBuilder body, String label, Object value) {
         body.append("- **").append(label).append(":** ").append(value).append('\n');
+    }
+
+    private Instant now() {
+        return clock.instant();
     }
 
     private static String errorCode(Exception exception) {
