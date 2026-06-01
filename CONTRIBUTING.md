@@ -86,9 +86,11 @@ the Java behavior still follows `SPEC.md`, fits Trello, and is covered by projec
 Before submitting changes:
 
 - Run `./mvnw -q spotless:check verify`; CI enforces the same Spotless formatting checks, curated
-  PMD checks, SpotBugs bytecode checks, FindSecBugs security checks, ArchUnit rules, test suite,
-  build, and JaCoCo checks. ArchUnit rejects circular dependencies between production top-level
-  packages. Coverage currently requires at least 80% line coverage.
+  PMD checks, CPD duplication checks, production-source Error Prone and Picnic compiler checks,
+  SpotBugs bytecode checks, FindSecBugs security checks, ArchUnit rules, test suite, build, and
+  JaCoCo checks.
+  ArchUnit rejects circular dependencies between production top-level packages. Coverage currently
+  requires at least 80% line coverage.
 - Add or update tests for scheduler, Trello normalization, workspace safety, prompt rendering, or
   Codex protocol behavior when those areas change.
 - Use imports instead of inline fully qualified Java type names in code. PMD enforces this so helpers
@@ -103,10 +105,11 @@ Before submitting changes:
   [CHANGELOG.md](CHANGELOG.md).
 
 `./mvnw -q spotless:check verify` remains the default local validation command. It runs Spotless
-formatting checks, curated PMD source checks, SpotBugs bytecode checks, FindSecBugs security checks,
-the deterministic test suite, ArchUnit architecture checks, the application build, and the JaCoCo
-coverage gate. The ArchUnit checks reject circular dependencies between production top-level
-packages. `verify` also fails if line coverage drops below 80%. The test suite does not call Trello.
+formatting checks, curated PMD source checks, CPD duplication checks, production-source Error Prone
+and Picnic compiler checks, SpotBugs bytecode checks, FindSecBugs security checks, the deterministic
+test suite, ArchUnit architecture checks, the application build, and the JaCoCo coverage gate. The
+ArchUnit checks reject circular dependencies between production top-level packages. `verify` also
+fails if line coverage drops below 80%. The test suite does not call Trello.
 
 Static-analysis findings are meant to be actionable in a local feedback loop. Prefer fixing a
 finding, then rerunning the analyzer and the relevant build or test command. If a rule is useful but
@@ -157,37 +160,14 @@ ruleset.
 
 SpotBugs and FindSecBugs project-level false positives belong in `config/spotbugs/exclude.xml`;
 code-local exceptions should use `@SuppressFBWarnings(value = "...", justification = "...")`. Error
-Prone and Picnic Error Prone Support should start in a non-blocking profile and use stable
+Prone and the selected Picnic Error Prone Support rule families run as blocking production-source
+compiler checks in normal validation. New Error Prone or Picnic checks should still start in a
+non-blocking branch or profile until their baseline is understood, then use stable
 `-Xep:<CheckName>:OFF|WARN|ERROR` flags for rule control. Semgrep suppressions should be
 rule-specific `nosemgrep` comments with a reason, and private-repository local runs should use
 `--metrics=off`. CodeQL is a later public-repository code-scanning layer and is not part of normal
 local `verify`. Hosted dashboards can add signal, but they must not replace local checks
 contributors can run, fix, and rerun.
-
-An optional Error Prone pass is available for local source-level feedback:
-
-```bash
-./mvnw -Perror-prone clean compile
-```
-
-This profile is intentionally not part of the default `./mvnw -q spotless:check verify` command. It
-uses Error Prone as a warning-oriented candidate pass while maintainers watch baseline findings and
-rule usefulness. The profile explicitly enables `OptionalNotPresent` so Optional presence checks that
-read the value unsafely are visible during local review. The `clean` phase is part of the command so
-Maven recompiles sources instead of skipping analysis when classes are already up to date. Do not add
-`-q` to this command because the profile currently reports findings as warnings.
-
-Optional Picnic Error Prone Support passes are available for measured follow-up cleanup:
-
-```bash
-./mvnw -Ppicnic-error-prone clean compile
-./mvnw -Ppicnic-refaster clean compile
-```
-
-`picnic-error-prone` runs Picnic bug checkers through Error Prone. `picnic-refaster` also loads
-Picnic Refaster rewrite rules so those suggestions stay explicit and reviewable. Both profiles are
-warning-oriented and are not part of `./mvnw -q spotless:check verify`. Keep the commands non-quiet
-so warning output is visible, and promote individual checks only after focused baseline cleanup.
 
 PowerShell installer tests use native `pwsh` when it is installed. CI also runs them through
 Microsoft's .NET SDK container:
