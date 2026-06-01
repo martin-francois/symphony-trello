@@ -54,6 +54,18 @@ class LocalHealthCheckerTest {
     }
 
     @Test
+    void portProbeUsesSameIpv4LoopbackHostAsHealthUrls() {
+        // given
+        var loopback = LocalHealthChecker.loopbackIpv4ForTests();
+
+        // when
+        String hostAddress = loopback.getHostAddress();
+
+        // then
+        assertThat(hostAddress).isEqualTo("127.0.0.1");
+    }
+
+    @Test
     void managedHealthPortRejectsOutOfRangeHttpPortOverride() {
         // given
         LocalHealthChecker checker =

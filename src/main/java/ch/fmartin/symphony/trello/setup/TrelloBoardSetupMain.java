@@ -54,7 +54,6 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
     private static final String CLI_COMMAND_PROPERTY = "symphony.trello.command";
 
     private final TrelloBoardSetupService boardSetup;
-    private final LocalSetup localSetup;
     private final LocalWorkerManager workerManager;
     private final BufferedReader input;
     private final PrintStream out;
@@ -65,13 +64,11 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
 
     TrelloBoardSetupMain(
             TrelloBoardSetupService boardSetup,
-            LocalSetup localSetup,
             LocalWorkerManager workerManager,
             BufferedReader input,
             PrintStream out,
             PrintStream err) {
         this.boardSetup = boardSetup;
-        this.localSetup = localSetup;
         this.workerManager = workerManager;
         this.input = input;
         this.out = out;
@@ -137,8 +134,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             PrintStream out,
             PrintStream err) {
         BufferedReader input = standardInputReader(); // NOPMD - System.in is process-owned.
-        CommandLine commandLine = new CommandLine(
-                        new TrelloBoardSetupMain(boardSetup, localSetup, workerManager, input, out, err))
+        CommandLine commandLine = new CommandLine(new TrelloBoardSetupMain(boardSetup, workerManager, input, out, err))
                 .addSubcommand(
                         "setup-local", new SetupLocalCommandFactory.SetupLocalCommand(localSetup, input, out, err))
                 .setOut(new PrintWriter(out, true, StandardCharsets.UTF_8))
