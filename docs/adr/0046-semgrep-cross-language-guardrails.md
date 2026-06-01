@@ -6,6 +6,7 @@ consulted:
   - "[GitHub issue #82](https://github.com/martin-francois/symphony-trello/issues/82)"
   - "[GitHub issue #87](https://github.com/martin-francois/symphony-trello/issues/87)"
   - "[GitHub issue #130](https://github.com/martin-francois/symphony-trello/issues/130)"
+  - "[GitHub issue #149](https://github.com/martin-francois/symphony-trello/issues/149)"
   - "[Semgrep releases](https://github.com/semgrep/semgrep/releases)"
 informed: [Future maintainers, Contributors]
 ---
@@ -38,6 +39,7 @@ or a hosted account requirement?
 
 * Add a focused Semgrep workflow with local repository rules.
 * Add Semgrep registry packs as a blocking gate.
+* Add Semgrep registry packs as report-only documentation.
 * Add only a documented local Semgrep command.
 * Defer Semgrep.
 
@@ -62,6 +64,46 @@ The workflow is separate from the heavy Java CI jobs so Semgrep failures are eas
 `./mvnw -q spotless:check verify` remains the primary local Java gate. Semgrep is the first
 cross-language policy gate; future rules must still be measured and triaged before becoming
 blocking.
+
+`--config auto` was evaluated after the first local rules landed. Semgrep 1.164.0 rejects that
+mode when metrics are disabled:
+
+```text
+Cannot create auto config when metrics are off. Please allow metrics or run with a specific config.
+```
+
+That makes `--config auto` unsuitable for this private-repository workflow. The project must not
+require Semgrep metrics or hosted Semgrep login for local checks.
+
+The explicit registry pack `p/default` was also evaluated with:
+
+```bash
+semgrep scan --config p/default --metrics=off --json .
+```
+
+Using `semgrep/semgrep:1.164.0`, it selected 1,059 community rules, ran 354 rules on 280
+tracked files, and reported 20 findings:
+
+* 13 `java.lang.security.audit.command-injection-process-builder` findings.
+* 6 `java.lang.security.audit.crypto.unencrypted-socket` findings.
+* 1 `bash.lang.security.ifs-tampering` finding.
+
+The ProcessBuilder findings are audit false positives for this codebase. The production uses are
+argument-vector based or intentionally run configured hook scripts through `bash -c`. The test
+findings launch local Java, shell, and installer fixtures.
+
+The unencrypted-socket findings are false positives for local loopback health probes and test
+servers. Those sockets do not carry remote or public network traffic.
+
+The `IFS` finding points at a `local IFS=/` used only to join already-normalized path segments
+inside `install.sh`. It is not a global `IFS` change.
+
+The same scan also emitted shell partial-parse warnings for `install.sh` and `mvnw`, which further
+confirms that `p/default` is not clean enough to promote as a blocking gate without a narrower local
+rule selection.
+
+No `p/default` finding was accepted as a code change or suppression. The project keeps the current
+local custom Semgrep rules as the blocking set.
 
 ### Consequences
 
@@ -103,8 +145,19 @@ Store local custom rules under `config/semgrep` and run them in a dedicated CI w
 Run a broad Semgrep registry configuration.
 
 * Good, because it would provide wider coverage quickly.
-* Bad, because it duplicates specialized Java analyzers without first measuring signal.
-* Bad, because a broad baseline could hide justified findings behind volume.
+* Bad, because `--config auto` requires metrics to build the automatic configuration.
+* Bad, because `p/default` reported only false positives in the measured baseline.
+* Bad, because broad registry packs can change outside this repository.
+* Bad, because the baseline also included shell partial-parse warnings.
+
+### Add Semgrep Registry Packs as Report-Only Documentation
+
+Document a report-only registry command but do not enforce it.
+
+* Good, because maintainers could rerun broader scans occasionally.
+* Bad, because it creates another non-blocking command whose findings can go stale.
+* Bad, because the measured `p/default` result did not identify actionable work.
+* Bad, because `--config auto` cannot satisfy the private metrics-off requirement.
 
 ### Add Only a Documented Local Semgrep Command
 
