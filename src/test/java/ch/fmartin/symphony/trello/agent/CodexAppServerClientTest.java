@@ -11,6 +11,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -45,8 +49,12 @@ class CodexAppServerClientTest {
         EffectiveConfig config = config(appServer);
         Path workspace = config.workspace().root().resolve("TRELLO-fast");
         Files.createDirectories(workspace);
-        CodexAppServerClient client =
-                new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
+        Instant eventTime = Instant.parse("2026-05-11T12:34:56Z");
+        CodexAppServerClient client = new CodexAppServerClient(
+                json,
+                new TrelloHandoffToolHandler(json, new TrelloClient(json)),
+                Clock.fixed(eventTime, ZoneOffset.UTC));
+        List<AgentEvent> events = new ArrayList<>();
 
         // when
         AgentRunResult result = client.runTurn(
@@ -55,10 +63,11 @@ class CodexAppServerClientTest {
                 workspace,
                 "Do a fast no-op turn.",
                 "worker-fast",
-                event -> {});
+                events::add);
 
         // then
         assertThat(result).isEqualTo(AgentRunResult.ok());
+        assertThat(events).allSatisfy(event -> assertThat(event.timestamp()).isEqualTo(eventTime));
     }
 
     @Test

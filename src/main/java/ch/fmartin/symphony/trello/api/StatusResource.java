@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.api;
 
 import ch.fmartin.symphony.trello.orchestrator.SymphonyOrchestrator;
+import ch.fmartin.symphony.trello.time.ApplicationClock;
 import io.vertx.ext.web.RoutingContext;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
@@ -14,7 +15,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.time.Instant;
+import java.time.Clock;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.BooleanSupplier;
@@ -23,18 +24,28 @@ import java.util.function.BooleanSupplier;
 public class StatusResource {
     private final SymphonyOrchestrator orchestrator;
     private final BooleanSupplier loopbackClient;
+    private final Clock clock;
 
     @Context
     RoutingContext routingContext;
 
-    @Inject
     public StatusResource(SymphonyOrchestrator orchestrator) {
-        this(orchestrator, null);
+        this(orchestrator, null, ApplicationClock.systemUtc());
+    }
+
+    @Inject
+    public StatusResource(SymphonyOrchestrator orchestrator, Clock clock) {
+        this(orchestrator, null, clock);
     }
 
     StatusResource(SymphonyOrchestrator orchestrator, BooleanSupplier loopbackClient) {
+        this(orchestrator, loopbackClient, ApplicationClock.systemUtc());
+    }
+
+    StatusResource(SymphonyOrchestrator orchestrator, BooleanSupplier loopbackClient, Clock clock) {
         this.orchestrator = orchestrator;
         this.loopbackClient = loopbackClient;
+        this.clock = clock;
     }
 
     @GET
@@ -115,9 +126,14 @@ public class StatusResource {
     public Response refresh() {
         orchestrator.requestRefresh();
         return Response.accepted(Map.of(
-                        "queued", true, "coalesced", false, "requested_at", Instant.now(), "operations", new String[] {
-                            "poll", "reconcile"
-                        }))
+                        "queued",
+                        true,
+                        "coalesced",
+                        false,
+                        "requested_at",
+                        clock.instant(),
+                        "operations",
+                        new String[] {"poll", "reconcile"}))
                 .build();
     }
 

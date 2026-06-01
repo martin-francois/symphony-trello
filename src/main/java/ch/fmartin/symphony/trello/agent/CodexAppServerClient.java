@@ -4,12 +4,14 @@ import ch.fmartin.symphony.trello.config.ConfigException;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.process.ProcessEnvironment;
+import ch.fmartin.symphony.trello.time.ApplicationClock;
 import ch.fmartin.symphony.trello.workspace.WorkspaceManager;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -17,8 +19,8 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.time.Clock;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -37,10 +39,17 @@ public class CodexAppServerClient {
 
     private final ObjectMapper json;
     private final TrelloHandoffToolHandler trelloTools;
+    private final Clock clock;
 
     public CodexAppServerClient(ObjectMapper json, TrelloHandoffToolHandler trelloTools) {
+        this(json, trelloTools, ApplicationClock.systemUtc());
+    }
+
+    @Inject
+    public CodexAppServerClient(ObjectMapper json, TrelloHandoffToolHandler trelloTools, Clock clock) {
         this.json = json;
         this.trelloTools = trelloTools;
+        this.clock = clock;
     }
 
     public AgentRunResult runTurn(
@@ -275,7 +284,7 @@ public class CodexAppServerClient {
         return node;
     }
 
-    private static AgentEvent event(
+    private AgentEvent event(
             String name,
             String workerIdentity,
             Long pid,
@@ -284,7 +293,7 @@ public class CodexAppServerClient {
             String message,
             Map<String, Long> usage,
             JsonNode payload) {
-        return new AgentEvent(name, Instant.now(), workerIdentity, pid, threadId, turnId, message, usage, payload);
+        return new AgentEvent(name, clock.instant(), workerIdentity, pid, threadId, turnId, message, usage, payload);
     }
 
     private static String summarize(JsonNode node) {

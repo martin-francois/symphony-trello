@@ -14,6 +14,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
@@ -118,6 +121,32 @@ class SetupDiagnosticReporterTest {
 
         // then
         assertThat(hint).isEmpty();
+    }
+
+    @Test
+    void rendersDiagnosticsWithInjectedClock() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("clock-config");
+        Files.createDirectories(configDir);
+        Instant now = Instant.parse("2026-05-11T12:34:56Z");
+        var reporter = new SetupDiagnosticReporter(
+                Map.of(), new FakeCommandRunner(), Files::list, Clock.fixed(now, ZoneOffset.UTC));
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty()));
+
+        // then
+        assertThat(report).contains("time_utc:** 2026-05-11T12:34:56Z");
     }
 
     @Test
