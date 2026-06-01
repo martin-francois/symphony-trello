@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded by [ADR 0045](0045-enforce-error-prone-and-picnic-in-verify.md)
 date: 2026-05-31
 decision-makers: [François Martin, Codex]
 consulted:
@@ -12,6 +12,10 @@ informed: [Future maintainers, Contributors]
 ---
 
 # Add Report-Only Picnic Error Prone Profiles
+
+This ADR records the historical decision to introduce Picnic checks as report-only profiles. It is
+superseded by [ADR 0045](0045-enforce-error-prone-and-picnic-in-verify.md), which promotes the
+selected clean production-source rule families into normal verification.
 
 ## Context and Problem Statement
 

@@ -207,17 +207,13 @@ matters, and easy for another engineer to understand without asking the original
   project-level false positives and `@SuppressFBWarnings(value = "...", justification = "...")`
   only when the exception belongs next to the code. Keep filter entries precise by bug pattern,
   class, method, or field, and do not suppress broad packages or all security findings.
-- For Error Prone and Picnic Error Prone Support, start in a non-blocking profile until build
-  compatibility and baseline findings are understood. Prefer generated or in-place patches for
-  mechanical fixes, promote checks from warning to error only after baseline cleanup, use stable
-  `-Xep:<CheckName>:OFF|WARN|ERROR` flags for rule control, and keep rewrite/fix profiles explicit
-  so normal verification does not unexpectedly modify source files. The current optional Error Prone
-  pass is `./mvnw -Perror-prone clean compile`; it is not part of normal
-  `./mvnw -q spotless:check verify`. Do not run the optional Error Prone command with Maven `-q`
-  because this profile reports findings as warnings while the baseline is evaluated. Picnic can be
-  measured with `./mvnw -Ppicnic-error-prone clean compile`; Refaster rewrite suggestions can be
-  measured separately with `./mvnw -Ppicnic-refaster clean compile`. Do not make either Picnic
-  profile blocking until the specific rule family has a clean or deliberately accepted baseline.
+- For Error Prone and Picnic Error Prone Support, start new rules in a non-blocking profile until
+  build compatibility and baseline findings are understood. Prefer generated or in-place patches for
+  mechanical fixes, promote checks from warning to error only after baseline cleanup, and use stable
+  `-Xep:<CheckName>:OFF|WARN|ERROR` flags for rule control. The current selected Error Prone, Picnic
+  bug-check, and Refaster rule families run as blocking production-source compiler checks in
+  `./mvnw -q spotless:check verify`; keep any future rewrite/fix exploration explicit so normal
+  verification does not unexpectedly modify source files.
 - For Semgrep, use custom rules for cross-language guardrails and security patterns that are not
   already covered by specialized linters. Prefer fixing findings, use rule-specific `nosemgrep`
   comments only with a reason, use `.semgrepignore` only for generated, vendored, or irrelevant
