@@ -1128,7 +1128,7 @@ final class SetupDiagnosticReporter {
         manifest.boards().stream().map(ConnectedBoard::workflowPath).forEach(workflowPaths::add);
         selectedWorkflow.ifPresent(workflowPaths::add);
         if (scanConfigDir) {
-            workflowFilesIfReadable(configDir).forEach(workflowPaths::add);
+            workflowPaths.addAll(workflowFilesIfReadable(configDir));
         }
         return workflowPaths;
     }
@@ -1789,7 +1789,7 @@ final class SetupDiagnosticReporter {
     }
 
     private static boolean isNonInteractive(List<String> args) {
-        return args.stream().anyMatch("--non-interactive"::equals);
+        return args.contains("--non-interactive");
     }
 
     private static WorkflowPathResolution workflowPathResolution(List<String> args) {

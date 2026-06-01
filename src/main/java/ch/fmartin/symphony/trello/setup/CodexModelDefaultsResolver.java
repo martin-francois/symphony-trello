@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 import ch.fmartin.symphony.trello.process.ProcessEnvironment;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.CodexModelDefaults;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -192,9 +194,7 @@ final class CodexModelDefaultsResolver {
 
     private ObjectNode object(Object... entries) {
         ObjectNode node = json.createObjectNode();
-        if (entries.length % 2 != 0) {
-            throw new IllegalArgumentException("Object entries must be key/value pairs");
-        }
+        checkArgument(entries.length % 2 == 0, "Object entries must be key/value pairs");
         for (int i = 0; i < entries.length; i += 2) {
             String key = (String) entries[i];
             Object value = entries[i + 1];
