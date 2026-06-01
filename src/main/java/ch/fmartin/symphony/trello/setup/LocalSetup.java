@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.GitHubIntegration;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.TrelloCredentials;
 import ch.fmartin.symphony.trello.setup.TrelloCredentialStore.CredentialSelection;
@@ -1108,9 +1110,7 @@ public final class LocalSetup {
             return defaultChoice;
         }
         int parsed = Integer.parseInt(answer.strip());
-        if (parsed < 1 || parsed > maxChoice) {
-            throw new IllegalArgumentException("Choice must be between 1 and " + maxChoice);
-        }
+        checkArgument(parsed >= 1 && parsed <= maxChoice, "Choice must be between 1 and %s", maxChoice);
         return parsed;
     }
 

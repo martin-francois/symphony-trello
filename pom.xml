@@ -29,7 +29,7 @@
     <exec-maven-plugin.version>3.6.3</exec-maven-plugin.version>
     <error-prone.version>2.49.0</error-prone.version>
     <error-prone-support.version>0.29.0</error-prone-support.version>
-    <picnic-refaster.namePattern>(CollectionRules[$]Collection(AddAllToCollectionBlock|Contains)|PrimitiveRules[$]MathClampInt|StreamRules[$]StreamNoneMatch|StringBuilderRules[$]StringBuilderRepeat)</picnic-refaster.namePattern>
+    <picnic-refaster.namePattern>(CollectionRules[$]Collection(AddAllToCollectionBlock|Contains)|NullRules[$]RequireNonNullElseGet|PreconditionsRules[$]Check(Argument|State)WithMessage|PrimitiveRules[$]MathClampInt|StreamRules[$]StreamNoneMatch|StringBuilderRules[$]StringBuilderRepeat)</picnic-refaster.namePattern>
     <jacoco.version>0.8.14</jacoco.version>
     <mockito.version>5.23.0</mockito.version>
     <picocli.version>4.7.7</picocli.version>

@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 import ch.fmartin.symphony.trello.codex.CodexSkillCatalog;
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
@@ -1864,9 +1866,7 @@ public final class TrelloBoardSetup {
     }
 
     private static Map<String, String> orderedMap(String... entries) {
-        if (entries.length % 2 != 0) {
-            throw new IllegalArgumentException("Entries must contain key-value pairs");
-        }
+        checkArgument(entries.length % 2 == 0, "Entries must contain key-value pairs");
         Map<String, String> map = new LinkedHashMap<>();
         for (int i = 0; i < entries.length; i += 2) {
             map.put(entries[i], entries[i + 1]);
@@ -2247,10 +2247,9 @@ public final class TrelloBoardSetup {
         public CodexModelDefaults {
             model = blank(model) ? null : model;
             reasoningEffort = blank(reasoningEffort) ? null : reasoningEffort;
-            if (!firstClassFieldsSupported && (model == null || reasoningEffort == null)) {
-                throw new IllegalArgumentException(
-                        "unsupported first-class Codex defaults must include fallback model and reasoning effort");
-            }
+            checkArgument(
+                    firstClassFieldsSupported || !(model == null || reasoningEffort == null),
+                    "unsupported first-class Codex defaults must include fallback model and reasoning effort");
         }
 
         public CodexModelDefaults(String model, String reasoningEffort) {
@@ -2275,9 +2274,7 @@ public final class TrelloBoardSetup {
         }
 
         private static String requireNonBlank(String value, String name) {
-            if (blank(value)) {
-                throw new IllegalArgumentException(name + " must not be blank");
-            }
+            checkArgument(!blank(value), "%s must not be blank", name);
             return value;
         }
     }

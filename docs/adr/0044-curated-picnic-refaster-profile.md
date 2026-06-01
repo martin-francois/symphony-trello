@@ -47,28 +47,29 @@ output shows names with dots, but the filter uses Refaster resource names with `
 
 * `CollectionRules.CollectionAddAllToCollectionBlock`
 * `CollectionRules.CollectionContains`
+* `NullRules.RequireNonNullElseGet`
+* `PreconditionsRules.CheckArgumentWithMessage`
+* `PreconditionsRules.CheckStateWithMessage`
 * `PrimitiveRules.MathClampInt`
 * `StreamRules.StreamNoneMatch`
 * `StringBuilderRules.StringBuilderRepeat`
 
 The accepted rewrites are applied where they appeared in the current baseline. They use direct JDK
-APIs and keep behavior unchanged.
+APIs or existing Guava validation helpers where the result is clearer, and keep behavior unchanged.
 
 The following families are rejected for this project at this time:
 
 * `ImmutableListRules`, `ImmutableMapRules`, and `ImmutableSetRules`: the current JDK collection
   factories are clear and immutable for these call sites. Replacing them with Guava factories would
   create broad style churn without improving behavior.
-* `PreconditionsRules`: the project currently uses plain Java argument checks. Moving to Guava
-  Preconditions would be a style change, not a correctness fix.
 * `OptionalRules`: several suggested rewrites make Optional code harder to read or conflict with the
   project's Optional guidance. Optional cleanup remains covered by explicit review and the dedicated
   Optional rules.
 * `FileRules.FilesReadString`: explicit `StandardCharsets.UTF_8` in file reads is clearer for this
   project, even though Java 25 defaults to UTF-8.
-* `StringRules`, `StreamRules.StreamMapFirst`, `StreamRules.StreamCollectLeastStream`,
-  `ComparatorRules`, and `NullRules`: the suggested rewrites are not clearly more readable in the
-  current call sites.
+* `StringRules`, `StreamRules.StreamMapFirst`, `StreamRules.StreamCollectLeastStream`, and
+  `ComparatorRules`: the suggested rewrites are not clearly more readable in the current call
+  sites.
 
 The profile remains report-only and separate from normal `verify`.
 
@@ -78,7 +79,8 @@ The profile remains report-only and separate from normal `verify`.
 * Good, because future drift in the accepted families remains visible.
 * Good, because rejected style families no longer bury useful signal.
 * Bad, because rejected families will not be reported by this profile unless the pattern is changed.
-* Bad, because broad Guava style adoption would need a new decision if the project wants it later.
+* Bad, because broader Guava collection style adoption would need a new decision if the project
+  wants it later.
 
 ### Confirmation
 
@@ -99,8 +101,8 @@ Apply every suggested rewrite from the baseline.
 
 * Good, because the report becomes clean.
 * Bad, because many changes are style-only.
-* Bad, because Guava collection and Preconditions usage would become mixed into the codebase without
-  a separate style decision.
+* Bad, because Guava collection usage would become mixed into the codebase without a separate style
+  decision.
 * Bad, because some Optional rewrites would make the code less readable.
 
 ### Keep the Profile Broad
@@ -121,7 +123,7 @@ Remove or stop using the Refaster profile.
 
 ### Apply Useful Rewrites and Narrow the Profile
 
-Apply only the useful JDK-oriented rewrites and include only those rule families in the profile.
+Apply only the useful rewrites and include only those rule families in the profile.
 
 * Good, because each accepted rewrite improves readability or directness.
 * Good, because the profile stays actionable.
@@ -131,9 +133,9 @@ Apply only the useful JDK-oriented rewrites and include only those rule families
 ## More Information
 
 The current baseline before narrowing was 195 suggestions. The largest rejected groups were
-`ImmutableListRules`, `ImmutableMapRules`, `ImmutableSetRules`, `PreconditionsRules`,
-`OptionalRules`, and `FileRules.FilesReadString`.
+`ImmutableListRules`, `ImmutableMapRules`, `ImmutableSetRules`, `OptionalRules`, and
+`FileRules.FilesReadString`.
 
 This decision does not reject Guava broadly. The repository already uses Guava where it clearly
-helps. It only rejects adopting Guava immutable collection factories and Preconditions as a
-repository-wide style through Refaster.
+helps. It only rejects adopting Guava immutable collection factories as a repository-wide style
+through Refaster.

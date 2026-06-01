@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.agent;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.config.StateNames;
 import ch.fmartin.symphony.trello.domain.Card;
@@ -302,9 +304,7 @@ public class TrelloHandoffToolHandler {
 
     private static String requiredText(JsonNode node, String key) {
         String value = text(node, key);
-        if (blank(value)) {
-            throw new IllegalArgumentException("Missing required argument: " + key);
-        }
+        checkArgument(!blank(value), "Missing required argument: %s", key);
         return value;
     }
 

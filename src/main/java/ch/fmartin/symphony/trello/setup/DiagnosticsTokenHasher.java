@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static java.util.Objects.requireNonNullElseGet;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileAlreadyExistsException;
@@ -104,8 +106,8 @@ final class DiagnosticsTokenHasher {
     }
 
     private static boolean supportsPosixFilePermissions(Path path) throws IOException {
-        Path existing = Optional.ofNullable(path.getParent())
-                .orElseGet(() -> path.toAbsolutePath().normalize());
+        Path existing = requireNonNullElseGet(
+                path.getParent(), () -> path.toAbsolutePath().normalize());
         return Files.getFileStore(existing).supportsFileAttributeView("posix");
     }
 

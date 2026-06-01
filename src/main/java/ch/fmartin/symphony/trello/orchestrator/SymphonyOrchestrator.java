@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.orchestrator;
 
+import static com.google.common.base.Preconditions.checkState;
+
 import ch.fmartin.symphony.trello.agent.AgentEvent;
 import ch.fmartin.symphony.trello.agent.AgentRunResult;
 import ch.fmartin.symphony.trello.agent.AgentRunner;
@@ -141,9 +143,7 @@ public class SymphonyOrchestrator {
     }
 
     public synchronized void setWorkflowPath(Path workflowPath) {
-        if (started) {
-            throw new IllegalStateException("Workflow path cannot be changed after orchestrator start");
-        }
+        checkState(!started, "Workflow path cannot be changed after orchestrator start");
         this.workflowPath = workflowPath;
     }
 
