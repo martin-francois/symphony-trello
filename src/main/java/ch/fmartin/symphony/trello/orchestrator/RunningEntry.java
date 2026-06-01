@@ -23,12 +23,12 @@ final class RunningEntry {
     volatile long lastReportedTotalTokens;
     int turnCount;
 
-    RunningEntry(Card card, String workerIdentity, Integer retryAttempt) {
+    RunningEntry(Card card, String workerIdentity, Integer retryAttempt, Instant startedAt) {
         this.card = card;
         this.cardId = card.id();
         this.workerIdentity = workerIdentity;
         this.retryAttempt = retryAttempt;
-        this.startedAt = Instant.now();
+        this.startedAt = startedAt;
         this.lastEventAt = this.startedAt;
     }
 

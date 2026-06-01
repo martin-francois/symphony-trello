@@ -8,6 +8,7 @@ import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.config.StateNames;
 import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
+import ch.fmartin.symphony.trello.time.ApplicationClock;
 import ch.fmartin.symphony.trello.tracker.CardLookupResult;
 import ch.fmartin.symphony.trello.tracker.TrackerClient;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
@@ -15,6 +16,7 @@ import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import ch.fmartin.symphony.trello.workspace.WorkspaceManager;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import java.io.IOException;
 import java.nio.file.ClosedWatchServiceException;
 import java.nio.file.Files;
@@ -23,6 +25,7 @@ import java.nio.file.StandardWatchEventKinds;
 import java.nio.file.WatchEvent;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
@@ -56,6 +59,7 @@ public class SymphonyOrchestrator {
     private final AgentRunner agentRunner;
     private final PromptRenderer prompts;
     private final WorkspaceManager workspaces;
+    private final Clock clock;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
     private final ExecutorService workers = Executors.newVirtualThreadPerTaskExecutor();
     private final Map<String, RunningEntry> running = new LinkedHashMap<>();
@@ -91,12 +95,25 @@ public class SymphonyOrchestrator {
             AgentRunner agentRunner,
             PromptRenderer prompts,
             WorkspaceManager workspaces) {
+        this(workflowLoader, configResolver, tracker, agentRunner, prompts, workspaces, ApplicationClock.systemUtc());
+    }
+
+    @Inject
+    public SymphonyOrchestrator(
+            WorkflowLoader workflowLoader,
+            ConfigResolver configResolver,
+            TrackerClient tracker,
+            AgentRunner agentRunner,
+            PromptRenderer prompts,
+            WorkspaceManager workspaces,
+            Clock clock) {
         this.workflowLoader = workflowLoader;
         this.configResolver = configResolver;
         this.tracker = tracker;
         this.agentRunner = agentRunner;
         this.prompts = prompts;
         this.workspaces = workspaces;
+        this.clock = clock;
     }
 
     public synchronized void start() {
@@ -365,7 +382,7 @@ public class SymphonyOrchestrator {
                 || config.codex().stallTimeout().isNegative()) {
             return;
         }
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         List<String> stalled = running.values().stream()
                 .filter(entry -> Duration.between(entry.lastEventAt, now)
                                 .compareTo(config.codex().stallTimeout())
@@ -380,7 +397,7 @@ public class SymphonyOrchestrator {
         if (entry == null) {
             return;
         }
-        ignoredWorkers.put(entry.workerIdentity, Instant.now().plus(IGNORED_WORKER_TTL));
+        ignoredWorkers.put(entry.workerIdentity, clock.instant().plus(IGNORED_WORKER_TTL));
         trimIgnoredWorkers();
         agentRunner.cancel(entry.workerIdentity);
         addRuntime(entry);
@@ -412,7 +429,7 @@ public class SymphonyOrchestrator {
             return;
         }
         String workerIdentity = UUID.randomUUID().toString();
-        RunningEntry entry = new RunningEntry(dispatchCard, workerIdentity, attempt);
+        RunningEntry entry = new RunningEntry(dispatchCard, workerIdentity, attempt, clock.instant());
         running.put(dispatchCard.id(), entry);
         String prompt;
         try {
@@ -541,7 +558,7 @@ public class SymphonyOrchestrator {
                 scheduler.schedule(() -> onRetryTimer(cardId), delay.toMillis(), TimeUnit.MILLISECONDS);
         retryAttempts.put(
                 cardId,
-                new RetryEntry(cardId, identifier, attempt, Instant.now().plus(delay), timer, error));
+                new RetryEntry(cardId, identifier, attempt, clock.instant().plus(delay), timer, error));
         claimed.add(cardId);
         LOG.infof(
                 "card_id=%s card_identifier=%s outcome=retrying attempt=%d delay_ms=%d",
@@ -736,7 +753,7 @@ public class SymphonyOrchestrator {
     }
 
     private void addRuntime(RunningEntry entry) {
-        endedRuntimeMillis += Duration.between(entry.startedAt, Instant.now()).toMillis();
+        endedRuntimeMillis += Duration.between(entry.startedAt, clock.instant()).toMillis();
     }
 
     private void addRecentEvent(String cardId, CardDebugDetails.EventInfo event) {
@@ -749,7 +766,7 @@ public class SymphonyOrchestrator {
     }
 
     private void removeExpiredIgnoredWorkers() {
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         ignoredWorkers.entrySet().removeIf(entry -> entry.getValue().isBefore(now));
     }
 
@@ -768,7 +785,7 @@ public class SymphonyOrchestrator {
     }
 
     public synchronized RuntimeSnapshot snapshot() {
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         List<RuntimeSnapshot.RunningRow> runningRows =
                 running.values().stream().map(this::runningRow).toList();
         List<RuntimeSnapshot.RetryRow> retryRows = retryAttempts.values().stream()
