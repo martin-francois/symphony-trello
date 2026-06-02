@@ -40,6 +40,26 @@ final class ConnectedBoardManifestTest {
     }
 
     @Test
+    void findByBoardMatchesShortLinkFromBoardUrlWhenBoardKeyIsFullBoardId() {
+        // given
+        ConnectedBoard board = board(
+                "6a1eb7c4873fd71be041d1cf",
+                "6a1eb7c4873fd71be041d1cf",
+                "Queue",
+                "https://trello.com/b/9wuK8XRD/live-parallel-board",
+                Path.of("WORKFLOW.md"));
+        ConnectedBoardManifest manifest = new ConnectedBoardManifest(List.of(board));
+
+        // when
+        var byShortLink = manifest.findByBoard("9wuK8XRD");
+        var byUrl = manifest.findByBoard("https://trello.com/b/9wuK8XRD/live-parallel-board");
+
+        // then
+        assertThat(byShortLink).contains(board);
+        assertThat(byUrl).contains(board);
+    }
+
+    @Test
     void findByWorkflowKeepsManifestOrderWhenWorkflowPathsAreDuplicated() {
         // given
         Path workflow = Path.of("WORKFLOW.md");
@@ -55,11 +75,16 @@ final class ConnectedBoardManifestTest {
     }
 
     private static ConnectedBoard board(String boardId, String boardKey, String boardName, Path workflowPath) {
+        return board(boardId, boardKey, boardName, "https://trello.example/" + boardId, workflowPath);
+    }
+
+    private static ConnectedBoard board(
+            String boardId, String boardKey, String boardName, String boardUrl, Path workflowPath) {
         return new ConnectedBoard(
                 boardId,
                 boardKey,
                 boardName,
-                "https://trello.example/" + boardId,
+                boardUrl,
                 workflowPath,
                 Path.of(".env"),
                 Path.of("workspaces"),
