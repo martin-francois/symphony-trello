@@ -1302,13 +1302,10 @@ final class TrelloBoardSetupMainTest {
         Path env = tempDir.resolve(".env.runtime");
         Path workflow = tempDir.resolve("missing-credentials-runtime-env.WORKFLOW.md");
         Files.writeString(env, "# no credentials yet\n", StandardCharsets.UTF_8);
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode = run(
-                stdout,
-                stderr,
+        MainProcessResult result = runMainProcessWithoutTrelloCredentials(
+                tempDir,
                 "new-board",
                 "--endpoint",
                 endpoint(),
@@ -1320,11 +1317,11 @@ final class TrelloBoardSetupMainTest {
                 env.toString());
 
         // then
-        assertThat(exitCode).isEqualTo(2);
+        assertThat(result.exitCode()).isEqualTo(2);
         assertThat(createdBoardName.get()).isNull();
         assertThat(workflow).doesNotExist();
-        assertThat(stdout.toString(StandardCharsets.UTF_8)).doesNotContain("Troubleshooting report written");
-        assertThat(stderr.toString(StandardCharsets.UTF_8))
+        assertThat(result.stdout()).doesNotContain("Troubleshooting report written");
+        assertThat(result.stderr())
                 .contains(
                         "setup_failed code=setup_missing_api_key",
                         env.toAbsolutePath().normalize().toString())
