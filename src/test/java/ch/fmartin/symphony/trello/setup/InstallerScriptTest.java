@@ -1924,6 +1924,49 @@ final class InstallerScriptTest {
     }
 
     @Test
+    void posixInstallerUpdatesMarkedCheckoutOriginBeforeFetching() throws Exception {
+        // given
+        Assumptions.assumeTrue(commandExists("bash"));
+        Assumptions.assumeTrue(commandExists("git"));
+        Path oldRepository = createSourceRepository(temporaryDirectory.resolve("old-origin"));
+        Path sourceRepository = createSourceRepository(temporaryDirectory.resolve("new-origin"));
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path symphonyHome = temporaryDirectory.resolve("remote-migration-home");
+        Path appHome = symphonyHome.resolve("app");
+        Path binDirectory = temporaryDirectory.resolve("remote-migration-bin");
+        Path fakeLog = temporaryDirectory.resolve("remote-migration.log");
+        Files.createDirectories(appHome);
+        run(Map.of(), "git", "-C", appHome.toString(), "init", "-b", "main").assertSuccess();
+        run(
+                        Map.of(),
+                        "git",
+                        "-C",
+                        appHome.toString(),
+                        "remote",
+                        "add",
+                        "origin",
+                        oldRepository.toUri().toString())
+                .assertSuccess();
+        Files.createFile(appHome.resolve(".symphony-trello-install"));
+        Map<String, String> environment = Map.of(
+                "PATH", fakeBin + File.pathSeparator + System.getenv("PATH"),
+                "SYMPHONY_TRELLO_REPO_URL", sourceRepository.toUri().toString(),
+                "SYMPHONY_HOME", symphonyHome.toString(),
+                "SYMPHONY_FAKE_LOG", fakeLog.toString());
+
+        // when
+        ProcessResult result =
+                run(environment, "bash", "install.sh", "--no-onboard", "--bin-dir", binDirectory.toString());
+
+        // then
+        result.assertSuccess();
+        ProcessResult origin = run(Map.of(), "git", "-C", appHome.toString(), "remote", "get-url", "origin");
+        origin.assertSuccess();
+        assertThat(origin.output().trim()).isEqualTo(sourceRepository.toUri().toString());
+        assertThat(result.output()).contains("remote set-url origin " + sourceRepository.toUri());
+    }
+
+    @Test
     void powershellInstallerRefusesUnmarkedUnrelatedExistingCheckoutWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();

@@ -222,6 +222,19 @@ assert_existing_checkout_safe() {
   exit 2
 }
 
+ensure_checkout_origin() {
+  local origin_url
+  origin_url="$(git -C "$APP_DIR" remote get-url origin 2>/dev/null || true)"
+  if [[ "$origin_url" == "$REPO_URL" ]]; then
+    return
+  fi
+  if [[ -z "$origin_url" ]]; then
+    run git -C "$APP_DIR" remote add origin "$REPO_URL"
+  else
+    run git -C "$APP_DIR" remote set-url origin "$REPO_URL"
+  fi
+}
+
 install_or_update_checkout() {
   if [[ ! -d "$APP_DIR/.git" ]]; then
     run mkdir -p "$(dirname "$APP_DIR")"
@@ -234,6 +247,7 @@ install_or_update_checkout() {
     fi
   else
     assert_existing_checkout_safe
+    ensure_checkout_origin
     run git -C "$APP_DIR" fetch --tags --prune origin
     checkout_ref "$APP_DIR" "$REF"
   fi
