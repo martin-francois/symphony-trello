@@ -925,9 +925,7 @@ final class SetupDiagnosticReporter {
     }
 
     private static DiagnosticsSelection selectBoardDiagnostics(ConnectedBoardManifest manifest, String boardSelector) {
-        List<ConnectedBoard> matches = manifest.boards().stream()
-                .filter(board -> matchesBoard(board, boardSelector))
-                .toList();
+        List<ConnectedBoard> matches = manifest.findAllByBoard(boardSelector);
         if (matches.size() > 1) {
             throw new TrelloBoardSetupException(
                     "setup_invalid_arguments",
@@ -943,19 +941,6 @@ final class SetupDiagnosticReporter {
                 .filter(board -> PathsEqual.samePath(board.workflowPath(), workflow))
                 .toList();
         return new DiagnosticsSelection(DiagnosticsSelectorKind.WORKFLOW, matches, Optional.of(workflow));
-    }
-
-    private static boolean matchesBoard(ConnectedBoard board, String selected) {
-        if (selected == null || selected.isBlank()) {
-            return false;
-        }
-        String normalized = selected.trim();
-        String parsed = TrelloBoardIds.parse(normalized);
-        return normalized.equalsIgnoreCase(board.boardName())
-                || normalized.equalsIgnoreCase(board.boardId())
-                || normalized.equalsIgnoreCase(board.boardKey())
-                || parsed.equalsIgnoreCase(board.boardId())
-                || parsed.equalsIgnoreCase(board.boardKey());
     }
 
     private static void appendSelectionMatch(StringBuilder body, DiagnosticsSelection selection) {
