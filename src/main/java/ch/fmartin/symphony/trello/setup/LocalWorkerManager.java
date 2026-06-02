@@ -499,9 +499,17 @@ final class LocalWorkerManager {
     }
 
     private ConnectedBoard selectedBoard(ConnectedBoardManifest manifest, String selector) {
-        return manifest.findByBoard(selector)
-                .orElseThrow(() -> new TrelloBoardSetupException(
-                        "setup_worker_board_not_found", "No connected Trello board matches \"" + selector + "\"."));
+        List<ConnectedBoard> matches = manifest.findAllByBoard(selector);
+        if (matches.isEmpty()) {
+            throw new TrelloBoardSetupException(
+                    "setup_worker_board_not_found", "No connected Trello board matches \"" + selector + "\".");
+        }
+        if (matches.size() > 1) {
+            throw new TrelloBoardSetupException(
+                    "setup_worker_board_ambiguous",
+                    "Multiple connected boards match --board. Re-run with a board id, short link, or --workflow.");
+        }
+        return matches.getFirst();
     }
 
     private ConnectedBoard selectedWorkflow(ConnectedBoardManifest manifest, Path workflowSelector) {

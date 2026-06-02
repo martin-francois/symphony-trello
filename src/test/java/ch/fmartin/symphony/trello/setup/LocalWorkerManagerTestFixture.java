@@ -178,6 +178,16 @@ final class LocalWorkerManagerTestFixture {
         return stopRequest(Optional.of(boardName));
     }
 
+    StopWorkerRequest stopWorkflowRequest(Path workflow) {
+        return new StopWorkerRequest(
+                Optional.empty(),
+                Optional.of(workflow),
+                Optional.of(paths.appHome()),
+                Optional.of(paths.configDir()),
+                Optional.of(paths.workspaceRoot()),
+                Optional.of(paths.stateHome()));
+    }
+
     StopWorkerRequest stopAllRequest() {
         return stopRequest(Optional.empty());
     }
@@ -186,6 +196,16 @@ final class LocalWorkerManagerTestFixture {
         return new WorkerStatusRequest(
                 Optional.of(boardName),
                 Optional.empty(),
+                Optional.of(paths.appHome()),
+                Optional.of(paths.configDir()),
+                Optional.of(paths.workspaceRoot()),
+                Optional.of(paths.stateHome()));
+    }
+
+    WorkerStatusRequest statusWorkflowRequest(Path workflow) {
+        return new WorkerStatusRequest(
+                Optional.empty(),
+                Optional.of(workflow),
                 Optional.of(paths.appHome()),
                 Optional.of(paths.configDir()),
                 Optional.of(paths.workspaceRoot()),
@@ -221,8 +241,11 @@ final class LocalWorkerManagerTestFixture {
     }
 
     ConnectedBoard connectedBoard(String boardId, String boardName) throws Exception {
-        String slug = boardName.toLowerCase(Locale.ROOT);
-        Path workflow = paths.configDir().resolve("WORKFLOW." + slug + ".md");
+        return connectedBoard(boardId, boardName, boardName.toLowerCase(Locale.ROOT));
+    }
+
+    ConnectedBoard connectedBoard(String boardId, String boardName, String workflowSlug) throws Exception {
+        Path workflow = paths.configDir().resolve("WORKFLOW." + workflowSlug + ".md");
         Files.createDirectories(paths.configDir());
         Files.writeString(
                 workflow,
