@@ -46,6 +46,7 @@ final class SetupDiagnosticReporterTest {
                 "setup_github_auth_required",
                 "setup_github_cli_install_failed",
                 "setup_workspace_id_required",
+                "setup_worker_board_ambiguous",
                 "setup_worker_board_required",
                 "trello_auth_failed",
                 "trello_permission_denied");

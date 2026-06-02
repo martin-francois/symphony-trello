@@ -656,6 +656,78 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
+    void startRejectsAmbiguousBoardNameSelector() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard first = fixture.connectedBoard("board-1", "Duplicate", "duplicate-one");
+        ConnectedBoard second = fixture.connectedBoard("board-2", "Duplicate", "duplicate-two");
+        fixture.save(first, second);
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Duplicate")));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_worker_board_ambiguous");
+            assertThat(failure)
+                    .hasMessage(
+                            "Multiple connected boards match --board. Re-run with a board id, short link, or --workflow.");
+        });
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void statusRejectsAmbiguousBoardNameSelectorButAllowsWorkflowSelector() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard first = fixture.connectedBoard("board-1", "Duplicate", "duplicate-one");
+        ConnectedBoard second = fixture.connectedBoard("board-2", "Duplicate", "duplicate-two");
+        fixture.save(first, second);
+        when(fixture.healthChecker.boardHealth(second)).thenReturn(fixture.sameWorkflow(second));
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.status(fixture.statusRequest("Duplicate")));
+        WorkerRunResult workflowResult = fixture.status(fixture.statusWorkflowRequest(second.workflowPath()));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_worker_board_ambiguous");
+            assertThat(failure)
+                    .hasMessage(
+                            "Multiple connected boards match --board. Re-run with a board id, short link, or --workflow.");
+        });
+        workflowResult.assertSuccess().stdoutContains("running \"Duplicate\"");
+    }
+
+    @Test
+    void stopRejectsAmbiguousBoardNameSelectorButAllowsWorkflowSelector() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard first = fixture.connectedBoard("board-1", "Duplicate", "duplicate-one");
+        ConnectedBoard second = fixture.connectedBoard("board-2", "Duplicate", "duplicate-two");
+        fixture.save(first, second);
+        fixture.writeManagedPid(second, 42);
+        when(fixture.platform.isAlive(42)).thenReturn(true);
+        when(fixture.platform.isManaged(42, fixture.paths.appHome(), second.workflowPath()))
+                .thenReturn(true);
+        when(fixture.platform.stop(42, Duration.ofSeconds(15), Duration.ofSeconds(5)))
+                .thenReturn(true);
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.stop(fixture.stopRequest("Duplicate")));
+        WorkerRunResult workflowResult = fixture.stop(fixture.stopWorkflowRequest(second.workflowPath()));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_worker_board_ambiguous");
+            assertThat(failure)
+                    .hasMessage(
+                            "Multiple connected boards match --board. Re-run with a board id, short link, or --workflow.");
+        });
+        workflowResult.assertSuccess().stdoutContains("Stopped WORKFLOW.duplicate-two.md");
+    }
+
+    @Test
     void explicitWorkflowUsesWorkflowBoardIdAndPortWithoutManifestEntry() throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);

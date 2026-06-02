@@ -31,17 +31,25 @@ record ConnectedBoardManifest(List<ConnectedBoard> boards) {
     }
 
     Optional<ConnectedBoard> findByBoard(String selector) {
+        return findAllByBoard(selector).stream().findFirst();
+    }
+
+    List<ConnectedBoard> findAllByBoard(String selector) {
         if (selector == null || selector.isBlank()) {
-            return Optional.empty();
+            return List.of();
         }
         String parsed = TrelloBoardIds.parse(selector);
         return boards.stream()
-                .filter(board -> board.boardName().equalsIgnoreCase(selector)
-                        || equalsIgnoreCase(board.boardId(), selector)
-                        || equalsIgnoreCase(board.boardKey(), selector)
-                        || equalsIgnoreCase(board.boardId(), parsed)
-                        || equalsIgnoreCase(board.boardKey(), parsed))
-                .findFirst();
+                .filter(board -> matchesBoard(board, selector, parsed))
+                .toList();
+    }
+
+    private static boolean matchesBoard(ConnectedBoard board, String selector, String parsed) {
+        return board.boardName().equalsIgnoreCase(selector)
+                || equalsIgnoreCase(board.boardId(), selector)
+                || equalsIgnoreCase(board.boardKey(), selector)
+                || equalsIgnoreCase(board.boardId(), parsed)
+                || equalsIgnoreCase(board.boardKey(), parsed);
     }
 
     private static boolean equalsIgnoreCase(String actual, String expected) {
