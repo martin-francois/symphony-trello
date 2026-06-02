@@ -45,11 +45,14 @@ record ConnectedBoardManifest(List<ConnectedBoard> boards) {
     }
 
     private static boolean matchesBoard(ConnectedBoard board, String selector, String parsed) {
+        String boardUrlKey = TrelloBoardIds.parse(board.boardUrl());
         return board.boardName().equalsIgnoreCase(selector)
                 || equalsIgnoreCase(board.boardId(), selector)
                 || equalsIgnoreCase(board.boardKey(), selector)
+                || equalsIgnoreCase(boardUrlKey, selector)
                 || equalsIgnoreCase(board.boardId(), parsed)
-                || equalsIgnoreCase(board.boardKey(), parsed);
+                || equalsIgnoreCase(board.boardKey(), parsed)
+                || equalsIgnoreCase(boardUrlKey, parsed);
     }
 
     private static boolean equalsIgnoreCase(String actual, String expected) {

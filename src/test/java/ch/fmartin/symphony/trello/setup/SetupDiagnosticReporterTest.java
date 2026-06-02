@@ -270,6 +270,79 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
+    void rendersDiagnosticsForSelectedBoardShortLinkFromBoardUrlWhenBoardKeyIsFullBoardId() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("url-short-link-config");
+        Path workspaceRoot = tempDir.resolve("url-short-link-workspaces");
+        Path stateHome = tempDir.resolve("url-short-link-state");
+        Path selectedWorkflow = configDir.resolve("WORKFLOW.selected.md");
+        Path otherWorkflow = configDir.resolve("WORKFLOW.other.md");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.writeString(selectedWorkflow, workflowWithPort(19191), StandardCharsets.UTF_8);
+        Files.writeString(otherWorkflow, workflowWithPort(19192), StandardCharsets.UTF_8);
+        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(
+                        new ConnectedBoard(
+                                "6a1eb7c4873fd71be041d1cf",
+                                "6a1eb7c4873fd71be041d1cf",
+                                "Selected Private Board",
+                                "https://trello.com/b/9wuK8XRD/selected-private-board",
+                                selectedWorkflow,
+                                configDir.resolve(".env"),
+                                workspaceRoot,
+                                19191,
+                                false,
+                                List.of(),
+                                false),
+                        new ConnectedBoard(
+                                "other-board-id",
+                                "other-key",
+                                "Other Private Board",
+                                "https://trello.com/b/other-key/other-private-board",
+                                otherWorkflow,
+                                configDir.resolve(".env"),
+                                workspaceRoot,
+                                19192,
+                                false,
+                                List.of(),
+                                false))));
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.of("9wuK8XRD"),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.of(workspaceRoot),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.empty()));
+
+        // then
+        assertThat(report)
+                .contains(
+                        "selector:** board",
+                        "selected_manifest_board_count:** 1",
+                        "selected_board_matched:** true",
+                        "board_count:** 1",
+                        "19191")
+                .doesNotContain(
+                        "Selected Private Board",
+                        "6a1eb7c4873fd71be041d1cf",
+                        "9wuK8XRD",
+                        "https://trello.com/b/9wuK8XRD/selected-private-board",
+                        "Other Private Board",
+                        "other-board-id",
+                        "other-key",
+                        "19192",
+                        tempDir.toString());
+    }
+
+    @Test
     void redactsRelativeStateHomeArgumentFromRenderedCommand() throws IOException {
         // given
         Path configDir = tempDir.resolve("relative-state-config");
