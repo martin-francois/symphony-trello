@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -21,7 +22,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -58,7 +61,7 @@ final class PackagedAppSmokeIT {
 
                 // when
                 JsonNode localStatus = waitForLocalStatus(appPort, stdout, stderr);
-                assertStaysAliveAfterHealthyStartup(process, Duration.ofSeconds(2));
+                assertDoesNotExitAfterHealthyStartup(process, Duration.ofSeconds(2));
 
                 // then
                 assertThat(localStatus.get("boardId").asText()).isEqualTo(BOARD_ID);
@@ -105,16 +108,18 @@ final class PackagedAppSmokeIT {
                 lastFailure);
     }
 
-    private static void assertStaysAliveAfterHealthyStartup(Process process, Duration duration)
+    private static void assertDoesNotExitAfterHealthyStartup(Process process, Duration duration)
             throws InterruptedException {
-        // /local-status can answer before Quarkus main returns; keep watching long enough to catch an
-        // immediate post-startup exit.
-        Instant deadline = now().plus(duration);
-        while (now().isBefore(deadline)) {
+        try {
+            ProcessHandle exited = process.toHandle().onExit().get(duration.toMillis(), TimeUnit.MILLISECONDS);
+            fail("Packaged worker exited within %s after first healthy startup response, pid=%s"
+                    .formatted(duration, exited.pid()));
+        } catch (TimeoutException expected) {
             assertThat(process.isAlive())
                     .as("packaged worker should stay alive after first healthy startup response")
                     .isTrue();
-            Thread.sleep(100);
+        } catch (ExecutionException e) {
+            throw new AssertionError("Could not observe packaged worker process lifetime", e);
         }
     }
 
