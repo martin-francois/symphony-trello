@@ -122,6 +122,7 @@ final class SetupDiagnosticReporter {
             "setup_repair_port_http_override",
             "setup_server_port_conflict",
             "setup_server_port_unavailable",
+            "setup_worker_board_ambiguous",
             "setup_worker_board_not_found",
             "setup_worker_board_required",
             "setup_worker_missing_api_key",
