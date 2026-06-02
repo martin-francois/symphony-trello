@@ -14,5 +14,5 @@ jobs:
     runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      - name: Run repository Semgrep rules
+      - name: Run selected Semgrep rules
         run: ./scripts/semgrep-docker.sh

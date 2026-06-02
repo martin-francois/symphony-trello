@@ -199,6 +199,10 @@ matters, and easy for another engineer to understand without asking the original
   only when the affected path is actually generated, vendored, or otherwise outside the intended
   analysis scope. Hosted dashboards may add signal, but they must not replace local checks that an
   agent can run, fix, and rerun.
+- If the same finding family needs recurring suppressions across multiple analyzers, reconsider the
+  rule or code boundary instead of copying suppressions into every tool. Decide whether the rule is
+  the wrong fit for this repository, whether a narrower custom rule should replace it, or whether the
+  code should expose a clearer reviewed boundary that analyzers can understand.
 - For PMD, prefer fixing or rule tuning. Use `@SuppressWarnings("PMD.RuleName")` for code-local
   suppressions, `// NOPMD - reason` only for truly line-local cases, and ruleset-level suppression
   only when a repeated false positive can be described precisely. Consider PMD's unnecessary
