@@ -1818,8 +1818,8 @@ final class SetupDiagnosticReporter {
         try {
             Map<?, ?> status = json.readValue(body, Map.class);
             Map<String, Object> summary = new LinkedHashMap<>();
-            summary.put("board_hash", hash(String.valueOf(status.get("boardId"))));
-            summary.put("configured_board_hash", hash(String.valueOf(status.get("configuredBoardId"))));
+            summary.put("resolved_board_hash", hash(String.valueOf(status.get("boardId"))));
+            summary.put("configured_board_input_hash", hash(String.valueOf(status.get("configuredBoardId"))));
             summary.put("workflow_path", sanitize(String.valueOf(status.get("workflowPath"))));
             return sanitize(truncate(json.writeValueAsString(summary), BODY_LIMIT));
         } catch (IOException | RuntimeException ignored) {
