@@ -394,6 +394,35 @@ final class SymphonyOrchestratorTest {
     }
 
     @Test
+    void periodicPollingPicksUpCardAddedAfterIdleStartup() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        writeWorkflow(workflow, "50");
+        FakeTracker tracker = new FakeTracker(List.of());
+        AgentRunner runner = mock();
+        AtomicReference<String> pickedUpCard = new AtomicReference<>();
+        doAnswer(invocation -> {
+                    AgentRunner.AgentRunRequest request = invocation.getArgument(0);
+                    pickedUpCard.set(request.card().identifier());
+                    return AgentRunResult.ok();
+                })
+                .when(runner)
+                .run(any());
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
+
+        // when
+        orchestrator.start();
+        waitUntil(() -> tracker.candidateFetches.get() >= 1);
+        tracker.setCandidates(List.of(TestCards.card("card-1", "TRELLO-late", "Todo")));
+        waitUntil(() -> pickedUpCard.get() != null);
+        orchestrator.stop();
+
+        // then
+        assertThat(pickedUpCard.get()).isEqualTo("TRELLO-late");
+        assertThat(tracker.candidateFetches.get()).isGreaterThanOrEqualTo(2);
+    }
+
+    @Test
     void refreshRequestedDuringActiveTickRunsImmediatelyAfterTickCompletes() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
