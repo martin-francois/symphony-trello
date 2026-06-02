@@ -98,8 +98,12 @@ run() {
   fi
 }
 
+terminal_available() {
+  [[ -e /dev/tty ]] && { : </dev/tty; } 2>/dev/null
+}
+
 run_interactive() {
-  if [[ ! -r /dev/tty ]]; then
+  if ! terminal_available; then
     echo "This step needs an interactive terminal. Rerun the installer from a terminal or pass --no-onboard." >&2
     exit 2
   fi
@@ -142,9 +146,10 @@ write_install_context() {
 prompt_from_terminal() {
   local variable_name="$1"
   local prompt="$2"
+  local unavailable_message="${3:-This step needs an interactive terminal. Rerun the installer from a terminal or pass --no-onboard.}"
   local answer
-  if [[ ! -r /dev/tty ]]; then
-    echo "This step needs an interactive terminal. Rerun the installer from a terminal or pass --no-onboard." >&2
+  if ! terminal_available; then
+    echo "$unavailable_message" >&2
     exit 2
   fi
   read -r -p "$prompt" answer </dev/tty
@@ -485,8 +490,13 @@ detect_supported_platform() {
 prompt_yes_no() {
   local variable_name="$1"
   local prompt="$2"
+  local unavailable_message="${3:-}"
   local prompt_answer
-  prompt_from_terminal prompt_answer "$prompt"
+  if [[ -n "$unavailable_message" ]]; then
+    prompt_from_terminal prompt_answer "$prompt" "$unavailable_message"
+  else
+    prompt_from_terminal prompt_answer "$prompt"
+  fi
   case "$prompt_answer" in
   [yY]*) printf -v "$variable_name" true ;;
   *) printf -v "$variable_name" false ;;
@@ -665,7 +675,10 @@ install_package_or_exit() {
   echo "$label is missing."
   echo "Proposed install command:"
   echo "  $command"
-  prompt_yes_no answer "Run this command now? [y/N] "
+  prompt_yes_no \
+    answer \
+    "Run this command now? [y/N] " \
+    "This step needs an interactive terminal. Rerun the installer from a terminal or install the missing prerequisite manually first."
   if [[ "$answer" != true ]]; then
     echo "$fallback"
     echo "Then rerun this installer."

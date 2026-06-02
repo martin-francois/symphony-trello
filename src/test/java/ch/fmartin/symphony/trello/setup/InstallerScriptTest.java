@@ -104,6 +104,32 @@ final class InstallerScriptTest {
     }
 
     @Test
+    void posixInstallerNoOnboardFailsCleanlyWithoutTerminalWhenPrerequisitePromptWouldRun() throws Exception {
+        // given
+        Assumptions.assumeTrue(Files.exists(Path.of("/bin/bash")));
+        Path fakeBin = temporaryDirectory.resolve("noninteractive-bin");
+        Files.createDirectories(fakeBin);
+        writeExecutable(fakeBin.resolve("git"), "#!/usr/bin/env bash\nexit 0\n");
+        writeExecutable(fakeBin.resolve("apt-get"), "#!/usr/bin/env bash\nexit 0\n");
+        Map<String, String> environment = Map.of(
+                "PATH", fakeBin + File.pathSeparator + "/bin",
+                "SYMPHONY_TRELLO_TEST_OS", "Linux",
+                "SYMPHONY_TRELLO_TEST_ARCH", "x86_64");
+
+        // when
+        ProcessResult result = run(environment, "/bin/bash", "install.sh", "--no-onboard");
+
+        // then
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.output())
+                .contains(
+                        "Java 25+ JDK is missing.",
+                        "This step needs an interactive terminal.",
+                        "install the missing prerequisite manually first")
+                .doesNotContain("/dev/tty: No such device or address", "pass --no-onboard");
+    }
+
+    @Test
     void posixInstallerDoesNotOfferPathSetupWhenBinDirIsAlreadyOnPath() throws Exception {
         // given
         Assumptions.assumeTrue(commandExists("bash"));
@@ -282,6 +308,37 @@ final class InstallerScriptTest {
         assertThat(home.resolve(".profile"))
                 .content(StandardCharsets.UTF_8)
                 .contains("export PATH='" + binDirectory + "':\"$PATH\"");
+    }
+
+    @Test
+    void posixInstallerGuidedSetupWithoutTerminalSuggestsNoOnboardWhenPrerequisitesExist() throws Exception {
+        // given
+        Assumptions.assumeTrue(commandExists("bash"));
+        Assumptions.assumeTrue(commandExists("git"));
+        Path sourceRepository = createSourceRepository(temporaryDirectory);
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path home = temporaryDirectory.resolve("guided-no-tty-home");
+        Path symphonyHome = temporaryDirectory.resolve("guided-no-tty-symphony-home");
+        Path binDirectory = temporaryDirectory.resolve("guided-no-tty-bin");
+        Path fakeLog = temporaryDirectory.resolve("guided-no-tty.log");
+        Files.createFile(temporaryDirectory.resolve("codex-authenticated"));
+        Files.createDirectories(home);
+        Map<String, String> environment = Map.of(
+                "PATH", fakeBin + File.pathSeparator + System.getenv("PATH"),
+                "HOME", home.toString(),
+                "SHELL", "/bin/bash",
+                "SYMPHONY_TRELLO_REPO_URL", sourceRepository.toUri().toString(),
+                "SYMPHONY_HOME", symphonyHome.toString(),
+                "SYMPHONY_FAKE_LOG", fakeLog.toString());
+
+        // when
+        ProcessResult result = run(environment, "bash", "install.sh", "--bin-dir", binDirectory.toString());
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isEqualTo(2);
+        assertThat(result.output())
+                .contains("Starting setup...", "This step needs an interactive terminal.", "pass --no-onboard")
+                .doesNotContain("install the missing prerequisite manually first");
     }
 
     @Test
