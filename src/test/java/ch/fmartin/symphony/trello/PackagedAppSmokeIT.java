@@ -58,6 +58,7 @@ final class PackagedAppSmokeIT {
 
                 // when
                 JsonNode localStatus = waitForLocalStatus(appPort, stdout, stderr);
+                assertStaysAliveAfterHealthyStartup(process, Duration.ofSeconds(2));
 
                 // then
                 assertThat(localStatus.get("boardId").asText()).isEqualTo(BOARD_ID);
@@ -102,6 +103,19 @@ final class PackagedAppSmokeIT {
         throw new AssertionError(
                 "Packaged app did not serve /api/v1/local-status. stdout=" + read(stdout) + "\nstderr=" + read(stderr),
                 lastFailure);
+    }
+
+    private static void assertStaysAliveAfterHealthyStartup(Process process, Duration duration)
+            throws InterruptedException {
+        // /local-status can answer before Quarkus main returns; keep watching long enough to catch an
+        // immediate post-startup exit.
+        Instant deadline = now().plus(duration);
+        while (now().isBefore(deadline)) {
+            assertThat(process.isAlive())
+                    .as("packaged worker should stay alive after first healthy startup response")
+                    .isTrue();
+            Thread.sleep(100);
+        }
     }
 
     private static String workflow(int trelloPort, int appPort, Path workspaceRoot) {
