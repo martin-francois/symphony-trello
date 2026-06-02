@@ -8,11 +8,15 @@ import java.util.Optional;
 
 final class PosixManagedProcessPlatform extends ProcessHandleManagedProcessPlatform {
     private static final Path DEV_NULL = Path.of("/dev/null");
+    private static final Path USR_BIN_SETSID = Path.of("/usr/bin/setsid");
     private static final Path USR_BIN_NOHUP = Path.of("/usr/bin/nohup");
 
     @Override
     protected List<String> launchCommand(List<String> command) {
-        List<String> detachedCommand = new ArrayList<>(command.size() + 1);
+        List<String> detachedCommand = new ArrayList<>(command.size() + 2);
+        if (Files.isExecutable(USR_BIN_SETSID)) {
+            detachedCommand.add(USR_BIN_SETSID.toString());
+        }
         detachedCommand.add(Files.isExecutable(USR_BIN_NOHUP) ? USR_BIN_NOHUP.toString() : "nohup");
         detachedCommand.addAll(command);
         return List.copyOf(detachedCommand);
