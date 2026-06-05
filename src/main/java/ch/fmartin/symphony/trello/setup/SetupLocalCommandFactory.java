@@ -258,6 +258,7 @@ final class SetupLocalCommandFactory {
 
         LocalSetupRequest request(Action action) {
             validateCliPaths();
+            boardName.ifPresent(value -> CliInputValidation.rejectControlCharacters("--board-name", value));
             Optional<Boolean> resolvedGithubMode = githubMode.or(() -> github.selected());
             List<Path> writableRoots = CliValueNormalizer.nonBlankTrimmedPaths(additionalWritableRoots);
             serverPort.ifPresent(LocalPort::validateCliServerPort);

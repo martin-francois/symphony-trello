@@ -191,6 +191,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         @Override
         public Integer call() throws IOException {
             try {
+                CliInputValidation.rejectControlCharacters("--name", boardName);
                 options.validateCliPaths();
                 options.validateRuntimeEnvTarget();
                 parent.boardSetup.preflightConnectedBoardManifest(options.manifestPath());

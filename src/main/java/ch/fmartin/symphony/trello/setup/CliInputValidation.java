@@ -14,6 +14,13 @@ final class CliInputValidation {
         value.ifPresent(path -> rejectControlCharacters(optionName, path));
     }
 
+    static void rejectControlCharacters(String optionName, String value) {
+        if (CONTROL_CHARACTERS.matchesAnyOf(value)) {
+            throw new TrelloBoardSetupException(
+                    "setup_invalid_arguments", optionName + " must not contain control characters.");
+        }
+    }
+
     static void rejectControlCharacters(String optionName, Path value) {
         rejectControlCharacters(optionName, value.toString());
     }
@@ -29,10 +36,4 @@ final class CliInputValidation {
         }
     }
 
-    private static void rejectControlCharacters(String optionName, String value) {
-        if (CONTROL_CHARACTERS.matchesAnyOf(value)) {
-            throw new TrelloBoardSetupException(
-                    "setup_invalid_arguments", optionName + " must not contain control characters.");
-        }
-    }
 }
