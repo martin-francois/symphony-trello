@@ -27,6 +27,8 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 final class SetupDiagnosticReporterTest {
     @TempDir
@@ -1586,6 +1588,42 @@ final class SetupDiagnosticReporterTest {
                 .doesNotContain("19091"));
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"\"many\"", "0", "-2", "1.5", "null"})
+    void diagnosticsFlagsInvalidWorkflowMaxAgentsValues(String maxAgentsValue) throws Exception {
+        // given
+        Path configDir = tempDir.resolve("invalid-max-agents-config-" + maxAgentsValue.hashCode());
+        Path workspaceRoot = tempDir.resolve("workspaces");
+        Path stateHome = tempDir.resolve("state");
+        Path workflow = configDir.resolve("WORKFLOW.invalid-max-agents.md");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.writeString(workflow, workflowWithMaxAgents(maxAgentsValue), StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.of(workspaceRoot),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.of(workflow)));
+
+        // then
+        assertThat(report)
+                .contains(
+                        "## Workflow Summary",
+                        "| workflow | board_hash | port | max_agents | active | terminal | in_progress | blocked |",
+                        "<path:",
+                        " | 20731 | invalid | 1 | 1 | false | false |")
+                .doesNotContain(tempDir.toString());
+    }
+
     private static HttpServer fakeLocalServer(int port) throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 0);
         server.createContext(
@@ -1638,6 +1676,25 @@ final class SetupDiagnosticReporterTest {
                 Body
                 """
                 .formatted(port);
+    }
+
+    private static String workflowWithMaxAgents(String maxAgentsValue) {
+        return """
+                ---
+                tracker:
+                  board_id: "custom-board-id"
+                  active_states:
+                    - "Ready for Codex"
+                  terminal_states:
+                    - "Done"
+                agent:
+                  max_concurrent_agents: %s
+                server:
+                  port: 20731
+                ---
+                Body
+                """
+                .formatted(maxAgentsValue);
     }
 
     private static FakeCommandRunner authProbeCommandRunner() {

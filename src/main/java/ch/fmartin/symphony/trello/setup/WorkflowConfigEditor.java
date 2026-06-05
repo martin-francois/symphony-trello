@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -98,23 +100,21 @@ final class WorkflowConfigEditor {
     }
 
     Optional<Integer> maxAgents(Path workflowPath) {
+        return maxAgentsSetting(workflowPath).value();
+    }
+
+    WorkflowIntegerSetting maxAgentsSetting(Path workflowPath) {
         try {
             SequencedMap<String, Object> yaml = parseYaml(read(workflowPath));
             if (!(yaml.get("agent") instanceof Map<?, ?> agent)) {
-                return Optional.empty();
+                return WorkflowIntegerSetting.omitted();
             }
-            Object value = agent.get("max_concurrent_agents");
-            if (value instanceof Number number) {
-                int maxAgents = number.intValue();
-                return maxAgents > 0 ? Optional.of(maxAgents) : Optional.empty();
+            if (!agent.containsKey("max_concurrent_agents")) {
+                return WorkflowIntegerSetting.omitted();
             }
-            if (value instanceof String text && !text.isBlank()) {
-                int maxAgents = Integer.parseInt(text.trim());
-                return maxAgents > 0 ? Optional.of(maxAgents) : Optional.empty();
-            }
-            return Optional.empty();
+            return positiveIntegerSetting(agent.get("max_concurrent_agents"));
         } catch (IOException | RuntimeException ignored) {
-            return Optional.empty();
+            return WorkflowIntegerSetting.omitted();
         }
     }
 
@@ -216,6 +216,69 @@ final class WorkflowConfigEditor {
         }
     }
 
+    private static WorkflowIntegerSetting positiveIntegerSetting(Object value) {
+        if (value instanceof Number number) {
+            return integralInteger(number)
+                    .filter(integer -> integer > 0)
+                    .map(WorkflowIntegerSetting::valid)
+                    .orElseGet(WorkflowIntegerSetting::invalidSetting);
+        }
+        if (value instanceof String text && !text.isBlank()) {
+            try {
+                int integer = Integer.parseInt(text.trim());
+                return integer > 0 ? WorkflowIntegerSetting.valid(integer) : WorkflowIntegerSetting.invalidSetting();
+            } catch (NumberFormatException ignored) {
+                return WorkflowIntegerSetting.invalidSetting();
+            }
+        }
+        return WorkflowIntegerSetting.invalidSetting();
+    }
+
+    private static Optional<Integer> integralInteger(Number number) {
+        return switch (number) {
+            case Byte value -> Optional.of(value.intValue());
+            case Short value -> Optional.of(value.intValue());
+            case Integer value -> Optional.of(value);
+            case Long value -> exactInt(BigInteger.valueOf(value));
+            case BigInteger value -> exactInt(value);
+            case BigDecimal value -> exactIntegralInt(value);
+            case Float value -> finiteIntegralInt(value.doubleValue());
+            case Double value -> finiteIntegralInt(value);
+            default -> exactNumberTextInt(number.toString());
+        };
+    }
+
+    private static Optional<Integer> finiteIntegralInt(double value) {
+        if (!Double.isFinite(value)) {
+            return Optional.empty();
+        }
+        return exactIntegralInt(BigDecimal.valueOf(value));
+    }
+
+    private static Optional<Integer> exactNumberTextInt(String value) {
+        try {
+            return exactIntegralInt(new BigDecimal(value));
+        } catch (NumberFormatException e) {
+            return Optional.empty();
+        }
+    }
+
+    private static Optional<Integer> exactIntegralInt(BigDecimal value) {
+        try {
+            return exactInt(value.toBigIntegerExact());
+        } catch (ArithmeticException e) {
+            return Optional.empty();
+        }
+    }
+
+    private static Optional<Integer> exactInt(BigInteger value) {
+        try {
+            return Optional.of(value.intValueExact());
+        } catch (ArithmeticException e) {
+            return Optional.empty();
+        }
+    }
+
     private static Optional<String> blockedStateFromWorkflowBody(String body) {
         var matcher =
                 Pattern.compile("(?m)^- \"(?<name>[^\"]+)\": blocked work\\.").matcher(body);
@@ -253,4 +316,22 @@ final class WorkflowConfigEditor {
     }
 
     record TrackerCredentialReferences(Optional<String> apiKey, Optional<String> apiToken) {}
+
+    record WorkflowIntegerSetting(Optional<Integer> value, boolean invalid) {
+        static WorkflowIntegerSetting valid(int value) {
+            return new WorkflowIntegerSetting(Optional.of(value), false);
+        }
+
+        static WorkflowIntegerSetting omitted() {
+            return new WorkflowIntegerSetting(Optional.empty(), false);
+        }
+
+        static WorkflowIntegerSetting invalidSetting() {
+            return new WorkflowIntegerSetting(Optional.empty(), true);
+        }
+
+        String diagnosticsCell() {
+            return value.map(String::valueOf).orElse(invalid ? "invalid" : "");
+        }
+    }
 }
