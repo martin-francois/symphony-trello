@@ -2286,6 +2286,42 @@ final class TrelloBoardSetupMainTest {
         assertThat(createdLists).isEmpty();
     }
 
+    @MethodSource("malformedDirectImportBoardSelectors")
+    @ParameterizedTest(name = "{0}")
+    void rejectsMalformedDirectImportBoardSelectorsBeforeTrelloRequest(String name, String badBoardSelector) {
+        // given
+        Path workflow = tempDir.resolve(name + ".WORKFLOW.md");
+
+        // when
+        CliRunResult result = runCli(
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                badBoardSelector,
+                "--active",
+                "Queue for Codex",
+                "--terminal",
+                "Released",
+                "--workflow",
+                workflow.toString(),
+                "--force");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments",
+                        "Invalid --board value. Use a Trello board URL, short link, or board id.")
+                .stderrDoesNotContain(badBoardSelector, "Troubleshooting report written")
+                .stdoutDoesNotContain("Imported Trello board", badBoardSelector);
+        assertThat(workflow).doesNotExist();
+        assertThat(createdLists).isEmpty();
+    }
+
     @Test
     void missingTrelloApiKeyPrintsHintWithoutTroubleshootingReport() throws Exception {
         // given
@@ -2482,6 +2518,14 @@ final class TrelloBoardSetupMainTest {
                         },
                         2,
                         "--in-progress cannot be used with --no-in-progress")));
+    }
+
+    private static Stream<Arguments> malformedDirectImportBoardSelectors() {
+        return Stream.of(
+                Arguments.of("trello-root-url", "https://trello.com/"),
+                Arguments.of("trello-board-url-without-id", "https://trello.com/b/"),
+                Arguments.of("non-trello-url", "https://example.com/b/abc123/name"),
+                Arguments.of("slash-containing-opaque-selector", "abc/def"));
     }
 
     private static String shellQuote(String value) {
