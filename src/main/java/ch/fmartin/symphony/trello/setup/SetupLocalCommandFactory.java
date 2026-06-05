@@ -312,7 +312,7 @@ final class SetupLocalCommandFactory {
                     allowAllPaths,
                     dangerFullAccess,
                     noStart,
-                    endpoint);
+                    TrelloApiEndpoint.normalize(endpoint));
         }
 
         private boolean hasExplicitBoardSetupRequest() {
