@@ -89,6 +89,25 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         }
     }
 
+    @MethodSource("invalidEndpointValues")
+    @ParameterizedTest
+    @SuppressWarnings("JUnitValueSource")
+    void dryRunRejectsInvalidEndpointBeforePlannedSetupOutput(String invalidEndpoint) {
+        // given
+        String boardName = "Endpoint Dry Run";
+
+        // when
+        SetupRunResult result = runSetup("--dry-run", "--endpoint", invalidEndpoint, "--board-name", boardName);
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments",
+                        "--endpoint must point to the Trello REST API base, for example https://api.trello.com/1")
+                .stderrDoesNotContain(invalidEndpoint, "Troubleshooting report written")
+                .stdoutDoesNotContain("Dry run", "WOULD write workflows");
+    }
+
     @Test
     void setupLocalRejectsControlCharactersInBoardNameBeforeTrelloRequest() {
         // given
@@ -3385,6 +3404,17 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         false,
                         new String[] {"setup_github_cli_required", "Install the GitHub CLI"},
                         new String[] {"setup_github_auth_required"}));
+    }
+
+    private static Stream<String> invalidEndpointValues() {
+        return Stream.of(
+                "https://api.trello.com/1/members/me",
+                "https://api.trello.com/2",
+                "http://api.trello.com/1",
+                "http://api.trello.com./1",
+                "https://api.trello.com/foo/1",
+                "https://api.trello.com/1?x=y",
+                "https://api.trello.com/1#frag");
     }
 
     private void writeOldBoardManifest(Path manifest, Path workflow) throws IOException {

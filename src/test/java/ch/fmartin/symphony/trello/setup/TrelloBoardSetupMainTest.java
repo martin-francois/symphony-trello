@@ -26,6 +26,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
@@ -45,6 +46,7 @@ final class TrelloBoardSetupMainTest {
     private HttpServer server;
     private final List<String> createdLists = new ArrayList<>();
     private final AtomicReference<String> createdBoardName = new AtomicReference<>();
+    private final AtomicInteger workspaceLookups = new AtomicInteger();
 
     @TempDir
     Path tempDir;
@@ -52,15 +54,16 @@ final class TrelloBoardSetupMainTest {
     @BeforeEach
     void startServer() throws Exception {
         server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
-        server.createContext(
-                "/1/members/me/organizations",
-                exchange -> respond(
-                        exchange,
-                        """
+        server.createContext("/1/members/me/organizations", exchange -> {
+            workspaceLookups.incrementAndGet();
+            respond(
+                    exchange,
+                    """
                 [
                   {"id":"workspace-1","name":"engineering","displayName":"Engineering","url":"https://trello.com/w/engineering"}
                 ]
-                """));
+                """);
+        });
         server.createContext("/1/boards/", exchange -> {
             Map<String, String> query = query(exchange);
             createdBoardName.set(query.get("name"));
@@ -787,6 +790,48 @@ final class TrelloBoardSetupMainTest {
                 .contains("workspace-1")
                 .contains("Engineering");
         assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
+    }
+
+    @Test
+    void listWorkspacesNormalizesRootEndpointToTrelloRestApiBase() {
+        // given
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+
+        // when
+        int exitCode = run(
+                stdout, stderr, "list-workspaces", "--endpoint", endpointRoot(), "--key", "key", "--token", "token");
+
+        // then
+        assertThat(exitCode).isZero();
+        assertThat(stdout.toString(StandardCharsets.UTF_8))
+                .contains("Trello workspaces:")
+                .contains("workspace-1")
+                .contains("Engineering");
+        assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
+        assertThat(workspaceLookups).hasValue(1);
+    }
+
+    @MethodSource("invalidEndpointValues")
+    @ParameterizedTest(name = "{0}")
+    void listWorkspacesRejectsInvalidEndpointsBeforeTrelloRequest(String name, String endpoint) {
+        // given
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+
+        // when
+        int exitCode =
+                run(stdout, stderr, "list-workspaces", "--endpoint", endpoint, "--key", "key", "--token", "token");
+
+        // then
+        assertThat(exitCode).isEqualTo(2);
+        assertThat(stderr.toString(StandardCharsets.UTF_8))
+                .contains(
+                        "setup_failed code=setup_invalid_arguments",
+                        "--endpoint must point to the Trello REST API base, for example https://api.trello.com/1")
+                .doesNotContain(endpoint, "Troubleshooting report written");
+        assertThat(stdout.toString(StandardCharsets.UTF_8)).doesNotContain("Trello workspaces:");
+        assertThat(workspaceLookups).hasValue(0);
     }
 
     @Test
@@ -2528,6 +2573,17 @@ final class TrelloBoardSetupMainTest {
                 Arguments.of("slash-containing-opaque-selector", "abc/def"));
     }
 
+    private static Stream<Arguments> invalidEndpointValues() {
+        return Stream.of(
+                Arguments.of("duplicated-rest-path", "https://api.trello.com/1/members/me"),
+                Arguments.of("wrong-rest-version", "https://api.trello.com/2"),
+                Arguments.of("insecure-production-endpoint", "http://api.trello.com/1"),
+                Arguments.of("insecure-production-endpoint-trailing-dot", "http://api.trello.com./1"),
+                Arguments.of("official-host-prefix", "https://api.trello.com/foo/1"),
+                Arguments.of("query-string", "https://api.trello.com/1?x=y"),
+                Arguments.of("fragment", "https://api.trello.com/1#frag"));
+    }
+
     private static String shellQuote(String value) {
         return "'" + value.replace("'", "'\\''") + "'";
     }
@@ -2622,5 +2678,9 @@ final class TrelloBoardSetupMainTest {
 
     private String endpoint() {
         return "http://127.0.0.1:" + server.getAddress().getPort() + "/1";
+    }
+
+    private String endpointRoot() {
+        return "http://127.0.0.1:" + server.getAddress().getPort();
     }
 }

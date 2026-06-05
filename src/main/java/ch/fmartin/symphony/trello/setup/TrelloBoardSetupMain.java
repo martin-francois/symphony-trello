@@ -296,7 +296,8 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
 
         @Override
         public Integer call() {
-            parent.boardSetup.listWorkspaces(new WorkspaceListRequest(endpoint, auth.credentials()), parent.out);
+            parent.boardSetup.listWorkspaces(
+                    new WorkspaceListRequest(TrelloApiEndpoint.normalize(endpoint), auth.credentials()), parent.out);
             return 0;
         }
     }
@@ -758,6 +759,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         }
 
         private void validate() {
+            endpoint = TrelloApiEndpoint.normalize(endpoint);
             if (serverPort != null) {
                 LocalPort.validateCliServerPort(serverPort);
             }
