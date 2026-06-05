@@ -1020,7 +1020,7 @@ final class SetupDiagnosticReporter {
                 sanitize(workflow.toString()),
                 editor.boardId(workflow).map(this::hash).orElse(""),
                 editor.serverPort(workflow).map(String::valueOf).orElse(""),
-                editor.maxAgents(workflow).map(String::valueOf).orElse(""),
+                editor.maxAgentsSetting(workflow).diagnosticsCell(),
                 lists.activeStates().size(),
                 lists.terminalStates().size(),
                 lists.inProgressState().isPresent(),
@@ -1061,7 +1061,7 @@ final class SetupDiagnosticReporter {
                     hash(boardId),
                     boardId,
                     editor.serverPort(workflow).map(String::valueOf).orElse(""),
-                    editor.maxAgents(workflow).map(String::valueOf).orElse(""),
+                    editor.maxAgentsSetting(workflow).diagnosticsCell(),
                     lists.activeStates().size(),
                     lists.terminalStates().size(),
                     lists.inProgressState().isPresent(),
@@ -1277,7 +1277,9 @@ final class SetupDiagnosticReporter {
                     pathToken(log.toString()),
                     log,
                     mapping.map(value -> pathToken(value.workflow().toString())).orElse(""),
-                    mapping.map(WorkflowLogMapping::workflow).orElse(null),
+                    mapping.map(WorkflowLogMapping::workflow)
+                            .map(Path::toString)
+                            .orElse(""),
                     logStream(log),
                     Files.isRegularFile(log),
                     logHasContent(log));
