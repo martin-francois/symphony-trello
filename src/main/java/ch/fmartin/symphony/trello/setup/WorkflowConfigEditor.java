@@ -68,10 +68,14 @@ final class WorkflowConfigEditor {
     }
 
     Optional<Integer> serverPort(Path workflowPath) {
+        return serverPortSetting(workflowPath).value();
+    }
+
+    WorkflowIntegerSetting serverPortSetting(Path workflowPath) {
         try {
-            return serverPort(parseYaml(read(workflowPath)));
-        } catch (IOException | TrelloBoardSetupException ignored) {
-            return Optional.empty();
+            return serverPortSetting(parseYaml(read(workflowPath)));
+        } catch (IOException | RuntimeException ignored) {
+            return WorkflowIntegerSetting.omitted();
         }
     }
 
@@ -138,6 +142,18 @@ final class WorkflowConfigEditor {
         }
     }
 
+    Optional<String> diagnosticsWarning(Path workflowPath) {
+        try {
+            SequencedMap<String, Object> yaml = parseYaml(read(workflowPath));
+            if (invalidServerPortSetting(yaml)) {
+                return Optional.of("invalid server.port");
+            }
+            return Optional.empty();
+        } catch (IOException | RuntimeException e) {
+            return Optional.of("unreadable or invalid workflow configuration");
+        }
+    }
+
     void updateServerPort(Path workflowPath, int port) throws IOException {
         FrontMatter frontMatter = read(workflowPath);
         SequencedMap<String, Object> yaml = parseYaml(frontMatter);
@@ -190,16 +206,19 @@ final class WorkflowConfigEditor {
     }
 
     private static Optional<Integer> serverPort(Map<String, Object> yaml) {
+        return serverPortSetting(yaml).value();
+    }
+
+    private static WorkflowIntegerSetting serverPortSetting(Map<String, Object> yaml) {
         Object serverValue = yaml.get("server");
         if (!(serverValue instanceof Map<?, ?> server)) {
-            return Optional.empty();
+            return WorkflowIntegerSetting.omitted();
+        }
+        if (!server.containsKey("port")) {
+            return WorkflowIntegerSetting.omitted();
         }
         Object port = server.get("port");
-        return switch (port) {
-            case Number number -> Optional.of(number.intValue());
-            case String value -> parseInteger(value);
-            default -> Optional.empty();
-        };
+        return workflowServerPortSetting(port);
     }
 
     private static Optional<String> boardId(Map<String, Object> yaml) {
@@ -208,6 +227,26 @@ final class WorkflowConfigEditor {
             return Optional.empty();
         }
         return optionalString(tracker.get("board_id"));
+    }
+
+    private static boolean invalidServerPortSetting(Map<String, Object> yaml) {
+        Object serverValue = yaml.get("server");
+        if (!(serverValue instanceof Map<?, ?> server) || !server.containsKey("port")) {
+            return false;
+        }
+        return serverPortSetting(yaml).invalid();
+    }
+
+    private static WorkflowIntegerSetting workflowServerPortSetting(Object value) {
+        Optional<Integer> port =
+                switch (value) {
+                    case Number number -> integralInteger(number);
+                    case String text when !text.isBlank() -> parseInteger(text.trim());
+                    default -> Optional.empty();
+                };
+        return port.filter(valuePort -> valuePort >= 0 && valuePort <= LocalPort.MAX)
+                .map(WorkflowIntegerSetting::valid)
+                .orElseGet(WorkflowIntegerSetting::invalidSetting);
     }
 
     private static Optional<Integer> parseInteger(String value) {
