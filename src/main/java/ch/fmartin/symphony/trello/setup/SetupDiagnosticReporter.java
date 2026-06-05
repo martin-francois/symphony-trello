@@ -425,6 +425,7 @@ final class SetupDiagnosticReporter {
 
         section(body, "Workflow Summary");
         appendWorkflows(body, context.selectedWorkflowPaths());
+        appendInvalidConnectedBoardWorkflows(body, context.selectedManifest());
         appendInvalidWorkflowFiles(body, context.selectedWorkflowPaths());
 
         section(body, "Local Health Probes");
@@ -619,6 +620,7 @@ final class SetupDiagnosticReporter {
 
         section(body, "Workflow Summary");
         appendWorkflows(body, manifest, paths, args, workflowPathResolution);
+        appendInvalidConnectedBoardWorkflows(body, manifest);
         appendInvalidWorkflowFiles(body, reportWorkflowPaths(manifest, paths, args, workflowPathResolution, true));
 
         section(body, "Local Health Probes");
@@ -1046,6 +1048,39 @@ final class SetupDiagnosticReporter {
                 List.of("workflow", "problem"), List.of(MarkdownTable.Alignment.LEFT, MarkdownTable.Alignment.LEFT));
         invalidWorkflows.forEach(workflow -> table.row(sanitize(workflow.path().toString()), workflow.warning()));
         table.appendTo(body);
+    }
+
+    private void appendInvalidConnectedBoardWorkflows(StringBuilder body, ConnectedBoardManifest manifest) {
+        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+        List<InvalidConnectedBoardWorkflow> invalidWorkflows = manifest.boards().stream()
+                .map(board -> invalidConnectedBoardWorkflow(editor, board))
+                .flatMap(Optional::stream)
+                .toList();
+        if (invalidWorkflows.isEmpty()) {
+            return;
+        }
+
+        section(body, "Invalid Connected Board Workflows");
+        line(body, "invalid_connected_board_workflow_count", invalidWorkflows.size());
+        MarkdownTable table = MarkdownTable.of(
+                List.of("board_hash", "workflow", "problem"),
+                List.of(MarkdownTable.Alignment.LEFT, MarkdownTable.Alignment.LEFT, MarkdownTable.Alignment.LEFT));
+        invalidWorkflows.forEach(workflow -> table.row(
+                hash(workflow.board().boardId()),
+                sanitize(workflow.board().workflowPath().toString()),
+                workflow.problem()));
+        table.appendTo(body);
+    }
+
+    private static Optional<InvalidConnectedBoardWorkflow> invalidConnectedBoardWorkflow(
+            WorkflowConfigEditor editor, ConnectedBoard board) {
+        WorkflowValidation validation = editor.validate(board);
+        if (validation.ok()) {
+            return Optional.empty();
+        }
+        String problem =
+                Files.isRegularFile(board.workflowPath()) ? "unusable workflow configuration" : "missing workflow file";
+        return Optional.of(new InvalidConnectedBoardWorkflow(board, problem));
     }
 
     private void appendLocalWorkflowIdentifiers(StringBuilder body, SequencedSet<Path> workflowPaths) {
@@ -2052,6 +2087,8 @@ final class SetupDiagnosticReporter {
             DiagnosticsSelectorKind kind, List<ConnectedBoard> boards, Optional<Path> workflow) {}
 
     private record InvalidWorkflowFile(Path path, String warning) {}
+
+    private record InvalidConnectedBoardWorkflow(ConnectedBoard board, String problem) {}
 
     private record DiagnosticsContext(
             LocalWorkerPaths paths,

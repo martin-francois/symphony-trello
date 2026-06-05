@@ -611,6 +611,69 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
+    void statusReportsInvalidConnectedBoardWorkflowInsteadOfStoppedForPlainFile() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        Files.writeString(board.workflowPath(), "plain body\n", StandardCharsets.UTF_8);
+        fixture.save(board);
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "invalid \"Queue\"",
+                        "unreadable or invalid workflow configuration",
+                        board.workflowPath().toString())
+                .stdoutDoesNotContain("stopped \"Queue\"");
+        verify(fixture.healthChecker, never()).boardHealth(any());
+    }
+
+    @Test
+    void statusReportsInvalidConnectedBoardWorkflowInsteadOfStoppedForMissingFile() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        Files.delete(board.workflowPath());
+        fixture.save(board);
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "invalid \"Queue\"",
+                        "missing workflow file",
+                        board.workflowPath().toString())
+                .stdoutDoesNotContain("stopped \"Queue\"");
+        verify(fixture.healthChecker, never()).boardHealth(any());
+    }
+
+    @Test
+    void statusStillReportsRunningWorkerWhenManifestConsistencyValidationWarns() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        Files.writeString(
+                board.workflowPath(),
+                Files.readString(board.workflowPath(), StandardCharsets.UTF_8).replace("port: 18080", "port: 18081"),
+                StandardCharsets.UTF_8);
+        fixture.save(board);
+        when(fixture.healthChecker.boardHealth(board)).thenReturn(fixture.sameWorkflow(board));
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("running \"Queue\"", "untracked, no managed pid")
+                .stdoutDoesNotContain("invalid \"Queue\"", "stopped \"Queue\"");
+    }
+
+    @Test
     void stopFailsForUntrackedRunningWorkerWhenPidFileIsMissingButHealthMatches() throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
