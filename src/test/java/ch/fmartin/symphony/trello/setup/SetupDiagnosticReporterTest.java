@@ -1669,6 +1669,80 @@ final class SetupDiagnosticReporterTest {
                 .doesNotContain(tempDir.toString(), invalidPortValue.replace("\"", ""), "custom-board-id");
     }
 
+    @Test
+    void diagnosticsSurfacesInvalidConnectedBoardWorkflowFiles() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("invalid-connected-workflow-config");
+        Path workspaceRoot = tempDir.resolve("private-workspaces");
+        Path stateHome = tempDir.resolve("state");
+        Path plainWorkflow = configDir.resolve("WORKFLOW.private-plain.md");
+        Path missingWorkflow = configDir.resolve("WORKFLOW.private-missing.md");
+        Path env = configDir.resolve(".env");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.writeString(plainWorkflow, "plain body with client notes\n", StandardCharsets.UTF_8);
+        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(
+                        new ConnectedBoard(
+                                "private-board-id",
+                                "private-key",
+                                "Sensitive Board Name",
+                                "https://trello.com/b/private-key/sensitive-board",
+                                plainWorkflow,
+                                env,
+                                workspaceRoot,
+                                19201,
+                                true,
+                                List.of(),
+                                false),
+                        new ConnectedBoard(
+                                "missing-board-id",
+                                "missing-key",
+                                "Missing Board Name",
+                                "https://trello.com/b/missing-key/missing-board",
+                                missingWorkflow,
+                                env,
+                                workspaceRoot,
+                                19202,
+                                false,
+                                List.of(),
+                                false))));
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.of(workspaceRoot),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.empty()));
+
+        // then
+        assertThat(report)
+                .contains(
+                        "- **manifest_status:** loaded",
+                        "## Invalid Connected Board Workflows",
+                        "- **invalid_connected_board_workflow_count:** 2",
+                        "| board_hash | workflow | problem |",
+                        "unusable workflow configuration",
+                        "missing workflow file")
+                .doesNotContain(
+                        tempDir.toString(),
+                        "Sensitive Board Name",
+                        "Missing Board Name",
+                        "private-board-id",
+                        "private-key",
+                        "missing-board-id",
+                        "missing-key",
+                        "https://trello.com",
+                        "plain body with client notes");
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"\"Ready for Codex\"", "null", "[]"})
     void diagnosticsFlagsInvalidWorkflowRoutingListValues(String routingListValue) throws Exception {

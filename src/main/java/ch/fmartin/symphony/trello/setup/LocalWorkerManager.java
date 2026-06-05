@@ -396,6 +396,12 @@ final class LocalWorkerManager {
         }
         ManagedProcessStore store = new ManagedProcessStore(paths.stateHome());
         for (ConnectedBoard board : boards) {
+            WorkflowValidation workflowDiagnostics = workflowConfig.diagnosticsValidation(board.workflowPath());
+            if (!workflowDiagnostics.ok()) {
+                out.println("invalid \"" + board.boardName() + "\" " + workflowDiagnostics.message() + ": "
+                        + board.workflowPath());
+                continue;
+            }
             ManagedProcessStore.ManagedProcessFiles files = store.files(board.workflowPath());
             Long pid = store.readPid(files.pidFile());
             BoardHealth health = healthChecker.boardHealth(board);
