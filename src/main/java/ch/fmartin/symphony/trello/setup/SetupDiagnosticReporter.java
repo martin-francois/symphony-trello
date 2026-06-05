@@ -487,7 +487,7 @@ final class SetupDiagnosticReporter {
         ConnectedBoardManifest manifest = manifestSnapshot.manifest();
         DiagnosticsSelection selection =
                 selectDiagnostics(manifest, request.board(), request.workflow(), paths.configDir());
-        tokenHasher = sharedTokenHasher.orElseGet(() -> DiagnosticsTokenHasher.load(paths.configDir()));
+        tokenHasher = sharedTokenHasher.orElseGet(() -> diagnosticsTokenHasher(request, paths));
         ConnectedBoardManifest selectedManifest = new ConnectedBoardManifest(selection.boards());
         boolean selected = selection.kind() != DiagnosticsSelectorKind.NONE;
         SequencedSet<Path> selectedWorkflowPaths =
@@ -512,7 +512,21 @@ final class SetupDiagnosticReporter {
     private DiagnosticsTokenHasher diagnosticsTokenHasher(DiagnosticsRequest request) {
         LocalWorkerPaths paths = LocalWorkerPaths.from(
                 request.appHome(), request.configDir(), request.workspaceRoot(), request.stateHome(), environment);
-        return DiagnosticsTokenHasher.load(paths.configDir());
+        return diagnosticsTokenHasher(request, paths);
+    }
+
+    private DiagnosticsTokenHasher diagnosticsTokenHasher(DiagnosticsRequest request, LocalWorkerPaths paths) {
+        if (shouldPersistDiagnosticsTokenKey(request, paths)) {
+            return DiagnosticsTokenHasher.load(paths.configDir());
+        }
+        return DiagnosticsTokenHasher.loadExisting(paths.configDir());
+    }
+
+    private boolean shouldPersistDiagnosticsTokenKey(DiagnosticsRequest request, LocalWorkerPaths paths) {
+        if (!Files.isDirectory(paths.configDir())) {
+            return false;
+        }
+        return request.configDir().map(path -> !path.toString().isBlank()).orElse(true);
     }
 
     private Optional<Path> write(
