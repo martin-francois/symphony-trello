@@ -748,6 +748,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             CliInputValidation.rejectControlCharacters("--workflow", workflowPath);
             CliInputValidation.rejectControlCharacters("--workspace-root", workspaceRoot);
             CliInputValidation.rejectControlCharacters("--env", envPath);
+            validateCodexModelOverrides();
         }
 
         Optional<String> codexModel() {
@@ -760,12 +761,18 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
 
         private void validate() {
             endpoint = TrelloApiEndpoint.normalize(endpoint);
+            validateCodexModelOverrides();
             if (serverPort != null) {
                 LocalPort.validateCliServerPort(serverPort);
             }
             if (maxConcurrentAgents < 1) {
                 throw new TrelloBoardSetupException("setup_invalid_max_agents", "--max-agents must be at least 1.");
             }
+        }
+
+        private void validateCodexModelOverrides() {
+            CliInputValidation.rejectBlankText("--codex-model", codexModel);
+            CliInputValidation.rejectBlankText("--codex-reasoning-effort", codexReasoningEffort);
         }
     }
 

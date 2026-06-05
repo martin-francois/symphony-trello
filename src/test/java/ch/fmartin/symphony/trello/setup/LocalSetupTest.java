@@ -46,6 +46,22 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         assertThat(trello.createdLists()).isEmpty();
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"--codex-model", "--codex-reasoning-effort"})
+    void dryRunRejectsBlankCodexModelOverridesBeforePlannedSetupOutput(String optionName) {
+        // given
+
+        // when
+        SetupRunResult result = runSetup("--dry-run", "--non-interactive", "--no-start", optionName, " ");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains("setup_failed code=setup_invalid_arguments", optionName + " must not be blank.")
+                .stderrDoesNotContain("Troubleshooting report written")
+                .stdoutDoesNotContain("Dry run", "WOULD write workflows");
+        assertThat(trello.createdLists()).isEmpty();
+    }
+
     @Test
     void setupLocalRejectsControlCharactersInPathOptions() {
         // given

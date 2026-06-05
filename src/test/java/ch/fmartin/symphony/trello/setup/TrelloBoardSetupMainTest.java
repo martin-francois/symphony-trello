@@ -37,6 +37,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 final class TrelloBoardSetupMainTest {
     private static final String CONFIG_DIR_PROPERTY = "symphony.trello.config.dir";
@@ -1661,6 +1662,83 @@ final class TrelloBoardSetupMainTest {
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("model: \"gpt-explicit\"", "reasoning_effort: \"medium\"");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"--codex-model", "--codex-reasoning-effort"})
+    void newBoardRejectsBlankCodexModelOverridesBeforeTrelloRequest(String optionName) {
+        // given
+        Path workflow = tempDir.resolve("blank-codex-new-board.WORKFLOW.md");
+        Path env = tempDir.resolve("missing-env-parent").resolve(".env");
+
+        // when
+        CliRunResult result = runCli(
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--name",
+                "Blank Codex New Board",
+                "--workspace-id",
+                "workspace-1",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                optionName,
+                " ");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains("setup_failed code=setup_invalid_arguments", optionName + " must not be blank.")
+                .stderrDoesNotContain("Troubleshooting report written");
+        assertThat(result.stdout()).doesNotContain("Created Trello board", "Saving Trello credentials");
+        assertThat(createdBoardName.get()).isNull();
+        assertThat(createdLists).isEmpty();
+        assertThat(env.getParent()).doesNotExist();
+        assertThat(workflow).doesNotExist();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"--codex-model", "--codex-reasoning-effort"})
+    void importBoardRejectsBlankCodexModelOverridesBeforeTrelloRequest(String optionName) {
+        // given
+        Path workflow = tempDir.resolve("blank-codex-import-board.WORKFLOW.md");
+        Path env = tempDir.resolve("missing-import-env-parent").resolve(".env");
+
+        // when
+        CliRunResult result = runCli(
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "input",
+                "--active",
+                "Queue for Codex",
+                "--terminal",
+                "Released",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                optionName,
+                " ");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains("setup_failed code=setup_invalid_arguments", optionName + " must not be blank.")
+                .stderrDoesNotContain("Troubleshooting report written");
+        assertThat(result.stdout()).doesNotContain("Imported Trello board", "Saving Trello credentials");
+        assertThat(createdLists).isEmpty();
+        assertThat(env.getParent()).doesNotExist();
+        assertThat(workflow).doesNotExist();
     }
 
     @Test
