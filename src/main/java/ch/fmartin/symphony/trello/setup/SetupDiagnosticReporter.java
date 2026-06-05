@@ -425,6 +425,7 @@ final class SetupDiagnosticReporter {
 
         section(body, "Workflow Summary");
         appendWorkflows(body, context.selectedWorkflowPaths());
+        appendInvalidWorkflowFiles(body, context.selectedWorkflowPaths());
 
         section(body, "Local Health Probes");
         appendHealthProbes(body, context.selectedManifest(), context.selectedWorkflowPaths());
@@ -618,6 +619,7 @@ final class SetupDiagnosticReporter {
 
         section(body, "Workflow Summary");
         appendWorkflows(body, manifest, paths, args, workflowPathResolution);
+        appendInvalidWorkflowFiles(body, reportWorkflowPaths(manifest, paths, args, workflowPathResolution, true));
 
         section(body, "Local Health Probes");
         appendHealthProbes(body, manifest, paths, args, workflowPathResolution);
@@ -1019,12 +1021,31 @@ final class SetupDiagnosticReporter {
         table.row(
                 sanitize(workflow.toString()),
                 editor.boardId(workflow).map(this::hash).orElse(""),
-                editor.serverPort(workflow).map(String::valueOf).orElse(""),
+                editor.serverPortSetting(workflow).diagnosticsCell(),
                 editor.maxAgentsSetting(workflow).diagnosticsCell(),
                 lists.activeStatesDiagnosticsCell(),
                 lists.terminalStatesDiagnosticsCell(),
                 lists.inProgressState().isPresent(),
                 lists.blockedState().isPresent());
+    }
+
+    private void appendInvalidWorkflowFiles(StringBuilder body, SequencedSet<Path> workflowPaths) {
+        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+        List<InvalidWorkflowFile> invalidWorkflows = workflowPaths.stream()
+                .map(workflow ->
+                        editor.diagnosticsWarning(workflow).map(warning -> new InvalidWorkflowFile(workflow, warning)))
+                .flatMap(Optional::stream)
+                .toList();
+        if (invalidWorkflows.isEmpty()) {
+            return;
+        }
+
+        section(body, "Invalid Workflow Files");
+        line(body, "invalid_workflow_count", invalidWorkflows.size());
+        MarkdownTable table = MarkdownTable.of(
+                List.of("workflow", "problem"), List.of(MarkdownTable.Alignment.LEFT, MarkdownTable.Alignment.LEFT));
+        invalidWorkflows.forEach(workflow -> table.row(sanitize(workflow.path().toString()), workflow.warning()));
+        table.appendTo(body);
     }
 
     private void appendLocalWorkflowIdentifiers(StringBuilder body, SequencedSet<Path> workflowPaths) {
@@ -1060,7 +1081,7 @@ final class SetupDiagnosticReporter {
                     workflow,
                     hash(boardId),
                     boardId,
-                    editor.serverPort(workflow).map(String::valueOf).orElse(""),
+                    editor.serverPortSetting(workflow).diagnosticsCell(),
                     editor.maxAgentsSetting(workflow).diagnosticsCell(),
                     lists.activeStatesDiagnosticsCell(),
                     lists.terminalStatesDiagnosticsCell(),
@@ -2029,6 +2050,8 @@ final class SetupDiagnosticReporter {
 
     private record DiagnosticsSelection(
             DiagnosticsSelectorKind kind, List<ConnectedBoard> boards, Optional<Path> workflow) {}
+
+    private record InvalidWorkflowFile(Path path, String warning) {}
 
     private record DiagnosticsContext(
             LocalWorkerPaths paths,

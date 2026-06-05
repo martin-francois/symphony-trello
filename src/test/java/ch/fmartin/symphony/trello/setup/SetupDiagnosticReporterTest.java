@@ -1602,6 +1602,47 @@ final class SetupDiagnosticReporterTest {
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
+        String report = renderWorkflowDiagnostics(reporter, configDir, workspaceRoot, stateHome, workflow);
+
+        // then
+        assertThat(report)
+                .contains(
+                        "## Workflow Summary",
+                        "| workflow | board_hash | port | max_agents | active | terminal | in_progress | blocked |",
+                        "<path:",
+                        " | 20731 | invalid | 1 | 1 | false | false |")
+                .doesNotContain(tempDir.toString());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"\"not-a-port\"", "-1", "70000", "18080.5"})
+    void diagnosticsSurfacesInvalidWorkflowFilesDuringBroadConfigScan(String invalidPortValue) throws Exception {
+        // given
+        Path configDir = tempDir.resolve("invalid-workflow-scan-config");
+        Path workspaceRoot = tempDir.resolve("workspaces");
+        Path stateHome = tempDir.resolve("state");
+        Path invalidWorkflow = configDir.resolve("WORKFLOW.invalid-port.md");
+        Path validWorkflow = configDir.resolve("WORKFLOW.no-tracker.md");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.writeString(
+                invalidWorkflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: "custom-board-id"
+                server:
+                  port: %s
+                ---
+                Body
+                """
+                        .formatted(invalidPortValue),
+                StandardCharsets.UTF_8);
+        Files.writeString(validWorkflow, workflowWithPort(20999), StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
         String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
                 Optional.empty(),
                 Optional.empty(),
@@ -1612,16 +1653,20 @@ final class SetupDiagnosticReporterTest {
                 Optional.of(workspaceRoot),
                 Optional.of(stateHome),
                 Optional.empty(),
-                Optional.of(workflow)));
+                Optional.empty()));
 
         // then
         assertThat(report)
                 .contains(
                         "## Workflow Summary",
-                        "| workflow | board_hash | port | max_agents | active | terminal | in_progress | blocked |",
+                        "## Invalid Workflow Files",
+                        "- **invalid_workflow_count:** 1",
+                        "| workflow | problem |",
+                        "| --- | --- |",
                         "<path:",
-                        " | 20731 | invalid | 1 | 1 | false | false |")
-                .doesNotContain(tempDir.toString());
+                        "invalid server.port",
+                        " | 20999 | ")
+                .doesNotContain(tempDir.toString(), invalidPortValue.replace("\"", ""), "custom-board-id");
     }
 
     @ParameterizedTest
@@ -1638,7 +1683,22 @@ final class SetupDiagnosticReporterTest {
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
-        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+        String report = renderWorkflowDiagnostics(reporter, configDir, workspaceRoot, stateHome, workflow);
+
+        // then
+        assertThat(report)
+                .contains(
+                        "## Workflow Summary",
+                        "| workflow | board_hash | port | max_agents | active | terminal | in_progress | blocked |",
+                        "<path:",
+                        " | 20722 |  | invalid | invalid | false | false |")
+                .doesNotContain(tempDir.toString(), "Ready for Codex");
+    }
+
+    private static String renderWorkflowDiagnostics(
+            SetupDiagnosticReporter reporter, Path configDir, Path workspaceRoot, Path stateHome, Path workflow)
+            throws IOException {
+        return reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
                 Optional.empty(),
                 Optional.empty(),
                 false,
@@ -1649,15 +1709,6 @@ final class SetupDiagnosticReporterTest {
                 Optional.of(stateHome),
                 Optional.empty(),
                 Optional.of(workflow)));
-
-        // then
-        assertThat(report)
-                .contains(
-                        "## Workflow Summary",
-                        "| workflow | board_hash | port | max_agents | active | terminal | in_progress | blocked |",
-                        "<path:",
-                        " | 20722 |  | invalid | invalid | false | false |")
-                .doesNotContain(tempDir.toString(), "Ready for Codex");
     }
 
     private static HttpServer fakeLocalServer(int port) throws IOException {
