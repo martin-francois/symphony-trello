@@ -452,6 +452,9 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
 
         @Override
         public Integer call() throws Exception {
+            options.validateCliPaths();
+            CliInputValidation.rejectControlCharacters("--output", output);
+            CliInputValidation.rejectDashOutputFile(output);
             var reporter = new SetupDiagnosticReporter(System.getenv(), new ProcessCommandRunner());
             var request = new DiagnosticsRequest(
                     options.board(),
@@ -560,6 +563,15 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
 
         Optional<Path> workflow() {
             return selector.workflow;
+        }
+
+        private void validateCliPaths() {
+            CliInputValidation.rejectControlCharacters("--config-dir", configDir);
+            CliInputValidation.rejectControlCharacters("--workspace-root", workspaceRoot);
+            CliInputValidation.rejectControlCharacters("--state-home", stateHome);
+            CliInputValidation.rejectControlCharacters("--manifest", manifest);
+            CliInputValidation.rejectControlCharacters("--app-home", appHome);
+            CliInputValidation.rejectControlCharacters("--workflow", workflow());
         }
     }
 

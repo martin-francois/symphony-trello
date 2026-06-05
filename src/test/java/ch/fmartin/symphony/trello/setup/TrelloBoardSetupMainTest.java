@@ -527,6 +527,85 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
+    void diagnosticsRejectsControlCharactersInPathOptionsWithoutRenderingReport() {
+        // given
+        String badOutput = "bad\noutput.md";
+        String badManifest = "bad\nmanifest.json";
+        String badWorkflow = "bad\nworkflow.md";
+        String badConfigDir = "bad\nconfig";
+        String badWorkspaceRoot = "bad\nworkspace-root";
+        String badStateHome = "bad\nstate";
+
+        List<InvalidPathOptionCase> cases = List.of(
+                new InvalidPathOptionCase("--output", "# Symphony for Trello Diagnostics", "diagnostics", "--output", badOutput),
+                new InvalidPathOptionCase(
+                        "--manifest", "# Symphony for Trello Diagnostics", "diagnostics", "--manifest", badManifest),
+                new InvalidPathOptionCase(
+                        "--workflow", "# Symphony for Trello Diagnostics", "diagnostics", "--workflow", badWorkflow),
+                new InvalidPathOptionCase(
+                        "--config-dir", "# Symphony for Trello Diagnostics", "diagnostics", "--config-dir", badConfigDir),
+                new InvalidPathOptionCase(
+                        "--workspace-root",
+                        "# Symphony for Trello Diagnostics",
+                        "diagnostics",
+                        "--workspace-root",
+                        badWorkspaceRoot),
+                new InvalidPathOptionCase(
+                        "--state-home", "# Symphony for Trello Diagnostics", "diagnostics", "--state-home", badStateHome));
+
+        // when
+        List<CliRunResult> results = cases.stream()
+                .map(invalidCase -> runCli(invalidCase.commandArray()))
+                .toList();
+
+        // then
+        for (int index = 0; index < cases.size(); index++) {
+            InvalidPathOptionCase invalidCase = cases.get(index);
+            CliRunResult result = results.get(index);
+            result.assertFailure(2)
+                    .stderrContains(
+                            "setup_failed code=setup_invalid_arguments",
+                            invalidCase.optionName() + " must not contain control characters")
+                    .stdoutDoesNotContain(
+                            invalidCase.forbiddenOutput(),
+                            badOutput,
+                            badManifest,
+                            badWorkflow,
+                            badConfigDir,
+                            badWorkspaceRoot,
+                            badStateHome)
+                    .stderrDoesNotContain(
+                            badOutput,
+                            badManifest,
+                            badWorkflow,
+                            badConfigDir,
+                            badWorkspaceRoot,
+                            badStateHome,
+                            "Troubleshooting report written");
+        }
+        assertThat(tempDir.resolve(badOutput)).doesNotExist();
+    }
+
+    @Test
+    void diagnosticsRejectsDashOutputWithoutCreatingDashFile() throws Exception {
+        // given
+        Path workingDir = tempDir.resolve("dash-output-workdir");
+        Path dashFile = workingDir.resolve("-");
+        Files.createDirectories(workingDir);
+
+        // when
+        MainProcessResult result = runMainProcess(workingDir, Map.of(), List.of(), "diagnostics", "--output", "-");
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isEqualTo(2);
+        assertThat(result.stdout()).doesNotContain("# Symphony for Trello Diagnostics", "Diagnostics written");
+        assertThat(result.stderr())
+                .contains("setup_failed code=setup_invalid_arguments", "--output - is not supported")
+                .doesNotContain("Troubleshooting report written", dashFile.toString(), tempDir.toString());
+        assertThat(dashFile).doesNotExist();
+    }
+
+    @Test
     void startReportsMissingWorkerCredentialsBeforeLaunchingWorker() throws Exception {
         // given
         Path configDir = tempDir.resolve("start-missing-credentials-config");

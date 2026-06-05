@@ -22,6 +22,13 @@ final class CliInputValidation {
         values.forEach(path -> rejectControlCharacters(optionName, path));
     }
 
+    static void rejectDashOutputFile(Optional<Path> value) {
+        if (value.map(Path::toString).filter("-"::equals).isPresent()) {
+            throw new TrelloBoardSetupException(
+                    "setup_invalid_arguments", "--output - is not supported. Omit --output to print to stdout.");
+        }
+    }
+
     private static void rejectControlCharacters(String optionName, String value) {
         if (CONTROL_CHARACTERS.matchesAnyOf(value)) {
             throw new TrelloBoardSetupException(
