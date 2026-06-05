@@ -1021,8 +1021,8 @@ final class SetupDiagnosticReporter {
                 editor.boardId(workflow).map(this::hash).orElse(""),
                 editor.serverPort(workflow).map(String::valueOf).orElse(""),
                 editor.maxAgentsSetting(workflow).diagnosticsCell(),
-                lists.activeStates().size(),
-                lists.terminalStates().size(),
+                lists.activeStatesDiagnosticsCell(),
+                lists.terminalStatesDiagnosticsCell(),
                 lists.inProgressState().isPresent(),
                 lists.blockedState().isPresent());
     }
@@ -1062,8 +1062,8 @@ final class SetupDiagnosticReporter {
                     boardId,
                     editor.serverPort(workflow).map(String::valueOf).orElse(""),
                     editor.maxAgentsSetting(workflow).diagnosticsCell(),
-                    lists.activeStates().size(),
-                    lists.terminalStates().size(),
+                    lists.activeStatesDiagnosticsCell(),
+                    lists.terminalStatesDiagnosticsCell(),
                     lists.inProgressState().isPresent(),
                     lists.blockedState().isPresent());
         }

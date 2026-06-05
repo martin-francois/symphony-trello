@@ -130,7 +130,9 @@ final class WorkflowConfigEditor {
                     stringList(tracker.get("terminal_states")),
                     optionalString(tracker.get("in_progress_state")),
                     optionalString(tracker.get("blocked_state"))
-                            .or(() -> blockedStateFromWorkflowBody(frontMatter.body())));
+                            .or(() -> blockedStateFromWorkflowBody(frontMatter.body())),
+                    invalidListSetting(tracker, "active_states"),
+                    invalidListSetting(tracker, "terminal_states"));
         } catch (IOException | RuntimeException ignored) {
             return WorkflowListConfiguration.empty();
         }
@@ -293,6 +295,16 @@ final class WorkflowConfigEditor {
                 .map(String::valueOf)
                 .filter(valueText -> !valueText.isBlank())
                 .toList();
+    }
+
+    private static boolean invalidListSetting(Map<?, ?> root, String key) {
+        if (!root.containsKey(key)) {
+            return false;
+        }
+        if (!(root.get(key) instanceof List<?> list)) {
+            return true;
+        }
+        return list.isEmpty() || list.stream().anyMatch(value -> !(value instanceof String text) || text.isBlank());
     }
 
     private static Optional<String> optionalString(Object value) {
