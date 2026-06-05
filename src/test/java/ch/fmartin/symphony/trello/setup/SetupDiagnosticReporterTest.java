@@ -460,6 +460,7 @@ final class SetupDiagnosticReporterTest {
                         false))));
         ManagedProcessStore.ManagedProcessFiles logs = new ManagedProcessStore(stateHome).files(workflow);
         Files.writeString(logs.stdoutLog(), "secret log content\n", StandardCharsets.UTF_8);
+        DiagnosticsTokenHasher.load(configDir);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -530,6 +531,64 @@ final class SetupDiagnosticReporterTest {
                         "Diagnostics tokens are stable only for this run because the local diagnostics key could not be read or written.")
                 .doesNotContain(
                         configDir.toString(), DiagnosticsTokenHasher.KEY_FILE_NAME, "Jane Doe", "invalid-local-key");
+    }
+
+    @Test
+    void diagnosticsDoesNotCreateMissingConfigDirectoryForTokenKey() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("missing-config");
+        Path workspaceRoot = tempDir.resolve("workspace");
+        Path stateHome = tempDir.resolve("state");
+        Files.createDirectories(workspaceRoot);
+        Files.createDirectories(stateHome);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.of(workspaceRoot),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.empty()));
+
+        // then
+        assertThat(report)
+                .contains(
+                        "# Symphony for Trello Diagnostics",
+                        "diagnostics_token_key:** temporary",
+                        "Diagnostics tokens are stable only for this run because the local diagnostics key could not be read or written.")
+                .doesNotContain(configDir.toString(), DiagnosticsTokenHasher.KEY_FILE_NAME);
+        assertThat(configDir).doesNotExist();
+    }
+
+    @Test
+    void diagnosticsCreatesTokenKeyForExplicitExistingConfigDirectory() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("existing-config");
+        Files.createDirectories(configDir);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty()));
+
+        // then
+        assertThat(report).contains("diagnostics_token_key:** local");
+        assertThat(configDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME)).isRegularFile();
     }
 
     @Test
