@@ -40,6 +40,11 @@ final class DiagnosticsTokenHasher {
         return readKey(keyPath).orElseGet(() -> createKey(keyPath).orElseGet(DiagnosticsTokenHasher::ephemeral));
     }
 
+    static DiagnosticsTokenHasher loadExisting(Path configDir) {
+        Path keyPath = configDir.resolve(KEY_FILE_NAME);
+        return readKey(keyPath).orElseGet(DiagnosticsTokenHasher::ephemeral);
+    }
+
     static DiagnosticsTokenHasher ephemeral() {
         return temporary(randomKey());
     }

@@ -35,6 +35,21 @@ final class DiagnosticsTokenHasherTest {
     }
 
     @Test
+    void readsExistingKeyWithoutCreatingOne() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("missing-config");
+
+        // when
+        DiagnosticsTokenHasher hasher = DiagnosticsTokenHasher.loadExisting(configDir);
+        String token = hasher.token("private-board-id");
+
+        // then
+        assertThat(hasher.persisted()).isFalse();
+        assertThat(token).hasSize(12);
+        assertThat(configDir).doesNotExist();
+    }
+
+    @Test
     void differentLocalKeysProduceDifferentTokens() throws Exception {
         // given
         Path firstConfig = tempDir.resolve("first-config");

@@ -615,6 +615,72 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
+    void diagnosticsWithBlankConfigDirDoesNotCreateTokenKeyInWorkingDirectory() throws Exception {
+        // given
+        Path workingDir = tempDir.resolve("blank-config-workdir");
+        Path diagnosticsKey = workingDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME);
+        Files.createDirectories(workingDir);
+
+        // when
+        MainProcessResult result = runMainProcess(workingDir, Map.of(), List.of(), "diagnostics", "--config-dir", "");
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isZero();
+        assertThat(result.stdout())
+                .contains("# Symphony for Trello Diagnostics", "diagnostics_token_key:** temporary")
+                .doesNotContain(DiagnosticsTokenHasher.KEY_FILE_NAME, workingDir.toString());
+        assertThat(result.stderr()).isEmpty();
+        assertThat(diagnosticsKey).doesNotExist();
+    }
+
+    @Test
+    void diagnosticsWithoutConfigDirCreatesTokenKeyInDefaultWorkingDirectory() throws Exception {
+        // given
+        Path workingDir = tempDir.resolve("default-config-workdir");
+        Path diagnosticsKey = workingDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME);
+        Files.createDirectories(workingDir);
+
+        // when
+        MainProcessResult result = runMainProcess(workingDir, Map.of(), List.of(), "diagnostics");
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isZero();
+        assertThat(result.stdout())
+                .contains("# Symphony for Trello Diagnostics", "diagnostics_token_key:** local")
+                .doesNotContain(DiagnosticsTokenHasher.KEY_FILE_NAME, workingDir.toString());
+        assertThat(result.stderr()).isEmpty();
+        assertThat(diagnosticsKey).isRegularFile();
+    }
+
+    @Test
+    void diagnosticsWithBlankConfigDirDoesNotPersistTokenKeyFromEnvironmentConfigDir() throws Exception {
+        // given
+        Path workingDir = tempDir.resolve("blank-config-env-workdir");
+        Path envConfigDir = tempDir.resolve("env-config");
+        Path diagnosticsKey = workingDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME);
+        Files.createDirectories(workingDir);
+        Files.createDirectories(envConfigDir);
+
+        // when
+        MainProcessResult result = runMainProcess(
+                workingDir,
+                Map.of("SYMPHONY_TRELLO_CONFIG_DIR", envConfigDir.toString()),
+                List.of(),
+                "diagnostics",
+                "--config-dir",
+                "");
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isZero();
+        assertThat(result.stdout())
+                .contains("# Symphony for Trello Diagnostics", "diagnostics_token_key:** temporary")
+                .doesNotContain(DiagnosticsTokenHasher.KEY_FILE_NAME, workingDir.toString(), envConfigDir.toString());
+        assertThat(result.stderr()).isEmpty();
+        assertThat(diagnosticsKey).doesNotExist();
+        assertThat(envConfigDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME)).doesNotExist();
+    }
+
+    @Test
     void startReportsMissingWorkerCredentialsBeforeLaunchingWorker() throws Exception {
         // given
         Path configDir = tempDir.resolve("start-missing-credentials-config");
