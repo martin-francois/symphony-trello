@@ -1624,6 +1624,42 @@ final class SetupDiagnosticReporterTest {
                 .doesNotContain(tempDir.toString());
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"\"Ready for Codex\"", "null", "[]"})
+    void diagnosticsFlagsInvalidWorkflowRoutingListValues(String routingListValue) throws Exception {
+        // given
+        Path configDir = tempDir.resolve("invalid-routing-config-" + routingListValue.hashCode());
+        Path workspaceRoot = tempDir.resolve("workspaces");
+        Path stateHome = tempDir.resolve("state");
+        Path workflow = configDir.resolve("WORKFLOW.invalid-routing.md");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.writeString(workflow, workflowWithRoutingLists(routingListValue), StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.of(workspaceRoot),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.of(workflow)));
+
+        // then
+        assertThat(report)
+                .contains(
+                        "## Workflow Summary",
+                        "| workflow | board_hash | port | max_agents | active | terminal | in_progress | blocked |",
+                        "<path:",
+                        " | 20722 |  | invalid | invalid | false | false |")
+                .doesNotContain(tempDir.toString(), "Ready for Codex");
+    }
+
     private static HttpServer fakeLocalServer(int port) throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 0);
         server.createContext(
@@ -1695,6 +1731,21 @@ final class SetupDiagnosticReporterTest {
                 Body
                 """
                 .formatted(maxAgentsValue);
+    }
+
+    private static String workflowWithRoutingLists(String routingListValue) {
+        return """
+                ---
+                tracker:
+                  board_id: "custom-board-id"
+                  active_states: %s
+                  terminal_states: %s
+                server:
+                  port: 20722
+                ---
+                Body
+                """
+                .formatted(routingListValue, routingListValue);
     }
 
     private static FakeCommandRunner authProbeCommandRunner() {
