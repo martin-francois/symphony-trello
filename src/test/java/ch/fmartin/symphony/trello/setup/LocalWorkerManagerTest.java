@@ -339,12 +339,13 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
-    void startIdempotencyWithManagedPidUsesExplicitEnvOverride() throws Exception {
+    void startIdempotencyWithManagedPidReportsExplicitEnvOverrideWasNotApplied() throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         Path envPath = fixture.paths.configDir().resolve(".env.override");
         int overridePort = 19090;
+        fixture.writeEnv(envPath);
         fixture.save(board);
         fixture.stubManagedPid(board, 42);
         fixture.stubWorkflowHealth(board, envPath, overridePort, fixture.sameWorkflow(board, overridePort));
@@ -360,10 +361,39 @@ final class LocalWorkerManagerTest {
                 Optional.of(fixture.paths.stateHome())));
 
         // then
-        result.assertSuccess().stdoutContains("already running", "pid=42");
+        result.assertSuccess()
+                .stdoutContains(
+                        "Supplied --env was not applied because Symphony for Trello is already running.",
+                        "Stop and start this worker to use: "
+                                + envPath.toAbsolutePath().normalize(),
+                        "already running",
+                        "pid=42");
         verify(fixture.healthChecker).managedHealthPort(board.workflowPath(), board.serverPort(), envPath);
         verify(fixture.healthChecker)
                 .workflowHealth(board.workflowPath(), board.boardId(), board.boardKey(), overridePort);
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void startValidatesExplicitEnvOverrideBeforeAlreadyRunningFastPath() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        Path envPath = fixture.paths.configDir().resolve(".env.key-only");
+        Files.writeString(envPath, "TRELLO_API_KEY=test-key\n", StandardCharsets.UTF_8);
+        fixture.save(board);
+        fixture.stubManagedPid(board, 42);
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue", envPath)));
+
+        // then
+        assertThat(thrown)
+                .isInstanceOf(TrelloBoardSetupException.class)
+                .hasMessageContaining("Missing Trello API token for worker start.");
+        assertThat((TrelloBoardSetupException) thrown)
+                .extracting(TrelloBoardSetupException::code)
+                .isEqualTo("setup_worker_missing_api_token");
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
     }
 
@@ -400,7 +430,13 @@ final class LocalWorkerManagerTest {
         WorkerRunResult result = fixture.start(fixture.startRequest("Docs Queue", envPath));
 
         // then
-        result.assertSuccess().stdoutContains("already running", "http://127.0.0.1:" + overridePort);
+        result.assertSuccess()
+                .stdoutContains(
+                        "Supplied --env was not applied because Symphony for Trello is already running.",
+                        "Stop and start this worker to use: "
+                                + envPath.toAbsolutePath().normalize(),
+                        "already running",
+                        "http://127.0.0.1:" + overridePort);
         verify(fixture.healthChecker).managedHealthPort(board.workflowPath(), board.serverPort(), envPath);
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
     }
