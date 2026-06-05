@@ -21,6 +21,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$ScriptBoundParameters = @{} + $PSBoundParameters
 $OriginalPath = $env:PATH
 $DefaultSymphonyHome = if ($env:SYMPHONY_HOME) { $env:SYMPHONY_HOME } else { "$env:LOCALAPPDATA\SymphonyTrello" }
 $DefaultPrefix = ""
@@ -52,6 +53,50 @@ function Apply-PositionalFlag([string]$Token) {
   }
 }
 
+function Assert-ExplicitPathOptionValue([string]$ParameterName, [string]$OptionName, [string]$Value) {
+  if ($ScriptBoundParameters.ContainsKey($ParameterName) -and [string]::IsNullOrWhiteSpace($Value)) {
+    throw "$OptionName must not be blank."
+  }
+}
+
+function Test-PublicOptionToken([string]$Token) {
+  return $Token -in @(
+    "-dry-run",
+    "--dry-run",
+    "-no-onboard",
+    "--no-onboard",
+    "-no-update-path",
+    "--no-update-path",
+    "-prefix",
+    "--prefix",
+    "-bin-dir",
+    "--bin-dir",
+    "-repo",
+    "--repo",
+    "-ref",
+    "--ref",
+    "-symphony-home",
+    "--symphony-home",
+    "-help",
+    "--help",
+    "-h"
+  )
+}
+
+function Read-PublicPathOptionValue([string[]]$Tokens, [int]$Index, [string]$OptionName) {
+  if ($Index -ge $Tokens.Count) {
+    throw "Missing value for $OptionName"
+  }
+  $value = $Tokens[$Index]
+  if ([string]::IsNullOrWhiteSpace($value)) {
+    throw "$OptionName must not be blank."
+  }
+  if (Test-PublicOptionToken $value) {
+    throw "Missing value for $OptionName"
+  }
+  return $value
+}
+
 function Apply-PublicArgs([string[]]$Tokens) {
   for ($i = 0; $i -lt $Tokens.Count; $i++) {
     $token = $Tokens[$i]
@@ -74,14 +119,12 @@ function Apply-PublicArgs([string[]]$Tokens) {
       }
       { $_ -in @("-prefix", "--prefix") } {
         $i++
-        if ($i -ge $Tokens.Count) { throw "Missing value for $token" }
-        Set-Variable -Name Prefix -Value $Tokens[$i] -Scope 1
+        Set-Variable -Name Prefix -Value (Read-PublicPathOptionValue $Tokens $i $token) -Scope 1
         break
       }
       { $_ -in @("-bin-dir", "--bin-dir") } {
         $i++
-        if ($i -ge $Tokens.Count) { throw "Missing value for $token" }
-        Set-Variable -Name BinDir -Value $Tokens[$i] -Scope 1
+        Set-Variable -Name BinDir -Value (Read-PublicPathOptionValue $Tokens $i $token) -Scope 1
         break
       }
       { $_ -in @("-repo", "--repo") } {
@@ -98,8 +141,7 @@ function Apply-PublicArgs([string[]]$Tokens) {
       }
       { $_ -in @("-symphony-home", "--symphony-home") } {
         $i++
-        if ($i -ge $Tokens.Count) { throw "Missing value for $token" }
-        Set-Variable -Name SymphonyHome -Value $Tokens[$i] -Scope 1
+        Set-Variable -Name SymphonyHome -Value (Read-PublicPathOptionValue $Tokens $i $token) -Scope 1
         break
       }
       default {
@@ -110,6 +152,10 @@ function Apply-PublicArgs([string[]]$Tokens) {
     }
   }
 }
+
+Assert-ExplicitPathOptionValue "SymphonyHome" "--symphony-home" $SymphonyHome
+Assert-ExplicitPathOptionValue "Prefix" "--prefix" $Prefix
+Assert-ExplicitPathOptionValue "BinDir" "--bin-dir" $BinDir
 
 function Test-ImplicitDefaultToken([string]$Token) {
   return $Token -eq $DefaultSymphonyHome -or

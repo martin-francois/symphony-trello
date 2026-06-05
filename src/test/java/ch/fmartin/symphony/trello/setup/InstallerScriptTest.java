@@ -923,6 +923,55 @@ final class InstallerScriptTest {
     }
 
     @Test
+    void powershellInstallerRejectsBlankPathValuesThroughScriptblockWhenAvailable() throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        Assumptions.assumeFalse(pwsh.isEmpty());
+
+        // when
+        ProcessResult result = run(
+                nonWindowsPowerShellEnvironment(),
+                command(
+                                pwsh,
+                                "-NoProfile",
+                                "-Command",
+                                "& ([scriptblock]::Create((Get-Content -Raw './install.ps1'))) "
+                                        + "--dry-run --no-onboard --prefix '' --bin-dir ''")
+                        .toArray(String[]::new));
+
+        // then
+        assertThat(result.exitCode()).isNotZero();
+        assertThat(result.output())
+                .contains("Missing value for --prefix")
+                .doesNotContain("Install:", "WOULD clone or update:", "/--bin-dir");
+    }
+
+    @Test
+    void powershellInstallerAcceptsDashPrefixedRelativePathValuesThroughScriptblockWhenAvailable() throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        Assumptions.assumeFalse(pwsh.isEmpty());
+
+        // when
+        ProcessResult result = run(
+                nonWindowsPowerShellEnvironment(),
+                command(
+                                pwsh,
+                                "-NoProfile",
+                                "-Command",
+                                "& ([scriptblock]::Create((Get-Content -Raw './install.ps1'))) --dry-run --no-onboard"
+                                        + " --prefix "
+                                        + powerShellLiteral("-dash-prefix-app")
+                                        + " --bin-dir "
+                                        + powerShellLiteral("-dash-bin"))
+                        .toArray(String[]::new));
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output()).contains("-dash-prefix-app", "-dash-bin", "Dry run: no files changed.");
+    }
+
+    @Test
     void powershellInstallerAcceptsPublicValueFlagsWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
@@ -1130,6 +1179,56 @@ final class InstallerScriptTest {
         result.assertSuccess();
         assertThat(result.output())
                 .contains("Symphony for Trello uninstall", "Trello boards were not deleted or archived.");
+    }
+
+    @Test
+    void powershellUninstallerRejectsBlankPathValuesThroughScriptblockWhenAvailable() throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        Assumptions.assumeFalse(pwsh.isEmpty());
+
+        // when
+        ProcessResult result = run(
+                nonWindowsPowerShellEnvironment(),
+                command(
+                                pwsh,
+                                "-NoProfile",
+                                "-Command",
+                                "& ([scriptblock]::Create((Get-Content -Raw './uninstall.ps1'))) "
+                                        + "--dry-run --yes --prefix '' --bin-dir ''")
+                        .toArray(String[]::new));
+
+        // then
+        assertThat(result.exitCode()).isNotZero();
+        assertThat(result.output())
+                .contains("Missing value for --prefix")
+                .doesNotContain("App checkout:", "Will remove if present:", "/--bin-dir");
+    }
+
+    @Test
+    void powershellUninstallerAcceptsDashPrefixedRelativePathValuesThroughScriptblockWhenAvailable() throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        Assumptions.assumeFalse(pwsh.isEmpty());
+
+        // when
+        ProcessResult result = run(
+                nonWindowsPowerShellEnvironment(),
+                command(
+                                pwsh,
+                                "-NoProfile",
+                                "-Command",
+                                "& ([scriptblock]::Create((Get-Content -Raw './uninstall.ps1'))) --dry-run --yes"
+                                        + " --prefix "
+                                        + powerShellLiteral("-dash-prefix-app")
+                                        + " --bin-dir "
+                                        + powerShellLiteral("-dash-bin"))
+                        .toArray(String[]::new));
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output())
+                .contains("-dash-prefix-app", "-dash-bin", "Trello boards were not deleted or archived.");
     }
 
     @Test
