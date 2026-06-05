@@ -143,14 +143,22 @@ final class WorkflowConfigEditor {
     }
 
     Optional<String> diagnosticsWarning(Path workflowPath) {
+        WorkflowValidation validation = diagnosticsValidation(workflowPath);
+        return validation.ok() ? Optional.empty() : Optional.of(validation.message());
+    }
+
+    WorkflowValidation diagnosticsValidation(Path workflowPath) {
+        if (!Files.isRegularFile(workflowPath)) {
+            return WorkflowValidation.warn("missing workflow file");
+        }
         try {
             SequencedMap<String, Object> yaml = parseYaml(read(workflowPath));
             if (invalidServerPortSetting(yaml)) {
-                return Optional.of("invalid server.port");
+                return WorkflowValidation.warn("invalid server.port");
             }
-            return Optional.empty();
+            return WorkflowValidation.valid();
         } catch (IOException | RuntimeException e) {
-            return Optional.of("unreadable or invalid workflow configuration");
+            return WorkflowValidation.warn("unreadable or invalid workflow configuration");
         }
     }
 
