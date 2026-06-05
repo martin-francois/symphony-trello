@@ -57,7 +57,7 @@ final class TrelloBoardConnector {
                 .map(ConnectedBoard::boardId)
                 .findFirst()
                 .orElse(selector);
-        String parsedBoardId = TrelloBoardIds.parse(boardId);
+        String parsedBoardId = TrelloBoardIds.parseImportBoardSelector(boardId);
         TrelloBoardSetup.BoardInfo boardInfo = boardSetup.getBoardInfo(
                 new TrelloBoardSetup.BoardInfoRequest(options.endpoint(), credentials, parsedBoardId));
         List<String> openLists = boardSetup.getOpenBoardListNames(
