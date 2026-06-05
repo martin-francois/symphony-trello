@@ -46,4 +46,28 @@ final class WorkflowConfigEditorTest {
         assertThat(editor.serverPort(workflow)).contains(18081);
         assertThat(workflow).content(StandardCharsets.UTF_8).contains("# Body");
     }
+
+    @Test
+    void treatsNullYamlFrontMatterAsMissingMaxAgents() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.null.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                null
+                ---
+                Body
+                """,
+                StandardCharsets.UTF_8);
+        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+
+        // when
+        var maxAgents = editor.maxAgents(workflow);
+        var maxAgentsSetting = editor.maxAgentsSetting(workflow);
+
+        // then
+        assertThat(maxAgents).isEmpty();
+        assertThat(maxAgentsSetting.diagnosticsCell()).isEmpty();
+    }
 }
