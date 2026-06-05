@@ -43,16 +43,16 @@ final class ConnectedBoardManifestTest {
     void findByBoardMatchesShortLinkFromBoardUrlWhenBoardKeyIsFullBoardId() {
         // given
         ConnectedBoard board = board(
-                "6a1eb7c4873fd71be041d1cf",
-                "6a1eb7c4873fd71be041d1cf",
+                "000000000000000000000001",
+                "000000000000000000000001",
                 "Queue",
-                "https://trello.com/b/9wuK8XRD/live-parallel-board",
+                "https://trello.com/b/SYNTH003/synthetic-board",
                 Path.of("WORKFLOW.md"));
         ConnectedBoardManifest manifest = new ConnectedBoardManifest(List.of(board));
 
         // when
-        var byShortLink = manifest.findByBoard("9wuK8XRD");
-        var byUrl = manifest.findByBoard("https://trello.com/b/9wuK8XRD/live-parallel-board");
+        var byShortLink = manifest.findByBoard("SYNTH003");
+        var byUrl = manifest.findByBoard("https://trello.com/b/SYNTH003/synthetic-board");
 
         // then
         assertThat(byShortLink).contains(board);

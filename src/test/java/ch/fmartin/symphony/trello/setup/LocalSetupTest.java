@@ -46,6 +46,49 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         assertThat(trello.createdLists()).isEmpty();
     }
 
+    @Test
+    void setupLocalRejectsControlCharactersInPathOptions() {
+        // given
+        String badWorkflow = "bad\nworkflow.WORKFLOW.md";
+        String badWorkspaceRoot = "bad\nworkspace-root";
+        String badConfigDir = "bad\nconfig";
+        String badManifest = "bad\nmanifest.json";
+        String badEnv = "bad\nenv";
+        String badAddPath = "bad\nadd-path";
+
+        List<InvalidPathOptionCase> cases = List.of(
+                new InvalidPathOptionCase("--workflow", "--dry-run", "--workflow", badWorkflow),
+                new InvalidPathOptionCase("--workspace-root", "--dry-run", "--workspace-root", badWorkspaceRoot),
+                new InvalidPathOptionCase("--config-dir", "--dry-run", "--config-dir", badConfigDir),
+                new InvalidPathOptionCase("--manifest", "--dry-run", "--manifest", badManifest),
+                new InvalidPathOptionCase("--env", "--dry-run", "--env", badEnv),
+                new InvalidPathOptionCase("--add-path", "--dry-run", "--add-path", badAddPath));
+
+        // when
+        List<SetupRunResult> results = cases.stream()
+                .map(invalidCase -> runSetup(invalidCase.commandArray()))
+                .toList();
+
+        // then
+        for (int index = 0; index < cases.size(); index++) {
+            InvalidPathOptionCase invalidCase = cases.get(index);
+            SetupRunResult result = results.get(index);
+            result.assertFailure(2)
+                    .stderrContains(
+                            "setup_failed code=setup_invalid_arguments",
+                            invalidCase.optionName() + " must not contain control characters")
+                    .stdoutDoesNotContain("WOULD write workflows", badWorkflow, badWorkspaceRoot, badConfigDir)
+                    .stderrDoesNotContain(
+                            badWorkflow,
+                            badWorkspaceRoot,
+                            badConfigDir,
+                            badManifest,
+                            badEnv,
+                            badAddPath,
+                            "Troubleshooting report written");
+        }
+    }
+
     @MethodSource("githubAuthCheckScenarios")
     @ParameterizedTest
     void checkReportsGithubAuthState(GithubAuthCheckScenario scenario) {
@@ -84,6 +127,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         @Override
         public String toString() {
             return name;
+        }
+    }
+
+    private record InvalidPathOptionCase(String optionName, List<String> command) {
+        private InvalidPathOptionCase(String optionName, String... command) {
+            this(optionName, List.of(command));
+        }
+
+        private String[] commandArray() {
+            return command.toArray(String[]::new);
         }
     }
 
