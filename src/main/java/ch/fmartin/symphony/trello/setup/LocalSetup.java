@@ -244,35 +244,91 @@ public final class LocalSetup {
     }
 
     private int runCheck(Options options, Prerequisites prerequisites, PrintStream out) throws IOException {
-        ConnectedBoardManifest manifest = connectedBoards(options).load();
+        ConnectedBoardRepository.ManifestLoadResult manifestLoad =
+                connectedBoards(options).loadForCheck();
+        ConnectedBoardManifest manifest = manifestLoad.manifest();
         boolean ok = prerequisites.readyFor(options);
         if (prerequisites.readyFor(options)) {
             out.println("  OK      Local prerequisites ready");
         }
+        for (String warning : manifestLoad.warnings()) {
+            out.println("  WARN    " + warning);
+            ok = false;
+        }
         if (manifest.boards().isEmpty()) {
+            if (!manifestLoad.warnings().isEmpty()) {
+                return 2;
+            }
             out.println("  WARN    No Trello boards connected to Symphony");
             return prerequisites.readyFor(options) ? 0 : 2;
         }
         for (ConnectedBoard board : manifest.boards()) {
-            WorkflowValidation workflow = workflowConfig.validate(board);
-            if (workflow.ok()) {
-                out.println("  OK      Workflow: " + board.workflowPath());
-            } else {
-                out.println("  WARN    " + workflow.message());
+            ConnectedBoardLocalValidation localValidation = validateConnectedBoardLocalPaths(board);
+            for (String warning : localValidation.warnings()) {
+                out.println("  WARN    " + warning);
+            }
+            if (!localValidation.ok()) {
                 ok = false;
+            } else {
+                WorkflowValidation workflow = workflowConfig.validate(board);
+                if (workflow.ok()) {
+                    out.println("  OK      Workflow: " + board.workflowPath());
+                } else {
+                    out.println("  WARN    " + workflow.message());
+                    ok = false;
+                }
             }
             if (board.githubEnabled() && !prerequisites.githubAuth().available()) {
                 out.println("  WARN    GitHub CLI is not authenticated for \"" + board.boardName() + "\"");
                 ok = false;
             }
-            if (!checkTrelloCredentials(options, board, out)) {
+            if (localValidation.envUsable() && !checkTrelloCredentials(options, board, out)) {
                 ok = false;
             }
-            BoardHealth health = healthChecker.boardHealth(board);
-            printBoardHealth(options, board, health, out);
-            ok = ok && health.kind() == BoardHealthKind.SAME_WORKFLOW;
+            if (localValidation.ok()) {
+                BoardHealth health = healthChecker.boardHealth(board);
+                printBoardHealth(options, board, health, out);
+                ok = ok && health.kind() == BoardHealthKind.SAME_WORKFLOW;
+            }
         }
         return ok ? 0 : 2;
+    }
+
+    private static ConnectedBoardLocalValidation validateConnectedBoardLocalPaths(ConnectedBoard board) {
+        List<String> warnings = new ArrayList<>();
+        boolean envUsable = true;
+        if (board.workflowPath() == null) {
+            warnings.add("Workflow path for \"" + board.boardName() + "\" is missing from connected-boards.json.");
+        } else if (Files.isDirectory(board.workflowPath())) {
+            warnings.add("Workflow path for \"" + board.boardName()
+                    + "\" must be a workflow file, but it is a directory: " + board.workflowPath());
+        }
+        if (board.workspaceRoot() == null) {
+            warnings.add("Workspace root for \"" + board.boardName() + "\" is missing from connected-boards.json.");
+        } else if (Files.exists(board.workspaceRoot()) && !Files.isDirectory(board.workspaceRoot())) {
+            warnings.add(
+                    "Workspace root for \"" + board.boardName() + "\" must be a directory: " + board.workspaceRoot());
+        }
+        if (board.serverPort() < 1 || board.serverPort() > 65535) {
+            warnings.add("Connected board \"" + board.boardName() + "\" has invalid server port " + board.serverPort()
+                    + "; expected 1 to 65535.");
+        }
+        if (board.envPath() == null) {
+            warnings.add(
+                    "Trello credential path for \"" + board.boardName() + "\" is missing from connected-boards.json.");
+            envUsable = false;
+        } else if (Files.isDirectory(board.envPath())) {
+            warnings.add("Trello credential path for \"" + board.boardName()
+                    + "\" must be a dotenv file, but it is a directory: " + board.envPath());
+            envUsable = false;
+        }
+        for (Path root : board.additionalWritableRoots()) {
+            if (!root.isAbsolute()) {
+                warnings.add(
+                        "Additional writable root for \"" + board.boardName() + "\" must be an absolute path: " + root);
+            }
+        }
+        return new ConnectedBoardLocalValidation(List.copyOf(warnings), envUsable);
     }
 
     private static void printBoardHealth(Options options, ConnectedBoard board, BoardHealth health, PrintStream out) {
@@ -1426,6 +1482,12 @@ public final class LocalSetup {
                     result.openLists(),
                     result.workflowPath(),
                     result.serverPort());
+        }
+    }
+
+    private record ConnectedBoardLocalValidation(List<String> warnings, boolean envUsable) {
+        boolean ok() {
+            return warnings.isEmpty();
         }
     }
 
