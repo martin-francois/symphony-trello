@@ -305,6 +305,152 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void checkReportsInvalidConnectedBoardLocalPathsWithoutStartHint() throws Exception {
+        // given
+        Path configDir = fixture.configDir();
+        Path workflow = configDir.resolve("WORKFLOW.invalid-local-paths.md");
+        Path envDirectory = tempDir.resolve("env-dir");
+        Path workspaceFile = tempDir.resolve("workspace-file");
+        Files.createDirectories(configDir);
+        Files.createDirectories(envDirectory);
+        Files.createDirectories(fixture.workspaceRoot());
+        Files.writeString(workspaceFile, "not a directory", StandardCharsets.UTF_8);
+        writeWorkflow(workflow, "synthetic-board", 20451);
+        fixture.givenManifest(
+                """
+                {"boards":[
+                  {"boardId":"synthetic-board","boardKey":"synthetic","boardName":"Workspace File","boardUrl":"https://trello.example/workspace-file","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":20451,"githubEnabled":false,"dangerFullAccess":false,"additionalWritableRoots":[]},
+                  {"boardId":"synthetic-board","boardKey":"synthetic","boardName":"Env Directory","boardUrl":"https://trello.example/env-directory","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":20453,"githubEnabled":false,"dangerFullAccess":false,"additionalWritableRoots":["relative/path"]}
+                ]}
+                """
+                        .formatted(
+                                json(workflow),
+                                json(configDir.resolve(".env.workspace-file")),
+                                json(workspaceFile),
+                                json(workflow),
+                                json(envDirectory),
+                                json(fixture.workspaceRoot())));
+
+        // when
+        SetupRunResult result = runSetup("check", "--endpoint", endpoint());
+
+        // then
+        result.assertFailure(2)
+                .stderrEmpty()
+                .stdoutContains(
+                        "Workspace root for \"Workspace File\" must be a directory: " + workspaceFile,
+                        "Trello credential path for \"Env Directory\" must be a dotenv file, but it is a directory: "
+                                + envDirectory,
+                        "Additional writable root for \"Env Directory\" must be an absolute path: relative/path")
+                .stdoutDoesNotContain("Start: symphony-trello start");
+    }
+
+    @Test
+    void checkReportsInvalidConnectedBoardManifestValueShapes() throws Exception {
+        // given
+        Path configDir = fixture.configDir();
+        Path workflow = configDir.resolve("WORKFLOW.invalid-shapes.md");
+        Files.createDirectories(fixture.workspaceRoot());
+        writeWorkflow(workflow, "synthetic-board", 20454);
+        fixture.givenManifest(
+                """
+                {"boards":[{"boardId":"synthetic-board","boardKey":"synthetic","boardName":"Synthetic Board","boardUrl":"https://trello.example/synthetic","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":"20454","githubEnabled":"false","dangerFullAccess":"false","additionalWritableRoots":"relative/path"}]}
+                """
+                        .formatted(json(workflow), json(configDir.resolve(".env")), json(fixture.workspaceRoot())));
+
+        // when
+        SetupRunResult result = runSetup("check", "--endpoint", endpoint());
+
+        // then
+        result.assertFailure(2)
+                .stderrEmpty()
+                .stdoutContains(
+                        "Connected-board manifest entry \"Synthetic Board\" field githubEnabled must be true or false.",
+                        "Connected-board manifest entry \"Synthetic Board\" field dangerFullAccess must be true or false.",
+                        "Connected-board manifest entry \"Synthetic Board\" field serverPort must be a JSON number from 1 to 65535.",
+                        "Connected-board manifest entry \"Synthetic Board\" field additionalWritableRoots must be an array of path strings.",
+                        "Connected-board manifest contains invalid values and could not be loaded for checks.")
+                .stdoutDoesNotContain(
+                        "Cannot deserialize", "Troubleshooting report written", "Start: symphony-trello start");
+    }
+
+    @Test
+    void checkReportsNullConnectedBoardManifestShapesWithoutRawException() throws Exception {
+        // given
+        Path configDir = fixture.configDir();
+        Files.createDirectories(configDir);
+        fixture.givenManifest(
+                """
+                {"boards":[null,{"boardId":"synthetic-board","boardKey":"synthetic","boardName":"Synthetic Board","boardUrl":"https://trello.example/synthetic","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":20454,"additionalWritableRoots":[null]}]}
+                """
+                        .formatted(
+                                json(configDir.resolve("WORKFLOW.null-shapes.md")),
+                                json(configDir.resolve(".env")),
+                                json(fixture.workspaceRoot())));
+
+        // when
+        SetupRunResult result = runSetup("check", "--endpoint", endpoint());
+
+        // then
+        result.assertFailure(2)
+                .stderrEmpty()
+                .stdoutContains(
+                        "Connected-board manifest entry 1 must be an object.",
+                        "Connected-board manifest entry \"Synthetic Board\" field additionalWritableRoots must contain only non-blank path strings.",
+                        "Connected-board manifest contains invalid values and could not be loaded for checks.")
+                .stdoutDoesNotContain("NullPointerException", "Cannot deserialize", "Troubleshooting report written");
+    }
+
+    @Test
+    void checkReportsMissingConnectedBoardManifestPathsWithoutRawException() throws Exception {
+        // given
+        Path configDir = fixture.configDir();
+        Files.createDirectories(configDir);
+        fixture.givenManifest(
+                """
+                {"boards":[{"boardId":"synthetic-board","boardKey":"synthetic","boardName":"Synthetic Board","boardUrl":"https://trello.example/synthetic","workspaceRoot":"%s","serverPort":20456,"githubEnabled":false,"dangerFullAccess":false,"additionalWritableRoots":[]}]}
+                """
+                        .formatted(json(fixture.workspaceRoot())));
+
+        // when
+        SetupRunResult result = runSetup("check", "--endpoint", endpoint());
+
+        // then
+        result.assertFailure(2)
+                .stderrEmpty()
+                .stdoutContains(
+                        "Connected-board manifest entry \"Synthetic Board\" field workflowPath must be a non-blank string.",
+                        "Connected-board manifest entry \"Synthetic Board\" field envPath must be a non-blank string.",
+                        "Workflow path for \"Synthetic Board\" is missing from connected-boards.json.",
+                        "Trello credential path for \"Synthetic Board\" is missing from connected-boards.json.")
+                .stdoutDoesNotContain("NullPointerException", "Troubleshooting report written");
+    }
+
+    @Test
+    void checkReportsOutOfRangeConnectedBoardManifestPort() throws Exception {
+        // given
+        Path configDir = fixture.configDir();
+        Path workflow = configDir.resolve("WORKFLOW.invalid-port.md");
+        Files.createDirectories(fixture.workspaceRoot());
+        writeWorkflow(workflow, "synthetic-board", 20455);
+        fixture.givenManifest(
+                """
+                {"boards":[{"boardId":"synthetic-board","boardKey":"synthetic","boardName":"Synthetic Board","boardUrl":"https://trello.example/synthetic","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":65536,"githubEnabled":false,"dangerFullAccess":false,"additionalWritableRoots":[]}]}
+                """
+                        .formatted(json(workflow), json(configDir.resolve(".env")), json(fixture.workspaceRoot())));
+
+        // when
+        SetupRunResult result = runSetup("check", "--endpoint", endpoint());
+
+        // then
+        result.assertFailure(2)
+                .stderrEmpty()
+                .stdoutContains(
+                        "Connected-board manifest entry \"Synthetic Board\" field serverPort must be between 1 and 65535.")
+                .stdoutDoesNotContain("expected 65536", "http://127.0.0.1:65536", "Start: symphony-trello start");
+    }
+
+    @Test
     void setupRejectsExplicitServerPortReservedByConnectedBoard() {
         // given
         int reservedPort = availablePort();

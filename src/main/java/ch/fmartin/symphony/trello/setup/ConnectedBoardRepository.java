@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import java.io.IOException;
@@ -7,6 +8,7 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
 import java.util.List;
 
 final class ConnectedBoardRepository {
@@ -27,6 +29,26 @@ final class ConnectedBoardRepository {
             return new ConnectedBoardManifest(List.of());
         }
         return json.readValue(manifestPath.toFile(), ConnectedBoardManifest.class);
+    }
+
+    ManifestLoadResult loadForCheck() throws IOException {
+        if (!Files.isRegularFile(manifestPath)) {
+            return new ManifestLoadResult(new ConnectedBoardManifest(List.of()), List.of());
+        }
+        JsonNode root = json.readTree(manifestPath.toFile());
+        List<String> warnings = manifestShapeWarnings(root);
+        if (root == null || !root.isObject() || !root.path("boards").isArray()) {
+            return new ManifestLoadResult(new ConnectedBoardManifest(List.of()), warnings);
+        }
+        try {
+            return new ManifestLoadResult(json.treeToValue(root, ConnectedBoardManifest.class), warnings);
+        } catch (IOException | RuntimeException e) {
+            return new ManifestLoadResult(
+                    new ConnectedBoardManifest(List.of()),
+                    append(
+                            warnings,
+                            "Connected-board manifest contains invalid values and could not be loaded for checks."));
+        }
     }
 
     ConnectedBoardManifest loadValidated() throws IOException {
@@ -83,6 +105,97 @@ final class ConnectedBoardRepository {
         }
     }
 
+    private static List<String> manifestShapeWarnings(JsonNode root) {
+        if (root == null || !root.isObject()) {
+            return List.of("Connected-board manifest must be a JSON object.");
+        }
+        JsonNode boards = root.path("boards");
+        if (!boards.isArray()) {
+            return List.of("Connected-board manifest field boards must be an array.");
+        }
+        List<String> warnings = new ArrayList<>();
+        for (int index = 0; index < boards.size(); index++) {
+            JsonNode board = boards.get(index);
+            if (!board.isObject()) {
+                warnings.add("Connected-board manifest entry " + (index + 1) + " must be an object.");
+                continue;
+            }
+            String label = boardLabel(board, index);
+            requireText(board, "boardId", label, warnings);
+            requireText(board, "boardKey", label, warnings);
+            requireText(board, "boardName", label, warnings);
+            requireText(board, "boardUrl", label, warnings);
+            requireText(board, "workflowPath", label, warnings);
+            requireText(board, "envPath", label, warnings);
+            requireText(board, "workspaceRoot", label, warnings);
+            requireBooleanIfPresent(board, "githubEnabled", label, warnings);
+            requireBooleanIfPresent(board, "dangerFullAccess", label, warnings);
+            requireServerPort(board, label, warnings);
+            requireWritableRoots(board, label, warnings);
+        }
+        return warnings;
+    }
+
+    private static void requireText(JsonNode board, String field, String label, List<String> warnings) {
+        JsonNode value = board.get(field);
+        if (value == null || !value.isTextual() || value.asText().isBlank()) {
+            warnings.add(
+                    "Connected-board manifest entry " + label + " field " + field + " must be a non-blank string.");
+        }
+    }
+
+    private static void requireBooleanIfPresent(JsonNode board, String field, String label, List<String> warnings) {
+        JsonNode value = board.get(field);
+        if (value != null && !value.isBoolean()) {
+            warnings.add("Connected-board manifest entry " + label + " field " + field + " must be true or false.");
+        }
+    }
+
+    private static void requireServerPort(JsonNode board, String label, List<String> warnings) {
+        JsonNode value = board.get("serverPort");
+        if (value == null || !value.isIntegralNumber()) {
+            warnings.add("Connected-board manifest entry " + label
+                    + " field serverPort must be a JSON number from 1 to 65535.");
+            return;
+        }
+        int port = value.asInt();
+        if (port < 1 || port > 65535) {
+            warnings.add("Connected-board manifest entry " + label + " field serverPort must be between 1 and 65535.");
+        }
+    }
+
+    private static void requireWritableRoots(JsonNode board, String label, List<String> warnings) {
+        JsonNode roots = board.get("additionalWritableRoots");
+        if (roots == null) {
+            return;
+        }
+        if (!roots.isArray()) {
+            warnings.add("Connected-board manifest entry " + label
+                    + " field additionalWritableRoots must be an array of path strings.");
+            return;
+        }
+        for (JsonNode root : roots) {
+            if (!root.isTextual() || root.asText().isBlank()) {
+                warnings.add("Connected-board manifest entry " + label
+                        + " field additionalWritableRoots must contain only non-blank path strings.");
+                return;
+            }
+        }
+    }
+
+    private static String boardLabel(JsonNode board, int index) {
+        JsonNode boardName = board.get("boardName");
+        return boardName != null && boardName.isTextual() && !boardName.asText().isBlank()
+                ? "\"" + boardName.asText() + "\""
+                : String.valueOf(index + 1);
+    }
+
+    private static List<String> append(List<String> warnings, String warning) {
+        List<String> appended = new ArrayList<>(warnings);
+        appended.add(warning);
+        return List.copyOf(appended);
+    }
+
     private static boolean blank(String value) {
         return value == null || value.isBlank();
     }
@@ -92,5 +205,11 @@ final class ConnectedBoardRepository {
                 .addSerializer(Path.class, new PathJsonSerializer())
                 .addDeserializer(Path.class, new PathJsonDeserializer());
         return new ObjectMapper().registerModule(module);
+    }
+
+    record ManifestLoadResult(ConnectedBoardManifest manifest, List<String> warnings) {
+        ManifestLoadResult {
+            warnings = List.copyOf(warnings);
+        }
     }
 }
