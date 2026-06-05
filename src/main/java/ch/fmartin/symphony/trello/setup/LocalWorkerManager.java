@@ -62,7 +62,7 @@ final class LocalWorkerManager {
                 .orElseGet(() -> board.envPath() == null ? paths.defaultEnvPath() : board.envPath())
                 .toAbsolutePath()
                 .normalize();
-        start(paths, board, envPath, out);
+        start(paths, board, envPath, request.envPath().isPresent(), out);
         return 0;
     }
 
@@ -88,11 +88,20 @@ final class LocalWorkerManager {
     }
 
     void start(LocalWorkerPaths paths, ConnectedBoard board, Path envPath, PrintStream out) throws IOException {
+        start(paths, board, envPath, false, out);
+    }
+
+    private void start(
+            LocalWorkerPaths paths, ConnectedBoard board, Path envPath, boolean explicitEnvOverride, PrintStream out)
+            throws IOException {
         ManagedProcessStore store = new ManagedProcessStore(paths.stateHome());
         ManagedProcessStore.ManagedProcessFiles files = store.files(board.workflowPath());
         Files.createDirectories(paths.stateHome());
         Long existingPid = store.readPid(files.pidFile());
         int healthPort = healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), envPath);
+        if (explicitEnvOverride) {
+            validateWorkerCredentials(board.workflowPath(), envPath);
+        }
         if (existingPid != null && platform.isAlive(existingPid)) {
             if (!platform.isManaged(existingPid, paths.appHome(), board.workflowPath())) {
                 throw new TrelloBoardSetupException(
@@ -102,6 +111,7 @@ final class LocalWorkerManager {
             BoardHealth health =
                     healthChecker.workflowHealth(board.workflowPath(), board.boardId(), board.boardKey(), healthPort);
             if (health.kind() == BoardHealthKind.SAME_WORKFLOW) {
+                printIgnoredEnvOverride(paths, board, envPath, explicitEnvOverride, out);
                 out.println(
                         "Symphony for Trello is already running for \"" + board.boardName() + "\" pid=" + existingPid);
                 return;
@@ -114,12 +124,15 @@ final class LocalWorkerManager {
         BoardHealth existingHealth =
                 healthChecker.workflowHealth(board.workflowPath(), board.boardId(), board.boardKey(), healthPort);
         if (existingHealth.kind() == BoardHealthKind.SAME_WORKFLOW) {
+            printIgnoredEnvOverride(paths, board, envPath, explicitEnvOverride, out);
             out.println("Symphony for Trello is already running for \"" + board.boardName() + "\" at "
                     + LocalHealthChecker.localServerUrl(existingHealth.port()));
             return;
         }
 
-        validateWorkerCredentials(board.workflowPath(), envPath);
+        if (!explicitEnvOverride) {
+            validateWorkerCredentials(board.workflowPath(), envPath);
+        }
 
         List<String> command = List.of(
                 javaExecutable(),
@@ -157,6 +170,21 @@ final class LocalWorkerManager {
                             + files.stdoutLog() + " and " + files.stderrLog());
         }
         out.println("Started Symphony for Trello: \"" + board.boardName() + "\"");
+    }
+
+    private static void printIgnoredEnvOverride(
+            LocalWorkerPaths paths, ConnectedBoard board, Path envPath, boolean explicitEnvOverride, PrintStream out) {
+        if (!explicitEnvOverride) {
+            return;
+        }
+        Path configuredEnvPath = (board.envPath() == null ? paths.defaultEnvPath() : board.envPath())
+                .toAbsolutePath()
+                .normalize();
+        if (PathsEqual.samePath(envPath, configuredEnvPath)) {
+            return;
+        }
+        out.println("Supplied --env was not applied because Symphony for Trello is already running.");
+        out.println("Stop and start this worker to use: " + envPath);
     }
 
     private void validateWorkerCredentials(Path workflowPath, Path envPath) {
