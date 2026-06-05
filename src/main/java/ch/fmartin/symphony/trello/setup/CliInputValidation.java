@@ -6,7 +6,8 @@ import java.util.List;
 import java.util.Optional;
 
 final class CliInputValidation {
-    private static final CharMatcher CONTROL_CHARACTERS = CharMatcher.javaIsoControl().precomputed();
+    private static final CharMatcher CONTROL_CHARACTERS =
+            CharMatcher.javaIsoControl().precomputed();
 
     private CliInputValidation() {}
 
@@ -14,7 +15,14 @@ final class CliInputValidation {
         value.ifPresent(path -> rejectControlCharacters(optionName, path));
     }
 
+    static void rejectControlCharactersInText(String optionName, Optional<String> value) {
+        value.ifPresent(text -> rejectControlCharacters(optionName, text));
+    }
+
     static void rejectControlCharacters(String optionName, String value) {
+        if (value == null) {
+            return;
+        }
         if (CONTROL_CHARACTERS.matchesAnyOf(value)) {
             throw new TrelloBoardSetupException(
                     "setup_invalid_arguments", optionName + " must not contain control characters.");
@@ -35,5 +43,4 @@ final class CliInputValidation {
                     "setup_invalid_arguments", "--output - is not supported. Omit --output to print to stdout.");
         }
     }
-
 }

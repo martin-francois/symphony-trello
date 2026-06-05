@@ -192,6 +192,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         public Integer call() throws IOException {
             try {
                 CliInputValidation.rejectControlCharacters("--name", boardName);
+                CliInputValidation.rejectControlCharacters("--workspace-id", workspaceId);
                 options.validateCliPaths();
                 options.validateRuntimeEnvTarget();
                 parent.boardSetup.preflightConnectedBoardManifest(options.manifestPath());
@@ -251,6 +252,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                 throw new ParameterException(spec.commandLine(), "--in-progress cannot be used with --no-in-progress.");
             }
             try {
+                CliInputValidation.rejectControlCharacters("--board", boardId);
                 options.validateCliPaths();
                 options.validateRuntimeEnvTarget();
                 parent.boardSetup.preflightConnectedBoardManifest(options.manifestPath());
