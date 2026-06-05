@@ -191,6 +191,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         @Override
         public Integer call() throws IOException {
             try {
+                options.validateCliPaths();
                 options.validateRuntimeEnvTarget();
                 parent.boardSetup.preflightConnectedBoardManifest(options.manifestPath());
                 NewBoardRequest request = options.newBoardRequest(boardName, workspaceId);
@@ -249,6 +250,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                 throw new ParameterException(spec.commandLine(), "--in-progress cannot be used with --no-in-progress.");
             }
             try {
+                options.validateCliPaths();
                 options.validateRuntimeEnvTarget();
                 parent.boardSetup.preflightConnectedBoardManifest(options.manifestPath());
                 ImportBoardRequest request = options.importBoardRequest(
@@ -316,6 +318,8 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
 
         @Override
         public Integer call() throws Exception {
+            options.validateCliPaths();
+            CliInputValidation.rejectControlCharacters("--env", envPath);
             return parent.workerManager.start(
                     new StartWorkerRequest(
                             options.board,
@@ -344,6 +348,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
 
         @Override
         public Integer call() throws Exception {
+            options.validateCliPaths();
             return parent.workerManager.stop(
                     new StopWorkerRequest(
                             options.board,
@@ -370,6 +375,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
 
         @Override
         public Integer call() throws Exception {
+            options.validateCliPaths();
             return parent.workerManager.status(
                     new WorkerStatusRequest(
                             options.board,
@@ -399,6 +405,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
 
         @Override
         public Integer call() throws Exception {
+            options.validateCliPaths();
             return parent.workerManager.logs(
                     new WorkerLogsRequest(
                             options.board,
@@ -518,6 +525,14 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
 
         @Option(names = "--app-home", hidden = true)
         Optional<Path> appHome = Optional.empty();
+
+        private void validateCliPaths() {
+            CliInputValidation.rejectControlCharacters("--workflow", workflow);
+            CliInputValidation.rejectControlCharacters("--config-dir", configDir);
+            CliInputValidation.rejectControlCharacters("--workspace-root", workspaceRoot);
+            CliInputValidation.rejectControlCharacters("--state-home", stateHome);
+            CliInputValidation.rejectControlCharacters("--app-home", appHome);
+        }
     }
 
     static final class DiagnosticsOptions {
@@ -711,6 +726,12 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
 
         boolean hasExplicitCodexModelRequest() {
             return codexModel().isPresent() || codexReasoningEffort().isPresent();
+        }
+
+        private void validateCliPaths() {
+            CliInputValidation.rejectControlCharacters("--workflow", workflowPath);
+            CliInputValidation.rejectControlCharacters("--workspace-root", workspaceRoot);
+            CliInputValidation.rejectControlCharacters("--env", envPath);
         }
 
         Optional<String> codexModel() {

@@ -284,10 +284,10 @@ final class SetupDiagnosticReporterTest {
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(
                         new ConnectedBoard(
-                                "6a1eb7c4873fd71be041d1cf",
-                                "6a1eb7c4873fd71be041d1cf",
+                                "000000000000000000000001",
+                                "000000000000000000000001",
                                 "Selected Private Board",
-                                "https://trello.com/b/9wuK8XRD/selected-private-board",
+                                "https://trello.com/b/SYNTH003/selected-private-board",
                                 selectedWorkflow,
                                 configDir.resolve(".env"),
                                 workspaceRoot,
@@ -311,7 +311,7 @@ final class SetupDiagnosticReporterTest {
 
         // when
         String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.of("9wuK8XRD"),
+                Optional.of("SYNTH003"),
                 Optional.empty(),
                 false,
                 false,
@@ -332,9 +332,9 @@ final class SetupDiagnosticReporterTest {
                         "19191")
                 .doesNotContain(
                         "Selected Private Board",
-                        "6a1eb7c4873fd71be041d1cf",
-                        "9wuK8XRD",
-                        "https://trello.com/b/9wuK8XRD/selected-private-board",
+                        "000000000000000000000001",
+                        "SYNTH003",
+                        "https://trello.com/b/SYNTH003/selected-private-board",
                         "Other Private Board",
                         "other-board-id",
                         "other-key",
