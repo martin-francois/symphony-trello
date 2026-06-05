@@ -257,6 +257,7 @@ final class SetupLocalCommandFactory {
         }
 
         LocalSetupRequest request(Action action) {
+            validateCliPaths();
             Optional<Boolean> resolvedGithubMode = githubMode.or(() -> github.selected());
             List<Path> writableRoots = CliValueNormalizer.nonBlankTrimmedPaths(additionalWritableRoots);
             serverPort.ifPresent(LocalPort::validateCliServerPort);
@@ -313,6 +314,15 @@ final class SetupLocalCommandFactory {
 
         private boolean hasExplicitBoardSetupRequest() {
             return boardName.isPresent() || board.isPresent();
+        }
+
+        private void validateCliPaths() {
+            CliInputValidation.rejectControlCharacters("--workflow", workflowPath);
+            CliInputValidation.rejectControlCharacters("--workspace-root", workspaceRoot);
+            CliInputValidation.rejectControlCharacters("--config-dir", configDir);
+            CliInputValidation.rejectControlCharacters("--manifest", manifestPath);
+            CliInputValidation.rejectControlCharacters("--env", envPath);
+            CliInputValidation.rejectControlCharactersInPaths("--add-path", additionalWritableRoots);
         }
 
         private boolean hasCodexAccessUpdateRequest() {

@@ -1980,6 +1980,77 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
+    void rejectsControlCharactersInDirectSetupAndLifecyclePathOptions() {
+        // given
+        String badWorkflow = "bad\nworkflow.WORKFLOW.md";
+        String badWorkspaceRoot = "bad\nworkspace-root";
+        String badEnv = "bad\nenv";
+
+        List<InvalidPathOptionCase> cases = List.of(
+                new InvalidPathOptionCase(
+                        "--workflow",
+                        "Created Trello board",
+                        "new-board",
+                        "--endpoint",
+                        endpoint(),
+                        "--key",
+                        "key",
+                        "--token",
+                        "token",
+                        "--name",
+                        "Queue",
+                        "--workflow",
+                        badWorkflow),
+                new InvalidPathOptionCase(
+                        "--workspace-root",
+                        "Imported Trello board",
+                        "import-board",
+                        "--endpoint",
+                        endpoint(),
+                        "--key",
+                        "key",
+                        "--token",
+                        "token",
+                        "--board",
+                        "https://trello.com/b/input/existing-board",
+                        "--active",
+                        "Queue for Codex",
+                        "--terminal",
+                        "Released",
+                        "--workspace-root",
+                        badWorkspaceRoot,
+                        "--force"),
+                new InvalidPathOptionCase(
+                        "--env",
+                        "Created Trello board",
+                        "new-board",
+                        "--endpoint",
+                        endpoint(),
+                        "--key",
+                        "key",
+                        "--token",
+                        "token",
+                        "--name",
+                        "Queue",
+                        "--env",
+                        badEnv),
+                new InvalidPathOptionCase("--workflow", "stopped", "status", "--workflow", badWorkflow));
+
+        // when / then
+        for (InvalidPathOptionCase invalidCase : cases) {
+            CliRunResult result = runCli(invalidCase.commandArray());
+            result.assertFailure(2)
+                    .stderrContains(
+                            "setup_failed code=setup_invalid_arguments",
+                            invalidCase.optionName() + " must not contain control characters")
+                    .stdoutDoesNotContain(invalidCase.forbiddenOutput(), badWorkflow, badWorkspaceRoot, badEnv)
+                    .stderrDoesNotContain(badWorkflow, badWorkspaceRoot, badEnv, "Troubleshooting report written");
+        }
+        assertThat(createdBoardName).hasValue(null);
+        assertThat(tempDir.resolve(badWorkflow)).doesNotExist();
+    }
+
+    @Test
     void missingTrelloApiKeyPrintsHintWithoutTroubleshootingReport() throws Exception {
         // given
         Path workingDir = tempDir.resolve("missing-credentials-run");
@@ -2062,6 +2133,16 @@ final class TrelloBoardSetupMainTest {
                 Arguments.of("missing option value", new String[] {"new-board", "--name"}, 2, new String[] {
                     "setup_failed code=setup_invalid_arguments", "Missing required parameter"
                 }));
+    }
+
+    private record InvalidPathOptionCase(String optionName, String forbiddenOutput, List<String> command) {
+        private InvalidPathOptionCase(String optionName, String forbiddenOutput, String... command) {
+            this(optionName, forbiddenOutput, List.of(command));
+        }
+
+        private String[] commandArray() {
+            return command.toArray(String[]::new);
+        }
     }
 
     private CliRunResult runCli(String... args) {
