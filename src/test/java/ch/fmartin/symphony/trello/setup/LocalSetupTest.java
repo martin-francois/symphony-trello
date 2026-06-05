@@ -89,6 +89,35 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         }
     }
 
+    @Test
+    void setupLocalRejectsControlCharactersInBoardNameBeforeTrelloRequest() {
+        // given
+        String badBoardName = "Local\nQueue";
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                badBoardName,
+                "--no-github");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments",
+                        "--board-name must not contain control characters")
+                .stderrDoesNotContain(badBoardName, "Troubleshooting report written")
+                .stdoutDoesNotContain("Board connected", badBoardName);
+        assertThat(trello.boardLookups()).isEmpty();
+        assertThat(trello.createdLists()).isEmpty();
+    }
+
     @MethodSource("githubAuthCheckScenarios")
     @ParameterizedTest
     void checkReportsGithubAuthState(GithubAuthCheckScenario scenario) {

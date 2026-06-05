@@ -2130,6 +2130,32 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
+    void rejectsControlCharactersInDirectNewBoardNameBeforeTrelloRequest() {
+        // given
+        String badBoardName = "Name\nWith newline";
+
+        // when
+        CliRunResult result = runCli(
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--name",
+                badBoardName);
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments", "--name must not contain control characters")
+                .stderrDoesNotContain(badBoardName, "Troubleshooting report written")
+                .stdoutDoesNotContain("Created Trello board", badBoardName);
+        assertThat(createdBoardName).hasValue(null);
+    }
+
+    @Test
     void missingTrelloApiKeyPrintsHintWithoutTroubleshootingReport() throws Exception {
         // given
         Path workingDir = tempDir.resolve("missing-credentials-run");
