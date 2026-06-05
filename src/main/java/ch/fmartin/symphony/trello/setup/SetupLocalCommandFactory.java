@@ -261,6 +261,7 @@ final class SetupLocalCommandFactory {
             boardName.ifPresent(value -> CliInputValidation.rejectControlCharacters("--board-name", value));
             CliInputValidation.rejectControlCharactersInText("--board", board);
             CliInputValidation.rejectControlCharactersInText("--workspace-id", workspaceId);
+            validateCodexModelOverrides();
             Optional<Boolean> resolvedGithubMode = githubMode.or(() -> github.selected());
             List<Path> writableRoots = CliValueNormalizer.nonBlankTrimmedPaths(additionalWritableRoots);
             serverPort.ifPresent(LocalPort::validateCliServerPort);
@@ -326,6 +327,11 @@ final class SetupLocalCommandFactory {
             CliInputValidation.rejectControlCharacters("--manifest", manifestPath);
             CliInputValidation.rejectControlCharacters("--env", envPath);
             CliInputValidation.rejectControlCharactersInPaths("--add-path", additionalWritableRoots);
+        }
+
+        private void validateCodexModelOverrides() {
+            CliInputValidation.rejectBlankText("--codex-model", codexModel);
+            CliInputValidation.rejectBlankText("--codex-reasoning-effort", codexReasoningEffort);
         }
 
         private boolean hasCodexAccessUpdateRequest() {

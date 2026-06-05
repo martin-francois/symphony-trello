@@ -19,6 +19,12 @@ final class CliInputValidation {
         value.ifPresent(text -> rejectControlCharacters(optionName, text));
     }
 
+    static void rejectBlankText(String optionName, Optional<String> value) {
+        value.map(String::strip).filter(String::isBlank).ifPresent(ignored -> {
+            throw new TrelloBoardSetupException("setup_invalid_arguments", optionName + " must not be blank.");
+        });
+    }
+
     static void rejectControlCharacters(String optionName, String value) {
         if (value == null) {
             return;
