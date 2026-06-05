@@ -110,10 +110,68 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // then
         result.assertFailure(2)
                 .stderrContains(
-                        "setup_failed code=setup_invalid_arguments",
-                        "--board-name must not contain control characters")
+                        "setup_failed code=setup_invalid_arguments", "--board-name must not contain control characters")
                 .stderrDoesNotContain(badBoardName, "Troubleshooting report written")
                 .stdoutDoesNotContain("Board connected", badBoardName);
+        assertThat(trello.boardLookups()).isEmpty();
+        assertThat(trello.createdLists()).isEmpty();
+    }
+
+    @Test
+    void setupLocalRejectsControlCharactersInBoardSelectorBeforeTrelloRequest() {
+        // given
+        String badBoardSelector = "board\nselector";
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                badBoardSelector,
+                "--no-github");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments", "--board must not contain control characters")
+                .stderrDoesNotContain(badBoardSelector, "Troubleshooting report written")
+                .stdoutDoesNotContain("Board connected", badBoardSelector);
+        assertThat(trello.boardLookups()).isEmpty();
+        assertThat(trello.createdLists()).isEmpty();
+    }
+
+    @Test
+    void setupLocalRejectsControlCharactersInWorkspaceIdBeforeTrelloRequest() {
+        // given
+        String badWorkspaceId = "workspace\nId";
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Local Queue",
+                "--workspace-id",
+                badWorkspaceId,
+                "--no-github");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments",
+                        "--workspace-id must not contain control characters")
+                .stderrDoesNotContain(badWorkspaceId, "Troubleshooting report written")
+                .stdoutDoesNotContain("Board connected", badWorkspaceId);
         assertThat(trello.boardLookups()).isEmpty();
         assertThat(trello.createdLists()).isEmpty();
     }

@@ -537,13 +537,18 @@ final class TrelloBoardSetupMainTest {
         String badStateHome = "bad\nstate";
 
         List<InvalidPathOptionCase> cases = List.of(
-                new InvalidPathOptionCase("--output", "# Symphony for Trello Diagnostics", "diagnostics", "--output", badOutput),
+                new InvalidPathOptionCase(
+                        "--output", "# Symphony for Trello Diagnostics", "diagnostics", "--output", badOutput),
                 new InvalidPathOptionCase(
                         "--manifest", "# Symphony for Trello Diagnostics", "diagnostics", "--manifest", badManifest),
                 new InvalidPathOptionCase(
                         "--workflow", "# Symphony for Trello Diagnostics", "diagnostics", "--workflow", badWorkflow),
                 new InvalidPathOptionCase(
-                        "--config-dir", "# Symphony for Trello Diagnostics", "diagnostics", "--config-dir", badConfigDir),
+                        "--config-dir",
+                        "# Symphony for Trello Diagnostics",
+                        "diagnostics",
+                        "--config-dir",
+                        badConfigDir),
                 new InvalidPathOptionCase(
                         "--workspace-root",
                         "# Symphony for Trello Diagnostics",
@@ -551,7 +556,11 @@ final class TrelloBoardSetupMainTest {
                         "--workspace-root",
                         badWorkspaceRoot),
                 new InvalidPathOptionCase(
-                        "--state-home", "# Symphony for Trello Diagnostics", "diagnostics", "--state-home", badStateHome));
+                        "--state-home",
+                        "# Symphony for Trello Diagnostics",
+                        "diagnostics",
+                        "--state-home",
+                        badStateHome));
 
         // when
         List<CliRunResult> results = cases.stream()
@@ -2136,15 +2145,7 @@ final class TrelloBoardSetupMainTest {
 
         // when
         CliRunResult result = runCli(
-                "new-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--name",
-                badBoardName);
+                "new-board", "--endpoint", endpoint(), "--key", "key", "--token", "token", "--name", badBoardName);
 
         // then
         result.assertFailure(2)
@@ -2153,6 +2154,70 @@ final class TrelloBoardSetupMainTest {
                 .stderrDoesNotContain(badBoardName, "Troubleshooting report written")
                 .stdoutDoesNotContain("Created Trello board", badBoardName);
         assertThat(createdBoardName).hasValue(null);
+    }
+
+    @Test
+    void rejectsControlCharactersInDirectWorkspaceIdBeforeTrelloRequest() {
+        // given
+        String badWorkspaceId = "workspace\nId";
+
+        // when
+        CliRunResult result = runCli(
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--name",
+                "Queue",
+                "--workspace-id",
+                badWorkspaceId);
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments",
+                        "--workspace-id must not contain control characters")
+                .stderrDoesNotContain(badWorkspaceId, "Troubleshooting report written")
+                .stdoutDoesNotContain("Created Trello board", badWorkspaceId);
+        assertThat(createdBoardName).hasValue(null);
+    }
+
+    @Test
+    void rejectsControlCharactersInDirectBoardSelectorBeforeTrelloRequest() {
+        // given
+        String badBoardSelector = "board\nselector";
+        Path workflow = tempDir.resolve("control-selector.WORKFLOW.md");
+
+        // when
+        CliRunResult result = runCli(
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                badBoardSelector,
+                "--active",
+                "Queue for Codex",
+                "--terminal",
+                "Released",
+                "--workflow",
+                workflow.toString(),
+                "--force");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments", "--board must not contain control characters")
+                .stderrDoesNotContain(badBoardSelector, "Troubleshooting report written")
+                .stdoutDoesNotContain("Imported Trello board", badBoardSelector);
+        assertThat(workflow).doesNotExist();
+        assertThat(createdLists).isEmpty();
     }
 
     @Test
