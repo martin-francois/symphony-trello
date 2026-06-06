@@ -829,6 +829,63 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
+    void diagnosticsRedactsTokenShapedSecretsInRecentLogs() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("token-log-config");
+        Path workspaceRoot = tempDir.resolve("token-log-workspaces");
+        Path stateHome = tempDir.resolve("token-log-state");
+        Files.createDirectories(configDir);
+        Files.createDirectories(workspaceRoot);
+        Files.createDirectories(stateHome);
+        Files.writeString(configDir.resolve("connected-boards.json"), "{\"boards\":[]}", StandardCharsets.UTF_8);
+        String githubToken = "ghp_" + "abcdefghijklmnopqrstuvwxyz1234567890abcd";
+        String trelloToken = "ATTA" + "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz";
+        String openAiToken = "sk-" + "proj-abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz";
+        Files.writeString(
+                stateHome.resolve("fake-secret.log"),
+                """
+                github token %s
+                trello key 1234567890abcdef1234567890abcdef
+                trello token %s
+                openai %s
+                password=super-secret-value
+                ordinary 1234567890abcdef1234567890abcdef
+                """
+                        .formatted(githubToken, trelloToken, openAiToken),
+                StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.of(workspaceRoot),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.empty()));
+
+        // then
+        assertThat(report)
+                .contains(
+                        "github token <redacted>",
+                        "trello key <redacted>",
+                        "trello token <redacted>",
+                        "openai <redacted>",
+                        "password=<redacted>",
+                        "ordinary 1234567890abcdef1234567890abcdef")
+                .doesNotContain(
+                        githubToken,
+                        "trello key 1234567890abcdef1234567890abcdef",
+                        trelloToken,
+                        openAiToken,
+                        "super-secret-value");
+    }
+
+    @Test
     void diagnosticsExplainsMissingManifestWhileStillSummarizingLocalWorkflows() throws Exception {
         // given
         Path configDir = tempDir.resolve("workflow-only-config");
