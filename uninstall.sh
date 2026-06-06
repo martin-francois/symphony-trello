@@ -19,6 +19,9 @@ YES_LOCAL_DATA=false
 REMOVE_CONFIG=false
 REMOVE_WORKSPACES=false
 REMOVE_STATE=false
+PATH_BLOCK_START="# >>> Symphony for Trello PATH >>>"
+PATH_BLOCK_END="# <<< Symphony for Trello PATH <<<"
+PATH_BLOCK_LEGACY_MARKER="# Symphony for Trello"
 
 usage() {
   cat <<'USAGE'
@@ -94,6 +97,26 @@ same_or_inside_path() {
   child="$1"
   parent="$2"
   [[ "$child" == "$parent" || "$child" == "$parent"/* ]]
+}
+
+shell_literal() {
+  local value="$1"
+  value="${value//\'/\'\\\'\'}"
+  printf "'%s'" "$value"
+}
+
+path_setup_line() {
+  local current_path
+  current_path="\"\$PATH\""
+  printf 'export PATH=%s:%s\n' "$(shell_literal "$BIN_DIR")" "$current_path"
+}
+
+profile_candidates() {
+  printf '%s/.bashrc\n' "$HOME"
+  printf '%s/.bash_profile\n' "$HOME"
+  printf '%s/.bash_login\n' "$HOME"
+  printf '%s/.profile\n' "$HOME"
+  printf '%s/.zshrc\n' "$HOME"
 }
 
 SYMPHONY_HOME="$(absolutize_path "$SYMPHONY_HOME")"
@@ -185,6 +208,89 @@ remove_path() {
       rm -rf "$path"
     fi
   fi
+}
+
+remove_path_setup_from_profile() {
+  local profile="$1"
+  local line current tmp block changed=false in_block=false block_matches=false pending_legacy=false
+  [[ -f "$profile" ]] || return 0
+  line="$(path_setup_line)"
+  tmp="$(mktemp "${TMPDIR:-/tmp}/symphony-trello-profile.XXXXXX")"
+  if ! exec 3<"$profile"; then
+    echo "  NOTE  Could not remove managed PATH setup from $profile"
+    rm -f "$tmp"
+    return
+  fi
+  while IFS= read -r current || [[ -n "$current" ]]; do
+    if [[ "$in_block" == true ]]; then
+      block+="$current"$'\n'
+      if [[ "$current" == "$line" ]]; then
+        block_matches=true
+      fi
+      if [[ "$current" == "$PATH_BLOCK_END" ]]; then
+        if [[ "$block_matches" == true ]]; then
+          changed=true
+        else
+          printf '%s' "$block" >>"$tmp"
+        fi
+        in_block=false
+        block_matches=false
+        block=""
+      fi
+      continue
+    fi
+    if [[ "$pending_legacy" == true ]]; then
+      if [[ "$current" == "$line" ]]; then
+        changed=true
+        pending_legacy=false
+        continue
+      fi
+      printf '%s\n' "$PATH_BLOCK_LEGACY_MARKER" >>"$tmp"
+      pending_legacy=false
+    fi
+    if [[ "$current" == "$PATH_BLOCK_START" ]]; then
+      in_block=true
+      block_matches=false
+      block="$current"$'\n'
+      continue
+    fi
+    if [[ "$current" == "$PATH_BLOCK_LEGACY_MARKER" ]]; then
+      pending_legacy=true
+      continue
+    fi
+    printf '%s\n' "$current" >>"$tmp"
+  done <&3
+  exec 3<&-
+  if [[ "$in_block" == true ]]; then
+    printf '%s' "$block" >>"$tmp"
+    echo "  SKIP  managed PATH setup in $profile is missing its end marker"
+  fi
+  if [[ "$pending_legacy" == true ]]; then
+    printf '%s\n' "$PATH_BLOCK_LEGACY_MARKER" >>"$tmp"
+  fi
+  if [[ "$changed" == false ]]; then
+    rm -f "$tmp"
+    return
+  fi
+  if [[ "$DRY_RUN" == true ]]; then
+    echo "  WOULD remove managed PATH setup from $profile"
+    rm -f "$tmp"
+    return
+  fi
+  if ! cat "$tmp" >"$profile"; then
+    echo "  NOTE  Could not remove managed PATH setup from $profile"
+    rm -f "$tmp"
+    return
+  fi
+  rm -f "$tmp"
+  echo "  OK  Removed managed PATH setup from $profile"
+}
+
+remove_path_setup_from_profiles() {
+  local profile
+  while IFS= read -r profile; do
+    remove_path_setup_from_profile "$profile"
+  done < <(profile_candidates)
 }
 
 path_exists() {
@@ -357,6 +463,7 @@ if confirm "Remove installer-managed app files and CLI executable?" "$YES"; then
   remove_path "$BIN_DIR/symphony-trello"
   remove_managed_codex_artifacts
   remove_path "$APP_DIR"
+  remove_path_setup_from_profiles
 else
   echo "Skipped installer-managed files."
 fi

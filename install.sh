@@ -24,6 +24,8 @@ OS_ARCH=""
 BREW_OPENJDK_BIN=""
 CODEX_NPM_PREFIX="$SYMPHONY_HOME/npm"
 APT_UPDATED=false
+PATH_BLOCK_START="# >>> Symphony for Trello PATH >>>"
+PATH_BLOCK_END="# <<< Symphony for Trello PATH <<<"
 
 usage() {
   cat <<USAGE
@@ -484,8 +486,9 @@ append_path_setup_to_profile() {
     fi
     if {
       printf '\n'
-      printf '# Symphony for Trello\n'
+      printf '%s\n' "$PATH_BLOCK_START"
       printf '%s\n' "$line"
+      printf '%s\n' "$PATH_BLOCK_END"
     } >>"$profile"; then
       echo "  OK  Added $BIN_DIR to PATH in $profile"
     else
