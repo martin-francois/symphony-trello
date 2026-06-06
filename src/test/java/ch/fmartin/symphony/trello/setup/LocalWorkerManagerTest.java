@@ -1125,14 +1125,13 @@ final class LocalWorkerManagerTest {
             ThrowingSupplier<WorkerRunResult> action,
             AtomicReference<WorkerRunResult> result,
             AtomicReference<Throwable> error) {
-        Thread thread = Thread.ofPlatform().start(() -> {
+        return Thread.ofPlatform().start(() -> {
             try {
                 result.set(action.get());
             } catch (Exception | AssertionError thrown) {
                 error.set(thrown);
             }
         });
-        return thread;
     }
 
     private static boolean threadIsWaiting(Thread thread) {
