@@ -107,6 +107,10 @@ matters, and easy for another engineer to understand without asking the original
    squash them into one base commit before adding the separate review-response commit.
    Keep `feat/issue-35-plan-b-onboarding` as a single commit on top of `main`; amend or squash and
    force-push when changing that branch.
+   Use closing keywords such as `Closes #123`, `Fixes #123`, or `Resolves #123` only when the PR or
+   commit fully implements the issue and should close it on merge. If the change only adds guidance,
+   creates a prerequisite, documents a decision, or implements part of the issue, use a non-closing
+   reference such as `Refs #123` and state what remains.
    The pull request title is linted in CI because the repository normally squash-merges with that
    title. CI also lints pull request commit messages so intentionally multi-commit or rebase-merged
    PRs keep release automation input clean. Before publishing a PR, run the same local check with
@@ -156,6 +160,11 @@ matters, and easy for another engineer to understand without asking the original
   down a future maintainer.
 - Use Java 25 LTS language/runtime features where they make the code clearer, but do not be clever
   for its own sake.
+- For project-owned hashes, prefer SHA3-family algorithms. Use `HmacSHA3-256` for tokens that
+  represent private context and may appear in diagnostics, public issue reports, logs, or
+  user-facing troubleshooting output. Use `SHA3-256` for deterministic project-owned hashes that do
+  not need a key. Use `SHA-256` only when an external tool, API, file format, dependency, or
+  compatibility contract requires it; make that reason clear nearby when it is not obvious.
 - Use the SDKMAN-managed Azul Zulu Java 25 LTS default for local work. Do not hardcode temporary JDK
   paths or prefix Maven commands with custom `JAVA_HOME`/`PATH` assignments; `java`, `javac`, and
   `./mvnw` should resolve through the shell environment.
