@@ -1,0 +1,26 @@
+name: Private Context
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  private-context:
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 0
+      - name: Scan worktree
+        run: scripts/check-private-context --worktree
+      - name: Scan pull request range
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: scripts/check-private-context --git-range "$PR_BASE_SHA..$PR_HEAD_SHA"

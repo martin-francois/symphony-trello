@@ -2199,7 +2199,7 @@ Minimum endpoints:
       },
       "running": [
         {
-          "card_id": "65df9f70b4a22a1234567890",
+          "card_id": "000000000000000000000101",
           "card_identifier": "TRELLO-aBcDeFgH",
           "state": "In Progress",
           "session_id": "thread-1-turn-1",
@@ -2217,7 +2217,7 @@ Minimum endpoints:
       ],
       "retrying": [
         {
-          "card_id": "65df9f70b4a22a1234567891",
+          "card_id": "000000000000000000000102",
           "card_identifier": "TRELLO-zYxWvUtS",
           "attempt": 3,
           "due_at": "2026-02-24T20:16:00Z",
@@ -2242,7 +2242,7 @@ Minimum endpoints:
     ```json
     {
       "card_identifier": "TRELLO-aBcDeFgH",
-      "card_id": "65df9f70b4a22a1234567890",
+      "card_id": "000000000000000000000101",
       "status": "running",
       "workspace": {
         "path": "/tmp/symphony_workspaces/TRELLO-aBcDeFgH"

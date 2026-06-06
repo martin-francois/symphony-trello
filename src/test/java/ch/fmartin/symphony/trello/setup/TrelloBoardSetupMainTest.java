@@ -86,7 +86,7 @@ final class TrelloBoardSetupMainTest {
                 exchange -> respond(
                         exchange,
                         """
-                {"id":"board-1","name":"Existing Board","shortLink":"existing","url":"https://trello.com/b/existing/board","closed":false}
+                {"id":"board-1","name":"Existing Board","shortLink":"existing","url":"https://trello.com/b/SYNTH004/board","closed":false}
                 """));
         server.createContext(
                 "/1/boards/board-1/lists",
@@ -1489,7 +1489,7 @@ final class TrelloBoardSetupMainTest {
                 "board-1",
                 "existing",
                 "Existing Board",
-                "https://trello.com/b/existing/board",
+                "https://trello.com/b/SYNTH004/board",
                 oldWorkflow.toAbsolutePath().normalize(),
                 oldEnv.toAbsolutePath().normalize(),
                 TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT.toAbsolutePath().normalize(),
@@ -2732,7 +2732,7 @@ final class TrelloBoardSetupMainTest {
             assertThat(board.boardId()).isEqualTo("board-1");
             assertThat(board.boardKey()).isEqualTo("existing");
             assertThat(board.boardName()).isEqualTo("Existing Board");
-            assertThat(board.boardUrl()).isEqualTo("https://trello.com/b/existing/board");
+            assertThat(board.boardUrl()).isEqualTo("https://trello.com/b/SYNTH004/board");
             assertThat(board.workflowPath()).isEqualTo(workflow.toAbsolutePath().normalize());
             assertThat(board.envPath()).isEqualTo(env.toAbsolutePath().normalize());
             assertThat(board.workspaceRoot())

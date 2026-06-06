@@ -94,7 +94,7 @@ final class TrelloBoardSetupTest {
             respond(
                     exchange,
                     """
-                    {"id":"board-1","name":"Existing Board","shortLink":"existing","url":"https://trello.com/b/existing/existing-board","closed":false}
+                    {"id":"board-1","name":"Existing Board","shortLink":"existing","url":"https://trello.com/b/SYNTH004/existing-board","closed":false}
                     """);
         });
         server.createContext("/1/boards/board-1/lists", exchange -> respond(exchange, boardListsResponse.get()));

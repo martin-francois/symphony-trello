@@ -68,7 +68,11 @@ matters, and easy for another engineer to understand without asking the original
    fixtures, docs, commit messages, or new issue text. When a Trello-shaped value is needed, replace
    it with a clearly synthetic same-shape value such as `SYNTH001` for an 8-character short link or
    `000000000000000000000001` for a 24-character board id, and use synthetic URLs such as
-   `https://trello.com/b/SYNTH001/synthetic-board`.
+   `https://trello.com/b/SYNTH001/synthetic-board`. Before committing or posting GitHub issue, PR,
+   or comment text that may contain copied diagnostics or live reproduction data, run the private
+   context scanner on the relevant input: `scripts/check-private-context --worktree`,
+   `scripts/check-private-context --git-range origin/main..HEAD`, or
+   `scripts/check-private-context --stdin`.
 13. Run the relevant verification before finishing. For normal code changes, use:
 
    ```bash

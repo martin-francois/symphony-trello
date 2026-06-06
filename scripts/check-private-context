@@ -1,0 +1,208 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage:
+  scripts/check-private-context --stdin [--label NAME]
+  scripts/check-private-context --file PATH [--file PATH...]
+  scripts/check-private-context --git-range RANGE
+  scripts/check-private-context --worktree
+
+Scans text for secrets and private operational context. Findings print only the
+location and rule name; matched values are never printed.
+EOF
+}
+
+die() {
+  printf 'check-private-context: %s\n' "$*" >&2
+  exit 2
+}
+
+if [ "$#" -eq 0 ]; then
+  usage >&2
+  exit 2
+fi
+
+stdin=false
+label="<stdin>"
+worktree=false
+files=()
+git_ranges=()
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --stdin)
+      stdin=true
+      shift
+      ;;
+    --label)
+      [ "$#" -ge 2 ] || die "Missing value for --label"
+      label="$2"
+      shift 2
+      ;;
+    --file)
+      [ "$#" -ge 2 ] || die "Missing value for --file"
+      files+=("$2")
+      shift 2
+      ;;
+    --git-range)
+      [ "$#" -ge 2 ] || die "Missing value for --git-range"
+      git_ranges+=("$2")
+      shift 2
+      ;;
+    --worktree)
+      worktree=true
+      shift
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *)
+      die "Unknown argument: $1"
+      ;;
+  esac
+done
+
+finding_count=0
+
+report_finding() {
+  local source="$1"
+  local line_number="$2"
+  local rule="$3"
+  local remediation="$4"
+
+  printf '%s:%s: %s: %s\n' "$source" "$line_number" "$rule" "$remediation" >&2
+  finding_count=$((finding_count + 1))
+}
+
+is_synthetic_short_link() {
+  [[ "$1" =~ ^SYNTH[0-9]{3}$ ]]
+}
+
+is_synthetic_trello_id() {
+  [[ "$1" =~ ^0{20}[0-9]{4}$ ]]
+}
+
+scan_line() {
+  local source="$1"
+  local line_number="$2"
+  local line="$3"
+  local short_link
+  local trello_id
+
+  if [[ "$line" =~ https?://(www\.)?trello\.com/[bc]/([A-Za-z0-9]{8})([^A-Za-z0-9_-]|$) ]]; then
+    short_link="${BASH_REMATCH[2]}"
+    if ! is_synthetic_short_link "$short_link"; then
+      report_finding \
+        "$source" \
+        "$line_number" \
+        "trello-url-private-context" \
+        "replace live Trello URLs with synthetic same-shape fixtures such as https://trello.com/b/SYNTH001/synthetic-board"
+    fi
+  fi
+
+  if [[ "$line" =~ (^|[^0-9a-f])([0-9a-f]{24})([^0-9a-f]|$) ]]; then
+    trello_id="${BASH_REMATCH[2]}"
+    if ! is_synthetic_trello_id "$trello_id"; then
+      report_finding \
+        "$source" \
+        "$line_number" \
+        "trello-id-private-context" \
+        "replace live-looking Trello ids with synthetic same-shape fixtures such as 000000000000000000000001"
+    fi
+  fi
+
+  if [[ "$line" =~ ATTA[0-9A-Za-z_-]{20,} ]]; then
+    report_finding "$source" "$line_number" "trello-token-secret" "redact the Trello token"
+  fi
+
+  if [[ "$line" =~ (gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}) ]]; then
+    report_finding "$source" "$line_number" "github-token-secret" "redact the GitHub token"
+  fi
+
+  if [[ "$line" =~ (^|[^A-Za-z0-9_-])sk-[A-Za-z0-9_-]{20,} ]]; then
+    report_finding "$source" "$line_number" "openai-token-secret" "redact the API token"
+  fi
+
+  if [[ "$line" =~ /home/[A-Za-z0-9._-]+/git-projects/ || "$line" =~ /root/\.local/share/symphony-trello/ ]]; then
+    report_finding "$source" "$line_number" "host-path-private-context" "redact private host paths or use \$HOME-based examples"
+  fi
+}
+
+scan_stream() {
+  local source="$1"
+  local line_number=0
+  local line
+
+  while IFS= read -r line || [ -n "$line" ]; do
+    line_number=$((line_number + 1))
+    scan_line "$source" "$line_number" "$line"
+  done
+}
+
+scan_file() {
+  local file="$1"
+
+  [ -f "$file" ] || die "File does not exist: $file"
+  if ! grep -Iq . "$file"; then
+    return 0
+  fi
+  # shellcheck disable=SC2094 # Scanner only reads the input file; it never writes to it.
+  scan_stream "$file" < "$file"
+}
+
+scan_git_diff_added_lines() {
+  local range="$1"
+  local line_number=0
+  local diff_line
+  local added_line
+
+  while IFS= read -r diff_line || [ -n "$diff_line" ]; do
+    case "$diff_line" in
+      +++*)
+        ;;
+      +*)
+        line_number=$((line_number + 1))
+        added_line="${diff_line#+}"
+        scan_line "git-diff:$range" "$line_number" "$added_line"
+        ;;
+    esac
+  done < <(
+    git diff --no-ext-diff --unified=0 "$range" -- . \
+      ':(exclude)target/**' \
+      ':(exclude).git/**'
+  )
+}
+
+if [ "$stdin" = true ]; then
+  scan_stream "$label"
+fi
+
+for file in "${files[@]}"; do
+  scan_file "$file"
+done
+
+for range in "${git_ranges[@]}"; do
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "--git-range requires a Git worktree"
+  scan_stream "git-range:$range" < <(git log --format='%s%n%b' "$range")
+  scan_git_diff_added_lines "$range"
+done
+
+if [ "$worktree" = true ]; then
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "--worktree requires a Git worktree"
+  while IFS= read -r -d '' file; do
+    case "$file" in
+      target/*|.git/*)
+        continue
+        ;;
+    esac
+    scan_file "$file"
+  done < <(git ls-files -co --exclude-standard -z)
+fi
+
+if [ "$finding_count" -gt 0 ]; then
+  printf 'check-private-context: found %d private-context finding(s)\n' "$finding_count" >&2
+  exit 1
+fi

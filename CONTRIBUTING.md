@@ -96,6 +96,13 @@ Before submitting changes:
   Codex protocol behavior when those areas change.
 - Use imports instead of inline fully qualified Java type names in code. PMD enforces this so helpers
   like `java.util.Arrays.stream(...)` should be written as `Arrays.stream(...)` with an import.
+- Before committing or posting GitHub issue, PR, or comment text that may include copied diagnostics
+  or live reproduction data, run the private context scanner on the relevant input:
+  `scripts/check-private-context --worktree`,
+  `scripts/check-private-context --git-range origin/main..HEAD`, or
+  `scripts/check-private-context --stdin`.
+  Replace live Trello URLs, short links, and ids with clearly synthetic same-shape values such as
+  `https://trello.com/b/SYNTH001/synthetic-board` and `000000000000000000000001`.
 - Document non-obvious design choices in `docs/adr/`.
 - Keep refactors separate from behavior changes when practical.
 - Use a Conventional Commit PR title or squash commit title when the change is merged. CI checks
