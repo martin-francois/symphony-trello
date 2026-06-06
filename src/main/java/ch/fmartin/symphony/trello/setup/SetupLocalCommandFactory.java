@@ -116,7 +116,10 @@ final class SetupLocalCommandFactory {
     static IParameterExceptionHandler usageErrors() {
         return (ParameterException exception, String[] ignored) -> {
             CommandLine commandLine = exception.getCommandLine();
-            commandLine.getErr().println("setup_failed code=setup_invalid_arguments message=" + exception.getMessage());
+            commandLine
+                    .getErr()
+                    .println("setup_failed code=setup_invalid_arguments message="
+                            + CliInputValidation.safeCliMessage(exception.getMessage()));
             commandLine.getErr().println("Try '" + commandLine.getCommandName() + " --help' for usage.");
             return 2;
         };
@@ -355,6 +358,10 @@ final class SetupLocalCommandFactory {
             boardName.ifPresent(value -> CliInputValidation.rejectControlCharacters("--board-name", value));
             CliInputValidation.rejectControlCharactersInText("--board", board);
             CliInputValidation.rejectControlCharactersInText("--workspace-id", workspaceId);
+            CliInputValidation.rejectControlCharactersInTextValues("--active", activeStates);
+            CliInputValidation.rejectControlCharactersInTextValues("--terminal", terminalStates);
+            CliInputValidation.rejectControlCharacters("--in-progress", inProgressState);
+            CliInputValidation.rejectControlCharacters("--blocked", blockedState);
             CliInputValidation.rejectWorkspaceIdReference("--workspace-id", workspaceId);
             github.validate();
             validateCodexModelOverrides();
