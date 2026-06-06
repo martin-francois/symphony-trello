@@ -147,6 +147,8 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                     return 2;
                 })
                 .setParameterExceptionHandler(SetupLocalCommandFactory.usageErrors());
+        SetupLocalCommandFactory.hideUnsupportedSubcommandOptions(
+                commandLine.getSubcommands().get("setup-local"));
         return commandLine.execute(args);
     }
 
@@ -761,6 +763,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
 
         private void validate() {
             endpoint = TrelloApiEndpoint.normalize(endpoint);
+            github.validate();
             validateCodexModelOverrides();
             if (serverPort != null) {
                 LocalPort.validateCliServerPort(serverPort);

@@ -16,13 +16,56 @@ import picocli.CommandLine.Command;
 import picocli.CommandLine.IParameterExceptionHandler;
 import picocli.CommandLine.Mixin;
 import picocli.CommandLine.Model.CommandSpec;
+import picocli.CommandLine.Model.OptionSpec;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.ParameterException;
 import picocli.CommandLine.Spec;
 
 final class SetupLocalCommandFactory {
+    private static final List<String> WORKFLOW_AND_ACCESS_OPTIONS = List.of(
+            "--workspace-id",
+            "--active",
+            "--terminal",
+            "--in-progress",
+            "--no-in-progress",
+            "--blocked",
+            "--workflow",
+            "--workspace-root",
+            "--server-port",
+            "--max-agents",
+            "--codex-model",
+            "--codex-reasoning-effort",
+            "--env",
+            "--add-path",
+            "--allow-all-paths",
+            "--danger-full-access",
+            "--no-start");
+    private static final List<String> CHECK_UNSUPPORTED_OPTIONS =
+            optionNames(List.of("--dry-run", "--force", "--board-name", "--board"), WORKFLOW_AND_ACCESS_OPTIONS);
+    private static final List<String> REPAIR_PORT_UNSUPPORTED_OPTIONS = optionNames(
+            List.of("--force", "--key", "--token", "--board-name"),
+            WORKFLOW_AND_ACCESS_OPTIONS,
+            List.of("--endpoint", "--github", "--no-github"));
+    private static final List<String> CONFIGURE_GITHUB_UNSUPPORTED_OPTIONS = List.of(
+            "--dry-run",
+            "--force",
+            "--board-name",
+            "--workspace-id",
+            "--active",
+            "--terminal",
+            "--in-progress",
+            "--no-in-progress",
+            "--blocked",
+            "--workflow",
+            "--workspace-root",
+            "--server-port",
+            "--env",
+            "--no-github");
+
     int execute(String[] args, LocalSetup setup, BufferedReader input, PrintStream out, PrintStream err) {
-        CommandLine commandLine = new CommandLine(new SetupLocalCommand(setup, input, out, err))
+        CommandLine commandLine = new CommandLine(new SetupLocalCommand(setup, input, out, err));
+        hideUnsupportedSubcommandOptions(commandLine);
+        commandLine
                 .setOut(new PrintWriter(out, true, StandardCharsets.UTF_8))
                 .setErr(new PrintWriter(err, true, StandardCharsets.UTF_8))
                 .setExecutionExceptionHandler((exception, ignored, parseResult) -> {
@@ -34,6 +77,35 @@ final class SetupLocalCommandFactory {
                 })
                 .setParameterExceptionHandler(usageErrors());
         return commandLine.execute(args);
+    }
+
+    @SafeVarargs
+    private static List<String> optionNames(List<String>... groups) {
+        List<String> names = new ArrayList<>();
+        for (List<String> group : groups) {
+            names.addAll(group);
+        }
+        return List.copyOf(names);
+    }
+
+    static void hideUnsupportedSubcommandOptions(CommandLine commandLine) {
+        hideUnsupportedOptions(commandLine.getSubcommands().get("check"), CHECK_UNSUPPORTED_OPTIONS);
+        hideUnsupportedOptions(commandLine.getSubcommands().get("repair-port"), REPAIR_PORT_UNSUPPORTED_OPTIONS);
+        hideUnsupportedOptions(
+                commandLine.getSubcommands().get("configure-github"), CONFIGURE_GITHUB_UNSUPPORTED_OPTIONS);
+    }
+
+    private static void hideUnsupportedOptions(CommandLine commandLine, List<String> optionNames) {
+        CommandSpec commandSpec = commandLine.getCommandSpec();
+        for (String optionName : optionNames) {
+            OptionSpec option = commandSpec.optionsMap().get(optionName);
+            if (option == null) {
+                continue;
+            }
+            CommandSpec owner = option.command();
+            owner.remove(option);
+            owner.addOption(OptionSpec.builder(option).hidden(true).build());
+        }
     }
 
     static void printExecutionFailure(PrintStream err, Exception exception, String errorCode) {
@@ -124,10 +196,11 @@ final class SetupLocalCommandFactory {
         @Override
         public Integer call() {
             CommonOptions options = parent.common.merge(common);
+            LocalSetupRequest request = options.request(Action.REPAIR_PORT);
             if (options.board.isEmpty()) {
                 throw new ParameterException(spec.commandLine(), "Missing required option: '--board=<board>'");
             }
-            return parent.setup.run(options.request(Action.REPAIR_PORT), parent.input, parent.out, parent.err);
+            return parent.setup.run(request, parent.input, parent.out, parent.err);
         }
     }
 
@@ -257,10 +330,13 @@ final class SetupLocalCommandFactory {
         }
 
         LocalSetupRequest request(Action action) {
+            validateLifecycleSharedOptions(action);
+            rejectUnsupportedOptions(action);
             validateCliPaths();
             boardName.ifPresent(value -> CliInputValidation.rejectControlCharacters("--board-name", value));
             CliInputValidation.rejectControlCharactersInText("--board", board);
             CliInputValidation.rejectControlCharactersInText("--workspace-id", workspaceId);
+            github.validate();
             validateCodexModelOverrides();
             Optional<Boolean> resolvedGithubMode = githubMode.or(() -> github.selected());
             List<Path> writableRoots = CliValueNormalizer.nonBlankTrimmedPaths(additionalWritableRoots);
@@ -316,8 +392,129 @@ final class SetupLocalCommandFactory {
                     TrelloApiEndpoint.normalize(endpoint));
         }
 
+        private void validateLifecycleSharedOptions(Action action) {
+            CliInputValidation.rejectBlankPath("--config-dir", configDir, "--config-dir must not be empty.");
+            CliInputValidation.rejectBlankPath("--manifest", manifestPath, "--manifest must not be empty.");
+            CliInputValidation.rejectControlCharacters("--config-dir", configDir);
+            CliInputValidation.rejectControlCharacters("--manifest", manifestPath);
+            configDir.ifPresent(path -> CliInputValidation.rejectExistingNonDirectoryPath("--config-dir", path));
+            if (action == Action.REPAIR_PORT || action == Action.CONFIGURE_GITHUB) {
+                CliInputValidation.rejectBlankText("--board", board);
+                CliInputValidation.rejectControlCharactersInText("--board", board);
+            }
+        }
+
         private boolean hasExplicitBoardSetupRequest() {
             return boardName.isPresent() || board.isPresent();
+        }
+
+        private void rejectUnsupportedOptions(Action action) {
+            List<String> unsupported =
+                    switch (action) {
+                        case SETUP -> List.of();
+                        case CHECK -> unsupportedForCheck();
+                        case REPAIR_PORT -> unsupportedForRepairPort();
+                        case CONFIGURE_GITHUB -> unsupportedForConfigureGithub();
+                    };
+            if (!unsupported.isEmpty()) {
+                throw new TrelloBoardSetupException(
+                        "setup_invalid_arguments",
+                        "setup-local %s does not support %s."
+                                .formatted(commandName(action), String.join(", ", unsupported)));
+            }
+        }
+
+        private List<String> unsupportedForCheck() {
+            List<String> unsupported = new ArrayList<>();
+            addIfPresent(unsupported, "--dry-run", dryRun);
+            addIfPresent(unsupported, "--force", force);
+            addIfPresent(unsupported, "--board-name", boardName);
+            addIfPresent(unsupported, "--board", board);
+            addWorkflowAndAccessOptions(unsupported);
+            return unsupported;
+        }
+
+        private List<String> unsupportedForRepairPort() {
+            List<String> unsupported = new ArrayList<>();
+            addIfPresent(unsupported, "--force", force);
+            addIfPresent(unsupported, "--key", apiKey);
+            addIfPresent(unsupported, "--token", apiToken);
+            addIfPresent(unsupported, "--board-name", boardName);
+            addWorkflowAndAccessOptions(unsupported);
+            addIfPresent(unsupported, "--endpoint", !TrelloBoardSetup.DEFAULT_ENDPOINT.equals(endpoint));
+            addGithubModeIfPresent(unsupported);
+            return unsupported;
+        }
+
+        private List<String> unsupportedForConfigureGithub() {
+            List<String> unsupported = new ArrayList<>();
+            addIfPresent(unsupported, "--dry-run", dryRun);
+            addIfPresent(unsupported, "--force", force);
+            addIfPresent(unsupported, "--board-name", boardName);
+            addIfPresent(unsupported, "--workspace-id", workspaceId);
+            addListIfPresent(unsupported, "--active", activeStates);
+            addListIfPresent(unsupported, "--terminal", terminalStates);
+            addIfPresent(unsupported, "--in-progress", inProgressState != null);
+            addIfPresent(unsupported, "--no-in-progress", noInProgress);
+            addIfPresent(unsupported, "--blocked", blockedState != null);
+            addIfPresent(unsupported, "--workflow", workflowPath);
+            addIfPresent(unsupported, "--workspace-root", workspaceRoot);
+            addIfPresent(unsupported, "--server-port", serverPort);
+            addIfPresent(unsupported, "--env", envPath);
+            return unsupported;
+        }
+
+        private void addWorkflowAndAccessOptions(List<String> unsupported) {
+            addIfPresent(unsupported, "--workspace-id", workspaceId);
+            addListIfPresent(unsupported, "--active", activeStates);
+            addListIfPresent(unsupported, "--terminal", terminalStates);
+            addIfPresent(unsupported, "--in-progress", inProgressState != null);
+            addIfPresent(unsupported, "--no-in-progress", noInProgress);
+            addIfPresent(unsupported, "--blocked", blockedState != null);
+            addIfPresent(unsupported, "--workflow", workflowPath);
+            addIfPresent(unsupported, "--workspace-root", workspaceRoot);
+            addIfPresent(unsupported, "--server-port", serverPort);
+            addIfPresent(unsupported, "--max-agents", maxAgents);
+            addIfPresent(unsupported, "--codex-model", codexModel);
+            addIfPresent(unsupported, "--codex-reasoning-effort", codexReasoningEffort);
+            addIfPresent(unsupported, "--env", envPath);
+            addListIfPresent(unsupported, "--add-path", additionalWritableRoots);
+            addIfPresent(unsupported, "--allow-all-paths", allowAllPaths);
+            addIfPresent(unsupported, "--danger-full-access", dangerFullAccess);
+            addIfPresent(unsupported, "--no-start", noStart);
+        }
+
+        private void addGithubModeIfPresent(List<String> unsupported) {
+            githubMode
+                    .or(() -> github.selected())
+                    .ifPresent(selected -> unsupported.add(selected ? "--github" : "--no-github"));
+        }
+
+        private static void addIfPresent(List<String> unsupported, String optionName, Optional<?> value) {
+            if (value.isPresent()) {
+                unsupported.add(optionName);
+            }
+        }
+
+        private static void addIfPresent(List<String> unsupported, String optionName, boolean present) {
+            if (present) {
+                unsupported.add(optionName);
+            }
+        }
+
+        private static void addListIfPresent(List<String> unsupported, String optionName, List<?> values) {
+            if (!values.isEmpty()) {
+                unsupported.add(optionName);
+            }
+        }
+
+        private static String commandName(Action action) {
+            return switch (action) {
+                case SETUP -> "setup";
+                case CHECK -> "check";
+                case REPAIR_PORT -> "repair-port";
+                case CONFIGURE_GITHUB -> "configure-github";
+            };
         }
 
         private void validateCliPaths() {

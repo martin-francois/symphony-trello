@@ -27,12 +27,8 @@ final class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
                 "key",
                 "--token",
                 "token",
-                "--board-name",
-                "GitHub Later",
                 "--board",
                 "https://trello.com/b/abc123/local-first",
-                "--env",
-                env.toString(),
                 "configure-github");
 
         // then
