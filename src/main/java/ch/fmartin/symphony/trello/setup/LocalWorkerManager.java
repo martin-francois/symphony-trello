@@ -99,10 +99,18 @@ final class LocalWorkerManager {
     private void start(
             LocalWorkerPaths paths, ConnectedBoard board, Path envPath, boolean explicitEnvOverride, PrintStream out)
             throws IOException {
+        validateWorkerEnvPath(envPath);
         ManagedProcessStore store = new ManagedProcessStore(paths.stateHome());
         ManagedProcessStore.ManagedProcessFiles files = store.files(board.workflowPath());
         Files.createDirectories(paths.stateHome());
         startWithProcessLock(paths, board, envPath, explicitEnvOverride, out, store, files);
+    }
+
+    private static void validateWorkerEnvPath(Path envPath) {
+        if (Files.exists(envPath) && !Files.isRegularFile(envPath)) {
+            throw new TrelloBoardSetupException(
+                    "setup_invalid_arguments", "--env must point to a regular dotenv file.");
+        }
     }
 
     private void startWithProcessLock(
