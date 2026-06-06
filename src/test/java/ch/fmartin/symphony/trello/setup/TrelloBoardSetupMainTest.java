@@ -13,6 +13,7 @@ import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.net.InetAddress;
@@ -848,6 +849,54 @@ final class TrelloBoardSetupMainTest {
         assertThat(result.stdout()).contains("Diagnostics written.");
         assertThat(result.stderr()).isEmpty();
         assertThat(outputPath).content(StandardCharsets.UTF_8).contains("# Symphony for Trello Diagnostics");
+    }
+
+    @Test
+    void diagnosticsCapturesAndSanitizesToolProbeStderr() throws Exception {
+        // given
+        assumeTrue(!javaExecutable().endsWith(".exe"), "POSIX executable scripts are required");
+        Path workingDir = tempDir.resolve("tool-probe-stderr-workdir");
+        Files.createDirectories(workingDir);
+        Path fakeBin = tempDir.resolve("tool-probe-bin");
+        Files.createDirectories(fakeBin);
+        writeExecutable(
+                fakeBin.resolve("java"),
+                """
+                #!/usr/bin/env sh
+                echo 'openjdk version "25" api_token=ATTAsecretsecretsecret board=000000000000000000000002 path=/home/Jane Doe/private' >&2
+                """);
+        writeExecutable(
+                fakeBin.resolve("javac"),
+                """
+                #!/usr/bin/env sh
+                echo 'javac 25'
+                """);
+        writeExecutable(
+                fakeBin.resolve("git"),
+                """
+                #!/usr/bin/env sh
+                echo 'git version 2.0 token=%s path=/home/Jane Doe/private'
+                """
+                        .formatted("ghp_" + "1234567890abcdef1234567890abcdef123456"));
+        Map<String, String> environment =
+                Map.of("PATH", fakeBin + File.pathSeparator + System.getenv().getOrDefault("PATH", ""));
+
+        // when
+        MainProcessResult result = runMainProcess(workingDir, environment, List.of(), "diagnostics");
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isZero();
+        assertThat(result.stderr()).isEmpty();
+        assertThat(result.stdout())
+                .contains("# Symphony for Trello Diagnostics", "## Tool Availability", "openjdk version", "git version")
+                .doesNotContain(
+                        "api_token=ATTAsecretsecretsecret",
+                        "ATTAsecretsecretsecret",
+                        "000000000000000000000002",
+                        "ghp_" + "1234567890abcdef1234567890abcdef123456",
+                        "/home/Jane Doe/private",
+                        "Jane Doe",
+                        tempDir.toString());
     }
 
     @Test
@@ -3818,6 +3867,11 @@ final class TrelloBoardSetupMainTest {
                 process.exitValue(),
                 new String(stdout, StandardCharsets.UTF_8),
                 new String(stderr, StandardCharsets.UTF_8));
+    }
+
+    private static void writeExecutable(Path path, String content) throws IOException {
+        Files.writeString(path, content, StandardCharsets.UTF_8);
+        assertThat(path.toFile().setExecutable(true)).isTrue();
     }
 
     private static String javaExecutable() {
