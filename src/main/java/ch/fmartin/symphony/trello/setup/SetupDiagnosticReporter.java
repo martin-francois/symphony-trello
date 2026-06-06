@@ -1379,9 +1379,7 @@ final class SetupDiagnosticReporter {
             body.append("\n### `")
                     .append(escapeBackticks(sanitize(log.toString())))
                     .append("`\n\n");
-            body.append("```text\n");
-            body.append(sanitize(logTail(log, LOG_LINE_LIMIT)));
-            body.append("\n```\n");
+            appendFencedCodeBlock(body, "text", sanitize(logTail(log, LOG_LINE_LIMIT)));
         }
     }
 
@@ -2150,6 +2148,30 @@ final class SetupDiagnosticReporter {
 
     private static String escapeBackticks(String value) {
         return value.replace("`", "'");
+    }
+
+    private static void appendFencedCodeBlock(StringBuilder body, String language, String content) {
+        String fence = markdownFence(content);
+        body.append(fence).append(language).append('\n');
+        body.append(content);
+        if (!content.endsWith("\n")) {
+            body.append('\n');
+        }
+        body.append(fence).append('\n');
+    }
+
+    private static String markdownFence(String content) {
+        int longestRun = 0;
+        int currentRun = 0;
+        for (int index = 0; index < content.length(); index++) {
+            if (content.charAt(index) == '`') {
+                currentRun++;
+                longestRun = Math.max(longestRun, currentRun);
+            } else {
+                currentRun = 0;
+            }
+        }
+        return "`".repeat(Math.max(3, longestRun + 1));
     }
 
     private static Path resolveUserDataPath(Path path, Path configDir) {
