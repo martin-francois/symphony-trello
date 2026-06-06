@@ -938,6 +938,53 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
+    void diagnosticsEscapesTerminalControlCharactersInRecentLogs() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("control-log-config");
+        Path workspaceRoot = tempDir.resolve("control-log-workspaces");
+        Path stateHome = tempDir.resolve("control-log-state");
+        Files.createDirectories(configDir);
+        Files.createDirectories(workspaceRoot);
+        Files.createDirectories(stateHome);
+        Files.writeString(configDir.resolve("connected-boards.json"), "{\"boards\":[]}", StandardCharsets.UTF_8);
+        Files.writeString(
+                stateHome.resolve("fake-control.log"),
+                "normal line\n"
+                        + "ansi \u001B[31mred\u001B[0m line\n"
+                        + "osc \u001B]8;;https://example.com\u0007Link\u001B]8;;\u0007 line\n"
+                        + "backspace abc\b\bxy\n"
+                        + "formfeed before\fafter\n"
+                        + "carriage before\rafter\n",
+                StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.of(workspaceRoot),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.empty()));
+
+        // then
+        assertThat(report)
+                .contains(
+                        "normal line",
+                        "ansi \\u001B[31mred\\u001B[0m line",
+                        "osc \\u001B]8;;https://example.com\\u0007Link\\u001B]8;;\\u0007 line",
+                        "backspace abc\\b\\bxy",
+                        "formfeed before\\fafter",
+                        "carriage before",
+                        "after")
+                .doesNotContain("\u001B", "\u0007", "\b", "\f", "\r");
+    }
+
+    @Test
     void diagnosticsExplainsMissingManifestWhileStillSummarizingLocalWorkflows() throws Exception {
         // given
         Path configDir = tempDir.resolve("workflow-only-config");
