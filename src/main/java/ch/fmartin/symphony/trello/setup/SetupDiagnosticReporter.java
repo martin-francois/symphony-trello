@@ -955,10 +955,20 @@ final class SetupDiagnosticReporter {
     private static DiagnosticsSelection selectWorkflowDiagnostics(
             ConnectedBoardManifest manifest, Path selectedWorkflow, Path configDir) {
         Path workflow = resolveWorkflowPathOption(selectedWorkflow, configDir, WorkflowPathResolution.CONFIG_DIR);
+        rejectUnusableSelectedWorkflow(workflow);
         List<ConnectedBoard> matches = manifest.boards().stream()
                 .filter(board -> PathsEqual.samePath(board.workflowPath(), workflow))
                 .toList();
         return new DiagnosticsSelection(DiagnosticsSelectorKind.WORKFLOW, matches, Optional.of(workflow));
+    }
+
+    private static void rejectUnusableSelectedWorkflow(Path workflow) {
+        WorkflowValidation validation = new WorkflowConfigEditor().diagnosticsValidation(workflow);
+        if (!validation.ok()) {
+            throw new TrelloBoardSetupException(
+                    "setup_invalid_arguments",
+                    "--workflow must reference a readable workflow file with usable workflow front matter.");
+        }
     }
 
     private static void appendSelectionMatch(StringBuilder body, DiagnosticsSelection selection) {
