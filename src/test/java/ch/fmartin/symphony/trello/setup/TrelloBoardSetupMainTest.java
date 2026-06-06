@@ -1855,6 +1855,38 @@ final class TrelloBoardSetupMainTest {
         assertThat(workflow).doesNotExist();
     }
 
+    @MethodSource("directSetupCodexModelOptions")
+    @ParameterizedTest(name = "{0} {1}")
+    void directSetupRejectsControlCharactersInCodexModelOverridesBeforeTrelloRequest(
+            String command, String optionName) {
+        // given
+        Path workflow = tempDir.resolve("control-character-codex-" + command + ".WORKFLOW.md");
+        Path env = tempDir.resolve("missing-control-character-env-parent").resolve(".env");
+        String invalidValue = "bad\nvalue";
+
+        // when
+        CliRunResult result = runCli(setupCommandWithCodexOverride(command, workflow, env, optionName, invalidValue));
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments",
+                        optionName + " must not contain control characters.")
+                .stderrDoesNotContain(invalidValue, "Troubleshooting report written");
+        assertThat(result.stdout())
+                .doesNotContain("Created Trello board", "Imported Trello board", "Saving Trello credentials");
+        assertThat(createdBoardName.get()).isNull();
+        assertThat(createdLists).isEmpty();
+        assertThat(env.getParent()).doesNotExist();
+        assertThat(workflow).doesNotExist();
+    }
+
+    private static Stream<Arguments> directSetupCodexModelOptions() {
+        return Stream.of("new-board", "import-board")
+                .flatMap(command -> Stream.of("--codex-model", "--codex-reasoning-effort")
+                        .map(optionName -> Arguments.of(command, optionName)));
+    }
+
     @Test
     void usesConfiguredDefaultWorkflowDirectoryWithoutDisablingBoardNameFallback() throws IOException {
         // given
@@ -2682,6 +2714,19 @@ final class TrelloBoardSetupMainTest {
                     "Released"));
         }
         args.addAll(List.of("--workflow", workflow.toString(), "--env", envValue));
+        return args.toArray(String[]::new);
+    }
+
+    private String[] setupCommandWithCodexOverride(
+            String command, Path workflow, Path env, String optionName, String optionValue) {
+        List<String> args =
+                new ArrayList<>(List.of(command, "--endpoint", endpoint(), "--key", "key", "--token", "token"));
+        if ("new-board".equals(command)) {
+            args.addAll(List.of("--name", "Codex Scalar Queue", "--workspace-id", "workspace-1"));
+        } else {
+            args.addAll(List.of("--board", "input", "--active", "Queue for Codex", "--terminal", "Released"));
+        }
+        args.addAll(List.of("--workflow", workflow.toString(), "--env", env.toString(), optionName, optionValue));
         return args.toArray(String[]::new);
     }
 
