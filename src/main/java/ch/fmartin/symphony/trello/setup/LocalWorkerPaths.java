@@ -17,6 +17,7 @@ record LocalWorkerPaths(Path appHome, Path configDir, Path workspaceRoot, Path s
             Optional<Path> workspaceRoot,
             Optional<Path> stateHome,
             Map<String, String> environment) {
+        boolean explicitConfigDir = configDir.isPresent();
         Path resolvedConfigDir = configDir
                 .or(() -> envPath(environment, CONFIG_DIR_ENV))
                 .orElseGet(() -> Path.of("."))
@@ -28,6 +29,7 @@ record LocalWorkerPaths(Path appHome, Path configDir, Path workspaceRoot, Path s
                 .toAbsolutePath()
                 .normalize();
         Path resolvedStateHome = stateHome
+                .or(() -> isolatedStateHome(explicitConfigDir, environment, resolvedConfigDir))
                 .or(() -> envPath(environment, STATE_HOME_ENV))
                 .orElseGet(() -> resolvedConfigDir.resolveSibling("state"))
                 .toAbsolutePath()
@@ -60,5 +62,13 @@ record LocalWorkerPaths(Path appHome, Path configDir, Path workspaceRoot, Path s
     private static Optional<Path> envPath(Map<String, String> environment, String name) {
         String value = environment.get(name);
         return value == null || value.isBlank() ? Optional.empty() : Optional.of(Path.of(value));
+    }
+
+    private static Optional<Path> isolatedStateHome(
+            boolean explicitConfigDir, Map<String, String> environment, Path resolvedConfigDir) {
+        if (!explicitConfigDir || InstalledCliDefaults.hasUserStateHomeOverride(environment)) {
+            return Optional.empty();
+        }
+        return Optional.of(resolvedConfigDir.resolveSibling("state"));
     }
 }

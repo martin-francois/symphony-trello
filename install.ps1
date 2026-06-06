@@ -817,65 +817,17 @@ param(
 )
 `$ErrorActionPreference = "Stop"
 `$AppHome = $PrefixLiteral
+`$InstalledAppHome = $PrefixLiteral
+`$InstalledConfigDir = $ConfigDirLiteral
+`$InstalledWorkspaceRoot = $WorkspaceRootLiteral
+`$InstalledStateHome = $StateHomeLiteral
 `$ConfigDir = if (`$env:SYMPHONY_TRELLO_CONFIG_DIR) { `$env:SYMPHONY_TRELLO_CONFIG_DIR } else { $ConfigDirLiteral }
-`$WorkspaceRootFromEnv = [bool]`$env:SYMPHONY_TRELLO_WORKSPACE_ROOT
-`$StateHomeFromEnv = [bool]`$env:SYMPHONY_TRELLO_STATE_HOME
 `$WorkspaceRoot = if (`$env:SYMPHONY_TRELLO_WORKSPACE_ROOT) { `$env:SYMPHONY_TRELLO_WORKSPACE_ROOT } else { $WorkspaceRootLiteral }
 `$StateHome = if (`$env:SYMPHONY_TRELLO_STATE_HOME) { `$env:SYMPHONY_TRELLO_STATE_HOME } else { $StateHomeLiteral }
 `$BinDir = $BinDirLiteral
 `$CodexNpmPrefix = $CodexNpmPrefixLiteral
 `$env:PATH = "`$BinDir;`$CodexNpmPrefix;`$CodexNpmPrefix\bin;`$env:PATH"
 New-Item -ItemType Directory -Force -Path `$StateHome | Out-Null
-function Test-CliOption {
-  param([string[]]`$Values, [string]`$Name)
-  foreach (`$value in `$Values) {
-    if (`$value -eq `$Name -or `$value.StartsWith("`$Name=")) {
-      return `$true
-    }
-  }
-  return `$false
-}
-function Get-CliOptionValue {
-  param([string[]]`$Values, [string]`$Name)
-  for (`$index = 0; `$index -lt `$Values.Count; `$index++) {
-    `$value = `$Values[`$index]
-    if (`$value -eq `$Name) {
-      if (`$index + 1 -lt `$Values.Count) {
-        return `$Values[`$index + 1]
-      }
-      return `$null
-    }
-    if (`$value.StartsWith("`$Name=")) {
-      return `$value.Substring(`$Name.Length + 1)
-    }
-  }
-  return `$null
-}
-function Test-SetupLocalLifecycleSubcommand {
-  param([string[]]`$Values)
-  for (`$index = 0; `$index -lt `$Values.Count; `$index++) {
-    `$value = `$Values[`$index]
-    switch (`$value) {
-      { `$_ -in @("check", "repair-port", "configure-github") } {
-        return `$true
-      }
-      { `$_ -in @("--key", "--token", "--board-name", "--board", "--workspace-id", "--active", "--terminal", "--in-progress", "--blocked", "--workflow", "--workspace-root", "--config-dir", "--manifest", "--server-port", "--max-agents", "--codex-model", "--codex-reasoning-effort", "--env", "--add-path", "--endpoint") } {
-        `$index++
-        break
-      }
-      { `$_ -match '^--(key|token|board-name|board|workspace-id|active|terminal|in-progress|blocked|workflow|workspace-root|config-dir|manifest|server-port|max-agents|codex-model|codex-reasoning-effort|env|add-path|endpoint)=' } {
-        break
-      }
-      { `$_.StartsWith("--") } {
-        break
-      }
-      default {
-        return `$false
-      }
-    }
-  }
-  return `$false
-}
 function Invoke-SetupCli {
   param([string[]]`$CliArgs = @())
   `$classpath = @(
@@ -894,88 +846,10 @@ function Invoke-SetupCli {
   if (-not `$env:SYMPHONY_TRELLO_DOTENV) {
     `$env:SYMPHONY_TRELLO_DOTENV = Join-Path `$ConfigDir ".env"
   }
-  if (`$CliArgs.Count -gt 0 -and `$CliArgs[0] -eq "setup-local") {
-    `$defaults = @()
-    `$setupLocalArgs = if (`$CliArgs.Count -gt 1) { `$CliArgs[1..(`$CliArgs.Count - 1)] } else { @() }
-    `$setupLocalLifecycle = Test-SetupLocalLifecycleSubcommand `$setupLocalArgs
-    `$explicitConfigDir = Test-CliOption `$CliArgs "--config-dir"
-    `$explicitConfigDirValue = Get-CliOptionValue `$CliArgs "--config-dir"
-    if (-not `$explicitConfigDir) {
-      `$defaults += @("--config-dir", `$ConfigDir)
-    }
-    if (-not `$setupLocalLifecycle -and -not `$explicitConfigDir) {
-      if (-not (Test-CliOption `$CliArgs "--workspace-root")) {
-        `$defaults += @("--workspace-root", `$WorkspaceRoot)
-      }
-    } elseif (`$explicitConfigDirValue) {
-      `$isolatedConfigDir = [System.IO.Path]::GetFullPath(`$explicitConfigDirValue)
-      if (-not `$setupLocalLifecycle -and -not (Test-CliOption `$CliArgs "--workspace-root")) {
-        if (`$WorkspaceRootFromEnv) {
-          `$defaults += @("--workspace-root", `$WorkspaceRoot)
-        } else {
-          `$defaults += @("--workspace-root", (Join-Path `$isolatedConfigDir "workspaces"))
-        }
-      }
-      if (-not `$StateHomeFromEnv) {
-        `$env:SYMPHONY_TRELLO_STATE_HOME = Join-Path (Split-Path -Parent `$isolatedConfigDir) "state"
-      }
-    }
-    if (`$defaults.Count -gt 0) {
-      `$tail = if (`$CliArgs.Count -gt 1) { `$CliArgs[1..(`$CliArgs.Count - 1)] } else { @() }
-      `$CliArgs = @(`$CliArgs[0]) + `$defaults + `$tail
-    }
-  } elseif (`$CliArgs.Count -gt 0 -and (`$CliArgs[0] -eq "new-board" -or `$CliArgs[0] -eq "import-board")) {
-    `$defaults = @()
-    if (-not (Test-CliOption `$CliArgs "--workspace-root")) {
-      `$defaults += @("--workspace-root", `$WorkspaceRoot)
-    }
-    if (`$defaults.Count -gt 0) {
-      `$tail = if (`$CliArgs.Count -gt 1) { `$CliArgs[1..(`$CliArgs.Count - 1)] } else { @() }
-      `$CliArgs = @(`$CliArgs[0]) + `$defaults + `$tail
-    }
-  } elseif (`$CliArgs.Count -gt 0 -and (`$CliArgs[0] -eq "start" -or `$CliArgs[0] -eq "stop" -or `$CliArgs[0] -eq "status" -or `$CliArgs[0] -eq "logs" -or `$CliArgs[0] -eq "diagnostics")) {
-    `$defaults = @()
-    `$explicitConfigDir = Test-CliOption `$CliArgs "--config-dir"
-    `$explicitConfigDirValue = Get-CliOptionValue `$CliArgs "--config-dir"
-    if (-not (Test-CliOption `$CliArgs "--config-dir")) {
-      `$defaults += @("--config-dir", `$ConfigDir)
-    }
-    if (-not `$explicitConfigDir) {
-      if (-not (Test-CliOption `$CliArgs "--workspace-root")) {
-        `$defaults += @("--workspace-root", `$WorkspaceRoot)
-      }
-      if (-not (Test-CliOption `$CliArgs "--state-home")) {
-        `$defaults += @("--state-home", `$StateHome)
-      }
-    } elseif (`$explicitConfigDirValue) {
-      `$isolatedConfigDir = [System.IO.Path]::GetFullPath(`$explicitConfigDirValue)
-      if (-not (Test-CliOption `$CliArgs "--workspace-root")) {
-        if (`$WorkspaceRootFromEnv) {
-          `$defaults += @("--workspace-root", `$WorkspaceRoot)
-        } else {
-          `$defaults += @("--workspace-root", (Join-Path `$isolatedConfigDir "workspaces"))
-        }
-      }
-      if (-not (Test-CliOption `$CliArgs "--state-home")) {
-        if (`$StateHomeFromEnv) {
-          `$defaults += @("--state-home", `$StateHome)
-        } else {
-          `$defaults += @("--state-home", (Join-Path (Split-Path -Parent `$isolatedConfigDir) "state"))
-        }
-      }
-    }
-    if (-not (Test-CliOption `$CliArgs "--app-home")) {
-      `$defaults += @("--app-home", `$AppHome)
-    }
-    if (`$defaults.Count -gt 0) {
-      `$tail = if (`$CliArgs.Count -gt 1) { `$CliArgs[1..(`$CliArgs.Count - 1)] } else { @() }
-      `$CliArgs = @(`$CliArgs[0]) + `$defaults + `$tail
-    }
-  }
   `$shell = if (`$env:SYMPHONY_TRELLO_WRAPPER_SHELL -eq "cmd") { "cmd" } else { "powershell" }
   `$commandPath = if (`$env:SYMPHONY_TRELLO_WRAPPER_COMMAND) { `$env:SYMPHONY_TRELLO_WRAPPER_COMMAND } else { `$PSCommandPath }
   `$env:SYMPHONY_TRELLO_COMMAND = `$commandPath
-  & java "-Dsymphony.trello.app.home=`$AppHome" "-Dsymphony.trello.config.dir=`$ConfigDir" "-Dsymphony.trello.shell=`$shell" "-Dsymphony.trello.command=`$commandPath" -cp `$classpath ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain @CliArgs
+  & java "-Dsymphony.trello.app.home=`$AppHome" "-Dsymphony.trello.config.dir=`$ConfigDir" "-Dsymphony.trello.installed.app.home=`$InstalledAppHome" "-Dsymphony.trello.installed.config.dir=`$InstalledConfigDir" "-Dsymphony.trello.installed.workspace.root=`$InstalledWorkspaceRoot" "-Dsymphony.trello.installed.state.home=`$InstalledStateHome" "-Dsymphony.trello.shell=`$shell" "-Dsymphony.trello.command=`$commandPath" -cp `$classpath ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain @CliArgs
   exit `$LASTEXITCODE
 }
 Invoke-SetupCli `$ScriptArgs

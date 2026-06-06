@@ -287,12 +287,10 @@ final class InstallerScriptLifecycleTest {
                 .filter(line -> line.contains("--help"))
                 .toList();
         assertThat(isolatedSetupLocalInvocations).singleElement().satisfies(line -> assertThat(line)
-                .contains(
-                        "--workspace-root " + isolatedConfigDirectory.resolve("workspaces"),
-                        "state_env=" + isolatedConfigDirectory.resolveSibling("state"))
+                .contains("--workspace-root " + isolatedConfigDirectory.resolve("workspaces"))
                 .doesNotContain(
                         "--workspace-root " + isolatedConfigArgument.resolve("workspaces"),
-                        "state_env=" + stateHome,
+                        "state_env=" + isolatedConfigDirectory.resolveSibling("state"),
                         "--workspace-root " + workspaceRoot));
         List<String> isolatedSetupLocalCheckInvocations = Files.readString(fakeLog, StandardCharsets.UTF_8)
                 .lines()
