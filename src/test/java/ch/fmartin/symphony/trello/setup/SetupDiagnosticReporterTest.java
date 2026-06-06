@@ -1140,6 +1140,88 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
+    void diagnosticsRejectsAmbiguousWorkflowSelectorWithoutLeakingPrivateContext() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("ambiguous-workflow-config");
+        Path workspaceRoot = tempDir.resolve("ambiguous-workflow-workspaces");
+        Path stateHome = tempDir.resolve("ambiguous-workflow-state");
+        Path workflow = configDir.resolve("WORKFLOW.private-shared.md");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.writeString(workflow, workflowWithPort(19193), StandardCharsets.UTF_8);
+        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(
+                        new ConnectedBoard(
+                                "private-workflow-board-a-id",
+                                "privateWorkflowA",
+                                "Private Workflow Board A",
+                                "https://trello.com/b/privateWorkflowA/private-workflow-a",
+                                workflow,
+                                configDir.resolve(".env"),
+                                workspaceRoot,
+                                19193,
+                                false,
+                                List.of(),
+                                false),
+                        new ConnectedBoard(
+                                "private-workflow-board-b-id",
+                                "privateWorkflowB",
+                                "Private Workflow Board B",
+                                "https://trello.com/b/privateWorkflowB/private-workflow-b",
+                                workflow,
+                                configDir.resolve(".env"),
+                                workspaceRoot,
+                                19194,
+                                false,
+                                List.of(),
+                                false))));
+        ManagedProcessStore store = new ManagedProcessStore(stateHome);
+        Files.writeString(store.files(workflow).stdoutLog(), "private workflow log\n", StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        Throwable thrown =
+                catchThrowable(() -> reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                        Optional.empty(),
+                        Optional.empty(),
+                        false,
+                        false,
+                        Optional.empty(),
+                        Optional.of(configDir),
+                        Optional.of(workspaceRoot),
+                        Optional.of(stateHome),
+                        Optional.empty(),
+                        Optional.of(workflow))));
+
+        // then
+        assertThat(thrown)
+                .isInstanceOfSatisfying(
+                        TrelloBoardSetupException.class,
+                        exception -> assertThat(exception)
+                                .extracting(TrelloBoardSetupException::code, Throwable::getMessage)
+                                .containsExactly(
+                                        "setup_invalid_arguments",
+                                        "Multiple connected-board rows reference --workflow. Repair connected-boards.json, then rerun the command."))
+                .hasMessageContaining("Multiple connected-board rows reference --workflow")
+                .satisfies(exception -> assertThat(exception.getMessage())
+                        .doesNotContain(
+                                "Private Workflow Board A",
+                                "Private Workflow Board B",
+                                "private-workflow-board-a-id",
+                                "private-workflow-board-b-id",
+                                "privateWorkflowA",
+                                "privateWorkflowB",
+                                "https://trello.com/b/privateWorkflowA/private-workflow-a",
+                                "https://trello.com/b/privateWorkflowB/private-workflow-b",
+                                workflow.toString(),
+                                "19193",
+                                "19194",
+                                "private workflow log",
+                                tempDir.toString()));
+        assertThat(configDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME)).doesNotExist();
+    }
+
+    @Test
     void diagnosticsRejectsBothBoardAndWorkflowSelectorsAtReporterBoundary() throws Exception {
         // given
         Path configDir = tempDir.resolve("conflicting-selector-config");
