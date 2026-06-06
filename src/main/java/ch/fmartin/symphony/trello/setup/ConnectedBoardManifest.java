@@ -38,18 +38,27 @@ record ConnectedBoardManifest(List<ConnectedBoard> boards) {
         if (selector == null || selector.isBlank()) {
             return List.of();
         }
-        String parsed = TrelloBoardIds.parse(selector);
+        List<ConnectedBoard> exactMatches = boards.stream()
+                .filter(board -> matchesExactBoardSelector(board, selector))
+                .toList();
+        if (!exactMatches.isEmpty()) {
+            return exactMatches;
+        }
+        String parsed = TrelloBoardIds.parseConnectedBoardSelector(selector);
         return boards.stream()
-                .filter(board -> matchesBoard(board, selector, parsed))
+                .filter(board -> matchesParsedBoardSelector(board, selector, parsed))
                 .toList();
     }
 
-    private static boolean matchesBoard(ConnectedBoard board, String selector, String parsed) {
-        String boardUrlKey = TrelloBoardIds.parse(board.boardUrl());
+    private static boolean matchesExactBoardSelector(ConnectedBoard board, String selector) {
         return equalsIgnoreCase(board.boardName(), selector)
                 || equalsIgnoreCase(board.boardId(), selector)
-                || equalsIgnoreCase(board.boardKey(), selector)
-                || equalsIgnoreCase(boardUrlKey, selector)
+                || equalsIgnoreCase(board.boardKey(), selector);
+    }
+
+    private static boolean matchesParsedBoardSelector(ConnectedBoard board, String selector, String parsed) {
+        String boardUrlKey = TrelloBoardIds.parseStoredBoardUrl(board.boardUrl());
+        return equalsIgnoreCase(boardUrlKey, selector)
                 || equalsIgnoreCase(board.boardId(), parsed)
                 || equalsIgnoreCase(board.boardKey(), parsed)
                 || equalsIgnoreCase(boardUrlKey, parsed);
