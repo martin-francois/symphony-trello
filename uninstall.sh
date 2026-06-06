@@ -99,6 +99,130 @@ same_or_inside_path() {
   [[ "$child" == "$parent" || "$child" == "$parent"/* ]]
 }
 
+script_checkout_dir() {
+  local source="${BASH_SOURCE[0]:-}"
+  local script_dir
+  case "$source" in
+  "" | bash | -*) return 1 ;;
+  esac
+  script_dir="$(dirname "$(absolutize_path "$source")")"
+  script_dir="$(normalize_path "$script_dir")"
+  if [[ -d "$script_dir/.git" || -f "$script_dir/pom.xml" ]]; then
+    printf '%s\n' "$script_dir"
+  fi
+}
+
+path_has_symlink_component() {
+  local path="$1"
+  local current="/"
+  local part
+  local -a parts=()
+  path="$(absolutize_path "$path")"
+  path="${path#/}"
+  IFS=/ read -r -a parts <<<"$path"
+  for part in "${parts[@]}"; do
+    case "$part" in
+    "" | .) continue ;;
+    ..)
+      current="${current%/*}"
+      [[ -n "$current" ]] || current="/"
+      continue
+      ;;
+    esac
+    current="${current%/}/$part"
+    if [[ -L "$current" ]]; then
+      return 0
+    fi
+    if [[ ! -e "$current" ]]; then
+      return 1
+    fi
+  done
+  return 1
+}
+
+normalize_path() {
+  local path="$1"
+  local -a parts=()
+  local -a normalized=()
+  local part
+  path="$(absolutize_path "$path")"
+  path="${path#/}"
+  IFS=/ read -r -a parts <<<"$path"
+  for part in "${parts[@]}"; do
+    case "$part" in
+    "" | .) ;;
+    ..)
+      if ((${#normalized[@]} > 0)); then
+        unset "normalized[$((${#normalized[@]} - 1))]"
+      fi
+      ;;
+    *) normalized+=("$part") ;;
+    esac
+  done
+  if ((${#normalized[@]} == 0)); then
+    printf '/\n'
+  else
+    local IFS=/
+    printf '/%s\n' "${normalized[*]}"
+  fi
+}
+
+is_blank() {
+  local value="$1"
+  value="${value// /}"
+  value="${value//$'\t'/}"
+  value="${value//$'\n'/}"
+  value="${value//$'\r'/}"
+  value="${value//$'\v'/}"
+  value="${value//$'\f'/}"
+  [[ -z "$value" ]]
+}
+
+has_control() {
+  local value="$1"
+  [[ "$value" != "${value//[$'\001'-$'\037'$'\177']/}" ]]
+}
+
+validate_bin_dir_option_value() {
+  if is_blank "$BIN_DIR"; then
+    echo "--bin-dir must not be blank." >&2
+    exit 2
+  fi
+  if has_control "$BIN_DIR"; then
+    echo "--bin-dir must not contain control characters." >&2
+    exit 2
+  fi
+  case "$BIN_DIR" in
+  /*) ;;
+  *)
+    echo "--bin-dir must be an absolute path." >&2
+    exit 2
+    ;;
+  esac
+}
+
+validate_command_directory() {
+  local bin_dir home_dir checkout_dir root
+  bin_dir="$(normalize_path "$BIN_DIR")"
+  home_dir="$(normalize_path "$HOME")"
+  checkout_dir="$(script_checkout_dir || true)"
+  if [[ "$bin_dir" == "/" || "$bin_dir" == "$home_dir" || (-n "$checkout_dir" && "$bin_dir" == "$checkout_dir") ]]; then
+    echo "--bin-dir must point to a dedicated command directory." >&2
+    exit 2
+  fi
+  if [[ -e "$bin_dir" && ! -d "$bin_dir" ]]; then
+    echo "--bin-dir must be a directory." >&2
+    exit 2
+  fi
+  for root in "$APP_DIR" "$CONFIG_DIR" "$WORKSPACE_ROOT" "$STATE_HOME"; do
+    root="$(normalize_path "$root")"
+    if same_or_inside_path "$bin_dir" "$root" || same_or_inside_path "$root" "$bin_dir"; then
+      echo "--bin-dir must not overlap Symphony app, config, workspace, or state directories." >&2
+      exit 2
+    fi
+  done
+}
+
 shell_literal() {
   local value="$1"
   value="${value//\'/\'\\\'\'}"
@@ -119,6 +243,7 @@ profile_candidates() {
   printf '%s/.zshrc\n' "$HOME"
 }
 
+validate_bin_dir_option_value
 SYMPHONY_HOME="$(absolutize_path "$SYMPHONY_HOME")"
 APP_DIR="$(absolutize_path "$APP_DIR")"
 CONFIG_DIR="$(absolutize_path "$CONFIG_DIR")"
@@ -194,6 +319,21 @@ safe_removal_path() {
   esac
   printf '%s\n' "$normalized"
 }
+
+validate_requested_removal_paths() {
+  if [[ "$REMOVE_CONFIG" == true ]]; then
+    safe_removal_path "$CONFIG_DIR" >/dev/null
+  fi
+  if [[ "$REMOVE_WORKSPACES" == true ]]; then
+    safe_removal_path "$WORKSPACE_ROOT" >/dev/null
+  fi
+  if [[ "$REMOVE_STATE" == true ]]; then
+    safe_removal_path "$STATE_HOME" >/dev/null
+  fi
+}
+
+validate_requested_removal_paths
+validate_command_directory
 
 remove_path() {
   local path
