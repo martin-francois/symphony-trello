@@ -73,10 +73,24 @@ final class CliInputValidation {
         }
     }
 
+    static void rejectRelativePath(String optionName, Optional<Path> value, String message) {
+        value.ifPresent(path -> rejectRelativePath(optionName, path, message));
+    }
+
+    static void rejectRelativePath(String optionName, Path value, String message) {
+        if (!value.isAbsolute()) {
+            throw new TrelloBoardSetupException("setup_invalid_arguments", message);
+        }
+    }
+
     static void rejectExistingNonDirectoryPath(String optionName, Path value) {
         if (Files.exists(value) && !Files.isDirectory(value)) {
             throw new TrelloBoardSetupException("setup_invalid_arguments", optionName + " must be a directory.");
         }
+    }
+
+    static void rejectExistingNonDirectoryPath(String optionName, Optional<Path> value) {
+        value.ifPresent(path -> rejectExistingNonDirectoryPath(optionName, path));
     }
 
     static void rejectDirectoryPath(String optionName, Path value) {

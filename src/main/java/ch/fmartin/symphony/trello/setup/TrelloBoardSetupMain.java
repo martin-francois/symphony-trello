@@ -624,8 +624,15 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             this.workflowPathExplicit = true;
         }
 
-        @Option(names = "--workspace-root", description = "Directory for per-card workspaces.")
         Path workspaceRoot = TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT;
+
+        boolean workspaceRootExplicit;
+
+        @Option(names = "--workspace-root", description = "Directory for per-card workspaces.")
+        void workspaceRoot(Path workspaceRoot) {
+            this.workspaceRoot = workspaceRoot;
+            this.workspaceRootExplicit = true;
+        }
 
         @Option(names = "--env", description = "Dotenv file to save Trello credentials for the generated worker.")
         Optional<Path> envPath = Optional.empty();
@@ -765,6 +772,13 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             CliInputValidation.rejectControlCharacters("--workflow", workflowPath);
             CliInputValidation.rejectBlankPath("--workflow", workflowPath);
             CliInputValidation.rejectControlCharacters("--workspace-root", workspaceRoot);
+            if (workspaceRootExplicit) {
+                CliInputValidation.rejectBlankPath(
+                        "--workspace-root", workspaceRoot, "--workspace-root must not be empty.");
+                CliInputValidation.rejectRelativePath(
+                        "--workspace-root", workspaceRoot, "--workspace-root must be an absolute path.");
+            }
+            CliInputValidation.rejectExistingNonDirectoryPath("--workspace-root", workspaceRoot);
             TrelloCredentialStore.validateEnvPathOption(envPath);
             validateCodexModelOverrides();
         }
