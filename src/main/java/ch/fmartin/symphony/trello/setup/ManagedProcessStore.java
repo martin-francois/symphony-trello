@@ -66,7 +66,7 @@ final class ManagedProcessStore {
 
     private static String workflowStateName(Path workflowPath) {
         Path resolved = resolvedWorkflowPath(workflowPath);
-        String hash = sha256(resolved.toString()).substring(0, 12);
+        String hash = sha3_256(resolved.toString()).substring(0, 12);
         return PathNames.fileName(workflowPath) + "." + hash;
     }
 
@@ -92,12 +92,12 @@ final class ManagedProcessStore {
                 pidFile, parent.resolve(name + ".log"), parent.resolve(name + ".err"), parent.resolve(name + ".lock"));
     }
 
-    private static String sha256(String value) {
+    private static String sha3_256(String value) {
         try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            MessageDigest digest = MessageDigest.getInstance("SHA3-256");
             return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
         } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 is required by the JDK", e);
+            throw new IllegalStateException("SHA3-256 is required by the JDK", e);
         }
     }
 
