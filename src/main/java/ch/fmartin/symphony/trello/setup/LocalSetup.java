@@ -127,11 +127,13 @@ public final class LocalSetup {
                 return repairPort(options, out);
             }
             if (options.dryRun()) {
+                rejectAmbiguousConnectedBoardSelector(connectedBoardsUnchecked(options), options);
                 printDryRun(out, options, prerequisites);
                 return 0;
             }
             ConnectedBoardRepository boards = connectedBoards(options);
             ConnectedBoardManifest manifest = boards.load();
+            rejectAmbiguousConnectedBoardSelector(manifest, options);
             if (!manifest.boards().isEmpty() && !options.forceNewSetup()) {
                 ExistingSetupAction action = existingSetupAction(manifest, terminal, options);
                 if (action == ExistingSetupAction.DISCONNECT) {
@@ -262,7 +264,8 @@ public final class LocalSetup {
             out.println("  WARN    No Trello boards connected to Symphony");
             return prerequisites.readyFor(options) ? 0 : 2;
         }
-        for (ConnectedBoard board : manifest.boards()) {
+        List<ConnectedBoard> selectedBoards = boardsForCheck(manifest, options);
+        for (ConnectedBoard board : selectedBoards) {
             ConnectedBoardLocalValidation localValidation = validateConnectedBoardLocalPaths(board);
             for (String warning : localValidation.warnings()) {
                 out.println("  WARN    " + warning);
@@ -287,11 +290,17 @@ public final class LocalSetup {
             }
             if (localValidation.ok()) {
                 BoardHealth health = healthChecker.boardHealth(board);
-                printBoardHealth(options, board, health, out);
+                printBoardHealth(options, manifest, board, health, out);
                 ok = ok && health.kind() == BoardHealthKind.SAME_WORKFLOW;
             }
         }
         return ok ? 0 : 2;
+    }
+
+    private static List<ConnectedBoard> boardsForCheck(ConnectedBoardManifest manifest, Options options) {
+        return options.existingBoardId()
+                .map(selector -> List.of(selectedConnectedBoard(manifest, selector)))
+                .orElseGet(manifest::boards);
     }
 
     private static ConnectedBoardLocalValidation validateConnectedBoardLocalPaths(ConnectedBoard board) {
@@ -331,7 +340,12 @@ public final class LocalSetup {
         return new ConnectedBoardLocalValidation(List.copyOf(warnings), envUsable);
     }
 
-    private static void printBoardHealth(Options options, ConnectedBoard board, BoardHealth health, PrintStream out) {
+    private static void printBoardHealth(
+            Options options,
+            ConnectedBoardManifest manifest,
+            ConnectedBoard board,
+            BoardHealth health,
+            PrintStream out) {
         if (health.kind() == BoardHealthKind.SAME_WORKFLOW) {
             out.println("  OK    \"" + board.boardName() + "\" local server: "
                     + LocalHealthChecker.localServerUrl(health.port()) + " (already running)");
@@ -346,7 +360,7 @@ public final class LocalSetup {
         if (health.kind() == BoardHealthKind.PORT_USED) {
             out.println("  WARN  \"" + board.boardName() + "\" configured port " + health.port()
                     + " is in use by another process");
-            out.println("        Suggested fix: " + repairPortCommand(options, board));
+            out.println("        Suggested fix: " + repairPortCommand(options, manifest, board));
             return;
         }
         out.println("  WARN  \"" + board.boardName() + "\" local server: "
@@ -356,11 +370,24 @@ public final class LocalSetup {
         out.println("        Actual workflow: " + health.actualWorkflowPath().orElse("<unknown>"));
         out.println("        Expected board: " + board.boardId() + " or " + board.boardKey());
         out.println("        Actual board: " + health.actualBoardId().orElse("<unknown>"));
-        out.println("        Suggested fix: " + repairPortCommand(options, board));
+        out.println("        Suggested fix: " + repairPortCommand(options, manifest, board));
     }
 
-    private static String repairPortCommand(Options options, ConnectedBoard board) {
-        return options.command() + " setup-local repair-port --board \"" + board.boardName() + "\"";
+    private static String repairPortCommand(Options options, ConnectedBoardManifest manifest, ConnectedBoard board) {
+        return options.command() + " setup-local repair-port --board \"" + repairPortSelector(manifest, board) + "\"";
+    }
+
+    private static String repairPortSelector(ConnectedBoardManifest manifest, ConnectedBoard board) {
+        long sameNameCount = manifest.boards().stream()
+                .filter(candidate -> equalsIgnoreCase(candidate.boardName(), board.boardName()))
+                .count();
+        if (sameNameCount <= 1) {
+            return board.boardName();
+        }
+        if (!blank(board.boardKey())) {
+            return board.boardKey();
+        }
+        return board.boardId();
     }
 
     private boolean checkTrelloCredentials(Options options, ConnectedBoard board, PrintStream out) {
@@ -393,10 +420,11 @@ public final class LocalSetup {
         String boardSelector = options.repairBoardName()
                 .orElseThrow(() -> new TrelloBoardSetupException(
                         "setup_repair_board_required", "repair-port requires --board NAME."));
-        ConnectedBoard board = manifest.findByBoard(boardSelector)
-                .orElseThrow(() -> new TrelloBoardSetupException(
-                        "setup_repair_board_not_found",
-                        "No connected Trello board matches \"" + boardSelector + "\"."));
+        ConnectedBoard board = selectedConnectedBoard(
+                manifest,
+                boardSelector,
+                "setup_repair_board_not_found",
+                "No connected Trello board matches \"" + boardSelector + "\".");
         healthChecker.externalHttpPortOverrideSource(board.envPath()).ifPresent(overrideSource -> {
             throw new TrelloBoardSetupException(
                     "setup_repair_port_http_override",
@@ -495,6 +523,7 @@ public final class LocalSetup {
     private static ExistingSetupAction existingSetupAction(
             ConnectedBoardManifest manifest, Terminal terminal, Options options) throws IOException {
         PrintStream out = borrowedOut(terminal); // NOPMD - Terminal owns the stream.
+        rejectAmbiguousConnectedBoardSelector(manifest, options);
         if (hasPotentialConnectedBoardCodexAccessTarget(manifest, options)) {
             rejectMixedCodexAccessUpdate(options);
         }
@@ -570,6 +599,16 @@ public final class LocalSetup {
         return options.existingBoardId()
                 .map(selector -> manifest.findByBoard(selector).isPresent())
                 .orElse(true);
+    }
+
+    private static void rejectAmbiguousConnectedBoardSelector(ConnectedBoardManifest manifest, Options options) {
+        options.existingBoardId().ifPresent(selector -> rejectAmbiguousConnectedBoardSelector(manifest, selector));
+    }
+
+    private static void rejectAmbiguousConnectedBoardSelector(ConnectedBoardManifest manifest, String selector) {
+        if (manifest.findAllByBoard(selector).size() > 1) {
+            throw ambiguousConnectedBoardSelector();
+        }
     }
 
     private static boolean hasSelectedGithubBoardCodexAccessTarget(ConnectedBoardManifest manifest, Options options) {
@@ -697,9 +736,29 @@ public final class LocalSetup {
     }
 
     private static ConnectedBoard selectedConnectedBoard(ConnectedBoardManifest manifest, String selector) {
-        return manifest.findByBoard(selector)
-                .orElseThrow(() -> new TrelloBoardSetupException(
-                        "setup_board_selection_required", "No connected Trello board matches \"" + selector + "\"."));
+        return selectedConnectedBoard(
+                manifest,
+                selector,
+                "setup_board_selection_required",
+                "No connected Trello board matches \"" + selector + "\".");
+    }
+
+    private static ConnectedBoard selectedConnectedBoard(
+            ConnectedBoardManifest manifest, String selector, String notFoundCode, String notFoundMessage) {
+        List<ConnectedBoard> matches = manifest.findAllByBoard(selector);
+        if (matches.isEmpty()) {
+            throw new TrelloBoardSetupException(notFoundCode, notFoundMessage);
+        }
+        if (matches.size() > 1) {
+            throw ambiguousConnectedBoardSelector();
+        }
+        return matches.getFirst();
+    }
+
+    private static TrelloBoardSetupException ambiguousConnectedBoardSelector() {
+        return new TrelloBoardSetupException(
+                "setup_worker_board_ambiguous",
+                "Multiple connected boards match --board. Re-run with a board id or short link.");
     }
 
     private static void rejectMixedCodexAccessUpdate(Options options) {
@@ -890,16 +949,21 @@ public final class LocalSetup {
 
     private static ConnectedBoard nonGithubBoard(List<ConnectedBoard> candidates, String requested) {
         String requestedBoardId = TrelloBoardIds.parse(requested);
-        return candidates.stream()
+        List<ConnectedBoard> matches = candidates.stream()
                 .filter(board -> board.boardName().equalsIgnoreCase(requested)
                         || board.boardId().equalsIgnoreCase(requested)
                         || board.boardKey().equalsIgnoreCase(requested)
                         || board.boardId().equalsIgnoreCase(requestedBoardId)
                         || board.boardKey().equalsIgnoreCase(requestedBoardId))
-                .findFirst()
-                .orElseThrow(() -> new TrelloBoardSetupException(
-                        "setup_github_upgrade_not_found",
-                        "No connected non-GitHub board matches \"" + requested + "\"."));
+                .toList();
+        if (matches.isEmpty()) {
+            throw new TrelloBoardSetupException(
+                    "setup_github_upgrade_not_found", "No connected non-GitHub board matches \"" + requested + "\".");
+        }
+        if (matches.size() > 1) {
+            throw ambiguousConnectedBoardSelector();
+        }
+        return matches.getFirst();
     }
 
     private void disconnectBoard(Options options, ConnectedBoardManifest manifest, Terminal terminal)
@@ -1198,6 +1262,10 @@ public final class LocalSetup {
 
     private static boolean blank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private static boolean equalsIgnoreCase(String actual, String expected) {
+        return actual != null && expected != null && actual.equalsIgnoreCase(expected);
     }
 
     record Options(

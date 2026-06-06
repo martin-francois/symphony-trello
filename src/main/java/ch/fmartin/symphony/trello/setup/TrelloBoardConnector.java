@@ -52,11 +52,16 @@ final class TrelloBoardConnector {
             boardId = terminal.readLine("Trello board URL, shortlink, or id: ");
         }
         String selector = boardId;
-        boardId = manifest.boards().stream()
+        List<ConnectedBoard> connectedMatches = manifest.boards().stream()
                 .filter(board -> board.boardName().equalsIgnoreCase(selector))
-                .map(ConnectedBoard::boardId)
-                .findFirst()
-                .orElse(selector);
+                .toList();
+        if (connectedMatches.size() > 1) {
+            throw new TrelloBoardSetupException(
+                    "setup_worker_board_ambiguous",
+                    "Multiple connected boards match --board. Re-run with a board id or short link.");
+        }
+        boardId =
+                connectedMatches.stream().findAny().map(ConnectedBoard::boardId).orElse(selector);
         String parsedBoardId = TrelloBoardIds.parseImportBoardSelector(boardId);
         TrelloBoardSetup.BoardInfo boardInfo = boardSetup.getBoardInfo(
                 new TrelloBoardSetup.BoardInfoRequest(options.endpoint(), credentials, parsedBoardId));
