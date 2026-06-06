@@ -19,6 +19,12 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.LockSupport;
+import java.util.function.BooleanSupplier;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -336,6 +342,67 @@ final class LocalWorkerManagerTest {
 
         // then
         result.assertSuccess().stdoutContains("already running");
+    }
+
+    @Test
+    void concurrentStartsForSameBoardReportOnlyOneStartAction() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        fixture.stubManagedPort(board);
+        CountDownLatch firstStartEntered = new CountDownLatch(1);
+        CountDownLatch releaseFirstStart = new CountDownLatch(1);
+        AtomicInteger startCalls = new AtomicInteger();
+        when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
+                .thenAnswer(invocation -> {
+                    startCalls.incrementAndGet();
+                    firstStartEntered.countDown();
+                    assertThat(releaseFirstStart.await(5, TimeUnit.SECONDS)).isTrue();
+                    return new ManagedProcessHandle(42);
+                });
+        when(fixture.healthChecker.waitForSameWorkflow(board, board.serverPort()))
+                .thenReturn(fixture.sameWorkflow(board));
+        when(fixture.platform.isAlive(42)).thenReturn(true);
+        when(fixture.platform.isManaged(42, fixture.paths.appHome(), board.workflowPath()))
+                .thenReturn(true);
+        when(fixture.healthChecker.workflowHealth(
+                        board.workflowPath(), board.boardId(), board.boardKey(), board.serverPort()))
+                .thenReturn(fixture.stopped(board), fixture.sameWorkflow(board));
+
+        AtomicReference<Thread> secondThread = new AtomicReference<>();
+        AtomicReference<WorkerRunResult> firstResult = new AtomicReference<>();
+        AtomicReference<Throwable> firstError = new AtomicReference<>();
+        AtomicReference<WorkerRunResult> secondResult = new AtomicReference<>();
+        AtomicReference<Throwable> secondError = new AtomicReference<>();
+        Thread first = startThread(() -> fixture.start(fixture.startRequest("Queue")), firstResult, firstError);
+        Thread second = null;
+        try {
+            assertThat(firstStartEntered.await(5, TimeUnit.SECONDS))
+                    .as(
+                            "first start should reach platform.start, thread state=%s, result=%s, error=%s",
+                            first.getState(), firstResult, firstError)
+                    .isTrue();
+            second = startThread(() -> fixture.start(fixture.startRequest("Queue")), secondResult, secondError);
+            secondThread.set(second);
+            awaitCondition(() -> startCalls.get() > 1 || threadIsWaiting(secondThread.get()));
+
+            // when
+            assertThat(startCalls).hasValue(1);
+        } finally {
+            releaseFirstStart.countDown();
+        }
+        first.join(Duration.ofSeconds(5));
+        if (second != null) {
+            second.join(Duration.ofSeconds(5));
+        }
+
+        // then
+        assertThat(firstError).hasValue(null);
+        assertThat(secondError).hasValue(null);
+        assertThat(firstResult.get().stdout()).contains("Started Symphony for Trello: \"Queue\"");
+        assertThat(secondResult.get().stdout()).contains("already running").doesNotContain("Started Symphony");
+        verify(fixture.platform).start(any(), eq(fixture.paths.appHome()), any(), any(), any());
     }
 
     @Test
@@ -960,6 +1027,41 @@ final class LocalWorkerManagerTest {
                             second.boardUrl(),
                             tempDir.toString());
         });
+    }
+
+    private static Thread startThread(
+            ThrowingSupplier<WorkerRunResult> action,
+            AtomicReference<WorkerRunResult> result,
+            AtomicReference<Throwable> error) {
+        Thread thread = Thread.ofPlatform().start(() -> {
+            try {
+                result.set(action.get());
+            } catch (Exception | AssertionError thrown) {
+                error.set(thrown);
+            }
+        });
+        return thread;
+    }
+
+    private static boolean threadIsWaiting(Thread thread) {
+        Thread.State state = thread.getState();
+        return state == Thread.State.BLOCKED || state == Thread.State.WAITING || state == Thread.State.TIMED_WAITING;
+    }
+
+    private static void awaitCondition(BooleanSupplier condition) {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (System.nanoTime() < deadline) {
+            if (condition.getAsBoolean()) {
+                return;
+            }
+            LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(10));
+        }
+        throw new AssertionError("condition was not met before timeout");
+    }
+
+    @FunctionalInterface
+    private interface ThrowingSupplier<T> {
+        T get() throws Exception;
     }
 
     private static Path onlyPidFile(Path stateHome) throws Exception {
