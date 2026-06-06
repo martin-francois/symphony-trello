@@ -15,6 +15,10 @@ final class CliInputValidation {
         value.ifPresent(path -> rejectControlCharacters(optionName, path));
     }
 
+    static void rejectBlankPath(String optionName, Optional<Path> value) {
+        value.ifPresent(path -> rejectBlankPath(optionName, path));
+    }
+
     static void rejectControlCharactersInText(String optionName, Optional<String> value) {
         value.ifPresent(text -> rejectControlCharacters(optionName, text));
     }
@@ -37,6 +41,12 @@ final class CliInputValidation {
 
     static void rejectControlCharacters(String optionName, Path value) {
         rejectControlCharacters(optionName, value.toString());
+    }
+
+    static void rejectBlankPath(String optionName, Path value) {
+        if (value.toString().isBlank()) {
+            throw new TrelloBoardSetupException("setup_invalid_arguments", optionName + " must be a file path.");
+        }
     }
 
     static void rejectControlCharactersInPaths(String optionName, List<Path> values) {
