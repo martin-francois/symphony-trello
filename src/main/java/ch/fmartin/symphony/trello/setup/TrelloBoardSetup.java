@@ -318,13 +318,13 @@ public final class TrelloBoardSetup {
                 request.githubIntegration().enabled() ? defaultMergingState(validationListNames, terminalStates) : null;
         boolean shouldCreateMergingList = canCreateMergingList && !blank(mergingState);
         String reviewState = defaultReviewState(openListNames);
+        validateConfiguredList("in-progress", "in_progress", inProgressState, openListNames);
+        validateConfiguredList("merging", "merging", mergingState, validationListNames);
+        validateConfiguredLists("active", "active", activeStates, validationListNames);
+        validateConfiguredLists("terminal", "terminal", terminalStates, openListNames);
+        validateConfiguredList("blocked", "blocked", blockedState, openListNames);
         activeStates = withOptionalActiveState(activeStates, inProgressState);
         activeStates = withOptionalActiveState(activeStates, mergingState);
-        validateConfiguredLists("active", activeStates, validationListNames);
-        validateConfiguredLists("terminal", terminalStates, openListNames);
-        validateConfiguredList("in-progress", inProgressState, openListNames);
-        validateConfiguredList("blocked", blockedState, openListNames);
-        validateConfiguredList("merging", mergingState, validationListNames);
         ensureWorkflowWritable(request.workflowPath(), request.force());
         int serverPort = resolveServerPort(request.workflowPath(), request.serverPort(), request.force());
         if (shouldCreateMergingList) {
@@ -1788,7 +1788,8 @@ public final class TrelloBoardSetup {
         return List.copyOf(combined);
     }
 
-    private static void validateConfiguredLists(String label, List<String> configured, List<String> openListNames) {
+    private static void validateConfiguredLists(
+            String label, String errorCodeSegment, List<String> configured, List<String> openListNames) {
         Set<String> normalizedOpenNames =
                 openListNames.stream().map(TrelloBoardSetup::normalize).collect(Collectors.toUnmodifiableSet());
         List<String> missing = configured.stream()
@@ -1796,17 +1797,18 @@ public final class TrelloBoardSetup {
                 .toList();
         if (!missing.isEmpty()) {
             throw new TrelloBoardSetupException(
-                    "setup_unknown_" + label + "_state",
+                    "setup_unknown_" + errorCodeSegment + "_state",
                     "Unknown " + label + " list(s): " + String.join(", ", missing) + ". Open lists: "
                             + String.join(", ", openListNames));
         }
     }
 
-    private static void validateConfiguredList(String label, String configured, List<String> openListNames) {
+    private static void validateConfiguredList(
+            String label, String errorCodeSegment, String configured, List<String> openListNames) {
         if (blank(configured)) {
             return;
         }
-        validateConfiguredLists(label, List.of(configured), openListNames);
+        validateConfiguredLists(label, errorCodeSegment, List.of(configured), openListNames);
     }
 
     private static BoardList toBoardList(Map<String, Object> payload) {
