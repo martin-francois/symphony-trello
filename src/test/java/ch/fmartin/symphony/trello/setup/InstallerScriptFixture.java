@@ -301,7 +301,7 @@ final class InstallerScriptFixture {
                   exit 0
                 fi
                 if [[ "$*" == *"ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain"* ]]; then
-                  echo "setup-cli cwd=$PWD $* dotenv=${SYMPHONY_TRELLO_DOTENV:-}" >> "${SYMPHONY_FAKE_LOG:?}"
+                  echo "setup-cli cwd=$PWD $* dotenv=${SYMPHONY_TRELLO_DOTENV:-} workspace_env=${SYMPHONY_TRELLO_WORKSPACE_ROOT:-} state_env=${SYMPHONY_TRELLO_STATE_HOME:-}" >> "${SYMPHONY_FAKE_LOG:?}"
                   if [[ "$*" == *"definitely-not-a-command"* ]]; then
                     echo "setup_failed code=setup_invalid_arguments message=Unmatched argument at index 0: 'definitely-not-a-command'" >&2
                     exit 2
