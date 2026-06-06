@@ -900,6 +900,51 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
+    void diagnosticsRejectsSpecialFileConfigDirWithoutRenderingReport() throws Exception {
+        // given
+        assumeTrue(!javaExecutable().endsWith(".exe"), "POSIX FIFO support is required");
+        Path workingDir = tempDir.resolve("special-config-workdir");
+        Path privateDir = tempDir.resolve("Jane Doe");
+        Path configFifo = privateDir.resolve("config.fifo");
+        Path stateHome = tempDir.resolve("special-config-state");
+        Path workspaceRoot = tempDir.resolve("special-config-workspace");
+        Files.createDirectories(workingDir);
+        Files.createDirectories(privateDir);
+        Files.createDirectories(stateHome);
+        Files.createDirectories(workspaceRoot);
+        assertThat(new ProcessBuilder("mkfifo", configFifo.toString())
+                        .directory(workingDir.toFile())
+                        .start()
+                        .waitFor())
+                .isZero();
+
+        // when
+        MainProcessResult result = runMainProcess(
+                workingDir,
+                Map.of(),
+                List.of(),
+                "diagnostics",
+                "--config-dir",
+                configFifo.toString(),
+                "--state-home",
+                stateHome.toString(),
+                "--workspace-root",
+                workspaceRoot.toString());
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isEqualTo(2);
+        assertThat(result.stdout()).doesNotContain("# Symphony for Trello Diagnostics", "Diagnostics written");
+        assertThat(result.stderr())
+                .contains("setup_failed code=setup_invalid_arguments", "--config-dir must be a directory.")
+                .doesNotContain(
+                        "Troubleshooting report written",
+                        configFifo.toString(),
+                        privateDir.toString(),
+                        tempDir.toString(),
+                        "Jane Doe");
+    }
+
+    @Test
     void diagnosticsRejectsRelativeOutputPathResolvingToStandardStreamWithoutRenderingReport() throws Exception {
         // given
         Path streamPath = Path.of("/dev/stdout");
