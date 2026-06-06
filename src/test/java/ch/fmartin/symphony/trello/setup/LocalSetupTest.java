@@ -2676,6 +2676,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path manifest = config.resolve("connected-boards.json");
         writeOldBoardManifest(manifest, workflow);
         Path env = tempDir.resolve(".env");
+        int updatedPort = availablePort();
 
         // when
         SetupRunResult result = runSetup(
@@ -2692,6 +2693,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 workflow.toString(),
                 "--env",
                 env.toString(),
+                "--server-port",
+                String.valueOf(updatedPort),
                 "--force",
                 "--no-github");
 
@@ -2701,7 +2704,9 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 .hasBoardCount(1)
                 .hasBoard("Imported Queue")
                 .hasBoardId("Imported Queue", "board-1")
+                .hasBoardWithPort("Imported Queue", updatedPort)
                 .hasNoBoard("Old Board");
+        assertThatWorkflow(workflow).hasServerPort(updatedPort);
         assertThat(commands.commandEvents).containsExactly("stop:" + workflow, "start:" + workflow);
     }
 
@@ -2890,6 +2895,93 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         assertThat(commands.commandEvents).isEmpty();
         assertThat(commands.stoppedWorkflows).isEmpty();
         assertThat(commands.startedEnvFiles).isEmpty();
+    }
+
+    @Test
+    void checkUsesWorkflowServerPortWhenManifestPortIsStale() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.stale-manifest-check.md");
+        Path env = tempDir.resolve(".env.stale-manifest-check");
+        Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
+        int workflowPort = availablePort();
+        writeWorkflow(workflow, "board-1", workflowPort);
+        Files.writeString(env, "TRELLO_API_KEY=key%nTRELLO_API_TOKEN=token%n".formatted(), StandardCharsets.UTF_8);
+        writeConnectedBoardManifest(manifest, "Stale Check Queue", workflow, env, ConfigDefaults.DEFAULT_SERVER_PORT);
+        commands.startHealthServer(workflow);
+
+        // when
+        SetupRunResult result = runSetup("check", "--endpoint", endpoint(), "--board", "Stale Check Queue");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "OK      Workflow: " + workflow,
+                        "OK    \"Stale Check Queue\" local server: http://127.0.0.1:" + workflowPort
+                                + " (already running)")
+                .stdoutDoesNotContain(
+                        "Workflow server.port does not match the connected board",
+                        "expected " + ConfigDefaults.DEFAULT_SERVER_PORT,
+                        "Suggested fix:");
+    }
+
+    @Test
+    void repairPortDryRunRepairsStaleManifestPortWithoutMovingHealthyWorkflow() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.stale-manifest-repair.md");
+        Path env = tempDir.resolve(".env.stale-manifest-repair");
+        Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
+        int workflowPort = availablePort();
+        writeWorkflow(workflow, "board-1", workflowPort);
+        Files.writeString(env, "TRELLO_API_KEY=key%nTRELLO_API_TOKEN=token%n".formatted(), StandardCharsets.UTF_8);
+        writeConnectedBoardManifest(manifest, "Stale Repair Queue", workflow, env, ConfigDefaults.DEFAULT_SERVER_PORT);
+        String originalWorkflow = Files.readString(workflow, StandardCharsets.UTF_8);
+        String originalManifest = Files.readString(manifest, StandardCharsets.UTF_8);
+        commands.startHealthServer(workflow);
+
+        // when
+        SetupRunResult result = runSetup("repair-port", "--dry-run", "--board", "Stale Repair Queue");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "Dry run",
+                        "WOULD   update connected-board manifest for \"Stale Repair Queue\" to use http://127.0.0.1:"
+                                + workflowPort,
+                        "Workflow and running Symphony worker already use this port.")
+                .stdoutDoesNotContain(
+                        "WOULD   update \"Stale Repair Queue\" to use http://127.0.0.1:"
+                                + ConfigDefaults.DEFAULT_SERVER_PORT,
+                        "WOULD   restart Symphony");
+        assertThat(Files.readString(workflow, StandardCharsets.UTF_8)).isEqualTo(originalWorkflow);
+        assertThat(Files.readString(manifest, StandardCharsets.UTF_8)).isEqualTo(originalManifest);
+    }
+
+    @Test
+    void repairPortUpdatesStaleManifestPortWithoutChangingHealthyWorkflow() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.stale-manifest-repair-actual.md");
+        Path env = tempDir.resolve(".env.stale-manifest-repair-actual");
+        Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
+        int workflowPort = availablePort();
+        writeWorkflow(workflow, "board-1", workflowPort);
+        Files.writeString(env, "TRELLO_API_KEY=key%nTRELLO_API_TOKEN=token%n".formatted(), StandardCharsets.UTF_8);
+        writeConnectedBoardManifest(
+                manifest, "Stale Actual Repair Queue", workflow, env, ConfigDefaults.DEFAULT_SERVER_PORT);
+        String originalWorkflow = Files.readString(workflow, StandardCharsets.UTF_8);
+        commands.startHealthServer(workflow);
+
+        // when
+        SetupRunResult result = runSetup("repair-port", "--board", "Stale Actual Repair Queue");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "OK      Updated connected-board manifest for \"Stale Actual Repair Queue\" to use http://127.0.0.1:"
+                                + workflowPort)
+                .stdoutDoesNotContain("Restart:", "Updated \"Stale Actual Repair Queue\" to use");
+        assertThat(Files.readString(workflow, StandardCharsets.UTF_8)).isEqualTo(originalWorkflow);
+        assertThatManifest(manifest).hasBoardWithPort("Stale Actual Repair Queue", workflowPort);
+        assertThat(commands.commandEvents).isEmpty();
     }
 
     @ParameterizedTest
@@ -4563,6 +4655,34 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                                 tempDir.resolve(".env.old"),
                                 tempDir.resolve("workspaces"),
                                 ConfigDefaults.DEFAULT_SERVER_PORT),
+                StandardCharsets.UTF_8);
+    }
+
+    private void writeConnectedBoardManifest(Path manifest, String boardName, Path workflow, Path env, int serverPort)
+            throws IOException {
+        Files.createDirectories(manifest.getParent());
+        Files.writeString(
+                manifest,
+                """
+                {
+                  "boards": [
+                    {
+                      "boardId": "board-1",
+                      "boardKey": "abc123",
+                      "boardName": "%s",
+                      "boardUrl": "https://trello.example/abc123",
+                      "workflowPath": "%s",
+                      "envPath": "%s",
+                      "workspaceRoot": "%s",
+                      "serverPort": %d,
+                      "githubEnabled": false,
+                      "additionalWritableRoots": [],
+                      "dangerFullAccess": false
+                    }
+                  ]
+                }
+                """
+                        .formatted(boardName, workflow, env, tempDir.resolve("workspaces"), serverPort),
                 StandardCharsets.UTF_8);
     }
 
