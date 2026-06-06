@@ -366,7 +366,7 @@ final class SetupLocalCommandFactory {
             rejectUnsupportedOptions(action);
             validateCliPaths();
             CliInputValidation.rejectBlankText("--board-name", boardName);
-            CliInputValidation.rejectBlankText("--board", board);
+            CliInputValidation.rejectBlankBoardSelector(board);
             CliInputValidation.rejectBlankText("--workspace-id", workspaceId);
             CliInputValidation.rejectBlankTextValues("--active", activeStates);
             CliInputValidation.rejectBlankTextValues("--terminal", terminalStates);
@@ -451,7 +451,7 @@ final class SetupLocalCommandFactory {
             CliInputValidation.rejectControlCharacters("--manifest", manifestPath);
             configDir.ifPresent(path -> CliInputValidation.rejectExistingNonDirectoryPath("--config-dir", path));
             if (action == Action.REPAIR_PORT || action == Action.CONFIGURE_GITHUB) {
-                CliInputValidation.rejectBlankText("--board", board);
+                CliInputValidation.rejectBlankBoardSelector(board);
                 CliInputValidation.rejectControlCharactersInText("--board", board);
             }
         }
@@ -570,7 +570,7 @@ final class SetupLocalCommandFactory {
 
         private void validateCliPaths() {
             CliInputValidation.rejectControlCharacters("--workflow", workflowPath);
-            CliInputValidation.rejectBlankPath("--workflow", workflowPath);
+            CliInputValidation.rejectBlankWorkflowSelector(workflowPath);
             CliInputValidation.rejectBlankPath("--config-dir", configDir, "--config-dir must not be empty.");
             CliInputValidation.rejectBlankPath("--manifest", manifestPath, "--manifest must not be empty.");
             CliInputValidation.rejectControlCharacters("--workspace-root", workspaceRoot);

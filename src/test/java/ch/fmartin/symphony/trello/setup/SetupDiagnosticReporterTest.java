@@ -1540,6 +1540,72 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
+    void diagnosticsRejectsBlankBoardSelectorAtReporterBoundary() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("blank-board-selector-config");
+        Files.createDirectories(configDir);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        Throwable thrown =
+                catchThrowable(() -> reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                        Optional.of(" "),
+                        Optional.empty(),
+                        false,
+                        false,
+                        Optional.empty(),
+                        Optional.of(configDir),
+                        Optional.empty(),
+                        Optional.empty(),
+                        Optional.empty(),
+                        Optional.empty())));
+
+        // then
+        assertThat(thrown)
+                .isInstanceOfSatisfying(
+                        TrelloBoardSetupException.class,
+                        exception -> assertThat(exception)
+                                .extracting(TrelloBoardSetupException::code, Throwable::getMessage)
+                                .containsExactly(
+                                        "setup_invalid_arguments",
+                                        "--board must not be empty. Provide a Trello board name, id, or short link, or omit --board to use the command's default scope."));
+        assertThat(configDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME)).doesNotExist();
+    }
+
+    @Test
+    void diagnosticsRejectsBlankWorkflowSelectorAtReporterBoundary() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("blank-workflow-selector-config");
+        Files.createDirectories(configDir);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        Throwable thrown =
+                catchThrowable(() -> reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                        Optional.empty(),
+                        Optional.empty(),
+                        false,
+                        false,
+                        Optional.empty(),
+                        Optional.of(configDir),
+                        Optional.empty(),
+                        Optional.empty(),
+                        Optional.empty(),
+                        Optional.of(Path.of("")))));
+
+        // then
+        assertThat(thrown)
+                .isInstanceOfSatisfying(
+                        TrelloBoardSetupException.class,
+                        exception -> assertThat(exception)
+                                .extracting(TrelloBoardSetupException::code, Throwable::getMessage)
+                                .containsExactly(
+                                        "setup_invalid_arguments",
+                                        "--workflow must not be empty. Provide a workflow path, or omit --workflow to use the command's default scope."));
+        assertThat(configDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME)).doesNotExist();
+    }
+
+    @Test
     void diagnosticsRejectsUnusableWorkflowSelectorsAtReporterBoundary() throws Exception {
         // given
         Path configDir = tempDir.resolve("unusable-workflow-selector-config");

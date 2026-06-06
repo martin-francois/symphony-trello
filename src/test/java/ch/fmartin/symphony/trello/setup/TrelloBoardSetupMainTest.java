@@ -3925,6 +3925,34 @@ final class TrelloBoardSetupMainTest {
                 .stdoutDoesNotContain("running ", "stopped ", badBoardSelector);
     }
 
+    @MethodSource("blankLifecycleSelectors")
+    @ParameterizedTest(name = "{0} rejects blank {1}")
+    void lifecycleCommandsRejectBlankSelectorsBeforeSelection(
+            String command, String optionName, String optionValue, String expectedMessage) {
+        // given
+
+        // when
+        CliRunResult result = runCli(command, optionName, optionValue);
+
+        // then
+        result.assertFailure(2)
+                .stderrContains("setup_failed code=setup_invalid_arguments", expectedMessage)
+                .stderrDoesNotContain("Troubleshooting report written")
+                .stdoutDoesNotContain("running ", "stopped ", "Logs for ");
+    }
+
+    private static Stream<Arguments> blankLifecycleSelectors() {
+        return Stream.of(
+                Arguments.of("start", "--board", "", "--board must not be empty."),
+                Arguments.of("stop", "--board", "   ", "--board must not be empty."),
+                Arguments.of("status", "--board", "", "--board must not be empty."),
+                Arguments.of("logs", "--board", "   ", "--board must not be empty."),
+                Arguments.of("start", "--workflow", "", "--workflow must not be empty."),
+                Arguments.of("stop", "--workflow", "   ", "--workflow must not be empty."),
+                Arguments.of("status", "--workflow", "", "--workflow must not be empty."),
+                Arguments.of("logs", "--workflow", "   ", "--workflow must not be empty."));
+    }
+
     @Test
     void diagnosticsRejectsControlCharactersInBoardSelectorWithoutRenderingReport() {
         // given

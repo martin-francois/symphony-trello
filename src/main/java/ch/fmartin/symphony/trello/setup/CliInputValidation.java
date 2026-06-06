@@ -63,6 +63,20 @@ final class CliInputValidation {
         value.ifPresent(text -> rejectWorkspaceIdReference(optionName, text));
     }
 
+    static void rejectBlankBoardSelector(Optional<String> value) {
+        rejectBlankText(
+                "--board",
+                value,
+                "--board must not be empty. Provide a Trello board name, id, or short link, or omit --board to use the command's default scope.");
+    }
+
+    static void rejectBlankWorkflowSelector(Optional<Path> value) {
+        rejectBlankPath(
+                "--workflow",
+                value,
+                "--workflow must not be empty. Provide a workflow path, or omit --workflow to use the command's default scope.");
+    }
+
     static void rejectBlankText(String optionName, Optional<String> value) {
         rejectBlankText(optionName, value, optionName + " must not be blank.");
     }

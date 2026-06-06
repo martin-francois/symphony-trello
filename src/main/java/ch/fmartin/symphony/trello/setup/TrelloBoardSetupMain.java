@@ -581,6 +581,8 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         Optional<Path> appHome = Optional.empty();
 
         private void validateCliPaths() {
+            CliInputValidation.rejectBlankBoardSelector(board);
+            CliInputValidation.rejectBlankWorkflowSelector(workflow);
             CliInputValidation.rejectControlCharactersInText("--board", board);
             CliInputValidation.rejectControlCharacters("--workflow", workflow);
             CliInputValidation.rejectBlankPath("--config-dir", configDir, "--config-dir must not be empty.");
@@ -623,13 +625,13 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         }
 
         private void validateCliPaths() {
-            CliInputValidation.rejectBlankText("--board", board(), "--board must not be empty.");
+            CliInputValidation.rejectBlankBoardSelector(board());
             CliInputValidation.rejectControlCharactersInText("--board", board());
             rejectBlankDiagnosticsPath("--config-dir", configDir);
             rejectBlankDiagnosticsPath("--workspace-root", workspaceRoot);
             rejectBlankDiagnosticsPath("--state-home", stateHome);
             rejectBlankDiagnosticsPath("--manifest", manifest);
-            rejectBlankDiagnosticsPath("--workflow", workflow());
+            CliInputValidation.rejectBlankWorkflowSelector(workflow());
             CliInputValidation.rejectControlCharacters("--config-dir", configDir);
             CliInputValidation.rejectControlCharacters("--workspace-root", workspaceRoot);
             CliInputValidation.rejectControlCharacters("--state-home", stateHome);
