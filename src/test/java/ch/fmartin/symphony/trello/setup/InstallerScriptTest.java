@@ -68,6 +68,100 @@ final class InstallerScriptTest {
                 }));
     }
 
+    @Test
+    void posixInstallerRejectsMissingHomeBeforeResolvingDefaultPaths() throws Exception {
+        // given
+        Assumptions.assumeTrue(commandExists("bash"));
+
+        // when
+        ProcessResult result = runWithoutHome(
+                "bash",
+                "install.sh",
+                "--dry-run",
+                "--no-onboard",
+                "--prefix",
+                temporaryDirectory.resolve("app").toString(),
+                "--bin-dir",
+                temporaryDirectory.resolve("bin").toString());
+
+        // then
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.output())
+                .contains("HOME must be set to a user home directory before running the installer.")
+                .doesNotContain("unbound variable", "/.local/share/symphony-trello");
+    }
+
+    @Test
+    void posixInstallerRejectsEmptyHomeBeforeResolvingDefaultPaths() throws Exception {
+        // given
+        Assumptions.assumeTrue(commandExists("bash"));
+
+        // when
+        ProcessResult result = run(
+                Map.of("HOME", ""),
+                "bash",
+                "install.sh",
+                "--dry-run",
+                "--no-onboard",
+                "--prefix",
+                temporaryDirectory.resolve("app").toString(),
+                "--bin-dir",
+                temporaryDirectory.resolve("bin").toString());
+
+        // then
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.output())
+                .contains("HOME must be set to a user home directory before running the installer.")
+                .doesNotContain("/.local/share/symphony-trello");
+    }
+
+    @Test
+    void posixUninstallerRejectsMissingHomeBeforeResolvingDefaultPaths() throws Exception {
+        // given
+        Assumptions.assumeTrue(commandExists("bash"));
+
+        // when
+        ProcessResult result = runWithoutHome(
+                "bash",
+                "uninstall.sh",
+                "--dry-run",
+                "--yes",
+                "--prefix",
+                temporaryDirectory.resolve("app").toString(),
+                "--bin-dir",
+                temporaryDirectory.resolve("bin").toString());
+
+        // then
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.output())
+                .contains("HOME must be set to a user home directory before running the uninstaller.")
+                .doesNotContain("unbound variable", "/.local/share/symphony-trello");
+    }
+
+    @Test
+    void posixUninstallerRejectsEmptyHomeBeforeResolvingDefaultPaths() throws Exception {
+        // given
+        Assumptions.assumeTrue(commandExists("bash"));
+
+        // when
+        ProcessResult result = run(
+                Map.of("HOME", ""),
+                "bash",
+                "uninstall.sh",
+                "--dry-run",
+                "--yes",
+                "--prefix",
+                temporaryDirectory.resolve("app").toString(),
+                "--bin-dir",
+                temporaryDirectory.resolve("bin").toString());
+
+        // then
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.output())
+                .contains("HOME must be set to a user home directory before running the uninstaller.")
+                .doesNotContain("/.local/share/symphony-trello");
+    }
+
     @MethodSource("invalidPosixInstallerSourceInputs")
     @ParameterizedTest(name = "{0}")
     void posixInstallerRejectsInvalidSourceInputsBeforeDryRunPlan(
@@ -2693,5 +2787,11 @@ final class InstallerScriptTest {
                         "https://example.invalid/unrelated.git")
                 .assertSuccess();
         return checkout;
+    }
+
+    private static ProcessResult runWithoutHome(String... command) throws Exception {
+        ProcessBuilder processBuilder = new ProcessBuilder(command);
+        processBuilder.environment().remove("HOME");
+        return run(processBuilder, "", 60);
     }
 }

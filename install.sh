@@ -5,6 +5,11 @@ ORIGINAL_PATH="$PATH"
 REPO_URL="${SYMPHONY_TRELLO_REPO_URL:-https://github.com/martin-francois/symphony-trello.git}"
 DEFAULT_REF="v0.2.0" # x-release-please-version
 REF="${SYMPHONY_TRELLO_REF:-$DEFAULT_REF}"
+HOME="${HOME:-}"
+if [[ -z "$HOME" ]]; then
+  echo "HOME must be set to a user home directory before running the installer." >&2
+  exit 2
+fi
 SYMPHONY_HOME="${SYMPHONY_HOME:-$HOME/.local/share/symphony-trello}"
 APP_DIR="$SYMPHONY_HOME/app"
 CONFIG_DIR="${SYMPHONY_TRELLO_CONFIG_DIR:-$SYMPHONY_HOME/config}"

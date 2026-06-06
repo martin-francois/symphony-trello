@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+HOME="${HOME:-}"
+if [[ -z "$HOME" ]]; then
+  echo "HOME must be set to a user home directory before running the uninstaller." >&2
+  exit 2
+fi
 SYMPHONY_HOME="${SYMPHONY_HOME:-$HOME/.local/share/symphony-trello}"
 APP_DIR="$SYMPHONY_HOME/app"
 CONFIG_DIR="${SYMPHONY_TRELLO_CONFIG_DIR:-$SYMPHONY_HOME/config}"
