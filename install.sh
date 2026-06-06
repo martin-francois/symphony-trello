@@ -218,6 +218,53 @@ normalize_path() {
   fi
 }
 
+same_or_inside_path() {
+  local child="$1"
+  local parent="$2"
+  [[ "$child" == "$parent" || "$child" == "$parent"/* ]]
+}
+
+script_checkout_dir() {
+  local source="${BASH_SOURCE[0]:-}"
+  local script_dir
+  case "$source" in
+  "" | bash | -*) return 1 ;;
+  esac
+  script_dir="$(dirname "$(absolutize_path "$source")")"
+  script_dir="$(normalize_path "$script_dir")"
+  if [[ -d "$script_dir/.git" || -f "$script_dir/pom.xml" ]]; then
+    printf '%s\n' "$script_dir"
+  fi
+}
+
+path_has_symlink_component() {
+  local path="$1"
+  local current="/"
+  local part
+  local -a parts=()
+  path="$(absolutize_path "$path")"
+  path="${path#/}"
+  IFS=/ read -r -a parts <<<"$path"
+  for part in "${parts[@]}"; do
+    case "$part" in
+    "" | .) continue ;;
+    ..)
+      current="${current%/*}"
+      [[ -n "$current" ]] || current="/"
+      continue
+      ;;
+    esac
+    current="${current%/}/$part"
+    if [[ -L "$current" ]]; then
+      return 0
+    fi
+    if [[ ! -e "$current" ]]; then
+      return 1
+    fi
+  done
+  return 1
+}
+
 is_blank() {
   local value="$1"
   value="${value// /}"
@@ -244,6 +291,50 @@ has_control() {
 
 has_space() {
   [[ "$1" == *" "* ]]
+}
+
+validate_bin_dir_option_value() {
+  if is_blank "$BIN_DIR"; then
+    echo "--bin-dir must not be blank." >&2
+    exit 2
+  fi
+  if has_control "$BIN_DIR"; then
+    echo "--bin-dir must not contain control characters." >&2
+    exit 2
+  fi
+  case "$BIN_DIR" in
+  /*) ;;
+  *)
+    echo "--bin-dir must be an absolute path." >&2
+    exit 2
+    ;;
+  esac
+}
+
+validate_command_directory() {
+  local bin_dir home_dir checkout_dir root
+  bin_dir="$(normalize_path "$BIN_DIR")"
+  home_dir="$(normalize_path "$HOME")"
+  checkout_dir="$(script_checkout_dir || true)"
+  if [[ "$bin_dir" == "/" || "$bin_dir" == "$home_dir" || (-n "$checkout_dir" && "$bin_dir" == "$checkout_dir") ]]; then
+    echo "--bin-dir must point to a dedicated command directory." >&2
+    exit 2
+  fi
+  if path_has_symlink_component "$BIN_DIR" || path_has_symlink_component "$bin_dir"; then
+    echo "--bin-dir must not be a symlink." >&2
+    exit 2
+  fi
+  if [[ -e "$bin_dir" && ! -d "$bin_dir" ]]; then
+    echo "--bin-dir must be a directory." >&2
+    exit 2
+  fi
+  for root in "$APP_DIR" "$CONFIG_DIR" "$WORKSPACE_ROOT" "$STATE_HOME"; do
+    root="$(normalize_path "$root")"
+    if same_or_inside_path "$bin_dir" "$root" || same_or_inside_path "$root" "$bin_dir"; then
+      echo "--bin-dir must not overlap Symphony app, config, workspace, or state directories." >&2
+      exit 2
+    fi
+  done
 }
 
 is_local_git_repo() {
@@ -983,6 +1074,7 @@ jdk_compatible() {
 }
 
 validate_source_inputs
+validate_bin_dir_option_value
 SYMPHONY_HOME="$(absolutize_path "$SYMPHONY_HOME")"
 APP_DIR="$(absolutize_path "$APP_DIR")"
 CONFIG_DIR="$(absolutize_path "$CONFIG_DIR")"
@@ -990,6 +1082,7 @@ WORKSPACE_ROOT="$(absolutize_path "$WORKSPACE_ROOT")"
 STATE_HOME="$(absolutize_path "$STATE_HOME")"
 BIN_DIR="$(absolutize_path "$BIN_DIR")"
 CODEX_NPM_PREFIX="$(absolutize_path "$SYMPHONY_HOME/npm")"
+validate_command_directory
 INSTALL_CONTEXT_FILE="$STATE_HOME/install-context.properties"
 activate_managed_codex_path
 detect_supported_platform
