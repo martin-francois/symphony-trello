@@ -990,14 +990,23 @@ public final class LocalSetup {
     }
 
     private static ConnectedBoard nonGithubBoard(List<ConnectedBoard> candidates, String requested) {
-        String requestedBoardId = TrelloBoardIds.parse(requested);
-        List<ConnectedBoard> matches = candidates.stream()
+        List<ConnectedBoard> exactMatches = candidates.stream()
                 .filter(board -> board.boardName().equalsIgnoreCase(requested)
                         || board.boardId().equalsIgnoreCase(requested)
-                        || board.boardKey().equalsIgnoreCase(requested)
-                        || board.boardId().equalsIgnoreCase(requestedBoardId)
+                        || board.boardKey().equalsIgnoreCase(requested))
+                .toList();
+        if (!exactMatches.isEmpty()) {
+            return singleNonGithubBoardMatch(exactMatches, requested);
+        }
+        String requestedBoardId = TrelloBoardIds.parse(requested);
+        List<ConnectedBoard> matches = candidates.stream()
+                .filter(board -> board.boardId().equalsIgnoreCase(requestedBoardId)
                         || board.boardKey().equalsIgnoreCase(requestedBoardId))
                 .toList();
+        return singleNonGithubBoardMatch(matches, requested);
+    }
+
+    private static ConnectedBoard singleNonGithubBoardMatch(List<ConnectedBoard> matches, String requested) {
         if (matches.isEmpty()) {
             throw new TrelloBoardSetupException(
                     "setup_github_upgrade_not_found", "No connected non-GitHub board matches \"" + requested + "\".");
