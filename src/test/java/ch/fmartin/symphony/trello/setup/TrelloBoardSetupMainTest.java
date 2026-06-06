@@ -1254,6 +1254,70 @@ final class TrelloBoardSetupMainTest {
                 Arguments.of("whitespace-only dotenv values", "TRELLO_API_KEY=   \nTRELLO_API_TOKEN=   \n"));
     }
 
+    @Test
+    void startRejectsSpecialFileEnvPathBeforeLaunchingWorker() throws Exception {
+        // given
+        assumeTrue(!javaExecutable().endsWith(".exe"), "POSIX FIFO support is required");
+        Path configDir = tempDir.resolve("start-special-env-config");
+        Path privateDir = tempDir.resolve("Jane Doe");
+        Path workspaceRoot = tempDir.resolve("start-special-env-workspaces");
+        Path stateHome = tempDir.resolve("start-special-env-state");
+        Path appHome = tempDir.resolve("start-special-env-app");
+        Path workflow = configDir.resolve("WORKFLOW.queue.md");
+        Path env = privateDir.resolve(".env.fifo");
+        Files.createDirectories(configDir);
+        Files.createDirectories(privateDir);
+        Files.writeString(workflow, workflowWithBoardAndPort("board-start-id", 19193), StandardCharsets.UTF_8);
+        assertThat(new ProcessBuilder("mkfifo", env.toString())
+                        .directory(tempDir.toFile())
+                        .start()
+                        .waitFor())
+                .isZero();
+        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
+                        "board-start-id",
+                        "board-start-key",
+                        "Queue",
+                        "https://trello.com/b/board-start-key/queue",
+                        workflow,
+                        env,
+                        workspaceRoot,
+                        19193,
+                        false,
+                        List.of(),
+                        false))));
+
+        // when
+        MainProcessResult result = runMainProcessWithoutTrelloCredentials(
+                tempDir,
+                "start",
+                "--config-dir",
+                configDir.toString(),
+                "--workspace-root",
+                workspaceRoot.toString(),
+                "--state-home",
+                stateHome.toString(),
+                "--app-home",
+                appHome.toString(),
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString());
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isEqualTo(2);
+        assertThat(result.stdout()).doesNotContain("Started Symphony", "Troubleshooting report written");
+        assertThat(result.stderr())
+                .contains("setup_failed code=setup_invalid_arguments", "--env must point to a regular dotenv file.")
+                .doesNotContain(
+                        "Troubleshooting report written",
+                        env.toString(),
+                        privateDir.toString(),
+                        tempDir.toString(),
+                        "Jane Doe");
+        assertThat(stateHome).doesNotExist();
+    }
+
     @MethodSource("directCommandHelp")
     @ParameterizedTest(name = "{0} help")
     void printsDirectCommandHelp(String command, String expectedUsage) {
