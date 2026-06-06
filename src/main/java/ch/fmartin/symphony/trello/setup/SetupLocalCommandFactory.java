@@ -532,6 +532,11 @@ final class SetupLocalCommandFactory {
             CliInputValidation.rejectControlCharacters("--workspace-root", workspaceRoot);
             CliInputValidation.rejectControlCharacters("--config-dir", configDir);
             CliInputValidation.rejectControlCharacters("--manifest", manifestPath);
+            CliInputValidation.rejectBlankPath(
+                    "--workspace-root", workspaceRoot, "--workspace-root must not be empty.");
+            CliInputValidation.rejectRelativePath(
+                    "--workspace-root", workspaceRoot, "--workspace-root must be an absolute path.");
+            CliInputValidation.rejectExistingNonDirectoryPath("--workspace-root", workspaceRoot);
             configDir.ifPresent(path -> CliInputValidation.rejectExistingNonDirectoryPath("--config-dir", path));
             TrelloCredentialStore.validateEnvPathOption(envPath);
             CliInputValidation.rejectBlankPaths("--add-path", additionalWritableRoots, "--add-path must not be empty.");

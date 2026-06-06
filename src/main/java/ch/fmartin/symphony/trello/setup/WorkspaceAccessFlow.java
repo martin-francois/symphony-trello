@@ -87,7 +87,8 @@ final class WorkspaceAccessFlow {
     }
 
     static boolean isBroadAccessPath(Path path) {
-        return path.getParent() == null && path.isAbsolute();
+        Path normalized = path.normalize();
+        return normalized.getParent() == null && normalized.isAbsolute();
     }
 
     private static boolean isHomeShorthand(String value) {

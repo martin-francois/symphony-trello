@@ -216,6 +216,145 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         assertThat(trello.createdLists()).isEmpty();
     }
 
+    @Test
+    void setupLocalRejectsInvalidWorkspaceRootValuesBeforePlannedOutput() throws Exception {
+        // given
+        Path workspaceFile = tempDir.resolve("workspace-root-file");
+        Files.writeString(workspaceFile, "not a directory", StandardCharsets.UTF_8);
+        Path workflow = tempDir.resolve("WORKFLOW.invalid-workspace-root.md");
+        record InvalidWorkspaceRootScenario(String expectedMessage, String workspaceRoot) {}
+        List<InvalidWorkspaceRootScenario> scenarios = List.of(
+                new InvalidWorkspaceRootScenario("--workspace-root must not be empty.", ""),
+                new InvalidWorkspaceRootScenario("--workspace-root must not be empty.", "   "),
+                new InvalidWorkspaceRootScenario("--workspace-root must be an absolute path.", "."),
+                new InvalidWorkspaceRootScenario("--workspace-root must be an absolute path.", " ./relative "),
+                new InvalidWorkspaceRootScenario("--workspace-root must be a directory.", workspaceFile.toString()));
+
+        // when
+        List<SetupRunResult> results = scenarios.stream()
+                .map(scenario -> runSetup(
+                        "--dry-run",
+                        "--board-name",
+                        "Dry Workspace Root",
+                        "--workflow",
+                        workflow.toString(),
+                        "--workspace-root",
+                        scenario.workspaceRoot()))
+                .toList();
+
+        // then
+        for (int index = 0; index < scenarios.size(); index++) {
+            InvalidWorkspaceRootScenario scenario = scenarios.get(index);
+            SetupRunResult result = results.get(index);
+            result.assertFailure(2)
+                    .stderrContains("setup_failed code=setup_invalid_arguments", scenario.expectedMessage())
+                    .stderrDoesNotContain("Troubleshooting report written", workspaceFile.toString(), "not a directory")
+                    .stdoutDoesNotContain("Dry run", "WOULD write workflows");
+        }
+        assertThat(workflow).doesNotExist();
+        assertThat(trello.createdLists()).isEmpty();
+    }
+
+    @Test
+    void setupLocalPromptsBeforeUsingFilesystemRootWorkspaceRoot() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.root-workspace-declined.md");
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                "n\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Root Workspace Declined",
+                "--workflow",
+                workflow.toString(),
+                "--workspace-root",
+                "/",
+                "--no-github");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "Using / as the workspace root lets Symphony create per-card workspaces from the whole filesystem root.",
+                        "This is unsafe unless you intentionally want that.",
+                        "Use / as the workspace root anyway? [y/N]",
+                        "Workspace-root selection cancelled.")
+                .stdoutDoesNotContain("Created Trello board", "Wrote workflow", "Dry run");
+        assertThat(workflow).doesNotExist();
+        assertThat(trello.createdLists()).isEmpty();
+    }
+
+    @Test
+    void setupLocalPromptsBeforeUsingRootEquivalentWorkspaceRoot() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.root-equivalent-workspace-declined.md");
+        Path rootEquivalent =
+                tempDir.toAbsolutePath().getRoot().resolve("root-equivalent").resolve("..");
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                "n\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Root Equivalent Workspace Declined",
+                "--workflow",
+                workflow.toString(),
+                "--workspace-root",
+                rootEquivalent.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "Using / as the workspace root lets Symphony create per-card workspaces from the whole filesystem root.",
+                        "Use / as the workspace root anyway? [y/N]",
+                        "Workspace-root selection cancelled.")
+                .stdoutDoesNotContain("Created Trello board", "Wrote workflow", "Dry run");
+        assertThat(workflow).doesNotExist();
+        assertThat(trello.createdLists()).isEmpty();
+    }
+
+    @Test
+    void setupLocalNonInteractiveAllowsFilesystemRootWorkspaceRoot() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.root-workspace-non-interactive.md");
+        Path env = tempDir.resolve(".env.root-workspace");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Root Workspace Allowed",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--workspace-root",
+                "/",
+                "--no-github",
+                "--no-start");
+
+        // then
+        result.assertSuccess();
+        assertThat(workflow).content(StandardCharsets.UTF_8).contains("root: \"/\"");
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"", "   "})
     void dryRunRejectsBlankWorkflowPathBeforePlannedSetupOutput(String workflowPath) {
