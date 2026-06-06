@@ -1316,6 +1316,7 @@ public final class LocalSetup {
             boolean workflowPathExplicit = request.workflowPath().isPresent();
             Path workspaceRoot = request.workspaceRoot().orElseGet(() -> defaultWorkspaceRoot(environment));
             Path manifest = request.manifestPath().orElse(null);
+            boolean manifestPathExplicit = request.manifestPath().isPresent();
             Path envPath = request.envPath().orElse(null);
             List<Path> additionalWritableRoots = request.additionalWritableRoots().stream()
                     .map(path -> WorkspaceAccessFlow.resolveAccessPath(path, callerDirectory(environment)))
@@ -1328,6 +1329,7 @@ public final class LocalSetup {
             configDir = configDir.toAbsolutePath().normalize();
             envPath = resolveUserDataPath(envPath == null ? DEFAULT_ENV_PATH : envPath, configDir);
             manifest = resolveUserDataPath(manifest == null ? Path.of("connected-boards.json") : manifest, configDir);
+            validateResolvedSetupPaths(configDir, manifest, manifestPathExplicit, request.action());
             additionalWritableRoots =
                     additionalWritableRoots.stream().map(Path::normalize).toList();
             if (request.nonInteractive()) {
@@ -1380,6 +1382,19 @@ public final class LocalSetup {
                     command,
                     request.endpoint(),
                     callerDirectory(environment));
+        }
+
+        private static void validateResolvedSetupPaths(
+                Path configDir, Path manifest, boolean manifestPathExplicit, LocalSetupRequest.Action action) {
+            CliInputValidation.rejectExistingNonDirectoryPath("--config-dir", configDir);
+            if (!manifestPathExplicit) {
+                return;
+            }
+            if (action == LocalSetupRequest.Action.CHECK) {
+                ConnectedBoardRepository.validateManifestPathForCheck(manifest);
+            } else {
+                ConnectedBoardRepository.validateManifestPathForSetup(manifest);
+            }
         }
 
         Options withCodexAccess(List<Path> additionalWritableRoots, boolean dangerFullAccess) {
