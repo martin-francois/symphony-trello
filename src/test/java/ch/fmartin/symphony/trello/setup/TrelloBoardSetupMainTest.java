@@ -2535,6 +2535,87 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
+    void lifecycleCommandsRejectBlankAndFileDirectoryOptionsBeforeWorkerHandling() throws Exception {
+        // given
+        Path configFile = tempDir.resolve("lifecycle-config-file");
+        Path workspaceFile = tempDir.resolve("lifecycle-workspace-file");
+        Path stateFile = tempDir.resolve("lifecycle-state-file");
+        Files.writeString(configFile, "file", StandardCharsets.UTF_8);
+        Files.writeString(workspaceFile, "file", StandardCharsets.UTF_8);
+        Files.writeString(stateFile, "file", StandardCharsets.UTF_8);
+        List<InvalidLifecycleDirectoryOptionScenario> scenarios = new ArrayList<>();
+        for (String command : List.of("start", "stop", "status", "logs")) {
+            scenarios.add(lifecycleDirectoryScenario(
+                    command + " blank config dir",
+                    "--config-dir",
+                    "--config-dir must not be empty.",
+                    command,
+                    "--config-dir",
+                    ""));
+            scenarios.add(lifecycleDirectoryScenario(
+                    command + " blank workspace root",
+                    "--workspace-root",
+                    "--workspace-root must not be empty.",
+                    command,
+                    "--workspace-root",
+                    ""));
+            scenarios.add(lifecycleDirectoryScenario(
+                    command + " blank state home",
+                    "--state-home",
+                    "--state-home must not be empty.",
+                    command,
+                    "--state-home",
+                    ""));
+            scenarios.add(lifecycleDirectoryScenario(
+                    command + " config file",
+                    "--config-dir",
+                    "--config-dir must be a directory.",
+                    command,
+                    "--config-dir",
+                    configFile.toString()));
+            scenarios.add(lifecycleDirectoryScenario(
+                    command + " workspace file",
+                    "--workspace-root",
+                    "--workspace-root must be a directory.",
+                    command,
+                    "--workspace-root",
+                    workspaceFile.toString()));
+            scenarios.add(lifecycleDirectoryScenario(
+                    command + " state file",
+                    "--state-home",
+                    "--state-home must be a directory.",
+                    command,
+                    "--state-home",
+                    stateFile.toString()));
+        }
+
+        // when
+        List<CliRunResult> results = scenarios.stream()
+                .map(scenario -> runCli(scenario.commandArray()))
+                .toList();
+
+        // then
+        for (int index = 0; index < scenarios.size(); index++) {
+            InvalidLifecycleDirectoryOptionScenario scenario = scenarios.get(index);
+            CliRunResult result = results.get(index);
+            result.assertFailure(2)
+                    .stderrContains("setup_failed code=setup_invalid_arguments", scenario.expectedMessage())
+                    .stderrDoesNotContain(
+                            "Troubleshooting report written",
+                            configFile.toString(),
+                            workspaceFile.toString(),
+                            stateFile.toString(),
+                            "Not a directory")
+                    .stdoutDoesNotContain(
+                            "running ",
+                            "stopped ",
+                            "Started Symphony",
+                            "Trello authentication failed",
+                            "untracked, no managed pid");
+        }
+    }
+
+    @Test
     void rejectsControlCharactersInDirectNewBoardNameBeforeTrelloRequest() {
         // given
         String badBoardName = "Name\nWith newline";
@@ -2745,6 +2826,23 @@ final class TrelloBoardSetupMainTest {
         private String[] commandArray() {
             return command.toArray(String[]::new);
         }
+    }
+
+    private record InvalidLifecycleDirectoryOptionScenario(
+            String name, String optionName, String expectedMessage, List<String> command) {
+        private String[] commandArray() {
+            return command.toArray(String[]::new);
+        }
+
+        @Override
+        public String toString() {
+            return name;
+        }
+    }
+
+    private static InvalidLifecycleDirectoryOptionScenario lifecycleDirectoryScenario(
+            String name, String optionName, String expectedMessage, String... command) {
+        return new InvalidLifecycleDirectoryOptionScenario(name, optionName, expectedMessage, List.of(command));
     }
 
     private CliRunResult runCli(String... args) {
