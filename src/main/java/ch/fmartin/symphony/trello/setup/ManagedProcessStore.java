@@ -19,11 +19,7 @@ final class ManagedProcessStore {
 
     ManagedProcessFiles files(Path workflowPath) {
         String name = workflowStateName(workflowPath);
-        return new ManagedProcessFiles(
-                stateHome.resolve(name + ".pid"),
-                stateHome.resolve(name + ".log"),
-                stateHome.resolve(name + ".err"),
-                stateHome.resolve(name + ".lock"));
+        return filesFor(stateHome, name);
     }
 
     List<Path> pidFiles() throws IOException {
@@ -44,8 +40,7 @@ final class ManagedProcessStore {
         if (parent == null) {
             parent = stateHome;
         }
-        return new ManagedProcessFiles(
-                pidFile, parent.resolve(name + ".log"), parent.resolve(name + ".err"), parent.resolve(name + ".lock"));
+        return filesFor(parent, name, pidFile);
     }
 
     Long readPid(Path pidFile) {
@@ -88,6 +83,15 @@ final class ManagedProcessStore {
         }
     }
 
+    private static ManagedProcessFiles filesFor(Path parent, String name) {
+        return filesFor(parent, name, parent.resolve(name + ".pid"));
+    }
+
+    private static ManagedProcessFiles filesFor(Path parent, String name, Path pidFile) {
+        return new ManagedProcessFiles(
+                pidFile, parent.resolve(name + ".log"), parent.resolve(name + ".err"), parent.resolve(name + ".lock"));
+    }
+
     private static String sha256(String value) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -97,7 +101,7 @@ final class ManagedProcessStore {
         }
     }
 
-    record ManagedProcessFiles(Path pidFile, Path stdoutLog, Path stderrLog, Path startLockFile) {
+    record ManagedProcessFiles(Path pidFile, Path stdoutLog, Path stderrLog, Path processLockFile) {
         String displayName() {
             String fileName = PathNames.fileName(pidFile);
             return fileName.substring(0, fileName.length() - ".pid".length());
