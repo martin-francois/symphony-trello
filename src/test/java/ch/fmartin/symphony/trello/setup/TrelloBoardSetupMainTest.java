@@ -695,6 +695,53 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
+    void logsDoesNotReadSymlinkedWorkerLogTargets() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("logs-symlink-config");
+        Path workspaceRoot = tempDir.resolve("logs-symlink-workspaces");
+        Path stateHome = tempDir.resolve("logs-symlink-state");
+        Path workflow = configDir.resolve("WORKFLOW.symlink-log.md");
+        Path privateHostFile = tempDir.resolve("private-host-file.txt");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.writeString(workflow, workflowWithBoardAndPort("board-id", 19194), StandardCharsets.UTF_8);
+        Files.writeString(privateHostFile, "PRIVATE_HOST_FILE_MARKER_SHOULD_NOT_APPEAR\n", StandardCharsets.UTF_8);
+        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
+                        "board-id",
+                        "board-key",
+                        "Board A",
+                        "https://trello.com/b/board-key/board-a",
+                        workflow,
+                        configDir.resolve(".env"),
+                        workspaceRoot,
+                        19194,
+                        false,
+                        List.of(),
+                        false))));
+        ManagedProcessStore.ManagedProcessFiles logs = new ManagedProcessStore(stateHome).files(workflow);
+        createSymbolicLinkOrSkip(logs.stdoutLog(), privateHostFile);
+        Files.writeString(logs.stderrLog(), "", StandardCharsets.UTF_8);
+
+        // when
+        CliRunResult result = runCli(
+                "logs",
+                "--config-dir",
+                configDir.toString(),
+                "--workspace-root",
+                workspaceRoot.toString(),
+                "--state-home",
+                stateHome.toString(),
+                "--board",
+                "Board A");
+
+        // then
+        result.assertSuccess()
+                .stdoutDoesNotContain("PRIVATE_HOST_FILE_MARKER_SHOULD_NOT_APPEAR", privateHostFile.toString())
+                .stderrEmpty();
+    }
+
+    @Test
     void diagnosticsOutputWriteFailureDoesNotLeakPrivatePath() throws Exception {
         // given
         Path configDir = tempDir.resolve("diagnostics-output-failure-config");
