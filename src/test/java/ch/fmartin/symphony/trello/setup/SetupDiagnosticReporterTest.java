@@ -25,6 +25,7 @@ import java.util.Optional;
 import java.util.regex.Pattern;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -1525,6 +1526,54 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
+    void diagnosticsIgnoresSymlinkedInstallerContext() throws Exception {
+        // given
+        Path appHome = tempDir.resolve("app");
+        Path configDir = tempDir.resolve("config");
+        Path workspaceRoot = tempDir.resolve("workspaces");
+        Path stateHome = tempDir.resolve("state");
+        Files.createDirectories(configDir);
+        Files.createDirectories(workspaceRoot);
+        Files.createDirectories(stateHome);
+        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of()));
+        Path privateContext = tempDir.resolve("private-context.txt");
+        Files.writeString(
+                privateContext,
+                """
+                PRIVATE_INSTALL_CONTEXT_MARKER_SHOULD_NOT_APPEAR
+                secret_token=abc123
+                """,
+                StandardCharsets.UTF_8);
+        createSymbolicLinkOrSkip(stateHome.resolve("install-context.properties"), privateContext);
+        var reporter = new SetupDiagnosticReporter(
+                Map.of(
+                        "SYMPHONY_TRELLO_APP_HOME", appHome.toString(),
+                        "SYMPHONY_TRELLO_CONFIG_DIR", configDir.toString(),
+                        "SYMPHONY_TRELLO_WORKSPACE_ROOT", workspaceRoot.toString(),
+                        "SYMPHONY_TRELLO_STATE_HOME", stateHome.toString()),
+                new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.of(workspaceRoot),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.empty()));
+
+        // then
+        assertThat(report)
+                .contains("## Installer Context")
+                .doesNotContain("PRIVATE_INSTALL_CONTEXT_MARKER_SHOULD_NOT_APPEAR", "secret_token", "abc123");
+    }
+
+    @Test
     void handledSetupFailureUsesRequestPathsForReportContext() throws Exception {
         // given
         Path configDir = tempDir.resolve("custom-config");
@@ -1992,6 +2041,15 @@ final class SetupDiagnosticReporterTest {
     private static int freePort() throws IOException {
         try (ServerSocket socket = new ServerSocket(0)) {
             return socket.getLocalPort();
+        }
+    }
+
+    private static void createSymbolicLinkOrSkip(Path link, Path target) {
+        try {
+            Files.createSymbolicLink(link, target);
+        } catch (IOException | UnsupportedOperationException e) {
+            Assumptions.abort("Symbolic links are not available in this test environment: "
+                    + e.getClass().getSimpleName());
         }
     }
 

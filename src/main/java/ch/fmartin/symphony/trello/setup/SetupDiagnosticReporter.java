@@ -16,6 +16,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Clock;
@@ -722,11 +723,11 @@ final class SetupDiagnosticReporter {
         values.put("wrapper_shell", environment.getOrDefault("SYMPHONY_TRELLO_WRAPPER_SHELL", ""));
         values.forEach((key, value) -> line(body, key, sanitizeInstallerContextValue(key, value)));
         Path context = paths.stateHome().resolve("install-context.properties");
-        if (Files.isRegularFile(context)) {
+        readInstallContextContent(context).ifPresent(content -> {
             body.append("\n```text\n");
-            body.append(sanitizeInstallerContextBlock(truncate(readLenient(context), BODY_LIMIT)));
+            body.append(sanitizeInstallerContextBlock(truncate(content, BODY_LIMIT)));
             body.append("\n```\n");
-        }
+        });
     }
 
     private void appendLocalPathIdentifiers(StringBuilder body, LocalWorkerPaths paths, Path manifestPath) {
@@ -1790,19 +1791,33 @@ final class SetupDiagnosticReporter {
         addValue(values, environment.get("SYMPHONY_TRELLO_REPO_URL"));
         addValue(values, environment.get("SYMPHONY_TRELLO_REF"));
         Path context = paths.stateHome().resolve("install-context.properties");
-        if (Files.isRegularFile(context)) {
-            readLenient(context).lines().forEach(line -> {
-                int separator = line.indexOf('=');
-                if (separator < 0) {
-                    return;
-                }
-                String key = line.substring(0, separator).toLowerCase(Locale.ROOT);
-                if ("repo_url".equals(key) || "ref".equals(key)) {
-                    addValue(values, line.substring(separator + 1));
-                }
-            });
-        }
+        readInstallContextContent(context).ifPresent(content -> content.lines().forEach(line -> {
+            int separator = line.indexOf('=');
+            if (separator < 0) {
+                return;
+            }
+            String key = line.substring(0, separator).toLowerCase(Locale.ROOT);
+            if ("repo_url".equals(key) || "ref".equals(key)) {
+                addValue(values, line.substring(separator + 1));
+            }
+        }));
         return values.stream().distinct().toList();
+    }
+
+    private static Optional<String> readInstallContextContent(Path context) {
+        if (!Files.isRegularFile(context, LinkOption.NOFOLLOW_LINKS)) {
+            return Optional.empty();
+        }
+        try (FileChannel channel = FileChannel.open(context, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)) {
+            ByteBuffer buffer = ByteBuffer.allocate(Math.toIntExact(channel.size()));
+            while (buffer.hasRemaining() && channel.read(buffer) != -1) {
+                // Read until the no-follow file handle is fully buffered.
+            }
+            buffer.flip();
+            return Optional.of(StandardCharsets.UTF_8.decode(buffer).toString());
+        } catch (IOException | ArithmeticException e) {
+            return Optional.of("Could not read installer context file.");
+        }
     }
 
     private static List<String> commandOptionValues(List<String> args) {
@@ -2046,14 +2061,6 @@ final class SetupDiagnosticReporter {
             return String.join("\n", lines.subList(from, lines.size()));
         } catch (IOException e) {
             return "Could not read log: " + e.getMessage();
-        }
-    }
-
-    private static String readLenient(Path path) {
-        try {
-            return Files.readString(path, StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            return "Could not read file: " + e.getMessage();
         }
     }
 
