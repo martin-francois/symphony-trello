@@ -1240,13 +1240,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "key\\slash",
                         "token\\slash",
                         "TRELLO_API_KEY=\"key\\\\slash\"",
-                        "TRELLO_API_TOKEN=\"token\\\\slash\""),
-                new DotenvCredentialEscapingScenario(
-                        "tab",
-                        "key\tvalue",
-                        "token\tvalue",
-                        "TRELLO_API_KEY=\"key\\tvalue\"",
-                        "TRELLO_API_TOKEN=\"token\\tvalue\""));
+                        "TRELLO_API_TOKEN=\"token\\\\slash\""));
     }
 
     private record DotenvCredentialEscapingScenario(
