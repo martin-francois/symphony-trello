@@ -960,9 +960,12 @@ final class SetupDiagnosticReporter {
             ConnectedBoardManifest manifest, Path selectedWorkflow, Path configDir) {
         Path workflow = resolveWorkflowPathOption(selectedWorkflow, configDir, WorkflowPathResolution.CONFIG_DIR);
         rejectUnusableSelectedWorkflow(workflow);
-        List<ConnectedBoard> matches = manifest.boards().stream()
-                .filter(board -> PathsEqual.samePath(board.workflowPath(), workflow))
-                .toList();
+        List<ConnectedBoard> matches = manifest.findAllByWorkflow(workflow);
+        if (matches.size() > 1) {
+            throw new TrelloBoardSetupException(
+                    "setup_invalid_arguments",
+                    "Multiple connected-board rows reference --workflow. Repair connected-boards.json, then rerun the command.");
+        }
         return new DiagnosticsSelection(DiagnosticsSelectorKind.WORKFLOW, matches, Optional.of(workflow));
     }
 
