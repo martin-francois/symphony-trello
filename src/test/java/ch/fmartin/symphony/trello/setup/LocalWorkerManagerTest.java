@@ -18,6 +18,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -552,6 +553,35 @@ final class LocalWorkerManagerTest {
         assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
             assertThat(failure.code()).isEqualTo("trello_auth_failed");
             assertThat(failure).hasMessage("Trello authentication failed while starting Symphony.");
+        });
+    }
+
+    @Test
+    void startAttachesShellCredentialSourceToTrelloAuthFailures() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(
+                tempDir, Map.of("TRELLO_API_KEY", "shell-key", "TRELLO_API_TOKEN", "shell-token"));
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        ManagedProcessStore.ManagedProcessFiles files = fixture.managedFiles(board);
+        fixture.stubStoppedStartedWorker(board, 42);
+        when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
+                .thenAnswer(invocation -> {
+                    Files.writeString(files.stdoutLog(), "Trello authentication failed\n", StandardCharsets.UTF_8);
+                    return new ManagedProcessHandle(42);
+                });
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("trello_auth_failed");
+            assertThat(failure.trelloApiKeyCredentialSource())
+                    .contains(TrelloBoardSetupException.TrelloCredentialSource.SHELL_ENVIRONMENT);
+            assertThat(failure.trelloApiTokenCredentialSource())
+                    .contains(TrelloBoardSetupException.TrelloCredentialSource.SHELL_ENVIRONMENT);
+            assertThat(failure.dotenvPath()).contains(board.envPath());
         });
     }
 

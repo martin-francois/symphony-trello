@@ -132,6 +132,97 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
+    void givesActionableHintForWorkerAuthFailureFromShellCredentials() {
+        // given
+        var authFailure = new TrelloBoardSetupException(
+                        "trello_auth_failed", "Trello authentication failed while starting Symphony.")
+                .withDotenvPath(tempDir.resolve(".env"))
+                .withTrelloCredentialEnvironmentNames("TRELLO_API_KEY", "TRELLO_API_TOKEN")
+                .withTrelloCredentialSources(
+                        TrelloBoardSetupException.TrelloCredentialSource.SHELL_ENVIRONMENT,
+                        TrelloBoardSetupException.TrelloCredentialSource.SHELL_ENVIRONMENT);
+
+        // when
+        Optional<String> hint = SetupDiagnosticReporter.userActionHint(authFailure);
+
+        // then
+        assertThat(hint).hasValueSatisfying(value -> assertThat(value)
+                .contains(
+                        "Check TRELLO_API_KEY and TRELLO_API_TOKEN from the shell environment.",
+                        "Shell variables take precedence over the .env file passed with --env.")
+                .doesNotContain("shell-key", "shell-token", tempDir.toString()));
+    }
+
+    @Test
+    void givesActionableHintForWorkerAuthFailureFromDotenvCredentials() {
+        // given
+        Path env = tempDir.resolve(".env");
+        var authFailure = new TrelloBoardSetupException(
+                        "trello_auth_failed", "Trello authentication failed while starting Symphony.")
+                .withDotenvPath(env)
+                .withTrelloCredentialEnvironmentNames("TRELLO_API_KEY", "TRELLO_API_TOKEN")
+                .withTrelloCredentialSources(
+                        TrelloBoardSetupException.TrelloCredentialSource.DOTENV_FILE,
+                        TrelloBoardSetupException.TrelloCredentialSource.DOTENV_FILE);
+
+        // when
+        Optional<String> hint = SetupDiagnosticReporter.userActionHint(authFailure);
+
+        // then
+        assertThat(hint).hasValueSatisfying(value -> assertThat(value)
+                .contains(
+                        "Check TRELLO_API_KEY and TRELLO_API_TOKEN in this .env credential file:",
+                        SetupDiagnosticReporter.displayPath(env))
+                .doesNotContain("dotenv-key", "dotenv-token", "shell environment"));
+    }
+
+    @Test
+    void givesActionableHintForWorkerAuthFailureFromMixedCredentialSources() {
+        // given
+        Path env = tempDir.resolve(".env");
+        var authFailure = new TrelloBoardSetupException(
+                        "trello_auth_failed", "Trello authentication failed while starting Symphony.")
+                .withDotenvPath(env)
+                .withTrelloCredentialEnvironmentNames("TRELLO_API_KEY", "TRELLO_API_TOKEN")
+                .withTrelloCredentialSources(
+                        TrelloBoardSetupException.TrelloCredentialSource.DOTENV_FILE,
+                        TrelloBoardSetupException.TrelloCredentialSource.SHELL_ENVIRONMENT);
+
+        // when
+        Optional<String> hint = SetupDiagnosticReporter.userActionHint(authFailure);
+
+        // then
+        assertThat(hint).hasValueSatisfying(value -> assertThat(value)
+                .contains(
+                        "Check these Trello credential sources:",
+                        "TRELLO_API_KEY: .env credential file\n    " + SetupDiagnosticReporter.displayPath(env),
+                        "TRELLO_API_TOKEN: shell environment",
+                        "Shell variables take precedence over the .env file passed with --env.")
+                .doesNotContain("dotenv-key", "shell-token"));
+    }
+
+    @Test
+    void givesActionableHintForWorkerAuthFailureFromWorkflowCredentials() {
+        // given
+        var authFailure = new TrelloBoardSetupException(
+                        "trello_auth_failed", "Trello authentication failed while starting Symphony.")
+                .withTrelloCredentialSources(
+                        TrelloBoardSetupException.TrelloCredentialSource.WORKFLOW_CONFIG,
+                        TrelloBoardSetupException.TrelloCredentialSource.WORKFLOW_CONFIG);
+
+        // when
+        Optional<String> hint = SetupDiagnosticReporter.userActionHint(authFailure);
+
+        // then
+        assertThat(hint).hasValueSatisfying(value -> assertThat(value)
+                .contains(
+                        "Check these Trello credential sources:",
+                        "tracker.api_key: workflow configuration",
+                        "tracker.api_token: workflow configuration")
+                .doesNotContain("TRELLO_API_KEY", "TRELLO_API_TOKEN"));
+    }
+
+    @Test
     void doesNotAddGenericHintWhenCodexAuthMessageAlreadyNamesRetryCommand() {
         // given
         var codexLoginFailed = new TrelloBoardSetupException(
