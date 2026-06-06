@@ -548,7 +548,13 @@ final class LocalWorkerManager {
 
     private ConnectedBoard selectedWorkflow(ConnectedBoardManifest manifest, Path workflowSelector) {
         Path workflowPath = workflowSelector.toAbsolutePath().normalize();
-        return manifest.findByWorkflow(workflowPath).orElseGet(() -> workflowBoard(workflowPath));
+        List<ConnectedBoard> matches = manifest.findAllByWorkflow(workflowPath);
+        if (matches.size() > 1) {
+            throw new TrelloBoardSetupException(
+                    "setup_worker_workflow_ambiguous",
+                    "Multiple connected-board rows reference --workflow. Repair connected-boards.json, then rerun the command.");
+        }
+        return matches.isEmpty() ? workflowBoard(workflowPath) : matches.getFirst();
     }
 
     private ConnectedBoard defaultSelectedBoard(ConnectedBoardManifest manifest, String command) {

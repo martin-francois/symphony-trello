@@ -130,6 +130,7 @@ final class SetupDiagnosticReporter {
             "setup_worker_missing_trello_credentials",
             "setup_worker_selection_conflict",
             "setup_worker_untracked",
+            "setup_worker_workflow_ambiguous",
             "setup_workspace_id_required",
             "setup_workspace_required",
             "setup_workflow_codex_missing",
@@ -288,6 +289,9 @@ final class SetupDiagnosticReporter {
             case "setup_workspace_id_required" ->
                 Optional.of(
                         "Re-run with --workspace-id, or use setup-local to choose a Trello Workspace interactively.");
+            case "setup_worker_workflow_ambiguous" ->
+                Optional.of(
+                        "Remove duplicate rows for the same workflow from connected-boards.json in the active Symphony config directory, then rerun the command.");
             default -> Optional.empty();
         };
     }
