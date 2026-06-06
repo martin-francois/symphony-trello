@@ -62,6 +62,38 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         assertThat(trello.createdLists()).isEmpty();
     }
 
+    @MethodSource("blankSetupLocalOptionValues")
+    @ParameterizedTest
+    void dryRunRejectsBlankSetupOptionValuesBeforePlannedSetupOutput(BlankSetupLocalOption option) {
+        // given
+
+        // when
+        SetupRunResult result = runSetup(option.commandArray());
+
+        // then
+        result.assertFailure(2)
+                .stderrContains("setup_failed code=setup_invalid_arguments", option.expectedMessage())
+                .stderrDoesNotContain("Troubleshooting report written")
+                .stdoutDoesNotContain("Dry run", "WOULD write workflows");
+        assertThat(trello.createdLists()).isEmpty();
+    }
+
+    private static Stream<BlankSetupLocalOption> blankSetupLocalOptionValues() {
+        return Stream.of(
+                new BlankSetupLocalOption("--board-name", "--board-name", " "),
+                new BlankSetupLocalOption("--workspace-id", "--workspace-id", " "),
+                new BlankSetupLocalOption("--active", "--active", ""),
+                new BlankSetupLocalOption("--active", "--active", ","),
+                new BlankSetupLocalOption("--active", "--active", "Ready for Codex, ,Inbox"),
+                new BlankSetupLocalOption("--terminal", "--terminal", ""),
+                new BlankSetupLocalOption("--terminal", "--terminal", "Done,   "),
+                new BlankSetupLocalOption("--in-progress", "--in-progress", ""),
+                new BlankSetupLocalOption("--blocked", "--blocked", " "),
+                new BlankSetupLocalOption("--add-path", "--add-path", "", "--add-path must not be empty."),
+                new BlankSetupLocalOption("--add-path", "--add-path", ",", "--add-path must not be empty."),
+                new BlankSetupLocalOption("--add-path", "--add-path", "/tmp,,/root", "--add-path must not be empty."));
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"--codex-model", "--codex-reasoning-effort"})
     void dryRunRejectsControlCharactersInCodexModelOverridesBeforePlannedSetupOutput(String optionName) {
@@ -79,6 +111,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 .stderrDoesNotContain(invalidValue, "Troubleshooting report written")
                 .stdoutDoesNotContain("Dry run", "WOULD write workflows");
         assertThat(trello.createdLists()).isEmpty();
+    }
+
+    private record BlankSetupLocalOption(String optionName, String option, String value, String expectedMessage) {
+        BlankSetupLocalOption(String optionName, String option, String value) {
+            this(optionName, option, value, optionName + " must not be blank.");
+        }
+
+        String[] commandArray() {
+            return new String[] {"--dry-run", "--non-interactive", "--no-start", option, value};
+        }
     }
 
     @Test
@@ -2138,11 +2180,11 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--board",
                 "board-1",
                 "--active",
-                "Build Next, Doing,",
+                "Build Next, Doing",
                 "--in-progress",
                 "Doing",
                 "--terminal",
-                "Shipped,",
+                "Shipped",
                 "--blocked",
                 "Needs Help",
                 "--env",

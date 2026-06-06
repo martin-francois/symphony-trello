@@ -255,10 +255,18 @@ final class SetupLocalCommandFactory {
         @Option(names = "--workspace-id", description = "Trello Workspace id for a new board.")
         Optional<String> workspaceId = Optional.empty();
 
-        @Option(names = "--active", split = ",", description = "Existing-board queued-work list name.")
+        @Option(names = "--active", description = "Existing-board queued-work list name.")
+        void activeState(String value) {
+            activeStates.addAll(CliValueNormalizer.commaSeparatedValues(value));
+        }
+
         List<String> activeStates = new ArrayList<>();
 
-        @Option(names = "--terminal", split = ",", description = "Existing-board terminal list name.")
+        @Option(names = "--terminal", description = "Existing-board terminal list name.")
+        void terminalState(String value) {
+            terminalStates.addAll(CliValueNormalizer.commaSeparatedValues(value));
+        }
+
         List<String> terminalStates = new ArrayList<>();
 
         @Option(names = "--in-progress", description = "Existing-board in-progress list name.")
@@ -303,7 +311,11 @@ final class SetupLocalCommandFactory {
         @Option(names = "--env", description = "Ignored dotenv file for Trello credentials.")
         Optional<Path> envPath = Optional.empty();
 
-        @Option(names = "--add-path", split = ",", description = "Allow sandboxed card runs to use this path.")
+        @Option(names = "--add-path", description = "Allow sandboxed card runs to use this path.")
+        void additionalWritableRoot(String value) {
+            additionalWritableRoots.addAll(CliValueNormalizer.commaSeparatedPaths(value));
+        }
+
         List<Path> additionalWritableRoots = new ArrayList<>();
 
         @Option(names = "--allow-all-paths", description = "Allow --add-path / in non-interactive setup.")
@@ -333,6 +345,13 @@ final class SetupLocalCommandFactory {
             validateLifecycleSharedOptions(action);
             rejectUnsupportedOptions(action);
             validateCliPaths();
+            CliInputValidation.rejectBlankText("--board-name", boardName);
+            CliInputValidation.rejectBlankText("--board", board);
+            CliInputValidation.rejectBlankText("--workspace-id", workspaceId);
+            CliInputValidation.rejectBlankTextValues("--active", activeStates);
+            CliInputValidation.rejectBlankTextValues("--terminal", terminalStates);
+            CliInputValidation.rejectBlankText("--in-progress", inProgressState);
+            CliInputValidation.rejectBlankText("--blocked", blockedState);
             boardName.ifPresent(value -> CliInputValidation.rejectControlCharacters("--board-name", value));
             CliInputValidation.rejectControlCharactersInText("--board", board);
             CliInputValidation.rejectControlCharactersInText("--workspace-id", workspaceId);
