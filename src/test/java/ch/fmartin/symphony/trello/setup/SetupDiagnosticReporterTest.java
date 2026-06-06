@@ -886,6 +886,58 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
+    void diagnosticsUsesLongerLogFenceWhenLogContainsMarkdownFence() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("fenced-log-config");
+        Path workspaceRoot = tempDir.resolve("fenced-log-workspaces");
+        Path stateHome = tempDir.resolve("fenced-log-state");
+        Files.createDirectories(configDir);
+        Files.createDirectories(workspaceRoot);
+        Files.createDirectories(stateHome);
+        Files.writeString(configDir.resolve("connected-boards.json"), "{\"boards\":[]}", StandardCharsets.UTF_8);
+        Files.writeString(
+                stateHome.resolve("fake-fence.log"),
+                """
+                before fence
+                ```
+                # injected markdown heading
+                [link](https://example.com)
+                ```
+                after fence
+                """,
+                StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.of(workspaceRoot),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.empty()));
+
+        // then
+        assertThat(report)
+                .contains(
+                        """
+                        ````text
+                        before fence
+                        ```
+                        # injected markdown heading
+                        [link](https://example.com)
+                        ```
+                        after fence
+                        ````
+                        """)
+                .doesNotContain("\n```text\nbefore fence\n```\n# injected markdown heading\n");
+    }
+
+    @Test
     void diagnosticsExplainsMissingManifestWhileStillSummarizingLocalWorkflows() throws Exception {
         // given
         Path configDir = tempDir.resolve("workflow-only-config");
