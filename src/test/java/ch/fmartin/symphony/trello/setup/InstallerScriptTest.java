@@ -513,10 +513,10 @@ final class InstallerScriptTest {
                         "Added " + binDirectory + " to PATH in " + loginProfile);
         assertThat(secondInstall.output()).contains("PATH setup already exists in " + profile);
         assertThat(Files.readString(profile, StandardCharsets.UTF_8))
-                .contains("# Symphony for Trello", expectedLine)
+                .contains("# >>> Symphony for Trello PATH >>>", expectedLine, "# <<< Symphony for Trello PATH <<<")
                 .containsOnlyOnce(expectedLine);
         assertThat(Files.readString(loginProfile, StandardCharsets.UTF_8))
-                .contains("# Symphony for Trello", expectedLine)
+                .contains("# >>> Symphony for Trello PATH >>>", expectedLine, "# <<< Symphony for Trello PATH <<<")
                 .containsOnlyOnce(expectedLine);
     }
 
@@ -732,6 +732,275 @@ final class InstallerScriptTest {
         assertThat(home.resolve(".profile"))
                 .content(StandardCharsets.UTF_8)
                 .contains("export PATH='" + binDirectory + "':\"$PATH\"");
+    }
+
+    @Test
+    void posixUninstallerDryRunReportsManagedPathProfileCleanup() throws Exception {
+        // given
+        Assumptions.assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("path-cleanup-dry-run-home");
+        Path symphonyHome = temporaryDirectory.resolve("path-cleanup-dry-run-symphony-home");
+        Path binDirectory = temporaryDirectory.resolve("path-cleanup-dry-run-bin");
+        Files.createDirectories(home);
+        String pathLine = "export PATH='" + binDirectory + "':\"$PATH\"";
+        String managedBlock =
+                """
+                before
+                # >>> Symphony for Trello PATH >>>
+                %s
+                # <<< Symphony for Trello PATH <<<
+                after
+                """
+                        .formatted(pathLine);
+        Files.writeString(home.resolve(".bashrc"), managedBlock, StandardCharsets.UTF_8);
+        Files.writeString(home.resolve(".profile"), managedBlock, StandardCharsets.UTF_8);
+        Map<String, String> environment = Map.of(
+                "HOME", home.toString(),
+                "SHELL", "/bin/bash",
+                "SYMPHONY_HOME", symphonyHome.toString());
+
+        // when
+        ProcessResult result =
+                run(environment, "bash", "uninstall.sh", "--dry-run", "--yes", "--bin-dir", binDirectory.toString());
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output())
+                .contains(
+                        "WOULD remove managed PATH setup from " + home.resolve(".bashrc"),
+                        "WOULD remove managed PATH setup from " + home.resolve(".profile"));
+        assertThat(home.resolve(".bashrc")).content(StandardCharsets.UTF_8).isEqualTo(managedBlock);
+        assertThat(home.resolve(".profile")).content(StandardCharsets.UTF_8).isEqualTo(managedBlock);
+    }
+
+    @Test
+    void posixUninstallerKeepsProfileWithUnterminatedManagedPathBlock() throws Exception {
+        // given
+        Assumptions.assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("path-cleanup-corrupt-home");
+        Path symphonyHome = temporaryDirectory.resolve("path-cleanup-corrupt-symphony-home");
+        Path binDirectory = temporaryDirectory.resolve("path-cleanup-corrupt-bin");
+        Files.createDirectories(home);
+        String profile =
+                """
+                before
+                # >>> Symphony for Trello PATH >>>
+                export PATH='%s':"$PATH"
+                alias kept='still here'
+                """
+                        .formatted(binDirectory);
+        Files.writeString(home.resolve(".bashrc"), profile, StandardCharsets.UTF_8);
+        Map<String, String> environment = Map.of(
+                "HOME", home.toString(),
+                "SHELL", "/bin/bash",
+                "SYMPHONY_HOME", symphonyHome.toString());
+
+        // when
+        ProcessResult result = run(environment, "bash", "uninstall.sh", "--yes", "--bin-dir", binDirectory.toString());
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output())
+                .contains("SKIP  managed PATH setup in " + home.resolve(".bashrc") + " is missing its end marker");
+        assertThat(home.resolve(".bashrc")).content(StandardCharsets.UTF_8).isEqualTo(profile);
+    }
+
+    @Test
+    void posixUninstallerKeepsManagedPathBlocksForDifferentBinDirectories() throws Exception {
+        // given
+        Assumptions.assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("path-cleanup-other-bin-home");
+        Path symphonyHome = temporaryDirectory.resolve("path-cleanup-other-bin-symphony-home");
+        Path binDirectory = temporaryDirectory.resolve("path-cleanup-other-bin-current");
+        Path otherBinDirectory = temporaryDirectory.resolve("path-cleanup-other-bin-other");
+        Files.createDirectories(home);
+        String currentPathLine = "export PATH='" + binDirectory + "':\"$PATH\"";
+        String otherPathLine = "export PATH='" + otherBinDirectory + "':\"$PATH\"";
+        String profile =
+                """
+                before
+                # >>> Symphony for Trello PATH >>>
+                %s
+                # <<< Symphony for Trello PATH <<<
+                middle
+                # >>> Symphony for Trello PATH >>>
+                %s
+                # <<< Symphony for Trello PATH <<<
+                after
+                """
+                        .formatted(otherPathLine, currentPathLine);
+        Files.writeString(home.resolve(".bashrc"), profile, StandardCharsets.UTF_8);
+
+        // when
+        ProcessResult result = runPosixUninstall(home, symphonyHome, binDirectory);
+
+        // then
+        result.assertSuccess();
+        assertRemovedPathSetup(result, home);
+        assertThat(home.resolve(".bashrc"))
+                .content(StandardCharsets.UTF_8)
+                .isEqualTo(
+                        """
+                        before
+                        # >>> Symphony for Trello PATH >>>
+                        %s
+                        # <<< Symphony for Trello PATH <<<
+                        middle
+                        after
+                        """
+                                .formatted(otherPathLine));
+    }
+
+    @Test
+    void posixUninstallerContinuesWhenManagedPathProfileCannotBeWritten() throws Exception {
+        // given
+        Assumptions.assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("path-cleanup-read-only-home");
+        Path symphonyHome = temporaryDirectory.resolve("path-cleanup-read-only-symphony-home");
+        Path binDirectory = temporaryDirectory.resolve("path-cleanup-read-only-bin");
+        Files.createDirectories(home);
+        String pathLine = "export PATH='" + binDirectory + "':\"$PATH\"";
+        String profile =
+                """
+                before
+                # >>> Symphony for Trello PATH >>>
+                %s
+                # <<< Symphony for Trello PATH <<<
+                after
+                """
+                        .formatted(pathLine);
+        Path shellProfile = home.resolve(".bashrc");
+        Files.writeString(shellProfile, profile, StandardCharsets.UTF_8);
+        assertThat(shellProfile.toFile().setWritable(false, false)).isTrue();
+        Assumptions.assumeFalse(Files.isWritable(shellProfile));
+        Map<String, String> environment = Map.of(
+                "HOME", home.toString(),
+                "SHELL", "/bin/bash",
+                "SYMPHONY_HOME", symphonyHome.toString());
+
+        // when
+        ProcessResult result = run(environment, "bash", "uninstall.sh", "--yes", "--bin-dir", binDirectory.toString());
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output())
+                .contains("NOTE  Could not remove managed PATH setup from " + home.resolve(".bashrc"));
+        assertThat(shellProfile).content(StandardCharsets.UTF_8).isEqualTo(profile);
+    }
+
+    @Test
+    void posixUninstallerContinuesWhenManagedPathProfileCannotBeRead() throws Exception {
+        // given
+        Assumptions.assumeTrue(commandExists("bash"));
+        Assumptions.assumeFalse(isWindows());
+        Assumptions.assumeTrue(commandExists("runuser"));
+        Assumptions.assumeTrue(canRunAsNobody());
+        Path home = temporaryDirectory.resolve("path-cleanup-unreadable-home");
+        Path symphonyHome = temporaryDirectory.resolve("path-cleanup-unreadable-symphony-home");
+        Path binDirectory = temporaryDirectory.resolve("path-cleanup-unreadable-bin");
+        temporaryDirectory.toFile().setReadable(true, false);
+        temporaryDirectory.toFile().setExecutable(true, false);
+        Files.createDirectories(home);
+        home.toFile().setReadable(true, false);
+        home.toFile().setExecutable(true, false);
+        String pathLine = "export PATH='" + binDirectory + "':\"$PATH\"";
+        String profile =
+                """
+                before
+                # >>> Symphony for Trello PATH >>>
+                %s
+                # <<< Symphony for Trello PATH <<<
+                after
+                """
+                        .formatted(pathLine);
+        Path shellProfile = home.resolve(".bashrc");
+        Files.writeString(shellProfile, profile, StandardCharsets.UTF_8);
+        assertThat(shellProfile.toFile().setReadable(false, false)).isTrue();
+
+        // when
+        ProcessResult result = run(
+                Map.of(),
+                "runuser",
+                "-u",
+                "nobody",
+                "--",
+                "env",
+                "HOME=" + home,
+                "SHELL=/bin/bash",
+                "SYMPHONY_HOME=" + symphonyHome,
+                "bash",
+                "uninstall.sh",
+                "--yes",
+                "--bin-dir",
+                binDirectory.toString());
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output())
+                .contains("NOTE  Could not remove managed PATH setup from " + home.resolve(".bashrc"));
+        assertThat(shellProfile).content(StandardCharsets.UTF_8).isEqualTo(profile);
+    }
+
+    @Test
+    void posixUninstallerRemovesLegacyManagedPathProfileBlocks() throws Exception {
+        // given
+        Assumptions.assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("path-cleanup-legacy-home");
+        Path symphonyHome = temporaryDirectory.resolve("path-cleanup-legacy-symphony-home");
+        Path binDirectory = temporaryDirectory.resolve("path-cleanup-legacy-bin");
+        Files.createDirectories(home);
+        String pathLine = "export PATH='" + binDirectory + "':\"$PATH\"";
+        String legacyBlock =
+                """
+                before
+                # Symphony for Trello
+                %s
+                after
+                """
+                        .formatted(pathLine);
+        Files.writeString(home.resolve(".bashrc"), legacyBlock, StandardCharsets.UTF_8);
+        Files.writeString(home.resolve(".profile"), "unchanged\n", StandardCharsets.UTF_8);
+
+        // when
+        ProcessResult result = runPosixUninstall(home, symphonyHome, binDirectory);
+
+        // then
+        result.assertSuccess();
+        assertRemovedPathSetup(result, home);
+        assertThat(home.resolve(".bashrc"))
+                .content(StandardCharsets.UTF_8)
+                .isEqualTo(
+                        """
+                        before
+                        after
+                        """);
+        assertThat(home.resolve(".profile")).content(StandardCharsets.UTF_8).isEqualTo("unchanged\n");
+    }
+
+    private static ProcessResult runPosixUninstall(Path home, Path symphonyHome, Path binDirectory) throws Exception {
+        return run(
+                uninstallEnvironment(home, symphonyHome),
+                "bash",
+                "uninstall.sh",
+                "--yes",
+                "--bin-dir",
+                binDirectory.toString());
+    }
+
+    private static Map<String, String> uninstallEnvironment(Path home, Path symphonyHome) {
+        return Map.of("HOME", home.toString(), "SHELL", "/bin/bash", "SYMPHONY_HOME", symphonyHome.toString());
+    }
+
+    private static void assertRemovedPathSetup(ProcessResult result, Path home) {
+        assertThat(result.output()).contains("OK  Removed managed PATH setup from " + home.resolve(".bashrc"));
+    }
+
+    private static boolean canRunAsNobody() {
+        try {
+            return run(Map.of(), "runuser", "-u", "nobody", "--", "true").exitCode() == 0;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     @Test
