@@ -308,7 +308,7 @@ final class SetupLocalCommandFactory {
                 description = "Codex reasoning effort to write into generated workflows.")
         Optional<String> codexReasoningEffort = Optional.empty();
 
-        @Option(names = "--env", description = "Ignored dotenv file for Trello credentials.")
+        @Option(names = "--env", description = "Dotenv file for Trello credentials.")
         Optional<Path> envPath = Optional.empty();
 
         @Option(names = "--add-path", description = "Allow sandboxed card runs to use this path.")
