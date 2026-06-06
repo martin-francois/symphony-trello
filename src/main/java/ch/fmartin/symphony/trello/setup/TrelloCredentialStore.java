@@ -148,15 +148,31 @@ final class TrelloCredentialStore {
         secureEnvPermissions(envPath);
     }
 
+    static void validateEnvPathOption(Optional<Path> envPath) {
+        envPath.ifPresent(TrelloCredentialStore::validateEnvPath);
+    }
+
     static void validateEnvPath(Path envPath) {
-        Path fileName = envPath.getFileName();
+        CliInputValidation.rejectControlCharacters("--env", envPath);
+        if (envPath.toString().isBlank()) {
+            throw new TrelloBoardSetupException("setup_invalid_arguments", "--env must point to a dotenv file path.");
+        }
+        Path absolute = envPath.toAbsolutePath().normalize();
+        if (Files.isDirectory(absolute)) {
+            throw new TrelloBoardSetupException(
+                    "setup_invalid_arguments", "--env must point to a dotenv file path, not a directory.");
+        }
+        Path fileName = absolute.getFileName();
         String name = fileName == null ? "" : fileName.toString();
-        if (".env.example".equals(name)
-                || ".env.template".equals(name)
-                || (!".env".equals(name) && !name.startsWith(".env."))) {
+        if (".env.example".equals(name) || ".env.template".equals(name)) {
             throw new TrelloBoardSetupException(
                     "setup_env_path_not_ignored",
                     "--env must point to an ignored dotenv file named .env or .env.NAME, not a tracked template.");
+        }
+        if (!".env".equals(name) && !name.startsWith(".env.")) {
+            throw new TrelloBoardSetupException(
+                    "setup_env_path_not_ignored",
+                    "--env must point to an ignored dotenv file named .env or .env.NAME.");
         }
     }
 

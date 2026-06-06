@@ -1509,6 +1509,49 @@ final class TrelloBoardSetupMainTest {
                 .doesNotContain("setup_missing_api_key");
     }
 
+    @MethodSource("invalidRuntimeEnvPathScenarios")
+    @ParameterizedTest(name = "{0} {1}")
+    void setupCommandsRejectInvalidRuntimeEnvPathWithSpecificMessage(
+            String command, InvalidRuntimeEnvPathScenario scenario) throws Exception {
+        // given
+        Path workflow = tempDir.resolve(command + "-" + scenario.name() + ".WORKFLOW.md");
+        String envValue = scenario.resolveEnvValue(tempDir);
+
+        // when
+        CliRunResult result = runCli(setupCommandWithRuntimeEnv(command, workflow, envValue));
+
+        // then
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(createdBoardName.get()).isNull();
+        assertThat(workflow).doesNotExist();
+        assertThat(result.stdout()).doesNotContain("Created Trello board", "Troubleshooting report written");
+        assertThat(result.stderr())
+                .contains(scenario.expectedErrorFragments().toArray(String[]::new))
+                .doesNotContain("direct-key", "direct-token", tempDir.toString(), "Troubleshooting report written");
+        scenario.rawPrivateValues().forEach(value -> assertThat(result.stderr()).doesNotContain(value));
+    }
+
+    private static Stream<Arguments> invalidRuntimeEnvPathScenarios() {
+        return Stream.of("new-board", "import-board").flatMap(command -> Stream.of(
+                        InvalidRuntimeEnvPathScenario.plain(
+                                "blank",
+                                "",
+                                "setup_failed code=setup_invalid_arguments",
+                                "--env must point to a dotenv file path."),
+                        InvalidRuntimeEnvPathScenario.plain(
+                                "whitespace",
+                                "   ",
+                                "setup_failed code=setup_invalid_arguments",
+                                "--env must point to a dotenv file path."),
+                        InvalidRuntimeEnvPathScenario.directoryScenario(),
+                        InvalidRuntimeEnvPathScenario.plain(
+                                "control-character",
+                                "env\nfile",
+                                "setup_failed code=setup_invalid_arguments",
+                                "--env must not contain control characters."))
+                .map(scenario -> Arguments.of(command, scenario)));
+    }
+
     @Test
     void newBoardRejectsMalformedRuntimeEnvFileBeforeCreatingBoard() throws Exception {
         // given
@@ -2622,6 +2665,60 @@ final class TrelloBoardSetupMainTest {
         }
         args.addAll(List.of("--name", "Runtime Env Queue", "--workflow", workflow.toString(), "--env", env.toString()));
         return runCli(args.toArray(String[]::new));
+    }
+
+    private String[] setupCommandWithRuntimeEnv(String command, Path workflow, String envValue) {
+        List<String> args = new ArrayList<>(
+                List.of(command, "--endpoint", endpoint(), "--key", "direct-key", "--token", "direct-token"));
+        if ("new-board".equals(command)) {
+            args.addAll(List.of("--name", "Runtime Env Queue"));
+        } else {
+            args.addAll(List.of(
+                    "--board",
+                    "https://trello.com/b/input/existing-board",
+                    "--active",
+                    "Queue for Codex",
+                    "--terminal",
+                    "Released"));
+        }
+        args.addAll(List.of("--workflow", workflow.toString(), "--env", envValue));
+        return args.toArray(String[]::new);
+    }
+
+    private record InvalidRuntimeEnvPathScenario(
+            String name, String envValue, boolean directory, List<String> expectedErrorFragments) {
+        private static InvalidRuntimeEnvPathScenario plain(
+                String name, String envValue, String... expectedErrorFragments) {
+            return new InvalidRuntimeEnvPathScenario(name, envValue, false, List.of(expectedErrorFragments));
+        }
+
+        private static InvalidRuntimeEnvPathScenario directoryScenario() {
+            return new InvalidRuntimeEnvPathScenario(
+                    "directory",
+                    "envdir",
+                    true,
+                    List.of(
+                            "setup_failed code=setup_invalid_arguments",
+                            "--env must point to a dotenv file path, not a directory."));
+        }
+
+        private String resolveEnvValue(Path base) throws IOException {
+            if (!directory) {
+                return envValue;
+            }
+            Path envDirectory = base.resolve(envValue);
+            Files.createDirectories(envDirectory);
+            return envDirectory.toString();
+        }
+
+        private List<String> rawPrivateValues() {
+            return envValue.isBlank() ? List.of() : List.of(envValue);
+        }
+
+        @Override
+        public String toString() {
+            return name;
+        }
     }
 
     private CliRunResult runCli(Supplier<TrelloBoardSetup.CodexModelDefaults> codexModelDefaults, String... args) {
