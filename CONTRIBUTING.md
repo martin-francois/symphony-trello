@@ -103,6 +103,8 @@ Before submitting changes:
   `scripts/check-private-context --stdin`.
   Replace live Trello URLs, short links, and ids with clearly synthetic same-shape values such as
   `https://trello.com/b/SYNTH001/synthetic-board` and `000000000000000000000001`.
+  For GitHub issue, PR, review, and comment writes from the command line, prefer `scripts/gh-safe`
+  so the exact title/body/comment text is scanned before `gh` posts it.
 - Document non-obvious design choices in `docs/adr/`.
 - Keep refactors separate from behavior changes when practical.
 - Use a Conventional Commit PR title or squash commit title when the change is merged. CI checks

@@ -1,0 +1,236 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage:
+  scripts/gh-safe issue create|edit|comment ...
+  scripts/gh-safe pr create|edit|comment ...
+  scripts/gh-safe api ... -f body=...
+
+Wraps GitHub text-writing commands and scans title/body/comment text for private
+context before posting. Use direct gh for read-only commands.
+EOF
+}
+
+die() {
+  printf 'gh-safe: %s\n' "$*" >&2
+  exit 2
+}
+
+if [ "$#" -eq 0 ]; then
+  usage >&2
+  exit 2
+fi
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+scanner="${CHECK_PRIVATE_CONTEXT_COMMAND:-$script_dir/check-private-context}"
+gh_command="${GH_SAFE_GH_COMMAND:-gh}"
+
+[ -x "$scanner" ] || die "Private context scanner is not executable: $scanner"
+
+args=("$@")
+rewritten=()
+temporary_files=()
+scan_target_count=0
+rewritten_value=""
+
+cleanup() {
+  if [ "${#temporary_files[@]}" -gt 0 ]; then
+    rm -f "${temporary_files[@]}"
+  fi
+}
+trap cleanup EXIT
+
+recognizes_write_command() {
+  local first=""
+  local second=""
+  local arg
+  local skip_next=false
+
+  for arg in "${args[@]}"; do
+    if [ "$skip_next" = true ]; then
+      skip_next=false
+      continue
+    fi
+    case "$arg" in
+      --repo|-R|--hostname)
+        skip_next=true
+        continue
+        ;;
+      --repo=*|-R=*|--hostname=*)
+        continue
+        ;;
+      -*)
+        continue
+        ;;
+    esac
+    if [ -z "$first" ]; then
+      first="$arg"
+    elif [ -z "$second" ]; then
+      second="$arg"
+      break
+    fi
+  done
+
+  case "$first $second" in
+    "issue create"|"issue edit"|"issue comment"|"pr create"|"pr edit"|"pr comment"|"pr review"|"api "*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+text_field_name() {
+  case "$1" in
+    title|body|comment|review)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+scan_text() {
+  local label="$1"
+  local text="$2"
+
+  scan_target_count=$((scan_target_count + 1))
+  printf '%s\n' "$text" | "$scanner" --stdin --label "$label"
+}
+
+scan_file() {
+  local file="$1"
+
+  scan_target_count=$((scan_target_count + 1))
+  "$scanner" --file "$file"
+}
+
+stdin_to_temporary_file() {
+  local temporary_file
+
+  temporary_file="$(mktemp)"
+  temporary_files+=("$temporary_file")
+  cat > "$temporary_file"
+  rewritten_value="$temporary_file"
+}
+
+scan_and_rewrite_file_value() {
+  local value="$1"
+
+  if [ "$value" = "-" ]; then
+    stdin_to_temporary_file
+    scan_file "$rewritten_value"
+    return 0
+  fi
+  [ -f "$value" ] || die "Body file does not exist or cannot be inspected."
+  scan_file "$value"
+  rewritten_value="$value"
+}
+
+scan_and_rewrite_field_value() {
+  local option="$1"
+  local value="$2"
+  local key="${value%%=*}"
+  local field_value="${value#*=}"
+  local file
+
+  if [ "$key" = "$value" ] || ! text_field_name "$key"; then
+    rewritten_value="$value"
+    return 0
+  fi
+
+  case "$option" in
+    -F|--field)
+      case "$field_value" in
+        @-)
+          stdin_to_temporary_file
+          scan_file "$rewritten_value"
+          rewritten_value="$key=@$rewritten_value"
+          ;;
+        @*)
+          file="${field_value#@}"
+          [ -f "$file" ] || die "Field file does not exist or cannot be inspected."
+          scan_file "$file"
+          rewritten_value="$value"
+          ;;
+        *)
+          scan_text "$key" "$field_value"
+          rewritten_value="$value"
+          ;;
+      esac
+      ;;
+    *)
+      scan_text "$key" "$field_value"
+      rewritten_value="$value"
+      ;;
+  esac
+}
+
+if ! recognizes_write_command; then
+  die "Unsupported or read-only command. Use gh-safe only for supported GitHub text writes."
+fi
+
+index=0
+while [ "$index" -lt "${#args[@]}" ]; do
+  arg="${args[$index]}"
+  case "$arg" in
+    --editor|--web)
+      die "Editor and web modes cannot be scanned. Provide --title, --body, --body-file, or body fields directly."
+      ;;
+    --title|--body)
+      next_index=$((index + 1))
+      [ "$next_index" -lt "${#args[@]}" ] || die "Missing value for $arg"
+      value="${args[$next_index]}"
+      scan_text "${arg#--}" "$value"
+      rewritten+=("$arg" "$value")
+      index=$((index + 2))
+      ;;
+    --title=*|--body=*)
+      key="${arg%%=*}"
+      value="${arg#*=}"
+      scan_text "${key#--}" "$value"
+      rewritten+=("$arg")
+      index=$((index + 1))
+      ;;
+    --body-file)
+      next_index=$((index + 1))
+      [ "$next_index" -lt "${#args[@]}" ] || die "Missing value for --body-file"
+      scan_and_rewrite_file_value "${args[$next_index]}"
+      rewritten+=("$arg" "$rewritten_value")
+      index=$((index + 2))
+      ;;
+    --body-file=*)
+      scan_and_rewrite_file_value "${arg#*=}"
+      rewritten+=("--body-file=$rewritten_value")
+      index=$((index + 1))
+      ;;
+    -f|-F|--field|--raw-field)
+      next_index=$((index + 1))
+      [ "$next_index" -lt "${#args[@]}" ] || die "Missing value for $arg"
+      scan_and_rewrite_field_value "$arg" "${args[$next_index]}"
+      rewritten+=("$arg" "$rewritten_value")
+      index=$((index + 2))
+      ;;
+    --field=*|--raw-field=*)
+      option="${arg%%=*}"
+      field="${arg#*=}"
+      scan_and_rewrite_field_value "$option" "$field"
+      rewritten+=("$option=$rewritten_value")
+      index=$((index + 1))
+      ;;
+    *)
+      rewritten+=("$arg")
+      index=$((index + 1))
+      ;;
+  esac
+done
+
+if [ "$scan_target_count" -eq 0 ]; then
+  die "No scanable GitHub text argument found. Provide --title, --body, --body-file, or body fields directly."
+fi
+
+"$gh_command" "${rewritten[@]}"

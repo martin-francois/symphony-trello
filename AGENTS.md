@@ -72,7 +72,10 @@ matters, and easy for another engineer to understand without asking the original
    or comment text that may contain copied diagnostics or live reproduction data, run the private
    context scanner on the relevant input: `scripts/check-private-context --worktree`,
    `scripts/check-private-context --git-range origin/main..HEAD`, or
-   `scripts/check-private-context --stdin`.
+   `scripts/check-private-context --stdin`. Use `scripts/gh-safe` instead of direct `gh issue`,
+   `gh pr`, or `gh api` write commands when creating or editing GitHub issue, PR, review, or comment
+   text. If a direct GitHub write command is unavoidable, scan the exact title/body/comment text with
+   `scripts/check-private-context --stdin` first.
 13. Run the relevant verification before finishing. For normal code changes, use:
 
    ```bash
