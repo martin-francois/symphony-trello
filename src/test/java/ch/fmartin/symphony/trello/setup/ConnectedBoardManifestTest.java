@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import java.nio.file.Path;
@@ -57,6 +58,87 @@ final class ConnectedBoardManifestTest {
         // then
         assertThat(byShortLink).contains(board);
         assertThat(byUrl).contains(board);
+    }
+
+    @Test
+    void findByBoardRejectsNonTrelloUrlHosts() {
+        // given
+        ConnectedBoard board = board(
+                "000000000000000000000001",
+                "SYNTH003",
+                "Queue",
+                "https://trello.com/b/SYNTH003/synthetic-board",
+                Path.of("WORKFLOW.md"));
+        ConnectedBoardManifest manifest = new ConnectedBoardManifest(List.of(board));
+
+        // when
+        Throwable notTrello = catchThrowable(() -> manifest.findByBoard("https://not-trello.com/b/SYNTH003/anything"));
+        Throwable prefixed = catchThrowable(() -> manifest.findByBoard("https://mytrello.com/b/SYNTH003/anything"));
+        Throwable hyphenated =
+                catchThrowable(() -> manifest.findByBoard("https://company-trello.com/b/SYNTH003/anything"));
+        Throwable embedded =
+                catchThrowable(() -> manifest.findByBoard("https://evil.example/https://trello.com/b/SYNTH003/x"));
+        Throwable missingHost = catchThrowable(() -> manifest.findByBoard("https:///b/SYNTH003/anything"));
+
+        // then
+        assertThat(notTrello)
+                .isInstanceOf(TrelloBoardSetupException.class)
+                .hasMessage(
+                        "Invalid --board value. Use a Trello board URL, short link, board id, or a connected board name.");
+        assertThat(prefixed)
+                .isInstanceOf(TrelloBoardSetupException.class)
+                .hasMessage(
+                        "Invalid --board value. Use a Trello board URL, short link, board id, or a connected board name.");
+        assertThat(hyphenated)
+                .isInstanceOf(TrelloBoardSetupException.class)
+                .hasMessage(
+                        "Invalid --board value. Use a Trello board URL, short link, board id, or a connected board name.");
+        assertThat(embedded)
+                .isInstanceOf(TrelloBoardSetupException.class)
+                .hasMessage(
+                        "Invalid --board value. Use a Trello board URL, short link, board id, or a connected board name.");
+        assertThat(missingHost)
+                .isInstanceOf(TrelloBoardSetupException.class)
+                .hasMessage(
+                        "Invalid --board value. Use a Trello board URL, short link, board id, or a connected board name.");
+    }
+
+    @Test
+    void findByBoardPreservesExactUrlLikeBoardNameMatches() {
+        // given
+        ConnectedBoard board = board(
+                "000000000000000000000001",
+                "SYNTH003",
+                "https://not-trello.com/b/team",
+                "https://trello.com/b/SYNTH003/synthetic-board",
+                Path.of("WORKFLOW.md"));
+        ConnectedBoardManifest manifest = new ConnectedBoardManifest(List.of(board));
+
+        // when
+        var selected = manifest.findByBoard("https://not-trello.com/b/team");
+
+        // then
+        assertThat(selected).contains(board);
+    }
+
+    @Test
+    void findByBoardAcceptsTrelloUrlHostsCaseInsensitively() {
+        // given
+        ConnectedBoard board = board(
+                "000000000000000000000001",
+                "SYNTH003",
+                "Queue",
+                "https://trello.com/b/SYNTH003/synthetic-board",
+                Path.of("WORKFLOW.md"));
+        ConnectedBoardManifest manifest = new ConnectedBoardManifest(List.of(board));
+
+        // when
+        var byUppercaseTrelloUrl = manifest.findByBoard("HTTPS://TRELLO.COM/b/SYNTH003/anything");
+        var byWwwTrelloUrl = manifest.findByBoard("https://www.trello.com/b/SYNTH003/anything");
+
+        // then
+        assertThat(byUppercaseTrelloUrl).contains(board);
+        assertThat(byWwwTrelloUrl).contains(board);
     }
 
     @Test

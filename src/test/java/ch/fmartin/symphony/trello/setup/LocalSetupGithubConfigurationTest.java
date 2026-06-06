@@ -41,6 +41,35 @@ final class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void configureGithubPreservesExactUrlLikeBoardNameSelection() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.url-like-name.md");
+        Path env = tempDir.resolve(".env");
+        String boardName = "https://not-trello.com/b/team";
+        SetupRunResult firstResult = connectLocalBoardWithoutGithub(workflow, env, boardName);
+        prepareNextSetupRunWithGithubAuth();
+
+        // when
+        SetupRunResult secondResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                boardName,
+                "configure-github");
+
+        // then
+        firstResult.assertSuccess();
+        secondResult.assertSuccess().stdoutContains("GitHub workflow enabled for \"" + boardName + "\"");
+        assertThat(trello.createdLists()).containsExactly("Merging");
+        assertThatWorkflow(workflow).hasGithubFlow().hasMerging();
+    }
+
+    @Test
     void githubAliasWithoutExplicitBoardUpgradesExistingNonGithubBoard() throws Exception {
         // given
         Path firstWorkflow = tempDir.resolve("WORKFLOW.local-first.md");
