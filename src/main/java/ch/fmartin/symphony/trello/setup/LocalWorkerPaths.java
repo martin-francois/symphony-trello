@@ -37,6 +37,10 @@ record LocalWorkerPaths(Path appHome, Path configDir, Path workspaceRoot, Path s
                 .orElseGet(() -> Path.of("."))
                 .toAbsolutePath()
                 .normalize();
+        CliInputValidation.rejectExistingNonDirectoryPath("--config-dir", resolvedConfigDir);
+        CliInputValidation.rejectExistingNonDirectoryPath("--workspace-root", resolvedWorkspaceRoot);
+        CliInputValidation.rejectExistingNonDirectoryPath("--state-home", resolvedStateHome);
+        CliInputValidation.rejectExistingNonDirectoryPath("--app-home", resolvedAppHome);
         return new LocalWorkerPaths(resolvedAppHome, resolvedConfigDir, resolvedWorkspaceRoot, resolvedStateHome);
     }
 
