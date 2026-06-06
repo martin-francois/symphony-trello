@@ -146,6 +146,138 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         assertThat(trello.createdLists()).isEmpty();
     }
 
+    @MethodSource("blankSetupLocalPathOptionScenarios")
+    @ParameterizedTest
+    void setupLocalRejectsBlankConfigAndManifestPathOptionsBeforePlannedOutput(
+            InvalidSetupPathOptionScenario scenario) {
+        // given
+
+        // when
+        SetupRunResult result = runSetup(scenario.commandArray());
+
+        // then
+        result.assertFailure(2)
+                .stderrContains("setup_failed code=setup_invalid_arguments", scenario.expectedMessage())
+                .stderrDoesNotContain("Troubleshooting report written")
+                .stdoutDoesNotContain("Dry run", "WOULD write workflows", "Symphony setup check");
+        assertThat(trello.createdLists()).isEmpty();
+    }
+
+    @Test
+    void setupLocalRejectsUnusableConfigAndManifestPathsBeforePlannedOutput() throws Exception {
+        // given
+        Path configFile = tempDir.resolve("config-file");
+        Path manifestDirectory = tempDir.resolve("manifest-directory");
+        Path invalidManifestFile = tempDir.resolve("invalid-manifest.json");
+        Path manifestParentFile = tempDir.resolve("manifest-parent-file");
+        Path manifestWithFileParent = manifestParentFile.resolve("connected-boards.json");
+        Files.writeString(configFile, "file", StandardCharsets.UTF_8);
+        Files.createDirectories(manifestDirectory);
+        Files.writeString(invalidManifestFile, "file", StandardCharsets.UTF_8);
+        Files.writeString(manifestParentFile, "file", StandardCharsets.UTF_8);
+        List<InvalidSetupPathOptionScenario> scenarios = List.of(
+                setupLocalPathScenario(
+                        "setup config file",
+                        "--config-dir must be a directory.",
+                        "--dry-run",
+                        "--non-interactive",
+                        "--board",
+                        "https://trello.com/b/input/queue",
+                        "--config-dir",
+                        configFile.toString()),
+                setupLocalPathScenario(
+                        "check config file",
+                        "--config-dir must be a directory.",
+                        "check",
+                        "--dry-run",
+                        "--board",
+                        "Test Board 4",
+                        "--config-dir",
+                        configFile.toString()),
+                setupLocalPathScenario(
+                        "configure github config file",
+                        "--config-dir must be a directory.",
+                        "configure-github",
+                        "--dry-run",
+                        "--board",
+                        "Test Board 4",
+                        "--config-dir",
+                        configFile.toString()),
+                setupLocalPathScenario(
+                        "setup manifest directory",
+                        "--manifest must be a file path.",
+                        "--dry-run",
+                        "--non-interactive",
+                        "--board",
+                        "https://trello.com/b/input/queue",
+                        "--manifest",
+                        manifestDirectory.toString()),
+                setupLocalPathScenario(
+                        "configure github manifest directory",
+                        "--manifest must be a file path.",
+                        "configure-github",
+                        "--board",
+                        "Test Board 4",
+                        "--manifest",
+                        manifestDirectory.toString()),
+                setupLocalPathScenario(
+                        "setup invalid manifest file",
+                        "--manifest must be a readable connected-board manifest JSON file.",
+                        "--dry-run",
+                        "--non-interactive",
+                        "--board",
+                        "https://trello.com/b/input/queue",
+                        "--manifest",
+                        invalidManifestFile.toString()),
+                setupLocalPathScenario(
+                        "setup manifest parent file",
+                        "--manifest must be a readable connected-board manifest JSON file.",
+                        "--dry-run",
+                        "--non-interactive",
+                        "--board",
+                        "https://trello.com/b/input/queue",
+                        "--manifest",
+                        manifestWithFileParent.toString()),
+                setupLocalPathScenario(
+                        "configure github invalid manifest file",
+                        "--manifest must be a readable connected-board manifest JSON file.",
+                        "configure-github",
+                        "--board",
+                        "Test Board 4",
+                        "--manifest",
+                        invalidManifestFile.toString()),
+                setupLocalPathScenario(
+                        "configure github manifest parent file",
+                        "--manifest must be a readable connected-board manifest JSON file.",
+                        "configure-github",
+                        "--board",
+                        "Test Board 4",
+                        "--manifest",
+                        manifestWithFileParent.toString()));
+
+        // when
+        List<SetupRunResult> results = scenarios.stream()
+                .map(scenario -> runSetup(scenario.commandArray()))
+                .toList();
+
+        // then
+        for (int index = 0; index < scenarios.size(); index++) {
+            InvalidSetupPathOptionScenario scenario = scenarios.get(index);
+            SetupRunResult result = results.get(index);
+            result.assertFailure(2)
+                    .stderrContains("setup_failed code=setup_invalid_arguments", scenario.expectedMessage())
+                    .stderrDoesNotContain(
+                            "Troubleshooting report written",
+                            configFile.toString(),
+                            manifestDirectory.toString(),
+                            invalidManifestFile.toString(),
+                            manifestParentFile.toString(),
+                            manifestWithFileParent.toString())
+                    .stdoutDoesNotContain("Dry run", "WOULD write workflows", "Symphony setup check");
+        }
+        assertThat(trello.createdLists()).isEmpty();
+    }
+
     @MethodSource("invalidEndpointValues")
     @ParameterizedTest
     @SuppressWarnings("JUnitValueSource")
@@ -406,6 +538,17 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         private String[] commandArray() {
             return command.toArray(String[]::new);
+        }
+    }
+
+    private record InvalidSetupPathOptionScenario(String name, String expectedMessage, List<String> command) {
+        private String[] commandArray() {
+            return command.toArray(String[]::new);
+        }
+
+        @Override
+        public String toString() {
+            return name;
         }
     }
 
@@ -3349,6 +3492,78 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 .stderrDoesNotContain("Troubleshooting report written");
         result.stdoutDoesNotContain("Dry run", "Symphony setup check");
         assertThat(trello.createdLists()).isEmpty();
+    }
+
+    private static Stream<InvalidSetupPathOptionScenario> blankSetupLocalPathOptionScenarios() {
+        return Stream.of(
+                setupLocalPathScenario(
+                        "setup blank config dir",
+                        "--config-dir must not be empty.",
+                        "--dry-run",
+                        "--non-interactive",
+                        "--board",
+                        "https://trello.com/b/input/queue",
+                        "--config-dir",
+                        ""),
+                setupLocalPathScenario(
+                        "setup whitespace config dir",
+                        "--config-dir must not be empty.",
+                        "--dry-run",
+                        "--non-interactive",
+                        "--board",
+                        "https://trello.com/b/input/queue",
+                        "--config-dir",
+                        "   "),
+                setupLocalPathScenario(
+                        "setup blank manifest",
+                        "--manifest must not be empty.",
+                        "--dry-run",
+                        "--non-interactive",
+                        "--board",
+                        "https://trello.com/b/input/queue",
+                        "--manifest",
+                        ""),
+                setupLocalPathScenario(
+                        "setup whitespace manifest",
+                        "--manifest must not be empty.",
+                        "--dry-run",
+                        "--non-interactive",
+                        "--board",
+                        "https://trello.com/b/input/queue",
+                        "--manifest",
+                        "   "),
+                setupLocalPathScenario(
+                        "check blank config dir",
+                        "--config-dir must not be empty.",
+                        "check",
+                        "--dry-run",
+                        "--board",
+                        "Test Board 4",
+                        "--config-dir",
+                        ""),
+                setupLocalPathScenario(
+                        "configure github blank config dir",
+                        "--config-dir must not be empty.",
+                        "configure-github",
+                        "--dry-run",
+                        "--board",
+                        "Test Board 4",
+                        "--config-dir",
+                        ""),
+                setupLocalPathScenario(
+                        "configure github blank manifest",
+                        "--manifest must not be empty.",
+                        "configure-github",
+                        "--dry-run",
+                        "--board",
+                        "Test Board 4",
+                        "--manifest",
+                        ""));
+    }
+
+    private static InvalidSetupPathOptionScenario setupLocalPathScenario(
+            String name, String expectedMessage, String... command) {
+        return new InvalidSetupPathOptionScenario(name, expectedMessage, List.of(command));
     }
 
     private static Stream<UnsupportedLifecycleOptionScenario> unsupportedLifecycleOptionScenarios() {

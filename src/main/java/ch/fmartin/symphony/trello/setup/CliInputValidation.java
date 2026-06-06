@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
 import com.google.common.base.CharMatcher;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
@@ -58,6 +59,18 @@ final class CliInputValidation {
     static void rejectBlankPath(String optionName, Path value, String message) {
         if (value.toString().isBlank()) {
             throw new TrelloBoardSetupException("setup_invalid_arguments", message);
+        }
+    }
+
+    static void rejectExistingNonDirectoryPath(String optionName, Path value) {
+        if (Files.exists(value) && !Files.isDirectory(value)) {
+            throw new TrelloBoardSetupException("setup_invalid_arguments", optionName + " must be a directory.");
+        }
+    }
+
+    static void rejectDirectoryPath(String optionName, Path value) {
+        if (Files.isDirectory(value)) {
+            throw new TrelloBoardSetupException("setup_invalid_arguments", optionName + " must be a file path.");
         }
     }
 

@@ -89,8 +89,48 @@ final class ConnectedBoardRepository {
         Files.deleteIfExists(probe);
     }
 
+    static void validateManifestPathForCheck(Path manifestPath) {
+        CliInputValidation.rejectDirectoryPath("--manifest", manifestPath);
+        rejectNonDirectoryManifestParent(manifestPath);
+    }
+
+    static void validateManifestPathForSetup(Path manifestPath) {
+        validateManifestPathForCheck(manifestPath);
+        if (Files.exists(manifestPath) && !Files.isRegularFile(manifestPath)) {
+            throw invalidManifestPath();
+        }
+        if (!Files.isRegularFile(manifestPath)) {
+            return;
+        }
+        try {
+            ManifestLoadResult loadResult = new ConnectedBoardRepository(manifestPath).loadForCheck();
+            if (!loadResult.warnings().isEmpty()) {
+                throw invalidManifestPath();
+            }
+        } catch (IOException e) {
+            throw invalidManifestPath(e);
+        }
+    }
+
     Path manifestPath() {
         return manifestPath;
+    }
+
+    private static TrelloBoardSetupException invalidManifestPath() {
+        return new TrelloBoardSetupException(
+                "setup_invalid_arguments", "--manifest must be a readable connected-board manifest JSON file.");
+    }
+
+    private static TrelloBoardSetupException invalidManifestPath(IOException cause) {
+        return new TrelloBoardSetupException(
+                "setup_invalid_arguments", "--manifest must be a readable connected-board manifest JSON file.", cause);
+    }
+
+    private static void rejectNonDirectoryManifestParent(Path manifestPath) {
+        Path parent = manifestPath.toAbsolutePath().normalize().getParent();
+        if (parent != null && Files.exists(parent) && !Files.isDirectory(parent)) {
+            throw invalidManifestPath();
+        }
     }
 
     private static void validateBoard(ConnectedBoard board) throws IOException {
