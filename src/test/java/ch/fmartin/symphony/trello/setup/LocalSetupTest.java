@@ -262,6 +262,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         }
     }
 
+    private record UnsupportedLifecycleOptionScenario(String subcommand, String optionName, List<String> command) {
+        private UnsupportedLifecycleOptionScenario(String subcommand, String optionName, String... command) {
+            this(subcommand, optionName, List.of(command));
+        }
+
+        private String[] commandArray() {
+            return command.toArray(String[]::new);
+        }
+    }
+
     @Test
     void nonInteractiveSetupCreatesNonGithubBoardAndWorkflow() throws Exception {
         // given
@@ -2591,7 +2601,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // then
         firstResult.assertSuccess();
-        secondResult.assertFailure(2).stderrContains("setup_board_selection_required", "--server-port");
+        secondResult.assertFailure(2).stderrContains("setup_invalid_arguments", "--server-port");
         assertThatWorkflow(workflow).doesNotHaveServerPort(19000);
         assertThat(commands.stoppedWorkflows).isEmpty();
         assertThat(commands.startedWorkflows).isEmpty();
@@ -2639,7 +2649,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         firstResult.assertSuccess();
         secondResult
                 .assertFailure(2)
-                .stderrContains("setup_board_selection_required", "--server-port")
+                .stderrContains("setup_invalid_arguments", "--server-port")
                 .stderrDoesNotContain("setup_codex_auth_required");
         assertThatWorkflow(workflow).hasNoGithubFlow().doesNotHaveServerPort(19000);
         assertThat(commands.stoppedWorkflows).isEmpty();
@@ -2737,10 +2747,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         firstResult.assertSuccess();
         secondResult
                 .assertFailure(2)
-                .stderrContains(
-                        "setup_invalid_arguments",
-                        "setup-local configure-github selects connected Trello boards with --board",
-                        "--workflow is not supported")
+                .stderrContains("setup_invalid_arguments", "setup-local configure-github does not support --workflow")
                 .stderrDoesNotContain("setup-local configure-github can apply", "Troubleshooting report written");
         assertThatWorkflow(workflow).hasNoGithubFlow();
         assertThat(commands.stoppedWorkflows).isEmpty();
@@ -2833,7 +2840,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // then
         firstResult.assertSuccess();
-        secondResult.assertFailure(2).stderrContains("setup_board_selection_required", "--server-port");
+        secondResult.assertFailure(2).stderrContains("setup_invalid_arguments", "--server-port");
         assertThatWorkflow(workflow).doesNotHaveServerPort(19000);
         assertThat(commands.stoppedWorkflows).isEmpty();
         assertThat(commands.startedWorkflows).isEmpty();
@@ -3183,6 +3190,78 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
             assertThat(workflow).doesNotExist();
             assertThat(trello.createdLists()).isEmpty();
         }
+    }
+
+    @MethodSource("unsupportedLifecycleOptionScenarios")
+    @ParameterizedTest
+    void lifecycleSubcommandsRejectUnsupportedInheritedSetupOptions(UnsupportedLifecycleOptionScenario scenario) {
+        // given
+
+        // when
+        SetupRunResult result = runSetup(scenario.commandArray());
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments",
+                        "setup-local " + scenario.subcommand() + " does not support " + scenario.optionName())
+                .stderrDoesNotContain("Troubleshooting report written");
+        result.stdoutDoesNotContain("Dry run", "Symphony setup check");
+        assertThat(trello.createdLists()).isEmpty();
+    }
+
+    private static Stream<UnsupportedLifecycleOptionScenario> unsupportedLifecycleOptionScenarios() {
+        return Stream.of(
+                unsupportedLifecycleOption("check", "--server-port", "check", "--server-port", "1"),
+                unsupportedLifecycleOption("check", "--server-port", "check", "--server-port", "0"),
+                unsupportedLifecycleOption("check", "--active", "check", "--active", "Inbox"),
+                unsupportedLifecycleOption("check", "--workspace-root", "check", "--workspace-root", "."),
+                unsupportedLifecycleOption("check", "--codex-model", "--codex-model", "", "check"),
+                unsupportedLifecycleOption("check", "--codex-model", "check", "--codex-model", ""),
+                unsupportedLifecycleOption(
+                        "repair-port", "--server-port", "repair-port", "--board", "Board", "--server-port", "1"),
+                unsupportedLifecycleOption(
+                        "repair-port", "--active", "repair-port", "--board", "Board", "--active", ""),
+                unsupportedLifecycleOption(
+                        "repair-port", "--active", "repair-port", "--board", "Board", "--active", "Inbox"),
+                unsupportedLifecycleOption(
+                        "repair-port",
+                        "--workspace-root",
+                        "repair-port",
+                        "--board",
+                        "Board",
+                        "--workspace-root",
+                        "/tmp/workspaces"),
+                unsupportedLifecycleOption("repair-port", "--workflow", "repair-port", "--workflow", "WORKFLOW.md"),
+                unsupportedLifecycleOption(
+                        "configure-github", "--dry-run", "configure-github", "--board", "Board", "--dry-run"),
+                unsupportedLifecycleOption(
+                        "configure-github",
+                        "--server-port",
+                        "configure-github",
+                        "--board",
+                        "Board",
+                        "--server-port",
+                        "1"),
+                unsupportedLifecycleOption(
+                        "configure-github", "--active", "configure-github", "--board", "Board", "--active", "Inbox"),
+                unsupportedLifecycleOption(
+                        "configure-github",
+                        "--workflow",
+                        "configure-github",
+                        "--board",
+                        "Board",
+                        "--workflow",
+                        "WORKFLOW.md"),
+                unsupportedLifecycleOption(
+                        "configure-github", "--env", "configure-github", "--board", "Board", "--env", ""),
+                unsupportedLifecycleOption(
+                        "configure-github", "--env", "configure-github", "--board", "Board", "--env", ".env.other"));
+    }
+
+    private static UnsupportedLifecycleOptionScenario unsupportedLifecycleOption(
+            String subcommand, String optionName, String... command) {
+        return new UnsupportedLifecycleOptionScenario(subcommand, optionName, command);
     }
 
     private static Stream<BroadWorkspacePathScenario> broadWorkspacePathScenarios() {
