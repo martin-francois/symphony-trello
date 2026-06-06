@@ -438,6 +438,81 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
+    void diagnosticsRejectsUnusableWorkflowSelectorsWithoutWritingReport() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("diagnostics-unusable-workflow-config");
+        Path workspaceRoot = tempDir.resolve("diagnostics-unusable-workflow-workspaces");
+        Path stateHome = tempDir.resolve("diagnostics-unusable-workflow-state");
+        Path directory = configDir.resolve("WORKFLOW.directory.md");
+        Path missing = configDir.resolve("WORKFLOW.missing.md");
+        Path empty = configDir.resolve("WORKFLOW.empty.md");
+        Path noFrontMatter = configDir.resolve("WORKFLOW.no-frontmatter.md");
+        Path invalidPort = configDir.resolve("WORKFLOW.invalid-port.md");
+        Files.createDirectories(directory);
+        Files.createDirectories(stateHome);
+        Files.writeString(empty, "", StandardCharsets.UTF_8);
+        Files.writeString(noFrontMatter, "Body only\n", StandardCharsets.UTF_8);
+        Files.writeString(
+                invalidPort,
+                """
+                ---
+                tracker:
+                  board_id: "private-board-id"
+                server:
+                  port: "not-a-port"
+                ---
+                Body
+                """,
+                StandardCharsets.UTF_8);
+        record UnusableWorkflowSelector(String name, Path workflow) {}
+        List<UnusableWorkflowSelector> selectors = List.of(
+                new UnusableWorkflowSelector("directory", directory),
+                new UnusableWorkflowSelector("missing", missing),
+                new UnusableWorkflowSelector("empty", empty),
+                new UnusableWorkflowSelector("no-frontmatter", noFrontMatter),
+                new UnusableWorkflowSelector("invalid-port", invalidPort));
+
+        // when
+        List<CliRunResult> results = selectors.stream()
+                .map(selector -> runCli(
+                        "diagnostics",
+                        "--config-dir",
+                        configDir.toString(),
+                        "--workspace-root",
+                        workspaceRoot.toString(),
+                        "--state-home",
+                        stateHome.toString(),
+                        "--workflow",
+                        selector.workflow().toString(),
+                        "--output",
+                        tempDir.resolve(selector.name() + "-diagnostics.md").toString()))
+                .toList();
+
+        // then
+        for (CliRunResult result : results) {
+            result.assertFailure(2)
+                    .stdoutDoesNotContain("# Symphony for Trello Diagnostics", "selected_workflow_file_count")
+                    .stderrContains(
+                            "setup_failed code=setup_invalid_arguments",
+                            "--workflow must reference a readable workflow file with usable workflow front matter.")
+                    .stderrDoesNotContain(
+                            "Troubleshooting report written",
+                            tempDir.toString(),
+                            configDir.toString(),
+                            directory.toString(),
+                            missing.toString(),
+                            empty.toString(),
+                            noFrontMatter.toString(),
+                            invalidPort.toString(),
+                            "private-board-id",
+                            "not-a-port");
+        }
+        for (UnusableWorkflowSelector selector : selectors) {
+            assertThat(tempDir.resolve(selector.name() + "-diagnostics.md")).doesNotExist();
+        }
+    }
+
+    @Test
     void diagnosticsRejectsAmbiguousBoardNameWithoutWritingReport() throws Exception {
         // given
         Path configDir = tempDir.resolve("diagnostics-ambiguous-board-config");

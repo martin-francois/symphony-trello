@@ -1153,6 +1153,76 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
+    void diagnosticsRejectsUnusableWorkflowSelectorsAtReporterBoundary() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("unusable-workflow-selector-config");
+        Path workspaceRoot = tempDir.resolve("unusable-workflow-selector-workspaces");
+        Path stateHome = tempDir.resolve("unusable-workflow-selector-state");
+        Path directory = configDir.resolve("WORKFLOW.directory.md");
+        Path missing = configDir.resolve("WORKFLOW.missing.md");
+        Path empty = configDir.resolve("WORKFLOW.empty.md");
+        Path noFrontMatter = configDir.resolve("WORKFLOW.no-frontmatter.md");
+        Path invalidPort = configDir.resolve("WORKFLOW.invalid-port.md");
+        Files.createDirectories(directory);
+        Files.createDirectories(stateHome);
+        Files.writeString(empty, "", StandardCharsets.UTF_8);
+        Files.writeString(noFrontMatter, "Body only\n", StandardCharsets.UTF_8);
+        Files.writeString(
+                invalidPort,
+                """
+                ---
+                tracker:
+                  board_id: "private-board-id"
+                server:
+                  port: "not-a-port"
+                ---
+                Body
+                """,
+                StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+        List<Path> unusableSelectors = List.of(directory, missing, empty, noFrontMatter, invalidPort);
+
+        // when
+        List<Throwable> thrown = unusableSelectors.stream()
+                .map(workflow ->
+                        catchThrowable(() -> reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                                Optional.empty(),
+                                Optional.empty(),
+                                false,
+                                false,
+                                Optional.empty(),
+                                Optional.of(configDir),
+                                Optional.of(workspaceRoot),
+                                Optional.of(stateHome),
+                                Optional.empty(),
+                                Optional.of(workflow)))))
+                .toList();
+
+        // then
+        for (Throwable exception : thrown) {
+            assertThat(exception)
+                    .isInstanceOfSatisfying(
+                            TrelloBoardSetupException.class,
+                            setupException -> assertThat(setupException)
+                                    .extracting(TrelloBoardSetupException::code, Throwable::getMessage)
+                                    .containsExactly(
+                                            "setup_invalid_arguments",
+                                            "--workflow must reference a readable workflow file with usable workflow front matter."))
+                    .satisfies(error -> assertThat(error.getMessage())
+                            .doesNotContain(
+                                    tempDir.toString(),
+                                    configDir.toString(),
+                                    directory.toString(),
+                                    missing.toString(),
+                                    empty.toString(),
+                                    noFrontMatter.toString(),
+                                    invalidPort.toString(),
+                                    "private-board-id",
+                                    "not-a-port"));
+        }
+    }
+
+    @Test
     void writesSanitizedReportWithInstallerToolWorkflowAndLogContext() throws Exception {
         // given
         Path appHome = tempDir.resolve("app");
