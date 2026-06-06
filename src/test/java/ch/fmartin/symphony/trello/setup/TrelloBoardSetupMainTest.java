@@ -48,6 +48,7 @@ final class TrelloBoardSetupMainTest {
     private HttpServer server;
     private final List<String> createdLists = new ArrayList<>();
     private final AtomicReference<String> createdBoardName = new AtomicReference<>();
+    private final AtomicInteger boardInfoLookups = new AtomicInteger();
     private final AtomicInteger workspaceLookups = new AtomicInteger();
 
     @TempDir
@@ -81,13 +82,14 @@ final class TrelloBoardSetupMainTest {
             createdLists.add(query.get("name"));
             respond(exchange, "{\"id\":\"list-" + createdLists.size() + "\",\"name\":\"" + query.get("name") + "\"}");
         });
-        server.createContext(
-                "/1/boards/input",
-                exchange -> respond(
-                        exchange,
-                        """
+        server.createContext("/1/boards/input", exchange -> {
+            boardInfoLookups.incrementAndGet();
+            respond(
+                    exchange,
+                    """
                 {"id":"board-1","name":"Existing Board","shortLink":"SYNTH001","url":"https://trello.com/b/SYNTH001/board","closed":false}
-                """));
+                """);
+        });
         server.createContext(
                 "/1/boards/board-1/lists",
                 exchange -> respond(
@@ -2090,6 +2092,52 @@ final class TrelloBoardSetupMainTest {
                 .contains(workflow.toAbsolutePath().normalize() + "\nRe-run with --force")
                 .doesNotContain(workflow.toAbsolutePath().normalize() + ".")
                 .doesNotContain("direct-key", "direct-token");
+    }
+
+    @Test
+    void importBoardDoesNotContactTrelloWhenWorkflowPreflightFails() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("existing-import-runtime-env.WORKFLOW.md");
+        Files.writeString(workflow, "existing workflow", StandardCharsets.UTF_8);
+        Path env = tempDir.resolve(".env.import-runtime");
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+
+        // when
+        int exitCode = run(
+                stdout,
+                stderr,
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "direct-key",
+                "--token",
+                "direct-token",
+                "--board",
+                "https://trello.com/b/input/existing-board",
+                "--active",
+                "Queue for Codex",
+                "--terminal",
+                "Released",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString());
+
+        // then
+        assertThat(exitCode).isEqualTo(2);
+        assertThat(boardInfoLookups).hasValue(0);
+        assertThat(createdLists).isEmpty();
+        assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo("existing workflow");
+        assertThat(env).doesNotExist();
+        assertThat(stdout.toString(StandardCharsets.UTF_8))
+                .doesNotContain("Imported Trello board", "Saving Trello credentials", "Troubleshooting report written");
+        assertThat(stderr.toString(StandardCharsets.UTF_8))
+                .contains("setup_failed code=setup_workflow_exists")
+                .contains(workflow.toAbsolutePath().normalize() + "\nRe-run with --force")
+                .doesNotContain(workflow.toAbsolutePath().normalize() + ".")
+                .doesNotContain("direct-key", "direct-token", "trello_api_request", "trello_auth_failed");
     }
 
     @Test

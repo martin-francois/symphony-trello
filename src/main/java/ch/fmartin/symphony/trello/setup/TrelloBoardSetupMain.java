@@ -296,6 +296,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                 options.validateCliPaths();
                 options.validateRuntimeEnvTarget();
                 parent.boardSetup.preflightConnectedBoardManifest(options.manifestPath());
+                parent.boardSetup.preflightWorkflowWrite(options.workflowPath, options.force);
                 ImportBoardRequest request = options.importBoardRequest(
                         TrelloBoardIds.parseImportBoardSelector(boardId),
                         activeStates,
