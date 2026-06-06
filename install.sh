@@ -973,6 +973,10 @@ BIN_DIR=$BIN_DIR_LITERAL
 CONFIG_DIR="\${SYMPHONY_TRELLO_CONFIG_DIR:-}"
 WORKSPACE_ROOT="\${SYMPHONY_TRELLO_WORKSPACE_ROOT:-}"
 STATE_HOME="\${SYMPHONY_TRELLO_STATE_HOME:-}"
+WORKSPACE_ROOT_FROM_ENV=false
+STATE_HOME_FROM_ENV=false
+if [[ -n "\$WORKSPACE_ROOT" ]]; then WORKSPACE_ROOT_FROM_ENV=true; fi
+if [[ -n "\$STATE_HOME" ]]; then STATE_HOME_FROM_ENV=true; fi
 if [[ -z "\$CONFIG_DIR" ]]; then CONFIG_DIR=$CONFIG_DIR_LITERAL; fi
 if [[ -z "\$WORKSPACE_ROOT" ]]; then WORKSPACE_ROOT=$WORKSPACE_ROOT_LITERAL; fi
 if [[ -z "\$STATE_HOME" ]]; then STATE_HOME=$STATE_HOME_LITERAL; fi
@@ -988,12 +992,76 @@ absolutize_path() {
     *) printf '%s/%s\n' "\$PWD" "\$1" ;;
   esac
 }
+normalize_path() {
+  local path="\$1"
+  local -a parts=()
+  local -a normalized=()
+  local part
+  path="\$(absolutize_path "\$path")"
+  path="\${path#/}"
+  IFS=/ read -r -a parts <<<"\$path"
+  for part in "\${parts[@]}"; do
+    case "\$part" in
+    "" | .) ;;
+    ..)
+      if (("\${#normalized[@]}" > 0)); then
+        unset "normalized[\$(("\${#normalized[@]}" - 1))]"
+      fi
+      ;;
+    *) normalized+=("\$part") ;;
+    esac
+  done
+  if (("\${#normalized[@]}" == 0)); then
+    printf '/\n'
+  else
+    local IFS=/
+    printf '/%s\n' "\${normalized[*]}"
+  fi
+}
 has_cli_option() {
   local option="\$1"
   shift
   local value
   for value in "\$@"; do
     [[ "\$value" == "\$option" || "\$value" == "\$option="* ]] && return 0
+  done
+  return 1
+}
+cli_option_value() {
+  local option="\$1"
+  shift
+  local value
+  while [[ "\$#" -gt 0 ]]; do
+    value="\$1"
+    if [[ "\$value" == "\$option" ]]; then
+      if [[ "\$#" -gt 1 ]]; then
+        printf '%s\n' "\$2"
+        return 0
+      fi
+      return 1
+    fi
+    if [[ "\$value" == "\$option="* ]]; then
+      printf '%s\n' "\${value#"\$option="}"
+      return 0
+    fi
+    shift
+  done
+  return 1
+}
+setup_local_lifecycle_subcommand() {
+  local value
+  while [[ "\$#" -gt 0 ]]; do
+    value="\$1"
+    shift
+    case "\$value" in
+    check | repair-port | configure-github) return 0 ;;
+    --key | --token | --board-name | --board | --workspace-id | --active | --terminal | --in-progress | --blocked | --workflow | --workspace-root | --config-dir | --manifest | --server-port | --max-agents | --codex-model | --codex-reasoning-effort | --env | --add-path | --endpoint)
+      [[ "\$#" -gt 0 ]] && shift
+      ;;
+    --key=* | --token=* | --board-name=* | --board=* | --workspace-id=* | --active=* | --terminal=* | --in-progress=* | --blocked=* | --workflow=* | --workspace-root=* | --config-dir=* | --manifest=* | --server-port=* | --max-agents=* | --codex-model=* | --codex-reasoning-effort=* | --env=* | --add-path=* | --endpoint=*) ;;
+    --*) ;;
+    *) return 1 ;;
+    esac
   done
   return 1
 }
@@ -1011,14 +1079,64 @@ exec_setup_cli() {
   export SYMPHONY_TRELLO_CALLER_DIR="\$caller_dir"
   export SYMPHONY_TRELLO_DOTENV="\${SYMPHONY_TRELLO_DOTENV:-\$CONFIG_DIR/.env}"
   if [[ "\$command" == "setup-local" ]]; then
-    has_cli_option "--config-dir" "\${args[@]}" || defaults+=(--config-dir "\$CONFIG_DIR")
-    has_cli_option "--workspace-root" "\${args[@]}" || defaults+=(--workspace-root "\$WORKSPACE_ROOT")
+    local explicit_config_dir=false
+    local explicit_config_dir_value=""
+    local setup_local_lifecycle=false
+    setup_local_lifecycle_subcommand "\${args[@]:1}" && setup_local_lifecycle=true
+    if has_cli_option "--config-dir" "\${args[@]}"; then
+      explicit_config_dir=true
+      explicit_config_dir_value="\$(cli_option_value "--config-dir" "\${args[@]}" || true)"
+    else
+      defaults+=(--config-dir "\$CONFIG_DIR")
+    fi
+    if [[ "\$setup_local_lifecycle" == false && "\$explicit_config_dir" == false ]]; then
+      has_cli_option "--workspace-root" "\${args[@]}" || defaults+=(--workspace-root "\$WORKSPACE_ROOT")
+    elif [[ -n "\$explicit_config_dir_value" ]]; then
+      local isolated_config_dir
+      isolated_config_dir="\$(normalize_path "\$explicit_config_dir_value")"
+      if [[ "\$setup_local_lifecycle" == false ]] && ! has_cli_option "--workspace-root" "\${args[@]}"; then
+        if [[ "\$WORKSPACE_ROOT_FROM_ENV" == true ]]; then
+          defaults+=(--workspace-root "\$WORKSPACE_ROOT")
+        else
+          defaults+=(--workspace-root "\$isolated_config_dir/workspaces")
+        fi
+      fi
+      if [[ "\$STATE_HOME_FROM_ENV" == false ]]; then
+        export SYMPHONY_TRELLO_STATE_HOME="\$(dirname "\$isolated_config_dir")/state"
+      fi
+    fi
   elif [[ "\$command" == "new-board" || "\$command" == "import-board" ]]; then
     has_cli_option "--workspace-root" "\${args[@]}" || defaults+=(--workspace-root "\$WORKSPACE_ROOT")
   elif [[ "\$command" == "start" || "\$command" == "stop" || "\$command" == "status" || "\$command" == "logs" || "\$command" == "diagnostics" ]]; then
-    has_cli_option "--config-dir" "\${args[@]}" || defaults+=(--config-dir "\$CONFIG_DIR")
-    has_cli_option "--workspace-root" "\${args[@]}" || defaults+=(--workspace-root "\$WORKSPACE_ROOT")
-    has_cli_option "--state-home" "\${args[@]}" || defaults+=(--state-home "\$STATE_HOME")
+    local explicit_config_dir=false
+    local explicit_config_dir_value=""
+    if has_cli_option "--config-dir" "\${args[@]}"; then
+      explicit_config_dir=true
+      explicit_config_dir_value="\$(cli_option_value "--config-dir" "\${args[@]}" || true)"
+    else
+      defaults+=(--config-dir "\$CONFIG_DIR")
+    fi
+    if [[ "\$explicit_config_dir" == false ]]; then
+      has_cli_option "--workspace-root" "\${args[@]}" || defaults+=(--workspace-root "\$WORKSPACE_ROOT")
+      has_cli_option "--state-home" "\${args[@]}" || defaults+=(--state-home "\$STATE_HOME")
+    elif [[ -n "\$explicit_config_dir_value" ]]; then
+      local isolated_config_dir
+      isolated_config_dir="\$(normalize_path "\$explicit_config_dir_value")"
+      if ! has_cli_option "--workspace-root" "\${args[@]}"; then
+        if [[ "\$WORKSPACE_ROOT_FROM_ENV" == true ]]; then
+          defaults+=(--workspace-root "\$WORKSPACE_ROOT")
+        else
+          defaults+=(--workspace-root "\$isolated_config_dir/workspaces")
+        fi
+      fi
+      if ! has_cli_option "--state-home" "\${args[@]}"; then
+        if [[ "\$STATE_HOME_FROM_ENV" == true ]]; then
+          defaults+=(--state-home "\$STATE_HOME")
+        else
+          defaults+=(--state-home "\$(dirname "\$isolated_config_dir")/state")
+        fi
+      fi
+    fi
     has_cli_option "--app-home" "\${args[@]}" || defaults+=(--app-home "\$APP_HOME")
   fi
   if [[ "\${#defaults[@]}" -gt 0 ]]; then

@@ -87,6 +87,62 @@ final class InstallerScriptLifecycleTest {
         ProcessResult unknownCommand = run(environment, installedCommand.toString(), "definitely-not-a-command");
         ProcessResult statusAfterInstall = run(environment, installedCommand.toString(), "status");
         ProcessResult noArgStart = run(environment, installedCommand.toString(), "start");
+        Path isolatedConfigDirectory = temporaryDirectory.resolve("isolated-config");
+        Path isolatedCallerDirectory = temporaryDirectory.resolve("isolated caller");
+        Files.createDirectories(isolatedConfigDirectory);
+        Files.createDirectories(isolatedCallerDirectory);
+        Files.writeString(
+                isolatedConfigDirectory.resolve("connected-boards.json"),
+                """
+                {"boards":[{"boardId":"isolated-board","boardName":"Isolated Board","workflowPath":"%s","envPath":"%s"}]}
+                """
+                        .formatted(
+                                configDirectory.resolve("WORKFLOW.lifecycle-board.md"),
+                                configDirectory.resolve(".env")),
+                StandardCharsets.UTF_8);
+        Path isolatedConfigArgument = isolatedConfigDirectory.resolve(".");
+        ProcessResult isolatedSetupLocalHelp = run(
+                environment,
+                isolatedCallerDirectory,
+                installedCommand.toString(),
+                "setup-local",
+                "--config-dir",
+                isolatedConfigArgument.toString(),
+                "--help");
+        ProcessResult isolatedSetupLocalCheck = run(
+                environment,
+                isolatedCallerDirectory,
+                installedCommand.toString(),
+                "setup-local",
+                "check",
+                "--config-dir",
+                isolatedConfigArgument.toString());
+        ProcessResult isolatedStatus = run(
+                environment,
+                isolatedCallerDirectory,
+                installedCommand.toString(),
+                "status",
+                "--config-dir",
+                isolatedConfigArgument.toString());
+        ProcessResult isolatedDiagnostics = run(
+                environment,
+                isolatedCallerDirectory,
+                installedCommand.toString(),
+                "diagnostics",
+                "--config-dir",
+                isolatedConfigArgument.toString());
+        Path environmentWorkspaceRoot = temporaryDirectory.resolve("environment workspaces");
+        Path environmentStateHome = temporaryDirectory.resolve("environment state");
+        Map<String, String> environmentPathOverrides = new LinkedHashMap<>(environment);
+        environmentPathOverrides.put("SYMPHONY_TRELLO_WORKSPACE_ROOT", environmentWorkspaceRoot.toString());
+        environmentPathOverrides.put("SYMPHONY_TRELLO_STATE_HOME", environmentStateHome.toString());
+        ProcessResult isolatedStatusWithEnvironmentRoots = run(
+                environmentPathOverrides,
+                isolatedCallerDirectory,
+                installedCommand.toString(),
+                "status",
+                "--config-dir",
+                isolatedConfigArgument.toString());
         ProcessResult update = run(
                 environment, "bash", installScript.toString(), "--no-onboard", "--bin-dir", binDirectory.toString());
         addSourceRepositoryCommit(sourceRepository, "UPGRADE_MARKER", "updated\n");
@@ -132,6 +188,18 @@ final class InstallerScriptLifecycleTest {
                 .contains("definitely-not-a-command");
         assertThat(statusAfterInstall.output()).contains("running WORKFLOW.lifecycle-board.md.");
         assertThat(noArgStart.output()).contains("already running", "WORKFLOW.lifecycle-board.md");
+        assertThat(isolatedSetupLocalHelp.exitCode())
+                .as(isolatedSetupLocalHelp.output())
+                .isZero();
+        assertThat(isolatedSetupLocalCheck.output())
+                .doesNotContain("setup-local check does not support --workspace-root");
+        assertThat(isolatedStatus.exitCode()).as(isolatedStatus.output()).isZero();
+        assertThat(isolatedDiagnostics.exitCode())
+                .as(isolatedDiagnostics.output())
+                .isZero();
+        assertThat(isolatedStatusWithEnvironmentRoots.exitCode())
+                .as(isolatedStatusWithEnvironmentRoots.output())
+                .isZero();
         assertThat(update.exitCode()).isZero();
         assertThat(secondUpdate.exitCode()).isZero();
         assertThat(markerContentAfterUpdate).isEqualTo("updated\n");
@@ -192,6 +260,66 @@ final class InstallerScriptLifecycleTest {
                         "app-present-before-exit",
                         "jar-stopped")
                 .doesNotContain("new-board --workflow");
+        List<String> isolatedInvocations = Files.readString(fakeLog, StandardCharsets.UTF_8)
+                .lines()
+                .filter(line -> line.startsWith("setup-cli "))
+                .filter(line -> line.contains("TrelloBoardSetupMain status")
+                        || line.contains("TrelloBoardSetupMain diagnostics"))
+                .filter(line -> line.contains("--config-dir " + isolatedConfigArgument))
+                .filter(line -> line.contains("--workspace-root " + isolatedConfigDirectory.resolve("workspaces")))
+                .toList();
+        assertThat(isolatedInvocations)
+                .allSatisfy(line -> assertThat(line)
+                        .contains(
+                                "--workspace-root " + isolatedConfigDirectory.resolve("workspaces"),
+                                "--state-home " + isolatedConfigDirectory.resolveSibling("state"))
+                        .doesNotContain(
+                                "--workspace-root " + isolatedConfigArgument.resolve("workspaces"),
+                                "--state-home " + isolatedConfigArgument.resolveSibling("state"),
+                                "--workspace-root " + workspaceRoot,
+                                "--state-home " + stateHome))
+                .hasSize(2);
+        List<String> isolatedSetupLocalInvocations = Files.readString(fakeLog, StandardCharsets.UTF_8)
+                .lines()
+                .filter(line -> line.startsWith("setup-cli "))
+                .filter(line -> line.contains("TrelloBoardSetupMain setup-local"))
+                .filter(line -> line.contains("--config-dir " + isolatedConfigArgument))
+                .filter(line -> line.contains("--help"))
+                .toList();
+        assertThat(isolatedSetupLocalInvocations).singleElement().satisfies(line -> assertThat(line)
+                .contains(
+                        "--workspace-root " + isolatedConfigDirectory.resolve("workspaces"),
+                        "state_env=" + isolatedConfigDirectory.resolveSibling("state"))
+                .doesNotContain(
+                        "--workspace-root " + isolatedConfigArgument.resolve("workspaces"),
+                        "state_env=" + stateHome,
+                        "--workspace-root " + workspaceRoot));
+        List<String> isolatedSetupLocalCheckInvocations = Files.readString(fakeLog, StandardCharsets.UTF_8)
+                .lines()
+                .filter(line -> line.startsWith("setup-cli "))
+                .filter(line -> line.contains("TrelloBoardSetupMain setup-local"))
+                .filter(line -> line.contains("check"))
+                .filter(line -> line.contains("--config-dir " + isolatedConfigArgument))
+                .toList();
+        assertThat(isolatedSetupLocalCheckInvocations).singleElement().satisfies(line -> assertThat(line)
+                .doesNotContain(
+                        "--workspace-root " + isolatedConfigDirectory.resolve("workspaces"),
+                        "--workspace-root " + isolatedConfigArgument.resolve("workspaces"),
+                        "--workspace-root " + workspaceRoot));
+        List<String> environmentRootInvocations = Files.readString(fakeLog, StandardCharsets.UTF_8)
+                .lines()
+                .filter(line -> line.startsWith("setup-cli "))
+                .filter(line -> line.contains("TrelloBoardSetupMain status"))
+                .filter(line -> line.contains("--config-dir " + isolatedConfigArgument))
+                .filter(line -> line.contains("--workspace-root " + environmentWorkspaceRoot))
+                .toList();
+        assertThat(environmentRootInvocations).singleElement().satisfies(line -> assertThat(line)
+                .contains("--state-home " + environmentStateHome)
+                .doesNotContain(
+                        "--workspace-root " + isolatedConfigDirectory.resolve("workspaces"),
+                        "--state-home " + isolatedConfigDirectory.resolveSibling("state"),
+                        "--workspace-root " + workspaceRoot,
+                        "--state-home " + stateHome));
     }
 
     @Test
