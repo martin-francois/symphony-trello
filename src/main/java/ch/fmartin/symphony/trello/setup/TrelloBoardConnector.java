@@ -7,7 +7,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -68,7 +67,7 @@ final class TrelloBoardConnector {
         List<String> openLists = boardSetup.getOpenBoardListNames(
                 new TrelloBoardSetup.BoardInfoRequest(options.endpoint(), credentials, boardInfo.boardId()));
         ExistingBoardLists configuredLists = existingBoardLists(options, terminal, openLists, githubIntegration);
-        Path workflowPath = resolveWorkflowPath(options, slug(boardInfo.boardName()));
+        Path workflowPath = resolveWorkflowPath(options, boardInfo.boardName());
         options = configureCodexModel(options, workflowPath, terminal);
         TrelloBoardSetup.ImportBoardResult result = boardSetup(options)
                 .importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
@@ -108,7 +107,7 @@ final class TrelloBoardConnector {
         List<TrelloBoardSetup.WorkspaceInfo> workspaces =
                 boardSetup.listWorkspaces(new TrelloBoardSetup.WorkspaceListRequest(options.endpoint(), credentials));
         String workspaceId = workspaceId(options, workspaces, terminal);
-        Path workflowPath = resolveWorkflowPath(options, slug(boardName));
+        Path workflowPath = resolveWorkflowPath(options, boardName);
         options = configureCodexModel(options, workflowPath, terminal);
         return LocalSetup.SetupResult.from(boardSetup(options)
                 .createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
@@ -283,20 +282,20 @@ final class TrelloBoardConnector {
                 : BoardSetupChoice.NEW;
     }
 
-    static Path resolveWorkflowPath(LocalSetup.Options options, String slug) {
+    static Path resolveWorkflowPath(LocalSetup.Options options, String boardName) {
         if (options.workflowPathExplicit()) {
             return options.workflowPath();
         }
-        Path requested = options.configDir().resolve("WORKFLOW." + slug + ".md");
+        Path requested = options.configDir().resolve(WorkflowFileNames.generatedFileName(boardName, "trello-board", 1));
         if (options.force() || !Files.exists(requested.toAbsolutePath().normalize())) {
             return requested;
         }
         Path parent = requested.getParent();
-        String fileName = PathNames.fileName(requested);
-        String prefix = fileName.substring(0, fileName.length() - ".md".length());
-        Path candidate = parentOrCurrent(parent).resolve(prefix + "-2.md");
+        Path candidate =
+                parentOrCurrent(parent).resolve(WorkflowFileNames.generatedFileName(boardName, "trello-board", 2));
         for (int suffix = 3; Files.exists(candidate.toAbsolutePath().normalize()); suffix++) {
-            candidate = parentOrCurrent(parent).resolve(prefix + "-" + suffix + ".md");
+            candidate = parentOrCurrent(parent)
+                    .resolve(WorkflowFileNames.generatedFileName(boardName, "trello-board", suffix));
         }
         return candidate;
     }
@@ -372,9 +371,7 @@ final class TrelloBoardConnector {
     }
 
     static String slug(String value) {
-        String slug =
-                value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-").replaceAll("(^-+|-+$)", "");
-        return slug.isBlank() ? "trello-board" : slug;
+        return WorkflowFileNames.slug(value, "trello-board");
     }
 
     static String fallbackSlug(String value) {

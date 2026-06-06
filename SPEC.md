@@ -909,8 +909,9 @@ policy:
 
 When `new-board` would otherwise write `WORKFLOW.md` and that file already exists, the Java
 implementation writes a board-specific file named `WORKFLOW.<slugified-board-name>.md`. If that file
-also exists, it appends a numeric suffix. Passing `--force` intentionally overwrites the selected
-workflow file.
+also exists, it appends a numeric suffix. Very long board-name slugs are shortened with a stable hash
+so generated workflow file names stay filesystem-safe. Passing `--force` intentionally overwrites the
+selected workflow file.
 
 Generated workflows include `server.port` for the optional HTTP status server. Unless the operator
 passes an explicit setup port option, the Java setup commands choose the first unused workflow port
@@ -3455,8 +3456,8 @@ When this profile is used:
 - if setup writes credentials to a non-default dotenv file, the managed-run wrapper MUST provide a
   way to start the workflow with that same dotenv file instead of requiring credentials to be copied
   into the default `.env`
-- setup MUST allocate workflow filenames from board-name slugs and choose non-conflicting local
-  ports without asking in the simple path
+- setup MUST allocate filesystem-safe workflow filenames from board-name slugs and choose
+  non-conflicting local ports without asking in the simple path
 - setup MUST keep Codex's workspace sandbox enabled by default and record explicit additional
   writable roots only when the user opts into extra path access
 - setup MUST ask before recording `dangerFullAccess` and explain that it disables Codex's

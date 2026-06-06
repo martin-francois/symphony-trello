@@ -333,9 +333,10 @@ With `--no-github`, `Merging` is not created, the active lists are `Ready for Co
 The first run writes `WORKFLOW.md`. If that file already exists and you did not pass `--workflow`,
 Symphony keeps the existing file and writes a board-specific file instead. For a board named
 `My Project`, the next file is `WORKFLOW.my-project.md`. If that file also exists, Symphony adds a
-number, such as `WORKFLOW.my-project-2.md`. Symphony also chooses the first unused status port from
-`18080`, `18081`, `18082`, and so on by checking other workflow files in the same folder. Use
-`--server-port` when you want to choose the port yourself.
+number, such as `WORKFLOW.my-project-2.md`. Very long board-name slugs are shortened with a stable
+hash so the generated workflow file name stays filesystem-safe. Symphony also chooses the first
+unused status port from `18080`, `18081`, `18082`, and so on by checking other workflow files in the
+same folder. Use `--server-port` when you want to choose the port yourself.
 
 Pass `--force` only when you intentionally want to replace the selected workflow file:
 

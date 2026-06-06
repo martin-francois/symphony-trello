@@ -557,10 +557,10 @@ public final class TrelloBoardSetup {
         }
 
         Path parent = requested.getParent();
-        String slug = slugify(request.boardName());
-        Path candidate = resolveSibling(parent, "WORKFLOW." + slug + ".md");
+        Path candidate = resolveSibling(parent, WorkflowFileNames.generatedFileName(request.boardName(), "board", 1));
         for (int suffix = 2; Files.exists(candidate.toAbsolutePath().normalize()); suffix++) {
-            candidate = resolveSibling(parent, "WORKFLOW." + slug + "-" + suffix + ".md");
+            candidate =
+                    resolveSibling(parent, WorkflowFileNames.generatedFileName(request.boardName(), "board", suffix));
         }
         return candidate;
     }
@@ -1917,9 +1917,7 @@ public final class TrelloBoardSetup {
     }
 
     static String slugify(String value) {
-        String slug =
-                value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-").replaceAll("(^-+|-+$)", "");
-        return slug.isBlank() ? "board" : slug;
+        return WorkflowFileNames.slug(value, "board");
     }
 
     public record TrelloCredentials(String apiKey, String apiToken) {
