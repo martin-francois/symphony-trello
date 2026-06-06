@@ -9,6 +9,8 @@ public class TrelloBoardSetupException extends RuntimeException {
     private final Path dotenvPath;
     private final String trelloApiKeyEnvironmentName;
     private final String trelloApiTokenEnvironmentName;
+    private final TrelloCredentialSource trelloApiKeyCredentialSource;
+    private final TrelloCredentialSource trelloApiTokenCredentialSource;
 
     public TrelloBoardSetupException(String code, String message) {
         this(code, message, null, null);
@@ -28,7 +30,7 @@ public class TrelloBoardSetupException extends RuntimeException {
 
     private TrelloBoardSetupException(
             String code, String message, Integer statusCode, Throwable cause, Path dotenvPath) {
-        this(code, message, statusCode, cause, dotenvPath, null, null);
+        this(code, message, statusCode, cause, dotenvPath, null, null, null, null);
     }
 
     private TrelloBoardSetupException(
@@ -38,13 +40,17 @@ public class TrelloBoardSetupException extends RuntimeException {
             Throwable cause,
             Path dotenvPath,
             String trelloApiKeyEnvironmentName,
-            String trelloApiTokenEnvironmentName) {
+            String trelloApiTokenEnvironmentName,
+            TrelloCredentialSource trelloApiKeyCredentialSource,
+            TrelloCredentialSource trelloApiTokenCredentialSource) {
         super(message, cause);
         this.code = code;
         this.statusCode = statusCode;
         this.dotenvPath = dotenvPath;
         this.trelloApiKeyEnvironmentName = trelloApiKeyEnvironmentName;
         this.trelloApiTokenEnvironmentName = trelloApiTokenEnvironmentName;
+        this.trelloApiKeyCredentialSource = trelloApiKeyCredentialSource;
+        this.trelloApiTokenCredentialSource = trelloApiTokenCredentialSource;
     }
 
     public String code() {
@@ -67,6 +73,14 @@ public class TrelloBoardSetupException extends RuntimeException {
         return Optional.ofNullable(trelloApiTokenEnvironmentName);
     }
 
+    Optional<TrelloCredentialSource> trelloApiKeyCredentialSource() {
+        return Optional.ofNullable(trelloApiKeyCredentialSource);
+    }
+
+    Optional<TrelloCredentialSource> trelloApiTokenCredentialSource() {
+        return Optional.ofNullable(trelloApiTokenCredentialSource);
+    }
+
     TrelloBoardSetupException withDotenvPath(Path path) {
         return new TrelloBoardSetupException(
                 code,
@@ -75,11 +89,42 @@ public class TrelloBoardSetupException extends RuntimeException {
                 getCause(),
                 path,
                 trelloApiKeyEnvironmentName,
-                trelloApiTokenEnvironmentName);
+                trelloApiTokenEnvironmentName,
+                trelloApiKeyCredentialSource,
+                trelloApiTokenCredentialSource);
     }
 
     TrelloBoardSetupException withTrelloCredentialEnvironmentNames(String apiKeyName, String apiTokenName) {
         return new TrelloBoardSetupException(
-                code, getMessage(), statusCode, getCause(), dotenvPath, apiKeyName, apiTokenName);
+                code,
+                getMessage(),
+                statusCode,
+                getCause(),
+                dotenvPath,
+                apiKeyName,
+                apiTokenName,
+                trelloApiKeyCredentialSource,
+                trelloApiTokenCredentialSource);
+    }
+
+    TrelloBoardSetupException withTrelloCredentialSources(
+            TrelloCredentialSource apiKeySource, TrelloCredentialSource apiTokenSource) {
+        return new TrelloBoardSetupException(
+                code,
+                getMessage(),
+                statusCode,
+                getCause(),
+                dotenvPath,
+                trelloApiKeyEnvironmentName,
+                trelloApiTokenEnvironmentName,
+                apiKeySource,
+                apiTokenSource);
+    }
+
+    enum TrelloCredentialSource {
+        SHELL_ENVIRONMENT,
+        DOTENV_FILE,
+        WORKFLOW_CONFIG,
+        MISSING
     }
 }

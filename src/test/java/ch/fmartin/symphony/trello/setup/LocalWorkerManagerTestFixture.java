@@ -27,12 +27,16 @@ final class LocalWorkerManagerTestFixture {
     final LocalWorkerManager manager;
 
     LocalWorkerManagerTestFixture(Path tempDir) {
+        this(tempDir, Map.of());
+    }
+
+    LocalWorkerManagerTestFixture(Path tempDir, Map<String, String> environment) {
         this.paths = LocalWorkerPaths.from(
                 Optional.of(tempDir.resolve("app")),
                 Optional.of(tempDir.resolve("config")),
                 Optional.of(tempDir.resolve("workspaces")),
                 Optional.of(tempDir.resolve("state")),
-                Map.of());
+                environment);
         this.platform = mock();
         when(platform.appendsToExistingLogs()).thenReturn(true);
         this.healthChecker = mock();
@@ -51,7 +55,7 @@ final class LocalWorkerManagerTestFixture {
                         Optional.empty(),
                         Optional.empty()));
         this.manager = new LocalWorkerManager(
-                Map.of(), new WorkflowConfigEditor(), healthChecker, platform, new LocalLogTailer());
+                environment, new WorkflowConfigEditor(), healthChecker, platform, new LocalLogTailer());
     }
 
     WorkerRunResult start(StartWorkerRequest request) throws Exception {
