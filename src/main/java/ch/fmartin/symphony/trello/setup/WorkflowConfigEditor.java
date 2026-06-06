@@ -201,6 +201,9 @@ final class WorkflowConfigEditor {
     }
 
     private static FrontMatter read(Path workflowPath) throws IOException {
+        if (!Files.isRegularFile(workflowPath)) {
+            throw new IOException("Workflow path is not a regular file.");
+        }
         return FrontMatter.parse(Files.readString(workflowPath, StandardCharsets.UTF_8));
     }
 

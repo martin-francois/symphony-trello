@@ -99,6 +99,7 @@ final class LocalWorkerManager {
     private void start(
             LocalWorkerPaths paths, ConnectedBoard board, Path envPath, boolean explicitEnvOverride, PrintStream out)
             throws IOException {
+        validateWorkerWorkflowPath(board.workflowPath());
         validateWorkerEnvPath(envPath);
         ManagedProcessStore store = new ManagedProcessStore(paths.stateHome());
         ManagedProcessStore.ManagedProcessFiles files = store.files(board.workflowPath());
@@ -110,6 +111,13 @@ final class LocalWorkerManager {
         if (Files.exists(envPath) && !Files.isRegularFile(envPath)) {
             throw new TrelloBoardSetupException(
                     "setup_invalid_arguments", "--env must point to a regular dotenv file.");
+        }
+    }
+
+    private static void validateWorkerWorkflowPath(Path workflowPath) {
+        if (Files.exists(workflowPath) && !Files.isRegularFile(workflowPath)) {
+            throw new TrelloBoardSetupException(
+                    "setup_invalid_arguments", "--workflow must point to a regular workflow file.");
         }
     }
 
@@ -660,6 +668,7 @@ final class LocalWorkerManager {
 
     private ConnectedBoard selectedWorkflow(ConnectedBoardManifest manifest, Path workflowSelector) {
         Path workflowPath = workflowSelector.toAbsolutePath().normalize();
+        validateWorkerWorkflowPath(workflowPath);
         List<ConnectedBoard> matches = manifest.findAllByWorkflow(workflowPath);
         if (matches.size() > 1) {
             throw new TrelloBoardSetupException(
