@@ -630,6 +630,30 @@ final class TrelloBoardSetupMainTest {
         assertThat(dashFile).doesNotExist();
     }
 
+    @MethodSource("blankDiagnosticsSelectors")
+    @ParameterizedTest(name = "{0} {1}")
+    void diagnosticsRejectsBlankSelectorsWithoutRenderingReport(String optionName, String optionValue)
+            throws Exception {
+        // given
+        Path workingDir = tempDir.resolve("blank-diagnostics-selector-workdir");
+        Path diagnosticsKey = workingDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME);
+        Files.createDirectories(workingDir);
+        Path output = workingDir.resolve("diagnostics.md");
+
+        // when
+        MainProcessResult result = runMainProcess(
+                workingDir, Map.of(), List.of(), "diagnostics", optionName, optionValue, "--output", output.toString());
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isEqualTo(2);
+        assertThat(result.stdout()).doesNotContain("# Symphony for Trello Diagnostics", "Diagnostics written");
+        assertThat(result.stderr())
+                .contains("setup_failed code=setup_invalid_arguments", optionName + " must not be empty.")
+                .doesNotContain("Troubleshooting report written", DiagnosticsTokenHasher.KEY_FILE_NAME);
+        assertThat(diagnosticsKey).doesNotExist();
+        assertThat(output).doesNotExist();
+    }
+
     @Test
     void diagnosticsWithBlankConfigDirDoesNotCreateTokenKeyInWorkingDirectory() throws Exception {
         // given
@@ -694,6 +718,14 @@ final class TrelloBoardSetupMainTest {
         assertThat(result.stderr()).isEmpty();
         assertThat(diagnosticsKey).doesNotExist();
         assertThat(envConfigDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME)).doesNotExist();
+    }
+
+    private static Stream<Arguments> blankDiagnosticsSelectors() {
+        return Stream.of(
+                Arguments.of("--board", ""),
+                Arguments.of("--board", "   "),
+                Arguments.of("--workflow", ""),
+                Arguments.of("--workflow", "   "));
     }
 
     @MethodSource("missingWorkerCredentialDotenvContents")
