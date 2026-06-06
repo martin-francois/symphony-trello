@@ -3286,6 +3286,36 @@ final class TrelloBoardSetupMainTest {
         assertThat(createdBoardName).hasValue(null);
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"workspace/path", "https://trello.com/w/workspace", "C:\\workspace"})
+    void rejectsUrlOrPathWorkspaceIdBeforeTrelloRequest(String badWorkspaceId) {
+        // given
+
+        // when
+        CliRunResult result = runCli(
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--name",
+                "Queue",
+                "--workspace-id",
+                badWorkspaceId);
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments",
+                        "--workspace-id must be a Trello Workspace id, not a URL or path.")
+                .stderrDoesNotContain(badWorkspaceId, "Troubleshooting report written")
+                .stdoutDoesNotContain("Created Trello board", badWorkspaceId);
+        assertThat(workspaceLookups).hasValue(0);
+        assertThat(createdBoardName).hasValue(null);
+    }
+
     @Test
     void rejectsControlCharactersInDirectBoardSelectorBeforeTrelloRequest() {
         // given

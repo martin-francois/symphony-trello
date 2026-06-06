@@ -45,6 +45,20 @@ final class CliInputValidation {
         value.ifPresent(text -> rejectControlCharacters(optionName, text));
     }
 
+    static void rejectWorkspaceIdReference(String optionName, String value) {
+        if (value == null) {
+            return;
+        }
+        if (looksLikeUrlOrPath(value)) {
+            throw new TrelloBoardSetupException(
+                    "setup_invalid_arguments", optionName + " must be a Trello Workspace id, not a URL or path.");
+        }
+    }
+
+    static void rejectWorkspaceIdReference(String optionName, Optional<String> value) {
+        value.ifPresent(text -> rejectWorkspaceIdReference(optionName, text));
+    }
+
     static void rejectBlankText(String optionName, Optional<String> value) {
         rejectBlankText(optionName, value, optionName + " must not be blank.");
     }
@@ -216,5 +230,9 @@ final class CliInputValidation {
         return STANDARD_STREAM_DEVICE_PATHS.contains(value)
                 || DEV_FD_STREAM.matcher(value).matches()
                 || PROCESS_FD_STREAM.matcher(value).matches();
+    }
+
+    private static boolean looksLikeUrlOrPath(String value) {
+        return value.contains("://") || value.contains("/") || value.contains("\\");
     }
 }

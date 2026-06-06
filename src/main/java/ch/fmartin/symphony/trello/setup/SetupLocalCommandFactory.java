@@ -355,6 +355,7 @@ final class SetupLocalCommandFactory {
             boardName.ifPresent(value -> CliInputValidation.rejectControlCharacters("--board-name", value));
             CliInputValidation.rejectControlCharactersInText("--board", board);
             CliInputValidation.rejectControlCharactersInText("--workspace-id", workspaceId);
+            CliInputValidation.rejectWorkspaceIdReference("--workspace-id", workspaceId);
             github.validate();
             validateCodexModelOverrides();
             Optional<Boolean> resolvedGithubMode = githubMode.or(() -> github.selected());

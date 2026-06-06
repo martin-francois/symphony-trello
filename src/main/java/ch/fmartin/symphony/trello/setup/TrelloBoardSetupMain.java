@@ -219,6 +219,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                 CliInputValidation.rejectBlankText("--workspace-id", workspaceId);
                 CliInputValidation.rejectControlCharacters("--name", boardName);
                 CliInputValidation.rejectControlCharacters("--workspace-id", workspaceId);
+                CliInputValidation.rejectWorkspaceIdReference("--workspace-id", workspaceId);
                 options.validateCliPaths();
                 options.validateRuntimeEnvTarget();
                 parent.boardSetup.preflightConnectedBoardManifest(options.manifestPath());

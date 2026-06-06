@@ -697,6 +697,33 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         assertThat(trello.createdLists()).isEmpty();
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"workspace/path", "https://trello.com/w/workspace", "C:\\workspace"})
+    void setupLocalRejectsUrlOrPathWorkspaceIdBeforePlannedSetupOutput(String badWorkspaceId) {
+        // given
+
+        // when
+        SetupRunResult result = runSetup(
+                "--dry-run",
+                "--non-interactive",
+                "--no-start",
+                "--board-name",
+                "Local Queue",
+                "--workspace-id",
+                badWorkspaceId,
+                "--no-github");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments",
+                        "--workspace-id must be a Trello Workspace id, not a URL or path.")
+                .stderrDoesNotContain(badWorkspaceId, "Troubleshooting report written")
+                .stdoutDoesNotContain("Dry run", "Board connected", badWorkspaceId);
+        assertThat(trello.boardLookups()).isEmpty();
+        assertThat(trello.createdLists()).isEmpty();
+    }
+
     @MethodSource("githubAuthCheckScenarios")
     @ParameterizedTest
     void checkReportsGithubAuthState(GithubAuthCheckScenario scenario) {
