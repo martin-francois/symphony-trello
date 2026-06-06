@@ -1,21 +1,26 @@
 package ch.fmartin.symphony.trello.setup;
 
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
+import com.google.common.util.concurrent.Striped;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.locks.Lock;
 
 final class LocalWorkerManager {
     private static final int STARTUP_LOG_BYTE_LIMIT = 128 * 1024;
+    private static final Striped<Lock> START_LOCKS = Striped.lazyWeakLock(1024);
 
     private final Map<String, String> environment;
     private final WorkflowConfigEditor workflowConfig;
@@ -97,6 +102,30 @@ final class LocalWorkerManager {
         ManagedProcessStore store = new ManagedProcessStore(paths.stateHome());
         ManagedProcessStore.ManagedProcessFiles files = store.files(board.workflowPath());
         Files.createDirectories(paths.stateHome());
+        Lock startLock = START_LOCKS.get(files.startLockFile().toAbsolutePath().normalize());
+        startLock.lock();
+        try (FileChannel channel =
+                        FileChannel.open(files.startLockFile(), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+                FileLock fileLock = channel.lock()) {
+            if (!fileLock.isValid()) {
+                throw new TrelloBoardSetupException(
+                        "setup_start_failed", "Could not acquire the managed worker start lock.");
+            }
+            startLocked(paths, board, envPath, explicitEnvOverride, out, store, files);
+        } finally {
+            startLock.unlock();
+        }
+    }
+
+    private void startLocked(
+            LocalWorkerPaths paths,
+            ConnectedBoard board,
+            Path envPath,
+            boolean explicitEnvOverride,
+            PrintStream out,
+            ManagedProcessStore store,
+            ManagedProcessStore.ManagedProcessFiles files)
+            throws IOException {
         Long existingPid = store.readPid(files.pidFile());
         int healthPort = healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), envPath);
         if (explicitEnvOverride) {
