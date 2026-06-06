@@ -748,6 +748,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
 
         private void validateCliPaths() {
             CliInputValidation.rejectControlCharacters("--workflow", workflowPath);
+            CliInputValidation.rejectBlankPath("--workflow", workflowPath);
             CliInputValidation.rejectControlCharacters("--workspace-root", workspaceRoot);
             TrelloCredentialStore.validateEnvPathOption(envPath);
             validateCodexModelOverrides();

@@ -124,6 +124,28 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         }
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"", "   "})
+    void dryRunRejectsBlankWorkflowPathBeforePlannedSetupOutput(String workflowPath) {
+        // given
+
+        // when
+        SetupRunResult result = runSetup(
+                "--dry-run",
+                "--non-interactive",
+                "--board",
+                "https://trello.com/b/input/queue",
+                "--workflow",
+                workflowPath);
+
+        // then
+        result.assertFailure(2)
+                .stderrContains("setup_failed code=setup_invalid_arguments", "--workflow must be a file path.")
+                .stderrDoesNotContain("Troubleshooting report written")
+                .stdoutDoesNotContain("Dry run", "WOULD write workflows");
+        assertThat(trello.createdLists()).isEmpty();
+    }
+
     @MethodSource("invalidEndpointValues")
     @ParameterizedTest
     @SuppressWarnings("JUnitValueSource")
