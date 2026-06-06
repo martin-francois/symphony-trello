@@ -1189,6 +1189,70 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
+    void newBoardBoundsGeneratedWorkflowPathForLongBoardNames() throws IOException {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Files.writeString(workflow, "keep me", StandardCharsets.UTF_8);
+        String boardName = "Project " + "Alpha ".repeat(80);
+        String expectedSlugPrefix = TrelloBoardSetup.slugify(boardName).substring(0, 100);
+
+        // when
+        var result = setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                boardName,
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                1,
+                false,
+                true));
+
+        // then
+        String fileName = result.workflowPath().getFileName().toString();
+        assertThat(fileName)
+                .startsWith("WORKFLOW." + expectedSlugPrefix + "-")
+                .endsWith(".md")
+                .matches("WORKFLOW\\.[a-z0-9-]+-[0-9a-f]{12}\\.md")
+                .hasSizeLessThan(128);
+        assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo("keep me");
+        assertThat(result.workflowPath()).content(StandardCharsets.UTF_8).contains("board_id: \"abc123\"");
+    }
+
+    @Test
+    void newBoardBoundsGeneratedWorkflowPathWhenLongBoardNameFallbackNeedsNumericSuffix() throws IOException {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Files.writeString(workflow, "keep me", StandardCharsets.UTF_8);
+        String boardName = "Project " + "Alpha ".repeat(80);
+        for (int suffix = 1; suffix < 10; suffix++) {
+            Files.writeString(
+                    tempDir.resolve(WorkflowFileNames.generatedFileName(boardName, "board", suffix)), "taken");
+        }
+
+        // when
+        var result = setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                boardName,
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                1,
+                false,
+                true));
+
+        // then
+        String fileName = result.workflowPath().getFileName().toString();
+        assertThat(fileName)
+                .endsWith("-10.md")
+                .matches("WORKFLOW\\.[a-z0-9-]+-[0-9a-f]{12}-10\\.md")
+                .hasSizeLessThan(128);
+        assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo("keep me");
+        assertThat(result.workflowPath()).content(StandardCharsets.UTF_8).contains("board_id: \"abc123\"");
+    }
+
+    @Test
     void newBoardUsesNextServerPortWhenExistingWorkflowUsesDefaultPort() throws IOException {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");

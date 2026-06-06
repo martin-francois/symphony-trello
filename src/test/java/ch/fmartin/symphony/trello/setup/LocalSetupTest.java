@@ -2587,6 +2587,53 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void setupBoundsGeneratedWorkflowPathForLongBoardNames() throws Exception {
+        // given
+        String boardName = "Project " + "Alpha ".repeat(80);
+        String expectedSlugPrefix = TrelloBoardConnector.slug(boardName).substring(0, 100);
+        Path config = fixture.configDir();
+        Path env = tempDir.resolve(".env");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                boardName,
+                "--env",
+                env.toString(),
+                "--no-github",
+                "--no-start");
+
+        // then
+        result.assertSuccess().stdoutContains("Board connected: \"" + boardName + "\"");
+        List<Path> workflows;
+        try (var stream = Files.list(config)) {
+            workflows = stream.filter(path -> path.getFileName().toString().startsWith("WORKFLOW."))
+                    .toList();
+        }
+        assertThat(workflows).singleElement().satisfies(workflow -> {
+            String fileName = workflow.getFileName().toString();
+            assertThat(fileName)
+                    .startsWith("WORKFLOW." + expectedSlugPrefix + "-")
+                    .endsWith(".md")
+                    .matches("WORKFLOW\\.[a-z0-9-]+-[0-9a-f]{12}\\.md")
+                    .hasSizeLessThan(128);
+            assertThat(workflow)
+                    .content(StandardCharsets.UTF_8)
+                    .contains("board_id: \"abc123\"", "## Local And Non-GitHub Repository Work");
+        });
+        assertThat(trello.createdLists())
+                .containsExactly("Inbox", "Ready for Codex", "In Progress", "Blocked", "Human Review", "Done");
+        assertThat(commands.startedWorkflows).isEmpty();
+    }
+
+    @Test
     void forcedWorkflowReplacementRemovesStaleManifestEntryWithSameWorkflowPath() throws Exception {
         // given
         Path config = tempDir.resolve("config");
