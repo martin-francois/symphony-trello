@@ -522,7 +522,7 @@ final class SetupLocalCommandFactory {
             CliInputValidation.rejectControlCharacters("--workspace-root", workspaceRoot);
             CliInputValidation.rejectControlCharacters("--config-dir", configDir);
             CliInputValidation.rejectControlCharacters("--manifest", manifestPath);
-            CliInputValidation.rejectControlCharacters("--env", envPath);
+            TrelloCredentialStore.validateEnvPathOption(envPath);
             CliInputValidation.rejectControlCharactersInPaths("--add-path", additionalWritableRoots);
         }
 
