@@ -118,6 +118,9 @@ public final class LocalSetup {
             options = Options.from(request, environment);
 
             printHeader(out, options);
+            if (!confirmWorkspaceRoot(options, terminal)) {
+                return 0;
+            }
             Prerequisites prerequisites = prerequisites();
             printPrerequisites(out, prerequisites, options);
             if (options.check()) {
@@ -507,6 +510,23 @@ public final class LocalSetup {
         CodexModelSelectionFlow.Selection selected = new CodexModelSelectionFlow()
                 .resolve(options, boardSetup.codexModelSelectionDefaultsForWorkflow(workflowPath), terminal);
         return options.withCodexModelSelection(selected);
+    }
+
+    private static boolean confirmWorkspaceRoot(Options options, Terminal terminal) throws IOException {
+        if (!options.workspaceRootExplicit()
+                || options.nonInteractive()
+                || !WorkspaceAccessFlow.isBroadAccessPath(options.workspaceRoot())) {
+            return true;
+        }
+        terminal.info("");
+        terminal.info(
+                "Using / as the workspace root lets Symphony create per-card workspaces from the whole filesystem root.");
+        terminal.info("This is unsafe unless you intentionally want that.");
+        if (PromptSupport.yes(terminal, "Use / as the workspace root anyway? [y/N] ")) {
+            return true;
+        }
+        terminal.info("Workspace-root selection cancelled.");
+        return false;
     }
 
     private TrelloBoardSetup boardSetupWithCodexModel(Options options) {

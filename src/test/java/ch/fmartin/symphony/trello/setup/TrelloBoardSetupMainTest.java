@@ -2535,6 +2535,157 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
+    void directSetupRejectsInvalidWorkspaceRootBeforeTrelloWork() throws Exception {
+        // given
+        Path workspaceFile = tempDir.resolve("direct-workspace-root-file");
+        Files.writeString(workspaceFile, "not a directory", StandardCharsets.UTF_8);
+        Path importWorkflow = tempDir.resolve("direct-invalid-workspace-root.WORKFLOW.md");
+        record InvalidWorkspaceRootScenario(String expectedMessage, List<String> command) {
+            String[] commandArray() {
+                return command.toArray(String[]::new);
+            }
+        }
+        List<InvalidWorkspaceRootScenario> scenarios = List.of(
+                new InvalidWorkspaceRootScenario(
+                        "--workspace-root must not be empty.",
+                        List.of(
+                                "new-board",
+                                "--endpoint",
+                                endpoint(),
+                                "--key",
+                                "key",
+                                "--token",
+                                "token",
+                                "--name",
+                                "Invalid Workspace",
+                                "--workspace-id",
+                                "workspace-1",
+                                "--workspace-root",
+                                "")),
+                new InvalidWorkspaceRootScenario(
+                        "--workspace-root must not be empty.",
+                        List.of(
+                                "new-board",
+                                "--endpoint",
+                                endpoint(),
+                                "--key",
+                                "key",
+                                "--token",
+                                "token",
+                                "--name",
+                                "Invalid Workspace",
+                                "--workspace-id",
+                                "workspace-1",
+                                "--workspace-root",
+                                "   ")),
+                new InvalidWorkspaceRootScenario(
+                        "--workspace-root must be an absolute path.",
+                        List.of(
+                                "import-board",
+                                "--endpoint",
+                                endpoint(),
+                                "--key",
+                                "key",
+                                "--token",
+                                "token",
+                                "--board",
+                                "https://trello.com/b/input/existing-board",
+                                "--active",
+                                "Queue for Codex",
+                                "--terminal",
+                                "Released",
+                                "--workflow",
+                                importWorkflow.toString(),
+                                "--force",
+                                "--workspace-root",
+                                ".")),
+                new InvalidWorkspaceRootScenario(
+                        "--workspace-root must be an absolute path.",
+                        List.of(
+                                "import-board",
+                                "--endpoint",
+                                endpoint(),
+                                "--key",
+                                "key",
+                                "--token",
+                                "token",
+                                "--board",
+                                "https://trello.com/b/input/existing-board",
+                                "--active",
+                                "Queue for Codex",
+                                "--terminal",
+                                "Released",
+                                "--workflow",
+                                importWorkflow.toString(),
+                                "--force",
+                                "--workspace-root",
+                                " ./relative ")),
+                new InvalidWorkspaceRootScenario(
+                        "--workspace-root must be a directory.",
+                        List.of(
+                                "import-board",
+                                "--endpoint",
+                                endpoint(),
+                                "--key",
+                                "key",
+                                "--token",
+                                "token",
+                                "--board",
+                                "https://trello.com/b/input/existing-board",
+                                "--active",
+                                "Queue for Codex",
+                                "--terminal",
+                                "Released",
+                                "--workflow",
+                                importWorkflow.toString(),
+                                "--force",
+                                "--workspace-root",
+                                workspaceFile.toString())));
+
+        // when / then
+        for (InvalidWorkspaceRootScenario scenario : scenarios) {
+            CliRunResult result = runCli(scenario.commandArray());
+            result.assertFailure(2)
+                    .stderrContains("setup_failed code=setup_invalid_arguments", scenario.expectedMessage())
+                    .stderrDoesNotContain("Troubleshooting report written", workspaceFile.toString(), "not a directory")
+                    .stdoutDoesNotContain("Created Trello board", "Imported Trello board");
+        }
+        assertThat(createdBoardName).hasValue(null);
+        assertThat(importWorkflow).doesNotExist();
+    }
+
+    @Test
+    void directImportBoardAllowsFilesystemRootWorkspaceRoot() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("direct-root-workspace.WORKFLOW.md");
+
+        // when
+        CliRunResult result = runCli(
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "https://trello.com/b/input/existing-board",
+                "--active",
+                "Queue for Codex",
+                "--terminal",
+                "Released",
+                "--workflow",
+                workflow.toString(),
+                "--force",
+                "--workspace-root",
+                "/");
+
+        // then
+        result.assertSuccess();
+        assertThat(workflow).content(StandardCharsets.UTF_8).contains("root: \"/\"");
+    }
+
+    @Test
     void lifecycleCommandsRejectBlankAndFileDirectoryOptionsBeforeWorkerHandling() throws Exception {
         // given
         Path configFile = tempDir.resolve("lifecycle-config-file");
