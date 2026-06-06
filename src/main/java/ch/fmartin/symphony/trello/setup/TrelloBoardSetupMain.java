@@ -133,6 +133,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             LocalWorkerManager workerManager,
             PrintStream out,
             PrintStream err) {
+        String[] effectiveArgs = InstalledCliDefaults.apply(args, System.getenv());
         BufferedReader input = standardInputReader(); // NOPMD - System.in is process-owned.
         CommandLine commandLine = new CommandLine(new TrelloBoardSetupMain(boardSetup, workerManager, input, out, err))
                 .addSubcommand(
@@ -142,14 +143,14 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                 .setExecutionExceptionHandler((exception, ignored, parseResult) -> {
                     SetupLocalCommandFactory.printExecutionFailure(err, exception, errorCode(exception));
                     if (!(exception instanceof ParameterException)) {
-                        SetupDiagnosticReporter.reportFailure(exception, args, input, out, err);
+                        SetupDiagnosticReporter.reportFailure(exception, effectiveArgs, input, out, err);
                     }
                     return 2;
                 })
                 .setParameterExceptionHandler(SetupLocalCommandFactory.usageErrors());
         SetupLocalCommandFactory.hideUnsupportedSubcommandOptions(
                 commandLine.getSubcommands().get("setup-local"));
-        return commandLine.execute(args);
+        return commandLine.execute(effectiveArgs);
     }
 
     @Override

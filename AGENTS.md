@@ -307,6 +307,12 @@ matters, and easy for another engineer to understand without asking the original
 - For CLI commands, follow the principle of least surprise: avoid silent no-ops, print actionable
   success/error output, and prefer preserving existing user files with a clear alternate path over
   making repeated setup commands appear to do nothing.
+- Keep installed command semantics and shared default resolution in the Java CLI when Java is
+  available. Install and uninstall scripts should contain only platform bootstrap, shell profile
+  editing, prerequisite installation, process cleanup before Java is available, and behavior that is
+  genuinely shell-specific. When a script change duplicates logic across Bash and PowerShell, first
+  move the behavior into Java and test it once. If duplication is unavoidable, document why near the
+  duplicated script logic or in an ADR when the tradeoff is architectural.
 - Do not make users inspect workflow or config internals to recover from CLI errors. When the
   program knows the relevant command, path, option, or environment variable names for this run,
   print those exact values in the next step instead of saying that they are "referenced by the
