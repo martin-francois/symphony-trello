@@ -529,6 +529,8 @@ final class SetupLocalCommandFactory {
         private void validateCodexModelOverrides() {
             CliInputValidation.rejectBlankText("--codex-model", codexModel);
             CliInputValidation.rejectBlankText("--codex-reasoning-effort", codexReasoningEffort);
+            CliInputValidation.rejectControlCharactersInText("--codex-model", codexModel);
+            CliInputValidation.rejectControlCharactersInText("--codex-reasoning-effort", codexReasoningEffort);
         }
 
         private boolean hasCodexAccessUpdateRequest() {
