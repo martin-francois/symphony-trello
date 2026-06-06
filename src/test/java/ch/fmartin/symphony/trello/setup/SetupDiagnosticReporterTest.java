@@ -50,6 +50,7 @@ final class SetupDiagnosticReporterTest {
                 "setup_workspace_id_required",
                 "setup_worker_board_ambiguous",
                 "setup_worker_board_required",
+                "setup_worker_workflow_ambiguous",
                 "trello_auth_failed",
                 "trello_permission_denied");
         List<String> unexpectedFailureCodes = List.of(
@@ -91,6 +92,22 @@ final class SetupDiagnosticReporterTest {
                 .contains("this .env credential file:\n  ")
                 .contains(".env")
                 .doesNotContain("local .env file", "usually"));
+    }
+
+    @Test
+    void givesActionableHintForAmbiguousWorkerWorkflowRows() {
+        // given
+        var duplicateWorkflowRows = new TrelloBoardSetupException(
+                "setup_worker_workflow_ambiguous", "Multiple connected-board rows reference --workflow.");
+
+        // when
+        Optional<String> hint = SetupDiagnosticReporter.userActionHint(duplicateWorkflowRows);
+
+        // then
+        assertThat(hint).hasValueSatisfying(value -> assertThat(value)
+                .contains(
+                        "Remove duplicate rows for the same workflow from connected-boards.json in the active Symphony config directory")
+                .doesNotContain(tempDir.toString(), "WORKFLOW", "board-1", "board-2"));
     }
 
     @Test

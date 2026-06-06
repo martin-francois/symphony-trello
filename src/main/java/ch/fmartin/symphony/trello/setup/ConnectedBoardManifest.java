@@ -69,9 +69,13 @@ record ConnectedBoardManifest(List<ConnectedBoard> boards) {
     }
 
     Optional<ConnectedBoard> findByWorkflow(Path workflowPath) {
+        return findAllByWorkflow(workflowPath).stream().findFirst();
+    }
+
+    List<ConnectedBoard> findAllByWorkflow(Path workflowPath) {
         return boards.stream()
                 .filter(board -> PathsEqual.samePath(board.workflowPath(), workflowPath))
-                .findFirst();
+                .toList();
     }
 
     private static boolean sameBoardOrWorkflow(ConnectedBoard first, ConnectedBoard second) {

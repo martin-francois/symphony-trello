@@ -827,6 +827,37 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
+    void lifecycleWorkflowSelectorsRejectDuplicateManifestRows() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard first = fixture.connectedBoard("board-1", "Dup Workflow A", "shared-workflow");
+        ConnectedBoard second = new ConnectedBoard(
+                "board-2",
+                "short-2",
+                "Dup Workflow B",
+                "https://trello.com/b/short-2/dup-workflow-b",
+                first.workflowPath(),
+                first.envPath(),
+                fixture.paths.workspaceRoot(),
+                first.serverPort(),
+                false,
+                List.of(),
+                false);
+        fixture.save(first, second);
+
+        // when
+        Throwable status = catchThrowable(() -> fixture.status(fixture.statusWorkflowRequest(first.workflowPath())));
+        Throwable start = catchThrowable(() -> fixture.start(fixture.startWorkflowRequest(first.workflowPath())));
+        Throwable logs = catchThrowable(() -> fixture.logs(fixture.logsWorkflowRequest(first.workflowPath())));
+
+        // then
+        assertDuplicateWorkflowSelector(status, first, second);
+        assertDuplicateWorkflowSelector(start, first, second);
+        assertDuplicateWorkflowSelector(logs, first, second);
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    @Test
     void explicitWorkflowUsesWorkflowBoardIdAndPortWithoutManifestEntry() throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
@@ -910,6 +941,25 @@ final class LocalWorkerManagerTest {
         // then
         result.assertSuccess().stdoutContains("Skipped unmanaged stale pid");
         verify(fixture.platform, never()).stop(anyLong(), any(Duration.class), any(Duration.class));
+    }
+
+    private void assertDuplicateWorkflowSelector(Throwable thrown, ConnectedBoard first, ConnectedBoard second) {
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_worker_workflow_ambiguous");
+            assertThat(failure)
+                    .hasMessage(
+                            "Multiple connected-board rows reference --workflow. Repair connected-boards.json, then rerun the command.");
+            assertThat(failure.getMessage())
+                    .doesNotContain(
+                            first.boardId(),
+                            first.boardName(),
+                            first.boardUrl(),
+                            first.workflowPath().toString(),
+                            second.boardId(),
+                            second.boardName(),
+                            second.boardUrl(),
+                            tempDir.toString());
+        });
     }
 
     private static Path onlyPidFile(Path stateHome) throws Exception {
