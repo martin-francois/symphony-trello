@@ -573,6 +573,10 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
 
         private void validateCliPaths() {
             CliInputValidation.rejectBlankText("--board", board(), "--board must not be empty.");
+            rejectBlankDiagnosticsPath("--config-dir", configDir);
+            rejectBlankDiagnosticsPath("--workspace-root", workspaceRoot);
+            rejectBlankDiagnosticsPath("--state-home", stateHome);
+            rejectBlankDiagnosticsPath("--manifest", manifest);
             rejectBlankDiagnosticsPath("--workflow", workflow());
             CliInputValidation.rejectControlCharacters("--config-dir", configDir);
             CliInputValidation.rejectControlCharacters("--workspace-root", workspaceRoot);
