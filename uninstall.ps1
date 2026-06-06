@@ -18,7 +18,7 @@ param(
   [Alias("-prefix", "--prefix")]
   [string]$Prefix = "",
   [Alias("-bin-dir", "bin-dir", "--bin-dir")]
-  [string]$BinDir = "$env:USERPROFILE\.local\bin",
+  [string]$BinDir = $(Join-Path $(if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }) (Join-Path ".local" "bin")),
   [switch]$Help,
   [Parameter(ValueFromRemainingArguments = $true)]
   [string[]]$RemainingArgs = @()
@@ -28,7 +28,7 @@ $ErrorActionPreference = "Stop"
 $ScriptBoundParameters = @{} + $PSBoundParameters
 $DefaultSymphonyHome = if ($env:SYMPHONY_HOME) { $env:SYMPHONY_HOME } else { "$env:LOCALAPPDATA\SymphonyTrello" }
 $DefaultPrefix = ""
-$DefaultBinDir = "$env:USERPROFILE\.local\bin"
+$DefaultBinDir = Join-Path $(if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }) (Join-Path ".local" "bin")
 
 function Apply-PositionalFlag([string]$Token) {
   switch ($Token) {
@@ -74,6 +74,34 @@ function Assert-ExplicitPathOptionValue([string]$ParameterName, [string]$OptionN
   if ($ScriptBoundParameters.ContainsKey($ParameterName) -and [string]::IsNullOrWhiteSpace($Value)) {
     throw "$OptionName must not be blank."
   }
+}
+
+function Assert-BinDirOptionValue {
+  if ([string]::IsNullOrWhiteSpace($BinDir)) {
+    throw "--bin-dir must not be blank."
+  }
+  if ([regex]::IsMatch($BinDir, "\p{Cc}")) {
+    throw "--bin-dir must not contain control characters."
+  }
+  if (-not (Test-FullyQualifiedPath $BinDir)) {
+    throw "--bin-dir must be an absolute path."
+  }
+}
+
+function Test-FullyQualifiedPath([string]$Path) {
+  if (-not [System.IO.Path]::IsPathRooted($Path)) {
+    return $false
+  }
+  $root = [System.IO.Path]::GetPathRoot($Path)
+  if ([string]::IsNullOrEmpty($root)) {
+    return $false
+  }
+  $isWindowsPlatform = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
+    [System.Runtime.InteropServices.OSPlatform]::Windows)
+  if (-not $isWindowsPlatform) {
+    return $true
+  }
+  return [regex]::IsMatch($root, "^[A-Za-z]:[\\/]\z") -or [regex]::IsMatch($root, "^\\\\[^\\]+\\[^\\]+\\?$")
 }
 
 function Test-PublicOptionToken([string]$Token) {
@@ -231,6 +259,7 @@ Options:
   exit 0
 }
 
+Assert-BinDirOptionValue
 $SymphonyHome = [System.IO.Path]::GetFullPath($SymphonyHome)
 if (-not $Prefix) {
   $Prefix = Join-Path $SymphonyHome "app"
@@ -246,6 +275,7 @@ if ($RemoveAllLocalData) {
 $Prefix = [System.IO.Path]::GetFullPath($Prefix)
 $ConfigDir = [System.IO.Path]::GetFullPath($ConfigDir)
 $WorkspaceRoot = [System.IO.Path]::GetFullPath($WorkspaceRoot)
+$RawBinDir = $BinDir
 $BinDir = [System.IO.Path]::GetFullPath($BinDir)
 $StateHome = [System.IO.Path]::GetFullPath($StateHome)
 $CodexHome = [System.IO.Path]::GetFullPath((Join-Path $SymphonyHome "codex"))
@@ -266,6 +296,72 @@ function Test-SameOrInsidePath([string]$Child, [string]$Parent) {
   $childPath = [System.IO.Path]::GetFullPath($Child).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
   $parentPath = [System.IO.Path]::GetFullPath($Parent).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
   return [string]::Equals($childPath, $parentPath, [System.StringComparison]::OrdinalIgnoreCase) -or $childPath.StartsWith($parentPath + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase) -or $childPath.StartsWith($parentPath + [System.IO.Path]::AltDirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Test-PathHasSymlinkComponent([string]$Path) {
+  $root = [System.IO.Path]::GetPathRoot($Path)
+  $relativePath = $Path.Substring($root.Length)
+  $current = $root
+  foreach ($part in $relativePath.Split([char[]]@([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar), [System.StringSplitOptions]::RemoveEmptyEntries)) {
+    if ($part -eq ".") {
+      continue
+    }
+    if ($part -eq "..") {
+      $parent = Split-Path -Parent $current
+      if (-not [string]::IsNullOrEmpty($parent)) {
+        $current = $parent
+      }
+      continue
+    }
+    $current = Join-Path $current $part
+    if (Test-Path -LiteralPath $current) {
+      $item = Get-Item -LiteralPath $current -Force
+      if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        return $true
+      }
+    } else {
+      return $false
+    }
+  }
+  return $false
+}
+
+function Get-ScriptCheckoutDirectory {
+  if ([string]::IsNullOrEmpty($PSScriptRoot)) {
+    return $null
+  }
+  $scriptDirectory = [System.IO.Path]::GetFullPath($PSScriptRoot)
+  if ((Test-Path -LiteralPath (Join-Path $scriptDirectory ".git")) -or
+      (Test-Path -LiteralPath (Join-Path $scriptDirectory "pom.xml"))) {
+    return $scriptDirectory
+  }
+  return $null
+}
+
+function Assert-CommandDirectory {
+  $normalizedBinDir = [System.IO.Path]::GetFullPath($BinDir)
+  $pathRoot = [System.IO.Path]::GetPathRoot($normalizedBinDir).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+  $trimmedBinDir = $normalizedBinDir.TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+  $homeValue = if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }
+  $homeDirectory = [System.IO.Path]::GetFullPath($homeValue)
+  $checkoutDirectory = Get-ScriptCheckoutDirectory
+  if ($trimmedBinDir.Equals($pathRoot, [System.StringComparison]::OrdinalIgnoreCase) -or
+      $trimmedBinDir.Equals($homeDirectory.TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar), [System.StringComparison]::OrdinalIgnoreCase) -or
+      (-not [string]::IsNullOrEmpty($checkoutDirectory) -and
+          $trimmedBinDir.Equals($checkoutDirectory.TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar), [System.StringComparison]::OrdinalIgnoreCase))) {
+    throw "--bin-dir must point to a dedicated command directory."
+  }
+  if (Test-Path -LiteralPath $normalizedBinDir) {
+    $binDirItem = Get-Item -LiteralPath $normalizedBinDir -Force
+    if (-not $binDirItem.PSIsContainer) {
+      throw "--bin-dir must be a directory."
+    }
+  }
+  foreach ($root in @($Prefix, $ConfigDir, $WorkspaceRoot, $StateHome)) {
+    if ((Test-SameOrInsidePath $normalizedBinDir $root) -or (Test-SameOrInsidePath $root $normalizedBinDir)) {
+      throw "--bin-dir must not overlap Symphony app, config, workspace, or state directories."
+    }
+  }
 }
 
 function Assert-AppRemovalPreservesCurrentData {
@@ -397,6 +493,21 @@ function Assert-SafeRemovalPath([string]$Path) {
   }
   return $trimmed
 }
+
+function Assert-RequestedRemovalPaths {
+  if ($RemoveConfig) {
+    Assert-SafeRemovalPath $ConfigDir | Out-Null
+  }
+  if ($RemoveWorkspaces) {
+    Assert-SafeRemovalPath $WorkspaceRoot | Out-Null
+  }
+  if ($RemoveState) {
+    Assert-SafeRemovalPath $StateHome | Out-Null
+  }
+}
+
+Assert-RequestedRemovalPaths
+Assert-CommandDirectory
 
 function Test-CommandLineArgument([string]$CommandLine, [string]$Argument) {
   $escaped = [regex]::Escape($Argument)
