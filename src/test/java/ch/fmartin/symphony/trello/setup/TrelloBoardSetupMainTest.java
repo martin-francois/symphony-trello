@@ -912,11 +912,7 @@ final class TrelloBoardSetupMainTest {
         Files.createDirectories(privateDir);
         Files.createDirectories(stateHome);
         Files.createDirectories(workspaceRoot);
-        assertThat(new ProcessBuilder("mkfifo", configFifo.toString())
-                        .directory(workingDir.toFile())
-                        .start()
-                        .waitFor())
-                .isZero();
+        createFifo(configFifo, workingDir);
 
         // when
         MainProcessResult result = runMainProcess(
@@ -942,6 +938,58 @@ final class TrelloBoardSetupMainTest {
                         privateDir.toString(),
                         tempDir.toString(),
                         "Jane Doe");
+    }
+
+    @Test
+    void diagnosticsRejectsSpecialFileWorkflowWithoutRenderingReport() throws Exception {
+        // given
+        assumeTrue(!javaExecutable().endsWith(".exe"), "POSIX FIFO support is required");
+        Path workingDir = tempDir.resolve("special-workflow-workdir");
+        Path privateDir = tempDir.resolve("Jane Doe");
+        Path configDir = tempDir.resolve("special-workflow-config");
+        Path stateHome = tempDir.resolve("special-workflow-state");
+        Path workspaceRoot = tempDir.resolve("special-workflow-workspace");
+        Path workflow = privateDir.resolve("WORKFLOW.private.fifo.md");
+        Path output = tempDir.resolve("special-workflow-output.md");
+        Files.createDirectories(workingDir);
+        Files.createDirectories(privateDir);
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.createDirectories(workspaceRoot);
+        createFifo(workflow, workingDir);
+
+        // when
+        MainProcessResult result = runMainProcess(
+                workingDir,
+                Map.of(),
+                List.of(),
+                "diagnostics",
+                "--config-dir",
+                configDir.toString(),
+                "--state-home",
+                stateHome.toString(),
+                "--workspace-root",
+                workspaceRoot.toString(),
+                "--workflow",
+                workflow.toString(),
+                "--output",
+                output.toString());
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isEqualTo(2);
+        assertThat(result.stdout()).doesNotContain("# Symphony for Trello Diagnostics", "Diagnostics written");
+        assertThat(result.stderr())
+                .contains(
+                        "setup_failed code=setup_invalid_arguments",
+                        "--workflow must reference a readable workflow file")
+                .doesNotContain(
+                        "Troubleshooting report written",
+                        workflow.toString(),
+                        output.toString(),
+                        privateDir.toString(),
+                        tempDir.toString(),
+                        "Jane Doe");
+        assertThat(output).doesNotExist();
     }
 
     @Test
@@ -1268,11 +1316,7 @@ final class TrelloBoardSetupMainTest {
         Files.createDirectories(configDir);
         Files.createDirectories(privateDir);
         Files.writeString(workflow, workflowWithBoardAndPort("board-start-id", 19193), StandardCharsets.UTF_8);
-        assertThat(new ProcessBuilder("mkfifo", env.toString())
-                        .directory(tempDir.toFile())
-                        .start()
-                        .waitFor())
-                .isZero();
+        createFifo(env, tempDir);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "board-start-id",
@@ -1316,6 +1360,97 @@ final class TrelloBoardSetupMainTest {
                         tempDir.toString(),
                         "Jane Doe");
         assertThat(stateHome).doesNotExist();
+    }
+
+    @Test
+    void startRejectsSpecialFileWorkflowBeforeLaunchingWorker() throws Exception {
+        // given
+        assumeTrue(!javaExecutable().endsWith(".exe"), "POSIX FIFO support is required");
+        Path configDir = tempDir.resolve("start-special-workflow-config");
+        Path privateDir = tempDir.resolve("Jane Doe");
+        Path workspaceRoot = tempDir.resolve("start-special-workflow-workspaces");
+        Path stateHome = tempDir.resolve("start-special-workflow-state");
+        Path appHome = tempDir.resolve("start-special-workflow-app");
+        Path workflow = privateDir.resolve("WORKFLOW.queue.fifo.md");
+        Path env = configDir.resolve(".env");
+        Files.createDirectories(configDir);
+        Files.createDirectories(privateDir);
+        Files.writeString(env, "TRELLO_API_KEY=dummy\nTRELLO_API_TOKEN=dummy\n", StandardCharsets.UTF_8);
+        createFifo(workflow, tempDir);
+
+        // when
+        MainProcessResult result = runMainProcessWithoutTrelloCredentials(
+                tempDir,
+                "start",
+                "--config-dir",
+                configDir.toString(),
+                "--workspace-root",
+                workspaceRoot.toString(),
+                "--state-home",
+                stateHome.toString(),
+                "--app-home",
+                appHome.toString(),
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString());
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isEqualTo(2);
+        assertThat(result.stdout()).doesNotContain("Started Symphony", "Troubleshooting report written");
+        assertThat(result.stderr())
+                .contains(
+                        "setup_failed code=setup_invalid_arguments",
+                        "--workflow must point to a regular workflow file.")
+                .doesNotContain(
+                        "Troubleshooting report written",
+                        workflow.toString(),
+                        privateDir.toString(),
+                        tempDir.toString(),
+                        "Jane Doe");
+        assertThat(stateHome).doesNotExist();
+    }
+
+    @ParameterizedTest(name = "{0} rejects special workflow files")
+    @ValueSource(strings = {"logs", "status"})
+    void lifecycleCommandsRejectSpecialFileWorkflowBeforeReading(String command) throws Exception {
+        // given
+        assumeTrue(!javaExecutable().endsWith(".exe"), "POSIX FIFO support is required");
+        Path configDir = tempDir.resolve(command + "-special-workflow-config");
+        Path privateDir = tempDir.resolve("Jane Doe " + command);
+        Path workspaceRoot = tempDir.resolve(command + "-special-workflow-workspaces");
+        Path stateHome = tempDir.resolve(command + "-special-workflow-state");
+        Path workflow = privateDir.resolve("WORKFLOW.queue.fifo.md");
+        Files.createDirectories(configDir);
+        Files.createDirectories(privateDir);
+        createFifo(workflow, tempDir);
+
+        // when
+        MainProcessResult result = runMainProcessWithoutTrelloCredentials(
+                tempDir,
+                command,
+                "--config-dir",
+                configDir.toString(),
+                "--workspace-root",
+                workspaceRoot.toString(),
+                "--state-home",
+                stateHome.toString(),
+                "--workflow",
+                workflow.toString());
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isEqualTo(2);
+        assertThat(result.stdout()).doesNotContain("Troubleshooting report written");
+        assertThat(result.stderr())
+                .contains(
+                        "setup_failed code=setup_invalid_arguments",
+                        "--workflow must point to a regular workflow file.")
+                .doesNotContain(
+                        "Troubleshooting report written",
+                        workflow.toString(),
+                        privateDir.toString(),
+                        tempDir.toString(),
+                        "Jane Doe");
     }
 
     @MethodSource("directCommandHelp")
@@ -3976,6 +4111,14 @@ final class TrelloBoardSetupMainTest {
                 process.exitValue(),
                 new String(stdout, StandardCharsets.UTF_8),
                 new String(stderr, StandardCharsets.UTF_8));
+    }
+
+    private static void createFifo(Path path, Path workingDir) throws IOException, InterruptedException {
+        assertThat(new ProcessBuilder("mkfifo", path.toString())
+                        .directory(workingDir.toFile())
+                        .start()
+                        .waitFor())
+                .isZero();
     }
 
     private static void writeExecutable(Path path, String content) throws IOException {
