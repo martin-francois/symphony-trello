@@ -2163,6 +2163,45 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void setupLocalReportsUnknownInProgressListAsInProgressError() {
+        // given
+        Path env = tempDir.resolve(".env");
+        Path workflow = tempDir.resolve("config").resolve("WORKFLOW.bad-in-progress.md");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "board-1",
+                "--active",
+                "Ready for Codex",
+                "--terminal",
+                "Done",
+                "--in-progress",
+                "No Such List 123",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_unknown_in_progress_state",
+                        "Unknown in-progress list(s): No Such List 123")
+                .stderrDoesNotContain("setup_unknown_active_state", "Unknown active list(s)");
+        assertThat(workflow).doesNotExist();
+        assertThat(trello.createdLists()).isEmpty();
+    }
+
+    @Test
     void githubExistingBoardSetupCreatesMissingRecommendedLists() throws Exception {
         // given
         commands.githubAuthenticated = true;

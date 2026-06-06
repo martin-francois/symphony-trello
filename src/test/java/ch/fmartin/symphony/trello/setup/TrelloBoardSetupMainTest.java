@@ -2276,6 +2276,41 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
+    void importBoardReportsUnknownInProgressListAsInProgressError() {
+        // given
+        Path workflow = tempDir.resolve("bad-in-progress.WORKFLOW.md");
+
+        // when
+        CliRunResult result = runCli(
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "https://trello.com/b/input/existing-board",
+                "--active",
+                "Queue for Codex",
+                "--terminal",
+                "Released",
+                "--workflow",
+                workflow.toString(),
+                "--force",
+                "--in-progress",
+                "No Such List 123");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_unknown_in_progress_state",
+                        "Unknown in-progress list(s): No Such List 123")
+                .stderrDoesNotContain("setup_unknown_active_state", "Unknown active list(s)");
+        assertThat(workflow).doesNotExist();
+    }
+
+    @Test
     void importBoardWritesExplicitCodexReasoningOverride() {
         // given
         Path workflow = tempDir.resolve("explicit-import-model.WORKFLOW.md");
