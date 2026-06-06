@@ -1917,13 +1917,23 @@ public final class TrelloBoardSetup {
     }
 
     public record TrelloCredentials(String apiKey, String apiToken) {
+        public TrelloCredentials {
+            validateValues(apiKey, apiToken);
+        }
+
         private void validate() {
+            validateValues(apiKey, apiToken);
+        }
+
+        private static void validateValues(String apiKey, String apiToken) {
             if (blank(apiKey)) {
                 throw new TrelloBoardSetupException("setup_missing_api_key", "Missing Trello API key");
             }
             if (blank(apiToken)) {
                 throw new TrelloBoardSetupException("setup_missing_api_token", "Missing Trello API token");
             }
+            CliInputValidation.rejectControlCharacters("Trello API key", apiKey);
+            CliInputValidation.rejectControlCharacters("Trello API token", apiToken);
         }
     }
 

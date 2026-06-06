@@ -839,6 +839,51 @@ final class TrelloBoardSetupMainTest {
         assertThat(workspaceLookups).hasValue(1);
     }
 
+    @MethodSource("credentialControlCharacterCliScenarios")
+    @ParameterizedTest(name = "{0}")
+    void listWorkspacesRejectsControlCharactersInCredentialsBeforeHttpHeaderConstruction(
+            String scenario, String optionName, String apiKey, String apiToken) throws Exception {
+        // given
+        Path workingDir = tempDir.resolve("credential-control-character-workdir");
+        Files.createDirectories(workingDir);
+
+        // when
+        MainProcessResult result = runMainProcess(
+                workingDir,
+                Map.of(),
+                List.of(),
+                "list-workspaces",
+                "--endpoint",
+                "http://127.0.0.1:9",
+                "--key",
+                apiKey,
+                "--token",
+                apiToken);
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isEqualTo(2);
+        assertThat(result.stdout()).doesNotContain("Troubleshooting report written");
+        assertThat(result.stderr())
+                .contains(
+                        "setup_failed code=setup_invalid_arguments",
+                        optionName + " must not contain control characters.")
+                .doesNotContain(
+                        "OAuth",
+                        "oauth_consumer_key",
+                        "oauth_token",
+                        apiKey,
+                        apiToken,
+                        "Troubleshooting report written");
+    }
+
+    private static Stream<Arguments> credentialControlCharacterCliScenarios() {
+        return Stream.of(
+                Arguments.of("api key contains newline", "Trello API key", "k\ney", "token"),
+                Arguments.of("api token contains newline", "Trello API token", "key", "t\noken"),
+                Arguments.of("api key contains tab", "Trello API key", "k\tey", "token"),
+                Arguments.of("api token contains tab", "Trello API token", "key", "t\token"));
+    }
+
     @MethodSource("invalidEndpointValues")
     @ParameterizedTest(name = "{0}")
     void listWorkspacesRejectsInvalidEndpointsBeforeTrelloRequest(String name, String endpoint) {
