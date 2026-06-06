@@ -293,6 +293,10 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                 CliInputValidation.rejectBlankTextValues("--terminal", terminalStates);
                 CliInputValidation.rejectBlankText("--in-progress", inProgressState);
                 CliInputValidation.rejectBlankText("--blocked", blockedState);
+                CliInputValidation.rejectControlCharactersInTextValues("--active", activeStates);
+                CliInputValidation.rejectControlCharactersInTextValues("--terminal", terminalStates);
+                CliInputValidation.rejectControlCharacters("--in-progress", inProgressState);
+                CliInputValidation.rejectControlCharacters("--blocked", blockedState);
                 options.validateCliPaths();
                 options.validateRuntimeEnvTarget();
                 parent.boardSetup.preflightConnectedBoardManifest(options.manifestPath());
@@ -576,6 +580,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         Optional<Path> appHome = Optional.empty();
 
         private void validateCliPaths() {
+            CliInputValidation.rejectControlCharactersInText("--board", board);
             CliInputValidation.rejectControlCharacters("--workflow", workflow);
             CliInputValidation.rejectBlankPath("--config-dir", configDir, "--config-dir must not be empty.");
             CliInputValidation.rejectBlankPath(
@@ -618,6 +623,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
 
         private void validateCliPaths() {
             CliInputValidation.rejectBlankText("--board", board(), "--board must not be empty.");
+            CliInputValidation.rejectControlCharactersInText("--board", board());
             rejectBlankDiagnosticsPath("--config-dir", configDir);
             rejectBlankDiagnosticsPath("--workspace-root", workspaceRoot);
             rejectBlankDiagnosticsPath("--state-home", stateHome);

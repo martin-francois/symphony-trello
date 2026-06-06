@@ -3692,6 +3692,44 @@ final class TrelloBoardSetupMainTest {
         assertThat(createdLists).isEmpty();
     }
 
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"--active", "--terminal", "--in-progress", "--blocked"})
+    void rejectsControlCharactersInDirectImportListSelectorsBeforeTrelloRequest(String optionName) {
+        // given
+        String badListSelector = "Bad\n# injected\u001B[31mred\u001B[0m";
+        Path workflow = tempDir.resolve("control-list-selector.WORKFLOW.md");
+        List<String> args = new ArrayList<>(List.of(
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "https://trello.com/b/input/existing-board"));
+        if (!"--active".equals(optionName)) {
+            args.addAll(List.of("--active", "Queue for Codex"));
+        }
+        if (!"--terminal".equals(optionName)) {
+            args.addAll(List.of("--terminal", "Released"));
+        }
+        args.addAll(List.of(optionName, badListSelector, "--workflow", workflow.toString(), "--force"));
+
+        // when
+        CliRunResult result = runCli(args.toArray(String[]::new));
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments",
+                        optionName + " must not contain control characters")
+                .stderrDoesNotContain(badListSelector, "\n# injected", "\u001B", "Troubleshooting report written")
+                .stdoutDoesNotContain("Imported Trello board", badListSelector);
+        assertThat(workflow).doesNotExist();
+        assertThat(createdLists).isEmpty();
+    }
+
     @MethodSource("malformedDirectImportBoardSelectors")
     @ParameterizedTest(name = "{0}")
     void rejectsMalformedDirectImportBoardSelectorsBeforeTrelloRequest(String name, String badBoardSelector) {
@@ -3726,6 +3764,54 @@ final class TrelloBoardSetupMainTest {
                 .stdoutDoesNotContain("Imported Trello board", badBoardSelector);
         assertThat(workflow).doesNotExist();
         assertThat(createdLists).isEmpty();
+    }
+
+    @ParameterizedTest(name = "{0} rejects control characters in board selector")
+    @ValueSource(strings = {"start", "stop", "status", "logs"})
+    void lifecycleCommandsRejectControlCharactersInBoardSelectorBeforeSelection(String command) {
+        // given
+        String badBoardSelector = "No such board\n# injected\u001B[31mred\u001B[0m";
+
+        // when
+        CliRunResult result = runCli(command, "--board", badBoardSelector);
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments", "--board must not contain control characters")
+                .stderrDoesNotContain(badBoardSelector, "\n# injected", "\u001B", "Troubleshooting report written")
+                .stdoutDoesNotContain("running ", "stopped ", badBoardSelector);
+    }
+
+    @Test
+    void diagnosticsRejectsControlCharactersInBoardSelectorWithoutRenderingReport() {
+        // given
+        String badBoardSelector = "No such board\n# injected\u001B[31mred\u001B[0m";
+
+        // when
+        CliRunResult result = runCli("diagnostics", "--board", badBoardSelector);
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments", "--board must not contain control characters")
+                .stderrDoesNotContain(badBoardSelector, "\n# injected", "\u001B", "Troubleshooting report written")
+                .stdoutDoesNotContain("# Symphony for Trello Diagnostics", badBoardSelector);
+    }
+
+    @Test
+    void parameterErrorsNeutralizeControlCharactersInMessages() {
+        // given
+        String badCommand = "bad\n# injected\u001B[31mred\u001B[0m";
+
+        // when
+        CliRunResult result = runCli(badCommand);
+
+        // then
+        result.assertFailure(2)
+                .stderrContains("setup_failed code=setup_invalid_arguments", "bad\\n# injected\\u001B[31mred\\u001B[0m")
+                .stderrDoesNotContain(badCommand, "\n# injected", "\u001B", "Troubleshooting report written")
+                .stdoutDoesNotContain(badCommand);
     }
 
     @Test

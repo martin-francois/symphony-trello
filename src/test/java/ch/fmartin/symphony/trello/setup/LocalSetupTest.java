@@ -113,6 +113,25 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         assertThat(trello.createdLists()).isEmpty();
     }
 
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"--active", "--terminal", "--in-progress", "--blocked"})
+    void dryRunRejectsControlCharactersInListSelectorsBeforePlannedSetupOutput(String optionName) {
+        // given
+        String invalidValue = "Bad\n# injected\u001B[31mred\u001B[0m";
+
+        // when
+        SetupRunResult result = runSetup("--dry-run", "--non-interactive", "--no-start", optionName, invalidValue);
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments",
+                        optionName + " must not contain control characters.")
+                .stderrDoesNotContain(invalidValue, "\n# injected", "\u001B", "Troubleshooting report written")
+                .stdoutDoesNotContain("Dry run", "WOULD write workflows", invalidValue);
+        assertThat(trello.createdLists()).isEmpty();
+    }
+
     private record BlankSetupLocalOption(String optionName, String option, String value, String expectedMessage) {
         BlankSetupLocalOption(String optionName, String option, String value) {
             this(optionName, option, value, optionName + " must not be blank.");
