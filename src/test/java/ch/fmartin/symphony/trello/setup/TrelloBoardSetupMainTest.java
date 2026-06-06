@@ -180,23 +180,35 @@ final class TrelloBoardSetupMainTest {
     @Test
     void printsNestedSetupLocalHelp() {
         // given
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
+        var checkStdout = new ByteArrayOutputStream();
+        var checkStderr = new ByteArrayOutputStream();
+        var repairStdout = new ByteArrayOutputStream();
+        var repairStderr = new ByteArrayOutputStream();
+        var configureStdout = new ByteArrayOutputStream();
+        var configureStderr = new ByteArrayOutputStream();
 
         // when
-        int checkExitCode = run(stdout, stderr, "setup-local", "check", "--help");
-        int repairExitCode = run(stdout, stderr, "setup-local", "repair-port", "--help");
-        int configureExitCode = run(stdout, stderr, "setup-local", "configure-github", "--help");
+        int checkExitCode = run(checkStdout, checkStderr, "setup-local", "check", "--help");
+        int repairExitCode = run(repairStdout, repairStderr, "setup-local", "repair-port", "--help");
+        int configureExitCode = run(configureStdout, configureStderr, "setup-local", "configure-github", "--help");
 
         // then
         assertThat(checkExitCode).isZero();
         assertThat(repairExitCode).isZero();
         assertThat(configureExitCode).isZero();
-        assertThat(stdout.toString(StandardCharsets.UTF_8))
+        assertThat(checkStdout.toString(StandardCharsets.UTF_8))
                 .contains("Usage: symphony-trello setup-local check")
-                .contains("Usage: symphony-trello setup-local repair-port")
-                .contains("Usage: symphony-trello setup-local configure-github");
-        assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
+                .contains("--config-dir", "--manifest")
+                .doesNotContain("--server-port", "--active", "--codex-model");
+        assertThat(repairStdout.toString(StandardCharsets.UTF_8))
+                .contains("Usage: symphony-trello setup-local repair-port", "--board", "--dry-run")
+                .doesNotContain("--workspace-root", "--server-port", "--active");
+        assertThat(configureStdout.toString(StandardCharsets.UTF_8))
+                .contains("Usage: symphony-trello setup-local configure-github", "--board", "--max-agents")
+                .doesNotContain("--workflow", "--server-port", "--active", "--dry-run", "--env");
+        assertThat(checkStderr.toString(StandardCharsets.UTF_8)).isEmpty();
+        assertThat(repairStderr.toString(StandardCharsets.UTF_8)).isEmpty();
+        assertThat(configureStderr.toString(StandardCharsets.UTF_8)).isEmpty();
     }
 
     @Test

@@ -1,31 +1,30 @@
 package ch.fmartin.symphony.trello.setup;
 
 import java.util.Optional;
-import picocli.CommandLine.ArgGroup;
 import picocli.CommandLine.Option;
 
 final class GitHubMode {
-    @ArgGroup(exclusive = true)
-    private Choice choice;
+    @Option(names = "--github", description = "Enable GitHub pull-request workflow pieces.")
+    private boolean github;
+
+    @Option(names = "--no-github", description = "Use a Trello-only workflow without pull requests.")
+    private boolean noGithub;
 
     Optional<Boolean> selected() {
-        if (choice == null) {
-            return Optional.empty();
-        }
-        if (choice.github) {
+        validate();
+        if (github) {
             return Optional.of(true);
         }
-        if (choice.noGithub) {
+        if (noGithub) {
             return Optional.of(false);
         }
         return Optional.empty();
     }
 
-    private static final class Choice {
-        @Option(names = "--github", description = "Enable GitHub pull-request workflow pieces.")
-        boolean github;
-
-        @Option(names = "--no-github", description = "Use a Trello-only workflow without pull requests.")
-        boolean noGithub;
+    void validate() {
+        if (github && noGithub) {
+            throw new TrelloBoardSetupException(
+                    "setup_invalid_arguments", "--github and --no-github cannot be used together.");
+        }
     }
 }
