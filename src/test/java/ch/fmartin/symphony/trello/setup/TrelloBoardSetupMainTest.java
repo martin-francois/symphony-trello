@@ -530,8 +530,74 @@ final class TrelloBoardSetupMainTest {
         result.assertFailure(2)
                 .stdoutDoesNotContain(
                         "# Symphony for Trello Diagnostics", "board A log", "board B log", "19188", "19189")
-                .stderrContains("setup_failed code=setup_invalid_arguments", "mutually exclusive")
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments",
+                        "Only one diagnostics selector may be provided.",
+                        "Try 'diagnostics --help' for usage.")
                 .stderrDoesNotContain("Board A", "Board B", workflowB.toString(), tempDir.toString());
+        assertThat(output).doesNotExist();
+    }
+
+    @Test
+    void diagnosticsRejectsRepeatedBoardSelectorsWithoutLeakingValues() {
+        // given
+        Path output = tempDir.resolve("repeated-board-selector-output.txt");
+        String firstBoard = "Jane Doe Private Board";
+        String secondBoard = "Internal Launch Board";
+
+        // when
+        CliRunResult result =
+                runCli("diagnostics", "--board", firstBoard, "--board", secondBoard, "--output", output.toString());
+
+        // then
+        result.assertFailure(2)
+                .stdoutDoesNotContain("# Symphony for Trello Diagnostics", "Diagnostics written")
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments",
+                        "Only one diagnostics selector may be provided.",
+                        "Try 'diagnostics --help' for usage.")
+                .stderrDoesNotContain(
+                        firstBoard,
+                        secondBoard,
+                        output.toString(),
+                        tempDir.toString(),
+                        "Troubleshooting report written");
+        assertThat(output).doesNotExist();
+    }
+
+    @Test
+    void diagnosticsRejectsRepeatedWorkflowSelectorsWithoutLeakingValues() {
+        // given
+        Path privateDir = tempDir.resolve("Jane Doe").resolve("private-checkout");
+        Path firstWorkflow = privateDir.resolve("WORKFLOW.private-a.md");
+        Path secondWorkflow = privateDir.resolve("WORKFLOW.private-b.md");
+        Path output = tempDir.resolve("repeated-workflow-selector-output.txt");
+
+        // when
+        CliRunResult result = runCli(
+                "diagnostics",
+                "--workflow",
+                firstWorkflow.toString(),
+                "--workflow",
+                secondWorkflow.toString(),
+                "--output",
+                output.toString());
+
+        // then
+        result.assertFailure(2)
+                .stdoutDoesNotContain("# Symphony for Trello Diagnostics", "Diagnostics written")
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments",
+                        "Only one diagnostics selector may be provided.",
+                        "Try 'diagnostics --help' for usage.")
+                .stderrDoesNotContain(
+                        firstWorkflow.toString(),
+                        secondWorkflow.toString(),
+                        privateDir.toString(),
+                        output.toString(),
+                        tempDir.toString(),
+                        "Jane Doe",
+                        "Troubleshooting report written");
         assertThat(output).doesNotExist();
     }
 
