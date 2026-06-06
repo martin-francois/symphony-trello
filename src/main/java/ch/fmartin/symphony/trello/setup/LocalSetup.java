@@ -130,13 +130,13 @@ public final class LocalSetup {
                 return repairPort(options, out);
             }
             if (options.dryRun()) {
-                rejectAmbiguousConnectedBoardSelector(connectedBoardsUnchecked(options), options);
+                rejectInvalidUnconnectedBoardSelector(connectedBoardsUnchecked(options), options);
                 printDryRun(out, options, prerequisites);
                 return 0;
             }
             ConnectedBoardRepository boards = connectedBoards(options);
             ConnectedBoardManifest manifest = boards.load();
-            rejectAmbiguousConnectedBoardSelector(manifest, options);
+            rejectInvalidUnconnectedBoardSelector(manifest, options);
             if (!manifest.boards().isEmpty() && !options.forceNewSetup()) {
                 ExistingSetupAction action = existingSetupAction(manifest, terminal, options);
                 if (action == ExistingSetupAction.DISCONNECT) {
@@ -623,6 +623,28 @@ public final class LocalSetup {
 
     private static void rejectAmbiguousConnectedBoardSelector(ConnectedBoardManifest manifest, Options options) {
         options.existingBoardId().ifPresent(selector -> rejectAmbiguousConnectedBoardSelector(manifest, selector));
+    }
+
+    private static void rejectInvalidUnconnectedBoardSelector(ConnectedBoardManifest manifest, Options options) {
+        options.existingBoardId().ifPresent(selector -> rejectInvalidUnconnectedBoardSelector(manifest, selector));
+    }
+
+    private static void rejectInvalidUnconnectedBoardSelector(ConnectedBoardManifest manifest, String selectedBoard) {
+        List<ConnectedBoard> connectedMatches = manifest.findAllByBoard(selectedBoard);
+        if (connectedMatches.size() > 1) {
+            throw ambiguousConnectedBoardSelector();
+        }
+        if (!connectedMatches.isEmpty()) {
+            return;
+        }
+        try {
+            TrelloBoardIds.parseImportBoardSelector(selectedBoard);
+        } catch (TrelloBoardSetupException exception) {
+            throw new TrelloBoardSetupException(
+                    "setup_invalid_arguments",
+                    "Invalid --board value. Use a Trello board URL, short link, board id, or a connected board name.",
+                    exception);
+        }
     }
 
     private static void rejectAmbiguousConnectedBoardSelector(ConnectedBoardManifest manifest, String selector) {
