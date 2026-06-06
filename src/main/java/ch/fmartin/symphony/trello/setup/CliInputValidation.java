@@ -216,6 +216,15 @@ final class CliInputValidation {
         }
     }
 
+    static void rejectNonRegularOutputFile(Optional<Path> value) {
+        if (value.filter(Files::exists)
+                .filter(path -> !Files.isRegularFile(path))
+                .isPresent()) {
+            throw new TrelloBoardSetupException(
+                    "setup_invalid_arguments", "Could not write diagnostics output. Choose a writable regular file.");
+        }
+    }
+
     private static boolean isStandardStreamDevicePath(Path value) {
         return isStandardStreamDevicePath(value.normalize().toString())
                 || isStandardStreamDevicePath(value.toAbsolutePath().normalize().toString())

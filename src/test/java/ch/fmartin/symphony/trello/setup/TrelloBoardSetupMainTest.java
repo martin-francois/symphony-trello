@@ -865,6 +865,35 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
+    void diagnosticsRejectsFifoOutputWithoutRenderingReport() throws Exception {
+        // given
+        assumeTrue(!javaExecutable().endsWith(".exe"), "POSIX FIFO support is required");
+        Path workingDir = tempDir.resolve("fifo-output-workdir");
+        Path privateDir = tempDir.resolve("Jane Doe");
+        Path outputPath = privateDir.resolve("diagnostics-output.fifo");
+        Files.createDirectories(workingDir);
+        Files.createDirectories(privateDir);
+        createFifo(outputPath, workingDir);
+
+        // when
+        MainProcessResult result = runDiagnosticsOutput(workingDir, outputPath.toString());
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isEqualTo(2);
+        assertThat(result.stdout()).doesNotContain("# Symphony for Trello Diagnostics", "Diagnostics written");
+        assertThat(result.stderr())
+                .contains(
+                        "setup_failed code=setup_invalid_arguments",
+                        "Could not write diagnostics output. Choose a writable regular file.")
+                .doesNotContain(
+                        "Troubleshooting report written",
+                        outputPath.toString(),
+                        privateDir.toString(),
+                        tempDir.toString(),
+                        "Jane Doe");
+    }
+
+    @Test
     void diagnosticsRejectsNumericProcFdStandardStreamOutputPath() throws Exception {
         // given
         long currentPid = ProcessHandle.current().pid();
