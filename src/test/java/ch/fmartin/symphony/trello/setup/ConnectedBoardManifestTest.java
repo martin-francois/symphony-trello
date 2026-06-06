@@ -172,9 +172,11 @@ final class ConnectedBoardManifestTest {
 
         // when
         var selected = manifest.findByWorkflow(workflow);
+        var matches = manifest.findAllByWorkflow(workflow);
 
         // then
         assertThat(selected).contains(first);
+        assertThat(matches).containsExactly(first, second);
     }
 
     private static ConnectedBoard board(String boardId, String boardKey, String boardName, Path workflowPath) {

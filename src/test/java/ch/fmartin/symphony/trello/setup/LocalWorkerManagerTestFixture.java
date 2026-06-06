@@ -72,6 +72,12 @@ final class LocalWorkerManagerTestFixture {
         return new WorkerRunResult(exitCode, stdout.toString(StandardCharsets.UTF_8));
     }
 
+    WorkerRunResult logs(WorkerLogsRequest request) throws Exception {
+        var stdout = new ByteArrayOutputStream();
+        int exitCode = manager.logs(request, printStream(stdout));
+        return new WorkerRunResult(exitCode, stdout.toString(StandardCharsets.UTF_8));
+    }
+
     void stubHealthyStartedWorker(ConnectedBoard board, long pid) throws Exception {
         when(platform.start(any(), eq(paths.appHome()), any(), any(), any())).thenReturn(new ManagedProcessHandle(pid));
         stubManagedPort(board);
@@ -206,6 +212,17 @@ final class LocalWorkerManagerTestFixture {
         return new WorkerStatusRequest(
                 Optional.empty(),
                 Optional.of(workflow),
+                Optional.of(paths.appHome()),
+                Optional.of(paths.configDir()),
+                Optional.of(paths.workspaceRoot()),
+                Optional.of(paths.stateHome()));
+    }
+
+    WorkerLogsRequest logsWorkflowRequest(Path workflow) {
+        return new WorkerLogsRequest(
+                Optional.empty(),
+                Optional.of(workflow),
+                false,
                 Optional.of(paths.appHome()),
                 Optional.of(paths.configDir()),
                 Optional.of(paths.workspaceRoot()),
