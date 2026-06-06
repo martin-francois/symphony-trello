@@ -3,6 +3,7 @@ package ch.fmartin.symphony.trello.setup;
 import static ch.fmartin.symphony.trello.TestHttpExchange.query;
 import static ch.fmartin.symphony.trello.TestHttpExchange.respond;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -707,6 +708,191 @@ final class TrelloBoardSetupMainTest {
                 .contains("setup_failed code=setup_invalid_arguments", "--output - is not supported")
                 .doesNotContain("Troubleshooting report written", dashFile.toString(), tempDir.toString());
         assertThat(dashFile).doesNotExist();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"/dev/stdout", "/dev/stderr", "/dev/fd/1", "/proc/self/fd/1", "/proc/thread-self/fd/1"})
+    void diagnosticsRejectsStandardStreamOutputPathsWithoutRenderingReport(String outputPath) throws Exception {
+        // given
+        Path workingDir = tempDir.resolve("stream-output-workdir");
+        Files.createDirectories(workingDir);
+
+        // when
+        MainProcessResult result = runDiagnosticsOutput(workingDir, outputPath);
+
+        // then
+        assertDiagnosticsStreamOutputRejected(result, outputPath, tempDir.toString());
+    }
+
+    @Test
+    void diagnosticsRejectsNumericProcFdStandardStreamOutputPath() throws Exception {
+        // given
+        long currentPid = ProcessHandle.current().pid();
+        String outputPath = "/proc/" + currentPid + "/fd/1";
+        assumeTrue(Files.exists(Path.of(outputPath)), outputPath + " is not available on this platform");
+        Path workingDir = tempDir.resolve("numeric-proc-fd-stream-output-workdir");
+        Files.createDirectories(workingDir);
+
+        // when
+        MainProcessResult result = runDiagnosticsOutput(workingDir, outputPath);
+
+        // then
+        assertDiagnosticsStreamOutputRejected(result, outputPath, tempDir.toString());
+    }
+
+    @Test
+    void diagnosticsAllowsPosixOutputFilenameContainingBackslashes() throws Exception {
+        // given
+        assumeTrue(!javaExecutable().endsWith(".exe"), "POSIX path semantics are required");
+        Path workingDir = tempDir.resolve("backslash-output-workdir");
+        Files.createDirectories(workingDir);
+        Path outputPath = workingDir.resolve("\\dev\\stdout");
+
+        // when
+        MainProcessResult result = runDiagnosticsOutput(workingDir, outputPath.toString());
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isZero();
+        assertThat(result.stdout()).contains("Diagnostics written.");
+        assertThat(result.stderr()).isEmpty();
+        assertThat(outputPath).content(StandardCharsets.UTF_8).contains("# Symphony for Trello Diagnostics");
+    }
+
+    @Test
+    void diagnosticsRejectsRelativeOutputPathResolvingToStandardStreamWithoutRenderingReport() throws Exception {
+        // given
+        Path streamPath = Path.of("/dev/stdout");
+        assumeTrue(Files.exists(streamPath), "/dev/stdout is not available on this platform");
+        Path workingDir = tempDir.resolve("relative-stream-output-workdir");
+        Files.createDirectories(workingDir);
+        Path outputPath = workingDir.relativize(streamPath);
+
+        // when
+        MainProcessResult result = runDiagnosticsOutput(workingDir, outputPath.toString());
+
+        // then
+        assertDiagnosticsStreamOutputRejected(result, outputPath.toString(), streamPath.toString());
+    }
+
+    @Test
+    void diagnosticsRejectsOutputSymlinkResolvingToStandardStreamWithoutRenderingReport() throws Exception {
+        // given
+        Path streamPath = Path.of("/dev/stdout");
+        assumeTrue(Files.exists(streamPath), "/dev/stdout is not available on this platform");
+        Path workingDir = tempDir.resolve("symlink-stream-output-workdir");
+        Files.createDirectories(workingDir);
+        Path outputPath = workingDir.resolve("diagnostics-output-link");
+        createSymbolicLinkOrSkip(outputPath, streamPath);
+
+        // when
+        MainProcessResult result = runDiagnosticsOutput(workingDir, outputPath.toString());
+
+        // then
+        assertDiagnosticsStreamOutputRejected(result, outputPath.toString(), streamPath.toString());
+    }
+
+    @Test
+    void diagnosticsRejectsOutputSymlinkChainResolvingToStandardStreamWithoutRenderingReport() throws Exception {
+        // given
+        Path streamPath = Path.of("/dev/stdout");
+        assumeTrue(Files.exists(streamPath), "/dev/stdout is not available on this platform");
+        Path workingDir = tempDir.resolve("symlink-chain-stream-output-workdir");
+        Files.createDirectories(workingDir);
+        Path intermediatePath = workingDir.resolve("intermediate-output-link");
+        Path outputPath = workingDir.resolve("diagnostics-output-link");
+        createSymbolicLinkOrSkip(intermediatePath, streamPath);
+        createSymbolicLinkOrSkip(outputPath, intermediatePath);
+
+        // when
+        MainProcessResult result = runDiagnosticsOutput(workingDir, outputPath.toString());
+
+        // then
+        assertDiagnosticsStreamOutputRejected(result, outputPath.toString(), streamPath.toString());
+    }
+
+    @Test
+    void diagnosticsRejectsOutputPathThroughSymlinkedParentResolvingToStandardStream() throws Exception {
+        // given
+        Path devPath = Path.of("/dev");
+        assumeTrue(Files.isDirectory(devPath), "/dev is not available on this platform");
+        Path workingDir = tempDir.resolve("symlink-parent-stream-output-workdir");
+        Files.createDirectories(workingDir);
+        Path linkedParent = workingDir.resolve("linked-device-directory");
+        Path outputPath = linkedParent.resolve("fd").resolve("1");
+        createSymbolicLinkOrSkip(linkedParent, devPath);
+
+        // when
+        MainProcessResult result = runDiagnosticsOutput(workingDir, outputPath.toString());
+
+        // then
+        assertDiagnosticsStreamOutputRejected(result, outputPath.toString(), devPath.toString());
+    }
+
+    @Test
+    void diagnosticsRejectsOverDeepOutputSymlinkChainWithoutRenderingReport() throws Exception {
+        // given
+        Path streamPath = Path.of("/dev/stdout");
+        assumeTrue(Files.exists(streamPath), "/dev/stdout is not available on this platform");
+        Path workingDir = tempDir.resolve("deep-symlink-chain-stream-output-workdir");
+        Files.createDirectories(workingDir);
+        Path previousPath = streamPath;
+        for (int index = 0; index < 18; index++) {
+            Path nextPath = workingDir.resolve("diagnostics-output-link-" + index);
+            createSymbolicLinkOrSkip(nextPath, previousPath);
+            previousPath = nextPath;
+        }
+
+        // when
+        MainProcessResult result = runDiagnosticsOutput(workingDir, previousPath.toString());
+
+        // then
+        assertDiagnosticsStreamOutputRejected(result, previousPath.toString(), streamPath.toString());
+    }
+
+    @Test
+    void diagnosticsAllowsDeepOutputSymlinkChainResolvingToRegularFile() throws Exception {
+        // given
+        Path workingDir = tempDir.resolve("deep-symlink-chain-file-output-workdir");
+        Files.createDirectories(workingDir);
+        Path outputFile = workingDir.resolve("diagnostics-output.md");
+        Path previousPath = outputFile;
+        for (int index = 0; index < 18; index++) {
+            Path nextPath = workingDir.resolve("diagnostics-file-output-link-" + index);
+            createSymbolicLinkOrSkip(nextPath, previousPath);
+            previousPath = nextPath;
+        }
+
+        // when
+        MainProcessResult result = runDiagnosticsOutput(workingDir, previousPath.toString());
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isZero();
+        assertThat(result.stdout()).contains("Diagnostics written.");
+        assertThat(result.stderr()).isEmpty();
+        assertThat(outputFile).content(StandardCharsets.UTF_8).contains("# Symphony for Trello Diagnostics");
+    }
+
+    private static void createSymbolicLinkOrSkip(Path link, Path target) throws IOException {
+        try {
+            Files.createSymbolicLink(link, target);
+        } catch (IOException | UnsupportedOperationException exception) {
+            assumeTrue(false, "symbolic links are not available on this platform: " + exception.getMessage());
+        }
+    }
+
+    private static MainProcessResult runDiagnosticsOutput(Path workingDir, String outputPath)
+            throws IOException, InterruptedException {
+        return runMainProcess(workingDir, Map.of(), List.of(), "diagnostics", "--output", outputPath);
+    }
+
+    private void assertDiagnosticsStreamOutputRejected(MainProcessResult result, String... forbiddenStderrValues) {
+        assertThat(result.exitCode()).as(result.output()).isEqualTo(2);
+        assertThat(result.stdout()).doesNotContain("# Symphony for Trello Diagnostics", "Diagnostics written");
+        assertThat(result.stderr())
+                .contains(
+                        "setup_failed code=setup_invalid_arguments", "--output standard stream paths are not supported")
+                .doesNotContain("Troubleshooting report written", tempDir.toString())
+                .doesNotContain(forbiddenStderrValues);
     }
 
     @MethodSource("blankDiagnosticsSelectors")

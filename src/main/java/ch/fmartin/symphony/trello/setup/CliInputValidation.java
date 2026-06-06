@@ -1,15 +1,31 @@
 package ch.fmartin.symphony.trello.setup;
 
 import com.google.common.base.CharMatcher;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Predicate;
+import java.util.regex.Pattern;
 
 final class CliInputValidation {
     private static final CharMatcher CONTROL_CHARACTERS =
             CharMatcher.javaIsoControl().precomputed();
+    private static final Set<String> STANDARD_STREAM_DEVICE_PATHS = Set.of(
+            "/dev/stdin",
+            "/dev/stdout",
+            "/dev/stderr",
+            "/proc/self/fd/0",
+            "/proc/self/fd/1",
+            "/proc/self/fd/2",
+            "/proc/thread-self/fd/0",
+            "/proc/thread-self/fd/1",
+            "/proc/thread-self/fd/2");
+    private static final Pattern DEV_FD_STREAM = Pattern.compile("/dev/fd/[0-2]");
+    private static final Pattern PROCESS_FD_STREAM = Pattern.compile("/proc/[1-9][0-9]*/fd/[0-2]");
 
     private CliInputValidation() {}
 
@@ -122,5 +138,83 @@ final class CliInputValidation {
             throw new TrelloBoardSetupException(
                     "setup_invalid_arguments", "--output - is not supported. Omit --output to print to stdout.");
         }
+    }
+
+    static void rejectStandardStreamOutputFile(Optional<Path> value) {
+        if (value.filter(CliInputValidation::isStandardStreamDevicePath).isPresent()) {
+            throw new TrelloBoardSetupException(
+                    "setup_invalid_arguments",
+                    "--output standard stream paths are not supported. Omit --output to print diagnostics to stdout.");
+        }
+    }
+
+    private static boolean isStandardStreamDevicePath(Path value) {
+        return isStandardStreamDevicePath(value.normalize().toString())
+                || isStandardStreamDevicePath(value.toAbsolutePath().normalize().toString())
+                || symlinkExpandedPathIsStandardStreamDevicePath(value)
+                || realPathIsStandardStreamDevicePath(value);
+    }
+
+    private static boolean symlinkExpandedPathIsStandardStreamDevicePath(Path value) {
+        Set<Path> visitedLinks = new HashSet<>();
+        Path absolute = value.toAbsolutePath().normalize();
+        Path current = absolute.getRoot() == null ? Path.of("") : absolute.getRoot();
+        for (Path element : absolute) {
+            current = current.resolve(element).normalize();
+            if (isStandardStreamDevicePath(current.toString())) {
+                return true;
+            }
+            SymlinkExpansion expansion = expandSymlinks(current, visitedLinks);
+            if (expansion.standardStreamDevicePath()) {
+                return true;
+            }
+            current = expansion.path();
+        }
+        return false;
+    }
+
+    private static SymlinkExpansion expandSymlinks(Path value, Set<Path> visitedLinks) {
+        Path current = value;
+        while (Files.isSymbolicLink(current)) {
+            Path normalizedCurrent = current.toAbsolutePath().normalize();
+            if (isStandardStreamDevicePath(normalizedCurrent.toString())) {
+                return new SymlinkExpansion(current, true);
+            }
+            if (!visitedLinks.add(normalizedCurrent)) {
+                return new SymlinkExpansion(current, false);
+            }
+            try {
+                Path target = Files.readSymbolicLink(current);
+                Path parent = normalizedCurrent.getParent();
+                Path resolvedTarget = target.isAbsolute() || parent == null ? target : parent.resolve(target);
+                if (isStandardStreamDevicePath(target.normalize().toString())
+                        || isStandardStreamDevicePath(resolvedTarget.normalize().toString())) {
+                    return new SymlinkExpansion(resolvedTarget, true);
+                }
+                current = resolvedTarget;
+            } catch (IOException ignored) {
+                // If the link target cannot be read, the writer handles the filesystem failure.
+                return new SymlinkExpansion(current, false);
+            }
+        }
+        return new SymlinkExpansion(
+                current, isStandardStreamDevicePath(current.normalize().toString()));
+    }
+
+    private record SymlinkExpansion(Path path, boolean standardStreamDevicePath) {}
+
+    private static boolean realPathIsStandardStreamDevicePath(Path value) {
+        try {
+            return isStandardStreamDevicePath(value.toRealPath().toString());
+        } catch (IOException ignored) {
+            // New output files do not have a real path yet; the writer handles other filesystem failures.
+            return false;
+        }
+    }
+
+    private static boolean isStandardStreamDevicePath(String value) {
+        return STANDARD_STREAM_DEVICE_PATHS.contains(value)
+                || DEV_FD_STREAM.matcher(value).matches()
+                || PROCESS_FD_STREAM.matcher(value).matches();
     }
 }
