@@ -696,8 +696,10 @@ final class TrelloBoardSetupMainTest {
         assertThat(envConfigDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME)).doesNotExist();
     }
 
-    @Test
-    void startReportsMissingWorkerCredentialsBeforeLaunchingWorker() throws Exception {
+    @MethodSource("missingWorkerCredentialDotenvContents")
+    @ParameterizedTest(name = "{0}")
+    void startReportsMissingWorkerCredentialsBeforeLaunchingWorker(String scenario, String dotenvContent)
+            throws Exception {
         // given
         Path configDir = tempDir.resolve("start-missing-credentials-config");
         Path workspaceRoot = tempDir.resolve("start-missing-credentials-workspaces");
@@ -707,7 +709,7 @@ final class TrelloBoardSetupMainTest {
         Path env = configDir.resolve(".env");
         Files.createDirectories(configDir);
         Files.writeString(workflow, workflowWithBoardAndPort("board-start-id", 19192), StandardCharsets.UTF_8);
-        Files.writeString(env, "# no Trello credentials\n", StandardCharsets.UTF_8);
+        Files.writeString(env, dotenvContent, StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "board-start-id",
@@ -752,6 +754,18 @@ final class TrelloBoardSetupMainTest {
                         "File:",
                         env.toAbsolutePath().normalize().toString())
                 .doesNotContain("--key", "--token", "referenced by the workflow");
+    }
+
+    private static Stream<Arguments> missingWorkerCredentialDotenvContents() {
+        return Stream.of(
+                Arguments.of("missing dotenv values", "# no Trello credentials\n"),
+                Arguments.of(
+                        "empty dotenv values",
+                        """
+                        TRELLO_API_KEY=
+                        TRELLO_API_TOKEN=
+                        """),
+                Arguments.of("whitespace-only dotenv values", "TRELLO_API_KEY=   \nTRELLO_API_TOKEN=   \n"));
     }
 
     @MethodSource("directCommandHelp")
