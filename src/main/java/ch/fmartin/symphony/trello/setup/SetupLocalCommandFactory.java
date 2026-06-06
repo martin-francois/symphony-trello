@@ -17,6 +17,7 @@ import picocli.CommandLine.IParameterExceptionHandler;
 import picocli.CommandLine.Mixin;
 import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Model.OptionSpec;
+import picocli.CommandLine.MutuallyExclusiveArgsException;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.ParameterException;
 import picocli.CommandLine.Spec;
@@ -119,10 +120,26 @@ final class SetupLocalCommandFactory {
             commandLine
                     .getErr()
                     .println("setup_failed code=setup_invalid_arguments message="
-                            + CliInputValidation.safeCliMessage(exception.getMessage()));
+                            + CliInputValidation.safeCliMessage(usageErrorMessage(exception)));
             commandLine.getErr().println("Try '" + commandLine.getCommandName() + " --help' for usage.");
             return 2;
         };
+    }
+
+    private static String usageErrorMessage(ParameterException exception) {
+        CommandLine commandLine = exception.getCommandLine();
+        if ("diagnostics".equals(commandLine.getCommandName()) && isDiagnosticsSelectorGroupError(exception)) {
+            return "Only one diagnostics selector may be provided.";
+        }
+        return exception.getMessage();
+    }
+
+    private static boolean isDiagnosticsSelectorGroupError(ParameterException exception) {
+        String message = exception.getMessage();
+        return exception instanceof MutuallyExclusiveArgsException
+                || (message != null
+                        && message.contains("expected only one match")
+                        && message.contains("[--board=<board> | --workflow=<workflow>]"));
     }
 
     private static String errorCode(Exception exception) {
