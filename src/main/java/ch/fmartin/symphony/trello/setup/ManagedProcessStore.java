@@ -4,9 +4,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
 
@@ -66,7 +63,7 @@ final class ManagedProcessStore {
 
     private static String workflowStateName(Path workflowPath) {
         Path resolved = resolvedWorkflowPath(workflowPath);
-        String hash = sha3_256(resolved.toString()).substring(0, 12);
+        String hash = Sha3.sha3_256(resolved.toString()).substring(0, 12);
         return PathNames.fileName(workflowPath) + "." + hash;
     }
 
@@ -90,15 +87,6 @@ final class ManagedProcessStore {
     private static ManagedProcessFiles filesFor(Path parent, String name, Path pidFile) {
         return new ManagedProcessFiles(
                 pidFile, parent.resolve(name + ".log"), parent.resolve(name + ".err"), parent.resolve(name + ".lock"));
-    }
-
-    private static String sha3_256(String value) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA3-256");
-            return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA3-256 is required by the JDK", e);
-        }
     }
 
     record ManagedProcessFiles(Path pidFile, Path stdoutLog, Path stderrLog, Path processLockFile) {
