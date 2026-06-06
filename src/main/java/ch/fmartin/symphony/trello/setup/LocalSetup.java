@@ -283,11 +283,15 @@ public final class LocalSetup {
             for (String warning : localValidation.warnings()) {
                 out.println("  WARN    " + warning);
             }
+            ConnectedBoard healthBoard = withWorkflowServerPort(board);
+            BoardHealth health = localValidation.ok()
+                    ? healthChecker.boardHealth(healthBoard)
+                    : new BoardHealth(BoardHealthKind.STOPPED, board.serverPort(), Optional.empty(), Optional.empty());
             if (!localValidation.ok()) {
                 ok = false;
             } else {
                 WorkflowValidation workflow = workflowConfig.validate(board);
-                if (workflow.ok()) {
+                if (workflow.ok() || isHealthyStaleManifestPort(board, healthBoard, workflow, health)) {
                     out.println("  OK      Workflow: " + board.workflowPath());
                 } else {
                     out.println("  WARN    " + workflow.message());
@@ -302,12 +306,18 @@ public final class LocalSetup {
                 ok = false;
             }
             if (localValidation.ok()) {
-                BoardHealth health = healthChecker.boardHealth(board);
-                printBoardHealth(options, manifest, board, health, out);
+                printBoardHealth(options, manifest, healthBoard, health, out);
                 ok = ok && health.kind() == BoardHealthKind.SAME_WORKFLOW;
             }
         }
         return ok ? 0 : 2;
+    }
+
+    private static boolean isHealthyStaleManifestPort(
+            ConnectedBoard board, ConnectedBoard healthBoard, WorkflowValidation workflow, BoardHealth health) {
+        return board.serverPort() != healthBoard.serverPort()
+                && health.kind() == BoardHealthKind.SAME_WORKFLOW
+                && workflow.message().startsWith("Workflow server.port does not match the connected board");
     }
 
     private static List<ConnectedBoard> boardsForCheck(ConnectedBoardManifest manifest, Options options) {
@@ -445,34 +455,70 @@ public final class LocalSetup {
                             + overrideSource
                             + " overrides the HTTP port. Remove or update SYMPHONY_HTTP_PORT/QUARKUS_HTTP_PORT in the board env file or service environment, then rerun setup-local repair-port.");
         });
-        BoardHealth health = healthChecker.boardHealth(board);
+        ConnectedBoard reconciledBoard = withWorkflowServerPort(board);
+        BoardHealth health = healthChecker.boardHealth(reconciledBoard);
+        if (health.kind() == BoardHealthKind.SAME_WORKFLOW && reconciledBoard.serverPort() != board.serverPort()) {
+            return repairManifestPort(options, out, boards, manifest, board, reconciledBoard);
+        }
         boolean wasRunning = health.kind() == BoardHealthKind.SAME_WORKFLOW;
-        int port = nextAvailablePort(manifest, board);
+        int port = nextAvailablePort(manifest, reconciledBoard);
         if (options.dryRun()) {
             out.println();
             out.println("Dry run");
-            out.println("  WOULD   update \"" + board.boardName() + "\" to use http://127.0.0.1:" + port);
+            out.println("  WOULD   update \"" + reconciledBoard.boardName() + "\" to use http://127.0.0.1:" + port);
             if (wasRunning) {
-                out.println("  WOULD   restart Symphony for \"" + board.boardName() + "\"");
+                out.println("  WOULD   restart Symphony for \"" + reconciledBoard.boardName() + "\"");
             } else {
-                out.println("          Restart: " + options.command() + " start --env " + board.envPath()
-                        + " --workflow " + board.workflowPath());
+                out.println("          Restart: " + options.command() + " start --env " + reconciledBoard.envPath()
+                        + " --workflow " + reconciledBoard.workflowPath());
             }
             return 0;
         }
-        ensureManagedRestartPossible(options, board, health);
+        ensureManagedRestartPossible(options, reconciledBoard, health);
         if (wasRunning) {
-            stopBoard(options, board.boardName(), board.workflowPath());
+            stopBoard(options, reconciledBoard.boardName(), reconciledBoard.workflowPath());
         }
-        workflowConfig.updateServerPort(board.workflowPath(), port);
-        boards.save(manifest.withBoard(board.withServerPort(port)));
-        out.println("  OK      Updated \"" + board.boardName() + "\" to use http://127.0.0.1:" + port);
+        workflowConfig.updateServerPort(reconciledBoard.workflowPath(), port);
+        boards.save(manifest.withBoard(reconciledBoard.withServerPort(port)));
+        out.println("  OK      Updated \"" + reconciledBoard.boardName() + "\" to use http://127.0.0.1:" + port);
         if (wasRunning) {
-            startBoard(options, board.withServerPort(port), out);
+            startBoard(options, reconciledBoard.withServerPort(port), out);
         } else {
-            out.println("          Restart: " + options.command() + " start --env " + board.envPath() + " --workflow "
-                    + board.workflowPath());
+            out.println("          Restart: " + options.command() + " start --env " + reconciledBoard.envPath()
+                    + " --workflow " + reconciledBoard.workflowPath());
         }
+        return 0;
+    }
+
+    private ConnectedBoard withWorkflowServerPort(ConnectedBoard board) {
+        if (board.workflowPath() == null) {
+            return board;
+        }
+        return workflowConfig
+                .serverPort(board.workflowPath())
+                .map(board::withServerPort)
+                .orElse(board);
+    }
+
+    private static int repairManifestPort(
+            Options options,
+            PrintStream out,
+            ConnectedBoardRepository boards,
+            ConnectedBoardManifest manifest,
+            ConnectedBoard staleBoard,
+            ConnectedBoard reconciledBoard)
+            throws IOException {
+        if (options.dryRun()) {
+            out.println();
+            out.println("Dry run");
+            out.println("  WOULD   update connected-board manifest for \"" + staleBoard.boardName()
+                    + "\" to use http://127.0.0.1:" + reconciledBoard.serverPort());
+            out.println("          Workflow and running Symphony worker already use this port.");
+            return 0;
+        }
+        boards.save(manifest.withBoard(reconciledBoard));
+        out.println("  OK      Updated connected-board manifest for \"" + staleBoard.boardName()
+                + "\" to use http://127.0.0.1:" + reconciledBoard.serverPort());
         return 0;
     }
 
