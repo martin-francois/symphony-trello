@@ -500,7 +500,7 @@ public final class LocalSetup {
         }
         if (options.nonInteractive()) {
             if (options.configureGithub()) {
-                rejectNonInteractiveIgnoredConfigureGithubUpdate(options);
+                rejectConfigureGithubWorkflowSelector(options);
             } else {
                 rejectNonInteractiveIgnoredWorkflowUpdate(options);
             }
@@ -510,8 +510,13 @@ public final class LocalSetup {
                 return ExistingSetupAction.UPDATE_CODEX_ACCESS;
             }
             if (options.configureGithub() || !options.hasExplicitBoardSetupRequest()) {
-                if (manifest.boards().stream().anyMatch(board -> !board.githubEnabled())) {
+                List<ConnectedBoard> nonGithubBoards = nonGithubBoards(manifest);
+                if (!nonGithubBoards.isEmpty()) {
+                    rejectInvalidConfigureGithubUpgradeRequestBeforeAuth(options, nonGithubBoards);
                     return ExistingSetupAction.UPGRADE_GITHUB;
+                }
+                if (options.nonInteractive()) {
+                    rejectNonInteractiveIgnoredConfigureGithubUpdate(options);
                 }
                 rejectConfigureGithubUpdateWithoutUpgrade(options);
                 if (hasConnectedBoardCodexAccessTarget(manifest, options)) {
@@ -721,12 +726,29 @@ public final class LocalSetup {
         }
     }
 
+    private static void rejectConfigureGithubWorkflowSelector(Options options) {
+        if (options.workflowPathExplicit()) {
+            throw new TrelloBoardSetupException(
+                    "setup_invalid_arguments",
+                    "setup-local configure-github selects connected Trello boards with --board; --workflow is not supported.");
+        }
+    }
+
     private static void rejectConfigureGithubUpdateWithoutUpgrade(Options options) {
         if (options.configureGithub() && options.hasConfigureGithubWorkflowUpdateRequest()) {
             throw new TrelloBoardSetupException(
                     "setup_github_upgrade_not_found",
                     "setup-local configure-github can apply --max-agents, --codex-model, and --codex-reasoning-effort only while upgrading a non-GitHub connected Trello board.");
         }
+    }
+
+    private static void rejectInvalidConfigureGithubUpgradeRequestBeforeAuth(
+            Options options, List<ConnectedBoard> nonGithubBoards) {
+        if (!options.nonInteractive()) {
+            return;
+        }
+        options.existingBoardId().ifPresent(selector -> nonGithubBoard(nonGithubBoards, selector));
+        rejectNonInteractiveIgnoredConfigureGithubUpdate(options);
     }
 
     private void upgradeExistingBoardToGithub(Options options, ConnectedBoardManifest manifest, Terminal terminal)
@@ -829,9 +851,7 @@ public final class LocalSetup {
 
     private static ConnectedBoard selectNonGithubBoardForUpgrade(
             Options options, ConnectedBoardManifest manifest, Terminal terminal) throws IOException {
-        List<ConnectedBoard> candidates = manifest.boards().stream()
-                .filter(board -> !board.githubEnabled())
-                .toList();
+        List<ConnectedBoard> candidates = nonGithubBoards(manifest);
         if (candidates.isEmpty()) {
             throw new TrelloBoardSetupException(
                     "setup_github_upgrade_not_found", "No non-GitHub connected board is available to upgrade.");
@@ -841,6 +861,12 @@ public final class LocalSetup {
             return selectNonGithubBoardForUpgradeWithoutSelector(options, candidates, terminal);
         }
         return nonGithubBoard(candidates, requested.orElseThrow());
+    }
+
+    private static List<ConnectedBoard> nonGithubBoards(ConnectedBoardManifest manifest) {
+        return manifest.boards().stream()
+                .filter(board -> !board.githubEnabled())
+                .toList();
     }
 
     private static ConnectedBoard selectNonGithubBoardForUpgradeWithoutSelector(

@@ -2598,6 +2598,156 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void configureGithubRejectsWorkflowOptionsBeforeCodexAuth() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.github-upgrade-before-auth.md");
+        Path env = tempDir.resolve(".env");
+        SetupRunResult firstResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "GitHub Upgrade Before Auth",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+        commands.codexAuthenticated = false;
+        commands.githubAuthenticated = true;
+        commands.startedWorkflows.clear();
+        commands.stoppedWorkflows.clear();
+
+        // when
+        SetupRunResult secondResult = runSetup(
+                "configure-github",
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--server-port",
+                "19000");
+
+        // then
+        firstResult.assertSuccess();
+        secondResult
+                .assertFailure(2)
+                .stderrContains("setup_board_selection_required", "--server-port")
+                .stderrDoesNotContain("setup_codex_auth_required");
+        assertThatWorkflow(workflow).hasNoGithubFlow().doesNotHaveServerPort(19000);
+        assertThat(commands.stoppedWorkflows).isEmpty();
+        assertThat(commands.startedWorkflows).isEmpty();
+    }
+
+    @Test
+    void configureGithubRejectsUnknownBoardSelectorWithActionableMessage() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.github-upgrade-unknown-selector.md");
+        Path env = tempDir.resolve(".env");
+        SetupRunResult firstResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "GitHub Upgrade Unknown Selector",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+        commands.startedWorkflows.clear();
+        commands.stoppedWorkflows.clear();
+
+        // when
+        SetupRunResult secondResult = runSetup(
+                "configure-github",
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "definitely-not-a-board",
+                "--no-start");
+
+        // then
+        firstResult.assertSuccess();
+        secondResult
+                .assertFailure(2)
+                .stderrContains(
+                        "setup_github_upgrade_not_found",
+                        "No connected non-GitHub board matches \"definitely-not-a-board\"")
+                .stderrDoesNotContain("setup-local configure-github can apply", "Troubleshooting report written");
+        assertThatWorkflow(workflow).hasNoGithubFlow();
+        assertThat(commands.stoppedWorkflows).isEmpty();
+        assertThat(commands.startedWorkflows).isEmpty();
+    }
+
+    @Test
+    void configureGithubRejectsWorkflowSelectorWithActionableMessage() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.github-upgrade-workflow-selector.md");
+        Path env = tempDir.resolve(".env");
+        SetupRunResult firstResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "GitHub Upgrade Workflow Selector",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+        commands.startedWorkflows.clear();
+        commands.stoppedWorkflows.clear();
+
+        // when
+        SetupRunResult secondResult = runSetup(
+                "configure-github",
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--workflow",
+                tempDir.resolve("definitely-not-a-workflow.md").toString(),
+                "--no-start");
+
+        // then
+        firstResult.assertSuccess();
+        secondResult
+                .assertFailure(2)
+                .stderrContains(
+                        "setup_invalid_arguments",
+                        "setup-local configure-github selects connected Trello boards with --board",
+                        "--workflow is not supported")
+                .stderrDoesNotContain("setup-local configure-github can apply", "Troubleshooting report written");
+        assertThatWorkflow(workflow).hasNoGithubFlow();
+        assertThat(commands.stoppedWorkflows).isEmpty();
+        assertThat(commands.startedWorkflows).isEmpty();
+    }
+
+    @Test
     void configureGithubRejectsWorkflowOptionsWhenNoUpgradeWillRun() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.github-already-enabled-model.md");
@@ -2640,6 +2790,51 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 .assertFailure(2)
                 .stderrContains("setup_github_upgrade_not_found", "non-GitHub connected Trello board");
         assertThat(workflow).content(StandardCharsets.UTF_8).doesNotContain("gpt-new");
+        assertThat(commands.stoppedWorkflows).isEmpty();
+        assertThat(commands.startedWorkflows).isEmpty();
+    }
+
+    @Test
+    void configureGithubRejectsUnsupportedWorkflowOptionsWhenNoUpgradeWillRun() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.github-already-enabled-server-port.md");
+        Path env = tempDir.resolve(".env");
+        commands.githubAuthenticated = true;
+        SetupRunResult firstResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "GitHub Already Enabled Server Port",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--github");
+        commands.startedWorkflows.clear();
+        commands.stoppedWorkflows.clear();
+
+        // when
+        SetupRunResult secondResult = runSetup(
+                "configure-github",
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--server-port",
+                "19000");
+
+        // then
+        firstResult.assertSuccess();
+        secondResult.assertFailure(2).stderrContains("setup_board_selection_required", "--server-port");
+        assertThatWorkflow(workflow).doesNotHaveServerPort(19000);
         assertThat(commands.stoppedWorkflows).isEmpty();
         assertThat(commands.startedWorkflows).isEmpty();
     }
