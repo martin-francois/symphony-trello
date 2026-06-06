@@ -67,6 +67,8 @@ jobs:
         run: pnpm dlx --package renovate renovate-config-validator renovate.json
 
   test:
+    # ADR 0048 keeps this on 2 vCPU: larger runners and parallel test modes did not improve the
+    # normalized Blacksmith free-minute cost.
     runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
