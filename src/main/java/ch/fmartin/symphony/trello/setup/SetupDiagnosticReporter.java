@@ -1214,6 +1214,7 @@ final class SetupDiagnosticReporter {
         try (Stream<Path> files = Files.list(configDir)) {
             return files.filter(path -> path.getFileName().toString().endsWith(".md"))
                     .filter(SetupDiagnosticReporter::hasWorkflowFileName)
+                    .filter(Files::isRegularFile)
                     .toList();
         } catch (IOException e) {
             return List.of();
