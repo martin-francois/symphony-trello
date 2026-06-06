@@ -427,6 +427,82 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void checkBoardSelectorToleratesMalformedManifestEntries() throws Exception {
+        // given
+        Path configDir = fixture.configDir();
+        Path workflow = configDir.resolve("WORKFLOW.valid.md");
+        Path env = configDir.resolve(".env.valid");
+        Files.createDirectories(configDir);
+        Files.createDirectories(fixture.workspaceRoot());
+        Files.writeString(env, "TRELLO_API_KEY=key\nTRELLO_API_TOKEN=token\n", StandardCharsets.UTF_8);
+        writeWorkflow(workflow, "valid-board-id", 20457);
+        commands.startHealthServer(workflow, "other-board");
+        fixture.givenManifest(
+                """
+                {"boards":[
+                  {"boardId":"missing-name-id","boardKey":"missing-name-key","boardUrl":"https://trello.example/missing-name","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":20458,"githubEnabled":false,"dangerFullAccess":false,"additionalWritableRoots":[]},
+                  {"boardId":"valid-board-id","boardKey":"valid-key","boardName":"Valid Board","boardUrl":"https://trello.example/valid","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":20457,"githubEnabled":false,"dangerFullAccess":false,"additionalWritableRoots":[]}
+                ]}
+                """
+                        .formatted(
+                                json(configDir.resolve("WORKFLOW.missing-name.md")),
+                                json(configDir.resolve(".env.missing-name")),
+                                json(fixture.workspaceRoot()),
+                                json(workflow),
+                                json(env),
+                                json(fixture.workspaceRoot())));
+
+        // when
+        SetupRunResult result = runSetup("check", "--board", "valid-key", "--endpoint", endpoint());
+
+        // then
+        result.assertFailure(2)
+                .stderrEmpty()
+                .stdoutContains(
+                        "Connected-board manifest entry 1 field boardName must be a non-blank string.",
+                        "WARN  \"Valid Board\" local server:",
+                        "Suggested fix: symphony-trello setup-local repair-port --board \"Valid Board\"")
+                .stdoutDoesNotContain("NullPointerException", "Troubleshooting report written");
+    }
+
+    @Test
+    void checkBoardSelectorReportsManifestWarningsBeforeMissingSelectorError() throws Exception {
+        // given
+        Path configDir = fixture.configDir();
+        Path workflow = configDir.resolve("WORKFLOW.valid.md");
+        Path env = configDir.resolve(".env.valid");
+        Files.createDirectories(configDir);
+        Files.createDirectories(fixture.workspaceRoot());
+        Files.writeString(env, "TRELLO_API_KEY=key\nTRELLO_API_TOKEN=token\n", StandardCharsets.UTF_8);
+        writeWorkflow(workflow, "valid-board-id", 20457);
+        fixture.givenManifest(
+                """
+                {"boards":[
+                  {"boardId":"missing-name-id","boardKey":"missing-name-key","boardUrl":"https://trello.example/missing-name","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":20458,"githubEnabled":false,"dangerFullAccess":false,"additionalWritableRoots":[]},
+                  {"boardId":"valid-board-id","boardKey":"valid-key","boardName":"Valid Board","boardUrl":"https://trello.example/valid","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":20457,"githubEnabled":false,"dangerFullAccess":false,"additionalWritableRoots":[]}
+                ]}
+                """
+                        .formatted(
+                                json(configDir.resolve("WORKFLOW.missing-name.md")),
+                                json(configDir.resolve(".env.missing-name")),
+                                json(fixture.workspaceRoot()),
+                                json(workflow),
+                                json(env),
+                                json(fixture.workspaceRoot())));
+
+        // when
+        SetupRunResult result = runSetup("check", "--board", "missing-private-selector", "--endpoint", endpoint());
+
+        // then
+        result.assertFailure(2)
+                .stdoutContains("Connected-board manifest entry 1 field boardName must be a non-blank string.")
+                .stderrContains(
+                        "setup_failed code=setup_board_selection_required",
+                        "No connected Trello board matches \"missing-private-selector\".")
+                .stderrDoesNotContain("Troubleshooting report written");
+    }
+
+    @Test
     void checkReportsOutOfRangeConnectedBoardManifestPort() throws Exception {
         // given
         Path configDir = fixture.configDir();

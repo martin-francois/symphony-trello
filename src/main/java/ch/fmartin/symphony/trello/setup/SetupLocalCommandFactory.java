@@ -41,7 +41,7 @@ final class SetupLocalCommandFactory {
             "--danger-full-access",
             "--no-start");
     private static final List<String> CHECK_UNSUPPORTED_OPTIONS =
-            optionNames(List.of("--dry-run", "--force", "--board-name", "--board"), WORKFLOW_AND_ACCESS_OPTIONS);
+            optionNames(List.of("--dry-run", "--force", "--board-name"), WORKFLOW_AND_ACCESS_OPTIONS);
     private static final List<String> REPAIR_PORT_UNSUPPORTED_OPTIONS = optionNames(
             List.of("--force", "--key", "--token", "--board-name"),
             WORKFLOW_AND_ACCESS_OPTIONS,
@@ -429,7 +429,6 @@ final class SetupLocalCommandFactory {
             addIfPresent(unsupported, "--dry-run", dryRun);
             addIfPresent(unsupported, "--force", force);
             addIfPresent(unsupported, "--board-name", boardName);
-            addIfPresent(unsupported, "--board", board);
             addWorkflowAndAccessOptions(unsupported);
             return unsupported;
         }
