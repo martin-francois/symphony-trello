@@ -45,6 +45,10 @@ final class CliInputValidation {
         value.ifPresent(text -> rejectControlCharacters(optionName, text));
     }
 
+    static void rejectControlCharactersInTextValues(String optionName, List<String> values) {
+        values.forEach(value -> rejectControlCharacters(optionName, value));
+    }
+
     static void rejectWorkspaceIdReference(String optionName, String value) {
         if (value == null) {
             return;
@@ -95,6 +99,34 @@ final class CliInputValidation {
 
     static void rejectControlCharacters(String optionName, Path value) {
         rejectControlCharacters(optionName, value.toString());
+    }
+
+    static String safeCliMessage(String message) {
+        if (message == null || !CONTROL_CHARACTERS.matchesAnyOf(message)) {
+            return message;
+        }
+        StringBuilder safe = new StringBuilder(message.length());
+        message.codePoints().forEach(codePoint -> appendSafeCliCodePoint(safe, codePoint));
+        return safe.toString();
+    }
+
+    private static void appendSafeCliCodePoint(StringBuilder safe, int codePoint) {
+        switch (codePoint) {
+            case '\b' -> safe.append("\\b");
+            case '\t' -> safe.append("\\t");
+            case '\n' -> safe.append("\\n");
+            case '\f' -> safe.append("\\f");
+            case '\r' -> safe.append("\\r");
+            default -> {
+                if (Character.isISOControl(codePoint)) {
+                    safe.append("\\u");
+                    String hex = Integer.toHexString(codePoint).toUpperCase();
+                    safe.repeat("0", Math.max(0, 4 - hex.length())).append(hex);
+                } else {
+                    safe.appendCodePoint(codePoint);
+                }
+            }
+        }
     }
 
     static void rejectBlankPath(String optionName, Path value) {
