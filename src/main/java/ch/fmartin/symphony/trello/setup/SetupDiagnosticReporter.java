@@ -1642,7 +1642,7 @@ final class SetupDiagnosticReporter {
                 .matcher(sanitized)
                 .replaceAll(match -> match.group(1) + pathToken(match.group(2)) + match.group(1));
         sanitized = WINDOWS_PATH.matcher(sanitized).replaceAll(match -> pathToken(match.group()));
-        return redactAbsolutePosixPaths(sanitized);
+        return CliInputValidation.safeDiagnosticsText(redactAbsolutePosixPaths(sanitized));
     }
 
     private String redactUrlUserInfo(String value) {
