@@ -5,6 +5,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 final class CliInputValidation {
     private static final CharMatcher CONTROL_CHARACTERS =
@@ -58,6 +59,16 @@ final class CliInputValidation {
 
     static void rejectBlankPath(String optionName, Path value, String message) {
         if (value.toString().isBlank()) {
+            throw new TrelloBoardSetupException("setup_invalid_arguments", message);
+        }
+    }
+
+    static void rejectBlankPaths(String optionName, List<Path> values, String message) {
+        values.forEach(path -> rejectBlankPath(optionName, path, message));
+    }
+
+    static void rejectRelativePathsExcept(List<Path> values, Predicate<Path> allowedRelativePath, String message) {
+        if (values.stream().anyMatch(path -> !path.isAbsolute() && !allowedRelativePath.test(path))) {
             throw new TrelloBoardSetupException("setup_invalid_arguments", message);
         }
     }

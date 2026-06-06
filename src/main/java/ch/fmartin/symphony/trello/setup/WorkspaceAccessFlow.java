@@ -51,10 +51,10 @@ final class WorkspaceAccessFlow {
     }
 
     static Path resolveAccessPath(String value, Path callerDirectory) {
-        if ("~".equals(value)) {
+        if (isHomeShorthand(value)) {
             return Path.of(System.getProperty("user.home")).normalize();
         }
-        if (value.startsWith("~/") || value.startsWith("~\\")) {
+        if (startsWithHomeDirectory(value)) {
             String remainder = value.substring(2).replace('\\', '/');
             return Path.of(System.getProperty("user.home")).resolve(remainder).normalize();
         }
@@ -64,6 +64,18 @@ final class WorkspaceAccessFlow {
 
     static Path resolveAccessPath(Path value, Path callerDirectory) {
         return resolveAccessPath(value.toString(), callerDirectory);
+    }
+
+    static Path resolveCliAccessPath(Path value) {
+        if (isHomeShorthand(value)) {
+            return resolveAccessPath(value.toString(), Path.of(""));
+        }
+        return value.normalize();
+    }
+
+    static boolean isHomeShorthand(Path value) {
+        String path = value.toString();
+        return isHomeShorthand(path) || startsWithHomeDirectory(path);
     }
 
     static void rejectBroadAccessPath(Path path, boolean allowAllPaths) {
@@ -76,6 +88,14 @@ final class WorkspaceAccessFlow {
 
     static boolean isBroadAccessPath(Path path) {
         return path.getParent() == null && path.isAbsolute();
+    }
+
+    private static boolean isHomeShorthand(String value) {
+        return "~".equals(value);
+    }
+
+    private static boolean startsWithHomeDirectory(String value) {
+        return value.startsWith("~/") || value.startsWith("~\\");
     }
 
     private static boolean confirmBroadAccess(Terminal terminal) throws IOException {
