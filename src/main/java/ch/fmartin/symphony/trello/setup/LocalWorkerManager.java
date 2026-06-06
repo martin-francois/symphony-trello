@@ -20,7 +20,7 @@ import java.util.concurrent.locks.Lock;
 
 final class LocalWorkerManager {
     private static final int STARTUP_LOG_BYTE_LIMIT = 128 * 1024;
-    private static final Striped<Lock> START_LOCKS = Striped.lazyWeakLock(1024);
+    private static final Striped<Lock> PROCESS_LOCKS = Striped.lazyWeakLock(1024);
 
     private final Map<String, String> environment;
     private final WorkflowConfigEditor workflowConfig;
@@ -102,18 +102,20 @@ final class LocalWorkerManager {
         ManagedProcessStore store = new ManagedProcessStore(paths.stateHome());
         ManagedProcessStore.ManagedProcessFiles files = store.files(board.workflowPath());
         Files.createDirectories(paths.stateHome());
-        Lock startLock = START_LOCKS.get(files.startLockFile().toAbsolutePath().normalize());
-        startLock.lock();
-        try (FileChannel channel =
-                        FileChannel.open(files.startLockFile(), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
-                FileLock fileLock = channel.lock()) {
-            if (!fileLock.isValid()) {
-                throw new TrelloBoardSetupException(
-                        "setup_start_failed", "Could not acquire the managed worker start lock.");
-            }
+        startWithProcessLock(paths, board, envPath, explicitEnvOverride, out, store, files);
+    }
+
+    private void startWithProcessLock(
+            LocalWorkerPaths paths,
+            ConnectedBoard board,
+            Path envPath,
+            boolean explicitEnvOverride,
+            PrintStream out,
+            ManagedProcessStore store,
+            ManagedProcessStore.ManagedProcessFiles files)
+            throws IOException {
+        try (var ignored = acquireProcessLock(files)) {
             startLocked(paths, board, envPath, explicitEnvOverride, out, store, files);
-        } finally {
-            startLock.unlock();
         }
     }
 
@@ -479,6 +481,20 @@ final class LocalWorkerManager {
     private void stop(LocalWorkerPaths paths, ManagedProcessStore store, ConnectedBoard board, PrintStream out)
             throws IOException {
         ManagedProcessStore.ManagedProcessFiles files = store.files(board.workflowPath());
+        if (!Files.isDirectory(paths.stateHome())) {
+            stopLocked(paths, store, board, out, files);
+            return;
+        }
+        stopWithProcessLock(paths, store, board, out, files);
+    }
+
+    private void stopLocked(
+            LocalWorkerPaths paths,
+            ManagedProcessStore store,
+            ConnectedBoard board,
+            PrintStream out,
+            ManagedProcessStore.ManagedProcessFiles files)
+            throws IOException {
         Long pid = store.readPid(files.pidFile());
         if (pid == null || !platform.isAlive(pid)) {
             store.deletePid(files.pidFile());
@@ -490,7 +506,7 @@ final class LocalWorkerManager {
                                 + files.displayName()
                                 + " because the worker is healthy but has no managed pid. Stop the process manually, then start it again with symphony-trello start.");
             }
-            out.println("Stopped " + files.displayName());
+            out.println("Symphony for Trello is already stopped for \"" + board.boardName() + "\"");
             return;
         }
         if (!platform.isManaged(pid, paths.appHome(), board.workflowPath())) {
@@ -507,6 +523,65 @@ final class LocalWorkerManager {
             throw new TrelloBoardSetupException("setup_stop_failed", "Managed process did not stop: pid=" + pid);
         }
         store.deletePid(files.pidFile());
+    }
+
+    private void stopWithProcessLock(
+            LocalWorkerPaths paths,
+            ManagedProcessStore store,
+            ConnectedBoard board,
+            PrintStream out,
+            ManagedProcessStore.ManagedProcessFiles files)
+            throws IOException {
+        try (var ignored = acquireProcessLock(files)) {
+            stopLocked(paths, store, board, out, files);
+        }
+    }
+
+    private static AcquiredProcessLock acquireProcessLock(ManagedProcessStore.ManagedProcessFiles files)
+            throws IOException {
+        Lock processLock =
+                PROCESS_LOCKS.get(files.processLockFile().toAbsolutePath().normalize());
+        processLock.lock();
+        FileChannel channel = null;
+        FileLock fileLock = null;
+        try {
+            channel = FileChannel.open(files.processLockFile(), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+            fileLock = channel.lock();
+            if (!fileLock.isValid()) {
+                throw new TrelloBoardSetupException(
+                        "setup_process_lock_failed", "Could not acquire the managed worker process lock.");
+            }
+            return new AcquiredProcessLock(processLock, channel, fileLock);
+        } catch (IOException | RuntimeException e) {
+            closeQuietly(fileLock, e);
+            closeQuietly(channel, e);
+            processLock.unlock();
+            throw e;
+        }
+    }
+
+    private static void closeQuietly(AutoCloseable closeable, Throwable originalFailure) {
+        if (closeable == null) {
+            return;
+        }
+        try {
+            closeable.close();
+        } catch (Exception closeFailure) {
+            originalFailure.addSuppressed(closeFailure);
+        }
+    }
+
+    private record AcquiredProcessLock(Lock processLock, FileChannel channel, FileLock fileLock)
+            implements AutoCloseable {
+        @Override
+        public void close() throws IOException {
+            try (channel;
+                    fileLock) {
+                // try-with-resources closes the OS lock and channel before releasing the in-process lock.
+            } finally {
+                processLock.unlock();
+            }
+        }
     }
 
     private void stopPidFiles(LocalWorkerPaths paths, ManagedProcessStore store, PrintStream out) throws IOException {

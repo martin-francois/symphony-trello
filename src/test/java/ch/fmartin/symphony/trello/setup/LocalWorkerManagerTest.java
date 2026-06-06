@@ -757,6 +757,98 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
+    void stopBoardSelectorReportsAlreadyStoppedWhenNoWorkerIsRunning() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+
+        // when
+        WorkerRunResult result = fixture.stop(fixture.stopRequest("Queue"));
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("Symphony for Trello is already stopped for \"Queue\"")
+                .stdoutDoesNotContain("Stopped WORKFLOW.");
+        verify(fixture.platform, never()).stop(anyLong(), any(Duration.class), any(Duration.class));
+    }
+
+    @Test
+    void stopWorkflowSelectorReportsAlreadyStoppedWhenNoWorkerIsRunning() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+
+        // when
+        WorkerRunResult result = fixture.stop(fixture.stopWorkflowRequest(board.workflowPath()));
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("Symphony for Trello is already stopped for \"Queue\"")
+                .stdoutDoesNotContain("Stopped WORKFLOW.");
+        verify(fixture.platform, never()).stop(anyLong(), any(Duration.class), any(Duration.class));
+    }
+
+    @Test
+    void concurrentStopsForSameBoardReportOnlyOneStopAction() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        fixture.writeManagedPid(board, 42);
+        CountDownLatch firstStopEntered = new CountDownLatch(1);
+        CountDownLatch releaseFirstStop = new CountDownLatch(1);
+        AtomicInteger stopCalls = new AtomicInteger();
+        when(fixture.platform.isAlive(42)).thenReturn(true);
+        when(fixture.platform.isManaged(42, fixture.paths.appHome(), board.workflowPath()))
+                .thenReturn(true);
+        when(fixture.platform.stop(42, Duration.ofSeconds(15), Duration.ofSeconds(5)))
+                .thenAnswer(invocation -> {
+                    stopCalls.incrementAndGet();
+                    firstStopEntered.countDown();
+                    assertThat(releaseFirstStop.await(5, TimeUnit.SECONDS)).isTrue();
+                    return true;
+                });
+
+        AtomicReference<Thread> secondThread = new AtomicReference<>();
+        AtomicReference<WorkerRunResult> firstResult = new AtomicReference<>();
+        AtomicReference<Throwable> firstError = new AtomicReference<>();
+        AtomicReference<WorkerRunResult> secondResult = new AtomicReference<>();
+        AtomicReference<Throwable> secondError = new AtomicReference<>();
+        Thread first = startThread(() -> fixture.stop(fixture.stopRequest("Queue")), firstResult, firstError);
+        Thread second = null;
+        try {
+            assertThat(firstStopEntered.await(5, TimeUnit.SECONDS))
+                    .as(
+                            "first stop should reach platform.stop, thread state=%s, result=%s, error=%s",
+                            first.getState(), firstResult, firstError)
+                    .isTrue();
+            second = startThread(() -> fixture.stop(fixture.stopRequest("Queue")), secondResult, secondError);
+            secondThread.set(second);
+            awaitCondition(() -> stopCalls.get() > 1 || threadIsWaiting(secondThread.get()));
+
+            // when
+            assertThat(stopCalls).hasValue(1);
+        } finally {
+            releaseFirstStop.countDown();
+        }
+        first.join(Duration.ofSeconds(5));
+        if (second != null) {
+            second.join(Duration.ofSeconds(5));
+        }
+
+        // then
+        assertThat(firstError).hasValue(null);
+        assertThat(secondError).hasValue(null);
+        assertThat(firstResult.get().stdout()).contains("Stopped WORKFLOW.");
+        assertThat(secondResult.get().stdout())
+                .contains("Symphony for Trello is already stopped for \"Queue\"")
+                .doesNotContain("Stopped WORKFLOW.");
+        verify(fixture.platform).stop(42, Duration.ofSeconds(15), Duration.ofSeconds(5));
+    }
+
+    @Test
     void stopWithoutSelectorStopsAllConnectedManagedWorkers() throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
