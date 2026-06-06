@@ -1296,7 +1296,7 @@ final class SetupDiagnosticReporter {
                 .orElseGet(Set::of);
         List<Path> logs;
         try (Stream<Path> files = recentLogLister.list(stateHome)) {
-            logs = files.filter(Files::isRegularFile)
+            logs = files.filter(SetupDiagnosticReporter::isRegularLogFile)
                     .filter(path -> {
                         String name = path.getFileName().toString();
                         return name.endsWith(".log") || name.endsWith(".err");
@@ -1356,7 +1356,7 @@ final class SetupDiagnosticReporter {
                             .map(Path::toString)
                             .orElse(""),
                     logStream(log),
-                    Files.isRegularFile(log),
+                    isRegularLogFile(log),
                     logHasContent(log));
         }
         table.appendTo(body);
@@ -1364,7 +1364,7 @@ final class SetupDiagnosticReporter {
 
     private List<Path> existingLogFiles(Path stateHome) {
         try (Stream<Path> files = recentLogLister.list(stateHome)) {
-            return files.filter(Files::isRegularFile)
+            return files.filter(SetupDiagnosticReporter::isRegularLogFile)
                     .filter(path -> {
                         String name = path.getFileName().toString();
                         return name.endsWith(".log") || name.endsWith(".err");
@@ -1401,16 +1401,20 @@ final class SetupDiagnosticReporter {
     }
 
     private static boolean logHasContent(Path log) {
-        return Files.isRegularFile(log) && nonEmptyOrUnreadable(log);
+        return isRegularLogFile(log) && nonEmptyOrUnreadable(log);
     }
 
     private static boolean nonEmptyOrUnreadable(Path path) {
-        try {
-            return Files.size(path) > 0;
+        try (FileChannel channel = openLogFile(path)) {
+            return channel.size() > 0;
         } catch (IOException ignored) {
             // Keep unreadable logs visible so logTail can report a sanitized read failure.
-            return true;
+            return isRegularLogFile(path);
         }
+    }
+
+    private static boolean isRegularLogFile(Path path) {
+        return Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS);
     }
 
     private static Set<Path> expectedLogFiles(Path stateHome, SequencedSet<Path> workflowPaths) {
@@ -2038,15 +2042,13 @@ final class SetupDiagnosticReporter {
     }
 
     private static String tail(Path path, int maxLines) {
-        try {
-            long size = Files.size(path);
+        try (FileChannel channel = openLogFile(path)) {
+            long size = channel.size();
             int bytesToRead = (int) Math.min(LOG_BYTE_LIMIT, size);
             ByteBuffer buffer = ByteBuffer.allocate(bytesToRead);
-            try (FileChannel channel = FileChannel.open(path, StandardOpenOption.READ)) {
-                channel.position(Math.max(0, size - bytesToRead));
-                while (buffer.hasRemaining() && channel.read(buffer) != -1) {
-                    // Continue until the bounded tail buffer is filled or EOF is reached.
-                }
+            channel.position(Math.max(0, size - bytesToRead));
+            while (buffer.hasRemaining() && channel.read(buffer) != -1) {
+                // Continue until the bounded tail buffer is filled or EOF is reached.
             }
             buffer.flip();
             String text = StandardCharsets.UTF_8.decode(buffer).toString();
@@ -2062,6 +2064,10 @@ final class SetupDiagnosticReporter {
         } catch (IOException e) {
             return "Could not read log: " + e.getMessage();
         }
+    }
+
+    private static FileChannel openLogFile(Path path) throws IOException {
+        return FileChannel.open(path, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS);
     }
 
     private static String firstLine(String value) {
