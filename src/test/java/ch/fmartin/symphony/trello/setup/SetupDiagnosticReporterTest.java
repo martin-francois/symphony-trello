@@ -830,6 +830,46 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
+    void diagnosticsDoesNotReadSymlinkedWorkerLogs() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("symlink-log-config");
+        Path workspaceRoot = tempDir.resolve("symlink-log-workspaces");
+        Path stateHome = tempDir.resolve("symlink-log-state");
+        Path workflow = configDir.resolve("WORKFLOW.symlink-log.md");
+        Path privateHostFile = tempDir.resolve("private-host-file.txt");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.writeString(workflow, workflowWithPort(19197), StandardCharsets.UTF_8);
+        Files.writeString(privateHostFile, "PRIVATE_HOST_FILE_MARKER_SHOULD_NOT_APPEAR\n", StandardCharsets.UTF_8);
+        ManagedProcessStore.ManagedProcessFiles logs = new ManagedProcessStore(stateHome).files(workflow);
+        createSymbolicLinkOrSkip(logs.stdoutLog(), privateHostFile);
+        Files.writeString(logs.stderrLog(), "", StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.of(workspaceRoot),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.empty()));
+
+        // then
+        assertThat(report)
+                .contains("## Recent Logs", "No worker logs found.")
+                .doesNotContain(
+                        "PRIVATE_HOST_FILE_MARKER_SHOULD_NOT_APPEAR",
+                        privateHostFile.toString(),
+                        logs.stdoutLog().toString(),
+                        tempDir.toString());
+    }
+
+    @Test
     void diagnosticsPreservesPreTimestampLogOutputThatIsNotStartupBanner() throws Exception {
         // given
         Path configDir = tempDir.resolve("pre-timestamp-log-config");
