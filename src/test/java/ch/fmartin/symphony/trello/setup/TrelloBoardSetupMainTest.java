@@ -349,6 +349,51 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
+    void statusRejectsTrelloCardUrlSelectors() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("status-card-url-config");
+        Path workspaceRoot = tempDir.resolve("status-card-url-workspaces");
+        Path stateHome = tempDir.resolve("status-card-url-state");
+        Path workflow = configDir.resolve("WORKFLOW.queue.md");
+        Path env = configDir.resolve(".env");
+        Files.createDirectories(configDir);
+        Files.writeString(workflow, workflowWithBoardAndPort("board-id", 19192), StandardCharsets.UTF_8);
+        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
+                        "board-id",
+                        "abc123",
+                        "Queue",
+                        "https://trello.com/b/abc123/queue",
+                        workflow,
+                        env,
+                        workspaceRoot,
+                        19192,
+                        false,
+                        List.of(),
+                        false))));
+
+        // when
+        CliRunResult result = runCli(
+                "status",
+                "--config-dir",
+                configDir.toString(),
+                "--workspace-root",
+                workspaceRoot.toString(),
+                "--state-home",
+                stateHome.toString(),
+                "--board",
+                "https://trello.com/c/abc123/not-a-board");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments",
+                        "Invalid --board value. Use a Trello board URL, short link, board id, or a connected board name.")
+                .stderrDoesNotContain("Queue", "abc123", "Troubleshooting report written")
+                .stdoutDoesNotContain("running", "stopped", "Queue", "abc123");
+    }
+
+    @Test
     void diagnosticsPrivateContextWritesPrivateTroubleshootingContextWithoutPrintingOutputPath() throws Exception {
         // given
         Path configDir = tempDir.resolve("private-context-config");
@@ -3658,6 +3703,7 @@ final class TrelloBoardSetupMainTest {
         return Stream.of(
                 Arguments.of("trello-root-url", "https://trello.com/"),
                 Arguments.of("trello-board-url-without-id", "https://trello.com/b/"),
+                Arguments.of("trello-card-url", "https://trello.com/c/abc123/not-a-board"),
                 Arguments.of("non-trello-url", "https://example.com/b/abc123/name"),
                 Arguments.of("not-trello-url", "https://not-trello.com/b/abc123/name"),
                 Arguments.of("prefixed-trello-url", "https://mytrello.com/b/abc123/name"),

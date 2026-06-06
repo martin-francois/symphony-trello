@@ -104,6 +104,27 @@ final class ConnectedBoardManifestTest {
     }
 
     @Test
+    void findByBoardRejectsTrelloCardUrlSelectors() {
+        // given
+        ConnectedBoard board = board(
+                "000000000000000000000001",
+                "SYNTH003",
+                "Queue",
+                "https://trello.com/b/SYNTH003/synthetic-board",
+                Path.of("WORKFLOW.md"));
+        ConnectedBoardManifest manifest = new ConnectedBoardManifest(List.of(board));
+
+        // when
+        Throwable cardUrl = catchThrowable(() -> manifest.findByBoard("https://trello.com/c/SYNTH003/not-a-board"));
+
+        // then
+        assertThat(cardUrl)
+                .isInstanceOf(TrelloBoardSetupException.class)
+                .hasMessage(
+                        "Invalid --board value. Use a Trello board URL, short link, board id, or a connected board name.");
+    }
+
+    @Test
     void findByBoardPreservesExactUrlLikeBoardNameMatches() {
         // given
         ConnectedBoard board = board(
