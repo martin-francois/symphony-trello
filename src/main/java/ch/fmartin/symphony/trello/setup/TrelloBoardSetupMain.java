@@ -629,6 +629,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             CliInputValidation.rejectControlCharacters("--manifest", manifest);
             CliInputValidation.rejectControlCharacters("--app-home", appHome);
             CliInputValidation.rejectControlCharacters("--workflow", workflow());
+            CliInputValidation.rejectExistingNonDirectoryPath("--config-dir", configDir);
         }
 
         private static void rejectBlankDiagnosticsPath(String optionName, Optional<Path> path) {
