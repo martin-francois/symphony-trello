@@ -88,6 +88,23 @@ function Assert-BinDirOptionValue {
   }
 }
 
+function Test-HasControlCharacter([string]$Value) {
+  return -not [string]::IsNullOrEmpty($Value) -and [regex]::IsMatch($Value, "\p{Cc}")
+}
+
+function Assert-AppPathOptionValues {
+  if ((Test-HasControlCharacter $SymphonyHome) -or
+      (Test-HasControlCharacter $Prefix) -or
+      (Test-HasControlCharacter $env:SYMPHONY_TRELLO_CONFIG_DIR) -or
+      (Test-HasControlCharacter $env:SYMPHONY_TRELLO_WORKSPACE_ROOT) -or
+      (Test-HasControlCharacter $env:SYMPHONY_TRELLO_STATE_HOME)) {
+    throw "Installer app, config, workspace, and state paths must not contain control characters."
+  }
+  if (-not [string]::IsNullOrEmpty($Prefix) -and -not (Test-FullyQualifiedPath $Prefix)) {
+    throw "--prefix must be an absolute path."
+  }
+}
+
 function Test-FullyQualifiedPath([string]$Path) {
   if (-not [System.IO.Path]::IsPathRooted($Path)) {
     return $false
@@ -102,6 +119,20 @@ function Test-FullyQualifiedPath([string]$Path) {
     return $true
   }
   return [regex]::IsMatch($root, "^[A-Za-z]:[\\/]\z") -or [regex]::IsMatch($root, "^\\\\[^\\]+\\[^\\]+\\?$")
+}
+
+function Test-BroadSystemPath([string]$Path) {
+  if ([string]::IsNullOrEmpty($Path)) {
+    return $true
+  }
+  $trimmedPath = [System.IO.Path]::GetFullPath($Path).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+  $isWindowsPlatform = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
+    [System.Runtime.InteropServices.OSPlatform]::Windows)
+  if (-not $isWindowsPlatform) {
+    return $trimmedPath -in @("", "/", "/etc", "/home", "/opt", "/root", "/tmp", "/usr", "/var")
+  }
+  $root = [System.IO.Path]::GetPathRoot($trimmedPath).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+  return $trimmedPath.Equals($root, [System.StringComparison]::OrdinalIgnoreCase)
 }
 
 function Test-PublicOptionToken([string]$Token) {
@@ -260,6 +291,7 @@ Options:
 }
 
 Assert-BinDirOptionValue
+Assert-AppPathOptionValues
 $SymphonyHome = [System.IO.Path]::GetFullPath($SymphonyHome)
 if (-not $Prefix) {
   $Prefix = Join-Path $SymphonyHome "app"
@@ -272,6 +304,7 @@ if ($RemoveAllLocalData) {
   $RemoveWorkspaces = $true
   $RemoveState = $true
 }
+$RawPrefix = $Prefix
 $Prefix = [System.IO.Path]::GetFullPath($Prefix)
 $ConfigDir = [System.IO.Path]::GetFullPath($ConfigDir)
 $WorkspaceRoot = [System.IO.Path]::GetFullPath($WorkspaceRoot)
@@ -360,6 +393,40 @@ function Assert-CommandDirectory {
   foreach ($root in @($Prefix, $ConfigDir, $WorkspaceRoot, $StateHome)) {
     if ((Test-SameOrInsidePath $normalizedBinDir $root) -or (Test-SameOrInsidePath $root $normalizedBinDir)) {
       throw "--bin-dir must not overlap Symphony app, config, workspace, or state directories."
+    }
+  }
+}
+
+function Assert-AppPaths {
+  $normalizedSymphonyHome = [System.IO.Path]::GetFullPath($SymphonyHome)
+  $normalizedPrefix = [System.IO.Path]::GetFullPath($Prefix)
+  $trimmedPrefix = $normalizedPrefix.TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+  if ((Test-BroadSystemPath $trimmedPrefix) -or (Test-BroadSystemPath $normalizedSymphonyHome)) {
+    throw "--prefix must point to a dedicated app checkout directory."
+  }
+  $homeValue = if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }
+  $homeDirectory = [System.IO.Path]::GetFullPath($homeValue).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+  $trimmedSymphonyHome = $normalizedSymphonyHome.TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+  $checkoutDirectory = Get-ScriptCheckoutDirectory
+  if ($trimmedPrefix.Equals($homeDirectory, [System.StringComparison]::OrdinalIgnoreCase) -or
+      $trimmedSymphonyHome.Equals($homeDirectory, [System.StringComparison]::OrdinalIgnoreCase) -or
+      (-not [string]::IsNullOrEmpty($checkoutDirectory) -and
+          $trimmedPrefix.Equals($checkoutDirectory.TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar), [System.StringComparison]::OrdinalIgnoreCase))) {
+    throw "--prefix must point to a dedicated app checkout directory."
+  }
+  if ((Test-PathHasSymlinkComponent $RawPrefix) -or (Test-PathHasSymlinkComponent $normalizedPrefix)) {
+    throw "--prefix must not be a symlink."
+  }
+  if (Test-Path -LiteralPath $normalizedPrefix) {
+    $prefixItem = Get-Item -LiteralPath $normalizedPrefix -Force
+    if (-not $prefixItem.PSIsContainer) {
+      throw "--prefix must be a directory."
+    }
+  }
+  foreach ($root in @($ConfigDir, $WorkspaceRoot, $StateHome)) {
+    if ((-not (Test-Path -LiteralPath $root)) -and
+        ((Test-SameOrInsidePath $normalizedPrefix $root) -or (Test-SameOrInsidePath $root $normalizedPrefix))) {
+      throw "--prefix must not overlap Symphony config, workspace, or state directories."
     }
   }
 }
@@ -506,6 +573,7 @@ function Assert-RequestedRemovalPaths {
   }
 }
 
+Assert-AppPaths
 Assert-RequestedRemovalPaths
 Assert-CommandDirectory
 
