@@ -46,7 +46,7 @@ record ConnectedBoardManifest(List<ConnectedBoard> boards) {
 
     private static boolean matchesBoard(ConnectedBoard board, String selector, String parsed) {
         String boardUrlKey = TrelloBoardIds.parse(board.boardUrl());
-        return board.boardName().equalsIgnoreCase(selector)
+        return equalsIgnoreCase(board.boardName(), selector)
                 || equalsIgnoreCase(board.boardId(), selector)
                 || equalsIgnoreCase(board.boardKey(), selector)
                 || equalsIgnoreCase(boardUrlKey, selector)

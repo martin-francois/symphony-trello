@@ -293,6 +293,112 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         }
     }
 
+    @MethodSource("ambiguousConnectedBoardSelectorCommands")
+    @ParameterizedTest
+    void setupLocalRejectsAmbiguousConnectedBoardNameSelectors(AmbiguousSelectorCommand command) throws Exception {
+        // given
+        DuplicateConnectedBoardsFixture duplicates = duplicateConnectedBoards();
+
+        // when
+        SetupRunResult result = runSetup(command.commandArray());
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_worker_board_ambiguous",
+                        "Multiple connected boards match --board. Re-run with a board id or short link.")
+                .stderrDoesNotContain(
+                        "Duplicate Private Board",
+                        "private-board-id-one",
+                        "private-board-id-two",
+                        "private-key-one",
+                        "private-key-two",
+                        "https://trello.example/private-one",
+                        "https://trello.example/private-two",
+                        duplicates.firstWorkflow().toString(),
+                        duplicates.secondWorkflow().toString(),
+                        tempDir.toString(),
+                        "Troubleshooting report written");
+        result.stdoutDoesNotContain(
+                "Dry run",
+                "WOULD",
+                "Duplicate Private Board",
+                "private-board-id-one",
+                "private-board-id-two",
+                duplicates.firstWorkflow().toString(),
+                duplicates.secondWorkflow().toString());
+    }
+
+    private static Stream<AmbiguousSelectorCommand> ambiguousConnectedBoardSelectorCommands() {
+        return Stream.of(
+                ambiguousSelectorCommand("check", "check", "--board", "Duplicate Private Board"),
+                ambiguousSelectorCommand(
+                        "repair-port", "repair-port", "--dry-run", "--board", "Duplicate Private Board"),
+                ambiguousSelectorCommand(
+                        "configure-github",
+                        "configure-github",
+                        "--non-interactive",
+                        "--board",
+                        "Duplicate Private Board",
+                        "--key",
+                        "key",
+                        "--token",
+                        "token"),
+                ambiguousSelectorCommand(
+                        "top-level",
+                        "--dry-run",
+                        "--non-interactive",
+                        "--force",
+                        "--board",
+                        "Duplicate Private Board",
+                        "--key",
+                        "key",
+                        "--token",
+                        "token"),
+                ambiguousSelectorCommand(
+                        "top-level-real-run",
+                        "--non-interactive",
+                        "--board",
+                        "Duplicate Private Board",
+                        "--key",
+                        "key",
+                        "--token",
+                        "token"));
+    }
+
+    private static AmbiguousSelectorCommand ambiguousSelectorCommand(String name, String... command) {
+        return new AmbiguousSelectorCommand(name, List.of(command));
+    }
+
+    @Test
+    void setupLocalCheckUsesShortLinkRepairSelectorForDuplicateBoardNames() throws Exception {
+        // given
+        DuplicateConnectedBoardsFixture duplicates = duplicateConnectedBoards();
+        commands.stopHealthServer(duplicates.firstWorkflow().toString());
+        commands.startHealthServer(duplicates.firstWorkflow(), "other-board");
+
+        // when
+        SetupRunResult result = runSetup("check", "--board", "private-key-one");
+
+        // then
+        result.assertFailure(2)
+                .stdoutContains("Suggested fix: symphony-trello setup-local repair-port --board \"private-key-one\"")
+                .stdoutDoesNotContain("setup-local repair-port --board \"Duplicate Private Board\"");
+    }
+
+    private record AmbiguousSelectorCommand(String name, List<String> command) {
+        private String[] commandArray() {
+            return command.toArray(String[]::new);
+        }
+
+        @Override
+        public String toString() {
+            return name;
+        }
+    }
+
+    private record DuplicateConnectedBoardsFixture(Path firstWorkflow, Path secondWorkflow) {}
+
     private record InvalidPathOptionCase(String optionName, List<String> command) {
         private InvalidPathOptionCase(String optionName, String... command) {
             this(optionName, List.of(command));
@@ -3770,6 +3876,64 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                                 tempDir.resolve("workspaces"),
                                 ConfigDefaults.DEFAULT_SERVER_PORT),
                 StandardCharsets.UTF_8);
+    }
+
+    private void writeDuplicateConnectedBoardsManifest(
+            Path firstWorkflow, Path firstEnv, Path secondWorkflow, Path secondEnv) throws IOException {
+        writeManifest(
+                """
+                {
+                  "boards": [
+                    {
+                      "boardId": "private-board-id-one",
+                      "boardKey": "private-key-one",
+                      "boardName": "Duplicate Private Board",
+                      "boardUrl": "https://trello.example/private-one",
+                      "workflowPath": "%s",
+                      "envPath": "%s",
+                      "workspaceRoot": "%s",
+                      "serverPort": 19101,
+                      "githubEnabled": false,
+                      "additionalWritableRoots": [],
+                      "dangerFullAccess": false
+                    },
+                    {
+                      "boardId": "private-board-id-two",
+                      "boardKey": "private-key-two",
+                      "boardName": "Duplicate Private Board",
+                      "boardUrl": "https://trello.example/private-two",
+                      "workflowPath": "%s",
+                      "envPath": "%s",
+                      "workspaceRoot": "%s",
+                      "serverPort": 19102,
+                      "githubEnabled": false,
+                      "additionalWritableRoots": [],
+                      "dangerFullAccess": false
+                    }
+                  ]
+                }
+                """
+                        .formatted(
+                                json(firstWorkflow),
+                                json(firstEnv),
+                                json(tempDir.resolve("workspaces-one")),
+                                json(secondWorkflow),
+                                json(secondEnv),
+                                json(tempDir.resolve("workspaces-two"))));
+    }
+
+    private DuplicateConnectedBoardsFixture duplicateConnectedBoards() throws IOException {
+        Path firstWorkflow = tempDir.resolve("private-workflows").resolve("WORKFLOW.duplicate-a.md");
+        Path secondWorkflow = tempDir.resolve("private-workflows").resolve("WORKFLOW.duplicate-b.md");
+        Path firstEnv = tempDir.resolve("private-env").resolve(".env.duplicate-a");
+        Path secondEnv = tempDir.resolve("private-env").resolve(".env.duplicate-b");
+        Files.createDirectories(firstEnv.getParent());
+        Files.writeString(firstEnv, "TRELLO_API_KEY=key\nTRELLO_API_TOKEN=token\n", StandardCharsets.UTF_8);
+        Files.writeString(secondEnv, "TRELLO_API_KEY=key\nTRELLO_API_TOKEN=token\n", StandardCharsets.UTF_8);
+        writeWorkflow(firstWorkflow, "private-board-id-one", 19101);
+        writeWorkflow(secondWorkflow, "private-board-id-two", 19102);
+        writeDuplicateConnectedBoardsManifest(firstWorkflow, firstEnv, secondWorkflow, secondEnv);
+        return new DuplicateConnectedBoardsFixture(firstWorkflow, secondWorkflow);
     }
 
     private record NonInteractiveGithubFailureScenario(
