@@ -519,6 +519,7 @@ final class SetupLocalCommandFactory {
 
         private void validateCliPaths() {
             CliInputValidation.rejectControlCharacters("--workflow", workflowPath);
+            CliInputValidation.rejectBlankPath("--workflow", workflowPath);
             CliInputValidation.rejectControlCharacters("--workspace-root", workspaceRoot);
             CliInputValidation.rejectControlCharacters("--config-dir", configDir);
             CliInputValidation.rejectControlCharacters("--manifest", manifestPath);

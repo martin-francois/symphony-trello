@@ -1552,6 +1552,32 @@ final class TrelloBoardSetupMainTest {
                 .map(scenario -> Arguments.of(command, scenario)));
     }
 
+    @MethodSource("blankWorkflowPathScenarios")
+    @ParameterizedTest(name = "{0} {1}")
+    void setupCommandsRejectBlankWorkflowPathBeforeTrelloRequest(String command, String workflowValue) {
+        // given
+        Path env = tempDir.resolve("missing-workflow-env-parent").resolve(".env");
+
+        // when
+        CliRunResult result = runCli(setupCommandWithWorkflow(command, workflowValue, env));
+
+        // then
+        result.assertFailure(2)
+                .stderrContains("setup_failed code=setup_invalid_arguments", "--workflow must be a file path.")
+                .stderrDoesNotContain("Troubleshooting report written");
+        assertThat(result.stdout())
+                .doesNotContain("Created Trello board", "Imported Trello board", "Saving Trello credentials");
+        assertThat(createdBoardName.get()).isNull();
+        assertThat(createdLists).isEmpty();
+        assertThat(env.getParent()).doesNotExist();
+        assertThat(tempDir.resolve("   ")).doesNotExist();
+    }
+
+    private static Stream<Arguments> blankWorkflowPathScenarios() {
+        return Stream.of("new-board", "import-board")
+                .flatMap(command -> Stream.of("", "   ").map(workflowValue -> Arguments.of(command, workflowValue)));
+    }
+
     @Test
     void newBoardRejectsMalformedRuntimeEnvFileBeforeCreatingBoard() throws Exception {
         // given
@@ -2714,6 +2740,18 @@ final class TrelloBoardSetupMainTest {
                     "Released"));
         }
         args.addAll(List.of("--workflow", workflow.toString(), "--env", envValue));
+        return args.toArray(String[]::new);
+    }
+
+    private String[] setupCommandWithWorkflow(String command, String workflowValue, Path env) {
+        List<String> args = new ArrayList<>(
+                List.of(command, "--endpoint", endpoint(), "--key", "direct-key", "--token", "direct-token"));
+        if ("new-board".equals(command)) {
+            args.addAll(List.of("--name", "Workflow Path Queue", "--workspace-id", "workspace-1"));
+        } else {
+            args.addAll(List.of("--board", "input", "--active", "Queue for Codex", "--terminal", "Released"));
+        }
+        args.addAll(List.of("--workflow", workflowValue, "--env", env.toString()));
         return args.toArray(String[]::new);
     }
 
