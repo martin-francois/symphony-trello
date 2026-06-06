@@ -59,6 +59,12 @@ final class SetupDiagnosticReporter {
             "(?i)([\"']?(?:key|token|secret|password|api[_-]?key|api[_-]?token|oauth_consumer_key|oauth_token|authorization|bearer)[\"']?\\s*[:=]\\s*[\"']?)([^\\s,\"'}]+)");
     private static final Pattern AUTHORIZATION_HEADER = Pattern.compile("(?i)(Authorization\\s*[:=]\\s*)[^\\r\\n]+");
     private static final Pattern BEARER_TOKEN = Pattern.compile("(?i)(Bearer\\s+)[A-Za-z0-9._~+/=-]+");
+    private static final Pattern GITHUB_TOKEN =
+            Pattern.compile("\\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]+)\\b");
+    private static final Pattern OPENAI_TOKEN = Pattern.compile("\\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}\\b");
+    private static final Pattern TRELLO_TOKEN = Pattern.compile("\\bATTA[A-Za-z0-9_-]{20,}\\b");
+    private static final Pattern TRELLO_API_KEY_CONTEXT =
+            Pattern.compile("(?i)\\b((?:trello\\s+(?:api\\s+)?key|api[_ -]?key)\\s*[:=]?\\s+)([0-9a-f]{32})\\b");
     private static final Pattern GITHUB_HTTPS_URL = Pattern.compile("(?i)\\bhttps?://github\\.com/[^\\s)>'\"`]+");
     private static final Pattern TRELLO_URL = Pattern.compile("https://trello\\.com/\\S+");
     private static final Pattern TRELLO_CARD_FIELD = Pattern.compile(
@@ -1620,6 +1626,10 @@ final class SetupDiagnosticReporter {
         sanitized = AUTHORIZATION_HEADER.matcher(sanitized).replaceAll("$1<redacted>");
         sanitized = BEARER_TOKEN.matcher(sanitized).replaceAll("$1<redacted>");
         sanitized = SECRET_ASSIGNMENT.matcher(sanitized).replaceAll("$1<redacted>");
+        sanitized = GITHUB_TOKEN.matcher(sanitized).replaceAll("<redacted>");
+        sanitized = OPENAI_TOKEN.matcher(sanitized).replaceAll("<redacted>");
+        sanitized = TRELLO_TOKEN.matcher(sanitized).replaceAll("<redacted>");
+        sanitized = TRELLO_API_KEY_CONTEXT.matcher(sanitized).replaceAll("$1<redacted>");
         sanitized = redactUrlUserInfo(sanitized);
         sanitized = redactGithubSshRemotes(sanitized);
         sanitized = GITHUB_HTTPS_URL.matcher(sanitized).replaceAll(match -> "<github-url:" + hash(match.group()) + ">");
