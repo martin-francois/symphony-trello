@@ -635,43 +635,62 @@ final class TrelloBoardSetupMainTest {
     void diagnosticsRejectsBlankSelectorsWithoutRenderingReport(String optionName, String optionValue)
             throws Exception {
         // given
-        Path workingDir = tempDir.resolve("blank-diagnostics-selector-workdir");
+        BlankDiagnosticsOptionRun run = blankDiagnosticsOptionRun("blank-diagnostics-selector-workdir");
+
+        // when
+        MainProcessResult result = runBlankDiagnosticsOption(run, optionName, optionValue);
+
+        // then
+        assertBlankDiagnosticsOptionRejected(run, result, optionName);
+    }
+
+    @MethodSource("blankDiagnosticsPathOptions")
+    @ParameterizedTest(name = "{0} {1}")
+    void diagnosticsRejectsBlankPathOptionsWithoutRenderingReport(String optionName, String optionValue)
+            throws Exception {
+        // given
+        BlankDiagnosticsOptionRun run = blankDiagnosticsOptionRun("blank-diagnostics-path-workdir");
+
+        // when
+        MainProcessResult result = runBlankDiagnosticsOption(run, optionName, optionValue);
+
+        // then
+        assertBlankDiagnosticsOptionRejected(run, result, optionName);
+    }
+
+    private BlankDiagnosticsOptionRun blankDiagnosticsOptionRun(String workingDirectoryName) throws IOException {
+        Path workingDir = tempDir.resolve(workingDirectoryName);
         Path diagnosticsKey = workingDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME);
         Files.createDirectories(workingDir);
         Path output = workingDir.resolve("diagnostics.md");
+        return new BlankDiagnosticsOptionRun(workingDir, diagnosticsKey, output);
+    }
 
-        // when
-        MainProcessResult result = runMainProcess(
-                workingDir, Map.of(), List.of(), "diagnostics", optionName, optionValue, "--output", output.toString());
+    private MainProcessResult runBlankDiagnosticsOption(
+            BlankDiagnosticsOptionRun run, String optionName, String optionValue) throws Exception {
+        return runMainProcess(
+                run.workingDir(),
+                Map.of(),
+                List.of(),
+                "diagnostics",
+                optionName,
+                optionValue,
+                "--output",
+                run.output().toString());
+    }
 
-        // then
+    private static void assertBlankDiagnosticsOptionRejected(
+            BlankDiagnosticsOptionRun run, MainProcessResult result, String optionName) {
         assertThat(result.exitCode()).as(result.output()).isEqualTo(2);
         assertThat(result.stdout()).doesNotContain("# Symphony for Trello Diagnostics", "Diagnostics written");
         assertThat(result.stderr())
                 .contains("setup_failed code=setup_invalid_arguments", optionName + " must not be empty.")
                 .doesNotContain("Troubleshooting report written", DiagnosticsTokenHasher.KEY_FILE_NAME);
-        assertThat(diagnosticsKey).doesNotExist();
-        assertThat(output).doesNotExist();
+        assertThat(run.diagnosticsKey()).doesNotExist();
+        assertThat(run.output()).doesNotExist();
     }
 
-    @Test
-    void diagnosticsWithBlankConfigDirDoesNotCreateTokenKeyInWorkingDirectory() throws Exception {
-        // given
-        Path workingDir = tempDir.resolve("blank-config-workdir");
-        Path diagnosticsKey = workingDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME);
-        Files.createDirectories(workingDir);
-
-        // when
-        MainProcessResult result = runMainProcess(workingDir, Map.of(), List.of(), "diagnostics", "--config-dir", "");
-
-        // then
-        assertThat(result.exitCode()).as(result.output()).isZero();
-        assertThat(result.stdout())
-                .contains("# Symphony for Trello Diagnostics", "diagnostics_token_key:** temporary")
-                .doesNotContain(DiagnosticsTokenHasher.KEY_FILE_NAME, workingDir.toString());
-        assertThat(result.stderr()).isEmpty();
-        assertThat(diagnosticsKey).doesNotExist();
-    }
+    private record BlankDiagnosticsOptionRun(Path workingDir, Path diagnosticsKey, Path output) {}
 
     @Test
     void diagnosticsWithoutConfigDirCreatesTokenKeyInDefaultWorkingDirectory() throws Exception {
@@ -692,40 +711,24 @@ final class TrelloBoardSetupMainTest {
         assertThat(diagnosticsKey).isRegularFile();
     }
 
-    @Test
-    void diagnosticsWithBlankConfigDirDoesNotPersistTokenKeyFromEnvironmentConfigDir() throws Exception {
-        // given
-        Path workingDir = tempDir.resolve("blank-config-env-workdir");
-        Path envConfigDir = tempDir.resolve("env-config");
-        Path diagnosticsKey = workingDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME);
-        Files.createDirectories(workingDir);
-        Files.createDirectories(envConfigDir);
-
-        // when
-        MainProcessResult result = runMainProcess(
-                workingDir,
-                Map.of("SYMPHONY_TRELLO_CONFIG_DIR", envConfigDir.toString()),
-                List.of(),
-                "diagnostics",
-                "--config-dir",
-                "");
-
-        // then
-        assertThat(result.exitCode()).as(result.output()).isZero();
-        assertThat(result.stdout())
-                .contains("# Symphony for Trello Diagnostics", "diagnostics_token_key:** temporary")
-                .doesNotContain(DiagnosticsTokenHasher.KEY_FILE_NAME, workingDir.toString(), envConfigDir.toString());
-        assertThat(result.stderr()).isEmpty();
-        assertThat(diagnosticsKey).doesNotExist();
-        assertThat(envConfigDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME)).doesNotExist();
-    }
-
     private static Stream<Arguments> blankDiagnosticsSelectors() {
         return Stream.of(
                 Arguments.of("--board", ""),
                 Arguments.of("--board", "   "),
                 Arguments.of("--workflow", ""),
                 Arguments.of("--workflow", "   "));
+    }
+
+    private static Stream<Arguments> blankDiagnosticsPathOptions() {
+        return Stream.of(
+                Arguments.of("--config-dir", ""),
+                Arguments.of("--config-dir", "   "),
+                Arguments.of("--state-home", ""),
+                Arguments.of("--state-home", "   "),
+                Arguments.of("--workspace-root", ""),
+                Arguments.of("--workspace-root", "   "),
+                Arguments.of("--manifest", ""),
+                Arguments.of("--manifest", "   "));
     }
 
     @MethodSource("missingWorkerCredentialDotenvContents")
