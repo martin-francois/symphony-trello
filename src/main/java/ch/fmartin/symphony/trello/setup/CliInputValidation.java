@@ -33,10 +33,24 @@ final class CliInputValidation {
         rejectBlankText(optionName, value, optionName + " must not be blank.");
     }
 
+    static void rejectBlankText(String optionName, String value) {
+        rejectBlankText(optionName, value, optionName + " must not be blank.");
+    }
+
+    static void rejectBlankText(String optionName, String value, String message) {
+        if (value != null && value.isBlank()) {
+            throw new TrelloBoardSetupException("setup_invalid_arguments", message);
+        }
+    }
+
     static void rejectBlankText(String optionName, Optional<String> value, String message) {
         value.map(String::strip).filter(String::isBlank).ifPresent(ignored -> {
             throw new TrelloBoardSetupException("setup_invalid_arguments", message);
         });
+    }
+
+    static void rejectBlankTextValues(String optionName, List<String> values) {
+        values.forEach(value -> rejectBlankText(optionName, value));
     }
 
     static void rejectControlCharacters(String optionName, String value) {

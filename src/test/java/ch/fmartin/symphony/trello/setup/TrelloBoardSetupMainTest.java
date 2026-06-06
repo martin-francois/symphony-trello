@@ -1952,6 +1952,66 @@ final class TrelloBoardSetupMainTest {
         assertThat(workflow).doesNotExist();
     }
 
+    @MethodSource("blankNewBoardSetupOptions")
+    @ParameterizedTest
+    void newBoardRejectsBlankSetupOptionValuesBeforeTrelloRequest(BlankDirectSetupOption option) {
+        // given
+        Path workflow = tempDir.resolve("blank-new-board-" + option.name() + ".WORKFLOW.md");
+        Path env = tempDir.resolve("blank-new-board-env").resolve(option.name()).resolve(".env");
+
+        // when
+        CliRunResult result = runCli(option.command(workflow, env));
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments", option.optionName() + " must not be blank.")
+                .stderrDoesNotContain("Troubleshooting report written");
+        assertThat(result.stdout()).doesNotContain("Created Trello board", "Saving Trello credentials");
+        assertThat(createdBoardName.get()).isNull();
+        assertThat(createdLists).isEmpty();
+        assertThat(env.getParent()).doesNotExist();
+        assertThat(workflow).doesNotExist();
+    }
+
+    private static Stream<BlankDirectSetupOption> blankNewBoardSetupOptions() {
+        return Stream.of(
+                new BlankDirectSetupOption(
+                        "name",
+                        "--name",
+                        "new-board",
+                        "--endpoint",
+                        "http://127.0.0.1:9",
+                        "--key",
+                        "key",
+                        "--token",
+                        "token",
+                        "--name",
+                        " ",
+                        "--workflow",
+                        "<workflow>",
+                        "--env",
+                        "<env>"),
+                new BlankDirectSetupOption(
+                        "workspace-id",
+                        "--workspace-id",
+                        "new-board",
+                        "--endpoint",
+                        "http://127.0.0.1:9",
+                        "--key",
+                        "key",
+                        "--token",
+                        "token",
+                        "--name",
+                        "Blank Workspace",
+                        "--workspace-id",
+                        "",
+                        "--workflow",
+                        "<workflow>",
+                        "--env",
+                        "<env>"));
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"--codex-model", "--codex-reasoning-effort"})
     void importBoardRejectsBlankCodexModelOverridesBeforeTrelloRequest(String optionName) {
@@ -1991,6 +2051,61 @@ final class TrelloBoardSetupMainTest {
         assertThat(workflow).doesNotExist();
     }
 
+    @MethodSource("blankImportBoardSetupOptions")
+    @ParameterizedTest
+    void importBoardRejectsBlankSetupOptionValuesBeforeTrelloRequest(BlankDirectSetupOption option) {
+        // given
+        Path workflow = tempDir.resolve("blank-import-board-" + option.name() + ".WORKFLOW.md");
+        Path env =
+                tempDir.resolve("blank-import-board-env").resolve(option.name()).resolve(".env");
+
+        // when
+        CliRunResult result = runCli(option.command(workflow, env));
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments", option.optionName() + " must not be blank.")
+                .stderrDoesNotContain("trello_api_request", "Troubleshooting report written");
+        assertThat(result.stdout()).doesNotContain("Imported Trello board", "Saving Trello credentials");
+        assertThat(createdLists).isEmpty();
+        assertThat(env.getParent()).doesNotExist();
+        assertThat(workflow).doesNotExist();
+    }
+
+    private static Stream<BlankDirectSetupOption> blankImportBoardSetupOptions() {
+        return Stream.of(
+                blankImportBoardOption("active-empty", "--active", "--active", ""),
+                blankImportBoardOption("active-comma", "--active", "--active", ","),
+                blankImportBoardOption("active-middle-empty", "--active", "--active", "Ready for Codex, ,Inbox"),
+                blankImportBoardOption("terminal-empty", "--terminal", "--terminal", ""),
+                blankImportBoardOption("terminal-trailing-empty", "--terminal", "--terminal", "Done,   "),
+                blankImportBoardOption("in-progress", "--in-progress", "--in-progress", ""),
+                blankImportBoardOption("blocked", "--blocked", "--blocked", " "));
+    }
+
+    private static BlankDirectSetupOption blankImportBoardOption(
+            String name, String optionName, String option, String value) {
+        List<String> command = new ArrayList<>(List.of(
+                "import-board",
+                "--endpoint",
+                "http://127.0.0.1:9",
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "input"));
+        if (!"--active".equals(optionName)) {
+            command.addAll(List.of("--active", "Queue for Codex"));
+        }
+        if (!"--terminal".equals(optionName)) {
+            command.addAll(List.of("--terminal", "Released"));
+        }
+        command.addAll(List.of(option, value, "--workflow", "<workflow>", "--env", "<env>"));
+        return new BlankDirectSetupOption(name, optionName, command);
+    }
+
     @MethodSource("directSetupCodexModelOptions")
     @ParameterizedTest(name = "{0} {1}")
     void directSetupRejectsControlCharactersInCodexModelOverridesBeforeTrelloRequest(
@@ -2021,6 +2136,22 @@ final class TrelloBoardSetupMainTest {
         return Stream.of("new-board", "import-board")
                 .flatMap(command -> Stream.of("--codex-model", "--codex-reasoning-effort")
                         .map(optionName -> Arguments.of(command, optionName)));
+    }
+
+    private record BlankDirectSetupOption(String name, String optionName, List<String> commandTemplate) {
+        BlankDirectSetupOption(String name, String optionName, String... commandTemplate) {
+            this(name, optionName, List.of(commandTemplate));
+        }
+
+        String[] command(Path workflow, Path env) {
+            return commandTemplate.stream()
+                    .map(value -> switch (value) {
+                        case "<workflow>" -> workflow.toString();
+                        case "<env>" -> env.toString();
+                        default -> value;
+                    })
+                    .toArray(String[]::new);
+        }
     }
 
     @Test
@@ -2298,11 +2429,11 @@ final class TrelloBoardSetupMainTest {
                 "--board",
                 "https://trello.com/b/input/existing-board",
                 "--active",
-                "Queue for Codex, Doing,",
+                "Queue for Codex, Doing",
                 "--in-progress",
                 "Doing",
                 "--terminal",
-                "Released,",
+                "Released",
                 "--workflow",
                 workflow.toString(),
                 "--env",
