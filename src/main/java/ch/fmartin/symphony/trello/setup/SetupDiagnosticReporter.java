@@ -286,7 +286,10 @@ final class SetupDiagnosticReporter {
                 Optional.of("Install the GitHub CLI `gh`, then rerun setup or disable GitHub integration.");
             case "setup_github_auth_required" ->
                 Optional.of("Run `gh auth login`, then rerun setup or disable GitHub integration.");
-            case "trello_auth_failed" -> Optional.of("Check the Trello API key and token, then rerun the command.");
+            case "trello_auth_failed" ->
+                Optional.of(trelloAuthFailureHint(
+                        setupException,
+                        setupException.dotenvPath().or(() -> dotenvPath).orElseGet(LocalEnvironment::defaultDotenv)));
             case "setup_workspace_id_required" ->
                 Optional.of(
                         "Re-run with --workspace-id, or use setup-local to choose a Trello Workspace interactively.");
@@ -325,6 +328,57 @@ final class SetupDiagnosticReporter {
 
     private static String credentialAssignment(String name, String placeholder) {
         return "  " + name + "=<" + placeholder + ">";
+    }
+
+    private static String trelloAuthFailureHint(TrelloBoardSetupException exception, Path dotenvPath) {
+        String apiKeyName = exception.trelloApiKeyEnvironmentName().orElse("TRELLO_API_KEY");
+        String apiTokenName = exception.trelloApiTokenEnvironmentName().orElse("TRELLO_API_TOKEN");
+        return exception
+                .trelloApiKeyCredentialSource()
+                .flatMap(apiKeySource -> exception
+                        .trelloApiTokenCredentialSource()
+                        .map(apiTokenSource -> trelloAuthFailureHint(
+                                apiKeyName, apiKeySource, apiTokenName, apiTokenSource, dotenvPath)))
+                .orElse("Check the Trello API key and token, then rerun the command.");
+    }
+
+    private static String trelloAuthFailureHint(
+            String apiKeyName,
+            TrelloBoardSetupException.TrelloCredentialSource apiKeySource,
+            String apiTokenName,
+            TrelloBoardSetupException.TrelloCredentialSource apiTokenSource,
+            Path dotenvPath) {
+        if (apiKeySource == TrelloBoardSetupException.TrelloCredentialSource.SHELL_ENVIRONMENT
+                && apiTokenSource == TrelloBoardSetupException.TrelloCredentialSource.SHELL_ENVIRONMENT) {
+            return "Check " + apiKeyName + " and " + apiTokenName
+                    + " from the shell environment. Shell variables take precedence over the .env file passed with --env.";
+        }
+        if (apiKeySource == TrelloBoardSetupException.TrelloCredentialSource.DOTENV_FILE
+                && apiTokenSource == TrelloBoardSetupException.TrelloCredentialSource.DOTENV_FILE) {
+            return "Check " + apiKeyName + " and " + apiTokenName + " in this .env credential file:\n  "
+                    + displayPath(dotenvPath);
+        }
+        String hint = "Check these Trello credential sources:\n"
+                + credentialSourceLine(apiKeyName, "tracker.api_key", apiKeySource, dotenvPath) + "\n"
+                + credentialSourceLine(apiTokenName, "tracker.api_token", apiTokenSource, dotenvPath);
+        if (apiKeySource == TrelloBoardSetupException.TrelloCredentialSource.SHELL_ENVIRONMENT
+                || apiTokenSource == TrelloBoardSetupException.TrelloCredentialSource.SHELL_ENVIRONMENT) {
+            hint += " Shell variables take precedence over the .env file passed with --env.";
+        }
+        return hint;
+    }
+
+    private static String credentialSourceLine(
+            String name,
+            String workflowField,
+            TrelloBoardSetupException.TrelloCredentialSource source,
+            Path dotenvPath) {
+        return switch (source) {
+            case SHELL_ENVIRONMENT -> "  " + name + ": shell environment";
+            case DOTENV_FILE -> "  " + name + ": .env credential file\n    " + displayPath(dotenvPath);
+            case WORKFLOW_CONFIG -> "  " + workflowField + ": workflow configuration";
+            case MISSING -> "  " + name + ": missing";
+        };
     }
 
     static String displayPath(Path path) {

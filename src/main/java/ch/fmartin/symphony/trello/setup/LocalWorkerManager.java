@@ -146,8 +146,9 @@ final class LocalWorkerManager {
             throws IOException {
         Long existingPid = store.readPid(files.pidFile());
         int healthPort = healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), envPath);
+        Optional<WorkerCredentialUsage> credentialUsage = workerCredentialUsage(board.workflowPath(), envPath);
         if (explicitEnvOverride) {
-            validateWorkerCredentials(board.workflowPath(), envPath);
+            credentialUsage.ifPresent(this::validateWorkerCredentials);
         }
         if (existingPid != null && platform.isAlive(existingPid)) {
             if (!platform.isManaged(existingPid, paths.appHome(), board.workflowPath())) {
@@ -178,7 +179,7 @@ final class LocalWorkerManager {
         }
 
         if (!explicitEnvOverride) {
-            validateWorkerCredentials(board.workflowPath(), envPath);
+            credentialUsage.ifPresent(this::validateWorkerCredentials);
         }
 
         List<String> command = List.of(
@@ -199,7 +200,7 @@ final class LocalWorkerManager {
         BoardHealth health = healthChecker.waitForSameWorkflow(board, healthPort);
         if (health.kind() != BoardHealthKind.SAME_WORKFLOW) {
             stopPid(store, files, handle.pid());
-            throwKnownStartupFailure(files, logOffsets, platform.appendsToExistingLogs());
+            throwKnownStartupFailure(files, logOffsets, platform.appendsToExistingLogs(), credentialUsage);
             throw new TrelloBoardSetupException(
                     "setup_start_unhealthy",
                     "Symphony start returned successfully, but " + LocalHealthChecker.localStateUrl(health.port())
@@ -234,61 +235,65 @@ final class LocalWorkerManager {
         out.println("Stop and start this worker to use: " + envPath);
     }
 
-    private void validateWorkerCredentials(Path workflowPath, Path envPath) {
-        workflowConfig
+    private Optional<WorkerCredentialUsage> workerCredentialUsage(Path workflowPath, Path envPath) {
+        return workflowConfig
                 .trackerCredentialReferences(workflowPath)
-                .ifPresent(references -> validateWorkerCredentials(
+                .map(references -> workerCredentialUsage(
                         envPath,
                         requiredEnvironmentCredential(references.apiKey(), "TRELLO_API_KEY"),
                         requiredEnvironmentCredential(references.apiToken(), "TRELLO_API_TOKEN")));
     }
 
-    private void validateWorkerCredentials(
+    private WorkerCredentialUsage workerCredentialUsage(
             Path envPath, Optional<String> apiKeyEnvironment, Optional<String> apiTokenEnvironment) {
-        boolean hasApiKey = apiKeyEnvironment
-                .map(name -> LocalEnvironment.firstPresent(envPath, environment, name)
-                        .isPresent())
-                .orElse(true);
-        boolean hasApiToken = apiTokenEnvironment
-                .map(name -> LocalEnvironment.firstPresent(envPath, environment, name)
-                        .isPresent())
-                .orElse(true);
+        Map<String, String> dotenv = LocalEnvironment.load(envPath);
+        return new WorkerCredentialUsage(
+                envPath,
+                apiKeyEnvironment,
+                apiTokenEnvironment,
+                credentialSource(apiKeyEnvironment, dotenv),
+                credentialSource(apiTokenEnvironment, dotenv));
+    }
+
+    private TrelloBoardSetupException.TrelloCredentialSource credentialSource(
+            Optional<String> environmentName, Map<String, String> dotenv) {
+        return environmentName
+                .map(name -> {
+                    if (!TrelloCredentialStore.blank(environment.get(name))) {
+                        return TrelloBoardSetupException.TrelloCredentialSource.SHELL_ENVIRONMENT;
+                    }
+                    if (!TrelloCredentialStore.blank(dotenv.get(name))) {
+                        return TrelloBoardSetupException.TrelloCredentialSource.DOTENV_FILE;
+                    }
+                    return TrelloBoardSetupException.TrelloCredentialSource.MISSING;
+                })
+                .orElse(TrelloBoardSetupException.TrelloCredentialSource.WORKFLOW_CONFIG);
+    }
+
+    private void validateWorkerCredentials(WorkerCredentialUsage usage) {
+        boolean hasApiKey = usage.apiKeySource() != TrelloBoardSetupException.TrelloCredentialSource.MISSING;
+        boolean hasApiToken = usage.apiTokenSource() != TrelloBoardSetupException.TrelloCredentialSource.MISSING;
         if (!hasApiKey && !hasApiToken) {
             throw missingWorkerCredentialException(
-                    "setup_worker_missing_trello_credentials",
-                    "Missing Trello credentials for worker start.",
-                    envPath,
-                    apiKeyEnvironment,
-                    apiTokenEnvironment);
+                    "setup_worker_missing_trello_credentials", "Missing Trello credentials for worker start.", usage);
         }
         if (!hasApiKey) {
             throw missingWorkerCredentialException(
-                    "setup_worker_missing_api_key",
-                    "Missing Trello API key for worker start.",
-                    envPath,
-                    apiKeyEnvironment,
-                    apiTokenEnvironment);
+                    "setup_worker_missing_api_key", "Missing Trello API key for worker start.", usage);
         }
         if (!hasApiToken) {
             throw missingWorkerCredentialException(
-                    "setup_worker_missing_api_token",
-                    "Missing Trello API token for worker start.",
-                    envPath,
-                    apiKeyEnvironment,
-                    apiTokenEnvironment);
+                    "setup_worker_missing_api_token", "Missing Trello API token for worker start.", usage);
         }
     }
 
     private static TrelloBoardSetupException missingWorkerCredentialException(
-            String code,
-            String message,
-            Path envPath,
-            Optional<String> apiKeyEnvironment,
-            Optional<String> apiTokenEnvironment) {
+            String code, String message, WorkerCredentialUsage usage) {
         return new TrelloBoardSetupException(code, message)
-                .withDotenvPath(envPath)
+                .withDotenvPath(usage.envPath())
                 .withTrelloCredentialEnvironmentNames(
-                        apiKeyEnvironment.orElse("TRELLO_API_KEY"), apiTokenEnvironment.orElse("TRELLO_API_TOKEN"));
+                        usage.apiKeyEnvironment().orElse("TRELLO_API_KEY"),
+                        usage.apiTokenEnvironment().orElse("TRELLO_API_TOKEN"));
     }
 
     private static Optional<String> requiredEnvironmentCredential(
@@ -308,11 +313,20 @@ final class LocalWorkerManager {
     private static void throwKnownStartupFailure(
             ManagedProcessStore.ManagedProcessFiles files,
             StartupLogOffsets logOffsets,
-            boolean appendsToExistingLogs) {
+            boolean appendsToExistingLogs,
+            Optional<WorkerCredentialUsage> credentialUsage) {
         String logs = startupLogs(files, logOffsets, appendsToExistingLogs);
         if (logs.contains("Trello authentication failed")) {
-            throw new TrelloBoardSetupException(
+            TrelloBoardSetupException exception = new TrelloBoardSetupException(
                     "trello_auth_failed", "Trello authentication failed while starting Symphony.");
+            throw credentialUsage
+                    .map(usage -> exception
+                            .withDotenvPath(usage.envPath())
+                            .withTrelloCredentialEnvironmentNames(
+                                    usage.apiKeyEnvironment().orElse("TRELLO_API_KEY"),
+                                    usage.apiTokenEnvironment().orElse("TRELLO_API_TOKEN"))
+                            .withTrelloCredentialSources(usage.apiKeySource(), usage.apiTokenSource()))
+                    .orElse(exception);
         }
         if (logs.contains("Trello permission denied")) {
             throw new TrelloBoardSetupException(
@@ -381,6 +395,13 @@ final class LocalWorkerManager {
                     StartupLogSnapshot.snapshot(files.stdoutLog()), StartupLogSnapshot.snapshot(files.stderrLog()));
         }
     }
+
+    private record WorkerCredentialUsage(
+            Path envPath,
+            Optional<String> apiKeyEnvironment,
+            Optional<String> apiTokenEnvironment,
+            TrelloBoardSetupException.TrelloCredentialSource apiKeySource,
+            TrelloBoardSetupException.TrelloCredentialSource apiTokenSource) {}
 
     private record StartupLogSnapshot(long size, long modifiedMillis) {
         private static StartupLogSnapshot snapshot(Path path) {
