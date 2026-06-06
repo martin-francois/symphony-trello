@@ -301,7 +301,170 @@ final class InstallerScriptFixture {
                   exit 0
                 fi
                 if [[ "$*" == *"ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain"* ]]; then
-                  echo "setup-cli cwd=$PWD $* dotenv=${SYMPHONY_TRELLO_DOTENV:-} workspace_env=${SYMPHONY_TRELLO_WORKSPACE_ROOT:-} state_env=${SYMPHONY_TRELLO_STATE_HOME:-}" >> "${SYMPHONY_FAKE_LOG:?}"
+                  java_args=()
+                  raw_cli_args=()
+                  found_main=false
+                  for value in "$@"; do
+                    if [[ "$found_main" == true ]]; then
+                      raw_cli_args+=("$value")
+                    elif [[ "$value" == "ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain" ]]; then
+                      found_main=true
+                    else
+                      java_args+=("$value")
+                    fi
+                  done
+                  installed_property() {
+                    local name="$1"
+                    for value in "${java_args[@]}"; do
+                      if [[ "$value" == "-D${name}="* ]]; then
+                        printf '%s' "${value#-D${name}=}"
+                        return 0
+                      fi
+                    done
+                    return 1
+                  }
+                  same_path() {
+                    [[ "$(/usr/bin/readlink -m "$1")" == "$(/usr/bin/readlink -m "$2")" ]]
+                  }
+                  has_option() {
+                    local option="$1"
+                    shift
+                    for value in "$@"; do
+                      if [[ "$value" == "$option" || "$value" == "$option="* ]]; then
+                        return 0
+                      fi
+                    done
+                    return 1
+                  }
+                  option_value() {
+                    local option="$1"
+                    shift
+                    local values=("$@")
+                    for ((index = 0; index < ${#values[@]}; index++)); do
+                      local value="${values[$index]}"
+                      if [[ "$value" == "$option" && $((index + 1)) -lt ${#values[@]} ]]; then
+                        printf '%s' "${values[$((index + 1))]}"
+                        return 0
+                      fi
+                      if [[ "$value" == "$option="* ]]; then
+                        printf '%s' "${value#${option}=}"
+                        return 0
+                      fi
+                    done
+                    return 1
+                  }
+                  setup_local_value_option() {
+                    case "$1" in
+                      --key|--token|--board-name|--board|--workspace-id|--active|--terminal|--in-progress|--blocked|--workflow|--workspace-root|--config-dir|--manifest|--server-port|--max-agents|--codex-model|--codex-reasoning-effort|--env|--add-path|--endpoint)
+                        return 0
+                        ;;
+                      *)
+                        return 1
+                        ;;
+                    esac
+                  }
+                  setup_local_lifecycle() {
+                    local values=("${raw_cli_args[@]:1}")
+                    for ((index = 0; index < ${#values[@]}; index++)); do
+                      local value="${values[$index]}"
+                      case "$value" in
+                        check|repair-port|configure-github)
+                          return 0
+                          ;;
+                      esac
+                      if setup_local_value_option "$value"; then
+                        index=$((index + 1))
+                      elif [[ "$value" != --* ]]; then
+                        return 1
+                      fi
+                    done
+                    return 1
+                  }
+                  config_dir="${SYMPHONY_TRELLO_CONFIG_DIR:-$(installed_property symphony.trello.installed.config.dir || true)}"
+                  workspace_root="${SYMPHONY_TRELLO_WORKSPACE_ROOT:-}"
+                  state_home="${SYMPHONY_TRELLO_STATE_HOME:-}"
+                  app_home="${SYMPHONY_TRELLO_APP_HOME:-$(installed_property symphony.trello.installed.app.home || true)}"
+                  installed_workspace_root="$(installed_property symphony.trello.installed.workspace.root || true)"
+                  installed_state_home="$(installed_property symphony.trello.installed.state.home || true)"
+                  workspace_from_user_environment=false
+                  state_from_user_environment=false
+                  if [[ -n "$workspace_root" && -n "$installed_workspace_root" ]] && ! same_path "$workspace_root" "$installed_workspace_root"; then
+                    workspace_from_user_environment=true
+                  fi
+                  if [[ -n "$state_home" && -n "$installed_state_home" ]] && ! same_path "$state_home" "$installed_state_home"; then
+                    state_from_user_environment=true
+                  fi
+                  defaults=()
+                  command="${raw_cli_args[0]:-}"
+                  explicit_config="$(option_value --config-dir "${raw_cli_args[@]}" || true)"
+                  case "$command" in
+                    setup-local)
+                      if ! has_option --config-dir "${raw_cli_args[@]}" && [[ -n "$config_dir" ]]; then
+                        defaults+=("--config-dir" "$config_dir")
+                      fi
+                      if ! setup_local_lifecycle; then
+                        if [[ -z "$explicit_config" ]]; then
+                          if [[ -n "$workspace_root" ]] && ! has_option --workspace-root "${raw_cli_args[@]}"; then
+                            defaults+=("--workspace-root" "$workspace_root")
+                          fi
+                        else
+                          if [[ "$workspace_from_user_environment" == true ]]; then
+                            if ! has_option --workspace-root "${raw_cli_args[@]}"; then
+                              defaults+=("--workspace-root" "$workspace_root")
+                            fi
+                          else
+                            if ! has_option --workspace-root "${raw_cli_args[@]}"; then
+                              defaults+=("--workspace-root" "$(/usr/bin/readlink -m "$explicit_config")/workspaces")
+                            fi
+                          fi
+                        fi
+                      fi
+                      ;;
+                    new-board|import-board)
+                      if [[ -n "$workspace_root" ]] && ! has_option --workspace-root "${raw_cli_args[@]}"; then
+                        defaults+=("--workspace-root" "$workspace_root")
+                      fi
+                      ;;
+                    start|stop|status|logs|diagnostics)
+                      if [[ -z "$explicit_config" ]]; then
+                        [[ -n "$config_dir" ]] && defaults+=("--config-dir" "$config_dir")
+                        if [[ -n "$workspace_root" ]] && ! has_option --workspace-root "${raw_cli_args[@]}"; then
+                          defaults+=("--workspace-root" "$workspace_root")
+                        fi
+                        if [[ -n "$state_home" ]] && ! has_option --state-home "${raw_cli_args[@]}"; then
+                          defaults+=("--state-home" "$state_home")
+                        fi
+                      else
+                        normalized_config="$(/usr/bin/readlink -m "$explicit_config")"
+                        if [[ "$workspace_from_user_environment" == true ]]; then
+                          if ! has_option --workspace-root "${raw_cli_args[@]}"; then
+                            defaults+=("--workspace-root" "$workspace_root")
+                          fi
+                        else
+                          if ! has_option --workspace-root "${raw_cli_args[@]}"; then
+                            defaults+=("--workspace-root" "$normalized_config/workspaces")
+                          fi
+                        fi
+                        if [[ "$state_from_user_environment" == true ]]; then
+                          if ! has_option --state-home "${raw_cli_args[@]}"; then
+                            defaults+=("--state-home" "$state_home")
+                          fi
+                        else
+                          if ! has_option --state-home "${raw_cli_args[@]}"; then
+                            defaults+=("--state-home" "$(dirname "$normalized_config")/state")
+                          fi
+                        fi
+                      fi
+                      if [[ -n "$app_home" ]] && ! has_option --app-home "${raw_cli_args[@]}"; then
+                        defaults+=("--app-home" "$app_home")
+                      fi
+                      ;;
+                  esac
+                  effective_cli_args=("${raw_cli_args[@]}")
+                  if [[ ${#defaults[@]} -gt 0 ]]; then
+                    effective_cli_args=("${raw_cli_args[0]}" "${defaults[@]}" "${raw_cli_args[@]:1}")
+                  fi
+                  echo "setup-cli cwd=$PWD ${java_args[*]} ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain ${effective_cli_args[*]} dotenv=${SYMPHONY_TRELLO_DOTENV:-} workspace_env=${SYMPHONY_TRELLO_WORKSPACE_ROOT:-} state_env=${SYMPHONY_TRELLO_STATE_HOME:-}" >> "${SYMPHONY_FAKE_LOG:?}"
                   if [[ "$*" == *"definitely-not-a-command"* ]]; then
                     echo "setup_failed code=setup_invalid_arguments message=Unmatched argument at index 0: 'definitely-not-a-command'" >&2
                     exit 2
@@ -315,16 +478,8 @@ final class InstallerScriptFixture {
 	                    exit 0
 	                  fi
 	                fi
-	                if [[ "$*" == *"ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain start"* || "$*" == *"ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain status"* || "$*" == *"ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain stop"* || "$*" == *"ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain logs"* || "$*" == *"ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain diagnostics"* ]]; then
-	                  cli_args=()
-	                  found_main=false
-	                  for value in "$@"; do
-	                    if [[ "$found_main" == true ]]; then
-	                      cli_args+=("$value")
-	                    elif [[ "$value" == "ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain" ]]; then
-	                      found_main=true
-	                    fi
-	                  done
+	                if [[ "${effective_cli_args[0]:-}" == "start" || "${effective_cli_args[0]:-}" == "status" || "${effective_cli_args[0]:-}" == "stop" || "${effective_cli_args[0]:-}" == "logs" || "${effective_cli_args[0]:-}" == "diagnostics" ]]; then
+	                  cli_args=("${effective_cli_args[@]}")
 	                  command="${cli_args[0]:-}"
 		                  config_dir="."
 		                  state_home="."
@@ -397,14 +552,17 @@ final class InstallerScriptFixture {
 	                      ;;
 	                  esac
 	                fi
-	                if [[ "$*" == *"ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain setup-local"* ]]; then
+	                if [[ "${effective_cli_args[0]:-}" == "setup-local" ]]; then
                   config_dir="."
-                  while [[ $# -gt 0 ]]; do
-                    if [[ "${1:-}" == "--config-dir" ]]; then
-                      config_dir="$2"
-                      shift 2
+                  cli_args=("${effective_cli_args[@]}")
+                  for ((index = 1; index < ${#cli_args[@]}; index++)); do
+                    if [[ "${cli_args[$index]}" == "--config-dir" && $((index + 1)) -lt ${#cli_args[@]} ]]; then
+                      config_dir="${cli_args[$((index + 1))]}"
+                      index=$((index + 1))
+                    elif [[ "${cli_args[$index]}" == "--config-dir="* ]]; then
+                      config_dir="${cli_args[$index]#--config-dir=}"
                     else
-                      shift
+                      :
                     fi
                   done
                   mkdir -p "$config_dir"
@@ -416,8 +574,8 @@ final class InstallerScriptFixture {
                   printf 'TRELLO_API_KEY=%s\\nTRELLO_API_TOKEN=%s\\n' "$key" "$token" > "$config_dir/.env"
                   printf -- '---\\ntracker:\\n  kind: trello\\n---\\n# %s\\n' "$board" > "$workflow"
                   printf '{"boards":[{"boardId":"board-1","boardName":"%s","workflowPath":"%s","envPath":"%s/.env"}]}\\n' "$board" "$workflow" "$config_dir" > "$config_dir/connected-boards.json"
-                  echo "setup-local key=$key token=$token board=$board" >> "${SYMPHONY_FAKE_LOG:?}"
-	                  "${SYMPHONY_TRELLO_COMMAND:?}" start --env "$config_dir/.env" --workflow "$workflow"
+	                  echo "setup-local key=$key token=$token board=$board" >> "${SYMPHONY_FAKE_LOG:?}"
+		                  "${SYMPHONY_TRELLO_COMMAND:?}" start --env "$config_dir/.env" --workflow "$workflow"
                   exit 0
                 fi
                 if [[ "$*" == *"-jar "* ]]; then
