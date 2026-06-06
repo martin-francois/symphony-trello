@@ -340,6 +340,11 @@ final class SetupLocalCommandFactory {
             validateCodexModelOverrides();
             Optional<Boolean> resolvedGithubMode = githubMode.or(() -> github.selected());
             List<Path> writableRoots = CliValueNormalizer.nonBlankTrimmedPaths(additionalWritableRoots);
+            CliInputValidation.rejectRelativePathsExcept(
+                    writableRoots, WorkspaceAccessFlow::isHomeShorthand, "--add-path must be an absolute path.");
+            writableRoots = writableRoots.stream()
+                    .map(WorkspaceAccessFlow::resolveCliAccessPath)
+                    .toList();
             serverPort.ifPresent(LocalPort::validateCliServerPort);
             if (maxAgents.filter(value -> value < 1).isPresent()) {
                 throw new TrelloBoardSetupException("setup_invalid_max_agents", "--max-agents must be at least 1.");
@@ -352,6 +357,9 @@ final class SetupLocalCommandFactory {
                 throw new TrelloBoardSetupException(
                         "setup_allow_all_paths_without_root",
                         "--allow-all-paths is only valid together with --add-path /.");
+            }
+            if (dryRun || nonInteractive) {
+                writableRoots.forEach(path -> WorkspaceAccessFlow.rejectBroadAccessPath(path, allowAllPaths));
             }
             if (noInProgress && inProgressState != null) {
                 throw new TrelloBoardSetupException(
@@ -526,6 +534,7 @@ final class SetupLocalCommandFactory {
             CliInputValidation.rejectControlCharacters("--manifest", manifestPath);
             configDir.ifPresent(path -> CliInputValidation.rejectExistingNonDirectoryPath("--config-dir", path));
             TrelloCredentialStore.validateEnvPathOption(envPath);
+            CliInputValidation.rejectBlankPaths("--add-path", additionalWritableRoots, "--add-path must not be empty.");
             CliInputValidation.rejectControlCharactersInPaths("--add-path", additionalWritableRoots);
         }
 

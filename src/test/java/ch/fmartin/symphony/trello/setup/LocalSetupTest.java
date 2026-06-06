@@ -124,6 +124,98 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         }
     }
 
+    @Test
+    void setupLocalRejectsInvalidAddPathValuesBeforePlannedOutput() {
+        // given
+        Path rootEquivalentPath = tempDir.getRoot().resolve("symphony").resolve("..");
+        record InvalidAddPathScenario(String name, String expectedCode, String expectedMessage, List<String> command) {
+            String[] commandArray() {
+                return command.toArray(String[]::new);
+            }
+        }
+        List<InvalidAddPathScenario> scenarios = List.of(
+                new InvalidAddPathScenario(
+                        "blank add path",
+                        "setup_invalid_arguments",
+                        "--add-path must not be empty.",
+                        List.of("--dry-run", "--non-interactive", "--board-name", "Dry Add Blank", "--add-path", "")),
+                new InvalidAddPathScenario(
+                        "relative add path",
+                        "setup_invalid_arguments",
+                        "--add-path must be an absolute path.",
+                        List.of(
+                                "--dry-run",
+                                "--non-interactive",
+                                "--board-name",
+                                "Dry Add Relative",
+                                "--add-path",
+                                "relative/path")),
+                new InvalidAddPathScenario(
+                        "dot add path",
+                        "setup_invalid_arguments",
+                        "--add-path must be an absolute path.",
+                        List.of("--dry-run", "--non-interactive", "--board-name", "Dry Add Dot", "--add-path", ".")),
+                new InvalidAddPathScenario(
+                        "broad dry run add path",
+                        "setup_broad_path_requires_confirmation",
+                        "Refusing to allow the whole filesystem. Re-run with --allow-all-paths if that is intentional.",
+                        List.of("--dry-run", "--board-name", "Dry Add Slash", "--add-path", "/")),
+                new InvalidAddPathScenario(
+                        "root-equivalent dry run add path",
+                        "setup_broad_path_requires_confirmation",
+                        "Refusing to allow the whole filesystem. Re-run with --allow-all-paths if that is intentional.",
+                        List.of(
+                                "--dry-run",
+                                "--board-name",
+                                "Dry Add Root Equivalent",
+                                "--add-path",
+                                rootEquivalentPath.toString())));
+
+        // when
+        List<SetupRunResult> results = scenarios.stream()
+                .map(scenario -> runSetup(scenario.commandArray()))
+                .toList();
+
+        // then
+        for (int index = 0; index < scenarios.size(); index++) {
+            InvalidAddPathScenario scenario = scenarios.get(index);
+            SetupRunResult result = results.get(index);
+            result.assertFailure(2)
+                    .stderrContains("setup_failed code=" + scenario.expectedCode(), scenario.expectedMessage())
+                    .stderrDoesNotContain("Troubleshooting report written")
+                    .stdoutDoesNotContain("Dry run", "WOULD write workflows");
+        }
+        assertThat(trello.createdLists()).isEmpty();
+    }
+
+    @Test
+    void setupLocalAcceptsCommaSeparatedAbsoluteAddPathsWithSpaces() {
+        // given
+        Path firstPath = tempDir.resolve("first allowed path");
+        Path secondPath = tempDir.resolve("second allowed path");
+
+        // when
+        SetupRunResult result =
+                runSetup("--dry-run", "--board-name", "Dry Add Absolute", "--add-path", firstPath + ", " + secondPath);
+
+        // then
+        result.assertSuccess().stdoutContains("Dry run", "WOULD write workflows under:");
+        assertThat(trello.createdLists()).isEmpty();
+    }
+
+    @Test
+    void setupLocalAcceptsHomeShorthandAddPaths() {
+        // given
+
+        // when
+        SetupRunResult result =
+                runSetup("--dry-run", "--board-name", "Dry Add Home", "--add-path", "~,~/project,~/../project");
+
+        // then
+        result.assertSuccess().stdoutContains("Dry run", "WOULD write workflows under:");
+        assertThat(trello.createdLists()).isEmpty();
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"", "   "})
     void dryRunRejectsBlankWorkflowPathBeforePlannedSetupOutput(String workflowPath) {
@@ -3316,8 +3408,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.codex-access.md");
         Path env = tempDir.resolve(".env");
-        Path allowedPath = Path.of("relative-allowed-path");
-        Path expectedAllowedPath = allowedPath.toAbsolutePath().normalize();
+        Path allowedPath = tempDir.resolve("absolute-allowed-path");
 
         // when
         SetupRunResult result = runSetup(
@@ -3345,7 +3436,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 .containsKeys("tracker", "codex")
                 .extractingByKey("codex")
                 .asString()
-                .contains(expectedAllowedPath.toString());
+                .contains(allowedPath.toString());
         assertThat(Files.readString(workflow, StandardCharsets.UTF_8)).doesNotStartWith("---\n---\n");
     }
 
