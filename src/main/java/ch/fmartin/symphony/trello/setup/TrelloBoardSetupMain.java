@@ -505,6 +505,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             CliInputValidation.rejectControlCharacters("--output", output);
             CliInputValidation.rejectDashOutputFile(output);
             CliInputValidation.rejectStandardStreamOutputFile(output);
+            CliInputValidation.rejectNonRegularOutputFile(output);
             var reporter = new SetupDiagnosticReporter(System.getenv(), new ProcessCommandRunner());
             var request = new DiagnosticsRequest(
                     options.board(),
