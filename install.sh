@@ -68,11 +68,19 @@ while [[ $# -gt 0 ]]; do
       echo "Missing value for --repo" >&2
       exit 2
     fi
+    if [[ "$2" == -* ]]; then
+      echo "Missing value for --repo" >&2
+      exit 2
+    fi
     REPO_URL="$2"
     shift
     ;;
   --ref)
     if [[ $# -lt 2 ]]; then
+      echo "Missing value for --ref" >&2
+      exit 2
+    fi
+    if [[ "$2" == -* ]]; then
       echo "Missing value for --ref" >&2
       exit 2
     fi
@@ -93,6 +101,15 @@ done
 
 run() {
   printf '  RUN  %s\n' "$*"
+  if [[ "$DRY_RUN" == false ]]; then
+    "$@"
+  fi
+}
+
+run_with_label() {
+  local label="$1"
+  shift
+  printf '  RUN  %s\n' "$label"
   if [[ "$DRY_RUN" == false ]]; then
     "$@"
   fi
@@ -194,6 +211,111 @@ normalize_path() {
   fi
 }
 
+is_blank() {
+  local value="$1"
+  value="${value// /}"
+  value="${value//$'\t'/}"
+  value="${value//$'\n'/}"
+  value="${value//$'\r'/}"
+  value="${value//$'\v'/}"
+  value="${value//$'\f'/}"
+  [[ -z "$value" ]]
+}
+
+has_space_or_control() {
+  local value="$1"
+  case "$value" in
+  *" "* | *$'\t'* | *$'\n'* | *$'\r'* | *$'\v'* | *$'\f'*) return 0 ;;
+  esac
+  [[ "$value" != "${value//[$'\001'-$'\037'$'\177']/}" ]]
+}
+
+has_control() {
+  local value="$1"
+  [[ "$value" != "${value//[$'\001'-$'\037'$'\177']/}" ]]
+}
+
+has_space() {
+  [[ "$1" == *" "* ]]
+}
+
+is_local_git_repo() {
+  local value="$1"
+  [[ -d "$value" && (-e "$value/.git" || (-f "$value/HEAD" && -d "$value/objects")) ]]
+}
+
+validate_repo_source() {
+  local value="$1"
+  if is_blank "$value"; then
+    echo "--repo must not be blank." >&2
+    exit 2
+  fi
+  if [[ "$value" == -* ]]; then
+    echo "Missing value for --repo" >&2
+    exit 2
+  fi
+  if has_control "$value"; then
+    echo "--repo must be a URL or local Git path without whitespace or control characters." >&2
+    exit 2
+  fi
+  if is_local_git_repo "$value"; then
+    return
+  fi
+  if has_space "$value"; then
+    echo "--repo must be a URL or local Git path without whitespace or control characters." >&2
+    exit 2
+  fi
+  case "$value" in
+  *://* | *@*:*) return ;;
+  esac
+  echo "--repo must be a URL or existing local Git repository path." >&2
+  exit 2
+}
+
+validate_ref_source() {
+  local value="$1"
+  if is_blank "$value"; then
+    echo "--ref must not be blank." >&2
+    exit 2
+  fi
+  if [[ "$value" == -* ]]; then
+    echo "Missing value for --ref" >&2
+    exit 2
+  fi
+  if has_space_or_control "$value"; then
+    echo "--ref must not contain whitespace or control characters." >&2
+    exit 2
+  fi
+  if [[ "$value" == refs/* || "$value" == origin/* || "$value" == /* || "$value" == */ || "$value" == *..* || "$value" == *//* || "$value" == *./* || "$value" == *. || "$value" == .* || "$value" == */.* || "$value" == *.lock || "$value" == *.lock/* || "$value" == *"@{"* ]]; then
+    echo "--ref must be a branch, tag, or commit without Git namespace prefixes or path traversal." >&2
+    exit 2
+  fi
+  if [[ ! "$value" =~ ^[A-Za-z0-9][A-Za-z0-9._/+,%=@-]*$ ]]; then
+    echo "--ref contains unsupported characters." >&2
+    exit 2
+  fi
+}
+
+validate_source_inputs() {
+  validate_repo_source "$REPO_URL"
+  validate_ref_source "$REF"
+}
+
+display_repo_source() {
+  local value="$1"
+  local scheme rest userinfo
+  if [[ "$value" == *://* ]]; then
+    scheme="${value%%://*}"
+    rest="${value#*://}"
+    userinfo="${rest%%@*}"
+    if [[ "$rest" == *@* && "$userinfo" != */* ]]; then
+      printf '%s://<redacted>@%s\n' "$scheme" "${rest#*@}"
+      return
+    fi
+  fi
+  printf '%s\n' "$value"
+}
+
 remote_has_branch() {
   git ls-remote --exit-code --heads "$1" "$2" >/dev/null 2>&1
 }
@@ -217,26 +339,28 @@ assert_existing_checkout_safe() {
   if [[ -f "$APP_DIR/.symphony-trello-install" ]]; then
     return
   fi
-  local origin_url
+  local origin_url display_repo
   origin_url="$(git -C "$APP_DIR" remote get-url origin 2>/dev/null || true)"
   if [[ "$origin_url" == "$REPO_URL" ]]; then
     return
   fi
+  display_repo="$(display_repo_source "$REPO_URL")"
   echo "Refusing to update existing Git checkout without Symphony installer marker: $APP_DIR" >&2
-  echo "Use an empty --prefix path, or pass a checkout whose origin remote is $REPO_URL." >&2
+  echo "Use an empty --prefix path, or pass a checkout whose origin remote is $display_repo." >&2
   exit 2
 }
 
 ensure_checkout_origin() {
-  local origin_url
+  local origin_url display_repo
   origin_url="$(git -C "$APP_DIR" remote get-url origin 2>/dev/null || true)"
   if [[ "$origin_url" == "$REPO_URL" ]]; then
     return
   fi
+  display_repo="$(display_repo_source "$REPO_URL")"
   if [[ -z "$origin_url" ]]; then
-    run git -C "$APP_DIR" remote add origin "$REPO_URL"
+    run_with_label "git -C $APP_DIR remote add origin $display_repo" git -C "$APP_DIR" remote add origin "$REPO_URL"
   else
-    run git -C "$APP_DIR" remote set-url origin "$REPO_URL"
+    run_with_label "git -C $APP_DIR remote set-url origin $display_repo" git -C "$APP_DIR" remote set-url origin "$REPO_URL"
   fi
 }
 
@@ -244,9 +368,9 @@ install_or_update_checkout() {
   if [[ ! -d "$APP_DIR/.git" ]]; then
     run mkdir -p "$(dirname "$APP_DIR")"
     if [[ "$DRY_RUN" == false ]] && remote_has_branch "$REPO_URL" "$REF"; then
-      run git clone --branch "$REF" "$REPO_URL" "$APP_DIR"
+      run_with_label "git clone --branch $REF $(display_repo_source "$REPO_URL") $APP_DIR" git clone --branch "$REF" "$REPO_URL" "$APP_DIR"
     else
-      run git clone "$REPO_URL" "$APP_DIR"
+      run_with_label "git clone $(display_repo_source "$REPO_URL") $APP_DIR" git clone "$REPO_URL" "$APP_DIR"
       run git -C "$APP_DIR" fetch --tags --prune origin
       checkout_ref "$APP_DIR" "$REF"
     fi
@@ -850,6 +974,7 @@ jdk_compatible() {
   [[ -n "$java_version" && -n "$javac_version" && "$java_version" -ge 25 && "$javac_version" -ge 25 ]]
 }
 
+validate_source_inputs
 SYMPHONY_HOME="$(absolutize_path "$SYMPHONY_HOME")"
 APP_DIR="$(absolutize_path "$APP_DIR")"
 CONFIG_DIR="$(absolutize_path "$CONFIG_DIR")"
@@ -870,6 +995,8 @@ echo "Config: $CONFIG_DIR"
 echo "Workspaces: $WORKSPACE_ROOT"
 echo "State/logs: $STATE_HOME"
 echo "Command: $BIN_DIR/symphony-trello"
+echo "Repository: $(display_repo_source "$REPO_URL")"
+echo "Ref: $REF"
 echo
 echo "Checking prerequisites..."
 if need git; then echo "  OK      Git available"; else echo "  NEEDED  Git"; fi

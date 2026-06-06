@@ -97,6 +97,20 @@ function Read-PublicPathOptionValue([string[]]$Tokens, [int]$Index, [string]$Opt
   return $value
 }
 
+function Read-PublicSourceOptionValue([string[]]$Tokens, [int]$Index, [string]$OptionName) {
+  if ($Index -ge $Tokens.Count) {
+    throw "Missing value for $OptionName"
+  }
+  $value = $Tokens[$Index]
+  if ([string]::IsNullOrWhiteSpace($value)) {
+    throw "$OptionName must not be blank."
+  }
+  if (Test-PublicOptionToken $value) {
+    throw "Missing value for $OptionName"
+  }
+  return $value
+}
+
 function Apply-PublicArgs([string[]]$Tokens) {
   for ($i = 0; $i -lt $Tokens.Count; $i++) {
     $token = $Tokens[$i]
@@ -129,14 +143,12 @@ function Apply-PublicArgs([string[]]$Tokens) {
       }
       { $_ -in @("-repo", "--repo") } {
         $i++
-        if ($i -ge $Tokens.Count) { throw "Missing value for $token" }
-        Set-Variable -Name Repo -Value $Tokens[$i] -Scope 1
+        Set-Variable -Name Repo -Value (Read-PublicSourceOptionValue $Tokens $i $token) -Scope 1
         break
       }
       { $_ -in @("-ref", "--ref") } {
         $i++
-        if ($i -ge $Tokens.Count) { throw "Missing value for $token" }
-        Set-Variable -Name Ref -Value $Tokens[$i] -Scope 1
+        Set-Variable -Name Ref -Value (Read-PublicSourceOptionValue $Tokens $i $token) -Scope 1
         break
       }
       { $_ -in @("-symphony-home", "--symphony-home") } {
@@ -157,12 +169,75 @@ Assert-ExplicitPathOptionValue "SymphonyHome" "--symphony-home" $SymphonyHome
 Assert-ExplicitPathOptionValue "Prefix" "--prefix" $Prefix
 Assert-ExplicitPathOptionValue "BinDir" "--bin-dir" $BinDir
 
+function Assert-SourceInputs {
+  if ([string]::IsNullOrWhiteSpace($Repo)) {
+    throw "--repo must not be blank."
+  }
+  if ($Repo.StartsWith("-")) {
+    throw "Missing value for --repo"
+  }
+  if ([regex]::IsMatch($Repo, "\p{Cc}")) {
+    throw "--repo must be a URL or local Git path without whitespace or control characters."
+  }
+  $localGitRepository = Test-LocalGitRepository $Repo
+  if (-not $localGitRepository -and [regex]::IsMatch($Repo, "\s")) {
+    throw "--repo must be a URL or local Git path without whitespace or control characters."
+  }
+  if (-not ($localGitRepository -or $Repo.Contains("://") -or $Repo -match "^[^@]+@[^:]+:.+")) {
+    throw "--repo must be a URL or existing local Git repository path."
+  }
+
+  if ([string]::IsNullOrWhiteSpace($Ref)) {
+    throw "--ref must not be blank."
+  }
+  if ($Ref.StartsWith("-")) {
+    throw "Missing value for --ref"
+  }
+  if ([regex]::IsMatch($Ref, "[\p{Cc}\s]")) {
+    throw "--ref must not contain whitespace or control characters."
+  }
+  if ($Ref.StartsWith("refs/") -or
+      $Ref.StartsWith("origin/") -or
+      $Ref.StartsWith("/") -or
+      $Ref.EndsWith("/") -or
+      $Ref.Contains("..") -or
+      $Ref.Contains("//") -or
+      $Ref.Contains("./") -or
+      $Ref.EndsWith(".") -or
+      $Ref.StartsWith(".") -or
+      $Ref.Contains("/.") -or
+      $Ref.Contains("@{") -or
+      $Ref.Contains(".lock/") -or
+      $Ref.EndsWith(".lock")) {
+    throw "--ref must be a branch, tag, or commit without Git namespace prefixes or path traversal."
+  }
+  if (-not [regex]::IsMatch($Ref, "^[A-Za-z0-9][A-Za-z0-9._/+,%=@-]*$")) {
+    throw "--ref contains unsupported characters."
+  }
+}
+
+function Test-LocalGitRepository([string]$Path) {
+  if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
+    return $false
+  }
+  $gitPath = Join-Path $Path ".git"
+  if (Test-Path -LiteralPath $gitPath) {
+    return $true
+  }
+  return (Test-Path -LiteralPath (Join-Path $Path "HEAD") -PathType Leaf) -and
+    (Test-Path -LiteralPath (Join-Path $Path "objects") -PathType Container)
+}
+
 function Test-ImplicitDefaultToken([string]$Token) {
   return $Token -eq $DefaultSymphonyHome -or
     $Token -eq $DefaultPrefix -or
     $Token -eq $DefaultBinDir -or
     $Token -eq $DefaultRepo -or
     $Token -eq $DefaultRef
+}
+
+function Format-RepositoryForOutput([string]$Value) {
+  return $Value -replace '^([A-Za-z][A-Za-z0-9+.-]*://)[^/]*@(.+)$', '${1}<redacted>@$2'
 }
 
 $positionalTokens = @($SymphonyHome, $Prefix, $BinDir, $Repo, $Ref) + $RemainingArgs |
@@ -216,6 +291,7 @@ Options:
   exit 0
 }
 
+Assert-SourceInputs
 $SymphonyHome = [System.IO.Path]::GetFullPath($SymphonyHome)
 if (-not $Prefix) {
   $Prefix = Join-Path $SymphonyHome "app"
@@ -615,7 +691,8 @@ function Assert-ExistingCheckoutSafe {
   if ($originUrl -eq $Repo) {
     return
   }
-  throw "Refusing to update existing Git checkout without Symphony installer marker:`n  $Prefix`nUse an empty --prefix path, or pass a checkout whose origin remote is:`n  $Repo"
+  $displayRepo = Format-RepositoryForOutput $Repo
+  throw "Refusing to update existing Git checkout without Symphony installer marker:`n  $Prefix`nUse an empty --prefix path, or pass a checkout whose origin remote is:`n  $displayRepo"
 }
 
 Write-Host "Symphony for Trello installer"
@@ -627,6 +704,8 @@ Write-Host "Config: $ConfigDir"
 Write-Host "Workspaces: $WorkspaceRoot"
 Write-Host "State/logs: $StateHome"
 Write-Host "Command: $BinDir\symphony-trello.ps1"
+Write-Host "Repository: $(Format-RepositoryForOutput $Repo)"
+Write-Host "Ref: $Ref"
 Write-Host
 Write-Host "Checking prerequisites..."
 Write-Host ($(if (Test-Command "git") { "  OK      Git available" } else { "  NEEDED  Git" }))
@@ -697,13 +776,14 @@ if ($UpdatingExistingCheckout -and (Get-ManagedPidFile)) {
   Invoke-Step "$BinDir\symphony-trello.ps1 stop" { & "$BinDir\symphony-trello.ps1" stop }
 }
 if (-not $UpdatingExistingCheckout) {
+  $displayRepo = Format-RepositoryForOutput $Repo
   if (Test-RemoteBranch $Repo $Ref) {
-    Invoke-Step "git clone --branch $Ref $Repo $Prefix" {
+    Invoke-Step "git clone --branch $Ref $displayRepo $Prefix" {
       New-Item -ItemType Directory -Force -Path (Split-Path $Prefix) | Out-Null
       & git clone --branch $Ref $Repo $Prefix
     }
   } else {
-    Invoke-Step "git clone $Repo $Prefix" {
+    Invoke-Step "git clone $displayRepo $Prefix" {
       New-Item -ItemType Directory -Force -Path (Split-Path $Prefix) | Out-Null
       & git clone $Repo $Prefix
     }
