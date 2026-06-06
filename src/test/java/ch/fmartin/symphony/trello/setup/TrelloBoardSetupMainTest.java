@@ -171,9 +171,11 @@ final class TrelloBoardSetupMainTest {
         assertThat(exitCode).isZero();
         assertThat(stdout.toString(StandardCharsets.UTF_8))
                 .contains("Usage: symphony-trello setup-local")
+                .contains("--env=<envPath>", "Dotenv file for Trello credentials.")
                 .contains("Commands:")
                 .contains("check")
-                .contains("--no-github");
+                .contains("--no-github")
+                .doesNotContain("Ignored dotenv file");
         assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
     }
 
@@ -198,10 +200,12 @@ final class TrelloBoardSetupMainTest {
         assertThat(configureExitCode).isZero();
         assertThat(checkStdout.toString(StandardCharsets.UTF_8))
                 .contains("Usage: symphony-trello setup-local check")
+                .doesNotContain("Ignored dotenv file")
                 .contains("--config-dir", "--manifest")
                 .doesNotContain("--server-port", "--active", "--codex-model");
         assertThat(repairStdout.toString(StandardCharsets.UTF_8))
                 .contains("Usage: symphony-trello setup-local repair-port", "--board", "--dry-run")
+                .doesNotContain("Ignored dotenv file")
                 .doesNotContain("--workspace-root", "--server-port", "--active");
         assertThat(configureStdout.toString(StandardCharsets.UTF_8))
                 .contains("Usage: symphony-trello setup-local configure-github", "--board", "--max-agents")
