@@ -63,7 +63,12 @@ matters, and easy for another engineer to understand without asking the original
 12. Redact private project names, host paths, Trello card ids, short links, account names, and similar
    internals from committed files, GitHub issues, and user-facing summaries unless the user
    explicitly asks to preserve them. Keep only the minimum technical detail needed to reproduce or
-   understand the issue.
+   understand the issue. Do not copy live Trello board ids, short links, card ids, board URLs, or
+   account names from diagnostics, live runs, GitHub issues, PR comments, or logs into tests,
+   fixtures, docs, commit messages, or new issue text. When a Trello-shaped value is needed, replace
+   it with a clearly synthetic same-shape value such as `SYNTH001` for an 8-character short link or
+   `000000000000000000000001` for a 24-character board id, and use synthetic URLs such as
+   `https://trello.com/b/SYNTH001/synthetic-board`.
 13. Run the relevant verification before finishing. For normal code changes, use:
 
    ```bash
