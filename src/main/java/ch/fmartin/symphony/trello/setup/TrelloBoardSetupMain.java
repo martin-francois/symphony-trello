@@ -193,6 +193,8 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         @Override
         public Integer call() throws IOException {
             try {
+                CliInputValidation.rejectBlankText("--name", boardName);
+                CliInputValidation.rejectBlankText("--workspace-id", workspaceId);
                 CliInputValidation.rejectControlCharacters("--name", boardName);
                 CliInputValidation.rejectControlCharacters("--workspace-id", workspaceId);
                 options.validateCliPaths();
@@ -230,10 +232,18 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         @Option(names = "--board", required = true, description = "Trello board URL, short link, or id.")
         String boardId;
 
-        @Option(names = "--active", split = ",", description = "Queued-work Trello list name.")
+        @Option(names = "--active", description = "Queued-work Trello list name.")
+        void activeState(String value) {
+            activeStates.addAll(CliValueNormalizer.commaSeparatedValues(value));
+        }
+
         List<String> activeStates = new ArrayList<>();
 
-        @Option(names = "--terminal", split = ",", description = "Terminal Trello list name.")
+        @Option(names = "--terminal", description = "Terminal Trello list name.")
+        void terminalState(String value) {
+            terminalStates.addAll(CliValueNormalizer.commaSeparatedValues(value));
+        }
+
         List<String> terminalStates = new ArrayList<>();
 
         @Option(names = "--in-progress", description = "In-progress Trello list name.")
@@ -254,7 +264,12 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                 throw new ParameterException(spec.commandLine(), "--in-progress cannot be used with --no-in-progress.");
             }
             try {
+                CliInputValidation.rejectBlankText("--board", boardId);
                 CliInputValidation.rejectControlCharacters("--board", boardId);
+                CliInputValidation.rejectBlankTextValues("--active", activeStates);
+                CliInputValidation.rejectBlankTextValues("--terminal", terminalStates);
+                CliInputValidation.rejectBlankText("--in-progress", inProgressState);
+                CliInputValidation.rejectBlankText("--blocked", blockedState);
                 options.validateCliPaths();
                 options.validateRuntimeEnvTarget();
                 parent.boardSetup.preflightConnectedBoardManifest(options.manifestPath());

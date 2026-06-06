@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 
 final class CliValueNormalizer {
@@ -11,6 +12,14 @@ final class CliValueNormalizer {
                 .map(String::trim)
                 .filter(value -> !value.isBlank())
                 .toList();
+    }
+
+    static List<String> commaSeparatedValues(String value) {
+        return Arrays.asList(value.split(",", -1));
+    }
+
+    static List<Path> commaSeparatedPaths(String value) {
+        return commaSeparatedValues(value).stream().map(Path::of).toList();
     }
 
     static List<Path> nonBlankTrimmedPaths(List<Path> values) {
