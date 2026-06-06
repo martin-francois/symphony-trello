@@ -110,6 +110,15 @@ final class CliInputValidation {
         return safe.toString();
     }
 
+    static String safeDiagnosticsText(String message) {
+        if (message == null || !CONTROL_CHARACTERS.matchesAnyOf(message)) {
+            return message;
+        }
+        StringBuilder safe = new StringBuilder(message.length());
+        message.codePoints().forEach(codePoint -> appendSafeDiagnosticsCodePoint(safe, codePoint));
+        return safe.toString();
+    }
+
     private static void appendSafeCliCodePoint(StringBuilder safe, int codePoint) {
         switch (codePoint) {
             case '\b' -> safe.append("\\b");
@@ -117,15 +126,28 @@ final class CliInputValidation {
             case '\n' -> safe.append("\\n");
             case '\f' -> safe.append("\\f");
             case '\r' -> safe.append("\\r");
-            default -> {
-                if (Character.isISOControl(codePoint)) {
-                    safe.append("\\u");
-                    String hex = Integer.toHexString(codePoint).toUpperCase();
-                    safe.repeat("0", Math.max(0, 4 - hex.length())).append(hex);
-                } else {
-                    safe.appendCodePoint(codePoint);
-                }
-            }
+            default -> appendEscapedControlCodePoint(safe, codePoint);
+        }
+    }
+
+    private static void appendSafeDiagnosticsCodePoint(StringBuilder safe, int codePoint) {
+        switch (codePoint) {
+            case '\n' -> safe.append('\n');
+            case '\t' -> safe.append('\t');
+            case '\b' -> safe.append("\\b");
+            case '\f' -> safe.append("\\f");
+            case '\r' -> safe.append("\\r");
+            default -> appendEscapedControlCodePoint(safe, codePoint);
+        }
+    }
+
+    private static void appendEscapedControlCodePoint(StringBuilder safe, int codePoint) {
+        if (Character.isISOControl(codePoint)) {
+            safe.append("\\u");
+            String hex = Integer.toHexString(codePoint).toUpperCase();
+            safe.repeat("0", Math.max(0, 4 - hex.length())).append(hex);
+        } else {
+            safe.appendCodePoint(codePoint);
         }
     }
 
