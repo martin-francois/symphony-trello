@@ -24,6 +24,7 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -81,6 +82,11 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     private static Stream<BlankSetupLocalOption> blankSetupLocalOptionValues() {
         return Stream.of(
                 new BlankSetupLocalOption("--board-name", "--board-name", " "),
+                new BlankSetupLocalOption(
+                        "--board",
+                        "--board",
+                        " ",
+                        "--board must not be empty. Provide a Trello board name, id, or short link, or omit --board to use the command's default scope."),
                 new BlankSetupLocalOption("--workspace-id", "--workspace-id", " "),
                 new BlankSetupLocalOption("--active", "--active", ""),
                 new BlankSetupLocalOption("--active", "--active", ","),
@@ -89,6 +95,11 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 new BlankSetupLocalOption("--terminal", "--terminal", "Done,   "),
                 new BlankSetupLocalOption("--in-progress", "--in-progress", ""),
                 new BlankSetupLocalOption("--blocked", "--blocked", " "),
+                new BlankSetupLocalOption(
+                        "--workflow",
+                        "--workflow",
+                        "",
+                        "--workflow must not be empty. Provide a workflow path, or omit --workflow to use the command's default scope."),
                 new BlankSetupLocalOption("--add-path", "--add-path", "", "--add-path must not be empty."),
                 new BlankSetupLocalOption("--add-path", "--add-path", ",", "--add-path must not be empty."),
                 new BlankSetupLocalOption("--add-path", "--add-path", "/tmp,,/root", "--add-path must not be empty."));
@@ -140,6 +151,28 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         String[] commandArray() {
             return new String[] {"--dry-run", "--non-interactive", "--no-start", option, value};
         }
+    }
+
+    @MethodSource("blankSetupLocalSupportedBoardSelectors")
+    @ParameterizedTest(name = "{0}")
+    void lifecycleSubcommandsRejectBlankSupportedBoardSelectorsBeforeBroadSelection(String name, String... command) {
+        // given
+
+        // when
+        SetupRunResult result = runSetup(command);
+
+        // then
+        result.assertFailure(2)
+                .stderrContains("setup_failed code=setup_invalid_arguments", "--board must not be empty.")
+                .stderrDoesNotContain("Troubleshooting report written")
+                .stdoutDoesNotContain("Symphony setup check", "Health check");
+    }
+
+    private static Stream<Arguments> blankSetupLocalSupportedBoardSelectors() {
+        return Stream.of(
+                Arguments.of("check blank board", new String[] {"check", "--board", ""}),
+                Arguments.of("repair-port blank board", new String[] {"repair-port", "--board", "   "}),
+                Arguments.of("configure-github blank board", new String[] {"configure-github", "--board", ""}));
     }
 
     @Test
@@ -432,7 +465,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // then
         result.assertFailure(2)
-                .stderrContains("setup_failed code=setup_invalid_arguments", "--workflow must be a file path.")
+                .stderrContains("setup_failed code=setup_invalid_arguments", "--workflow must not be empty.")
                 .stderrDoesNotContain("Troubleshooting report written")
                 .stdoutDoesNotContain("Dry run", "WOULD write workflows");
         assertThat(trello.createdLists()).isEmpty();
@@ -4016,6 +4049,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 unsupportedLifecycleOption("check", "--server-port", "check", "--server-port", "0"),
                 unsupportedLifecycleOption("check", "--active", "check", "--active", "Inbox"),
                 unsupportedLifecycleOption("check", "--workspace-root", "check", "--workspace-root", "."),
+                unsupportedLifecycleOption("check", "--workflow", "check", "--workflow", ""),
                 unsupportedLifecycleOption("check", "--codex-model", "--codex-model", "", "check"),
                 unsupportedLifecycleOption("check", "--codex-model", "check", "--codex-model", ""),
                 unsupportedLifecycleOption(

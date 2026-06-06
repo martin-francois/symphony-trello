@@ -995,6 +995,8 @@ final class SetupDiagnosticReporter {
             Optional<String> selectedBoard,
             Optional<Path> selectedWorkflow,
             Path configDir) {
+        CliInputValidation.rejectBlankBoardSelector(selectedBoard);
+        CliInputValidation.rejectBlankWorkflowSelector(selectedWorkflow);
         if (selectedBoard.isPresent() && selectedWorkflow.isPresent()) {
             throw new TrelloBoardSetupException(
                     "setup_invalid_arguments", "--board and --workflow cannot be used together.");
