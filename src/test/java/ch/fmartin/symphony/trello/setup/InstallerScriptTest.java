@@ -68,6 +68,222 @@ final class InstallerScriptTest {
                 }));
     }
 
+    @MethodSource("invalidPosixInstallerSourceInputs")
+    @ParameterizedTest(name = "{0}")
+    void posixInstallerRejectsInvalidSourceInputsBeforeDryRunPlan(
+            String name, String[] sourceArgs, String expectedMessage) throws Exception {
+        // given
+        Assumptions.assumeTrue(commandExists("bash"));
+        Path prefix = temporaryDirectory
+                .resolve(name.replaceAll("[^A-Za-z0-9]+", "-"))
+                .resolve("app");
+        String[] command = Stream.concat(
+                        Stream.of("bash", "install.sh", "--dry-run", "--no-onboard", "--prefix", prefix.toString()),
+                        Stream.of(sourceArgs))
+                .toArray(String[]::new);
+
+        // when
+        ProcessResult result = run(Map.of(), command);
+
+        // then
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.output()).contains(expectedMessage).doesNotContain("WOULD clone or update:");
+        assertThat(prefix).doesNotExist();
+    }
+
+    private static Stream<Arguments> invalidPosixInstallerSourceInputs() {
+        return Stream.of(
+                Arguments.of("blank repo", new String[] {"--repo", ""}, "--repo must not be blank."),
+                Arguments.of("option-looking repo", new String[] {"--repo", "--prefix"}, "Missing value for --repo"),
+                Arguments.of(
+                        "option-looking repo with following token",
+                        new String[] {"--repo", "--prefix", "/tmp/ignored"},
+                        "Missing value for --repo"),
+                Arguments.of(
+                        "malformed repo",
+                        new String[] {"--repo", "not-a-url"},
+                        "--repo must be a URL or existing local Git repository path."),
+                Arguments.of("blank ref", new String[] {"--ref", ""}, "--ref must not be blank."),
+                Arguments.of(
+                        "option-looking ref with following token",
+                        new String[] {"--ref", "--prefix", "/tmp/ignored"},
+                        "Missing value for --ref"),
+                Arguments.of(
+                        "path traversal ref",
+                        new String[] {"--ref", "../main"},
+                        "--ref must be a branch, tag, or commit without Git namespace prefixes or path traversal."),
+                Arguments.of(
+                        "remote namespace ref",
+                        new String[] {"--ref", "origin/main"},
+                        "--ref must be a branch, tag, or commit without Git namespace prefixes or path traversal."),
+                Arguments.of(
+                        "full namespace ref",
+                        new String[] {"--ref", "refs/heads/main"},
+                        "--ref must be a branch, tag, or commit without Git namespace prefixes or path traversal."),
+                Arguments.of(
+                        "lock component ref",
+                        new String[] {"--ref", "foo.lock/bar"},
+                        "--ref must be a branch, tag, or commit without Git namespace prefixes or path traversal."),
+                Arguments.of(
+                        "trailing dot ref",
+                        new String[] {"--ref", "foo."},
+                        "--ref must be a branch, tag, or commit without Git namespace prefixes or path traversal."),
+                Arguments.of(
+                        "unsupported ref characters",
+                        new String[] {"--ref", "main;echo-x"},
+                        "--ref contains unsupported characters."),
+                Arguments.of(
+                        "control character ref",
+                        new String[] {"--ref", "main\nother"},
+                        "--ref must not contain whitespace or control characters."));
+    }
+
+    @Test
+    void posixInstallerAcceptsScpStyleRepoAndRedactsCredentialUrlBeforeDryRunPlan() throws Exception {
+        // given
+        Assumptions.assumeTrue(commandExists("bash"));
+
+        // when
+        ProcessResult scpRepo = run(
+                Map.of(),
+                "bash",
+                "install.sh",
+                "--dry-run",
+                "--no-onboard",
+                "--repo",
+                "deploy@example.com:org/repo.git");
+        ProcessResult credentialRepo = run(
+                Map.of(),
+                "bash",
+                "install.sh",
+                "--dry-run",
+                "--no-onboard",
+                "--repo",
+                "https://user:secret-token@example.com/org/repo.git");
+        ProcessResult buildMetadataRef =
+                run(Map.of(), "bash", "install.sh", "--dry-run", "--no-onboard", "--ref", "v1.2.3+hotfix.1");
+
+        // then
+        scpRepo.assertSuccess();
+        assertThat(scpRepo.output()).contains("Repository: deploy@example.com:org/repo.git");
+        credentialRepo.assertSuccess();
+        assertThat(credentialRepo.output())
+                .contains("Repository: https://<redacted>@example.com/org/repo.git")
+                .doesNotContain("user:secret-token");
+        buildMetadataRef.assertSuccess();
+        assertThat(buildMetadataRef.output()).contains("Ref: v1.2.3+hotfix.1");
+    }
+
+    @Test
+    void posixInstallerRejectsExistingNonGitRepoPathBeforeDryRunPlan() throws Exception {
+        // given
+        Assumptions.assumeTrue(commandExists("bash"));
+        Path notGitRepository = temporaryDirectory.resolve("not-git-repository");
+        Path prefix = temporaryDirectory.resolve("non-git-repo-prefix").resolve("app");
+        Files.createDirectories(notGitRepository);
+
+        // when
+        ProcessResult result = run(
+                Map.of(),
+                "bash",
+                "install.sh",
+                "--dry-run",
+                "--no-onboard",
+                "--prefix",
+                prefix.toString(),
+                "--repo",
+                notGitRepository.toString());
+
+        // then
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.output())
+                .contains("--repo must be a URL or existing local Git repository path.")
+                .doesNotContain("WOULD clone or update:");
+        assertThat(prefix).doesNotExist();
+    }
+
+    @Test
+    void posixInstallerAcceptsLocalGitRepoPathWithSpacesBeforeDryRunPlan() throws Exception {
+        // given
+        Assumptions.assumeTrue(commandExists("bash"));
+        Path localRepository = temporaryDirectory.resolve("local repo with spaces");
+        Path prefix = temporaryDirectory.resolve("local-repo-space-prefix").resolve("app");
+        Files.createDirectories(localRepository.resolve(".git"));
+
+        // when
+        ProcessResult result = run(
+                Map.of(),
+                "bash",
+                "install.sh",
+                "--dry-run",
+                "--no-onboard",
+                "--prefix",
+                prefix.toString(),
+                "--repo",
+                localRepository.toString());
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output()).contains("Repository: " + localRepository, "WOULD clone or update:");
+        assertThat(prefix).doesNotExist();
+    }
+
+    @Test
+    void posixInstallerRedactsCredentialRepoUrlInRealGitStepLabels() throws Exception {
+        // given
+        Assumptions.assumeTrue(commandExists("bash"));
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path prefix = temporaryDirectory.resolve("credential-repo-label-prefix").resolve("app");
+        Path binDirectory = temporaryDirectory.resolve("credential-repo-label-bin");
+        Path fakeLog = temporaryDirectory.resolve("credential-repo-label.log");
+        writeExecutable(
+                fakeBin.resolve("git"),
+                """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                case "${1:-}" in
+                  ls-remote) exit 1 ;;
+                  clone)
+                    app="${@: -1}"
+                    mkdir -p "$app/.git" "$app/target/quarkus-app"
+                    printf '#!/usr/bin/env bash\\nexit 0\\n' > "$app/mvnw"
+                    chmod +x "$app/mvnw"
+                    exit 0
+                    ;;
+                  -C) exit 0 ;;
+                  *) exit 0 ;;
+                esac
+                """);
+        Map<String, String> environment = Map.of(
+                "PATH",
+                fakeBin + File.pathSeparator + System.getenv("PATH"),
+                "SYMPHONY_TRELLO_TEST_OS",
+                "Linux",
+                "SYMPHONY_TRELLO_TEST_ARCH",
+                "x86_64",
+                "SYMPHONY_FAKE_LOG",
+                fakeLog.toString());
+
+        // when
+        ProcessResult result = run(
+                environment,
+                "bash",
+                "install.sh",
+                "--no-onboard",
+                "--prefix",
+                prefix.toString(),
+                "--bin-dir",
+                binDirectory.toString(),
+                "--repo",
+                "https://user:secret-token@example.com/org/repo.git");
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output())
+                .contains("Repository: https://<redacted>@example.com/org/repo.git")
+                .doesNotContain("user:secret-token");
+    }
+
     @Test
     void posixInstallerDryRunReportsConcreteMissingPrerequisiteActions() throws Exception {
         // given
@@ -84,6 +300,8 @@ final class InstallerScriptTest {
         assertThat(result.exitCode()).isZero();
         assertThat(result.output())
                 .contains(
+                        "Repository: https://github.com/martin-francois/symphony-trello.git",
+                        "Ref: " + installerDefaultRef(),
                         "WOULD offer to install Git",
                         "WOULD offer to install Java 25+ JDK",
                         "WOULD offer to install Codex CLI with Symphony-managed npm:",
@@ -946,6 +1164,201 @@ final class InstallerScriptTest {
                 .doesNotContain("Install:", "WOULD clone or update:", "/--bin-dir");
     }
 
+    @MethodSource("invalidPowerShellInstallerSourceInputs")
+    @ParameterizedTest(name = "{0}")
+    void powershellInstallerRejectsInvalidSourceInputsBeforeDryRunPlanWhenAvailable(
+            String name, String[] sourceArgs, String expectedMessage) throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        Assumptions.assumeFalse(pwsh.isEmpty());
+        Path prefix = temporaryDirectory
+                .resolve(name.replaceAll("[^A-Za-z0-9]+", "-"))
+                .resolve("app");
+        String[] command = Stream.concat(
+                        command(
+                                pwsh,
+                                "-NoProfile",
+                                "-File",
+                                "./install.ps1",
+                                "--dry-run",
+                                "--no-onboard",
+                                "--prefix",
+                                prefix.toString())
+                                .stream(),
+                        Stream.of(sourceArgs))
+                .toArray(String[]::new);
+
+        // when
+        ProcessResult result = run(nonWindowsPowerShellEnvironment(), command);
+
+        // then
+        assertThat(result.exitCode()).isNotZero();
+        assertThat(result.output()).contains(expectedMessage).doesNotContain("WOULD clone or update:");
+        assertThat(prefix).doesNotExist();
+    }
+
+    private static Stream<Arguments> invalidPowerShellInstallerSourceInputs() {
+        return Stream.of(
+                Arguments.of("blank repo", new String[] {"--repo", ""}, "--repo must not be blank."),
+                Arguments.of(
+                        "malformed repo",
+                        new String[] {"--repo", "not-a-url"},
+                        "--repo must be a URL or existing local Git repository path."),
+                Arguments.of("blank ref", new String[] {"--ref", ""}, "--ref must not be blank."),
+                Arguments.of("path traversal ref", new String[] {"--ref", "../main"}, "Git namespace prefixes"),
+                Arguments.of("remote namespace ref", new String[] {"--ref", "origin/main"}, "Git namespace prefixes"),
+                Arguments.of("lock component ref", new String[] {"--ref", "foo.lock/bar"}, "Git namespace prefixes"),
+                Arguments.of("trailing dot ref", new String[] {"--ref", "foo."}, "Git namespace prefixes"),
+                Arguments.of(
+                        "unsupported ref characters",
+                        new String[] {"--ref", "main;echo-x"},
+                        "--ref contains unsupported characters."));
+    }
+
+    @Test
+    void powershellInstallerAcceptsScpStyleRepoAndRedactsCredentialUrlBeforeDryRunPlanWhenAvailable() throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        Assumptions.assumeFalse(pwsh.isEmpty());
+
+        // when
+        ProcessResult scpRepo = run(
+                nonWindowsPowerShellEnvironment(),
+                command(
+                                pwsh,
+                                "-NoProfile",
+                                "-File",
+                                "./install.ps1",
+                                "--dry-run",
+                                "--no-onboard",
+                                "--repo",
+                                "deploy@example.com:org/repo.git")
+                        .toArray(String[]::new));
+        ProcessResult credentialRepo = run(
+                nonWindowsPowerShellEnvironment(),
+                command(
+                                pwsh,
+                                "-NoProfile",
+                                "-File",
+                                "./install.ps1",
+                                "--dry-run",
+                                "--no-onboard",
+                                "--repo",
+                                "https://user:secret-token@example.com/org/repo.git")
+                        .toArray(String[]::new));
+        ProcessResult buildMetadataRef = run(
+                nonWindowsPowerShellEnvironment(),
+                command(
+                                pwsh,
+                                "-NoProfile",
+                                "-File",
+                                "./install.ps1",
+                                "--dry-run",
+                                "--no-onboard",
+                                "--ref",
+                                "v1.2.3+hotfix.1")
+                        .toArray(String[]::new));
+
+        // then
+        scpRepo.assertSuccess();
+        assertThat(scpRepo.output()).contains("Repository: deploy@example.com:org/repo.git");
+        credentialRepo.assertSuccess();
+        assertThat(credentialRepo.output())
+                .contains("Repository: https://<redacted>@example.com/org/repo.git")
+                .doesNotContain("user:secret-token");
+        buildMetadataRef.assertSuccess();
+        assertThat(buildMetadataRef.output()).contains("Ref: v1.2.3+hotfix.1");
+    }
+
+    @Test
+    void powershellInstallerRejectsExistingNonGitRepoPathBeforeDryRunPlanWhenAvailable() throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        Assumptions.assumeFalse(pwsh.isEmpty());
+        Path notGitRepository = temporaryDirectory.resolve("ps-not-git-repository");
+        Path prefix = temporaryDirectory.resolve("ps-non-git-repo-prefix").resolve("app");
+        Files.createDirectories(notGitRepository);
+
+        // when
+        ProcessResult result = run(
+                nonWindowsPowerShellEnvironment(),
+                command(
+                                pwsh,
+                                "-NoProfile",
+                                "-File",
+                                "./install.ps1",
+                                "--dry-run",
+                                "--no-onboard",
+                                "--prefix",
+                                prefix.toString(),
+                                "--repo",
+                                notGitRepository.toString())
+                        .toArray(String[]::new));
+
+        // then
+        assertThat(result.exitCode()).isNotZero();
+        assertThat(result.output())
+                .contains("--repo must be a URL or existing local Git repository path.")
+                .doesNotContain("WOULD clone or update:");
+        assertThat(prefix).doesNotExist();
+    }
+
+    @Test
+    void powershellInstallerAcceptsLocalGitRepoPathWithSpacesBeforeDryRunPlanWhenAvailable() throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        Assumptions.assumeFalse(pwsh.isEmpty());
+        Path localRepository = temporaryDirectory.resolve("ps local repo with spaces");
+        Path prefix = temporaryDirectory.resolve("ps-local-repo-space-prefix").resolve("app");
+        Files.createDirectories(localRepository.resolve(".git"));
+
+        // when
+        ProcessResult result = run(
+                nonWindowsPowerShellEnvironment(),
+                command(
+                                pwsh,
+                                "-NoProfile",
+                                "-File",
+                                "./install.ps1",
+                                "--dry-run",
+                                "--no-onboard",
+                                "--prefix",
+                                prefix.toString(),
+                                "--repo",
+                                localRepository.toString())
+                        .toArray(String[]::new));
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output()).contains("Repository: " + localRepository, "WOULD clone or update:");
+        assertThat(prefix).doesNotExist();
+    }
+
+    @Test
+    void powershellInstallerRejectsBlankSourceValueThroughScriptblockWhenAvailable() throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        Assumptions.assumeFalse(pwsh.isEmpty());
+        Path prefix = temporaryDirectory.resolve("ps-scriptblock-source").resolve("app");
+
+        // when
+        ProcessResult result = run(
+                nonWindowsPowerShellEnvironment(),
+                command(
+                                pwsh,
+                                "-NoProfile",
+                                "-Command",
+                                "& ([scriptblock]::Create((Get-Content -Raw './install.ps1'))) --dry-run --no-onboard"
+                                        + " --repo '' --prefix "
+                                        + powerShellLiteral(prefix.toString()))
+                        .toArray(String[]::new));
+
+        // then
+        assertThat(result.exitCode()).isNotZero();
+        assertThat(result.output()).contains("Missing value for --repo").doesNotContain("WOULD clone or update:");
+        assertThat(prefix).doesNotExist();
+    }
+
     @Test
     void powershellInstallerAcceptsDashPrefixedRelativePathValuesThroughScriptblockWhenAvailable() throws Exception {
         // given
@@ -1004,6 +1417,8 @@ final class InstallerScriptTest {
         assertThat(result.output())
                 .contains(
                         "Install: " + home.resolve("app"),
+                        "Repository: https://example.invalid/symphony-trello.git",
+                        "Ref: feature/test-ref",
                         "Command: " + bin + "\\symphony-trello.ps1",
                         "WOULD clone or update: " + home.resolve("app"),
                         "WOULD build packaged Quarkus app with Maven wrapper",
@@ -2161,7 +2576,8 @@ final class InstallerScriptTest {
                 .contains(
                         "Refusing to update existing Git checkout without Symphony installer",
                         "marker:",
-                        "Use an empty --prefix path");
+                        "Use",
+                        "an empty --prefix path");
         assertThat(existingCheckout.resolve(".symphony-trello-install")).doesNotExist();
     }
 
