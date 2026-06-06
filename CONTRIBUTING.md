@@ -103,6 +103,8 @@ Before submitting changes:
   `scripts/check-private-context --stdin`.
   Replace live Trello URLs, short links, and ids with clearly synthetic same-shape values such as
   `https://trello.com/b/SYNTH001/synthetic-board` and `000000000000000000000001`.
+  See [Private Context Scanning](docs/security/private-context-scanning.md) for the local commands
+  and GitHub event coverage.
 - Document non-obvious design choices in `docs/adr/`.
 - Keep refactors separate from behavior changes when practical.
 - Use a Conventional Commit PR title or squash commit title when the change is merged. CI checks

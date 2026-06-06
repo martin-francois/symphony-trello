@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage:
+  GITHUB_EVENT_NAME=issues GITHUB_EVENT_PATH=event.json scripts/check-github-event-private-context
+
+Scans GitHub event title/body/comment fields for private context. Findings print
+only the event field and rule name; matched values are never printed.
+EOF
+}
+
+die() {
+  printf 'check-github-event-private-context: %s\n' "$*" >&2
+  exit 2
+}
+
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+  usage
+  exit 0
+fi
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+scanner="${CHECK_PRIVATE_CONTEXT_COMMAND:-$script_dir/check-private-context}"
+event_name="${GITHUB_EVENT_NAME:-}"
+event_path="${GITHUB_EVENT_PATH:-}"
+
+[ -x "$scanner" ] || die "Private context scanner is not executable: $scanner"
+[ -n "$event_name" ] || die "GITHUB_EVENT_NAME is required"
+[ -n "$event_path" ] || die "GITHUB_EVENT_PATH is required"
+[ -f "$event_path" ] || die "GITHUB_EVENT_PATH does not point to a file"
+command -v jq >/dev/null 2>&1 || die "jq is required to read the GitHub event payload"
+
+finding_status=0
+field_count=0
+
+scan_field() {
+  local label="$1"
+  local filter="$2"
+  local value
+
+  value="$(jq -r "$filter // empty" "$event_path")"
+  if [ -z "$value" ]; then
+    return 0
+  fi
+
+  field_count=$((field_count + 1))
+  if ! printf '%s\n' "$value" | "$scanner" --stdin --label "$label"; then
+    finding_status=1
+  fi
+}
+
+case "$event_name" in
+  issues)
+    scan_field "github-event:issue.title" ".issue.title"
+    scan_field "github-event:issue.body" ".issue.body"
+    ;;
+  issue_comment)
+    scan_field "github-event:issue_comment.body" ".comment.body"
+    ;;
+  pull_request)
+    scan_field "github-event:pull_request.title" ".pull_request.title"
+    scan_field "github-event:pull_request.body" ".pull_request.body"
+    ;;
+  pull_request_review)
+    scan_field "github-event:pull_request_review.body" ".review.body"
+    ;;
+  pull_request_review_comment)
+    scan_field "github-event:pull_request_review_comment.body" ".comment.body"
+    ;;
+  *)
+    printf 'check-github-event-private-context: event %s has no configured fields to scan\n' "$event_name" >&2
+    ;;
+esac
+
+if [ "$finding_status" -ne 0 ]; then
+  exit "$finding_status"
+fi
+
+if [ "$field_count" -eq 0 ]; then
+  printf 'check-github-event-private-context: no non-empty GitHub text fields found for %s\n' "$event_name"
+fi
