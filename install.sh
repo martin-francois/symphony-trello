@@ -16,6 +16,7 @@ CONFIG_DIR="${SYMPHONY_TRELLO_CONFIG_DIR:-$SYMPHONY_HOME/config}"
 WORKSPACE_ROOT="${SYMPHONY_TRELLO_WORKSPACE_ROOT:-$SYMPHONY_HOME/workspaces}"
 STATE_HOME="${SYMPHONY_TRELLO_STATE_HOME:-$SYMPHONY_HOME/state}"
 BIN_DIR="$HOME/.local/bin"
+PREFIX_CONFIGURED=false
 DRY_RUN=false
 NO_ONBOARD=false
 SKIP_PATH_SETUP=false
@@ -60,6 +61,7 @@ while [[ $# -gt 0 ]]; do
       exit 2
     fi
     APP_DIR="$2"
+    PREFIX_CONFIGURED=true
     shift
     ;;
   --bin-dir)
@@ -221,16 +223,33 @@ normalize_path() {
 same_or_inside_path() {
   local child="$1"
   local parent="$2"
+  if [[ "$parent" == "/" ]]; then
+    [[ "$child" == /* ]]
+    return
+  fi
   [[ "$child" == "$parent" || "$child" == "$parent"/* ]]
+}
+
+path_parent() {
+  local path="$1"
+  path="${path%/}"
+  if [[ "$path" != */* ]]; then
+    printf '.\n'
+  elif [[ "$path" == /* && "${path%/*}" == "" ]]; then
+    printf '/\n'
+  else
+    printf '%s\n' "${path%/*}"
+  fi
 }
 
 script_checkout_dir() {
   local source="${BASH_SOURCE[0]:-}"
-  local script_dir
+  local script_dir script_path
   case "$source" in
   "" | bash | -*) return 1 ;;
   esac
-  script_dir="$(dirname "$(absolutize_path "$source")")"
+  script_path="$(absolutize_path "$source")"
+  script_dir="$(path_parent "$script_path")"
   script_dir="$(normalize_path "$script_dir")"
   if [[ -d "$script_dir/.git" || -f "$script_dir/pom.xml" ]]; then
     printf '%s\n' "$script_dir"
@@ -309,6 +328,64 @@ validate_bin_dir_option_value() {
     exit 2
     ;;
   esac
+}
+
+validate_app_path_option_values() {
+  if is_blank "$APP_DIR"; then
+    echo "--prefix must not be blank." >&2
+    exit 2
+  fi
+  if has_control "$SYMPHONY_HOME" || has_control "$APP_DIR" || has_control "$CONFIG_DIR" || has_control "$WORKSPACE_ROOT" || has_control "$STATE_HOME"; then
+    echo "Installer app, config, workspace, and state paths must not contain control characters." >&2
+    exit 2
+  fi
+  if [[ "$PREFIX_CONFIGURED" == true ]]; then
+    case "$APP_DIR" in
+    /*) ;;
+    *)
+      echo "--prefix must be an absolute path." >&2
+      exit 2
+      ;;
+    esac
+  fi
+}
+
+is_broad_system_path() {
+  case "$1" in
+  / | /etc | /home | /opt | /root | /tmp | /usr | /var) return 0 ;;
+  *) return 1 ;;
+  esac
+}
+
+validate_app_paths() {
+  local raw_app_dir app_dir home_dir symphony_home checkout_dir root
+  raw_app_dir="$APP_DIR"
+  app_dir="$(normalize_path "$APP_DIR")"
+  home_dir="$(normalize_path "$HOME")"
+  symphony_home="$(normalize_path "$SYMPHONY_HOME")"
+  checkout_dir="$(script_checkout_dir || true)"
+  if is_broad_system_path "$app_dir" ||
+    is_broad_system_path "$symphony_home" ||
+    [[ "$app_dir" == "$home_dir" || "$symphony_home" == "$home_dir" ||
+      (-n "$checkout_dir" && "$app_dir" == "$checkout_dir") ]]; then
+    echo "--prefix must point to a dedicated app checkout directory." >&2
+    exit 2
+  fi
+  if path_has_symlink_component "$raw_app_dir" || path_has_symlink_component "$app_dir"; then
+    echo "--prefix must not be a symlink." >&2
+    exit 2
+  fi
+  if [[ -e "$app_dir" && ! -d "$app_dir" ]]; then
+    echo "--prefix must be a directory." >&2
+    exit 2
+  fi
+  for root in "$CONFIG_DIR" "$WORKSPACE_ROOT" "$STATE_HOME"; do
+    root="$(normalize_path "$root")"
+    if same_or_inside_path "$app_dir" "$root" || same_or_inside_path "$root" "$app_dir"; then
+      echo "--prefix must not overlap Symphony config, workspace, or state directories." >&2
+      exit 2
+    fi
+  done
 }
 
 validate_command_directory() {
@@ -444,7 +521,7 @@ assert_existing_checkout_safe() {
   fi
   display_repo="$(display_repo_source "$REPO_URL")"
   echo "Refusing to update existing Git checkout without Symphony installer marker: $APP_DIR" >&2
-  echo "Use an empty --prefix path, or pass a checkout whose origin remote is $display_repo." >&2
+  echo "Use a dedicated app checkout path, or pass a checkout whose origin remote is $display_repo." >&2
   exit 2
 }
 
@@ -1074,6 +1151,7 @@ jdk_compatible() {
 }
 
 validate_source_inputs
+validate_app_path_option_values
 validate_bin_dir_option_value
 SYMPHONY_HOME="$(absolutize_path "$SYMPHONY_HOME")"
 APP_DIR="$(absolutize_path "$APP_DIR")"
@@ -1082,6 +1160,7 @@ WORKSPACE_ROOT="$(absolutize_path "$WORKSPACE_ROOT")"
 STATE_HOME="$(absolutize_path "$STATE_HOME")"
 BIN_DIR="$(absolutize_path "$BIN_DIR")"
 CODEX_NPM_PREFIX="$(absolutize_path "$SYMPHONY_HOME/npm")"
+validate_app_paths
 validate_command_directory
 INSTALL_CONTEXT_FILE="$STATE_HOME/install-context.properties"
 activate_managed_codex_path
