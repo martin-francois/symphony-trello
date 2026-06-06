@@ -47,6 +47,10 @@ final class TrelloBoardSetupService {
         return setup(options).importExistingBoard(request);
     }
 
+    void preflightWorkflowWrite(Path workflowPath, boolean force) {
+        setup.preflightWorkflowWrite(workflowPath, force);
+    }
+
     void preflightConnectedBoardManifest(Path manifestPath) {
         ConnectedBoardRepository boards = new ConnectedBoardRepository(manifestPath);
         try {

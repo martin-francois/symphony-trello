@@ -230,6 +230,10 @@ public final class TrelloBoardSetup {
                 .toList();
     }
 
+    void preflightWorkflowWrite(Path workflowPath, boolean force) {
+        ensureWorkflowWritable(workflowPath, force);
+    }
+
     public MemberInfo getMemberInfo(MemberInfoRequest request) {
         request.validate();
         Map<String, Object> member = getMap(
