@@ -627,6 +627,46 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void setupLocalRejectsUnconnectedPlainBoardNameBeforeTrelloLookup() {
+        // given
+        Path isolatedConfig = tempDir.resolve("isolated-config");
+        Path workflow = isolatedConfig.resolve("WORKFLOW.unconnected-board.md");
+        Path env = tempDir.resolve(".env.unconnected-board");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--config-dir",
+                isolatedConfig.toString(),
+                "--board",
+                "Unconnected Board",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github",
+                "--no-start");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments",
+                        "Invalid --board value. Use a Trello board URL, short link, board id, or a connected board name.")
+                .stderrDoesNotContain("Trello rejected", "Troubleshooting report written")
+                .stdoutDoesNotContain("Validating Trello", "Board connected");
+        assertThat(trello.boardLookups()).isEmpty();
+        assertThat(trello.createdLists()).isEmpty();
+        assertThat(workflow).doesNotExist();
+        assertThat(env).doesNotExist();
+    }
+
+    @Test
     void setupLocalRejectsControlCharactersInWorkspaceIdBeforeTrelloRequest() {
         // given
         String badWorkspaceId = "workspace\nId";
