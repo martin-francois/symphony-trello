@@ -101,7 +101,7 @@
       "matchUpdateTypes": ["major"],
       "automerge": false,
       "dependencyDashboardApproval": true,
-      "addLabels": ["major-update"]
+      "addLabels": ["major update"]
     }
   ]
 }
