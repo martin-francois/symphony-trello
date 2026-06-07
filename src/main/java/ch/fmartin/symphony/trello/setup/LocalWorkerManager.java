@@ -69,7 +69,11 @@ final class LocalWorkerManager {
             startAll(paths, manifest, request, out);
             return 0;
         }
-        ConnectedBoard selectedBoard = selectOne(manifest, request.board(), request.workflow(), "start");
+        Optional<Path> explicitEnvPath =
+                request.envPath().map(path -> path.toAbsolutePath().normalize());
+        Path fallbackEnvPath = paths.defaultEnvPath().toAbsolutePath().normalize();
+        ConnectedBoard selectedBoard = selectOne(
+                manifest, request.board(), request.workflow(), "start", explicitEnvPath, fallbackEnvPath, true);
         Path envPath = request.envPath()
                 .orElseGet(() -> selectedBoard.envPath() == null ? paths.defaultEnvPath() : selectedBoard.envPath())
                 .toAbsolutePath()
@@ -441,7 +445,8 @@ final class LocalWorkerManager {
         LocalWorkerPaths paths = LocalWorkerPaths.from(
                 request.appHome(), request.configDir(), request.workspaceRoot(), request.stateHome(), environment);
         ConnectedBoardManifest manifest = new ConnectedBoardRepository(paths.manifestPath()).load();
-        List<ConnectedBoard> boards = selectForStop(manifest, request.board(), request.workflow());
+        List<ConnectedBoard> boards =
+                selectForStop(manifest, request.board(), request.workflow(), paths.defaultEnvPath());
         boards = withDefaultEnvForExplicitWorkflow(paths, request.workflow(), boards);
         ManagedProcessStore store = new ManagedProcessStore(paths.stateHome());
         if (boards.isEmpty()) {
@@ -469,7 +474,8 @@ final class LocalWorkerManager {
         LocalWorkerPaths paths = LocalWorkerPaths.from(
                 request.appHome(), request.configDir(), request.workspaceRoot(), request.stateHome(), environment);
         ConnectedBoardManifest manifest = new ConnectedBoardRepository(paths.manifestPath()).load();
-        List<ConnectedBoard> boards = selectForStatus(manifest, request.board(), request.workflow());
+        List<ConnectedBoard> boards =
+                selectForStatus(manifest, request.board(), request.workflow(), paths.defaultEnvPath());
         boards = withDefaultEnvForExplicitWorkflow(paths, request.workflow(), boards);
         if (boards.isEmpty()) {
             printPidFileStatus(paths, out);
@@ -517,7 +523,8 @@ final class LocalWorkerManager {
         LocalWorkerPaths paths = LocalWorkerPaths.from(
                 request.appHome(), request.configDir(), request.workspaceRoot(), request.stateHome(), environment);
         ConnectedBoardManifest manifest = new ConnectedBoardRepository(paths.manifestPath()).load();
-        ConnectedBoard board = selectOne(manifest, request.board(), request.workflow(), "logs");
+        ConnectedBoard board = selectOne(
+                manifest, request.board(), request.workflow(), "logs", Optional.empty(), paths.defaultEnvPath(), false);
         ManagedProcessStore.ManagedProcessFiles files =
                 new ManagedProcessStore(paths.stateHome()).files(board.workflowPath());
         List<Path> logFiles = List.of(files.stdoutLog(), files.stderrLog());
@@ -677,13 +684,24 @@ final class LocalWorkerManager {
     }
 
     private ConnectedBoard selectOne(
-            ConnectedBoardManifest manifest, Optional<String> board, Optional<Path> workflow, String command) {
+            ConnectedBoardManifest manifest,
+            Optional<String> board,
+            Optional<Path> workflow,
+            String command,
+            Optional<Path> explicitWorkflowEnvPath,
+            Path fallbackWorkflowEnvPath,
+            boolean validateServerPort) {
         if (board.isPresent() && workflow.isPresent()) {
             throw new TrelloBoardSetupException(
                     "setup_worker_selection_conflict", "--board and --workflow cannot be used together.");
         }
         return board.map(selector -> selectedBoard(manifest, selector))
-                .or(() -> workflow.map(workflowSelector -> selectedWorkflow(manifest, workflowSelector)))
+                .or(() -> workflow.map(workflowSelector -> selectedWorkflow(
+                        manifest,
+                        workflowSelector,
+                        explicitWorkflowEnvPath,
+                        fallbackWorkflowEnvPath,
+                        validateServerPort)))
                 .orElseGet(() -> defaultSelectedBoard(manifest, command));
     }
 
@@ -701,16 +719,46 @@ final class LocalWorkerManager {
         return matches.getFirst();
     }
 
-    private ConnectedBoard selectedWorkflow(ConnectedBoardManifest manifest, Path workflowSelector) {
+    private ConnectedBoard selectedWorkflow(
+            ConnectedBoardManifest manifest,
+            Path workflowSelector,
+            Optional<Path> explicitWorkflowEnvPath,
+            Path fallbackWorkflowEnvPath,
+            boolean validateServerPort) {
         Path workflowPath = workflowSelector.toAbsolutePath().normalize();
-        validateWorkerWorkflowPath(workflowPath);
         List<ConnectedBoard> matches = manifest.findAllByWorkflow(workflowPath);
         if (matches.size() > 1) {
             throw new TrelloBoardSetupException(
                     "setup_worker_workflow_ambiguous",
                     "Multiple connected-board rows reference --workflow. Repair connected-boards.json, then rerun the command.");
         }
-        return matches.isEmpty() ? workflowBoard(workflowPath) : matches.getFirst();
+        Path validationEnvPath = explicitWorkflowEnvPath.orElse(fallbackWorkflowEnvPath);
+        ConnectedBoard board = matches.isEmpty() ? workflowBoard(workflowPath, validationEnvPath) : matches.getFirst();
+        validateExplicitWorkflowSelector(
+                workflowPath,
+                selectedWorkflowEnvPath(board, explicitWorkflowEnvPath, fallbackWorkflowEnvPath),
+                validateServerPort);
+        return board;
+    }
+
+    private static Path selectedWorkflowEnvPath(
+            ConnectedBoard board, Optional<Path> explicitWorkflowEnvPath, Path fallbackWorkflowEnvPath) {
+        return explicitWorkflowEnvPath.orElseGet(
+                () -> board.envPath() == null ? fallbackWorkflowEnvPath : board.envPath());
+    }
+
+    private void validateExplicitWorkflowSelector(Path workflowPath, Path envPath, boolean validateServerPort) {
+        validateWorkerWorkflowPath(workflowPath);
+        validateWorkerEnvPath(envPath);
+        boolean workflowServerPortUsed = validateServerPort
+                && healthChecker.externalHttpPortOverrideSource(envPath).isEmpty();
+        WorkflowValidation validation = workflowConfig.diagnosticsValidation(
+                workflowPath, WorkflowEnvironmentResolver.resolver(environment, envPath), workflowServerPortUsed);
+        if (!validation.ok()) {
+            throw new TrelloBoardSetupException(
+                    "setup_invalid_arguments",
+                    "--workflow must reference a readable workflow file with usable workflow front matter.");
+        }
     }
 
     private ConnectedBoard defaultSelectedBoard(ConnectedBoardManifest manifest, String command) {
@@ -728,17 +776,25 @@ final class LocalWorkerManager {
     }
 
     private List<ConnectedBoard> selectForStop(
-            ConnectedBoardManifest manifest, Optional<String> board, Optional<Path> workflow) {
+            ConnectedBoardManifest manifest,
+            Optional<String> board,
+            Optional<Path> workflow,
+            Path explicitWorkflowEnvPath) {
         if (board.isPresent() || workflow.isPresent()) {
-            return List.of(selectOne(manifest, board, workflow, "stop"));
+            return List.of(
+                    selectOne(manifest, board, workflow, "stop", Optional.empty(), explicitWorkflowEnvPath, false));
         }
         return manifest.boards();
     }
 
     private List<ConnectedBoard> selectForStatus(
-            ConnectedBoardManifest manifest, Optional<String> board, Optional<Path> workflow) {
+            ConnectedBoardManifest manifest,
+            Optional<String> board,
+            Optional<Path> workflow,
+            Path explicitWorkflowEnvPath) {
         if (board.isPresent() || workflow.isPresent()) {
-            return List.of(selectOne(manifest, board, workflow, "status"));
+            return List.of(
+                    selectOne(manifest, board, workflow, "status", Optional.empty(), explicitWorkflowEnvPath, false));
         }
         return manifest.boards();
     }
