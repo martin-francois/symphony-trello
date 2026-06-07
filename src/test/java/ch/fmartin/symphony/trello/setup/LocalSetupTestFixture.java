@@ -14,6 +14,7 @@ import java.io.PrintStream;
 import java.io.StringReader;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -26,12 +27,13 @@ import java.util.regex.Pattern;
 final class LocalSetupTestFixture implements AutoCloseable {
     private final Path tempDir;
     private final FakeTrelloServer trello;
-    private final FakeCommands commands = new FakeCommands();
+    private final FakeCommands commands;
     private final LocalWorkerManager workerManager = mock();
     private final LocalSetup setup;
 
     LocalSetupTestFixture(Path tempDir) throws IOException {
         this.tempDir = tempDir;
+        commands = new FakeCommands(availablePort());
         trello = new FakeTrelloServer().start();
         when(workerManager.canStopManagedWorker(any(), any())).thenReturn(true);
         doAnswer(invocation -> {
@@ -117,6 +119,14 @@ final class LocalSetupTestFixture implements AutoCloseable {
     }
 
     SetupRunResult runSetupWithInput(String input, String... args) {
+        return runSetupWithEffectiveArgs(input, argsWithFixtureServerPort(args));
+    }
+
+    SetupRunResult runSetupWithProductionDefaultPort(String... args) {
+        return runSetupWithEffectiveArgs("", args);
+    }
+
+    private SetupRunResult runSetupWithEffectiveArgs(String input, String[] args) {
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
         int exitCode = setup.run(
@@ -126,6 +136,20 @@ final class LocalSetupTestFixture implements AutoCloseable {
                 new PrintStream(stderr, true, StandardCharsets.UTF_8));
         return new SetupRunResult(
                 exitCode, stdout.toString(StandardCharsets.UTF_8), stderr.toString(StandardCharsets.UTF_8));
+    }
+
+    String[] argsWithFixtureServerPort(String... args) {
+        if (hasServerPort(args)
+                || invokesLifecycleSubcommand(args)
+                || hasDryRun(args)
+                || !hasNewBoardSetupShape(args)) {
+            return args;
+        }
+        String[] effectiveArgs = new String[args.length + 2];
+        effectiveArgs[0] = "--server-port";
+        effectiveArgs[1] = String.valueOf(availablePort());
+        System.arraycopy(args, 0, effectiveArgs, 2, args.length);
+        return effectiveArgs;
     }
 
     SetupRunResult runSetup(LocalSetupRequest request) {
@@ -240,7 +264,83 @@ final class LocalSetupTestFixture implements AutoCloseable {
         return path.toString().replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
+    private static boolean hasServerPort(String... args) {
+        for (String arg : args) {
+            if ("--server-port".equals(arg) || arg.startsWith("--server-port=")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean invokesLifecycleSubcommand(String... args) {
+        for (String arg : args) {
+            if ("check".equals(arg) || "repair-port".equals(arg) || "configure-github".equals(arg)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasDryRun(String... args) {
+        for (String arg : args) {
+            if ("--dry-run".equals(arg)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasNewBoardSetupShape(String... args) {
+        return hasWorkflowOrEnvTarget(args) || (hasDirectCredentials(args) && hasBoardSelector(args));
+    }
+
+    private static boolean hasWorkflowOrEnvTarget(String... args) {
+        for (String arg : args) {
+            if ("--workflow".equals(arg)
+                    || arg.startsWith("--workflow=")
+                    || "--env".equals(arg)
+                    || arg.startsWith("--env=")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasDirectCredentials(String... args) {
+        for (String arg : args) {
+            if ("--key".equals(arg)
+                    || arg.startsWith("--key=")
+                    || "--token".equals(arg)
+                    || arg.startsWith("--token=")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasBoardSelector(String... args) {
+        for (String arg : args) {
+            if ("--board-name".equals(arg)
+                    || arg.startsWith("--board-name=")
+                    || "--board".equals(arg)
+                    || arg.startsWith("--board=")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static int availablePort() {
+        try (ServerSocket socket = new ServerSocket(0)) {
+            return socket.getLocalPort();
+        } catch (IOException e) {
+            throw new AssertionError("Could not allocate test port", e);
+        }
+    }
+
     static final class FakeCommands implements CommandRunner {
+        private final int defaultServerPort;
         boolean githubAuthenticated;
         boolean githubCliAvailable = true;
         boolean wingetAvailable;
@@ -257,6 +357,10 @@ final class LocalSetupTestFixture implements AutoCloseable {
         final List<String> githubLoginCommands = new ArrayList<>();
         final Map<String, String> statusByWorkflow = new LinkedHashMap<>();
         private final Map<String, HttpServer> healthServersByWorkflow = new LinkedHashMap<>();
+
+        FakeCommands(int defaultServerPort) {
+            this.defaultServerPort = defaultServerPort;
+        }
 
         @Override
         public CommandResult run(String... command) {
@@ -356,8 +460,7 @@ final class LocalSetupTestFixture implements AutoCloseable {
             int port = healthPortOverride == null ? workflowPort(workflowPath) : healthPortOverride;
             try {
                 stopHealthServer(workflowPath.toString());
-                HttpServer healthServer =
-                        HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 0);
+                HttpServer healthServer = createHealthServer(port);
                 String workflow = workflowPath.toAbsolutePath().normalize().toString();
                 healthServer.createContext(
                         "/api/v1/local-status",
@@ -381,6 +484,27 @@ final class LocalSetupTestFixture implements AutoCloseable {
             }
         }
 
+        static HttpServer createHealthServer(int port) throws IOException {
+            IOException failure = null;
+            for (int attempt = 0; attempt < 10; attempt++) {
+                try {
+                    return HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 0);
+                } catch (IOException e) {
+                    failure = e;
+                    sleepAfterPortStop();
+                }
+            }
+            throw failure;
+        }
+
+        private static void sleepAfterPortStop() {
+            try {
+                Thread.sleep(25);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+
         void stopHealthServer(String workflowPath) {
             HttpServer healthServer = healthServersByWorkflow.remove(workflowPath);
             if (healthServer != null) {
@@ -393,13 +517,13 @@ final class LocalSetupTestFixture implements AutoCloseable {
             healthServersByWorkflow.clear();
         }
 
-        static int workflowPort(Path workflowPath) {
+        int workflowPort(Path workflowPath) {
             try {
                 var matcher = Pattern.compile("(?m)^\\s*port:\\s*(\\d+)\\s*$")
                         .matcher(Files.readString(workflowPath, StandardCharsets.UTF_8));
-                return matcher.find() ? Integer.parseInt(matcher.group(1)) : TrelloBoardSetup.DEFAULT_SERVER_PORT;
+                return matcher.find() ? Integer.parseInt(matcher.group(1)) : defaultServerPort;
             } catch (IOException e) {
-                return TrelloBoardSetup.DEFAULT_SERVER_PORT;
+                return defaultServerPort;
             }
         }
     }

@@ -1942,7 +1942,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
             }
 
             // when
-            SetupRunResult result = runSetup(
+            SetupRunResult result = runSetupWithProductionDefaultPort(
                     "--non-interactive",
                     "--endpoint",
                     endpoint(),
@@ -4278,32 +4278,27 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         commands.githubCliAvailable = false;
         commands.wingetAvailable = true;
-        String previousOsName = System.getProperty("os.name");
+        LocalSetup windowsSetup = setupWithOperatingSystem("Windows 11");
         Path workflow = tempDir.resolve("WORKFLOW.github-cli-winget.md");
         Path env = tempDir.resolve(".env");
 
         // when
-        SetupRunResult result;
-        try {
-            System.setProperty("os.name", "Windows 11");
-            result = runSetupWithInput(
-                    "y\n\nn\nn\n",
-                    "--endpoint",
-                    endpoint(),
-                    "--key",
-                    "key",
-                    "--token",
-                    "token",
-                    "--board-name",
-                    "GitHub CLI Winget Queue",
-                    "--workflow",
-                    workflow.toString(),
-                    "--env",
-                    env.toString(),
-                    "--github");
-        } finally {
-            System.setProperty("os.name", previousOsName);
-        }
+        SetupRunResult result = runSetupWithInput(
+                windowsSetup,
+                "y\n\nn\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "GitHub CLI Winget Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--github");
 
         // then
         result.assertSuccess()

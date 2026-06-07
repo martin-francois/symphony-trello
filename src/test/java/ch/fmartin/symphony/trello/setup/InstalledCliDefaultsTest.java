@@ -141,18 +141,14 @@ final class InstalledCliDefaultsTest {
         // given
         Map<String, String> environment =
                 Map.of("SYMPHONY_TRELLO_STATE_HOME", "/tmp/state", "SYMPHONY_TRELLO_CONFIG_DIR", configDir.toString());
-        String previous = System.getProperty(InstalledCliDefaults.INSTALLED_STATE_HOME_PROPERTY);
-        try {
-            System.setProperty(InstalledCliDefaults.INSTALLED_STATE_HOME_PROPERTY, stateHome.toString());
+        InstalledCliDefaults.InstalledPaths paths = InstalledCliDefaults.InstalledPaths.from(
+                environment, Map.of(InstalledCliDefaults.INSTALLED_STATE_HOME_PROPERTY, stateHome.toString()));
 
-            // when
-            boolean userOverride = InstalledCliDefaults.hasUserStateHomeOverride(environment);
+        // when
+        boolean userOverride = paths.stateHomeFromUserEnvironment();
 
-            // then
-            assertThat(userOverride).isTrue();
-        } finally {
-            restoreProperty(InstalledCliDefaults.INSTALLED_STATE_HOME_PROPERTY, previous);
-        }
+        // then
+        assertThat(userOverride).isTrue();
     }
 
     private InstalledCliDefaults.InstalledPaths installedPaths() {
@@ -163,13 +159,5 @@ final class InstalledCliDefaultsTest {
                 Optional.of(appHome.toString()),
                 Optional.of(workspaceRoot.toString()),
                 Optional.of(stateHome.toString()));
-    }
-
-    private static void restoreProperty(String name, String value) {
-        if (value == null) {
-            System.clearProperty(name);
-        } else {
-            System.setProperty(name, value);
-        }
     }
 }

@@ -26,6 +26,8 @@
     <maven-pmd-plugin.version>3.28.0</maven-pmd-plugin.version>
     <pmd.failOnViolation>true</pmd.failOnViolation>
     <pmd.ruleset>config/pmd/ruleset.xml</pmd.ruleset>
+    <junit.parallel.config.fixed.parallelism>4</junit.parallel.config.fixed.parallelism>
+    <junit.parallel.enabled>true</junit.parallel.enabled>
     <exec-maven-plugin.version>3.6.3</exec-maven-plugin.version>
     <error-prone.version>2.49.0</error-prone.version>
     <error-prone-support.version>0.29.0</error-prone-support.version>
@@ -222,6 +224,11 @@
           <argLine>@{argLine} -Xshare:off -javaagent:${org.mockito:mockito-core:jar}</argLine>
           <systemPropertyVariables>
             <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
+            <junit.jupiter.execution.parallel.config.fixed.parallelism>${junit.parallel.config.fixed.parallelism}</junit.jupiter.execution.parallel.config.fixed.parallelism>
+            <junit.jupiter.execution.parallel.config.strategy>fixed</junit.jupiter.execution.parallel.config.strategy>
+            <junit.jupiter.execution.parallel.enabled>${junit.parallel.enabled}</junit.jupiter.execution.parallel.enabled>
+            <junit.jupiter.execution.parallel.mode.classes.default>concurrent</junit.jupiter.execution.parallel.mode.classes.default>
+            <junit.jupiter.execution.parallel.mode.default>concurrent</junit.jupiter.execution.parallel.mode.default>
             <maven.home>${maven.home}</maven.home>
           </systemPropertyVariables>
         </configuration>
@@ -233,6 +240,11 @@
           <argLine>@{argLine} -Xshare:off -javaagent:${org.mockito:mockito-core:jar}</argLine>
           <systemPropertyVariables>
             <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
+            <junit.jupiter.execution.parallel.config.fixed.parallelism>${junit.parallel.config.fixed.parallelism}</junit.jupiter.execution.parallel.config.fixed.parallelism>
+            <junit.jupiter.execution.parallel.config.strategy>fixed</junit.jupiter.execution.parallel.config.strategy>
+            <junit.jupiter.execution.parallel.enabled>${junit.parallel.enabled}</junit.jupiter.execution.parallel.enabled>
+            <junit.jupiter.execution.parallel.mode.classes.default>concurrent</junit.jupiter.execution.parallel.mode.classes.default>
+            <junit.jupiter.execution.parallel.mode.default>concurrent</junit.jupiter.execution.parallel.mode.default>
             <maven.home>${maven.home}</maven.home>
           </systemPropertyVariables>
         </configuration>
@@ -363,6 +375,12 @@
   </build>
 
   <profiles>
+    <profile>
+      <id>parallel-tests</id>
+      <properties>
+        <junit.parallel.enabled>true</junit.parallel.enabled>
+      </properties>
+    </profile>
     <profile>
       <id>pmd-candidate</id>
       <properties>

@@ -3,8 +3,6 @@ package ch.fmartin.symphony.trello.setup;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.sun.net.httpserver.HttpServer;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -98,11 +96,8 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
                         "Port Used Queue",
                         (test, workflow, env) -> {
                             test.commands.stopHealthServer(workflow.toString());
-                            HttpServer otherServer = HttpServer.create(
-                                    new InetSocketAddress(
-                                            InetAddress.getLoopbackAddress(),
-                                            LocalSetupTestFixture.FakeCommands.workflowPort(workflow)),
-                                    0);
+                            HttpServer otherServer = LocalSetupTestFixture.FakeCommands.createHealthServer(
+                                    test.commands.workflowPort(workflow));
                             otherServer.createContext("/api/v1/local-status", exchange -> {
                                 byte[] bytes = "{}".getBytes(StandardCharsets.UTF_8);
                                 exchange.sendResponseHeaders(404, bytes.length);
@@ -115,7 +110,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
                         },
                         (test, workflow, env) -> new String[] {
                             "WARN  \"Port Used Queue\" configured port "
-                                    + LocalSetupTestFixture.FakeCommands.workflowPort(workflow)
+                                    + test.commands.workflowPort(workflow)
                                     + " is in use by another process",
                             "Suggested fix: symphony-trello setup-local repair-port --board \"Port Used Queue\""
                         },
