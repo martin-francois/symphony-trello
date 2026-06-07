@@ -284,7 +284,7 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
-    void importsExistingBoardUsingFirstMatchingRecommendedListNames() {
+    void importExistingBoardRejectsCaseVariantRecommendedListNames() {
         // given
         boardListsResponse.set(
                 """
@@ -304,7 +304,7 @@ final class TrelloBoardSetupTest {
         Path workflow = tempDir.resolve("imported-duplicated-recommended-lists.md");
 
         // when
-        var result = setup.importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
+        Throwable thrown = catchThrowable(() -> setup.importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
                 endpoint(),
                 new TrelloBoardSetup.TrelloCredentials("key", "token"),
                 "input",
@@ -318,22 +318,15 @@ final class TrelloBoardSetupTest {
                 null,
                 1,
                 false,
-                TrelloBoardSetup.GitHubIntegration.DISABLED));
+                TrelloBoardSetup.GitHubIntegration.DISABLED)));
 
         // then
-        assertThat(result.activeStates()).containsExactly("ready for codex", "in progress");
-        assertThat(result.terminalStates()).containsExactly("done");
-        assertThat(result.inProgressState()).isEqualTo("in progress");
-        assertThat(result.blockedState()).isEqualTo("blocked");
-        assertThat(workflow)
-                .content(StandardCharsets.UTF_8)
-                .contains(
-                        "- \"ready for codex\"",
-                        "- \"in progress\"",
-                        "- \"done\"",
-                        "in_progress_state: \"in progress\"",
-                        "blocked_state: \"blocked\"",
-                        "list_name \"human review\"");
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_ambiguous_in_progress_state");
+            assertThat(failure)
+                    .hasMessageContaining("Multiple open Trello lists match in-progress list selector(s): in progress");
+        });
+        assertThat(workflow).doesNotExist();
     }
 
     @Test

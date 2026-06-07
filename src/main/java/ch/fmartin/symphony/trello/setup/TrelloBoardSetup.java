@@ -4,6 +4,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 
 import ch.fmartin.symphony.trello.codex.CodexSkillCatalog;
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
+import ch.fmartin.symphony.trello.config.StateNames;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -25,7 +26,6 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -1795,9 +1795,9 @@ public final class TrelloBoardSetup {
     private static void validateConfiguredLists(
             String label, String errorCodeSegment, List<String> configured, List<String> openListNames) {
         Set<String> normalizedOpenNames =
-                openListNames.stream().map(TrelloBoardSetup::normalize).collect(Collectors.toUnmodifiableSet());
+                openListNames.stream().map(StateNames::normalize).collect(Collectors.toUnmodifiableSet());
         List<String> missing = configured.stream()
-                .filter(name -> !normalizedOpenNames.contains(normalize(name)))
+                .filter(name -> !normalizedOpenNames.contains(StateNames.normalize(name)))
                 .toList();
         if (!missing.isEmpty()) {
             throw new TrelloBoardSetupException(
@@ -1805,6 +1805,23 @@ public final class TrelloBoardSetup {
                     "Unknown " + label + " list(s): " + String.join(", ", missing) + ". Open lists: "
                             + String.join(", ", openListNames));
         }
+        List<String> ambiguous = configured.stream()
+                .filter(name -> hasDuplicateMatchingOpenListName(name, openListNames))
+                .toList();
+        if (!ambiguous.isEmpty()) {
+            throw new TrelloBoardSetupException(
+                    "setup_ambiguous_" + errorCodeSegment + "_state",
+                    "Multiple open Trello lists match " + label + " list selector(s): "
+                            + String.join(", ", ambiguous)
+                            + ". Rename one of those Trello lists before running import-board.");
+        }
+    }
+
+    private static boolean hasDuplicateMatchingOpenListName(String configured, List<String> openListNames) {
+        Map<String, Long> matchingOpenNameCounts = openListNames.stream()
+                .filter(name -> StateNames.normalize(name).equals(StateNames.normalize(configured)))
+                .collect(Collectors.groupingBy(StateNames::normalize, LinkedHashMap::new, Collectors.counting()));
+        return matchingOpenNameCounts.values().stream().anyMatch(count -> count > 1);
     }
 
     private static void validateConfiguredList(
@@ -1910,10 +1927,6 @@ public final class TrelloBoardSetup {
 
     private static String encode(String value) {
         return URLEncoder.encode(value, StandardCharsets.UTF_8);
-    }
-
-    private static String normalize(String value) {
-        return value.trim().toLowerCase(Locale.ROOT);
     }
 
     static String slugify(String value) {

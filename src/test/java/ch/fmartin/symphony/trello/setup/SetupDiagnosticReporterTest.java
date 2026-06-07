@@ -39,6 +39,7 @@ final class SetupDiagnosticReporterTest {
     void reportsOnlyUnexpectedSetupFailures() {
         // given
         List<String> expectedFailureCodes = List.of(
+                "setup_ambiguous_active_state",
                 "setup_invalid_arguments",
                 "setup_missing_api_key",
                 "setup_missing_api_token",

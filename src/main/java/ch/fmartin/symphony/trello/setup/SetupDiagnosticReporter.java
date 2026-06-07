@@ -263,7 +263,8 @@ final class SetupDiagnosticReporter {
         if (!(exception instanceof TrelloBoardSetupException setupException)) {
             return true;
         }
-        return !setupException.code().startsWith("setup_unknown_")
+        return !setupException.code().startsWith("setup_ambiguous_")
+                && !setupException.code().startsWith("setup_unknown_")
                 && !EXPECTED_SETUP_FAILURE_CODES.contains(setupException.code());
     }
 
