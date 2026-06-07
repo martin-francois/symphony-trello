@@ -49,6 +49,16 @@ final class TrelloBoardSetupMainTest {
     private HttpServer server;
     private final List<String> createdLists = new ArrayList<>();
     private final AtomicReference<String> createdBoardName = new AtomicReference<>();
+    private final AtomicReference<String> boardListsResponse = new AtomicReference<>(
+            """
+            [
+              {"id":"list-ready","name":"Queue for Codex","closed":false,"pos":1},
+              {"id":"list-doing","name":"Doing","closed":false,"pos":2},
+              {"id":"list-review","name":"Review","closed":false,"pos":3},
+              {"id":"list-blocked","name":"Blocked","closed":false,"pos":4},
+              {"id":"list-done","name":"Released","closed":false,"pos":5}
+            ]
+            """);
     private final AtomicInteger boardInfoLookups = new AtomicInteger();
     private final AtomicInteger workspaceLookups = new AtomicInteger();
 
@@ -91,19 +101,7 @@ final class TrelloBoardSetupMainTest {
                 {"id":"board-1","name":"Existing Board","shortLink":"SYNTH001","url":"https://trello.com/b/SYNTH001/board","closed":false}
                 """);
         });
-        server.createContext(
-                "/1/boards/board-1/lists",
-                exchange -> respond(
-                        exchange,
-                        """
-                [
-                  {"id":"list-ready","name":"Queue for Codex","closed":false,"pos":1},
-                  {"id":"list-doing","name":"Doing","closed":false,"pos":2},
-                  {"id":"list-review","name":"Review","closed":false,"pos":3},
-                  {"id":"list-blocked","name":"Blocked","closed":false,"pos":4},
-                  {"id":"list-done","name":"Released","closed":false,"pos":5}
-                ]
-                """));
+        server.createContext("/1/boards/board-1/lists", exchange -> respond(exchange, boardListsResponse.get()));
         server.start();
     }
 
@@ -3960,6 +3958,134 @@ final class TrelloBoardSetupMainTest {
                 .stderrDoesNotContain(badListSelector, "\n# injected", "\u001B", "Troubleshooting report written")
                 .stdoutDoesNotContain("Imported Trello board", badListSelector);
         assertThat(workflow).doesNotExist();
+        assertThat(createdLists).isEmpty();
+    }
+
+    @MethodSource("ambiguousDirectImportListSelectors")
+    @ParameterizedTest(name = "{0}")
+    void importBoardRejectsAmbiguousDuplicateOpenListNames(
+            String name, String optionName, String duplicatedName, String expectedCode, String expectedMessage) {
+        // given
+        boardListsResponse.set(
+                """
+                [
+                  {"id":"list-ready","name":"Queue for Codex","closed":false,"pos":1},
+                  {"id":"list-doing","name":"Doing","closed":false,"pos":2},
+                  {"id":"list-review","name":"Review","closed":false,"pos":3},
+                  {"id":"list-blocked","name":"Blocked","closed":false,"pos":4},
+                  {"id":"list-done","name":"Released","closed":false,"pos":5},
+                  {"id":"list-duplicate","name":"%s","closed":false,"pos":6}
+                ]
+                """
+                        .formatted(duplicatedName));
+        Path workflow = tempDir.resolve(name + ".WORKFLOW.md");
+        Path manifest = workflow.getParent().resolve("connected-boards.json");
+        List<String> args = new ArrayList<>(List.of(
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "https://trello.com/b/input/existing-board",
+                "--workflow",
+                workflow.toString(),
+                "--no-github",
+                "--force"));
+        if (!"--active".equals(optionName)) {
+            args.addAll(List.of("--active", "Queue for Codex"));
+        }
+        if (!"--terminal".equals(optionName)) {
+            args.addAll(List.of("--terminal", "Released"));
+        }
+        args.addAll(List.of(optionName, duplicatedName));
+
+        // when
+        CliRunResult result = runCli(args.toArray(String[]::new));
+
+        // then
+        result.assertFailure(2)
+                .stderrContains("setup_failed code=" + expectedCode, expectedMessage)
+                .stderrDoesNotContain("Troubleshooting report written")
+                .stdoutDoesNotContain("Imported Trello board", "Wrote workflow");
+        assertThat(workflow).doesNotExist();
+        assertThat(manifest).doesNotExist();
+        assertThat(createdLists).isEmpty();
+    }
+
+    private static Stream<Arguments> ambiguousDirectImportListSelectors() {
+        return Stream.of(
+                Arguments.of(
+                        "ambiguous-active-list",
+                        "--active",
+                        "Queue for Codex",
+                        "setup_ambiguous_active_state",
+                        "Multiple open Trello lists match active list selector(s): Queue for Codex"),
+                Arguments.of(
+                        "ambiguous-terminal-list",
+                        "--terminal",
+                        "Released",
+                        "setup_ambiguous_terminal_state",
+                        "Multiple open Trello lists match terminal list selector(s): Released"),
+                Arguments.of(
+                        "ambiguous-in-progress-list",
+                        "--in-progress",
+                        "Doing",
+                        "setup_ambiguous_in_progress_state",
+                        "Multiple open Trello lists match in-progress list selector(s): Doing"),
+                Arguments.of(
+                        "ambiguous-blocked-list",
+                        "--blocked",
+                        "Blocked",
+                        "setup_ambiguous_blocked_state",
+                        "Multiple open Trello lists match blocked list selector(s): Blocked"));
+    }
+
+    @Test
+    void importBoardRejectsAmbiguousDefaultActiveListName() {
+        // given
+        boardListsResponse.set(
+                """
+                [
+                  {"id":"list-ready-a","name":"Ready for Codex","closed":false,"pos":1},
+                  {"id":"list-ready-b","name":"Ready  for Codex","closed":false,"pos":2},
+                  {"id":"list-doing","name":"Doing","closed":false,"pos":3},
+                  {"id":"list-blocked","name":"Blocked","closed":false,"pos":4},
+                  {"id":"list-done","name":"Released","closed":false,"pos":5}
+                ]
+                """);
+        Path workflow = tempDir.resolve("ambiguous-default-active.WORKFLOW.md");
+        Path manifest = workflow.getParent().resolve("connected-boards.json");
+
+        // when
+        CliRunResult result = runCli(
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "https://trello.com/b/input/existing-board",
+                "--terminal",
+                "Released",
+                "--workflow",
+                workflow.toString(),
+                "--no-github",
+                "--force");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_ambiguous_active_state",
+                        "Multiple open Trello lists match active list selector(s): Ready for Codex")
+                .stderrDoesNotContain("Troubleshooting report written")
+                .stdoutDoesNotContain("Imported Trello board", "Wrote workflow");
+        assertThat(workflow).doesNotExist();
+        assertThat(manifest).doesNotExist();
         assertThat(createdLists).isEmpty();
     }
 
