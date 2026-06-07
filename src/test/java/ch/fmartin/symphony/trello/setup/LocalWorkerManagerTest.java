@@ -1106,18 +1106,47 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
-    void startRequiresSelectorWhenMultipleBoardsAreConnected() throws Exception {
+    void startWithoutSelectorLaunchesEveryConnectedBoard() throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
-        fixture.save(fixture.connectedBoard("board-1", "First"), fixture.connectedBoard("board-2", "Second"));
+        ConnectedBoard first = fixture.connectedBoard("board-1", "First");
+        ConnectedBoard second = fixture.connectedBoard("board-2", "Second");
+        fixture.save(first, second);
+        when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
+                .thenReturn(new ManagedProcessHandle(42), new ManagedProcessHandle(43));
+        when(fixture.healthChecker.waitForSameWorkflow(any(), anyInt()))
+                .thenReturn(new BoardHealth(BoardHealthKind.SAME_WORKFLOW, 18080, Optional.empty(), Optional.empty()));
+        when(fixture.platform.isAlive(anyLong())).thenReturn(true);
+        when(fixture.platform.isManaged(anyLong(), eq(fixture.paths.appHome()), any()))
+                .thenReturn(true);
 
         // when
-        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest()));
+        WorkerRunResult result = fixture.start(fixture.startRequest());
+
+        // then
+        result.assertSuccess().stdoutContains("\"First\"", "\"Second\"");
+        verify(fixture.platform, times(2)).start(any(), eq(fixture.paths.appHome()), any(), any(), any());
+    }
+
+    @Test
+    void startEnvWithoutSelectorRequiresBoardOrWorkflow() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard first = fixture.connectedBoard("board-1", "First");
+        ConnectedBoard second = fixture.connectedBoard("board-2", "Second");
+        fixture.save(first, second);
+        Path env = fixture.paths.configDir().resolve(".env.override");
+        fixture.writeEnv(env);
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startEnvRequest(env)));
 
         // then
         assertThat(thrown)
                 .isInstanceOf(TrelloBoardSetupException.class)
-                .hasMessageContaining("--board NAME or --workflow PATH");
+                .hasMessage("--env requires --board or --workflow.");
+        assertThat(((TrelloBoardSetupException) thrown).code()).isEqualTo("setup_worker_selection_conflict");
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
     }
 
     @Test
