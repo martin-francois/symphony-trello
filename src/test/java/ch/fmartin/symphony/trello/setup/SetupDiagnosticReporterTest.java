@@ -961,6 +961,43 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
+    void diagnosticsRedactsYamlParserSecretContinuationLinesInRecentLogs() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("yaml-parser-log-config");
+        Path workspaceRoot = tempDir.resolve("yaml-parser-log-workspaces");
+        Path stateHome = tempDir.resolve("yaml-parser-log-state");
+        Files.createDirectories(configDir);
+        Files.createDirectories(workspaceRoot);
+        Files.createDirectories(stateHome);
+        Files.writeString(configDir.resolve("connected-boards.json"), "{\"boards\":[]}", StandardCharsets.UTF_8);
+        String trelloToken = "ATTA" + "thisLooksLikeASecretTokenValue1234567890";
+        Files.writeString(
+                stateHome.resolve("parser-secret.log"),
+                """
+                Failed to parse workflow front matter
+                 api_token: "%s
+                 ... sLikeASecretTokenValue1234567890
+                line: 4, column: 14
+                """
+                        .formatted(trelloToken),
+                StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = renderDefaultDiagnostics(reporter, configDir, workspaceRoot, stateHome);
+
+        // then
+        assertThat(report)
+                .contains(
+                        "Failed to parse workflow front matter",
+                        "api_token: \"<redacted>",
+                        "... <redacted>",
+                        "line: 4, column: 14")
+                .doesNotContain(
+                        trelloToken, "thisLooksLikeASecretTokenValue1234567890", "sLikeASecretTokenValue1234567890");
+    }
+
+    @Test
     void diagnosticsUsesLongerLogFenceWhenLogContainsMarkdownFence() throws Exception {
         // given
         Path configDir = tempDir.resolve("fenced-log-config");
