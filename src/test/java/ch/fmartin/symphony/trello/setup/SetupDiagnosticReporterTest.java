@@ -457,6 +457,108 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
+    void workflowSummaryResolvesConnectedBoardEnvironmentReferences() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("env-backed-workflow-config");
+        Path workspaceRoot = tempDir.resolve("env-backed-workspaces");
+        Path stateHome = tempDir.resolve("env-backed-state");
+        Path workflow = configDir.resolve("WORKFLOW.env-backed.md");
+        Path env = configDir.resolve(".env.env-backed");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  board_id: $SYNTHETIC_BOARD_ID
+                  active_states:
+                    - "Ready for Codex"
+                  terminal_states:
+                    - "Done"
+                server:
+                  port: $SYNTHETIC_WORKER_PORT
+                ---
+                Body
+                """,
+                StandardCharsets.UTF_8);
+        Files.writeString(
+                env,
+                """
+                SYNTHETIC_BOARD_ID=resolved-env-board-id
+                SYNTHETIC_WORKER_PORT=19301
+                """,
+                StandardCharsets.UTF_8);
+        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
+                        "resolved-env-board-id",
+                        "env-key",
+                        "Private Env Board",
+                        "https://trello.com/b/env-key/private-env-board",
+                        workflow,
+                        env,
+                        workspaceRoot,
+                        19301,
+                        false,
+                        List.of(),
+                        false))));
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = renderDefaultDiagnostics(reporter, configDir, workspaceRoot, stateHome);
+
+        // then
+        String boardHash = token(diagnosticsKey(configDir), "resolved-env-board-id");
+        assertThat(report)
+                .contains(
+                        "## Workflow Summary",
+                        "| workflow | board_hash | port | max_agents | active | terminal | in_progress | blocked |",
+                        boardHash,
+                        " | 19301 | ")
+                .doesNotContain(
+                        "SYNTHETIC_BOARD_ID",
+                        "SYNTHETIC_WORKER_PORT",
+                        "$SYNTHETIC_BOARD_ID",
+                        "$SYNTHETIC_WORKER_PORT",
+                        "resolved-env-board-id",
+                        "Private Env Board",
+                        "env-key",
+                        "https://trello.com",
+                        "## Invalid Workflow Files",
+                        tempDir.toString());
+
+        String selectedReport = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.of(workspaceRoot),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.of(workflow)));
+        assertThat(selectedReport)
+                .contains(
+                        "selector:** workflow",
+                        "selected_workflow_in_manifest:** true",
+                        "selected_manifest_board_count:** 1",
+                        boardHash,
+                        " | 19301 | ")
+                .doesNotContain(
+                        "SYNTHETIC_BOARD_ID",
+                        "SYNTHETIC_WORKER_PORT",
+                        "$SYNTHETIC_BOARD_ID",
+                        "$SYNTHETIC_WORKER_PORT",
+                        "resolved-env-board-id",
+                        "Private Env Board",
+                        "env-key",
+                        "https://trello.com",
+                        "## Invalid Workflow Files",
+                        tempDir.toString());
+    }
+
+    @Test
     void redactsRelativeStateHomeArgumentFromRenderedCommand() throws IOException {
         // given
         Path configDir = tempDir.resolve("relative-state-config");
@@ -658,17 +760,7 @@ final class SetupDiagnosticReporterTest {
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
-        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.empty(),
-                Optional.empty(),
-                false,
-                false,
-                Optional.empty(),
-                Optional.of(configDir),
-                Optional.of(workspaceRoot),
-                Optional.of(stateHome),
-                Optional.empty(),
-                Optional.empty()));
+        String report = renderDefaultDiagnostics(reporter, configDir, workspaceRoot, stateHome);
 
         // then
         assertThat(report)
@@ -804,17 +896,7 @@ final class SetupDiagnosticReporterTest {
         });
 
         // when
-        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.empty(),
-                Optional.empty(),
-                false,
-                false,
-                Optional.empty(),
-                Optional.of(configDir),
-                Optional.of(workspaceRoot),
-                Optional.of(stateHome),
-                Optional.empty(),
-                Optional.empty()));
+        String report = renderDefaultDiagnostics(reporter, configDir, workspaceRoot, stateHome);
 
         // then
         assertThat(report)
@@ -859,17 +941,7 @@ final class SetupDiagnosticReporterTest {
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
-        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.empty(),
-                Optional.empty(),
-                false,
-                false,
-                Optional.empty(),
-                Optional.of(configDir),
-                Optional.of(workspaceRoot),
-                Optional.of(stateHome),
-                Optional.empty(),
-                Optional.empty()));
+        String report = renderDefaultDiagnostics(reporter, configDir, workspaceRoot, stateHome);
 
         // then
         assertThat(report)
@@ -912,17 +984,7 @@ final class SetupDiagnosticReporterTest {
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
-        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.empty(),
-                Optional.empty(),
-                false,
-                false,
-                Optional.empty(),
-                Optional.of(configDir),
-                Optional.of(workspaceRoot),
-                Optional.of(stateHome),
-                Optional.empty(),
-                Optional.empty()));
+        String report = renderDefaultDiagnostics(reporter, configDir, workspaceRoot, stateHome);
 
         // then
         assertThat(report)
@@ -962,17 +1024,7 @@ final class SetupDiagnosticReporterTest {
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
-        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.empty(),
-                Optional.empty(),
-                false,
-                false,
-                Optional.empty(),
-                Optional.of(configDir),
-                Optional.of(workspaceRoot),
-                Optional.of(stateHome),
-                Optional.empty(),
-                Optional.empty()));
+        String report = renderDefaultDiagnostics(reporter, configDir, workspaceRoot, stateHome);
 
         // then
         assertThat(report)
@@ -1002,17 +1054,7 @@ final class SetupDiagnosticReporterTest {
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
-        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.empty(),
-                Optional.empty(),
-                false,
-                false,
-                Optional.empty(),
-                Optional.of(configDir),
-                Optional.of(workspaceRoot),
-                Optional.of(stateHome),
-                Optional.empty(),
-                Optional.empty()));
+        String report = renderDefaultDiagnostics(reporter, configDir, workspaceRoot, stateHome);
 
         // then
         assertThat(report)
@@ -1057,17 +1099,7 @@ final class SetupDiagnosticReporterTest {
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
-        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.empty(),
-                Optional.empty(),
-                false,
-                false,
-                Optional.empty(),
-                Optional.of(configDir),
-                Optional.of(workspaceRoot),
-                Optional.of(stateHome),
-                Optional.empty(),
-                Optional.empty()));
+        String report = renderDefaultDiagnostics(reporter, configDir, workspaceRoot, stateHome);
 
         // then
         assertThat(report)
@@ -1097,17 +1129,7 @@ final class SetupDiagnosticReporterTest {
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
-        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.empty(),
-                Optional.empty(),
-                false,
-                false,
-                Optional.empty(),
-                Optional.of(configDir),
-                Optional.of(workspaceRoot),
-                Optional.of(stateHome),
-                Optional.empty(),
-                Optional.empty()));
+        String report = renderDefaultDiagnostics(reporter, configDir, workspaceRoot, stateHome);
 
         // then
         assertThat(report)
@@ -1141,17 +1163,7 @@ final class SetupDiagnosticReporterTest {
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
-        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.empty(),
-                Optional.empty(),
-                false,
-                false,
-                Optional.empty(),
-                Optional.of(configDir),
-                Optional.of(workspaceRoot),
-                Optional.of(stateHome),
-                Optional.empty(),
-                Optional.empty()));
+        String report = renderDefaultDiagnostics(reporter, configDir, workspaceRoot, stateHome);
 
         // then
         assertThat(report)
@@ -1186,17 +1198,7 @@ final class SetupDiagnosticReporterTest {
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
-        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.empty(),
-                Optional.empty(),
-                false,
-                false,
-                Optional.empty(),
-                Optional.of(configDir),
-                Optional.of(workspaceRoot),
-                Optional.of(stateHome),
-                Optional.empty(),
-                Optional.empty()));
+        String report = renderDefaultDiagnostics(reporter, configDir, workspaceRoot, stateHome);
 
         // then
         assertThat(report)
@@ -1280,6 +1282,56 @@ final class SetupDiagnosticReporterTest {
                         "https://trello.com/b/SYNTH102/other-relative-board",
                         "19185",
                         "other workflow log",
+                        tempDir.toString());
+    }
+
+    @Test
+    void diagnosticsResolvesLegacyManifestWorkflowEnvironmentFromConfigDirectoryDotenv() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("legacy-env-config");
+        Path workspaceRoot = tempDir.resolve("legacy-env-workspaces");
+        Path stateHome = tempDir.resolve("legacy-env-state");
+        Path workflow = configDir.resolve("WORKFLOW.legacy-env.md");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.writeString(workflow, workflowWithEnvironmentBackedPort(), StandardCharsets.UTF_8);
+        Files.writeString(
+                configDir.resolve(".env"),
+                """
+                LEGACY_BOARD_ID=legacy-board-id
+                LEGACY_STATUS_PORT=19421
+                """,
+                StandardCharsets.UTF_8);
+        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
+                        "legacy-board-id",
+                        "legacykey",
+                        "Legacy Board",
+                        "https://trello.com/b/legacykey/legacy-board",
+                        workflow,
+                        null,
+                        workspaceRoot,
+                        19421,
+                        false,
+                        List.of(),
+                        false))));
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = renderDefaultDiagnostics(reporter, configDir, workspaceRoot, stateHome);
+
+        // then
+        assertThat(report)
+                .contains("## Workflow Summary", " | 19421 | ")
+                .doesNotContain(
+                        "## Invalid Workflow Files",
+                        "## Invalid Connected Board Workflows",
+                        "$LEGACY_STATUS_PORT",
+                        "$LEGACY_BOARD_ID",
+                        "Legacy Board",
+                        "legacy-board-id",
+                        "legacykey",
+                        "https://trello.com",
                         tempDir.toString());
     }
 
@@ -1911,17 +1963,7 @@ final class SetupDiagnosticReporterTest {
                 new FakeCommandRunner());
 
         // when
-        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.empty(),
-                Optional.empty(),
-                false,
-                false,
-                Optional.empty(),
-                Optional.of(configDir),
-                Optional.of(workspaceRoot),
-                Optional.of(stateHome),
-                Optional.empty(),
-                Optional.empty()));
+        String report = renderDefaultDiagnostics(reporter, configDir, workspaceRoot, stateHome);
 
         // then
         assertThat(report)
@@ -2422,6 +2464,18 @@ final class SetupDiagnosticReporterTest {
                 .formatted(port);
     }
 
+    private static String workflowWithEnvironmentBackedPort() {
+        return """
+                ---
+                tracker:
+                  board_id: "$LEGACY_BOARD_ID"
+                server:
+                  port: $LEGACY_STATUS_PORT
+                ---
+                Body
+                """;
+    }
+
     private static String workflowWithMaxAgents(String maxAgentsValue) {
         return """
                 ---
@@ -2454,6 +2508,21 @@ final class SetupDiagnosticReporterTest {
                 Body
                 """
                 .formatted(routingListValue, routingListValue);
+    }
+
+    private static String renderDefaultDiagnostics(
+            SetupDiagnosticReporter reporter, Path configDir, Path workspaceRoot, Path stateHome) throws IOException {
+        return reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.of(workspaceRoot),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.empty()));
     }
 
     private static FakeCommandRunner authProbeCommandRunner() {

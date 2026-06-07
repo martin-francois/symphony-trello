@@ -1195,6 +1195,123 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
+    void newBoardRejectsRequestedServerPortAlreadyListeningBeforeTrelloRequest() throws IOException {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        HttpServer listeningServer = startLoopbackServer();
+        int listeningPort = listeningServer.getAddress().getPort();
+        var request = new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "My Project",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                listeningPort,
+                1,
+                false,
+                true);
+
+        // when
+        Throwable thrown;
+        try {
+            thrown = catchThrowable(() -> setup.createRecommendedBoard(request));
+        } finally {
+            listeningServer.stop(0);
+        }
+
+        // then
+        assertThat(thrown)
+                .isInstanceOf(TrelloBoardSetupException.class)
+                .extracting(exception -> ((TrelloBoardSetupException) exception).code(), Throwable::getMessage)
+                .containsExactly(
+                        "setup_server_port_conflict",
+                        "--server-port %d is already in use on 127.0.0.1.".formatted(listeningPort));
+        assertThat(authorization.get()).isNull();
+        assertThat(createdLists).isEmpty();
+        assertThat(workflow).doesNotExist();
+    }
+
+    @Test
+    void importBoardRejectsRequestedServerPortAlreadyListeningBeforeTrelloRequest() throws IOException {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        HttpServer listeningServer = startLoopbackServer();
+        int listeningPort = listeningServer.getAddress().getPort();
+        var request = new TrelloBoardSetup.ImportBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "input",
+                List.of("Ready for Codex"),
+                List.of("Done"),
+                null,
+                false,
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                listeningPort,
+                1,
+                false,
+                TrelloBoardSetup.GitHubIntegration.DISABLED,
+                false);
+
+        // when
+        Throwable thrown;
+        try {
+            thrown = catchThrowable(() -> setup.importExistingBoard(request));
+        } finally {
+            listeningServer.stop(0);
+        }
+
+        // then
+        assertThat(thrown)
+                .isInstanceOf(TrelloBoardSetupException.class)
+                .extracting(exception -> ((TrelloBoardSetupException) exception).code(), Throwable::getMessage)
+                .containsExactly(
+                        "setup_server_port_conflict",
+                        "--server-port %d is already in use on 127.0.0.1.".formatted(listeningPort));
+        assertThat(boardInfoLookups).hasValue(0);
+        assertThat(createdLists).isEmpty();
+        assertThat(workflow).doesNotExist();
+    }
+
+    @Test
+    void newBoardSkipsUnresolvedEnvironmentBackedSiblingWorkflowPort() throws IOException {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Path siblingWorkflow = tempDir.resolve("WORKFLOW.env-port.md");
+        Files.writeString(
+                siblingWorkflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: existing-board
+                server:
+                  port: $SYNTHETIC_MISSING_WORKFLOW_PORT_FOR_TEST
+                ---
+                # Existing workflow
+                """,
+                StandardCharsets.UTF_8);
+
+        // when
+        var result = setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "My Project",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                1,
+                false,
+                true));
+
+        // then
+        assertThat(result.serverPort()).isEqualTo(ConfigDefaults.DEFAULT_SERVER_PORT);
+        assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: 18080");
+    }
+
+    @Test
     void newBoardUsesSluggedWorkflowPathWhenDefaultWorkflowAlreadyExists() throws IOException {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
@@ -1487,6 +1604,52 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
+    void forceNewBoardDoesNotPreserveExistingServerPortWhenItIsAlreadyListening() throws IOException {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        HttpServer listeningServer = startLoopbackServer();
+        int listeningPort = listeningServer.getAddress().getPort();
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: "existing"
+                server:
+                  port: %d
+                ---
+                # Existing
+                """
+                        .formatted(listeningPort),
+                StandardCharsets.UTF_8);
+
+        // when
+        TrelloBoardSetup.NewBoardResult result;
+        try {
+            result = setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                    endpoint(),
+                    new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                    "My Project",
+                    null,
+                    workflow,
+                    Path.of("./workspaces"),
+                    1,
+                    true,
+                    true));
+        } finally {
+            listeningServer.stop(0);
+        }
+
+        // then
+        assertThat(result.serverPort()).isNotEqualTo(listeningPort);
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("port: " + result.serverPort())
+                .doesNotContain("port: " + listeningPort);
+    }
+
+    @Test
     void forceNewBoardDoesNotPreserveExistingServerPortWhenSiblingAlreadyUsesIt() throws IOException {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
@@ -1658,6 +1821,13 @@ final class TrelloBoardSetupTest {
                 """
                         .formatted(ConfigDefaults.DEFAULT_CODEX_COMMAND, codexFields),
                 StandardCharsets.UTF_8);
+    }
+
+    private static HttpServer startLoopbackServer() throws IOException {
+        HttpServer listeningServer =
+                HttpServer.create(new InetSocketAddress(LocalHealthChecker.loopbackIpv4ForTests(), 0), 0);
+        listeningServer.start();
+        return listeningServer;
     }
 
     private void forceRegenerateExistingWorkflow(Path workflow) {

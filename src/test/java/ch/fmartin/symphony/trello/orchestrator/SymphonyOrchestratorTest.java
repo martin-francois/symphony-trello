@@ -83,12 +83,7 @@ final class SymphonyOrchestratorTest {
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
 
         // when
-        orchestrator.start();
-        waitUntil(() -> runs.get() == 1
-                && orchestrator.snapshot().counts().running() == 0
-                && orchestrator.snapshot().counts().retrying() == 0);
-        RuntimeSnapshot snapshot = orchestrator.snapshot();
-        orchestrator.stop();
+        RuntimeSnapshot snapshot = runOnceAndSnapshotIdle(orchestrator, runs);
 
         // then
         assertThat(snapshot.counts().running()).isZero();
@@ -391,12 +386,7 @@ final class SymphonyOrchestratorTest {
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
 
         // when
-        orchestrator.start();
-        waitUntil(() -> runs.get() == 1
-                && orchestrator.snapshot().counts().running() == 0
-                && orchestrator.snapshot().counts().retrying() == 0);
-        RuntimeSnapshot snapshot = orchestrator.snapshot();
-        orchestrator.stop();
+        RuntimeSnapshot snapshot = runOnceAndSnapshotIdle(orchestrator, runs);
 
         // then
         assertThat(snapshot.counts().running()).isZero();
@@ -815,6 +805,17 @@ final class SymphonyOrchestratorTest {
                 new WorkspaceManager(new HookRunner()));
         orchestrator.workflowPath = workflow;
         return orchestrator;
+    }
+
+    private static RuntimeSnapshot runOnceAndSnapshotIdle(SymphonyOrchestrator orchestrator, AtomicInteger runs)
+            throws Exception {
+        orchestrator.start();
+        waitUntil(() -> runs.get() == 1
+                && orchestrator.snapshot().counts().running() == 0
+                && orchestrator.snapshot().counts().retrying() == 0);
+        RuntimeSnapshot snapshot = orchestrator.snapshot();
+        orchestrator.stop();
+        return snapshot;
     }
 
     private static void waitUntil(Condition condition) throws Exception {

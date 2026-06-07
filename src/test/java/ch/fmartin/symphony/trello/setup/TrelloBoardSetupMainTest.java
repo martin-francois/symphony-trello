@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -1484,21 +1485,8 @@ final class TrelloBoardSetupMainTest {
                         false))));
 
         // when
-        MainProcessResult result = runMainProcessWithoutTrelloCredentials(
-                tempDir,
-                "start",
-                "--config-dir",
-                configDir.toString(),
-                "--workspace-root",
-                workspaceRoot.toString(),
-                "--state-home",
-                stateHome.toString(),
-                "--app-home",
-                appHome.toString(),
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString());
+        MainProcessResult result =
+                runStartWithoutTrelloCredentials(configDir, workspaceRoot, stateHome, appHome, workflow, env);
 
         // then
         assertThat(result.exitCode()).as(result.output()).isEqualTo(2);
@@ -1531,21 +1519,8 @@ final class TrelloBoardSetupMainTest {
         createFifo(workflow, tempDir);
 
         // when
-        MainProcessResult result = runMainProcessWithoutTrelloCredentials(
-                tempDir,
-                "start",
-                "--config-dir",
-                configDir.toString(),
-                "--workspace-root",
-                workspaceRoot.toString(),
-                "--state-home",
-                stateHome.toString(),
-                "--app-home",
-                appHome.toString(),
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString());
+        MainProcessResult result =
+                runStartWithoutTrelloCredentials(configDir, workspaceRoot, stateHome, appHome, workflow, env);
 
         // then
         assertThat(result.exitCode()).as(result.output()).isEqualTo(2);
@@ -1852,6 +1827,92 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
+    void newBoardRejectsManifestReservedServerPortBeforeCreatingTrelloBoard() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("manifest-port-conflict.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.manifest-port-conflict");
+        Path existingWorkflow = tempDir.resolve("existing-port-conflict.WORKFLOW.md");
+        new ConnectedBoardRepository(tempDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(connectedBoard(existingWorkflow, 18081))));
+
+        // when
+        CliRunResult result = runCli(
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "direct-key",
+                "--token",
+                "direct-token",
+                "--name",
+                "Manifest Port Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--server-port",
+                "18081");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_server_port_conflict",
+                        "--server-port 18081 is already reserved by another connected workflow.")
+                .stdoutDoesNotContain(
+                        "Created Trello board", "Saving Trello credentials", "Troubleshooting report written");
+        assertThat(createdBoardName.get()).isNull();
+        assertThat(workspaceLookups).hasValue(0);
+        assertThat(createdLists).isEmpty();
+        assertThat(workflow).doesNotExist();
+        assertThat(env).doesNotExist();
+    }
+
+    @Test
+    void newBoardRejectsLiveServerPortBeforeCreatingTrelloBoard() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("live-port-conflict.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.live-port-conflict");
+        HttpServer listeningServer = startLoopbackServer();
+        int listeningPort = listeningServer.getAddress().getPort();
+
+        // when
+        CliRunResult result;
+        try {
+            result = runCli(
+                    "new-board",
+                    "--endpoint",
+                    endpoint(),
+                    "--key",
+                    "direct-key",
+                    "--token",
+                    "direct-token",
+                    "--name",
+                    "Live Port Queue",
+                    "--workflow",
+                    workflow.toString(),
+                    "--env",
+                    env.toString(),
+                    "--server-port",
+                    String.valueOf(listeningPort));
+        } finally {
+            listeningServer.stop(0);
+        }
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_server_port_conflict",
+                        "--server-port %d is already in use on 127.0.0.1.".formatted(listeningPort))
+                .stdoutDoesNotContain(
+                        "Created Trello board", "Saving Trello credentials", "Troubleshooting report written");
+        assertThat(createdBoardName.get()).isNull();
+        assertThat(workspaceLookups).hasValue(0);
+        assertThat(createdLists).isEmpty();
+        assertThat(workflow).doesNotExist();
+        assertThat(env).doesNotExist();
+    }
+
+    @Test
     void importBoardRejectsReservedServerPortBeforeContactingTrello() throws Exception {
         // given
         Path workflow = tempDir.resolve("import-reserved-port.WORKFLOW.md");
@@ -1890,6 +1951,173 @@ final class TrelloBoardSetupMainTest {
         assertThat(createdLists).isEmpty();
         assertThat(workflow).doesNotExist();
         assertThat(env).doesNotExist();
+    }
+
+    @Test
+    void importBoardRejectsManifestReservedServerPortBeforeContactingTrello() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("import-manifest-port-conflict.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.import-manifest-port-conflict");
+        Path existingWorkflow = tempDir.resolve("existing-import-port-conflict.WORKFLOW.md");
+        new ConnectedBoardRepository(tempDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(connectedBoard(existingWorkflow, 18082))));
+
+        // when
+        CliRunResult result = runCli(
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "direct-key",
+                "--token",
+                "direct-token",
+                "--board",
+                "https://trello.com/b/input/existing-board",
+                "--active",
+                "Queue for Codex",
+                "--terminal",
+                "Released",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--server-port",
+                "18082");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_server_port_conflict",
+                        "--server-port 18082 is already reserved by another connected workflow.")
+                .stdoutDoesNotContain(
+                        "Imported Trello board", "Saving Trello credentials", "Troubleshooting report written");
+        assertThat(boardInfoLookups).hasValue(0);
+        assertThat(createdLists).isEmpty();
+        assertThat(workflow).doesNotExist();
+        assertThat(env).doesNotExist();
+    }
+
+    @Test
+    void importBoardRejectsLiveServerPortBeforeContactingTrello() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("import-live-port-conflict.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.import-live-port-conflict");
+        HttpServer listeningServer = startLoopbackServer();
+        int listeningPort = listeningServer.getAddress().getPort();
+
+        // when
+        CliRunResult result;
+        try {
+            result = runCli(
+                    "import-board",
+                    "--endpoint",
+                    endpoint(),
+                    "--key",
+                    "direct-key",
+                    "--token",
+                    "direct-token",
+                    "--board",
+                    "https://trello.com/b/input/existing-board",
+                    "--active",
+                    "Queue for Codex",
+                    "--terminal",
+                    "Released",
+                    "--workflow",
+                    workflow.toString(),
+                    "--env",
+                    env.toString(),
+                    "--server-port",
+                    String.valueOf(listeningPort));
+        } finally {
+            listeningServer.stop(0);
+        }
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_server_port_conflict",
+                        "--server-port %d is already in use on 127.0.0.1.".formatted(listeningPort))
+                .stdoutDoesNotContain(
+                        "Imported Trello board", "Saving Trello credentials", "Troubleshooting report written");
+        assertThat(boardInfoLookups).hasValue(0);
+        assertThat(createdLists).isEmpty();
+        assertThat(workflow).doesNotExist();
+        assertThat(env).doesNotExist();
+    }
+
+    @Test
+    void importBoardForceAllowsCurrentManagedWorkerServerPortForSameWorkflow() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("force-existing-live-port.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.force-existing-live-port");
+        HttpServer listeningServer = startLoopbackServer();
+        int listeningPort = listeningServer.getAddress().getPort();
+        Files.writeString(workflow, workflowWithBoardAndPort("board-1", listeningPort), StandardCharsets.UTF_8);
+        ConnectedBoard oldBoard = new ConnectedBoard(
+                "board-1",
+                "SYNTH002",
+                "Existing Board",
+                "https://trello.com/b/SYNTH002/board",
+                workflow.toAbsolutePath().normalize(),
+                env.toAbsolutePath().normalize(),
+                TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT.toAbsolutePath().normalize(),
+                listeningPort,
+                true,
+                List.of(),
+                false);
+        new ConnectedBoardRepository(tempDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(oldBoard)));
+        LocalWorkerManager workerManager = mock();
+        when(workerManager.canStopManagedWorker(any(LocalWorkerPaths.class), eq(oldBoard)))
+                .thenReturn(true);
+        TrelloBoardSetup boardSetup = new TrelloBoardSetup(
+                new ObjectMapper(),
+                () -> CodexModelSelectionDefaults.of(TrelloBoardSetup.CodexModelDefaults.fallback()));
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+
+        // when
+        int exitCode;
+        try {
+            exitCode = TrelloBoardSetupMain.run(
+                    new String[] {
+                        "import-board",
+                        "--endpoint",
+                        endpoint(),
+                        "--key",
+                        "key",
+                        "--token",
+                        "token",
+                        "--board",
+                        "https://trello.com/b/input/existing-board",
+                        "--active",
+                        "Queue for Codex",
+                        "--terminal",
+                        "Released",
+                        "--workflow",
+                        workflow.toString(),
+                        "--env",
+                        env.toString(),
+                        "--server-port",
+                        String.valueOf(listeningPort),
+                        "--force"
+                    },
+                    new TrelloBoardSetupService(boardSetup, workerManager, Map.of()),
+                    new LocalSetup(boardSetup, new ProcessCommandRunner()),
+                    workerManager,
+                    new PrintStream(stdout, true, StandardCharsets.UTF_8),
+                    new PrintStream(stderr, true, StandardCharsets.UTF_8));
+        } finally {
+            listeningServer.stop(0);
+        }
+
+        // then
+        assertThat(exitCode).isZero();
+        assertThat(stdout.toString(StandardCharsets.UTF_8))
+                .contains("Imported Trello board: Existing Board", "HTTP status port: " + listeningPort);
+        assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
+        verify(workerManager).canStopManagedWorker(any(LocalWorkerPaths.class), eq(oldBoard));
+        verify(workerManager).stop(any(LocalWorkerPaths.class), eq(oldBoard), any(PrintStream.class));
     }
 
     @Test
@@ -3263,7 +3491,7 @@ final class TrelloBoardSetupMainTest {
                     .isEqualTo(TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT
                             .toAbsolutePath()
                             .normalize());
-            assertThat(board.serverPort()).isEqualTo(TrelloBoardSetup.DEFAULT_SERVER_PORT);
+            assertThat(board.serverPort()).isGreaterThanOrEqualTo(TrelloBoardSetup.DEFAULT_SERVER_PORT);
         });
         assertThat(stdout.toString(StandardCharsets.UTF_8))
                 .contains("Imported Trello board: Existing Board")
@@ -3282,6 +3510,177 @@ final class TrelloBoardSetupMainTest {
                                 + shellQuote(
                                         workflow.toAbsolutePath().normalize().toString()))
                 .doesNotContain("./mvnw quarkus:dev");
+        assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
+    }
+
+    @Test
+    void forceImportBoardPreservesEnvironmentBackedServerPortFromSelectedEnv() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("imported-env-port.WORKFLOW.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: "existing-board"
+                server:
+                  port: $SYNTHETIC_IMPORT_STATUS_PORT
+                ---
+                Existing body
+                """,
+                StandardCharsets.UTF_8);
+        Path env = tempDir.resolve(".env.imported-port");
+        Files.writeString(env, "SYNTHETIC_IMPORT_STATUS_PORT=19091\n", StandardCharsets.UTF_8);
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+
+        // when
+        int exitCode = run(
+                stdout,
+                stderr,
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "https://trello.com/b/input/existing-board",
+                "--active",
+                "Queue for Codex",
+                "--terminal",
+                "Released",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--force");
+
+        // then
+        assertThat(exitCode).isZero();
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("port: 19091")
+                .doesNotContain("port: 18080");
+        ConnectedBoardManifest manifest = new ConnectedBoardRepository(tempDir.resolve("connected-boards.json")).load();
+        assertThat(manifest.boards()).singleElement().satisfies(board -> {
+            assertThat(board.workflowPath()).isEqualTo(workflow.toAbsolutePath().normalize());
+            assertThat(board.envPath()).isEqualTo(env.toAbsolutePath().normalize());
+            assertThat(board.serverPort()).isEqualTo(19091);
+        });
+        assertThat(stdout.toString(StandardCharsets.UTF_8)).contains("HTTP status port: 19091");
+        assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
+    }
+
+    @Test
+    void importBoardSkipsEnvironmentBackedSiblingWorkflowPortFromSelectedEnv() throws Exception {
+        // given
+        Path siblingWorkflow = tempDir.resolve("existing-env-port.WORKFLOW.md");
+        Files.writeString(
+                siblingWorkflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: "existing-board"
+                server:
+                  port: $SYNTHETIC_IMPORT_STATUS_PORT
+                ---
+                Existing body
+                """,
+                StandardCharsets.UTF_8);
+        Path workflow = tempDir.resolve("new-import.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.import-port-scan");
+        Files.writeString(env, "SYNTHETIC_IMPORT_STATUS_PORT=18080\n", StandardCharsets.UTF_8);
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+
+        // when
+        int exitCode = run(
+                stdout,
+                stderr,
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "https://trello.com/b/input/existing-board",
+                "--active",
+                "Queue for Codex",
+                "--terminal",
+                "Released",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString());
+
+        // then
+        assertThat(exitCode).isZero();
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("port: 18081")
+                .doesNotContain("port: 18080");
+        assertConnectedBoardUsesWorkflowEnvAndPort(workflow, env, 18081);
+        assertThat(stdout.toString(StandardCharsets.UTF_8)).contains("HTTP status port: 18081");
+        assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
+    }
+
+    @Test
+    void newBoardSkipsEnvironmentBackedSiblingWorkflowPortFromSelectedEnv() throws Exception {
+        // given
+        Path siblingWorkflow = tempDir.resolve("existing-new-board-env-port.WORKFLOW.md");
+        Files.writeString(
+                siblingWorkflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: "existing-board"
+                server:
+                  port: $SYNTHETIC_NEW_BOARD_STATUS_PORT
+                ---
+                Existing body
+                """,
+                StandardCharsets.UTF_8);
+        Path workflow = tempDir.resolve("new-board-env-port.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.new-board-port-scan");
+        Files.writeString(env, "SYNTHETIC_NEW_BOARD_STATUS_PORT=18080\n", StandardCharsets.UTF_8);
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+
+        // when
+        int exitCode = run(
+                stdout,
+                stderr,
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--name",
+                "New Port Queue",
+                "--workspace-id",
+                "workspace-id",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString());
+
+        // then
+        assertThat(exitCode).isZero();
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("port: 18081")
+                .doesNotContain("port: 18080");
+        assertConnectedBoardUsesWorkflowEnvAndPort(workflow, env, 18081);
+        assertThat(stdout.toString(StandardCharsets.UTF_8)).contains("HTTP status port: 18081");
         assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
     }
 
@@ -4700,6 +5099,26 @@ final class TrelloBoardSetupMainTest {
         return runMainProcess(workingDir, Map.of(), List.of("TRELLO_API_KEY", "TRELLO_API_TOKEN"), arguments);
     }
 
+    private MainProcessResult runStartWithoutTrelloCredentials(
+            Path configDir, Path workspaceRoot, Path stateHome, Path appHome, Path workflow, Path env)
+            throws IOException, InterruptedException {
+        return runMainProcessWithoutTrelloCredentials(
+                tempDir,
+                "start",
+                "--config-dir",
+                configDir.toString(),
+                "--workspace-root",
+                workspaceRoot.toString(),
+                "--state-home",
+                stateHome.toString(),
+                "--app-home",
+                appHome.toString(),
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString());
+    }
+
     private static MainProcessResult runMainProcess(
             Path workingDir, Map<String, String> environment, List<String> environmentToRemove, String... arguments)
             throws IOException, InterruptedException {
@@ -4761,6 +5180,41 @@ final class TrelloBoardSetupMainTest {
                 Body
                 """
                 .formatted(boardId, port);
+    }
+
+    private static ConnectedBoard connectedBoard(Path workflowPath, int serverPort) {
+        Path normalizedWorkflow = workflowPath.toAbsolutePath().normalize();
+        Path parent = normalizedWorkflow.getParent();
+        Path base = parent == null ? Path.of(".").toAbsolutePath().normalize() : parent;
+        return new ConnectedBoard(
+                "board-conflict",
+                "SYNTH004",
+                "Conflicting Trello Board",
+                "https://trello.com/b/SYNTH004/board",
+                normalizedWorkflow,
+                base.resolve(".env.conflict"),
+                base.resolve("workspaces"),
+                serverPort,
+                true,
+                List.of(),
+                false);
+    }
+
+    private void assertConnectedBoardUsesWorkflowEnvAndPort(Path workflow, Path env, int serverPort)
+            throws IOException {
+        ConnectedBoardManifest manifest = new ConnectedBoardRepository(tempDir.resolve("connected-boards.json")).load();
+        assertThat(manifest.boards()).singleElement().satisfies(board -> {
+            assertThat(board.workflowPath()).isEqualTo(workflow.toAbsolutePath().normalize());
+            assertThat(board.envPath()).isEqualTo(env.toAbsolutePath().normalize());
+            assertThat(board.serverPort()).isEqualTo(serverPort);
+        });
+    }
+
+    private static HttpServer startLoopbackServer() throws IOException {
+        HttpServer listeningServer =
+                HttpServer.create(new InetSocketAddress(LocalHealthChecker.loopbackIpv4ForTests(), 0), 0);
+        listeningServer.start();
+        return listeningServer;
     }
 
     private record MainProcessCase(List<String> arguments, int expectedExitCode, String expectedOutput) {

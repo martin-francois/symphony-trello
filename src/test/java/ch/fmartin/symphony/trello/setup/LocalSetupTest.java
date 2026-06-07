@@ -5,6 +5,7 @@ import static ch.fmartin.symphony.trello.setup.TerminalTranscriptAssertions.asse
 import static ch.fmartin.symphony.trello.setup.WorkflowAssertions.assertThatWorkflow;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
@@ -2238,6 +2239,229 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void existingBoardImportSkipsServerPortsReservedByConnectedBoardManifest() throws Exception {
+        // given
+        Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
+        Path reservedWorkflow = tempDir.resolve("other").resolve("WORKFLOW.reserved-default-port.md");
+        Path reservedEnv = tempDir.resolve(".env.reserved-default-port");
+        Path workflow = tempDir.resolve("WORKFLOW.import-manifest-reservation.md");
+        Path env = tempDir.resolve(".env.import-manifest-reservation");
+        writeConnectedBoardManifest(
+                manifest, "Reserved Default Port", reservedWorkflow, reservedEnv, ConfigDefaults.DEFAULT_SERVER_PORT);
+
+        // when
+        SetupRunResult result = runSetupWithProductionDefaultPort(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "board-1",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-start",
+                "--no-github");
+
+        // then
+        int expectedPort = ConfigDefaults.DEFAULT_SERVER_PORT + 1;
+        result.assertSuccess().stdoutContains("Local server port selected for \"Imported Queue\": " + expectedPort);
+        assertThatWorkflow(workflow).hasServerPort(expectedPort);
+        assertThatManifest(manifest).hasBoardWithPort("Imported Queue", expectedPort);
+    }
+
+    @Test
+    void newBoardSetupRejectsManifestReservedRequestedPortBeforeTrelloValidation() throws Exception {
+        // given
+        Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
+        Path reservedWorkflow = tempDir.resolve("WORKFLOW.reserved-new-board.md");
+        Path reservedEnv = tempDir.resolve(".env.reserved-new-board");
+        Path workflow = tempDir.resolve("WORKFLOW.requested-conflict-new-board.md");
+        Path env = tempDir.resolve(".env.requested-conflict-new-board");
+        int reservedPort = firstAvailableManagedPort();
+        writeConnectedBoardManifest(manifest, "Reserved New Board", reservedWorkflow, reservedEnv, reservedPort);
+        String originalManifest = Files.readString(manifest, StandardCharsets.UTF_8);
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Requested Conflict Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--server-port",
+                String.valueOf(reservedPort),
+                "--no-start",
+                "--no-github");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_server_port_conflict",
+                        "--server-port %d is already reserved by another connected workflow.".formatted(reservedPort));
+        assertThat(trello.memberLookups()).isEmpty();
+        assertThat(trello.workspaceLookups()).isEmpty();
+        assertThat(trello.boardLookups()).isEmpty();
+        assertThat(trello.createdLists()).isEmpty();
+        assertThat(workflow).doesNotExist();
+        assertThat(env).doesNotExist();
+        assertThat(Files.readString(manifest, StandardCharsets.UTF_8)).isEqualTo(originalManifest);
+    }
+
+    @Test
+    void existingBoardImportRejectsListeningRequestedPortBeforeTrelloBoardLookup() throws Exception {
+        // given
+        Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
+        Path workflow = tempDir.resolve("WORKFLOW.requested-listening-import.md");
+        Path env = tempDir.resolve(".env.requested-listening-import");
+        Files.createDirectories(manifest.getParent());
+        Files.writeString(manifest, "{ \"boards\": [] }\n", StandardCharsets.UTF_8);
+        String originalManifest = Files.readString(manifest, StandardCharsets.UTF_8);
+
+        // when
+        SetupRunResult result;
+        try (ServerSocket occupiedPort = new ServerSocket()) {
+            occupiedPort.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
+            int port = occupiedPort.getLocalPort();
+            result = runSetup(
+                    "--non-interactive",
+                    "--endpoint",
+                    endpoint(),
+                    "--key",
+                    "key",
+                    "--token",
+                    "token",
+                    "--board",
+                    "board-1",
+                    "--workflow",
+                    workflow.toString(),
+                    "--env",
+                    env.toString(),
+                    "--server-port",
+                    String.valueOf(port),
+                    "--no-start",
+                    "--no-github");
+
+            result.assertFailure(2)
+                    .stderrContains(
+                            "setup_failed code=setup_server_port_conflict",
+                            "--server-port %d is already in use on 127.0.0.1.".formatted(port));
+        }
+
+        // then
+        assertThat(trello.memberLookups()).isEmpty();
+        assertThat(trello.workspaceLookups()).isEmpty();
+        assertThat(trello.boardLookups()).isEmpty();
+        assertThat(trello.createdLists()).isEmpty();
+        assertThat(workflow).doesNotExist();
+        assertThat(env).doesNotExist();
+        assertThat(Files.readString(manifest, StandardCharsets.UTF_8)).isEqualTo(originalManifest);
+    }
+
+    @Test
+    void existingBoardImportSkipsEnvironmentBackedSiblingWorkflowServerPorts() throws Exception {
+        // given
+        Path config = tempDir.resolve("config");
+        Files.createDirectories(config);
+        Path siblingWorkflow = config.resolve("WORKFLOW.sibling-env-port.md");
+        Path workflow = config.resolve("WORKFLOW.import-sibling-env-port.md");
+        Path env = tempDir.resolve(".env.import-sibling-env-port");
+        Files.writeString(
+                siblingWorkflow,
+                """
+                ---
+                tracker:
+                  board_id: "sibling-board"
+                server:
+                  port: $SIBLING_WORKFLOW_PORT
+                ---
+                Body
+                """,
+                StandardCharsets.UTF_8);
+        Files.writeString(
+                env,
+                """
+                TRELLO_API_KEY=key
+                TRELLO_API_TOKEN=token
+                SIBLING_WORKFLOW_PORT=%d
+                """
+                        .formatted(ConfigDefaults.DEFAULT_SERVER_PORT),
+                StandardCharsets.UTF_8);
+
+        // when
+        SetupRunResult result = runSetupWithProductionDefaultPort(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "board-1",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-start",
+                "--no-github");
+
+        // then
+        int expectedPort = ConfigDefaults.DEFAULT_SERVER_PORT + 1;
+        result.assertSuccess().stdoutContains("Local server port selected for \"Imported Queue\": " + expectedPort);
+        assertThatWorkflow(workflow).hasServerPort(expectedPort);
+        assertThatManifest(config.resolve("connected-boards.json")).hasBoardWithPort("Imported Queue", expectedPort);
+    }
+
+    @Test
+    void forcedExistingBoardImportDoesNotPreserveEphemeralWorkflowServerPort() throws Exception {
+        // given
+        Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
+        Path workflow = tempDir.resolve("WORKFLOW.import-ephemeral-port.md");
+        Path env = tempDir.resolve(".env.import-ephemeral-port");
+        int expectedPort = firstAvailableManagedPort();
+        writeWorkflow(workflow, "board-1", 0);
+
+        // when
+        SetupRunResult result = runSetupWithProductionDefaultPort(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "board-1",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--force",
+                "--no-start",
+                "--no-github");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("Board connected: \"Imported Queue\"")
+                .stdoutDoesNotContain("Local server port selected for \"Imported Queue\": 0");
+        assertThatWorkflow(workflow).hasServerPort(expectedPort);
+        assertThatManifest(manifest).hasBoardWithPort("Imported Queue", expectedPort);
+    }
+
+    @Test
     void existingBoardSetupUsesSuffixedWorkflowPathWhenGeneratedWorkflowAlreadyExists() throws Exception {
         // given
         Path config = tempDir.resolve("config");
@@ -2711,6 +2935,185 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void forcedExistingBoardImportPreservesEnvironmentBackedServerPortFromSelectedEnv() throws Exception {
+        // given
+        Path config = tempDir.resolve("config");
+        Path workflow = config.resolve("WORKFLOW.env-backed-import.md");
+        Path env = tempDir.resolve(".env.env-backed-import");
+        int configuredPort = 19_091;
+        fixture.givenConnectedBoard("Env Backed Import", workflow, env, configuredPort, false);
+        fixture.givenWorkflow(workflow, "board-1", configuredPort);
+        Files.writeString(
+                workflow,
+                Files.readString(workflow, StandardCharsets.UTF_8)
+                        .replace("port: " + configuredPort, "port: $ENV_BACKED_IMPORT_PORT"),
+                StandardCharsets.UTF_8);
+        Files.writeString(
+                env,
+                """
+                TRELLO_API_KEY=key
+                TRELLO_API_TOKEN=token
+                ENV_BACKED_IMPORT_PORT=%d
+                """
+                        .formatted(configuredPort),
+                StandardCharsets.UTF_8);
+
+        // when
+        SetupRunResult result = runSetupWithProductionDefaultPort(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "board-1",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--force",
+                "--no-start",
+                "--no-github");
+
+        // then
+        result.assertSuccess().stdoutContains("Board connected: \"Imported Queue\"");
+        assertThatWorkflow(workflow).hasServerPort(configuredPort);
+        assertThatManifest(config.resolve("connected-boards.json"))
+                .hasBoardWithPort("Imported Queue", configuredPort)
+                .hasEnvPath("Imported Queue", env);
+        assertThat(commands.commandEvents).containsExactly("stop:" + workflow);
+    }
+
+    @Test
+    void forcedExistingBoardImportPreservesRunningWorkflowServerPort() throws Exception {
+        // given
+        Path config = tempDir.resolve("config");
+        Path workflow = config.resolve("WORKFLOW.running-import.md");
+        Path env = tempDir.resolve(".env.running-import");
+        int configuredPort = availablePort();
+        fixture.givenConnectedBoard("Running Import", workflow, env, configuredPort, false);
+        fixture.givenWorkflow(workflow, "board-1", configuredPort);
+        Files.writeString(env, "TRELLO_API_KEY=key%nTRELLO_API_TOKEN=token%n".formatted(), StandardCharsets.UTF_8);
+        commands.startHealthServer(workflow);
+
+        // when
+        SetupRunResult result = runSetupWithProductionDefaultPort(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "board-1",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--force",
+                "--no-start",
+                "--no-github");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("Board connected: \"Imported Queue\"")
+                .stdoutDoesNotContain(
+                        "Local server port selected for \"Imported Queue\": " + ConfigDefaults.DEFAULT_SERVER_PORT);
+        assertThatWorkflow(workflow).hasServerPort(configuredPort);
+        assertThatManifest(config.resolve("connected-boards.json")).hasBoardWithPort("Imported Queue", configuredPort);
+        assertThat(commands.commandEvents).containsExactly("stop:" + workflow);
+    }
+
+    @Test
+    void forcedExistingBoardImportAllowsExplicitManagedCurrentServerPort() throws Exception {
+        // given
+        Path config = tempDir.resolve("config");
+        Path workflow = config.resolve("WORKFLOW.running-explicit-import.md");
+        Path env = tempDir.resolve(".env.running-explicit-import");
+        int configuredPort = availablePort();
+        fixture.givenConnectedBoard("Running Explicit Import", workflow, env, configuredPort, false);
+        fixture.givenWorkflow(workflow, "board-1", configuredPort);
+        Files.writeString(env, "TRELLO_API_KEY=key%nTRELLO_API_TOKEN=token%n".formatted(), StandardCharsets.UTF_8);
+        commands.startHealthServer(workflow);
+
+        // when
+        SetupRunResult result = runSetupWithProductionDefaultPort(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "board-1",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--server-port",
+                String.valueOf(configuredPort),
+                "--force",
+                "--no-start",
+                "--no-github");
+
+        // then
+        result.assertSuccess().stdoutContains("Board connected: \"Imported Queue\"");
+        assertThatWorkflow(workflow).hasServerPort(configuredPort);
+        assertThatManifest(config.resolve("connected-boards.json")).hasBoardWithPort("Imported Queue", configuredPort);
+        assertThat(commands.commandEvents).containsExactly("stop:" + workflow);
+    }
+
+    @Test
+    void forcedExistingBoardImportRejectsUnmanagedLiveCurrentServerPortBeforeWorkflowRewrite() throws Exception {
+        // given
+        Path config = tempDir.resolve("config");
+        Path workflow = config.resolve("WORKFLOW.unmanaged-live-import.md");
+        Path env = tempDir.resolve(".env.unmanaged-live-import");
+        int configuredPort = availablePort();
+        fixture.givenConnectedBoard("Unmanaged Live Import", workflow, env, configuredPort, false);
+        fixture.givenWorkflow(workflow, "board-1", configuredPort);
+        String originalWorkflow = Files.readString(workflow, StandardCharsets.UTF_8);
+        Files.writeString(env, "TRELLO_API_KEY=key%nTRELLO_API_TOKEN=token%n".formatted(), StandardCharsets.UTF_8);
+        commands.startHealthServer(workflow);
+        doReturn(false).when(workerManager).canStopManagedWorker(any(), any());
+
+        // when
+        SetupRunResult result = runSetupWithProductionDefaultPort(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "board-1",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--force",
+                "--no-start",
+                "--no-github");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_server_port_conflict",
+                        "--server-port %d is already in use on 127.0.0.1.".formatted(configuredPort));
+        assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo(originalWorkflow);
+        assertThatManifest(config.resolve("connected-boards.json"))
+                .hasBoardCount(1)
+                .hasBoard("Unmanaged Live Import")
+                .hasBoardWithPort("Unmanaged Live Import", configuredPort);
+        assertThat(commands.commandEvents).isEmpty();
+    }
+
+    @Test
     void forcedWorkflowReplacementStopsStaleWorkerEvenWhenStartupIsSkipped() throws Exception {
         // given
         Path config = tempDir.resolve("config");
@@ -3021,6 +3424,82 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         assertThat(Files.readString(workflow, StandardCharsets.UTF_8)).isEqualTo(originalWorkflow);
         assertThatManifest(manifest).hasBoardWithPort("Stale Actual Repair Queue", workflowPort);
         assertThat(commands.commandEvents).isEmpty();
+    }
+
+    @Test
+    void repairPortDoesNotCopyHealthyWorkflowPortReservedByAnotherConnectedBoard() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.conflicting-stale-manifest-repair.md");
+        Path otherWorkflow = tempDir.resolve("WORKFLOW.other-port-owner.md");
+        Path env = tempDir.resolve(".env.conflicting-stale-manifest-repair");
+        Path otherEnv = tempDir.resolve(".env.other-port-owner");
+        Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
+        int conflictingPort = availablePort();
+        int expectedPort = firstAvailableManagedPort(conflictingPort);
+        writeWorkflow(workflow, "board-1", conflictingPort);
+        writeWorkflow(otherWorkflow, "board-2", conflictingPort);
+        Files.writeString(env, "TRELLO_API_KEY=key%nTRELLO_API_TOKEN=token%n".formatted(), StandardCharsets.UTF_8);
+        Files.writeString(otherEnv, "TRELLO_API_KEY=key%nTRELLO_API_TOKEN=token%n".formatted(), StandardCharsets.UTF_8);
+        writeManifest(
+                """
+                {
+                  "boards": [
+                    {
+                      "boardId": "board-1",
+                      "boardKey": "abc123",
+                      "boardName": "Conflict Repair Queue",
+                      "boardUrl": "https://trello.example/abc123",
+                      "workflowPath": "%s",
+                      "envPath": "%s",
+                      "workspaceRoot": "%s",
+                      "serverPort": %d,
+                      "githubEnabled": false,
+                      "additionalWritableRoots": [],
+                      "dangerFullAccess": false
+                    },
+                    {
+                      "boardId": "board-2",
+                      "boardKey": "def456",
+                      "boardName": "Other Port Owner",
+                      "boardUrl": "https://trello.example/def456",
+                      "workflowPath": "%s",
+                      "envPath": "%s",
+                      "workspaceRoot": "%s",
+                      "serverPort": %d,
+                      "githubEnabled": false,
+                      "additionalWritableRoots": [],
+                      "dangerFullAccess": false
+                    }
+                  ]
+                }
+                """
+                        .formatted(
+                                json(workflow),
+                                json(env),
+                                json(tempDir.resolve("workspaces")),
+                                ConfigDefaults.DEFAULT_SERVER_PORT,
+                                json(otherWorkflow),
+                                json(otherEnv),
+                                json(tempDir.resolve("workspaces")),
+                                conflictingPort));
+        commands.startHealthServer(workflow);
+
+        // when
+        SetupRunResult result = runSetup("repair-port", "--board", "Conflict Repair Queue");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "OK      Updated \"Conflict Repair Queue\" to use http://127.0.0.1:" + expectedPort,
+                        "Starting Symphony...")
+                .stdoutDoesNotContain(
+                        "Updated connected-board manifest for \"Conflict Repair Queue\"",
+                        "Workflow and running Symphony worker already use this port.");
+        assertThatWorkflow(workflow).hasServerPort(expectedPort);
+        assertThatManifest(manifest)
+                .hasBoardWithPort("Conflict Repair Queue", expectedPort)
+                .hasBoardWithPort("Other Port Owner", conflictingPort);
+        assertThat(commands.commandEvents).containsExactly("stop:" + workflow, "start:" + workflow);
     }
 
     @ParameterizedTest
@@ -3448,6 +3927,54 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         firstResult.assertSuccess();
         secondResult.assertSuccess().stdoutContains("GitHub workflow enabled for \"GitHub Upgrade Max Agents\"");
         assertThatWorkflow(workflow).hasGithubFlow().hasMaxAgents(3);
+        assertThat(trello.createdLists()).containsExactly("Merging");
+        assertThat(commands.stoppedWorkflows).containsExactly(workflow.toString());
+        assertThat(commands.startedWorkflows).containsExactly(workflow.toString());
+    }
+
+    @Test
+    void configureGithubPreservesEnvironmentBackedServerPort() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.github-upgrade-env-port.md");
+        Path env = tempDir.resolve(".env");
+        int configuredPort = 18_091;
+        SetupRunResult firstResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "GitHub Upgrade Env Port",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--server-port",
+                String.valueOf(configuredPort),
+                "--no-github");
+        Files.writeString(
+                workflow,
+                Files.readString(workflow, StandardCharsets.UTF_8)
+                        .replace("port: " + configuredPort, "port: $GITHUB_UPGRADE_PORT"),
+                StandardCharsets.UTF_8);
+        Files.writeString(env, "GITHUB_UPGRADE_PORT=" + configuredPort + "\n", StandardOpenOption.APPEND);
+        commands.githubAuthenticated = true;
+        commands.startedWorkflows.clear();
+        commands.startedEnvFiles.clear();
+        commands.stoppedWorkflows.clear();
+        trello.createdLists().clear();
+
+        // when
+        SetupRunResult secondResult = runSetup(
+                "configure-github", "--non-interactive", "--endpoint", endpoint(), "--key", "key", "--token", "token");
+
+        // then
+        firstResult.assertSuccess();
+        secondResult.assertSuccess().stdoutContains("GitHub workflow enabled for \"GitHub Upgrade Env Port\"");
+        assertThatWorkflow(workflow).hasGithubFlow().hasServerPort(configuredPort);
         assertThat(trello.createdLists()).containsExactly("Merging");
         assertThat(commands.stoppedWorkflows).containsExactly(workflow.toString());
         assertThat(commands.startedWorkflows).containsExactly(workflow.toString());
@@ -4727,6 +5254,24 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 """
                         .formatted(boardName, workflow, env, tempDir.resolve("workspaces"), serverPort),
                 StandardCharsets.UTF_8);
+    }
+
+    private static int firstAvailableManagedPort(int... reservedPorts) {
+        for (int port = ConfigDefaults.DEFAULT_SERVER_PORT; port <= LocalPort.MAX; port++) {
+            if (!contains(reservedPorts, port) && !LocalHealthChecker.portAcceptsConnections(port)) {
+                return port;
+            }
+        }
+        throw new AssertionError("No free managed test port found.");
+    }
+
+    private static boolean contains(int[] ports, int candidate) {
+        for (int port : ports) {
+            if (port == candidate) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void writeDuplicateConnectedBoardsManifest(

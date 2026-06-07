@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
+import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.GitHubIntegration;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.TrelloCredentials;
 import java.io.IOException;
@@ -7,8 +8,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -17,11 +20,19 @@ final class TrelloBoardConnector {
 
     private final TrelloBoardSetup boardSetup;
     private final WorkflowConfigEditor workflowConfig;
+    private final LocalWorkerManager workerManager;
+    private final Map<String, String> environment;
     private final CodexModelSelectionFlow codexModelSelectionFlow;
 
-    TrelloBoardConnector(TrelloBoardSetup boardSetup, WorkflowConfigEditor workflowConfig) {
+    TrelloBoardConnector(
+            TrelloBoardSetup boardSetup,
+            WorkflowConfigEditor workflowConfig,
+            LocalWorkerManager workerManager,
+            Map<String, String> environment) {
         this.boardSetup = boardSetup;
         this.workflowConfig = workflowConfig;
+        this.workerManager = workerManager;
+        this.environment = Map.copyOf(environment);
         this.codexModelSelectionFlow = new CodexModelSelectionFlow();
     }
 
@@ -37,6 +48,27 @@ final class TrelloBoardConnector {
             return importExistingBoard(options, credentials, githubIntegration, manifest, terminal);
         }
         return createRecommendedBoard(options, credentials, githubIntegration, manifest, terminal);
+    }
+
+    void preflightRequestedServerPort(LocalSetup.Options options, ConnectedBoardManifest manifest) {
+        options.serverPort().ifPresent(ignored -> preflightWorkflowPath(options)
+                .ifPresent(workflowPath -> localSetupServerPort(options, manifest, workflowPath)));
+    }
+
+    private static Optional<Path> preflightWorkflowPath(LocalSetup.Options options) {
+        if (options.workflowPathExplicit()) {
+            return Optional.of(options.workflowPath());
+        }
+        if (options.existingBoardId().isPresent()) {
+            return Optional.empty();
+        }
+        if (options.boardName().isPresent()) {
+            return Optional.of(resolveWorkflowPath(options, options.boardName().orElseThrow()));
+        }
+        if (options.nonInteractive()) {
+            return Optional.of(resolveWorkflowPath(options, DEFAULT_BOARD_NAME));
+        }
+        return Optional.empty();
     }
 
     private LocalSetup.SetupResult importExistingBoard(
@@ -81,11 +113,12 @@ final class TrelloBoardConnector {
                         configuredLists.blockedState(),
                         workflowPath,
                         options.workspaceRoot(),
-                        localSetupServerPort(options, manifest, workflowPath),
+                        localSetupImportServerPort(options, manifest, workflowPath),
                         options.maxAgents(),
                         options.force(),
                         githubIntegration,
-                        configuredLists.createMissingGithubLists()));
+                        configuredLists.createMissingGithubLists(),
+                        options.envPath()));
         return LocalSetup.SetupResult.from(result);
     }
 
@@ -121,7 +154,8 @@ final class TrelloBoardConnector {
                         options.maxAgents(),
                         options.force(),
                         !options.workflowPathExplicit(),
-                        githubIntegration)));
+                        githubIntegration,
+                        options.envPath())));
     }
 
     private LocalSetup.Options configureCodexModel(LocalSetup.Options options, Path workflowPath, Terminal terminal)
@@ -309,7 +343,8 @@ final class TrelloBoardConnector {
             ConnectedBoardManifest manifest,
             Path workflowPath,
             WorkflowConfigEditor editor) {
-        Set<Integer> reservedPorts = reservedWorkflowServerPorts(manifest, workflowPath, options.force(), editor);
+        Set<Integer> reservedPorts = reservedWorkflowServerPorts(
+                manifest, workflowPath, options.force(), editor, ignored -> Optional.empty());
         return options.serverPort()
                 .map(requestedPort -> validatedRequestedServerPort(requestedPort, reservedPorts))
                 .orElseGet(() -> firstAvailableServerPort(reservedPorts));
@@ -338,21 +373,128 @@ final class TrelloBoardConnector {
     }
 
     private int localSetupServerPort(LocalSetup.Options options, ConnectedBoardManifest manifest, Path workflowPath) {
-        return localSetupServerPort(options, manifest, workflowPath, workflowConfig);
+        Set<Integer> reservedPorts = reservedWorkflowServerPorts(
+                manifest,
+                workflowPath,
+                options.force(),
+                workflowConfig,
+                name -> LocalEnvironment.get(name, options.envPath()));
+        return options.serverPort()
+                .map(requestedPort ->
+                        validatedRequestedServerPort(options, manifest, workflowPath, requestedPort, reservedPorts))
+                .orElseGet(() -> firstAvailableServerPort(reservedPorts));
+    }
+
+    private Integer localSetupImportServerPort(
+            LocalSetup.Options options, ConnectedBoardManifest manifest, Path workflowPath) throws IOException {
+        Set<Integer> reservedPorts = reservedWorkflowServerPorts(
+                manifest,
+                workflowPath,
+                options.force(),
+                workflowConfig,
+                name -> LocalEnvironment.get(name, options.envPath()));
+        if (options.serverPort().isEmpty()) {
+            return selectedImportServerPort(options, manifest, workflowPath, reservedPorts);
+        }
+        return validatedRequestedServerPort(
+                options, manifest, workflowPath, options.serverPort().orElseThrow(), reservedPorts);
+    }
+
+    private Integer selectedImportServerPort(
+            LocalSetup.Options options, ConnectedBoardManifest manifest, Path workflowPath, Set<Integer> reservedPorts)
+            throws IOException {
+        return replaceableWorkflowServerPort(options, manifest, workflowPath, reservedPorts)
+                .orElseGet(() -> firstAvailableServerPort(reservedPorts));
+    }
+
+    private Optional<Integer> replaceableWorkflowServerPort(
+            LocalSetup.Options options, ConnectedBoardManifest manifest, Path workflowPath, Set<Integer> reservedPorts)
+            throws IOException {
+        if (!options.force()
+                || !Files.isRegularFile(workflowPath.toAbsolutePath().normalize())) {
+            return Optional.empty();
+        }
+        Optional<Integer> existingPort = workflowConfig
+                .serverPort(workflowPath, name -> LocalEnvironment.get(name, options.envPath()))
+                .filter(port -> port != 0)
+                .filter(port -> !reservedPorts.contains(port));
+        if (existingPort.isEmpty()) {
+            return Optional.empty();
+        }
+        int port = existingPort.orElseThrow();
+        if (!LocalHealthChecker.portAcceptsConnections(port)) {
+            return Optional.of(port);
+        }
+        if (canStopManagedWorkflow(options, manifest, workflowPath, port)) {
+            return Optional.of(port);
+        }
+        throw new TrelloBoardSetupException(
+                "setup_server_port_conflict", "--server-port %d is already in use on 127.0.0.1.".formatted(port));
+    }
+
+    private int validatedRequestedServerPort(
+            LocalSetup.Options options,
+            ConnectedBoardManifest manifest,
+            Path workflowPath,
+            int port,
+            Set<Integer> reservedPorts) {
+        if (reservedPorts.contains(port)) {
+            throw new TrelloBoardSetupException(
+                    "setup_server_port_conflict",
+                    "--server-port %d is already reserved by another connected workflow.".formatted(port));
+        }
+        if (LocalHealthChecker.portAcceptsConnections(port)
+                && !canStopManagedWorkflow(options, manifest, workflowPath, port)) {
+            throw new TrelloBoardSetupException(
+                    "setup_server_port_conflict", "--server-port %d is already in use on 127.0.0.1.".formatted(port));
+        }
+        return port;
+    }
+
+    private boolean canStopManagedWorkflow(
+            LocalSetup.Options options, ConnectedBoardManifest manifest, Path workflowPath, int port) {
+        List<ConnectedBoard> matches = manifest.boards().stream()
+                .filter(board -> board.serverPort() == port)
+                .filter(board -> PathsEqual.samePath(board.workflowPath(), workflowPath))
+                .toList();
+        if (matches.isEmpty()) {
+            return false;
+        }
+        try {
+            return workerManager.canStopManagedWorker(localWorkerPaths(options), matches.getFirst());
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    private LocalWorkerPaths localWorkerPaths(LocalSetup.Options options) {
+        return LocalWorkerPaths.from(
+                Optional.empty(),
+                Optional.of(options.configDir()),
+                Optional.of(options.workspaceRoot()),
+                Optional.empty(),
+                environment);
     }
 
     private static Set<Integer> reservedWorkflowServerPorts(
-            ConnectedBoardManifest manifest, Path workflowPath, boolean replacingTarget, WorkflowConfigEditor editor) {
+            ConnectedBoardManifest manifest,
+            Path workflowPath,
+            boolean replacingTarget,
+            WorkflowConfigEditor editor,
+            Function<String, Optional<String>> environmentResolver) {
         Set<Integer> reservedPorts = manifest.boards().stream()
                 .filter(board -> !PathsEqual.samePath(board.workflowPath(), workflowPath))
                 .map(ConnectedBoard::serverPort)
                 .collect(Collectors.toCollection(HashSet::new));
-        reservedPorts.addAll(siblingWorkflowServerPorts(workflowPath, replacingTarget, editor));
+        reservedPorts.addAll(siblingWorkflowServerPorts(workflowPath, replacingTarget, editor, environmentResolver));
         return reservedPorts;
     }
 
     private static Set<Integer> siblingWorkflowServerPorts(
-            Path workflowPath, boolean replacingTarget, WorkflowConfigEditor editor) {
+            Path workflowPath,
+            boolean replacingTarget,
+            WorkflowConfigEditor editor,
+            Function<String, Optional<String>> environmentResolver) {
         Path absolute = workflowPath.toAbsolutePath().normalize();
         Path parent = absolute.getParent();
         if (parent == null || !Files.isDirectory(parent)) {
@@ -363,7 +505,7 @@ final class TrelloBoardConnector {
                     .map(Path::toAbsolutePath)
                     .map(Path::normalize)
                     .filter(path -> !replacingTarget || !path.equals(absolute))
-                    .flatMap(path -> editor.serverPort(path).stream())
+                    .flatMap(path -> editor.serverPort(path, environmentResolver).stream())
                     .collect(Collectors.toUnmodifiableSet());
         } catch (IOException ignored) {
             return Set.of();

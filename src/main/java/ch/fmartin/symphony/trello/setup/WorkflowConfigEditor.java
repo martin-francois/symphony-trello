@@ -193,7 +193,11 @@ final class WorkflowConfigEditor {
     }
 
     Optional<String> diagnosticsWarning(Path workflowPath) {
-        WorkflowValidation validation = diagnosticsValidation(workflowPath);
+        return diagnosticsWarning(workflowPath, LocalEnvironment::get);
+    }
+
+    Optional<String> diagnosticsWarning(Path workflowPath, Function<String, Optional<String>> environmentResolver) {
+        WorkflowValidation validation = diagnosticsValidation(workflowPath, environmentResolver);
         return validation.ok() ? Optional.empty() : Optional.of(validation.message());
     }
 
@@ -280,10 +284,6 @@ final class WorkflowConfigEditor {
                 workflowPath, "---\n" + YAML.writeValueAsString(yaml) + "---\n" + body, StandardCharsets.UTF_8);
     }
 
-    private static Optional<Integer> serverPort(Map<String, Object> yaml) {
-        return serverPort(yaml, ignored -> Optional.empty());
-    }
-
     private static Optional<Integer> serverPort(
             Map<String, Object> yaml, Function<String, Optional<String>> environmentResolver) {
         return serverPortSetting(yaml, environmentResolver).value();
@@ -311,10 +311,6 @@ final class WorkflowConfigEditor {
                 .orElseGet(() -> workflowServerPortSetting(port));
     }
 
-    private static Optional<String> boardId(Map<String, Object> yaml) {
-        return boardId(yaml, ignored -> Optional.empty());
-    }
-
     private static Optional<String> boardId(
             Map<String, Object> yaml, Function<String, Optional<String>> environmentResolver) {
         Object trackerValue = yaml.get("tracker");
@@ -330,10 +326,6 @@ final class WorkflowConfigEditor {
                         .map(String::trim)
                         .filter(resolved -> !resolved.isBlank())
                         .or(() -> Optional.of(value)));
-    }
-
-    private static boolean invalidServerPortSetting(Map<String, Object> yaml) {
-        return invalidServerPortSetting(yaml, ignored -> Optional.empty());
     }
 
     private static boolean invalidServerPortSetting(

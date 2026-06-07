@@ -80,7 +80,7 @@ public class SymphonyOrchestrator {
     private long totalInputTokens;
     private long totalOutputTokens;
     private long totalTokens;
-    private Object rateLimits;
+    private volatile Object rateLimits;
     private final AtomicBoolean refreshRequested = new AtomicBoolean();
     private final AtomicBoolean workflowReloadRequested = new AtomicBoolean();
     private volatile boolean tickRunning;
