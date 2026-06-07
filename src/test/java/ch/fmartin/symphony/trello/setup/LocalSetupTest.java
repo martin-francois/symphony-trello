@@ -4142,6 +4142,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 unsupportedLifecycleOption("check", "--active", "check", "--active", "Inbox"),
                 unsupportedLifecycleOption("check", "--workspace-root", "check", "--workspace-root", "."),
                 unsupportedLifecycleOption("check", "--workflow", "check", "--workflow", ""),
+                unsupportedLifecycleOption(
+                        "check", "--workflow", "check", "--board", "Board", "--workflow", "WORKFLOW.md"),
                 unsupportedLifecycleOption("check", "--codex-model", "--codex-model", "", "check"),
                 unsupportedLifecycleOption("check", "--codex-model", "check", "--codex-model", ""),
                 unsupportedLifecycleOption(
@@ -4159,6 +4161,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "--workspace-root",
                         "/tmp/workspaces"),
                 unsupportedLifecycleOption("repair-port", "--workflow", "repair-port", "--workflow", "WORKFLOW.md"),
+                unsupportedLifecycleOption(
+                        "repair-port", "--workflow", "repair-port", "--board", "Board", "--workflow", "WORKFLOW.md"),
                 unsupportedLifecycleOption(
                         "configure-github", "--dry-run", "configure-github", "--board", "Board", "--dry-run"),
                 unsupportedLifecycleOption(

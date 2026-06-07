@@ -4050,6 +4050,40 @@ final class TrelloBoardSetupMainTest {
                             "--no-github cannot be used with configure-github"
                         }),
                 Arguments.of(
+                        "setup-local check board workflow selector conflict",
+                        new String[] {"setup-local", "check", "--board", "Queue", "--workflow", "/tmp/queue.md"},
+                        2,
+                        new String[] {
+                            "setup_failed code=setup_invalid_arguments", "setup-local check does not support --workflow"
+                        }),
+                Arguments.of(
+                        "setup-local repair-port board workflow selector conflict",
+                        new String[] {
+                            "setup-local",
+                            "repair-port",
+                            "--board",
+                            "Queue",
+                            "--workflow",
+                            "/tmp/queue.md",
+                            "--server-port",
+                            "18132"
+                        },
+                        2,
+                        new String[] {
+                            "setup_failed code=setup_invalid_arguments",
+                            "setup-local repair-port does not support --workflow"
+                        }),
+                Arguments.of(
+                        "setup-local configure-github board workflow selector conflict",
+                        new String[] {
+                            "setup-local", "configure-github", "--board", "Queue", "--workflow", "/tmp/queue.md"
+                        },
+                        2,
+                        new String[] {
+                            "setup_failed code=setup_invalid_arguments",
+                            "setup-local configure-github does not support --workflow"
+                        }),
+                Arguments.of(
                         "invalid port",
                         new String[] {"new-board", "--name", "Queue", "--server-port", "70000"},
                         2,
