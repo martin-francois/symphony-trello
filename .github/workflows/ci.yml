@@ -67,6 +67,8 @@ jobs:
         run: pnpm dlx --package renovate renovate-config-validator renovate.json
 
   test:
+    # ADR 0048 keeps this job on 2 vCPU and uses a lower hosted JUnit parallelism
+    # than the local Maven default to minimize normalized Blacksmith cost.
     runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -82,7 +84,7 @@ jobs:
       - name: Test and coverage, including installer lifecycle
         env:
           SYMPHONY_TRELLO_TEST_PWSH: ./scripts/pwsh-docker.sh
-        run: ./mvnw -Djunit.parallel.enabled=false verify
+        run: ./mvnw -Djunit.parallel.enabled=true -Djunit.parallel.config.fixed.parallelism=2 verify
 
   windows-powershell:
     runs-on: blacksmith-2vcpu-windows-2025

@@ -64,10 +64,21 @@ final class InstallerScriptFixture {
             throws IOException {
         processBuilder.environment().putAll(environment);
         if (!environment.containsKey("HOME") && !isWindows()) {
-            Path home = Path.of("target", "installer-script-test-home").toAbsolutePath();
+            Path home = defaultPosixHome(environment);
             Files.createDirectories(home);
             processBuilder.environment().put("HOME", home.toString());
         }
+    }
+
+    private static Path defaultPosixHome(Map<String, String> environment) {
+        String symphonyHome = environment.get("SYMPHONY_HOME");
+        if (symphonyHome != null && !symphonyHome.isBlank()) {
+            Path symphonyHomePath = Path.of(symphonyHome);
+            if (symphonyHomePath.isAbsolute()) {
+                return symphonyHomePath.resolveSibling("user-home");
+            }
+        }
+        return Path.of("target", "installer-script-test-home").toAbsolutePath();
     }
 
     static ProcessResult run(ProcessBuilder processBuilder, String input, int timeoutSeconds)
