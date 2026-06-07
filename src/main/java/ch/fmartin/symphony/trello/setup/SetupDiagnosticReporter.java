@@ -124,6 +124,7 @@ final class SetupDiagnosticReporter {
             "setup_missing_board_name",
             "setup_missing_trello_credentials",
             "setup_mixed_codex_access_update",
+            "setup_overlapping_list_roles",
             "setup_prerequisite_missing",
             "setup_repair_board_not_found",
             "setup_repair_board_required",

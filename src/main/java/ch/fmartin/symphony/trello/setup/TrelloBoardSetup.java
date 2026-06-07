@@ -5,6 +5,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import ch.fmartin.symphony.trello.codex.CodexSkillCatalog;
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.config.StateNames;
+import ch.fmartin.symphony.trello.config.TrelloListRoleValidator;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -327,6 +328,11 @@ public final class TrelloBoardSetup {
         validateConfiguredLists("active", "active", activeStates, validationListNames);
         validateConfiguredLists("terminal", "terminal", terminalStates, openListNames);
         validateConfiguredList("blocked", "blocked", blockedState, openListNames);
+        validateConfiguredListRoleOverlaps(
+                withOptionalActiveState(activeStates, mergingState),
+                withSystemTerminalStates(terminalStates),
+                inProgressState,
+                blockedState);
         activeStates = withOptionalActiveState(activeStates, inProgressState);
         activeStates = withOptionalActiveState(activeStates, mergingState);
         ensureWorkflowWritable(request.workflowPath(), request.force());
@@ -1830,6 +1836,17 @@ public final class TrelloBoardSetup {
             return;
         }
         validateConfiguredLists(label, errorCodeSegment, List.of(configured), openListNames);
+    }
+
+    private static void validateConfiguredListRoleOverlaps(
+            List<String> activeStates, List<String> terminalStates, String inProgressState, String blockedState) {
+        TrelloListRoleValidator.firstOverlap(activeStates, terminalStates, inProgressState, blockedState)
+                .ifPresent(overlap -> {
+                    throw new TrelloBoardSetupException(
+                            "setup_overlapping_list_roles",
+                            "Configured Trello list roles overlap: " + overlap.description()
+                                    + ". Choose distinct Trello lists for active, terminal, in-progress, and blocked roles.");
+                });
     }
 
     private static BoardList toBoardList(Map<String, Object> payload) {

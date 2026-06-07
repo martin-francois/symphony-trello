@@ -75,6 +75,7 @@ public class ConfigResolver {
                         list(tracker, "active_states", List.of("Todo", "In Progress")),
                         list(tracker, "active_list_ids", List.of()),
                         string(tracker, "in_progress_state", null),
+                        string(tracker, "blocked_state", null),
                         normalizedList(tracker, "blocker_enforced_states", List.of("Todo", "Ready for Codex")),
                         normalizedList(
                                 tracker,
@@ -147,6 +148,11 @@ public class ConfigResolver {
         if (blank(config.codex().command())) {
             throw new ConfigException("missing_codex_command", "codex.command is required");
         }
+        firstAuthoritativeListRoleOverlap(config.tracker()).ifPresent(overlap -> {
+            throw new ConfigException(
+                    "overlapping_tracker_list_roles",
+                    "tracker list roles must use distinct Trello lists: " + overlap.description());
+        });
         if (!blank(config.tracker().inProgressState())
                 && config.tracker().activeListIds().isEmpty()
                 && config.tracker().activeStates().stream()
@@ -176,6 +182,16 @@ public class ConfigResolver {
             return defaultValue;
         }
         return value.toString();
+    }
+
+    private static Optional<TrelloListRoleValidator.Overlap> firstAuthoritativeListRoleOverlap(
+            EffectiveConfig.TrackerConfig tracker) {
+        return TrelloListRoleValidator.firstOverlap(tracker.activeListIds(), tracker.terminalListIds(), null, null)
+                .or(() -> TrelloListRoleValidator.firstOverlap(
+                        tracker.activeListIds().isEmpty() ? tracker.activeStates() : List.of(),
+                        tracker.terminalListIds().isEmpty() ? tracker.terminalStates() : List.of(),
+                        tracker.inProgressState(),
+                        tracker.blockedState()));
     }
 
     private static String optionalString(Map<String, Object> root, String key) {

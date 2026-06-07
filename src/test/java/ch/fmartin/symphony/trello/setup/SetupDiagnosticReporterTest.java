@@ -43,6 +43,7 @@ final class SetupDiagnosticReporterTest {
                 "setup_invalid_arguments",
                 "setup_missing_api_key",
                 "setup_missing_api_token",
+                "setup_overlapping_list_roles",
                 "setup_prerequisite_missing",
                 "setup_codex_auth_required",
                 "setup_codex_login_failed",
