@@ -22,4 +22,8 @@ record StartWorkerRequest(
             Optional<Path> stateHome) {
         this(board, workflow, envPath, appHome, configDir, workspaceRoot, stateHome, false);
     }
+
+    boolean plainStart() {
+        return board.isEmpty() && workflow.isEmpty() && envPath.isEmpty();
+    }
 }

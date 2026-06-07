@@ -184,6 +184,10 @@ final class LocalWorkerManagerTestFixture {
         return startRequest(Optional.empty(), Optional.empty(), Optional.empty());
     }
 
+    StartWorkerRequest startEnvRequest(Path envPath) {
+        return startRequest(Optional.empty(), Optional.empty(), Optional.of(envPath));
+    }
+
     StopWorkerRequest stopRequest(String boardName) {
         return stopRequest(Optional.of(boardName));
     }

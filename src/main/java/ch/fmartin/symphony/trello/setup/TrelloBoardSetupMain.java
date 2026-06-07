@@ -349,7 +349,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
 
     @Command(
             name = "start",
-            description = "Start a managed local Symphony worker.",
+            description = "Start managed local Symphony workers.",
             versionProvider = TrelloBoardSetupMain.ProjectVersion.class,
             mixinStandardHelpOptions = true)
     static final class StartCommand implements Callable<Integer> {
