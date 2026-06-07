@@ -64,6 +64,63 @@ final class TrelloBoardSetupService {
         }
     }
 
+    void preflightRequestedServerPort(Integer requestedPort, Path workflowPath, boolean force, Path manifestPath) {
+        if (requestedPort == null || requestedPort == 0) {
+            return;
+        }
+
+        ConnectedBoardManifest manifest;
+        try {
+            manifest = new ConnectedBoardRepository(manifestPath).loadValidated();
+        } catch (IOException exception) {
+            throw new TrelloBoardSetupException(
+                    "setup_manifest_unavailable",
+                    "Could not read or write the connected-board manifest. Check the config directory permissions.",
+                    exception);
+        }
+        Optional<ConnectedBoard> replaceableBoard = force
+                ? manifest.boards().stream()
+                        .filter(board -> board.serverPort() == requestedPort)
+                        .filter(board -> PathsEqual.samePath(board.workflowPath(), workflowPath))
+                        .findAny()
+                : Optional.empty();
+        boolean reservedByAnotherWorkflow = manifest.boards().stream()
+                .filter(board -> board.serverPort() == requestedPort)
+                .anyMatch(board -> !sameConnectedBoard(replaceableBoard, board));
+        if (reservedByAnotherWorkflow) {
+            throw new TrelloBoardSetupException(
+                    "setup_server_port_conflict",
+                    "--server-port %d is already reserved by another connected workflow.".formatted(requestedPort));
+        }
+        if (LocalHealthChecker.portAcceptsConnections(requestedPort)
+                && !canReuseLivePortForForcedWorkflowUpdate(manifestPath, replaceableBoard)) {
+            throw new TrelloBoardSetupException(
+                    "setup_server_port_conflict",
+                    "--server-port %d is already in use on 127.0.0.1.".formatted(requestedPort));
+        }
+    }
+
+    private boolean canReuseLivePortForForcedWorkflowUpdate(
+            Path manifestPath, Optional<ConnectedBoard> replaceableBoard) {
+        return replaceableBoard
+                .map(board -> canStopManagedWorker(manifestPath, board))
+                .orElse(false);
+    }
+
+    private static boolean sameConnectedBoard(Optional<ConnectedBoard> candidate, ConnectedBoard board) {
+        return candidate
+                .map(replaceable -> replaceable.boardId().equals(board.boardId()))
+                .orElse(false);
+    }
+
+    private boolean canStopManagedWorker(Path manifestPath, ConnectedBoard board) {
+        try {
+            return workerManager.canStopManagedWorker(localWorkerPaths(manifestPath, board.workspaceRoot()), board);
+        } catch (IOException exception) {
+            return false;
+        }
+    }
+
     void persistConnectedBoard(
             TrelloBoardSetup.NewBoardResult result,
             Path envPath,

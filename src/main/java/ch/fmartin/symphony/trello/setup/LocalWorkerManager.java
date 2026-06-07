@@ -750,8 +750,11 @@ final class LocalWorkerManager {
     private void validateExplicitWorkflowSelector(Path workflowPath, Path envPath, boolean validateServerPort) {
         validateWorkerWorkflowPath(workflowPath);
         validateWorkerEnvPath(envPath);
-        boolean workflowServerPortUsed = validateServerPort
-                && healthChecker.externalHttpPortOverrideSource(envPath).isEmpty();
+        if (!validateServerPort) {
+            return;
+        }
+        boolean workflowServerPortUsed =
+                healthChecker.externalHttpPortOverrideSource(envPath).isEmpty();
         WorkflowValidation validation = workflowConfig.diagnosticsValidation(
                 workflowPath, WorkflowEnvironmentResolver.resolver(environment, envPath), workflowServerPortUsed);
         if (!validation.ok()) {
@@ -797,10 +800,6 @@ final class LocalWorkerManager {
                     selectOne(manifest, board, workflow, "status", Optional.empty(), explicitWorkflowEnvPath, false));
         }
         return manifest.boards();
-    }
-
-    private ConnectedBoard workflowBoard(Path workflowPath) {
-        return workflowBoard(workflowPath, null);
     }
 
     private ConnectedBoard workflowBoard(Path workflowPath, Path envPath) {

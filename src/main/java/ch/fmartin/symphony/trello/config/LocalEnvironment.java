@@ -68,7 +68,7 @@ public final class LocalEnvironment {
         }
     }
 
-    static Path defaultDotenv(Map<String, String> environment) {
+    public static Path defaultDotenv(Map<String, String> environment) {
         String configured = environment.get(DOTENV_PATH_ENV);
         return hasText(configured) ? Path.of(configured) : DEFAULT_DOTENV;
     }

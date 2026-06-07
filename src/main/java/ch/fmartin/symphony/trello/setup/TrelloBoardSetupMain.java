@@ -223,6 +223,8 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                 options.validateCliPaths();
                 options.validateRuntimeEnvTarget();
                 parent.boardSetup.preflightConnectedBoardManifest(options.manifestPath());
+                parent.boardSetup.preflightRequestedServerPort(
+                        options.serverPort, options.workflowPath, options.force, options.manifestPath());
                 NewBoardRequest request = options.newBoardRequest(boardName, workspaceId);
                 TrelloBoardSetup.NewBoardResult result = parent.boardSetup.createRecommendedBoard(request, options);
                 options.persistRuntimeCredentials(parent.input, parent.out, parent.err);
@@ -301,6 +303,8 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                 options.validateRuntimeEnvTarget();
                 parent.boardSetup.preflightConnectedBoardManifest(options.manifestPath());
                 parent.boardSetup.preflightWorkflowWrite(options.workflowPath, options.force);
+                parent.boardSetup.preflightRequestedServerPort(
+                        options.serverPort, options.workflowPath, options.force, options.manifestPath());
                 ImportBoardRequest request = options.importBoardRequest(
                         TrelloBoardIds.parseImportBoardSelector(boardId),
                         activeStates,
@@ -717,7 +721,8 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                     maxConcurrentAgents,
                     force,
                     !workflowPathExplicit,
-                    gitHubIntegration());
+                    gitHubIntegration(),
+                    runtimeEnvPath());
         }
 
         ImportBoardRequest importBoardRequest(
@@ -742,7 +747,9 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                     serverPort,
                     maxConcurrentAgents,
                     force,
-                    gitHubIntegration());
+                    gitHubIntegration(),
+                    false,
+                    runtimeEnvPath());
         }
 
         private GitHubIntegration gitHubIntegration() {

@@ -291,8 +291,9 @@ final class LocalSetupTestFixture implements AutoCloseable {
         return false;
     }
 
-    private static boolean hasNewBoardSetupShape(String... args) {
-        return hasWorkflowOrEnvTarget(args) || (hasDirectCredentials(args) && hasBoardSelector(args));
+    private boolean hasNewBoardSetupShape(String... args) {
+        return hasWorkflowOrEnvTarget(args)
+                || (hasDirectCredentials(args) && (hasBoardSelector(args) || !Files.isRegularFile(manifestPath())));
     }
 
     private static boolean hasWorkflowOrEnvTarget(String... args) {
