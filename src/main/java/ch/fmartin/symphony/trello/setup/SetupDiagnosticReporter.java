@@ -70,6 +70,7 @@ final class SetupDiagnosticReporter {
     private static final Pattern TRELLO_URL = Pattern.compile("https://trello\\.com/\\S+");
     private static final Pattern TRELLO_CARD_FIELD = Pattern.compile(
             "(?i)([\"']?(?:card[_-]?id|card[_-]?identifier|cardId|cardIdentifier)[\"']?\\s*[:=]\\s*[\"']?)([^\\s,\"'}]+)");
+    private static final Pattern YAML_PARSER_CONTINUATION_LINE = Pattern.compile("(?m)^(\\s*\\.\\.\\.\\s+)[^\\r\\n]+$");
     private static final Pattern PATH_ASSIGNMENT =
             Pattern.compile("(?i)(\\b(?:path|file|directory|dir|workspace|config|state|home)=)([^\\r\\n]+)");
     private static final Pattern QUOTED_POSIX_PATH = Pattern.compile("([\"'`])(/[^\"'`\\r\\n]+)\\1");
@@ -1690,6 +1691,7 @@ final class SetupDiagnosticReporter {
         sanitized = OPENAI_TOKEN.matcher(sanitized).replaceAll("<redacted>");
         sanitized = TRELLO_TOKEN.matcher(sanitized).replaceAll("<redacted>");
         sanitized = TRELLO_API_KEY_CONTEXT.matcher(sanitized).replaceAll("$1<redacted>");
+        sanitized = YAML_PARSER_CONTINUATION_LINE.matcher(sanitized).replaceAll("$1<redacted>");
         sanitized = redactUrlUserInfo(sanitized);
         sanitized = redactGithubSshRemotes(sanitized);
         sanitized = GITHUB_HTTPS_URL.matcher(sanitized).replaceAll(match -> "<github-url:" + hash(match.group()) + ">");
