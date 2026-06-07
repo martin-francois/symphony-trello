@@ -461,6 +461,14 @@ matters, and easy for another engineer to understand without asking the original
 
 - Follow the testing pyramid: fast focused unit tests first, broader integration tests where shared
   contracts or external boundaries are involved.
+- Write new tests so they can run under JUnit class and method parallel execution by default. Avoid
+  JVM-global mutation such as system properties, environment hacks, fixed ports, process-wide
+  singleton state, shared files, or shared external service fixtures unless the test owns and
+  restores the state in a way that remains safe when other tests run concurrently. Prefer dependency
+  injection, per-test temporary directories, dynamic ports, scoped fakes, and unique fixture names.
+  If a test truly must coordinate access to a shared resource, keep the lock narrow and explain why
+  the resource cannot be isolated; do not make broad test classes or whole finding families serial
+  only to hide parallel-safety problems.
 - When a bug is found, explicitly ask why the current suite missed it and add the smallest
   regression test that would have failed before the fix. Prefer writing that test before the fix
   when practical. If the fix already exists, temporarily revert or otherwise disable the fix when

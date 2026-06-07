@@ -63,6 +63,16 @@ public final class LocalSetup {
             Map<String, String> environment,
             WorkflowConfigEditor workflowConfig,
             LocalWorkerManager workerManager) {
+        this(boardSetup, commands, environment, workflowConfig, workerManager, () -> System.getProperty("os.name", ""));
+    }
+
+    LocalSetup(
+            TrelloBoardSetup boardSetup,
+            CommandRunner commands,
+            Map<String, String> environment,
+            WorkflowConfigEditor workflowConfig,
+            LocalWorkerManager workerManager,
+            Supplier<String> osName) {
         this.boardSetup = boardSetup;
         this.environment = Map.copyOf(environment);
         this.workflowConfig = workflowConfig;
@@ -73,7 +83,7 @@ public final class LocalSetup {
         this.prerequisiteChecker = new PrerequisiteChecker(commands);
         this.codexAuthFlow = new CodexAuthFlow(commands);
         this.credentialStore = new TrelloCredentialStore(this.environment);
-        this.githubConfigurator = new GitHubConfigurator(commands);
+        this.githubConfigurator = new GitHubConfigurator(commands, osName);
         this.boardConnector = new TrelloBoardConnector(boardSetup, workflowConfig);
         this.workspaceAccessFlow = new WorkspaceAccessFlow();
         this.codexSandboxFlow = new CodexSandboxFlow();

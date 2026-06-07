@@ -82,7 +82,7 @@ jobs:
       - name: Test and coverage, including installer lifecycle
         env:
           SYMPHONY_TRELLO_TEST_PWSH: ./scripts/pwsh-docker.sh
-        run: ./mvnw verify
+        run: ./mvnw -Djunit.parallel.enabled=false verify
 
   windows-powershell:
     runs-on: blacksmith-2vcpu-windows-2025
@@ -94,4 +94,4 @@ jobs:
           java-version: "25"
           cache: maven
       - name: PowerShell generated-wrapper lifecycle
-        run: .\mvnw.cmd -q -Dtest=InstallerScriptLifecycleTest#powershellInstallerLifecycleInstallsStartsStopsAndUninstallsWithFakeJavaOnWindows test
+        run: .\mvnw.cmd -q '-Djunit.parallel.enabled=false' -Dtest=InstallerScriptLifecycleTest#powershellInstallerLifecycleInstallsStartsStopsAndUninstallsWithFakeJavaOnWindows test

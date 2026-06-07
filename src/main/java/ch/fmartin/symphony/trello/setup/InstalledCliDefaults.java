@@ -192,13 +192,21 @@ final class InstalledCliDefaults {
             Optional<String> installedWorkspaceRoot,
             Optional<String> installedStateHome) {
         static InstalledPaths from(Map<String, String> environment) {
+            return from(environment, System::getProperty);
+        }
+
+        static InstalledPaths from(Map<String, String> environment, Map<String, String> properties) {
+            return from(environment, properties::get);
+        }
+
+        private static InstalledPaths from(Map<String, String> environment, PropertyLookup properties) {
             return new InstalledPaths(
-                    value(environment, CONFIG_DIR_ENV).or(InstalledPaths::installedConfigDir),
+                    value(environment, CONFIG_DIR_ENV).or(() -> property(properties, INSTALLED_CONFIG_DIR_PROPERTY)),
                     value(environment, WORKSPACE_ROOT_ENV),
                     value(environment, STATE_HOME_ENV),
-                    value(environment, APP_HOME_ENV).or(InstalledPaths::installedAppHome),
-                    installedWorkspaceRootProperty(),
-                    installedStateHomeProperty());
+                    value(environment, APP_HOME_ENV).or(() -> property(properties, INSTALLED_APP_HOME_PROPERTY)),
+                    property(properties, INSTALLED_WORKSPACE_ROOT_PROPERTY),
+                    property(properties, INSTALLED_STATE_HOME_PROPERTY));
         }
 
         boolean workspaceRootFromUserEnvironment() {
@@ -209,24 +217,8 @@ final class InstalledCliDefaults {
             return stateHome.isPresent() && !samePath(stateHome, installedStateHome);
         }
 
-        private static Optional<String> installedConfigDir() {
-            return property(INSTALLED_CONFIG_DIR_PROPERTY);
-        }
-
-        private static Optional<String> installedWorkspaceRootProperty() {
-            return property(INSTALLED_WORKSPACE_ROOT_PROPERTY);
-        }
-
-        private static Optional<String> installedStateHomeProperty() {
-            return property(INSTALLED_STATE_HOME_PROPERTY);
-        }
-
-        private static Optional<String> installedAppHome() {
-            return property(INSTALLED_APP_HOME_PROPERTY);
-        }
-
-        private static Optional<String> property(String name) {
-            String value = System.getProperty(name);
+        private static Optional<String> property(PropertyLookup properties, String name) {
+            String value = properties.get(name);
             return value == null || value.isBlank() ? Optional.empty() : Optional.of(value);
         }
 
@@ -242,5 +234,9 @@ final class InstalledCliDefaults {
                             .equals(Path.of(secondPath).toAbsolutePath().normalize())))
                     .orElse(false);
         }
+    }
+
+    private interface PropertyLookup {
+        String get(String name);
     }
 }
