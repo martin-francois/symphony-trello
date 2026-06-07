@@ -725,9 +725,9 @@ public final class TrelloBoardSetup {
         return port;
     }
 
-    private static void validateOptionalServerPort(Integer port, String label) {
+    private static void validateOptionalSetupServerPort(Integer port) {
         if (port != null) {
-            validateServerPort(port, label);
+            LocalPort.validateCliServerPort(port);
         }
     }
 
@@ -2008,7 +2008,7 @@ public final class TrelloBoardSetup {
             Objects.requireNonNull(workflowPath, "workflowPath");
             Objects.requireNonNull(workspaceRoot, "workspaceRoot");
             Objects.requireNonNull(githubIntegration, "githubIntegration");
-            validateOptionalServerPort(serverPort, "--server-port");
+            validateOptionalSetupServerPort(serverPort);
             if (blank(boardName)) {
                 throw new TrelloBoardSetupException("setup_missing_board_name", "Missing board name");
             }
@@ -2227,7 +2227,7 @@ public final class TrelloBoardSetup {
             Objects.requireNonNull(workflowPath, "workflowPath");
             Objects.requireNonNull(workspaceRoot, "workspaceRoot");
             Objects.requireNonNull(githubIntegration, "githubIntegration");
-            validateOptionalServerPort(serverPort, "--server-port");
+            validateOptionalSetupServerPort(serverPort);
             if (blank(boardId)) {
                 throw new TrelloBoardSetupException("setup_missing_board_id", "Missing board id");
             }

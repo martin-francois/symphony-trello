@@ -1804,6 +1804,85 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
+    void newBoardRejectsReservedServerPortBeforeCreatingTrelloBoard() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("reserved-port.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.reserved-port");
+
+        // when
+        CliRunResult result = runCli(
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "direct-key",
+                "--token",
+                "direct-token",
+                "--name",
+                "Reserved Port Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--server-port",
+                "1");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_server_port",
+                        "--server-port must be between 1024 and 65535 for local HTTP status.")
+                .stdoutDoesNotContain(
+                        "Created Trello board", "Saving Trello credentials", "Troubleshooting report written");
+        assertThat(createdBoardName.get()).isNull();
+        assertThat(workspaceLookups).hasValue(0);
+        assertThat(createdLists).isEmpty();
+        assertThat(workflow).doesNotExist();
+        assertThat(env).doesNotExist();
+    }
+
+    @Test
+    void importBoardRejectsReservedServerPortBeforeContactingTrello() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("import-reserved-port.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.import-reserved-port");
+
+        // when
+        CliRunResult result = runCli(
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "direct-key",
+                "--token",
+                "direct-token",
+                "--board",
+                "https://trello.com/b/input/existing-board",
+                "--active",
+                "Queue for Codex",
+                "--terminal",
+                "Released",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--server-port",
+                "2");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_server_port",
+                        "--server-port must be between 1024 and 65535 for local HTTP status.")
+                .stdoutDoesNotContain(
+                        "Imported Trello board", "Saving Trello credentials", "Troubleshooting report written");
+        assertThat(boardInfoLookups).hasValue(0);
+        assertThat(createdLists).isEmpty();
+        assertThat(workflow).doesNotExist();
+        assertThat(env).doesNotExist();
+    }
+
+    @Test
     void newBoardPreflightsConnectedBoardManifestBeforeCreatingTrelloBoard() throws Exception {
         // given
         Path workflow = tempDir.resolve("manifest-preflight.WORKFLOW.md");
@@ -4088,7 +4167,8 @@ final class TrelloBoardSetupMainTest {
                         new String[] {"new-board", "--name", "Queue", "--server-port", "70000"},
                         2,
                         new String[] {
-                            "setup_failed code=setup_invalid_port", "--server-port must be between 1 and 65535"
+                            "setup_failed code=setup_invalid_port",
+                            "--server-port must be between 1024 and 65535 for local HTTP status."
                         }),
                 Arguments.of(
                         "allow all paths without root",

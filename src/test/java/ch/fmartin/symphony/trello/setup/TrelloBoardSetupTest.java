@@ -38,6 +38,7 @@ final class TrelloBoardSetupTest {
     private final AtomicReference<String> authorization = new AtomicReference<>();
     private final AtomicReference<String> workspaceResponse = new AtomicReference<>();
     private final AtomicReference<String> boardListsResponse = new AtomicReference<>();
+    private final AtomicInteger boardInfoLookups = new AtomicInteger();
 
     @TempDir
     Path tempDir;
@@ -91,6 +92,7 @@ final class TrelloBoardSetupTest {
         });
         server.createContext("/1/boards/input", exchange -> {
             assertThat(exchange.getRequestMethod()).isEqualTo("GET");
+            boardInfoLookups.incrementAndGet();
             respond(
                     exchange,
                     """
@@ -1164,6 +1166,42 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
+    void importBoardRejectsReservedRequestedServerPortBeforeTrelloRequest() {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        var request = new TrelloBoardSetup.ImportBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "input",
+                List.of("Ready for Codex"),
+                List.of("Done"),
+                null,
+                false,
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                2,
+                1,
+                false,
+                TrelloBoardSetup.GitHubIntegration.DISABLED,
+                false);
+
+        // when
+        Throwable thrown = catchThrowable(() -> setup.importExistingBoard(request));
+
+        // then
+        assertThat(thrown)
+                .isInstanceOf(TrelloBoardSetupException.class)
+                .extracting(exception -> ((TrelloBoardSetupException) exception).code(), Throwable::getMessage)
+                .containsExactly(
+                        "setup_invalid_server_port",
+                        "--server-port must be between 1024 and 65535 for local HTTP status.");
+        assertThat(boardInfoLookups).hasValue(0);
+        assertThat(createdLists).isEmpty();
+        assertThat(workflow).doesNotExist();
+    }
+
+    @Test
     void newBoardUsesSluggedWorkflowPathWhenDefaultWorkflowAlreadyExists() throws IOException {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
@@ -1309,6 +1347,37 @@ final class TrelloBoardSetupTest {
         // then
         assertThat(result.serverPort()).isEqualTo(18081);
         assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: 18081");
+    }
+
+    @Test
+    void newBoardRejectsReservedRequestedServerPortBeforeTrelloRequest() {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        var request = new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "My Project",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                1,
+                1,
+                false,
+                true);
+
+        // when
+        Throwable thrown = catchThrowable(() -> setup.createRecommendedBoard(request));
+
+        // then
+        assertThat(thrown)
+                .isInstanceOf(TrelloBoardSetupException.class)
+                .extracting(exception -> ((TrelloBoardSetupException) exception).code(), Throwable::getMessage)
+                .containsExactly(
+                        "setup_invalid_server_port",
+                        "--server-port must be between 1024 and 65535 for local HTTP status.");
+        assertThat(authorization.get()).isNull();
+        assertThat(createdLists).isEmpty();
+        assertThat(workflow).doesNotExist();
     }
 
     @Test

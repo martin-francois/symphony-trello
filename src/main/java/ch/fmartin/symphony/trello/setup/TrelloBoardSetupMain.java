@@ -831,6 +831,9 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             CliInputValidation.rejectExistingNonDirectoryPath("--workspace-root", workspaceRoot);
             TrelloCredentialStore.validateEnvPathOption(envPath);
             validateCodexModelOverrides();
+            if (serverPort != null) {
+                LocalPort.validateCliServerPort(serverPort);
+            }
         }
 
         Optional<String> codexModel() {
@@ -845,9 +848,6 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             endpoint = TrelloApiEndpoint.normalize(endpoint);
             github.validate();
             validateCodexModelOverrides();
-            if (serverPort != null) {
-                LocalPort.validateCliServerPort(serverPort);
-            }
             if (maxConcurrentAgents < 1) {
                 throw new TrelloBoardSetupException("setup_invalid_max_agents", "--max-agents must be at least 1.");
             }
