@@ -58,7 +58,14 @@ final class LocalWorkerManager {
         LocalWorkerPaths paths = LocalWorkerPaths.from(
                 request.appHome(), request.configDir(), request.workspaceRoot(), request.stateHome(), environment);
         ConnectedBoardManifest manifest = new ConnectedBoardRepository(paths.manifestPath()).load();
-        if (request.all()) {
+        if (!request.all()
+                && request.envPath().isPresent()
+                && request.board().isEmpty()
+                && request.workflow().isEmpty()) {
+            throw new TrelloBoardSetupException(
+                    "setup_worker_selection_conflict", "--env requires --board or --workflow.");
+        }
+        if (request.all() || request.plainStart()) {
             startAll(paths, manifest, request, out);
             return 0;
         }

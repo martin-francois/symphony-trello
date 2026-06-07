@@ -776,7 +776,9 @@ This Java implementation provides:
 - `list-workspaces`: prints Workspaces accessible to the configured Trello token
 - `new-board`: creates the recommended Trello board and starter workflow
 - `import-board`: writes a starter workflow for an existing board
-- `start [--board NAME | --workflow PATH]`: starts a managed local worker
+- `start [--board NAME | --workflow PATH]`: starts managed local workers; without a selector, starts
+  all connected workers. `--env PATH` requires `--board` or `--workflow` because one dotenv file
+  cannot safely imply every connected Trello board's credentials.
 - `stop [--board NAME | --workflow PATH]`: stops one managed local worker, or all connected workers
   when no selector is provided
 - `status [--board NAME | --workflow PATH]`: reports managed local worker health
