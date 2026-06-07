@@ -168,6 +168,10 @@ final class LocalWorkerManagerTestFixture {
         return startRequest(Optional.empty(), Optional.of(workflow), Optional.empty());
     }
 
+    StartWorkerRequest startWorkflowRequest(Path workflow, Path envPath) {
+        return startRequest(Optional.empty(), Optional.of(workflow), Optional.of(envPath));
+    }
+
     StartWorkerRequest startAllRequest() {
         return new StartWorkerRequest(
                 Optional.empty(),

@@ -1457,7 +1457,19 @@ final class TrelloBoardSetupMainTest {
         Path env = privateDir.resolve(".env.fifo");
         Files.createDirectories(configDir);
         Files.createDirectories(privateDir);
-        Files.writeString(workflow, workflowWithBoardAndPort("board-start-id", 19193), StandardCharsets.UTF_8);
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: "board-start-id"
+                server:
+                  port: $WORKER_PORT
+                ---
+                Body
+                """,
+                StandardCharsets.UTF_8);
         createFifo(env, tempDir);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
@@ -4030,6 +4042,36 @@ final class TrelloBoardSetupMainTest {
                 Arguments.of("stop", "--workflow", "   ", "--workflow must not be empty."),
                 Arguments.of("status", "--workflow", "", "--workflow must not be empty."),
                 Arguments.of("logs", "--workflow", "   ", "--workflow must not be empty."));
+    }
+
+    @Test
+    void startRejectsMissingExplicitWorkflowWithoutTroubleshootingReport() {
+        // given
+        Path configDir = tempDir.resolve("missing-start-config");
+        Path stateHome = tempDir.resolve("missing-start-state");
+        Path workspaceRoot = tempDir.resolve("missing-start-workspaces");
+        Path workflow = configDir.resolve("missing.WORKFLOW.md");
+
+        // when
+        CliRunResult result = runCli(
+                "start",
+                "--config-dir",
+                configDir.toString(),
+                "--state-home",
+                stateHome.toString(),
+                "--workspace-root",
+                workspaceRoot.toString(),
+                "--workflow",
+                workflow.toString());
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments",
+                        "--workflow must reference a readable workflow file with usable workflow front matter.")
+                .stderrDoesNotContain(workflow.toString(), tempDir.toString(), "Troubleshooting report written")
+                .stdoutDoesNotContain("Started Symphony for Trello", "running ", "stopped ", "Logs for ");
+        assertThat(stateHome).doesNotExist();
     }
 
     @Test

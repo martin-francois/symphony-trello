@@ -194,12 +194,17 @@ final class WorkflowConfigEditor {
 
     WorkflowValidation diagnosticsValidation(
             Path workflowPath, Function<String, Optional<String>> environmentResolver) {
+        return diagnosticsValidation(workflowPath, environmentResolver, true);
+    }
+
+    WorkflowValidation diagnosticsValidation(
+            Path workflowPath, Function<String, Optional<String>> environmentResolver, boolean validateServerPort) {
         if (!Files.isRegularFile(workflowPath)) {
             return WorkflowValidation.warn("missing workflow file");
         }
         try {
             SequencedMap<String, Object> yaml = parseYaml(read(workflowPath));
-            if (invalidServerPortSetting(yaml, environmentResolver)) {
+            if (validateServerPort && invalidServerPortSetting(yaml, environmentResolver)) {
                 return WorkflowValidation.warn("invalid server.port");
             }
             return WorkflowValidation.valid();

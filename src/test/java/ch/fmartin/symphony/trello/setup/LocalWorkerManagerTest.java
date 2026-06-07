@@ -379,6 +379,58 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
+    void startExplicitWorkflowAllowsUnresolvedWorkflowServerPortWhenHttpPortOverrideIsConfigured() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue").withServerPort(19094);
+        Files.writeString(
+                board.workflowPath(),
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: literal-key
+                  api_token: literal-token
+                  board_id: board-1
+                server:
+                  port: $SYMPHONY_TEST_PORT
+                ---
+                # Queue
+                """,
+                StandardCharsets.UTF_8);
+        Files.writeString(
+                board.envPath(),
+                """
+                TRELLO_API_KEY=test-key
+                TRELLO_API_TOKEN=test-token
+                SYMPHONY_HTTP_PORT=19094
+                """,
+                StandardCharsets.UTF_8);
+        fixture.save(board);
+        when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
+                .thenReturn(new ManagedProcessHandle(42));
+        when(fixture.healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), board.envPath()))
+                .thenReturn(19094);
+        when(fixture.healthChecker.externalHttpPortOverrideSource(board.envPath()))
+                .thenReturn(Optional.of("SYMPHONY_HTTP_PORT in " + board.envPath()));
+        when(fixture.healthChecker.waitForSameWorkflow(board, 19094))
+                .thenReturn(new BoardHealth(
+                        BoardHealthKind.SAME_WORKFLOW,
+                        19094,
+                        Optional.of(board.workflowPath().toString()),
+                        Optional.of(board.boardId())));
+        when(fixture.platform.isAlive(42)).thenReturn(true);
+        when(fixture.platform.isManaged(42, fixture.paths.appHome(), board.workflowPath()))
+                .thenReturn(true);
+
+        // when
+        WorkerRunResult result = fixture.start(fixture.startWorkflowRequest(board.workflowPath()));
+
+        // then
+        result.assertSuccess().stdoutContains("Started Symphony for Trello: \"Queue\"");
+    }
+
+    @Test
     void startRejectsUnresolvedWorkflowBoardIdBeforeLaunchingPackagedApp() throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
@@ -998,6 +1050,68 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
+    void stopWorkflowSelectorDoesNotRequireResolvedWorkflowServerPort() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        Files.writeString(
+                board.workflowPath(),
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: board-1
+                server:
+                  port: $SYMPHONY_TEST_PORT
+                ---
+                # Queue
+                """,
+                StandardCharsets.UTF_8);
+        fixture.save(board);
+        fixture.writeManagedPid(board, 42);
+        when(fixture.platform.isAlive(42)).thenReturn(true);
+        when(fixture.platform.isManaged(42, fixture.paths.appHome(), board.workflowPath()))
+                .thenReturn(true);
+        when(fixture.platform.stop(42, Duration.ofSeconds(15), Duration.ofSeconds(5)))
+                .thenReturn(true);
+
+        // when
+        WorkerRunResult result = fixture.stop(fixture.stopWorkflowRequest(board.workflowPath()));
+
+        // then
+        result.assertSuccess().stdoutContains("Stopped WORKFLOW.queue.md");
+    }
+
+    @Test
+    void logsWorkflowSelectorDoesNotRequireResolvedWorkflowServerPort() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        Files.writeString(
+                board.workflowPath(),
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: board-1
+                server:
+                  port: $SYMPHONY_TEST_PORT
+                ---
+                # Queue
+                """,
+                StandardCharsets.UTF_8);
+        fixture.save(board);
+        ManagedProcessStore.ManagedProcessFiles files = fixture.managedFiles(board);
+        Files.writeString(files.stdoutLog(), "worker log line\n", StandardCharsets.UTF_8);
+
+        // when
+        WorkerRunResult result = fixture.logs(fixture.logsWorkflowRequest(board.workflowPath()));
+
+        // then
+        result.assertSuccess().stdoutContains("worker log line");
+    }
+
+    @Test
     void concurrentStopsForSameBoardReportOnlyOneStopAction() throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
@@ -1253,6 +1367,41 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
+    void lifecycleWorkflowSelectorsRejectMissingWorkflowFilesBeforeActing() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        Path workflow = fixture.paths.configDir().resolve("missing.WORKFLOW.md");
+
+        // when
+        assertLifecycleRejectsExplicitWorkflow(fixture, workflow);
+
+        // then
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void lifecycleWorkflowSelectorsRejectUnusableWorkflowFilesBeforeActing() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        Path workflowDirectory = fixture.paths.configDir().resolve("directory.WORKFLOW.md");
+        Path emptyWorkflow = fixture.paths.configDir().resolve("empty.WORKFLOW.md");
+        Path plainWorkflow = fixture.paths.configDir().resolve("plain.WORKFLOW.md");
+        Files.createDirectories(workflowDirectory);
+        Files.writeString(emptyWorkflow, "", StandardCharsets.UTF_8);
+        Files.writeString(plainWorkflow, "plain body\n", StandardCharsets.UTF_8);
+
+        // when
+        assertLifecycleRejectsExplicitWorkflow(
+                fixture, workflowDirectory, "--workflow must point to a regular workflow file.");
+        for (Path workflow : List.of(emptyWorkflow, plainWorkflow)) {
+            assertLifecycleRejectsExplicitWorkflow(fixture, workflow);
+        }
+
+        // then
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    @Test
     void explicitWorkflowUsesWorkflowBoardIdAndPortWithoutManifestEntry() throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
@@ -1350,6 +1499,89 @@ final class LocalWorkerManagerTest {
                         argThat(board ->
                                 "resolved-direct-board".equals(board.boardId()) && board.serverPort() == 19092),
                         eq(19092));
+    }
+
+    @Test
+    void startExplicitWorkflowUsesExplicitEnvOverrideForWorkflowValidation() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-override", "Override");
+        fixture.save(board);
+        Path overrideEnv = fixture.paths.configDir().resolve("override.env");
+        Files.writeString(
+                overrideEnv,
+                """
+                TRELLO_API_KEY=test-key
+                TRELLO_API_TOKEN=test-token
+                WORKER_PORT=19093
+                """,
+                StandardCharsets.UTF_8);
+        Files.writeString(
+                board.workflowPath(),
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: board-override
+                server:
+                  port: $WORKER_PORT
+                ---
+                # Override
+                """,
+                StandardCharsets.UTF_8);
+        when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
+                .thenReturn(new ManagedProcessHandle(42));
+        when(fixture.healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), overrideEnv))
+                .thenReturn(19093);
+        when(fixture.healthChecker.waitForSameWorkflow(board, 19093))
+                .thenReturn(new BoardHealth(
+                        BoardHealthKind.SAME_WORKFLOW,
+                        19093,
+                        Optional.of(board.workflowPath().toString()),
+                        Optional.of("board-override")));
+        when(fixture.platform.isAlive(42)).thenReturn(true);
+        when(fixture.platform.isManaged(42, fixture.paths.appHome(), board.workflowPath()))
+                .thenReturn(true);
+
+        // when
+        WorkerRunResult result = fixture.start(fixture.startWorkflowRequest(board.workflowPath(), overrideEnv));
+
+        // then
+        result.assertSuccess();
+        verify(fixture.healthChecker).managedHealthPort(board.workflowPath(), board.serverPort(), overrideEnv);
+    }
+
+    @Test
+    void startExplicitWorkflowUsesConnectedBoardEnvPathForWorkflowValidation() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-custom-env", "Custom Env");
+        Path customEnv = fixture.paths.configDir().resolve("custom.env");
+        fixture.writeEnv(customEnv);
+        Files.deleteIfExists(fixture.paths.defaultEnvPath());
+        Files.createDirectory(fixture.paths.defaultEnvPath());
+        ConnectedBoard boardWithCustomEnv = new ConnectedBoard(
+                board.boardId(),
+                board.boardKey(),
+                board.boardName(),
+                board.boardUrl(),
+                board.workflowPath(),
+                customEnv,
+                board.workspaceRoot(),
+                board.serverPort(),
+                board.githubEnabled(),
+                board.additionalWritableRoots(),
+                board.dangerFullAccess());
+        fixture.save(boardWithCustomEnv);
+        fixture.stubHealthyStartedWorker(boardWithCustomEnv, 42);
+
+        // when
+        WorkerRunResult result = fixture.start(fixture.startWorkflowRequest(board.workflowPath()));
+
+        // then
+        result.assertSuccess();
+        verify(fixture.healthChecker)
+                .managedHealthPort(boardWithCustomEnv.workflowPath(), boardWithCustomEnv.serverPort(), customEnv);
     }
 
     @Test
@@ -1524,6 +1756,34 @@ final class LocalWorkerManagerTest {
                             second.boardName(),
                             second.boardUrl(),
                             tempDir.toString());
+        });
+    }
+
+    private void assertLifecycleRejectsExplicitWorkflow(LocalWorkerManagerTestFixture fixture, Path workflow) {
+        assertLifecycleRejectsExplicitWorkflow(
+                fixture,
+                workflow,
+                "--workflow must reference a readable workflow file with usable workflow front matter.");
+    }
+
+    private void assertLifecycleRejectsExplicitWorkflow(
+            LocalWorkerManagerTestFixture fixture, Path workflow, String expectedMessage) {
+        Throwable status = catchThrowable(() -> fixture.status(fixture.statusWorkflowRequest(workflow)));
+        Throwable start = catchThrowable(() -> fixture.start(fixture.startWorkflowRequest(workflow)));
+        Throwable stop = catchThrowable(() -> fixture.stop(fixture.stopWorkflowRequest(workflow)));
+        Throwable logs = catchThrowable(() -> fixture.logs(fixture.logsWorkflowRequest(workflow)));
+
+        assertInvalidExplicitWorkflowSelector(status, expectedMessage);
+        assertInvalidExplicitWorkflowSelector(start, expectedMessage);
+        assertInvalidExplicitWorkflowSelector(stop, expectedMessage);
+        assertInvalidExplicitWorkflowSelector(logs, expectedMessage);
+    }
+
+    private void assertInvalidExplicitWorkflowSelector(Throwable thrown, String expectedMessage) {
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_invalid_arguments");
+            assertThat(failure).hasMessage(expectedMessage);
+            assertThat(failure.getMessage()).doesNotContain(tempDir.toString());
         });
     }
 
