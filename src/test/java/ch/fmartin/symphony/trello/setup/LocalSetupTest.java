@@ -2925,6 +2925,45 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void checkReportsOverlappingConnectedWorkflowListRoles() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.overlap-check.md");
+        Path env = tempDir.resolve(".env.overlap-check");
+        Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
+        int port = availablePort();
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: "board-1"
+                  active_states:
+                    - "Ready for Codex"
+                  terminal_states:
+                    - "Ready  for Codex"
+                server:
+                  port: %d
+                codex:
+                  command: codex app-server
+                ---
+                Body
+                """
+                        .formatted(port),
+                StandardCharsets.UTF_8);
+        Files.writeString(env, "TRELLO_API_KEY=key%nTRELLO_API_TOKEN=token%n".formatted(), StandardCharsets.UTF_8);
+        writeConnectedBoardManifest(manifest, "Overlap Check Queue", workflow, env, port);
+
+        // when
+        SetupRunResult result = runSetup("check", "--endpoint", endpoint(), "--board", "Overlap Check Queue");
+
+        // then
+        result.assertFailure(2)
+                .stdoutContains("WARN", "Workflow tracker list roles overlap", "overlapping tracker list roles")
+                .stdoutDoesNotContain("OK      Workflow: " + workflow);
+    }
+
+    @Test
     void repairPortDryRunRepairsStaleManifestPortWithoutMovingHealthyWorkflow() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.stale-manifest-repair.md");

@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
+import ch.fmartin.symphony.trello.config.TrelloListRoleValidator;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
@@ -46,10 +47,18 @@ final class WorkflowConfigEditor {
             if (!boardIdValidation.ok()) {
                 return boardIdValidation;
             }
-            return serverPort(yaml, environmentResolver)
+            WorkflowValidation serverPortValidation = serverPort(yaml, environmentResolver)
                     .map(configuredServerPort -> validateServerPort(board, configuredServerPort))
                     .orElseGet(() -> WorkflowValidation.warn("Workflow file is missing server.port for \""
                             + board.boardName() + "\": " + board.workflowPath()));
+            if (!serverPortValidation.ok()) {
+                return serverPortValidation;
+            }
+            if (invalidListRoleOverlap(yaml, frontMatter.body())) {
+                return WorkflowValidation.warn("Workflow tracker list roles overlap for \"" + board.boardName()
+                        + "\": overlapping tracker list roles");
+            }
+            return WorkflowValidation.valid();
         } catch (IOException | TrelloBoardSetupException e) {
             return WorkflowValidation.warn("Workflow file is not readable or has invalid YAML for \""
                     + board.boardName() + "\": " + board.workflowPath() + " (" + e.getMessage() + ")");
@@ -203,9 +212,13 @@ final class WorkflowConfigEditor {
             return WorkflowValidation.warn("missing workflow file");
         }
         try {
-            SequencedMap<String, Object> yaml = parseYaml(read(workflowPath));
+            FrontMatter frontMatter = read(workflowPath);
+            SequencedMap<String, Object> yaml = parseYaml(frontMatter);
             if (validateServerPort && invalidServerPortSetting(yaml, environmentResolver)) {
                 return WorkflowValidation.warn("invalid server.port");
+            }
+            if (invalidListRoleOverlap(yaml, frontMatter.body())) {
+                return WorkflowValidation.warn("overlapping tracker list roles");
             }
             return WorkflowValidation.valid();
         } catch (IOException | RuntimeException e) {
@@ -330,6 +343,24 @@ final class WorkflowConfigEditor {
             return false;
         }
         return serverPortSetting(yaml, environmentResolver).invalid();
+    }
+
+    private static boolean invalidListRoleOverlap(Map<String, Object> yaml, String body) {
+        Object trackerValue = yaml.get("tracker");
+        if (!(trackerValue instanceof Map<?, ?> tracker)) {
+            return false;
+        }
+        List<String> activeListIds = stringList(tracker.get("active_list_ids"));
+        List<String> terminalListIds = stringList(tracker.get("terminal_list_ids"));
+        return TrelloListRoleValidator.firstOverlap(activeListIds, terminalListIds, null, null)
+                .or(() -> TrelloListRoleValidator.firstOverlap(
+                        activeListIds.isEmpty() ? stringList(tracker.get("active_states")) : List.of(),
+                        terminalListIds.isEmpty() ? stringList(tracker.get("terminal_states")) : List.of(),
+                        optionalString(tracker.get("in_progress_state")).orElse(null),
+                        optionalString(tracker.get("blocked_state"))
+                                .or(() -> blockedStateFromWorkflowBody(body))
+                                .orElse(null)))
+                .isPresent();
     }
 
     private static void validateResolvedTextReference(
