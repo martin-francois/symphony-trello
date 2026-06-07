@@ -4089,6 +4089,87 @@ final class TrelloBoardSetupMainTest {
         assertThat(createdLists).isEmpty();
     }
 
+    @MethodSource("overlappingDirectImportListRoles")
+    @ParameterizedTest(name = "{0}")
+    void importBoardRejectsOverlappingListRoles(String name, List<String> roleArgs, String expectedMessage) {
+        // given
+        if ("overlapping-github-merging-terminal".equals(name) || "overlapping-active-system-terminal".equals(name)) {
+            boardListsResponse.set(
+                    """
+                    [
+                      {"id":"list-ready","name":"Queue for Codex","closed":false,"pos":1},
+                      {"id":"list-doing","name":"Doing","closed":false,"pos":2},
+                      {"id":"list-review","name":"Review","closed":false,"pos":3},
+                      {"id":"list-blocked","name":"Blocked","closed":false,"pos":4},
+                      {"id":"list-merging","name":"Merging","closed":false,"pos":5},
+                      {"id":"list-done","name":"Released","closed":false,"pos":6},
+                      {"id":"list-archived","name":"Archived","closed":false,"pos":7}
+                    ]
+                    """);
+        }
+        Path workflow = tempDir.resolve(name + ".WORKFLOW.md");
+        Path manifest = workflow.getParent().resolve("connected-boards.json");
+        List<String> args = new ArrayList<>(List.of(
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "https://trello.com/b/input/existing-board",
+                "--workflow",
+                workflow.toString(),
+                "--force"));
+        if (!"overlapping-github-merging-terminal".equals(name)) {
+            args.add("--no-github");
+        }
+        args.addAll(roleArgs);
+
+        // when
+        CliRunResult result = runCli(args.toArray(String[]::new));
+
+        // then
+        result.assertFailure(2)
+                .stderrContains("setup_failed code=setup_overlapping_list_roles", expectedMessage)
+                .stderrDoesNotContain("Troubleshooting report written")
+                .stdoutDoesNotContain("Imported Trello board", "Wrote workflow");
+        assertThat(workflow).doesNotExist();
+        assertThat(manifest).doesNotExist();
+        assertThat(createdLists).isEmpty();
+    }
+
+    private static Stream<Arguments> overlappingDirectImportListRoles() {
+        return Stream.of(
+                Arguments.of(
+                        "overlapping-active-terminal",
+                        List.of("--active", "Queue for Codex", "--terminal", "Queue  for Codex"),
+                        "active and terminal both use Queue for Codex"),
+                Arguments.of(
+                        "overlapping-active-blocked",
+                        List.of(
+                                "--active",
+                                "Queue for Codex",
+                                "--terminal",
+                                "Released",
+                                "--blocked",
+                                "Queue for Codex"),
+                        "active and blocked both use Queue for Codex"),
+                Arguments.of(
+                        "overlapping-in-progress-terminal",
+                        List.of("--active", "Queue for Codex", "--terminal", "Doing", "--in-progress", "Doing"),
+                        "terminal and in-progress both use Doing"),
+                Arguments.of(
+                        "overlapping-github-merging-terminal",
+                        List.of("--active", "Queue for Codex", "--terminal", "Merging"),
+                        "active and terminal both use Merging"),
+                Arguments.of(
+                        "overlapping-active-system-terminal",
+                        List.of("--active", "Archived", "--terminal", "Released", "--blocked", "Blocked"),
+                        "active and terminal both use Archived"));
+    }
+
     @MethodSource("malformedDirectImportBoardSelectors")
     @ParameterizedTest(name = "{0}")
     void rejectsMalformedDirectImportBoardSelectorsBeforeTrelloRequest(String name, String badBoardSelector) {
