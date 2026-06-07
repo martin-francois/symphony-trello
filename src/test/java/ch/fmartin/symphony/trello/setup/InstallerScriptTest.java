@@ -2008,6 +2008,7 @@ final class InstallerScriptTest {
         List<ProcessResult> results = cases.stream()
                 .map(appPath -> {
                     Map<String, String> environment = new LinkedHashMap<>(nonWindowsPowerShellEnvironment());
+                    environment.put("HOME", home.toString());
                     environment.put("USERPROFILE", home.toString());
                     environment.put("SYMPHONY_HOME", appPath.value());
                     return runUnchecked(
@@ -3902,7 +3903,7 @@ final class InstallerScriptTest {
             Path safeBin) {
         return cases.stream()
                 .map(appPath -> {
-                    List<String> command = command(pwsh, "-NoProfile", "-File", script);
+                    List<String> command = new ArrayList<>(command(pwsh, "-NoProfile", "-File", script));
                     command.addAll(fixedArgs);
                     command.add("--prefix");
                     command.add(appPath.value());

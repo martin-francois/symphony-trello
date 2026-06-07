@@ -4,6 +4,8 @@ set -euo pipefail
 # Microsoft documents the .NET SDK images as the current PowerShell-in-Docker path.
 # Keep this wrapper small so CI and local checks exercise the same PowerShell runtime.
 IMAGE="${SYMPHONY_TRELLO_PWSH_DOCKER_IMAGE:-mcr.microsoft.com/dotnet/sdk:8.0}"
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+repo_root="$(cd -- "$script_dir/.." && pwd -P)"
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "Docker is required to run PowerShell through $IMAGE." >&2
@@ -22,11 +24,19 @@ while IFS='=' read -r name _; do
   esac
 done < <(env)
 
+docker_mounts=(
+  -v "$repo_root:$repo_root"
+  -v /tmp:/tmp
+)
+case "$PWD" in
+"$repo_root" | "$repo_root"/* | /tmp | /tmp/*) ;;
+*) docker_mounts+=(-v "$PWD:$PWD") ;;
+esac
+
 exec docker run --rm \
   --user "$(id -u):$(id -g)" \
   "${docker_environment[@]}" \
-  -v "$PWD:$PWD" \
-  -v /tmp:/tmp \
+  "${docker_mounts[@]}" \
   -w "$PWD" \
   "$IMAGE" \
   pwsh "$@"
