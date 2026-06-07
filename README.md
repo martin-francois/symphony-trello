@@ -433,8 +433,9 @@ Common setup command options:
 - `--workspace-root PATH`: choose where Symphony creates the local work directory for each Trello
   card. The generated workflow uses `./workspaces`; choose another path when you want those
   checkouts on a different disk or clearly separated from the repository.
-- `--server-port PORT`: choose the HTTP status port written into the generated workflow. If you omit
-  it, Symphony uses the first unused workflow port starting at `18080`.
+- `--server-port PORT`: choose the HTTP status port written into the generated workflow. Use a port
+  from `1024` through `65535`. If you omit it, Symphony uses the first unused workflow port starting
+  at `18080`.
 - `--max-agents N`: choose how many cards from this board may run at the same time. Start with `1`
   if you want one-at-a-time review, or raise it when your machine and workflow can handle parallel
   Codex sessions.
