@@ -473,20 +473,77 @@ public class SymphonyOrchestrator {
     }
 
     private synchronized void onWorkerExit(String cardId, String workerIdentity, AgentRunResult result) {
-        Optional<RunningEntry> current = currentRunningEntry(cardId, workerIdentity);
-        if (current.isEmpty()) {
-            return;
-        }
-        RunningEntry entry = current.get();
+        currentRunningEntry(cardId, workerIdentity).ifPresent(entry -> handleWorkerExit(cardId, result, entry));
+    }
+
+    private void handleWorkerExit(String cardId, AgentRunResult result, RunningEntry entry) {
         running.remove(cardId);
         addRuntime(entry);
+        WorkerExitState state = workerExitState(cardId, entry.identifier());
         if (result.success()) {
             completed.add(cardId);
-            scheduleRetry(cardId, 1, entry.identifier(), null, true);
-        } else {
-            releaseCurrentFromDispatch(entry.card, result.reason());
+            if (state.retry()) {
+                scheduleRetry(cardId, 1, entry.identifier(), null, true);
+            } else {
+                completeWorkerExit(cardId, entry, state);
+            }
+        } else if (state.retry()) {
+            releaseAfterFailedWorkerExit(entry, state, result.reason());
             scheduleRetry(cardId, nextAttempt(entry.retryAttempt), entry.identifier(), result.reason(), false);
+        } else {
+            completeWorkerExit(cardId, entry, state);
         }
+    }
+
+    private WorkerExitState workerExitState(String cardId, String identifier) {
+        try {
+            CardLookupResult result =
+                    tracker.fetchCardStatesByIds(config, List.of(cardId)).get(cardId);
+            return switch (result) {
+                case CardLookupResult.Missing ignored -> WorkerExitState.complete(true, null);
+                case CardLookupResult.Failed failed -> {
+                    LOG.warnf(
+                            "card_id=%s card_identifier=%s worker_exit_refresh=failed reason=%s",
+                            cardId, identifier, failed.message());
+                    yield WorkerExitState.retry(null);
+                }
+                case CardLookupResult.Found found -> workerExitState(found.card());
+                case null -> WorkerExitState.retry(null);
+            };
+        } catch (RuntimeException e) {
+            LOG.warnf(
+                    "card_id=%s card_identifier=%s worker_exit_refresh=failed reason=%s",
+                    cardId, identifier, e.getMessage());
+            return WorkerExitState.retry(null);
+        }
+    }
+
+    private WorkerExitState workerExitState(Card card) {
+        if (isOutOfBoardScope(card)) {
+            return WorkerExitState.complete(false, card);
+        }
+        if (TrelloClient.isTerminal(card, config)) {
+            return WorkerExitState.complete(true, card);
+        }
+        if (TrelloClient.isActive(card, config)) {
+            return WorkerExitState.retry(card);
+        }
+        return WorkerExitState.complete(false, card);
+    }
+
+    private void completeWorkerExit(String cardId, RunningEntry entry, WorkerExitState state) {
+        claimed.remove(cardId);
+        if (state.cleanupWorkspace()) {
+            workspaces.removeForIdentifierIfPresent(entry.identifier(), config);
+        }
+    }
+
+    private void releaseAfterFailedWorkerExit(RunningEntry entry, WorkerExitState state, String reason) {
+        if (state.card() == null) {
+            releaseCurrentFromDispatch(entry.card, reason);
+            return;
+        }
+        releaseFromDispatch(state.card(), reason);
     }
 
     private static void cancelWorkerTask(RunningEntry entry) {
@@ -496,19 +553,15 @@ public class SymphonyOrchestrator {
     }
 
     private synchronized void onAgentEvent(AgentEvent event) {
-        String cardId = running.values().stream()
+        running.values().stream()
                 .filter(entry -> entry.workerIdentity.equals(event.workerIdentity()))
                 .map(entry -> entry.cardId)
                 .findAny()
-                .orElse(null);
-        if (cardId == null) {
-            return;
-        }
-        Optional<RunningEntry> current = currentRunningEntry(cardId, event.workerIdentity());
-        if (current.isEmpty()) {
-            return;
-        }
-        RunningEntry entry = current.get();
+                .ifPresent(cardId -> currentRunningEntry(cardId, event.workerIdentity())
+                        .ifPresent(entry -> applyAgentEvent(cardId, entry, event)));
+    }
+
+    private void applyAgentEvent(String cardId, RunningEntry entry, AgentEvent event) {
         entry.lastEvent = event.event();
         entry.lastMessage = event.message();
         entry.lastEventAt = event.timestamp();
@@ -835,25 +888,30 @@ public class SymphonyOrchestrator {
         Optional<RuntimeSnapshot.RetryRow> retryRow = snapshot.retrying().stream()
                 .filter(row -> row.cardIdentifier().equals(cardIdentifier))
                 .findAny();
-        if (runningRow.isEmpty() && retryRow.isEmpty()) {
-            return Optional.empty();
-        }
-        String cardId = runningRow.map(RuntimeSnapshot.RunningRow::cardId).orElseGet(() -> retryRow.get()
-                .cardId());
-        return Optional.of(new CardDebugDetails(
-                cardIdentifier,
-                cardId,
-                runningRow.isPresent() ? "running" : "retrying",
-                new CardDebugDetails.WorkspaceInfo(
-                        config.workspace().root().resolve(WorkspaceManager.sanitize(cardIdentifier))),
-                new CardDebugDetails.AttemptInfo(
-                        0, retryRow.map(RuntimeSnapshot.RetryRow::attempt).orElse(null)),
-                runningRow.orElse(null),
-                retryRow.orElse(null),
-                new CardDebugDetails.LogInfo(List.of()),
-                List.copyOf(recentEvents.getOrDefault(cardId, new ArrayDeque<>())),
-                retryRow.map(RuntimeSnapshot.RetryRow::error).orElse(null),
-                Map.of()));
+        return runningRow
+                .map(this::runningCardDetailsSelection)
+                .or(() -> retryRow.map(this::retryCardDetailsSelection))
+                .map(selection -> new CardDebugDetails(
+                        cardIdentifier,
+                        selection.cardId(),
+                        selection.status(),
+                        new CardDebugDetails.WorkspaceInfo(
+                                config.workspace().root().resolve(WorkspaceManager.sanitize(cardIdentifier))),
+                        new CardDebugDetails.AttemptInfo(0, selection.currentRetryAttempt()),
+                        selection.runningRow(),
+                        selection.retryRow(),
+                        new CardDebugDetails.LogInfo(List.of()),
+                        List.copyOf(recentEvents.getOrDefault(selection.cardId(), new ArrayDeque<>())),
+                        selection.lastError(),
+                        Map.of()));
+    }
+
+    private CardDetailsSelection runningCardDetailsSelection(RuntimeSnapshot.RunningRow row) {
+        return new CardDetailsSelection(row.cardId(), "running", null, row, null, null);
+    }
+
+    private CardDetailsSelection retryCardDetailsSelection(RuntimeSnapshot.RetryRow row) {
+        return new CardDetailsSelection(row.cardId(), "retrying", row.attempt(), null, row, row.error());
     }
 
     private RuntimeSnapshot.RunningRow runningRow(RunningEntry entry) {
@@ -875,4 +933,12 @@ public class SymphonyOrchestrator {
                         "total_tokens",
                         entry.totalTokens));
     }
+
+    private record CardDetailsSelection(
+            String cardId,
+            String status,
+            Integer currentRetryAttempt,
+            RuntimeSnapshot.RunningRow runningRow,
+            RuntimeSnapshot.RetryRow retryRow,
+            String lastError) {}
 }
