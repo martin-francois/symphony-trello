@@ -53,7 +53,7 @@ final class SymphonyOrchestratorTest {
 
         // when
         orchestrator.start();
-        Thread.sleep(500);
+        waitUntil(() -> orchestrator.snapshot().counts().retrying() == 1);
         RuntimeSnapshot snapshot = orchestrator.snapshot();
         orchestrator.stop();
 
@@ -65,6 +65,35 @@ final class SymphonyOrchestratorTest {
         });
         assertThat(snapshot.routing().activeLists()).containsExactly("Todo");
         assertThat(snapshot.routing().terminalLists()).contains("done");
+    }
+
+    @Test
+    void doesNotQueueContinuationRetryAfterSuccessfulHandoffMovesCardOutOfActiveList() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        writeWorkflow(workflow, "60000");
+        FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
+        AtomicInteger runs = new AtomicInteger();
+        AgentRunner runner = mock();
+        when(runner.run(any())).thenAnswer(invocation -> {
+            runs.incrementAndGet();
+            tracker.setCardState(TestCards.card("card-1", "TRELLO-abc", "Human Review"));
+            return AgentRunResult.ok();
+        });
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
+
+        // when
+        orchestrator.start();
+        waitUntil(() -> runs.get() == 1
+                && orchestrator.snapshot().counts().running() == 0
+                && orchestrator.snapshot().counts().retrying() == 0);
+        RuntimeSnapshot snapshot = orchestrator.snapshot();
+        orchestrator.stop();
+
+        // then
+        assertThat(snapshot.counts().running()).isZero();
+        assertThat(snapshot.counts().retrying()).isZero();
+        assertThat(tracker.cardState("card-1").state()).isEqualTo("Human Review");
     }
 
     @Test
@@ -326,7 +355,7 @@ final class SymphonyOrchestratorTest {
     }
 
     @Test
-    void doesNotReleaseFailedCardThatAlreadyMovedOutOfInProgress() throws Exception {
+    void doesNotRetryFailedCardThatAlreadyMovedOutOfInProgress() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         Files.writeString(
@@ -350,10 +379,12 @@ final class SymphonyOrchestratorTest {
                   command: fake
                 ---
                 {{ card.state }}
-                """);
+        """);
         FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "In Progress")));
+        AtomicInteger runs = new AtomicInteger();
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
+            runs.incrementAndGet();
             tracker.setCardState(TestCards.card("card-1", "TRELLO-abc", "Blocked"));
             return AgentRunResult.fail("handoff failed after move");
         });
@@ -361,13 +392,15 @@ final class SymphonyOrchestratorTest {
 
         // when
         orchestrator.start();
-        waitUntil(() -> orchestrator.snapshot().counts().retrying() == 1);
+        waitUntil(() -> runs.get() == 1
+                && orchestrator.snapshot().counts().running() == 0
+                && orchestrator.snapshot().counts().retrying() == 0);
         RuntimeSnapshot snapshot = orchestrator.snapshot();
         orchestrator.stop();
 
         // then
-        assertThat(snapshot.retrying()).singleElement().satisfies(row -> assertThat(row.cardIdentifier())
-                .isEqualTo("TRELLO-abc"));
+        assertThat(snapshot.counts().running()).isZero();
+        assertThat(snapshot.counts().retrying()).isZero();
         assertThat(tracker.releasedCards).isEmpty();
         assertThat(tracker.cardState("card-1").state()).isEqualTo("Blocked");
     }
