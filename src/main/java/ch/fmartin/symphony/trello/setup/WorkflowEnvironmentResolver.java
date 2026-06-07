@@ -7,12 +7,10 @@ import java.util.Optional;
 import java.util.function.Function;
 
 final class WorkflowEnvironmentResolver {
-    private static final Path DEFAULT_DOTENV = Path.of(".env");
-
     private WorkflowEnvironmentResolver() {}
 
     static Function<String, Optional<String>> resolver(Map<String, String> environment, Path envPath) {
-        Path dotenvPath = envPath == null ? DEFAULT_DOTENV : envPath;
+        Path dotenvPath = envPath == null ? LocalEnvironment.defaultDotenv(environment) : envPath;
         Map<String, String> dotenv = LocalEnvironment.load(dotenvPath);
         return name -> value(environment, dotenv, name);
     }
@@ -23,7 +21,7 @@ final class WorkflowEnvironmentResolver {
                 return Optional.of(name + " environment variable");
             }
         }
-        Path dotenvPath = envPath == null ? DEFAULT_DOTENV : envPath;
+        Path dotenvPath = envPath == null ? LocalEnvironment.defaultDotenv(environment) : envPath;
         Map<String, String> dotenv = LocalEnvironment.load(dotenvPath);
         for (String name : LocalHealthChecker.HTTP_PORT_ENVIRONMENT_NAMES) {
             if (hasText(dotenv.get(name))) {

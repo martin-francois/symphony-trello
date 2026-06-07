@@ -490,12 +490,24 @@ final class SetupDiagnosticReporter {
 
         section(body, "Connected Board Manifest");
         appendManifest(
-                body, context.selectedManifest(), context.manifestSnapshot().status());
+                body,
+                context.selectedManifest(),
+                context.manifestSnapshot().status(),
+                context.paths().defaultEnvPath());
 
         section(body, "Workflow Summary");
-        appendWorkflows(body, context.selectedWorkflowPaths());
-        appendInvalidConnectedBoardWorkflows(body, context.selectedManifest());
-        appendInvalidWorkflowFiles(body, context.selectedWorkflowPaths());
+        appendWorkflows(
+                body,
+                context.selectedManifest(),
+                context.selectedWorkflowPaths(),
+                context.paths().defaultEnvPath());
+        appendInvalidConnectedBoardWorkflows(
+                body, context.selectedManifest(), context.paths().defaultEnvPath());
+        appendInvalidWorkflowFiles(
+                body,
+                context.selectedManifest(),
+                context.selectedWorkflowPaths(),
+                context.paths().defaultEnvPath());
 
         section(body, "Local Health Probes");
         appendHealthProbes(body, context.selectedManifest(), context.selectedWorkflowPaths());
@@ -535,7 +547,10 @@ final class SetupDiagnosticReporter {
 
         section(body, "Connected Board Identifiers");
         appendLocalManifestIdentifiers(
-                body, context.selectedManifest(), context.manifestSnapshot().status());
+                body,
+                context.selectedManifest(),
+                context.manifestSnapshot().status(),
+                context.paths().defaultEnvPath());
 
         section(body, "Workflow Identifiers");
         appendLocalWorkflowIdentifiers(body, context.selectedWorkflowPaths());
@@ -685,12 +700,16 @@ final class SetupDiagnosticReporter {
         appendToolStatus(body, SETUP_FAILURE_TOOL_COMMANDS);
 
         section(body, "Connected Board Manifest");
-        appendManifest(body, manifest, manifestSnapshot.status());
+        appendManifest(body, manifest, manifestSnapshot.status(), paths.defaultEnvPath());
 
         section(body, "Workflow Summary");
         appendWorkflows(body, manifest, paths, args, workflowPathResolution);
-        appendInvalidConnectedBoardWorkflows(body, manifest);
-        appendInvalidWorkflowFiles(body, reportWorkflowPaths(manifest, paths, args, workflowPathResolution, true));
+        appendInvalidConnectedBoardWorkflows(body, manifest, paths.defaultEnvPath());
+        appendInvalidWorkflowFiles(
+                body,
+                manifest,
+                reportWorkflowPaths(manifest, paths, args, workflowPathResolution, true),
+                paths.defaultEnvPath());
 
         section(body, "Local Health Probes");
         appendHealthProbes(body, manifest, paths, args, workflowPathResolution);
@@ -878,7 +897,8 @@ final class SetupDiagnosticReporter {
         }
     }
 
-    private void appendManifest(StringBuilder body, ConnectedBoardManifest manifest, ManifestStatus status) {
+    private void appendManifest(
+            StringBuilder body, ConnectedBoardManifest manifest, ManifestStatus status, Path defaultEnvPath) {
         line(body, "manifest_status", status.name().toLowerCase(Locale.ROOT));
         line(body, "board_count", manifest.boards().size());
         appendManifestStatusNote(body, status);
@@ -914,13 +934,13 @@ final class SetupDiagnosticReporter {
                     board.dangerFullAccess(),
                     sanitize(board.workspaceRoot().toString()),
                     sanitize(board.workflowPath().toString()),
-                    sanitize(board.envPath().toString()));
+                    sanitize(effectiveEnvPath(board, defaultEnvPath).toString()));
         }
         table.appendTo(body);
     }
 
     private void appendLocalManifestIdentifiers(
-            StringBuilder body, ConnectedBoardManifest manifest, ManifestStatus status) {
+            StringBuilder body, ConnectedBoardManifest manifest, ManifestStatus status, Path defaultEnvPath) {
         line(body, "manifest_status", status.name().toLowerCase(Locale.ROOT));
         line(body, "board_count", manifest.boards().size());
         appendManifestStatusNote(body, status);
@@ -971,8 +991,8 @@ final class SetupDiagnosticReporter {
                     board.serverPort(),
                     pathToken(board.workflowPath().toString()),
                     board.workflowPath(),
-                    pathToken(board.envPath().toString()),
-                    board.envPath(),
+                    pathToken(effectiveEnvPath(board, defaultEnvPath).toString()),
+                    effectiveEnvPath(board, defaultEnvPath),
                     pathToken(board.workspaceRoot().toString()),
                     board.workspaceRoot(),
                     board.githubEnabled(),
@@ -980,6 +1000,10 @@ final class SetupDiagnosticReporter {
                     board.additionalWritableRoots().size());
         }
         table.appendTo(body);
+    }
+
+    private static Path effectiveEnvPath(ConnectedBoard board, Path defaultEnvPath) {
+        return board.envPath() == null ? defaultEnvPath : board.envPath();
     }
 
     private static void appendManifestStatusNote(StringBuilder body, ManifestStatus status) {
@@ -994,7 +1018,7 @@ final class SetupDiagnosticReporter {
         }
     }
 
-    private static DiagnosticsSelection selectDiagnostics(
+    private DiagnosticsSelection selectDiagnostics(
             ConnectedBoardManifest manifest,
             Optional<String> selectedBoard,
             Optional<Path> selectedWorkflow,
@@ -1023,10 +1047,11 @@ final class SetupDiagnosticReporter {
         return new DiagnosticsSelection(DiagnosticsSelectorKind.BOARD, matches, Optional.empty());
     }
 
-    private static DiagnosticsSelection selectWorkflowDiagnostics(
+    private DiagnosticsSelection selectWorkflowDiagnostics(
             ConnectedBoardManifest manifest, Path selectedWorkflow, Path configDir) {
         Path workflow = resolveWorkflowPathOption(selectedWorkflow, configDir, WorkflowPathResolution.CONFIG_DIR);
-        rejectUnusableSelectedWorkflow(workflow);
+        rejectUnusableSelectedWorkflow(
+                workflow, workflowEnvironmentResolver(manifest, workflow, configDir.resolve(".env")));
         List<ConnectedBoard> matches = manifest.findAllByWorkflow(workflow);
         if (matches.size() > 1) {
             throw new TrelloBoardSetupException(
@@ -1036,8 +1061,9 @@ final class SetupDiagnosticReporter {
         return new DiagnosticsSelection(DiagnosticsSelectorKind.WORKFLOW, matches, Optional.of(workflow));
     }
 
-    private static void rejectUnusableSelectedWorkflow(Path workflow) {
-        WorkflowValidation validation = new WorkflowConfigEditor().diagnosticsValidation(workflow);
+    private static void rejectUnusableSelectedWorkflow(
+            Path workflow, Function<String, Optional<String>> environmentResolver) {
+        WorkflowValidation validation = new WorkflowConfigEditor().diagnosticsValidation(workflow, environmentResolver);
         if (!validation.ok()) {
             throw new TrelloBoardSetupException(
                     "setup_invalid_arguments",
@@ -1074,16 +1100,21 @@ final class SetupDiagnosticReporter {
                 reportWorkflowPaths(manifest, paths, args, workflowPathResolution, !hasBoardOption(args));
         MarkdownTable table = workflowTable();
         for (Path workflow : workflowPaths) {
-            appendWorkflowRow(table, editor, workflow, workflowEnvironmentResolver(manifest, workflow));
+            appendWorkflowRow(
+                    table, editor, workflow, workflowEnvironmentResolver(manifest, workflow, paths.defaultEnvPath()));
         }
         table.appendTo(body);
     }
 
-    private void appendWorkflows(StringBuilder body, SequencedSet<Path> workflowPaths) {
+    private void appendWorkflows(
+            StringBuilder body,
+            ConnectedBoardManifest manifest,
+            SequencedSet<Path> workflowPaths,
+            Path defaultEnvPath) {
         WorkflowConfigEditor editor = new WorkflowConfigEditor();
         MarkdownTable table = workflowTable();
         for (Path workflow : workflowPaths) {
-            appendWorkflowRow(table, editor, workflow, WorkflowEnvironmentResolver.resolver(environment, null));
+            appendWorkflowRow(table, editor, workflow, workflowEnvironmentResolver(manifest, workflow, defaultEnvPath));
         }
         table.appendTo(body);
     }
@@ -1110,7 +1141,7 @@ final class SetupDiagnosticReporter {
         WorkflowListConfiguration lists = editor.listConfiguration(workflow);
         table.row(
                 sanitize(workflow.toString()),
-                editor.boardId(workflow).map(this::hash).orElse(""),
+                editor.boardId(workflow, environmentResolver).map(this::hash).orElse(""),
                 editor.serverPortSetting(workflow, environmentResolver).diagnosticsCell(),
                 editor.maxAgentsSetting(workflow).diagnosticsCell(),
                 lists.activeStatesDiagnosticsCell(),
@@ -1119,11 +1150,16 @@ final class SetupDiagnosticReporter {
                 lists.blockedState().isPresent());
     }
 
-    private void appendInvalidWorkflowFiles(StringBuilder body, SequencedSet<Path> workflowPaths) {
+    private void appendInvalidWorkflowFiles(
+            StringBuilder body,
+            ConnectedBoardManifest manifest,
+            SequencedSet<Path> workflowPaths,
+            Path defaultEnvPath) {
         WorkflowConfigEditor editor = new WorkflowConfigEditor();
         List<InvalidWorkflowFile> invalidWorkflows = workflowPaths.stream()
-                .map(workflow ->
-                        editor.diagnosticsWarning(workflow).map(warning -> new InvalidWorkflowFile(workflow, warning)))
+                .map(workflow -> editor.diagnosticsWarning(
+                                workflow, workflowEnvironmentResolver(manifest, workflow, defaultEnvPath))
+                        .map(warning -> new InvalidWorkflowFile(workflow, warning)))
                 .flatMap(Optional::stream)
                 .toList();
         if (invalidWorkflows.isEmpty()) {
@@ -1138,10 +1174,11 @@ final class SetupDiagnosticReporter {
         table.appendTo(body);
     }
 
-    private void appendInvalidConnectedBoardWorkflows(StringBuilder body, ConnectedBoardManifest manifest) {
+    private void appendInvalidConnectedBoardWorkflows(
+            StringBuilder body, ConnectedBoardManifest manifest, Path defaultEnvPath) {
         WorkflowConfigEditor editor = new WorkflowConfigEditor();
         List<InvalidConnectedBoardWorkflow> invalidWorkflows = manifest.boards().stream()
-                .map(board -> invalidConnectedBoardWorkflow(editor, board))
+                .map(board -> invalidConnectedBoardWorkflow(editor, board, defaultEnvPath))
                 .flatMap(Optional::stream)
                 .toList();
         if (invalidWorkflows.isEmpty()) {
@@ -1161,8 +1198,9 @@ final class SetupDiagnosticReporter {
     }
 
     private Optional<InvalidConnectedBoardWorkflow> invalidConnectedBoardWorkflow(
-            WorkflowConfigEditor editor, ConnectedBoard board) {
-        WorkflowValidation validation = editor.validate(board, workflowEnvironmentResolver(board.envPath()));
+            WorkflowConfigEditor editor, ConnectedBoard board, Path defaultEnvPath) {
+        WorkflowValidation validation =
+                editor.validate(board, workflowEnvironmentResolver(board.envPath(), defaultEnvPath));
         if (validation.ok()) {
             return Optional.empty();
         }
@@ -1215,16 +1253,17 @@ final class SetupDiagnosticReporter {
     }
 
     private Function<String, Optional<String>> workflowEnvironmentResolver(
-            ConnectedBoardManifest manifest, Path workflowPath) {
+            ConnectedBoardManifest manifest, Path workflowPath, Path defaultEnvPath) {
         return manifest.boards().stream()
                 .filter(board -> PathsEqual.samePath(board.workflowPath(), workflowPath))
                 .findAny()
-                .map(board -> workflowEnvironmentResolver(board.envPath()))
-                .orElseGet(() -> WorkflowEnvironmentResolver.resolver(environment, null));
+                .map(board -> workflowEnvironmentResolver(board.envPath(), defaultEnvPath))
+                .orElseGet(() -> WorkflowEnvironmentResolver.resolver(environment, defaultEnvPath));
     }
 
-    private Function<String, Optional<String>> workflowEnvironmentResolver(Path envPath) {
-        return WorkflowEnvironmentResolver.resolver(environment, envPath);
+    private Function<String, Optional<String>> workflowEnvironmentResolver(Path envPath, Path defaultEnvPath) {
+        Path resolvedEnvPath = envPath == null ? defaultEnvPath : envPath;
+        return WorkflowEnvironmentResolver.resolver(environment, resolvedEnvPath);
     }
 
     private void appendHealthProbes(

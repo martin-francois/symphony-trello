@@ -84,7 +84,8 @@ public final class LocalSetup {
         this.codexAuthFlow = new CodexAuthFlow(commands);
         this.credentialStore = new TrelloCredentialStore(this.environment);
         this.githubConfigurator = new GitHubConfigurator(commands, osName);
-        this.boardConnector = new TrelloBoardConnector(boardSetup, workflowConfig);
+        this.boardConnector =
+                new TrelloBoardConnector(boardSetup, workflowConfig, this.workerManager, this.environment);
         this.workspaceAccessFlow = new WorkspaceAccessFlow();
         this.codexSandboxFlow = new CodexSandboxFlow();
         this.diagnosticReporter = new SetupDiagnosticReporter(this.environment, commands);
@@ -172,6 +173,7 @@ public final class LocalSetup {
                     }
                 }
             }
+            boardConnector.preflightRequestedServerPort(options, manifest);
             codexAuthFlow.ensureAuthenticated(prerequisites, options, terminal);
 
             preflightLocalWorkflowWrite(options);
@@ -458,7 +460,9 @@ public final class LocalSetup {
         });
         ConnectedBoard reconciledBoard = withWorkflowServerPort(board);
         BoardHealth health = healthChecker.boardHealth(reconciledBoard);
-        if (health.kind() == BoardHealthKind.SAME_WORKFLOW && reconciledBoard.serverPort() != board.serverPort()) {
+        if (health.kind() == BoardHealthKind.SAME_WORKFLOW
+                && reconciledBoard.serverPort() != board.serverPort()
+                && !serverPortReservedByOtherBoard(manifest, reconciledBoard)) {
             return repairManifestPort(options, out, boards, manifest, board, reconciledBoard);
         }
         boolean wasRunning = health.kind() == BoardHealthKind.SAME_WORKFLOW;
@@ -521,6 +525,12 @@ public final class LocalSetup {
         out.println("  OK      Updated connected-board manifest for \"" + staleBoard.boardName()
                 + "\" to use http://127.0.0.1:" + reconciledBoard.serverPort());
         return 0;
+    }
+
+    private static boolean serverPortReservedByOtherBoard(ConnectedBoardManifest manifest, ConnectedBoard board) {
+        return manifest.boards().stream()
+                .filter(connectedBoard -> !connectedBoard.boardId().equals(board.boardId()))
+                .anyMatch(connectedBoard -> connectedBoard.serverPort() == board.serverPort());
     }
 
     private static int nextAvailablePort(ConnectedBoardManifest manifest, ConnectedBoard ignoredBoard) {
@@ -972,7 +982,8 @@ public final class LocalSetup {
                                 : workflowConfig.maxAgents(board.workflowPath()).orElseGet(options::maxAgents),
                         true,
                         GitHubIntegration.ENABLED,
-                        true));
+                        true,
+                        board.envPath()));
         ConnectedBoard access = withRequestedCodexAccess(options, board, terminal);
         applyCodexAccess(
                 options.withCodexAccess(access.additionalWritableRoots(), access.dangerFullAccess()),

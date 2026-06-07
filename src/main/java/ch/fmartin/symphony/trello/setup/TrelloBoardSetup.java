@@ -4,6 +4,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 
 import ch.fmartin.symphony.trello.codex.CodexSkillCatalog;
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
+import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import ch.fmartin.symphony.trello.config.StateNames;
 import ch.fmartin.symphony.trello.config.TrelloListRoleValidator;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
@@ -150,7 +151,7 @@ public final class TrelloBoardSetup {
         request.validate();
         Path workflowPath = resolveNewBoardWorkflowPath(request);
         ensureWorkflowWritable(workflowPath, request.force());
-        int serverPort = resolveServerPort(workflowPath, request.serverPort(), request.force());
+        int serverPort = resolveServerPort(workflowPath, request.serverPort(), request.force(), request.envPath());
         String workspaceId = resolveWorkspaceId(request);
         Map<String, Object> board = postMap(
                 request.endpoint(),
@@ -274,6 +275,7 @@ public final class TrelloBoardSetup {
 
     public ImportBoardResult importExistingBoard(ImportBoardRequest request) {
         request.validate();
+        preflightRequestedServerPort(request.workflowPath(), request.serverPort(), request.force(), request.envPath());
         Map<String, Object> board = getMap(
                 request.endpoint(),
                 "boards/" + encodeSegment(request.boardId()),
@@ -336,7 +338,8 @@ public final class TrelloBoardSetup {
         activeStates = withOptionalActiveState(activeStates, inProgressState);
         activeStates = withOptionalActiveState(activeStates, mergingState);
         ensureWorkflowWritable(request.workflowPath(), request.force());
-        int serverPort = resolveServerPort(request.workflowPath(), request.serverPort(), request.force());
+        int serverPort =
+                resolveServerPort(request.workflowPath(), request.serverPort(), request.force(), request.envPath());
         if (shouldCreateMergingList) {
             postMap(
                     request.endpoint(),
@@ -575,38 +578,59 @@ public final class TrelloBoardSetup {
         return parent == null ? Path.of(fileName) : parent.resolve(fileName);
     }
 
-    private int resolveServerPort(Path workflowPath, Integer requestedPort, boolean force) {
+    private int resolveServerPort(Path workflowPath, Integer requestedPort, boolean force, Path envPath) {
         if (requestedPort != null) {
-            ensureServerPortAvailable(workflowPath, requestedPort);
+            ensureServerPortAvailable(workflowPath, requestedPort, force, envPath);
             return requestedPort;
         }
 
         Path absolute = workflowPath.toAbsolutePath().normalize();
         if (force) {
-            return replaceableWorkflowServerPortReservation(absolute)
-                    .filter(existingPort ->
-                            workflowServerPortConflict(absolute, existingPort).isEmpty())
-                    .orElseGet(() -> nextAvailableWorkflowServerPort(absolute));
+            return replaceableWorkflowServerPortReservation(absolute, envPath)
+                    .filter(existingPort -> workflowServerPortConflict(absolute, existingPort, envPath)
+                            .isEmpty())
+                    .filter(existingPort -> !LocalHealthChecker.portAcceptsConnections(existingPort))
+                    .orElseGet(() -> nextAvailableWorkflowServerPort(absolute, envPath));
         }
-        return nextAvailableWorkflowServerPort(absolute);
+        return nextAvailableWorkflowServerPort(absolute, envPath);
     }
 
-    private void ensureServerPortAvailable(Path workflowPath, int requestedPort) {
+    private void preflightRequestedServerPort(Path workflowPath, Integer requestedPort, boolean force, Path envPath) {
+        if (requestedPort != null) {
+            ensureServerPortAvailable(workflowPath, requestedPort, force, envPath);
+        }
+    }
+
+    private void ensureServerPortAvailable(Path workflowPath, int requestedPort, boolean force, Path envPath) {
         if (requestedPort == 0) {
             return;
         }
 
         Path target = workflowPath.toAbsolutePath().normalize();
-        workflowServerPortConflict(target, requestedPort).ifPresent(conflictingWorkflow -> {
+        workflowServerPortConflict(target, requestedPort, envPath).ifPresent(conflictingWorkflow -> {
             throw new TrelloBoardSetupException(
                     "setup_server_port_conflict",
                     "--server-port %d is already used by %s".formatted(requestedPort, conflictingWorkflow));
         });
+        if (LocalHealthChecker.portAcceptsConnections(requestedPort)
+                && !canReuseReplaceableWorkflowServerPort(target, requestedPort, force, envPath)) {
+            throw new TrelloBoardSetupException(
+                    "setup_server_port_conflict",
+                    "--server-port %d is already in use on 127.0.0.1.".formatted(requestedPort));
+        }
     }
 
-    private Optional<Path> workflowServerPortConflict(Path target, int requestedPort) {
+    private boolean canReuseReplaceableWorkflowServerPort(
+            Path workflowPath, int requestedPort, boolean force, Path envPath) {
+        return force
+                && replaceableWorkflowServerPortReservation(workflowPath, envPath)
+                        .filter(existingPort -> existingPort == requestedPort)
+                        .isPresent();
+    }
+
+    private Optional<Path> workflowServerPortConflict(Path target, int requestedPort, Path envPath) {
         for (Path candidate : siblingWorkflowFiles(target)) {
-            if (workflowServerPortReservation(candidate)
+            if (workflowServerPortReservation(candidate, envPath)
                     .filter(port -> port == requestedPort)
                     .isPresent()) {
                 return Optional.of(candidate);
@@ -615,14 +639,14 @@ public final class TrelloBoardSetup {
         return Optional.empty();
     }
 
-    private int nextAvailableWorkflowServerPort(Path workflowPath) {
+    private int nextAvailableWorkflowServerPort(Path workflowPath, Path envPath) {
         Set<Integer> reservedPorts = new HashSet<>();
         for (Path candidate : siblingWorkflowFiles(workflowPath)) {
-            workflowServerPortReservation(candidate).ifPresent(reservedPorts::add);
+            workflowServerPortReservation(candidate, envPath).ifPresent(reservedPorts::add);
         }
 
         for (int port = DEFAULT_SERVER_PORT; port <= 65535; port++) {
-            if (!reservedPorts.contains(port)) {
+            if (!reservedPorts.contains(port) && !LocalHealthChecker.portAcceptsConnections(port)) {
                 return port;
             }
         }
@@ -650,24 +674,47 @@ public final class TrelloBoardSetup {
         }
     }
 
-    private Optional<Integer> workflowServerPortReservation(Path workflowPath) {
+    private Optional<Integer> workflowServerPortReservation(Path workflowPath, Path envPath) {
         return readWorkflowFrontMatter(workflowPath)
                 .filter(TrelloBoardSetup::hasRealTrelloBoardId)
-                .flatMap(workflowConfig -> workflowServerPortReservation(workflowConfig, workflowPath));
+                .flatMap(workflowConfig -> workflowServerPortReservation(workflowConfig, workflowPath, envPath));
     }
 
-    private Optional<Integer> workflowServerPortReservation(Map<String, Object> workflowConfig, Path workflowPath) {
+    private Optional<Integer> workflowServerPortReservation(
+            Map<String, Object> workflowConfig, Path workflowPath, Path envPath) {
         Object server = workflowConfig.get("server");
         if (server instanceof Map<?, ?> serverMap && serverMap.containsKey("port")) {
-            int port = parseServerPort(serverMap.get("port"), workflowPath);
-            return port == 0 ? Optional.empty() : Optional.of(port);
+            return parseServerPortReservation(serverMap.get("port"), workflowPath, envPath);
         }
         return Optional.of(DEFAULT_SERVER_PORT);
     }
 
-    private Optional<Integer> replaceableWorkflowServerPortReservation(Path workflowPath) {
+    private Optional<Integer> parseServerPortReservation(Object value, Path workflowPath, Path envPath) {
+        Optional<String> environmentName = environmentReferenceName(value);
+        if (environmentName.isPresent()) {
+            return environmentName
+                    .flatMap(name -> envPath == null ? LocalEnvironment.get(name) : LocalEnvironment.get(name, envPath))
+                    .map(String::trim)
+                    .filter(resolved -> !resolved.isBlank())
+                    .map(resolved -> parseServerPort(resolved, workflowPath))
+                    .filter(port -> port != 0);
+        }
+
+        int port = parseServerPort(value, workflowPath);
+        return port == 0 ? Optional.empty() : Optional.of(port);
+    }
+
+    private static Optional<String> environmentReferenceName(Object value) {
+        if (!(value instanceof String text)) {
+            return Optional.empty();
+        }
+        String trimmed = text.trim();
+        return trimmed.startsWith("$") && trimmed.length() > 1 ? Optional.of(trimmed.substring(1)) : Optional.empty();
+    }
+
+    private Optional<Integer> replaceableWorkflowServerPortReservation(Path workflowPath, Path envPath) {
         try {
-            return workflowServerPortReservation(workflowPath);
+            return workflowServerPortReservation(workflowPath, envPath);
         } catch (TrelloBoardSetupException e) {
             return Optional.empty();
         }
@@ -1982,7 +2029,8 @@ public final class TrelloBoardSetup {
             int maxConcurrentAgents,
             boolean force,
             boolean useBoardNameWorkflowFallback,
-            GitHubIntegration githubIntegration) {
+            GitHubIntegration githubIntegration,
+            Path envPath) {
         public NewBoardRequest(
                 URI endpoint,
                 TrelloCredentials credentials,
@@ -2004,7 +2052,8 @@ public final class TrelloBoardSetup {
                     maxConcurrentAgents,
                     force,
                     useBoardNameWorkflowFallback,
-                    GitHubIntegration.ENABLED);
+                    GitHubIntegration.ENABLED,
+                    null);
         }
 
         public NewBoardRequest(
@@ -2029,7 +2078,35 @@ public final class TrelloBoardSetup {
                     maxConcurrentAgents,
                     force,
                     useBoardNameWorkflowFallback,
-                    GitHubIntegration.ENABLED);
+                    GitHubIntegration.ENABLED,
+                    null);
+        }
+
+        public NewBoardRequest(
+                URI endpoint,
+                TrelloCredentials credentials,
+                String boardName,
+                String workspaceId,
+                Path workflowPath,
+                Path workspaceRoot,
+                Integer serverPort,
+                int maxConcurrentAgents,
+                boolean force,
+                boolean useBoardNameWorkflowFallback,
+                GitHubIntegration githubIntegration) {
+            this(
+                    endpoint,
+                    credentials,
+                    boardName,
+                    workspaceId,
+                    workflowPath,
+                    workspaceRoot,
+                    serverPort,
+                    maxConcurrentAgents,
+                    force,
+                    useBoardNameWorkflowFallback,
+                    githubIntegration,
+                    null);
         }
 
         private void validate() {
@@ -2088,10 +2165,46 @@ public final class TrelloBoardSetup {
             int maxConcurrentAgents,
             boolean force,
             GitHubIntegration githubIntegration,
-            boolean createMissingGithubLists) {
+            boolean createMissingGithubLists,
+            Path envPath) {
         public ImportBoardRequest {
             activeStates = List.copyOf(activeStates);
             terminalStates = List.copyOf(terminalStates);
+        }
+
+        public ImportBoardRequest(
+                URI endpoint,
+                TrelloCredentials credentials,
+                String boardId,
+                List<String> activeStates,
+                List<String> terminalStates,
+                String inProgressState,
+                boolean detectInProgressState,
+                String blockedState,
+                Path workflowPath,
+                Path workspaceRoot,
+                Integer serverPort,
+                int maxConcurrentAgents,
+                boolean force,
+                GitHubIntegration githubIntegration,
+                boolean createMissingGithubLists) {
+            this(
+                    endpoint,
+                    credentials,
+                    boardId,
+                    activeStates,
+                    terminalStates,
+                    inProgressState,
+                    detectInProgressState,
+                    blockedState,
+                    workflowPath,
+                    workspaceRoot,
+                    serverPort,
+                    maxConcurrentAgents,
+                    force,
+                    githubIntegration,
+                    createMissingGithubLists,
+                    null);
         }
 
         public ImportBoardRequest(
@@ -2122,7 +2235,8 @@ public final class TrelloBoardSetup {
                     maxConcurrentAgents,
                     force,
                     GitHubIntegration.ENABLED,
-                    false);
+                    false,
+                    null);
         }
 
         public ImportBoardRequest(
@@ -2155,7 +2269,8 @@ public final class TrelloBoardSetup {
                     maxConcurrentAgents,
                     force,
                     githubIntegration,
-                    false);
+                    false,
+                    null);
         }
 
         public ImportBoardRequest(
@@ -2187,7 +2302,8 @@ public final class TrelloBoardSetup {
                     maxConcurrentAgents,
                     force,
                     GitHubIntegration.ENABLED,
-                    false);
+                    false,
+                    null);
         }
 
         public ImportBoardRequest(
@@ -2216,7 +2332,8 @@ public final class TrelloBoardSetup {
                     maxConcurrentAgents,
                     force,
                     GitHubIntegration.ENABLED,
-                    false);
+                    false,
+                    null);
         }
 
         public ImportBoardRequest(
@@ -2246,7 +2363,8 @@ public final class TrelloBoardSetup {
                     maxConcurrentAgents,
                     force,
                     GitHubIntegration.ENABLED,
-                    false);
+                    false,
+                    null);
         }
 
         private void validate() {
