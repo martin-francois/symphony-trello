@@ -1,0 +1,46 @@
+title = "Symphony for Trello private-context BetterLeaks rules"
+betterleaksMinVersion = "v1.4.1"
+
+[[rules]]
+id = "trello-url-private-context"
+description = "Trello board or card URL with a non-synthetic short link. Replace live Trello URLs with synthetic same-shape fixtures such as https://trello.com/b/SYNTH001/synthetic-board."
+regex = '''https?://(?:www\.)?trello\.com/[bc]/([A-Za-z0-9]{8})(?:[^A-Za-z0-9_-]|$)'''
+keywords = ["trello.com"]
+filter = '''
+filter.matchesAny(finding["secret"], [r"""^SYNTH[0-9]{3}$"""])
+'''
+
+[[rules]]
+id = "trello-id-private-context"
+description = "Live-looking 24-character Trello id. Replace it with a synthetic same-shape fixture such as 000000000000000000000001."
+regex = '''(?:^|[^0-9a-f])([0-9a-f]{24})(?:[^0-9a-f]|$)'''
+filter = '''
+filter.matchesAny(finding["secret"], [r"""^0{20}[0-9]{4}$"""])
+'''
+
+[[rules]]
+id = "trello-token-secret"
+description = "Trello API token. Redact the token before committing or posting."
+regex = '''(ATTA[0-9A-Za-z_-]{20,})'''
+keywords = ["ATTA"]
+
+[[rules]]
+id = "github-token-secret"
+description = "GitHub token. Redact the token before committing or posting."
+regex = '''(gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,})'''
+keywords = ["ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_"]
+
+[[rules]]
+id = "openai-token-secret"
+description = "OpenAI API token. Redact the token before committing or posting."
+regex = '''(?:^|[^A-Za-z0-9_-])(sk-[A-Za-z0-9_-]{20,})'''
+keywords = ["sk-"]
+
+[[rules]]
+id = "host-path-private-context"
+description = "Private host path. Redact private host paths or use HOME-based examples."
+regex = '''(/home/[A-Za-z0-9._-]+/git-projects/[A-Za-z0-9._/-]*|/root/\.local/share/symphony-trello/[A-Za-z0-9._/-]*)'''
+keywords = ["/home/", "/root/.local/share/symphony-trello/"]
+filter = '''
+attributes[?"path"].orValue("") == "config/betterleaks/private-context.toml"
+'''

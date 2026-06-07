@@ -50,10 +50,10 @@ When npm is already available, the POSIX prompt includes:
 ```text
 Codex CLI is missing.
 Install Codex CLI with Symphony-managed npm.
-  Location: /root/.local/share/symphony-trello/npm
-  Command: /root/.local/bin/codex
+  Location: $HOME/.local/share/symphony-trello/npm
+  Command: $HOME/.local/bin/codex
 This keeps system-wide npm packages unchanged.
-  Codex CLI: npm install --global --prefix '/root/.local/share/symphony-trello/npm' @openai/codex
+  Codex CLI: npm install --global --prefix '$HOME/.local/share/symphony-trello/npm' @openai/codex
 Run now? [y/N]
 ```
 

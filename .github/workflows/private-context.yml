@@ -1,0 +1,71 @@
+name: Private Context
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  private-context:
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    steps:
+      - name: Check out trusted push source
+        if: github.event_name == 'push'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 0
+      - name: Check out pull request source
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check out trusted scanner
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: scanner
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Fetch trusted base into pull request source
+        if: github.event_name == 'pull_request'
+        working-directory: source
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --no-tags --depth=1 \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "$PR_BASE_SHA"
+      - name: Detect trusted scanner
+        if: github.event_name == 'pull_request'
+        id: trusted-scanner
+        run: |
+          if [ -x scanner/scripts/check-private-context ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Trusted scanner is not present on the base branch yet; pull request private-context scans will start after this guardrail PR is merged."
+          fi
+      - name: Scan worktree
+        if: github.event_name == 'push'
+        run: scripts/check-private-context --worktree
+      - name: Scan pull request worktree
+        if: github.event_name == 'pull_request' && steps.trusted-scanner.outputs.available == 'true'
+        working-directory: source
+        run: ../scanner/scripts/check-private-context --worktree
+      - name: Scan pull request range
+        if: github.event_name == 'pull_request' && steps.trusted-scanner.outputs.available == 'true'
+        working-directory: source
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: ../scanner/scripts/check-private-context --git-range "$PR_BASE_SHA..$PR_HEAD_SHA"

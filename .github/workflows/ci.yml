@@ -15,14 +15,25 @@ jobs:
         uses: DavidAnson/markdownlint-cli2-action@ded1f9488f68a970bc66ea5619e13e9b52e601cd # v23
       - name: Installer shell syntax
         run: |
-          bash -n install.sh
-          bash -n uninstall.sh
+          bash -n \
+            install.sh \
+            uninstall.sh \
+            scripts/betterleaks-docker.sh \
+            scripts/check-private-context
       - name: Install shell lint tooling
         run: sudo apt-get update && sudo apt-get install -y shellcheck shfmt
       - name: Installer shell lint
         run: |
-          shellcheck install.sh uninstall.sh
-          shfmt -d install.sh uninstall.sh
+          shellcheck \
+            install.sh \
+            uninstall.sh \
+            scripts/betterleaks-docker.sh \
+            scripts/check-private-context
+          shfmt -d \
+            install.sh \
+            uninstall.sh \
+            scripts/betterleaks-docker.sh \
+            scripts/check-private-context
       - name: PowerShell script smoke and analysis
         run: |
           ./scripts/pwsh-docker.sh -NoProfile -File ./install.ps1 --dry-run --no-onboard

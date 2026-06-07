@@ -94,7 +94,7 @@ final class TrelloBoardSetupTest {
             respond(
                     exchange,
                     """
-                    {"id":"board-1","name":"Existing Board","shortLink":"existing","url":"https://trello.com/b/existing/existing-board","closed":false}
+                    {"id":"board-1","name":"Existing Board","shortLink":"SYNTH001","url":"https://trello.com/b/SYNTH001/existing-board","closed":false}
                     """);
         });
         server.createContext("/1/boards/board-1/lists", exchange -> respond(exchange, boardListsResponse.get()));
@@ -441,7 +441,7 @@ final class TrelloBoardSetupTest {
         assertThat(result.blockedState()).isEqualTo("Blocked");
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
-                .contains("board_id: \"existing\"")
+                .contains("board_id: \"SYNTH001\"")
                 .contains("root: \"./agent-workspaces\"")
                 .contains("port: " + ConfigDefaults.DEFAULT_SERVER_PORT)
                 .contains("model: \"gpt-5.5\"")
@@ -504,7 +504,7 @@ final class TrelloBoardSetupTest {
                 .contains("max_concurrent_agents: 2");
         assertThat(result.serverPort()).isEqualTo(ConfigDefaults.DEFAULT_SERVER_PORT);
         EffectiveConfig config = resolve(workflow);
-        assertThat(config.tracker().boardId()).isEqualTo("existing");
+        assertThat(config.tracker().boardId()).isEqualTo("SYNTH001");
         assertThat(config.codex().model()).isEqualTo("gpt-5.5");
         assertThat(config.codex().reasoningEffort()).isEqualTo("medium");
         assertThat(config.workspace().root()).isEqualTo(workflow.getParent().resolve("agent-workspaces"));

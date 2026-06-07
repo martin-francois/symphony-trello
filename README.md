@@ -385,17 +385,17 @@ Use this path when you already have a Trello board and want Symphony to write a 
 [`WORKFLOW.md`](#workflow-contract) for that board.
 
 1. Copy the board short link from the board URL.
-   In `https://trello.com/b/abc123/my-board`, use `abc123`.
+   In `https://trello.com/b/SYNTH001/my-board`, use `SYNTH001`.
 2. Run the import command:
 
 ```bash
-symphony-trello import-board --board abc123 --active "Ready for Codex" --in-progress "In Progress" --terminal Done --blocked Blocked
+symphony-trello import-board --board SYNTH001 --active "Ready for Codex" --in-progress "In Progress" --terminal Done --blocked Blocked
 ```
 
 Add `--no-github` when the imported board should not use GitHub PR publication or landing:
 
 ```bash
-symphony-trello import-board --board abc123 --active "Ready for Codex" --in-progress "In Progress" --terminal Done --blocked Blocked --no-github
+symphony-trello import-board --board SYNTH001 --active "Ready for Codex" --in-progress "In Progress" --terminal Done --blocked Blocked --no-github
 ```
 
 You may omit `--active` when the board already has a list named `Ready for Codex`. You may omit
@@ -476,7 +476,7 @@ write [`WORKFLOW.md`](#workflow-contract) yourself.
 5. Choose a non-active list for blocked work, such as `Blocked`. If your board does not have one,
    use your review list so blocked cards still leave the active list.
 6. Copy the board short link from the board URL.
-   In `https://trello.com/b/abc123/my-board`, the `board_id` value can be `abc123`.
+   In `https://trello.com/b/SYNTH001/my-board`, the `board_id` value can be `SYNTH001`.
 7. Create [`WORKFLOW.md`](#workflow-contract) and set `tracker.board_id`, `tracker.active_states`,
    `tracker.in_progress_state`, `tracker.terminal_states`, and the handoff list names to match
    your board.
@@ -489,7 +489,7 @@ tracker:
   kind: trello
   api_key: $TRELLO_API_KEY
   api_token: $TRELLO_API_TOKEN
-  board_id: abc123
+  board_id: SYNTH001
   active_states:
     - Ready for Codex
     - In Progress

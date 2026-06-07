@@ -68,7 +68,14 @@ matters, and easy for another engineer to understand without asking the original
    fixtures, docs, commit messages, or new issue text. When a Trello-shaped value is needed, replace
    it with a clearly synthetic same-shape value such as `SYNTH001` for an 8-character short link or
    `000000000000000000000001` for a 24-character board id, and use synthetic URLs such as
-   `https://trello.com/b/SYNTH001/synthetic-board`.
+   `https://trello.com/b/SYNTH001/synthetic-board`. GitHub Secret Scanning with repository custom
+   patterns is the primary protection for GitHub-hosted issue, pull request, review, and comment
+   text. Use `scripts/check-private-context` before committing files or manually posting copied
+   diagnostic text from live reproduction work, logs, or local setup output. The scanner delegates
+   to BetterLeaks plus repository-specific private-context rules. For manual GitHub posts where the
+   exact text is available, scan it first with
+   `scripts/check-private-context --stdin --label <safe-label>`. When the scanner reports
+   Trello-shaped test data, make the fixture clearly synthetic rather than suppressing the finding.
 13. Run the relevant verification before finishing. For normal code changes, use:
 
    ```bash
@@ -601,6 +608,10 @@ matters, and easy for another engineer to understand without asking the original
   The ADR must make the selected approach explicit, list the alternatives considered, and explain
   why they were not chosen. Do not leave these decisions only in chat, PR comments, or commit
   messages.
+- Treat evaluated tool, dependency, scanner, analyzer, CI gate, and wrapper-vs-premade decisions as
+  ADR-worthy when more than one plausible maintained option exists. This especially applies when a
+  user rejects an in-house or hand-rolled implementation in favor of a premade solution. Record the
+  chosen tool, the rejected tools or custom approach, and the operational tradeoffs in the same PR.
 - When an implementation approach, refactor, dependency, tool, API shape, user-flow behavior, or
   testing strategy is attempted or seriously considered and then rejected for non-obvious reasons,
   create or update an ADR that records the rejected approach and why. The goal is to prevent future
