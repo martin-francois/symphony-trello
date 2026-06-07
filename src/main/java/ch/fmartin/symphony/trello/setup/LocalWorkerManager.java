@@ -62,11 +62,14 @@ final class LocalWorkerManager {
             startAll(paths, manifest, request, out);
             return 0;
         }
-        ConnectedBoard board = selectOne(manifest, request.board(), request.workflow(), "start");
+        ConnectedBoard selectedBoard = selectOne(manifest, request.board(), request.workflow(), "start");
         Path envPath = request.envPath()
-                .orElseGet(() -> board.envPath() == null ? paths.defaultEnvPath() : board.envPath())
+                .orElseGet(() -> selectedBoard.envPath() == null ? paths.defaultEnvPath() : selectedBoard.envPath())
                 .toAbsolutePath()
                 .normalize();
+        ConnectedBoard board = request.workflow().isPresent() && selectedBoard.envPath() == null
+                ? workflowBoard(selectedBoard.workflowPath(), envPath)
+                : selectedBoard;
         start(paths, board, envPath, request.envPath().isPresent(), out);
         return 0;
     }
@@ -147,9 +150,6 @@ final class LocalWorkerManager {
         Long existingPid = store.readPid(files.pidFile());
         int healthPort = healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), envPath);
         Optional<WorkerCredentialUsage> credentialUsage = workerCredentialUsage(board.workflowPath(), envPath);
-        if (explicitEnvOverride) {
-            credentialUsage.ifPresent(this::validateWorkerCredentials);
-        }
         if (existingPid != null && platform.isAlive(existingPid)) {
             if (!platform.isManaged(existingPid, paths.appHome(), board.workflowPath())) {
                 throw new TrelloBoardSetupException(
@@ -178,9 +178,13 @@ final class LocalWorkerManager {
             return;
         }
 
-        if (!explicitEnvOverride) {
-            credentialUsage.ifPresent(this::validateWorkerCredentials);
-        }
+        boolean workflowServerPortUsed =
+                healthChecker.externalHttpPortOverrideSource(envPath).isEmpty();
+        workflowConfig.validateStartEnvironmentReferences(
+                board.workflowPath(),
+                WorkflowEnvironmentResolver.resolver(environment, envPath),
+                workflowServerPortUsed);
+        credentialUsage.ifPresent(this::validateWorkerCredentials);
 
         List<String> command = List.of(
                 javaExecutable(),
@@ -431,6 +435,7 @@ final class LocalWorkerManager {
                 request.appHome(), request.configDir(), request.workspaceRoot(), request.stateHome(), environment);
         ConnectedBoardManifest manifest = new ConnectedBoardRepository(paths.manifestPath()).load();
         List<ConnectedBoard> boards = selectForStop(manifest, request.board(), request.workflow());
+        boards = withDefaultEnvForExplicitWorkflow(paths, request.workflow(), boards);
         ManagedProcessStore store = new ManagedProcessStore(paths.stateHome());
         if (boards.isEmpty()) {
             stopPidFiles(paths, store, out);
@@ -458,13 +463,15 @@ final class LocalWorkerManager {
                 request.appHome(), request.configDir(), request.workspaceRoot(), request.stateHome(), environment);
         ConnectedBoardManifest manifest = new ConnectedBoardRepository(paths.manifestPath()).load();
         List<ConnectedBoard> boards = selectForStatus(manifest, request.board(), request.workflow());
+        boards = withDefaultEnvForExplicitWorkflow(paths, request.workflow(), boards);
         if (boards.isEmpty()) {
             printPidFileStatus(paths, out);
             return 0;
         }
         ManagedProcessStore store = new ManagedProcessStore(paths.stateHome());
         for (ConnectedBoard board : boards) {
-            WorkflowValidation workflowDiagnostics = workflowConfig.diagnosticsValidation(board.workflowPath());
+            WorkflowValidation workflowDiagnostics = workflowConfig.diagnosticsValidation(
+                    board.workflowPath(), WorkflowEnvironmentResolver.resolver(environment, board.envPath()));
             if (!workflowDiagnostics.ok()) {
                 out.println("invalid \"" + board.boardName() + "\" " + workflowDiagnostics.message() + ": "
                         + board.workflowPath());
@@ -730,20 +737,40 @@ final class LocalWorkerManager {
     }
 
     private ConnectedBoard workflowBoard(Path workflowPath) {
-        String boardId = workflowConfig.boardId(workflowPath).orElseGet(() -> PathNames.fileName(workflowPath));
-        int serverPort = workflowConfig.serverPort(workflowPath).orElse(TrelloBoardSetup.DEFAULT_SERVER_PORT);
+        return workflowBoard(workflowPath, null);
+    }
+
+    private ConnectedBoard workflowBoard(Path workflowPath, Path envPath) {
+        var environmentResolver = WorkflowEnvironmentResolver.resolver(environment, envPath);
+        String boardId = workflowConfig
+                .boardId(workflowPath, environmentResolver)
+                .orElseGet(() -> PathNames.fileName(workflowPath));
+        int serverPort = workflowConfig
+                .serverPort(workflowPath, environmentResolver)
+                .orElse(TrelloBoardSetup.DEFAULT_SERVER_PORT);
         return new ConnectedBoard(
                 boardId,
                 boardId,
                 PathNames.fileName(workflowPath),
                 "",
                 workflowPath,
-                null,
+                envPath,
                 TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT,
                 serverPort,
                 false,
                 List.of(),
                 false);
+    }
+
+    private List<ConnectedBoard> withDefaultEnvForExplicitWorkflow(
+            LocalWorkerPaths paths, Optional<Path> workflow, List<ConnectedBoard> boards) {
+        if (workflow.isEmpty()) {
+            return boards;
+        }
+        return boards.stream()
+                .map(board ->
+                        board.envPath() == null ? workflowBoard(board.workflowPath(), paths.defaultEnvPath()) : board)
+                .toList();
     }
 
     private static ManagedProcessPlatform platformForCurrentOs() {

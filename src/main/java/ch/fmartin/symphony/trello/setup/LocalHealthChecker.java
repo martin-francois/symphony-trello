@@ -20,6 +20,8 @@ import java.util.Map;
 import java.util.Optional;
 
 final class LocalHealthChecker {
+    static final List<String> HTTP_PORT_ENVIRONMENT_NAMES = List.of("SYMPHONY_HTTP_PORT", "QUARKUS_HTTP_PORT");
+
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final TypeReference<Map<String, Object>> JSON_MAP_TYPE = new TypeReference<>() {};
     private static final Duration LOCAL_STATUS_TIMEOUT = Duration.ofMillis(500);
@@ -108,11 +110,13 @@ final class LocalHealthChecker {
     int managedHealthPort(Path workflowPath, int fallbackPort, Path envPath) {
         return externalHttpPortOverride(envPath)
                 .map(LocalHealthChecker::requireStableExternalPort)
-                .orElseGet(() -> stableWorkflowPort(workflowPath, fallbackPort));
+                .orElseGet(() -> stableWorkflowPort(workflowPath, fallbackPort, envPath));
     }
 
-    private int stableWorkflowPort(Path workflowPath, int fallbackPort) {
-        int port = workflowConfig.serverPort(workflowPath).orElse(fallbackPort);
+    private int stableWorkflowPort(Path workflowPath, int fallbackPort, Path envPath) {
+        int port = workflowConfig
+                .serverPort(workflowPath, WorkflowEnvironmentResolver.resolver(environment, envPath))
+                .orElse(fallbackPort);
         if (port == 0) {
             throw new TrelloBoardSetupException(
                     "setup_managed_port_required",
@@ -122,19 +126,7 @@ final class LocalHealthChecker {
     }
 
     Optional<String> externalHttpPortOverrideSource(Path envPath) {
-        for (String name : List.of("SYMPHONY_HTTP_PORT", "QUARKUS_HTTP_PORT")) {
-            if (!blank(environment.get(name))) {
-                return Optional.of(name + " environment variable");
-            }
-        }
-        Path dotenv = envPath == null ? Path.of(".env") : envPath;
-        Map<String, String> dotenvValues = LocalEnvironment.load(dotenv);
-        for (String name : List.of("SYMPHONY_HTTP_PORT", "QUARKUS_HTTP_PORT")) {
-            if (!blank(dotenvValues.get(name))) {
-                return Optional.of(name + " in " + dotenv);
-            }
-        }
-        return Optional.empty();
+        return WorkflowEnvironmentResolver.externalHttpPortOverrideSource(environment, envPath);
     }
 
     static boolean portAcceptsConnections(int port) {
@@ -175,7 +167,7 @@ final class LocalHealthChecker {
 
     private Optional<Integer> externalHttpPortOverride(Path envPath) {
         Path dotenv = envPath == null ? Path.of(".env") : envPath;
-        return LocalEnvironment.firstPresent(dotenv, environment, "SYMPHONY_HTTP_PORT", "QUARKUS_HTTP_PORT")
+        return LocalEnvironment.firstPresent(dotenv, environment, HTTP_PORT_ENVIRONMENT_NAMES.toArray(String[]::new))
                 .filter(value -> !blank(value))
                 .map(value -> {
                     try {

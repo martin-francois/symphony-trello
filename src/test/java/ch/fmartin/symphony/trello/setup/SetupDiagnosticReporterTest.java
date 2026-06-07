@@ -52,6 +52,7 @@ final class SetupDiagnosticReporterTest {
                 "setup_worker_board_ambiguous",
                 "setup_worker_board_required",
                 "setup_worker_workflow_ambiguous",
+                "setup_workflow_unresolved_environment",
                 "trello_auth_failed",
                 "trello_permission_denied");
         List<String> unexpectedFailureCodes = List.of(
