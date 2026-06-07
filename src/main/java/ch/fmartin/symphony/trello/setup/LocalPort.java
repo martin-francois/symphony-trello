@@ -4,7 +4,10 @@ import static com.google.common.base.Preconditions.checkArgument;
 
 record LocalPort(int value) {
     static final int MIN = 1;
+    static final int MIN_USER_SERVICE = 1024;
     static final int MAX = 65_535;
+    private static final String CLI_SERVER_PORT_RANGE =
+            "--server-port must be between 1024 and 65535 for local HTTP status.";
 
     LocalPort {
         checkArgument(isValid(value), "Local port must be between %s and %s: %s", MIN, MAX, value);
@@ -16,7 +19,10 @@ record LocalPort(int value) {
 
     static void validateCliServerPort(int value) {
         if (!isValid(value)) {
-            throw new TrelloBoardSetupException("setup_invalid_port", "--server-port must be between 1 and 65535.");
+            throw new TrelloBoardSetupException("setup_invalid_port", CLI_SERVER_PORT_RANGE);
+        }
+        if (value < MIN_USER_SERVICE) {
+            throw new TrelloBoardSetupException("setup_invalid_server_port", CLI_SERVER_PORT_RANGE);
         }
     }
 

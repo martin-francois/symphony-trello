@@ -832,8 +832,8 @@ shape, map inputs to request objects, delegate to setup services, and return exi
 Codex, GitHub, workflow generation, health-check, port-repair, and onboarding decisions remain in
 the setup services instead of command parser classes.
 
-When a setup command accepts `--server-port`, the value MUST be a concrete TCP port from 1 through
-65535. Omit the option to let setup choose the first available managed status port.
+When a setup command accepts `--server-port`, the value MUST be a concrete TCP port from 1024
+through 65535. Omit the option to let setup choose the first available managed status port.
 
 When `new-board` is used without an explicit Workspace and the token can access exactly one Trello
 Workspace, the Java implementation uses that Workspace automatically. If the token can access
@@ -918,8 +918,8 @@ selected workflow file.
 Generated workflows include `server.port` for the optional HTTP status server. Unless the operator
 passes an explicit setup port option, the Java setup commands choose the first unused workflow port
 starting at `18080` by inspecting other workflow files in the same folder. Existing Trello workflow
-files without `server.port` reserve `18080`, matching the Java runtime default. Operators MAY pass
-`0` for temporary local runs that should use an ephemeral port.
+files without `server.port` reserve `18080`, matching the Java runtime default. Hand-authored
+workflow files MAY use `server.port: 0` for temporary local runs that should use an ephemeral port.
 
 When `import-board` reads an existing board, the Java implementation detects common list names:
 `Ready for Codex` for queued work, `In Progress` for visible pickup, `Blocked` for blocked handoff,
