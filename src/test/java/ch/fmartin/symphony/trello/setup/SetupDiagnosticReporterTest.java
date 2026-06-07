@@ -187,9 +187,9 @@ final class SetupDiagnosticReporterTest {
                 .save(new ConnectedBoardManifest(List.of(
                         new ConnectedBoard(
                                 "private-board-id",
-                                "privatekey",
+                                "SYNTH901",
                                 "Sensitive Board Name",
-                                "https://trello.com/b/privatekey/sensitive-board",
+                                "https://trello.com/b/SYNTH901/sensitive-board",
                                 privateWorkflow,
                                 env,
                                 workspaceRoot,
@@ -214,7 +214,7 @@ final class SetupDiagnosticReporterTest {
                 store.files(privateWorkflow).stderrLog(),
                 """
                 TRELLO_API_TOKEN=trello-secret
-                board https://trello.com/b/privatekey/sensitive-board
+                board https://trello.com/b/SYNTH901/sensitive-board
                 repo /Users/Jane Doe/client/private-repo
                 selected-tail-line
                 """,
@@ -243,7 +243,7 @@ final class SetupDiagnosticReporterTest {
 
         // when
         String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.of("https://trello.com/b/privatekey/sensitive-board"),
+                Optional.of("https://trello.com/b/SYNTH901/sensitive-board"),
                 Optional.empty(),
                 false,
                 false,
@@ -274,9 +274,9 @@ final class SetupDiagnosticReporterTest {
                 .doesNotContain(
                         "Sensitive Board Name",
                         "private-board-id",
-                        "privatekey",
+                        "SYNTH901",
                         "trello-secret",
-                        "https://trello.com/b/privatekey/sensitive-board",
+                        "https://trello.com/b/SYNTH901/sensitive-board",
                         "Other Board",
                         "other-board-id",
                         "19182",
@@ -929,9 +929,9 @@ final class SetupDiagnosticReporterTest {
                 .save(new ConnectedBoardManifest(List.of(
                         new ConnectedBoard(
                                 "relative-board-id",
-                                "relativekey",
+                                "SYNTH101",
                                 "Relative Board",
-                                "https://trello.com/b/relativekey/relative-board",
+                                "https://trello.com/b/SYNTH101/relative-board",
                                 workflow,
                                 configDir.resolve(".env"),
                                 workspaceRoot,
@@ -941,9 +941,9 @@ final class SetupDiagnosticReporterTest {
                                 false),
                         new ConnectedBoard(
                                 "other-board-id",
-                                "otherkey",
+                                "SYNTH102",
                                 "Other Relative Board",
-                                "https://trello.com/b/otherkey/other-relative-board",
+                                "https://trello.com/b/SYNTH102/other-relative-board",
                                 otherWorkflow,
                                 configDir.resolve(".env"),
                                 workspaceRoot,
@@ -981,12 +981,12 @@ final class SetupDiagnosticReporterTest {
                 .doesNotContain(
                         "Relative Board",
                         "relative-board-id",
-                        "relativekey",
-                        "https://trello.com/b/relativekey/relative-board",
+                        "SYNTH101",
+                        "https://trello.com/b/SYNTH101/relative-board",
                         "Other Relative Board",
                         "other-board-id",
-                        "otherkey",
-                        "https://trello.com/b/otherkey/other-relative-board",
+                        "SYNTH102",
+                        "https://trello.com/b/SYNTH102/other-relative-board",
                         "19185",
                         "other workflow log",
                         tempDir.toString());
@@ -1008,9 +1008,9 @@ final class SetupDiagnosticReporterTest {
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "manifest-board-id",
-                        "manifestkey",
+                        "SYNTH201",
                         "Manifest Board",
-                        "https://trello.com/b/manifestkey/manifest-board",
+                        "https://trello.com/b/SYNTH201/manifest-board",
                         manifestWorkflow,
                         configDir.resolve(".env"),
                         workspaceRoot,
@@ -1049,8 +1049,8 @@ final class SetupDiagnosticReporterTest {
                 .doesNotContain(
                         "Manifest Board",
                         "manifest-board-id",
-                        "manifestkey",
-                        "https://trello.com/b/manifestkey/manifest-board",
+                        "SYNTH201",
+                        "https://trello.com/b/SYNTH201/manifest-board",
                         "19186",
                         "manifest workflow log",
                         tempDir.toString());
@@ -1073,9 +1073,9 @@ final class SetupDiagnosticReporterTest {
                 .save(new ConnectedBoardManifest(List.of(
                         new ConnectedBoard(
                                 "private-board-a-id",
-                                "privateAKey",
+                                "SYNTH301",
                                 privateBoardName,
-                                "https://trello.com/b/privateAKey/private-a",
+                                "https://trello.com/b/SYNTH301/private-a",
                                 workflowA,
                                 configDir.resolve(".env"),
                                 workspaceRoot,
@@ -1085,9 +1085,9 @@ final class SetupDiagnosticReporterTest {
                                 false),
                         new ConnectedBoard(
                                 "private-board-b-id",
-                                "privateBKey",
+                                "SYNTH302",
                                 privateBoardName,
-                                "https://trello.com/b/privateBKey/private-b",
+                                "https://trello.com/b/SYNTH302/private-b",
                                 workflowB,
                                 configDir.resolve(".env"),
                                 workspaceRoot,
@@ -1127,10 +1127,10 @@ final class SetupDiagnosticReporterTest {
                                 privateBoardName,
                                 "private-board-a-id",
                                 "private-board-b-id",
-                                "privateAKey",
-                                "privateBKey",
-                                "https://trello.com/b/privateAKey/private-a",
-                                "https://trello.com/b/privateBKey/private-b",
+                                "SYNTH301",
+                                "SYNTH302",
+                                "https://trello.com/b/SYNTH301/private-a",
+                                "https://trello.com/b/SYNTH302/private-b",
                                 workflowA.toString(),
                                 workflowB.toString(),
                                 "private board A log",
@@ -1153,9 +1153,9 @@ final class SetupDiagnosticReporterTest {
                 .save(new ConnectedBoardManifest(List.of(
                         new ConnectedBoard(
                                 "private-workflow-board-a-id",
-                                "privateWorkflowA",
+                                "SYNTH401",
                                 "Private Workflow Board A",
-                                "https://trello.com/b/privateWorkflowA/private-workflow-a",
+                                "https://trello.com/b/SYNTH401/private-workflow-a",
                                 workflow,
                                 configDir.resolve(".env"),
                                 workspaceRoot,
@@ -1165,9 +1165,9 @@ final class SetupDiagnosticReporterTest {
                                 false),
                         new ConnectedBoard(
                                 "private-workflow-board-b-id",
-                                "privateWorkflowB",
+                                "SYNTH402",
                                 "Private Workflow Board B",
-                                "https://trello.com/b/privateWorkflowB/private-workflow-b",
+                                "https://trello.com/b/SYNTH402/private-workflow-b",
                                 workflow,
                                 configDir.resolve(".env"),
                                 workspaceRoot,
@@ -1209,10 +1209,10 @@ final class SetupDiagnosticReporterTest {
                                 "Private Workflow Board B",
                                 "private-workflow-board-a-id",
                                 "private-workflow-board-b-id",
-                                "privateWorkflowA",
-                                "privateWorkflowB",
-                                "https://trello.com/b/privateWorkflowA/private-workflow-a",
-                                "https://trello.com/b/privateWorkflowB/private-workflow-b",
+                                "SYNTH401",
+                                "SYNTH402",
+                                "https://trello.com/b/SYNTH401/private-workflow-a",
+                                "https://trello.com/b/SYNTH402/private-workflow-b",
                                 workflow.toString(),
                                 "19193",
                                 "19194",

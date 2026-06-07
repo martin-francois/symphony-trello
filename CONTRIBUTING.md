@@ -178,6 +178,22 @@ a later public-repository code-scanning layer and is not part of normal local `v
 dashboards can add signal, but they must not replace local checks contributors can run, fix, and
 rerun.
 
+GitHub Secret Scanning with repository custom patterns is the primary protection for
+GitHub-hosted issue, pull request, review, and comment text. Private-context scanning uses
+BetterLeaks plus repository-specific rules under `config/betterleaks` as a local and CI complement.
+Run it before committing files or manually posting copied diagnostic text:
+
+```bash
+scripts/check-private-context --worktree
+scripts/check-private-context --git-range origin/main..HEAD
+printf '%s\n' 'text to post' | scripts/check-private-context --stdin --label github-body
+```
+
+If the scanner reports Trello-shaped values that are only test data, make them clearly synthetic
+rather than suppressing the finding. See
+[Private Context Scanning](docs/security/private-context-scanning.md) for the local commands and
+the GitHub Secret Scanning responsibility split.
+
 PowerShell installer tests use native `pwsh` when it is installed. CI also runs them through
 Microsoft's .NET SDK container:
 
