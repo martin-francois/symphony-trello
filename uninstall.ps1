@@ -308,7 +308,6 @@ $RawPrefix = $Prefix
 $Prefix = [System.IO.Path]::GetFullPath($Prefix)
 $ConfigDir = [System.IO.Path]::GetFullPath($ConfigDir)
 $WorkspaceRoot = [System.IO.Path]::GetFullPath($WorkspaceRoot)
-$RawBinDir = $BinDir
 $BinDir = [System.IO.Path]::GetFullPath($BinDir)
 $StateHome = [System.IO.Path]::GetFullPath($StateHome)
 $CodexHome = [System.IO.Path]::GetFullPath((Join-Path $SymphonyHome "codex"))

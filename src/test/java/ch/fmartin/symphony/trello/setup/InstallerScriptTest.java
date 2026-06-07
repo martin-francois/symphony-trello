@@ -8,6 +8,7 @@ import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -83,35 +84,11 @@ final class InstallerScriptTest {
         Files.createSymbolicLink(symlink, symphonyHome.resolve("config"));
         Map<String, String> environment = Map.of("HOME", home.toString(), "SYMPHONY_HOME", symphonyHome.toString());
 
-        List<UnsafeCommandDirectory> cases = List.of(
-                new UnsafeCommandDirectory("root", "/", "--bin-dir must point to a dedicated command directory."),
-                new UnsafeCommandDirectory(
-                        "home", home.toString(), "--bin-dir must point to a dedicated command directory."),
-                new UnsafeCommandDirectory(
-                        "checkout",
-                        Path.of("").toAbsolutePath().normalize().toString(),
-                        "--bin-dir must point to a dedicated command directory."),
-                new UnsafeCommandDirectory("blank", "", "--bin-dir must not be blank."),
-                new UnsafeCommandDirectory("whitespace", "   ", "--bin-dir must not be blank."),
-                new UnsafeCommandDirectory("relative", "relative-bin", "--bin-dir must be an absolute path."),
-                new UnsafeCommandDirectory(
-                        "control",
-                        temporaryDirectory.resolve("bin\nline").toString(),
-                        "--bin-dir must not contain control characters."),
-                new UnsafeCommandDirectory("file", file.toString(), "--bin-dir must be a directory."),
-                new UnsafeCommandDirectory("symlink", symlink.toString(), "--bin-dir must not be a symlink."),
-                new UnsafeCommandDirectory(
-                        "symlink-parent", symlink.resolve("bin").toString(), "--bin-dir must not be a symlink."),
-                new UnsafeCommandDirectory(
-                        "symlink-traversal", symlink.resolve("../bin").toString(), "--bin-dir must not be a symlink."),
-                new UnsafeCommandDirectory(
-                        "symlink-after-traversal",
-                        temporaryDirectory
-                                .resolve("missing")
-                                .resolve("../install-bin-config-link")
-                                .resolve("bin")
-                                .toString(),
-                        "--bin-dir must not be a symlink."),
+        List<UnsafeCommandDirectory> cases = posixUnsafeCommandDirectories(
+                home,
+                file,
+                symlink,
+                "install-bin-config-link",
                 new UnsafeCommandDirectory(
                         "config-overlap",
                         symphonyHome.resolve("config").toString(),
@@ -158,35 +135,11 @@ final class InstallerScriptTest {
         Files.createSymbolicLink(symlink, symphonyHome.resolve("state"));
         Map<String, String> environment = Map.of("HOME", home.toString(), "SYMPHONY_HOME", symphonyHome.toString());
 
-        List<UnsafeCommandDirectory> cases = List.of(
-                new UnsafeCommandDirectory("root", "/", "--bin-dir must point to a dedicated command directory."),
-                new UnsafeCommandDirectory(
-                        "home", home.toString(), "--bin-dir must point to a dedicated command directory."),
-                new UnsafeCommandDirectory(
-                        "checkout",
-                        Path.of("").toAbsolutePath().normalize().toString(),
-                        "--bin-dir must point to a dedicated command directory."),
-                new UnsafeCommandDirectory("blank", "", "--bin-dir must not be blank."),
-                new UnsafeCommandDirectory("whitespace", "   ", "--bin-dir must not be blank."),
-                new UnsafeCommandDirectory("relative", "relative-bin", "--bin-dir must be an absolute path."),
-                new UnsafeCommandDirectory(
-                        "control",
-                        temporaryDirectory.resolve("bin\nline").toString(),
-                        "--bin-dir must not contain control characters."),
-                new UnsafeCommandDirectory("file", file.toString(), "--bin-dir must be a directory."),
-                new UnsafeCommandDirectory("symlink", symlink.toString(), "--bin-dir must not be a symlink."),
-                new UnsafeCommandDirectory(
-                        "symlink-parent", symlink.resolve("bin").toString(), "--bin-dir must not be a symlink."),
-                new UnsafeCommandDirectory(
-                        "symlink-traversal", symlink.resolve("../bin").toString(), "--bin-dir must not be a symlink."),
-                new UnsafeCommandDirectory(
-                        "symlink-after-traversal",
-                        temporaryDirectory
-                                .resolve("missing")
-                                .resolve("../uninstall-bin-state-link")
-                                .resolve("bin")
-                                .toString(),
-                        "--bin-dir must not be a symlink."),
+        List<UnsafeCommandDirectory> cases = posixUnsafeCommandDirectories(
+                home,
+                file,
+                symlink,
+                "uninstall-bin-state-link",
                 new UnsafeCommandDirectory(
                         "state-overlap",
                         symphonyHome.resolve("state").toString(),
@@ -210,7 +163,15 @@ final class InstallerScriptTest {
                 .toList();
 
         // then
-        assertUnsafeCommandDirectoryFailures(rejectedCases, results, "Installed CLI:", "Will remove if present:");
+        for (int index = 0; index < rejectedCases.size(); index++) {
+            UnsafeCommandDirectory commandDirectory = rejectedCases.get(index);
+            ProcessResult result = results.get(index);
+            assertThat(result.exitCode()).as(commandDirectory.name()).isEqualTo(2);
+            assertThat(result.output())
+                    .as(commandDirectory.name())
+                    .contains(commandDirectory.expectedMessage())
+                    .doesNotContain("Installed CLI:", "Will remove if present:");
+        }
     }
 
     @Test
@@ -268,202 +229,12 @@ final class InstallerScriptTest {
                         "--prefix must not overlap Symphony config, workspace, or state directories."));
 
         // when
-        List<ProcessResult> results = cases.stream()
-                .map(appPath -> runUnchecked(
-                        environment,
-                        "bash",
-                        "install.sh",
-                        "--dry-run",
-                        "--no-onboard",
-                        "--prefix",
-                        appPath.value(),
-                        "--bin-dir",
-                        safeBin.toString()))
-                .toList();
+        List<ProcessResult> results =
+                runPosixAppPathCases(environment, "install.sh", List.of("--dry-run", "--no-onboard"), cases, safeBin);
 
         // then
-        assertUnsafeAppPathFailures(cases, results, "Install:", "WOULD clone or update:", "Command PATH setup");
-    }
-
-    @Test
-    void posixInstallerAcceptsDedicatedAppPathDirectlyUnderHome() throws Exception {
-        // given
-        Assumptions.assumeTrue(commandExists("bash"));
-        Path home = temporaryDirectory.resolve("install-home-child-home");
-        Path app = home.resolve("symphony-trello");
-        Path safeBin = temporaryDirectory.resolve("install-home-child-bin");
-        Path fakeBin = createFakeToolchain(temporaryDirectory);
-        Files.createDirectories(home);
-        Map<String, String> environment = Map.of(
-                "HOME",
-                home.toString(),
-                "PATH",
-                fakeBin + File.pathSeparator + System.getenv("PATH"),
-                "SYMPHONY_TRELLO_TEST_OS",
-                "Linux",
-                "SYMPHONY_TRELLO_TEST_ARCH",
-                "x86_64");
-
-        // when
-        ProcessResult result = run(
-                environment,
-                "bash",
-                "install.sh",
-                "--dry-run",
-                "--no-onboard",
-                "--prefix",
-                app.toString(),
-                "--bin-dir",
-                safeBin.toString());
-
-        // then
-        result.assertSuccess();
-        assertThat(result.output()).contains("Install: " + app, "WOULD clone or update: " + app);
-    }
-
-    @Test
-    void posixInstallerRejectsAppPathInsideRootScopedConfigDirectory() throws Exception {
-        // given
-        Assumptions.assumeTrue(commandExists("bash"));
-        Path home = temporaryDirectory.resolve("install-root-config-home");
-        Path app = home.resolve(".local/share/symphony-trello/app");
-        Path safeBin = temporaryDirectory.resolve("install-root-config-bin");
-        Map<String, String> environment = Map.of("HOME", home.toString(), "SYMPHONY_TRELLO_CONFIG_DIR", "/");
-
-        // when
-        ProcessResult result = run(
-                environment,
-                "bash",
-                "install.sh",
-                "--dry-run",
-                "--no-onboard",
-                "--prefix",
-                app.toString(),
-                "--bin-dir",
-                safeBin.toString());
-
-        // then
-        assertThat(result.exitCode()).isEqualTo(2);
-        assertThat(result.output())
-                .contains("--prefix must not overlap Symphony config, workspace, or state directories.")
-                .doesNotContain("WOULD clone or update:", "Dry run: no files changed.");
-    }
-
-    @Test
-    void posixInstallerRejectsUnsafeSymphonyHomeBeforeDryRunPlan() throws Exception {
-        // given
-        Assumptions.assumeTrue(commandExists("bash"));
-        Path home = temporaryDirectory.resolve("install-home-base-home");
-        Path safeBin = temporaryDirectory.resolve("install-home-base-bin");
-        Files.createDirectories(home);
-
-        List<UnsafeInstallerPath> cases = List.of(
-                new UnsafeInstallerPath("root", "/", "--prefix must point to a dedicated app checkout directory."),
-                new UnsafeInstallerPath(
-                        "root-home", "/root", "--prefix must point to a dedicated app checkout directory."),
-                new UnsafeInstallerPath(
-                        "home", home.toString(), "--prefix must point to a dedicated app checkout directory."),
-                new UnsafeInstallerPath(
-                        "control", temporaryDirectory.resolve("home\nline").toString(), "control characters"));
-
-        // when
-        List<ProcessResult> results = cases.stream()
-                .map(appPath -> {
-                    Map<String, String> environment = Map.of("HOME", home.toString(), "SYMPHONY_HOME", appPath.value());
-                    return runUnchecked(
-                            environment,
-                            "bash",
-                            "install.sh",
-                            "--dry-run",
-                            "--no-onboard",
-                            "--bin-dir",
-                            safeBin.toString());
-                })
-                .toList();
-
-        // then
-        for (int index = 0; index < cases.size(); index++) {
-            UnsafeCommandDirectory commandDirectory = cases.get(index);
-            ProcessResult result = results.get(index);
-            assertThat(result.exitCode()).as(commandDirectory.name()).isEqualTo(2);
-            assertThat(result.output())
-                    .as(commandDirectory.name())
-                    .contains(commandDirectory.expectedMessage())
-                    .doesNotContain("Installed CLI:", "Will remove if present:");
-        }
-    }
-
-    @Test
-    void posixInstallerRejectsUnsafeAppPathsBeforeDryRunPlan() throws Exception {
-        // given
-        Assumptions.assumeTrue(commandExists("bash"));
-        Path home = temporaryDirectory.resolve("install-app-home");
-        Path symphonyHome = temporaryDirectory.resolve("install-app-symphony-home");
-        Path file = temporaryDirectory.resolve("install-app-file");
-        Path symlink = temporaryDirectory.resolve("install-app-link");
-        Path safeBin = temporaryDirectory.resolve("install-app-bin");
-        Files.createDirectories(home);
-        Files.writeString(file, "not a directory", StandardCharsets.UTF_8);
-        Files.createSymbolicLink(symlink, temporaryDirectory.resolve("install-app-target"));
-        Map<String, String> environment = Map.of("HOME", home.toString(), "SYMPHONY_HOME", symphonyHome.toString());
-
-        List<UnsafeInstallerPath> cases = List.of(
-                new UnsafeInstallerPath("root", "/", "--prefix must point to a dedicated app checkout directory."),
-                new UnsafeInstallerPath(
-                        "root-home", "/root", "--prefix must point to a dedicated app checkout directory."),
-                new UnsafeInstallerPath(
-                        "home", home.toString(), "--prefix must point to a dedicated app checkout directory."),
-                new UnsafeInstallerPath(
-                        "checkout",
-                        Path.of("").toAbsolutePath().normalize().toString(),
-                        "--prefix must point to a dedicated app checkout directory."),
-                new UnsafeInstallerPath("blank", "", "--prefix must not be blank."),
-                new UnsafeInstallerPath("whitespace", "   ", "--prefix must not be blank."),
-                new UnsafeInstallerPath("relative", "relative-app", "--prefix must be an absolute path."),
-                new UnsafeInstallerPath(
-                        "control", temporaryDirectory.resolve("app\nline").toString(), "control characters"),
-                new UnsafeInstallerPath("file", file.toString(), "--prefix must be a directory."),
-                new UnsafeInstallerPath("symlink", symlink.toString(), "--prefix must not be a symlink."),
-                new UnsafeInstallerPath(
-                        "symlink-parent", symlink.resolve("app").toString(), "--prefix must not be a symlink."),
-                new UnsafeInstallerPath(
-                        "symlink-traversal", symlink.resolve("../app").toString(), "--prefix must not be a symlink."),
-                new UnsafeInstallerPath(
-                        "symlink-after-traversal",
-                        temporaryDirectory
-                                .resolve("missing")
-                                .resolve("../install-app-link")
-                                .toString(),
-                        "--prefix must not be a symlink."),
-                new UnsafeInstallerPath(
-                        "local-data-overlap",
-                        symphonyHome.toString(),
-                        "--prefix must not overlap Symphony config, workspace, or state directories."));
-
-        // when
-        List<ProcessResult> results = cases.stream()
-                .map(appPath -> runUnchecked(
-                        environment,
-                        "bash",
-                        "install.sh",
-                        "--dry-run",
-                        "--no-onboard",
-                        "--prefix",
-                        appPath.value(),
-                        "--bin-dir",
-                        safeBin.toString()))
-                .toList();
-
-        // then
-        for (int index = 0; index < cases.size(); index++) {
-            UnsafeInstallerPath appPath = cases.get(index);
-            ProcessResult result = results.get(index);
-            assertThat(result.exitCode()).as(appPath.name()).isEqualTo(2);
-            assertThat(result.output())
-                    .as(appPath.name())
-                    .contains(appPath.expectedMessage())
-                    .doesNotContain("Install:", "WOULD clone or update:", "Command PATH setup");
-        }
+        assertUnsafeAppPathFailures(
+                cases, results, OutputStyle.RAW, "Install:", "WOULD clone or update:", "Command PATH setup");
     }
 
     @Test
@@ -588,59 +359,15 @@ final class InstallerScriptTest {
         Files.createSymbolicLink(symlink, temporaryDirectory.resolve("uninstall-app-target"));
         Map<String, String> environment = Map.of("HOME", home.toString(), "SYMPHONY_HOME", symphonyHome.toString());
 
-        List<UnsafeInstallerPath> cases = List.of(
-                new UnsafeInstallerPath("root", "/", "--prefix must point to a dedicated app checkout directory."),
-                new UnsafeInstallerPath(
-                        "root-home", "/root", "--prefix must point to a dedicated app checkout directory."),
-                new UnsafeInstallerPath(
-                        "home", home.toString(), "--prefix must point to a dedicated app checkout directory."),
-                new UnsafeInstallerPath(
-                        "checkout",
-                        Path.of("").toAbsolutePath().normalize().toString(),
-                        "--prefix must point to a dedicated app checkout directory."),
-                new UnsafeInstallerPath("blank", "", "--prefix must not be blank."),
-                new UnsafeInstallerPath("whitespace", "   ", "--prefix must not be blank."),
-                new UnsafeInstallerPath("relative", "relative-app", "--prefix must be an absolute path."),
-                new UnsafeInstallerPath(
-                        "control", temporaryDirectory.resolve("app\nline").toString(), "control characters"),
-                new UnsafeInstallerPath("file", file.toString(), "--prefix must be a directory."),
-                new UnsafeInstallerPath("symlink", symlink.toString(), "--prefix must not be a symlink."),
-                new UnsafeInstallerPath(
-                        "symlink-parent", symlink.resolve("app").toString(), "--prefix must not be a symlink."),
-                new UnsafeInstallerPath(
-                        "symlink-traversal", symlink.resolve("../app").toString(), "--prefix must not be a symlink."),
-                new UnsafeInstallerPath(
-                        "symlink-after-traversal",
-                        temporaryDirectory
-                                .resolve("missing")
-                                .resolve("../uninstall-app-link")
-                                .toString(),
-                        "--prefix must not be a symlink."));
+        List<UnsafeInstallerPath> cases = posixUnsafeAppPaths(home, file, symlink, "uninstall-app-link");
 
         // when
-        List<ProcessResult> results = cases.stream()
-                .map(appPath -> runUnchecked(
-                        environment,
-                        "bash",
-                        "uninstall.sh",
-                        "--dry-run",
-                        "--yes",
-                        "--prefix",
-                        appPath.value(),
-                        "--bin-dir",
-                        safeBin.toString()))
-                .toList();
+        List<ProcessResult> results =
+                runPosixAppPathCases(environment, "uninstall.sh", List.of("--dry-run", "--yes"), cases, safeBin);
 
         // then
-        for (int index = 0; index < cases.size(); index++) {
-            UnsafeInstallerPath appPath = cases.get(index);
-            ProcessResult result = results.get(index);
-            assertThat(result.exitCode()).as(appPath.name()).isEqualTo(2);
-            assertThat(result.output())
-                    .as(appPath.name())
-                    .contains(appPath.expectedMessage())
-                    .doesNotContain("App checkout:", "Will remove if present:", "Installed CLI:");
-        }
+        assertUnsafeAppPathFailures(
+                cases, results, OutputStyle.RAW, "App checkout:", "Will remove if present:", "Installed CLI:");
     }
 
     @Test
@@ -2210,65 +1937,22 @@ final class InstallerScriptTest {
         Map<String, String> environment = new LinkedHashMap<>(nonWindowsPowerShellEnvironment());
         environment.put("USERPROFILE", home.toString());
         environment.put("SYMPHONY_HOME", symphonyHome.toString());
-        List<UnsafeInstallerPath> cases = List.of(
-                new UnsafeInstallerPath("root", "/", "--prefix must point to a dedicated app checkout directory."),
-                new UnsafeInstallerPath(
-                        "root-home", "/root", "--prefix must point to a dedicated app checkout directory."),
-                new UnsafeInstallerPath(
-                        "checkout",
-                        Path.of("").toAbsolutePath().normalize().toString(),
-                        "--prefix must point to a dedicated app checkout directory."),
-                new UnsafeInstallerPath("relative", "relative-app", "--prefix must be an absolute path."),
-                new UnsafeInstallerPath("drive-relative", "C:relative-app", "--prefix must be an absolute path."),
-                new UnsafeInstallerPath("root-relative", "\\relative-app", "--prefix must be an absolute path."),
-                new UnsafeInstallerPath(
-                        "control", temporaryDirectory.resolve("app\nline").toString(), "control characters"),
-                new UnsafeInstallerPath("file", file.toString(), "--prefix must be a directory."),
-                new UnsafeInstallerPath("symlink", symlink.toString(), "--prefix must not be a symlink."),
-                new UnsafeInstallerPath(
-                        "symlink-parent", symlink.resolve("app").toString(), "--prefix must not be a symlink."),
-                new UnsafeInstallerPath(
-                        "symlink-traversal", symlink.resolve("../app").toString(), "--prefix must not be a symlink."),
-                new UnsafeInstallerPath(
-                        "symlink-after-traversal",
-                        temporaryDirectory
-                                .resolve("missing")
-                                .resolve("../ps-install-app-link")
-                                .toString(),
-                        "--prefix must not be a symlink."),
+        List<UnsafeInstallerPath> cases = powershellUnsafeAppPaths(
+                file,
+                symlink,
+                "ps-install-app-link",
                 new UnsafeInstallerPath(
                         "local-data-overlap",
                         symphonyHome.toString(),
                         "--prefix must not overlap Symphony config, workspace"));
 
         // when
-        List<ProcessResult> results = cases.stream()
-                .map(appPath -> runUnchecked(
-                        environment,
-                        command(
-                                        pwsh,
-                                        "-NoProfile",
-                                        "-File",
-                                        "./install.ps1",
-                                        "--dry-run",
-                                        "--no-onboard",
-                                        "--prefix",
-                                        appPath.value(),
-                                        "--bin-dir",
-                                        safeBin.toString())
-                                .toArray(String[]::new)))
-                .toList();
+        List<ProcessResult> results = runPowerShellAppPathCases(
+                environment, pwsh, "./install.ps1", List.of("--dry-run", "--no-onboard"), cases, safeBin);
 
         // then
-        for (int index = 0; index < cases.size(); index++) {
-            UnsafeInstallerPath appPath = cases.get(index);
-            ProcessResult result = results.get(index);
-            assertThat(result.exitCode()).as(appPath.name()).isNotZero();
-            assertThat(normalizedWhitespace(result.output()))
-                    .as(appPath.name())
-                    .contains(appPath.expectedMessage())
-                    .doesNotContain("Install:", "WOULD clone or update:", "Command PATH setup");
-        }
+        assertUnsafeAppPathFailures(
+                cases, results, OutputStyle.NORMALIZED, "Install:", "WOULD clone or update:", "Command PATH setup");
     }
 
     @Test
@@ -2370,29 +2054,10 @@ final class InstallerScriptTest {
         Map<String, String> environment = new LinkedHashMap<>(nonWindowsPowerShellEnvironment());
         environment.put("USERPROFILE", home.toString());
         environment.put("SYMPHONY_HOME", symphonyHome.toString());
-        List<UnsafeCommandDirectory> cases = List.of(
-                new UnsafeCommandDirectory("root", "/", "--bin-dir must point to a dedicated command directory."),
-                new UnsafeCommandDirectory("relative", "relative-bin", "--bin-dir must be an absolute path."),
-                new UnsafeCommandDirectory("drive-relative", "C:relative-bin", "--bin-dir must be an absolute path."),
-                new UnsafeCommandDirectory("root-relative", "\\relative-bin", "--bin-dir must be an absolute path."),
-                new UnsafeCommandDirectory(
-                        "control",
-                        temporaryDirectory.resolve("bin\nline").toString(),
-                        "--bin-dir must not contain control characters."),
-                new UnsafeCommandDirectory("file", file.toString(), "--bin-dir must be a directory."),
-                new UnsafeCommandDirectory("symlink", symlink.toString(), "--bin-dir must not be a symlink."),
-                new UnsafeCommandDirectory(
-                        "symlink-parent", symlink.resolve("bin").toString(), "--bin-dir must not be a symlink."),
-                new UnsafeCommandDirectory(
-                        "symlink-traversal", symlink.resolve("../bin").toString(), "--bin-dir must not be a symlink."),
-                new UnsafeCommandDirectory(
-                        "symlink-after-traversal",
-                        temporaryDirectory
-                                .resolve("missing")
-                                .resolve("../ps-install-bin-workspaces-link")
-                                .resolve("bin")
-                                .toString(),
-                        "--bin-dir must not be a symlink."),
+        List<UnsafeCommandDirectory> cases = powershellUnsafeCommandDirectories(
+                file,
+                symlink,
+                "ps-install-bin-workspaces-link",
                 new UnsafeCommandDirectory(
                         "workspace-overlap",
                         symphonyHome.resolve("workspaces").toString(),
@@ -2927,61 +2592,15 @@ final class InstallerScriptTest {
         Map<String, String> environment = new LinkedHashMap<>(nonWindowsPowerShellEnvironment());
         environment.put("USERPROFILE", home.toString());
         environment.put("SYMPHONY_HOME", symphonyHome.toString());
-        List<UnsafeInstallerPath> cases = List.of(
-                new UnsafeInstallerPath("root", "/", "--prefix must point to a dedicated app checkout directory."),
-                new UnsafeInstallerPath(
-                        "root-home", "/root", "--prefix must point to a dedicated app checkout directory."),
-                new UnsafeInstallerPath(
-                        "checkout",
-                        Path.of("").toAbsolutePath().normalize().toString(),
-                        "--prefix must point to a dedicated app checkout directory."),
-                new UnsafeInstallerPath("relative", "relative-app", "--prefix must be an absolute path."),
-                new UnsafeInstallerPath("drive-relative", "C:relative-app", "--prefix must be an absolute path."),
-                new UnsafeInstallerPath("root-relative", "\\relative-app", "--prefix must be an absolute path."),
-                new UnsafeInstallerPath(
-                        "control", temporaryDirectory.resolve("app\nline").toString(), "control characters"),
-                new UnsafeInstallerPath("file", file.toString(), "--prefix must be a directory."),
-                new UnsafeInstallerPath("symlink", symlink.toString(), "--prefix must not be a symlink."),
-                new UnsafeInstallerPath(
-                        "symlink-parent", symlink.resolve("app").toString(), "--prefix must not be a symlink."),
-                new UnsafeInstallerPath(
-                        "symlink-traversal", symlink.resolve("../app").toString(), "--prefix must not be a symlink."),
-                new UnsafeInstallerPath(
-                        "symlink-after-traversal",
-                        temporaryDirectory
-                                .resolve("missing")
-                                .resolve("../ps-uninstall-app-link")
-                                .toString(),
-                        "--prefix must not be a symlink."));
+        List<UnsafeInstallerPath> cases = powershellUnsafeAppPaths(file, symlink, "ps-uninstall-app-link");
 
         // when
-        List<ProcessResult> results = cases.stream()
-                .map(appPath -> runUnchecked(
-                        environment,
-                        command(
-                                        pwsh,
-                                        "-NoProfile",
-                                        "-File",
-                                        "./uninstall.ps1",
-                                        "--dry-run",
-                                        "--yes",
-                                        "--prefix",
-                                        appPath.value(),
-                                        "--bin-dir",
-                                        safeBin.toString())
-                                .toArray(String[]::new)))
-                .toList();
+        List<ProcessResult> results = runPowerShellAppPathCases(
+                environment, pwsh, "./uninstall.ps1", List.of("--dry-run", "--yes"), cases, safeBin);
 
         // then
-        for (int index = 0; index < cases.size(); index++) {
-            UnsafeInstallerPath appPath = cases.get(index);
-            ProcessResult result = results.get(index);
-            assertThat(result.exitCode()).as(appPath.name()).isNotZero();
-            assertThat(normalizedWhitespace(result.output()))
-                    .as(appPath.name())
-                    .contains(appPath.expectedMessage())
-                    .doesNotContain("App checkout:", "Will remove if present:", "Installed CLI:");
-        }
+        assertUnsafeAppPathFailures(
+                cases, results, OutputStyle.NORMALIZED, "App checkout:", "Will remove if present:", "Installed CLI:");
     }
 
     @Test
@@ -3034,29 +2653,10 @@ final class InstallerScriptTest {
         Map<String, String> environment = new LinkedHashMap<>(nonWindowsPowerShellEnvironment());
         environment.put("USERPROFILE", home.toString());
         environment.put("SYMPHONY_HOME", symphonyHome.toString());
-        List<UnsafeCommandDirectory> cases = List.of(
-                new UnsafeCommandDirectory("root", "/", "--bin-dir must point to a dedicated command directory."),
-                new UnsafeCommandDirectory("relative", "relative-bin", "--bin-dir must be an absolute path."),
-                new UnsafeCommandDirectory("drive-relative", "C:relative-bin", "--bin-dir must be an absolute path."),
-                new UnsafeCommandDirectory("root-relative", "\\relative-bin", "--bin-dir must be an absolute path."),
-                new UnsafeCommandDirectory(
-                        "control",
-                        temporaryDirectory.resolve("bin\nline").toString(),
-                        "--bin-dir must not contain control characters."),
-                new UnsafeCommandDirectory("file", file.toString(), "--bin-dir must be a directory."),
-                new UnsafeCommandDirectory("symlink", symlink.toString(), "--bin-dir must not be a symlink."),
-                new UnsafeCommandDirectory(
-                        "symlink-parent", symlink.resolve("bin").toString(), "--bin-dir must not be a symlink."),
-                new UnsafeCommandDirectory(
-                        "symlink-traversal", symlink.resolve("../bin").toString(), "--bin-dir must not be a symlink."),
-                new UnsafeCommandDirectory(
-                        "symlink-after-traversal",
-                        temporaryDirectory
-                                .resolve("missing")
-                                .resolve("../ps-uninstall-bin-state-link")
-                                .resolve("bin")
-                                .toString(),
-                        "--bin-dir must not be a symlink."),
+        List<UnsafeCommandDirectory> cases = powershellUnsafeCommandDirectories(
+                file,
+                symlink,
+                "ps-uninstall-bin-state-link",
                 new UnsafeCommandDirectory(
                         "state-overlap",
                         symphonyHome.resolve("state").toString(),
@@ -3084,8 +2684,15 @@ final class InstallerScriptTest {
                 .toList();
 
         // then
-        assertUnsafeCommandDirectoryFailures(
-                rejectedCases, results, ResultOutput.NORMALIZED, "Installed CLI:", "Will remove if present:");
+        for (int index = 0; index < rejectedCases.size(); index++) {
+            UnsafeCommandDirectory commandDirectory = rejectedCases.get(index);
+            ProcessResult result = results.get(index);
+            assertThat(result.exitCode()).as(commandDirectory.name()).isNotZero();
+            assertThat(normalizedWhitespace(result.output()))
+                    .as(commandDirectory.name())
+                    .contains(commandDirectory.expectedMessage())
+                    .doesNotContain("Installed CLI:", "Will remove if present:");
+        }
     }
 
     @Test
@@ -4265,6 +3872,202 @@ final class InstallerScriptTest {
 
     private static String normalizedWhitespace(String text) {
         return text.replace("|", "").replaceAll("\\s+", " ");
+    }
+
+    private static List<ProcessResult> runPosixAppPathCases(
+            Map<String, String> environment,
+            String script,
+            List<String> fixedArgs,
+            List<UnsafeInstallerPath> cases,
+            Path safeBin) {
+        return cases.stream()
+                .map(appPath -> {
+                    List<String> command = new ArrayList<>(List.of("bash", script));
+                    command.addAll(fixedArgs);
+                    command.add("--prefix");
+                    command.add(appPath.value());
+                    command.add("--bin-dir");
+                    command.add(safeBin.toString());
+                    return runUnchecked(environment, command.toArray(String[]::new));
+                })
+                .toList();
+    }
+
+    private static List<ProcessResult> runPowerShellAppPathCases(
+            Map<String, String> environment,
+            List<String> pwsh,
+            String script,
+            List<String> fixedArgs,
+            List<UnsafeInstallerPath> cases,
+            Path safeBin) {
+        return cases.stream()
+                .map(appPath -> {
+                    List<String> command = command(pwsh, "-NoProfile", "-File", script);
+                    command.addAll(fixedArgs);
+                    command.add("--prefix");
+                    command.add(appPath.value());
+                    command.add("--bin-dir");
+                    command.add(safeBin.toString());
+                    return runUnchecked(environment, command.toArray(String[]::new));
+                })
+                .toList();
+    }
+
+    private static void assertUnsafeAppPathFailures(
+            List<UnsafeInstallerPath> cases, List<ProcessResult> results, OutputStyle outputStyle, String... absent) {
+        for (int index = 0; index < cases.size(); index++) {
+            UnsafeInstallerPath appPath = cases.get(index);
+            ProcessResult result = results.get(index);
+            assertThat(result.exitCode()).as(appPath.name()).isNotZero();
+            assertThat(outputStyle.apply(result.output()))
+                    .as(appPath.name())
+                    .contains(appPath.expectedMessage())
+                    .doesNotContain(absent);
+        }
+    }
+
+    private List<UnsafeCommandDirectory> posixUnsafeCommandDirectories(
+            Path home, Path file, Path symlink, String symlinkName, UnsafeCommandDirectory extraCase) {
+        List<UnsafeCommandDirectory> cases = new ArrayList<>(List.of(
+                new UnsafeCommandDirectory("root", "/", "--bin-dir must point to a dedicated command directory."),
+                new UnsafeCommandDirectory(
+                        "home", home.toString(), "--bin-dir must point to a dedicated command directory."),
+                new UnsafeCommandDirectory(
+                        "checkout",
+                        Path.of("").toAbsolutePath().normalize().toString(),
+                        "--bin-dir must point to a dedicated command directory."),
+                new UnsafeCommandDirectory("blank", "", "--bin-dir must not be blank."),
+                new UnsafeCommandDirectory("whitespace", "   ", "--bin-dir must not be blank."),
+                new UnsafeCommandDirectory("relative", "relative-bin", "--bin-dir must be an absolute path."),
+                new UnsafeCommandDirectory(
+                        "control",
+                        temporaryDirectory.resolve("bin\nline").toString(),
+                        "--bin-dir must not contain control characters."),
+                new UnsafeCommandDirectory("file", file.toString(), "--bin-dir must be a directory.")));
+        cases.addAll(unsafeCommandDirectorySymlinkCases(symlink, symlinkName));
+        cases.add(extraCase);
+        return List.copyOf(cases);
+    }
+
+    private List<UnsafeCommandDirectory> powershellUnsafeCommandDirectories(
+            Path file, Path symlink, String symlinkName, UnsafeCommandDirectory extraCase) {
+        List<UnsafeCommandDirectory> cases = new ArrayList<>(List.of(
+                new UnsafeCommandDirectory("root", "/", "--bin-dir must point to a dedicated command directory."),
+                new UnsafeCommandDirectory("relative", "relative-bin", "--bin-dir must be an absolute path."),
+                new UnsafeCommandDirectory("drive-relative", "C:relative-bin", "--bin-dir must be an absolute path."),
+                new UnsafeCommandDirectory("root-relative", "\\relative-bin", "--bin-dir must be an absolute path."),
+                new UnsafeCommandDirectory(
+                        "control",
+                        temporaryDirectory.resolve("bin\nline").toString(),
+                        "--bin-dir must not contain control characters."),
+                new UnsafeCommandDirectory("file", file.toString(), "--bin-dir must be a directory.")));
+        cases.addAll(unsafeCommandDirectorySymlinkCases(symlink, symlinkName));
+        cases.add(extraCase);
+        return List.copyOf(cases);
+    }
+
+    private List<UnsafeCommandDirectory> unsafeCommandDirectorySymlinkCases(Path symlink, String symlinkName) {
+        return List.of(
+                new UnsafeCommandDirectory("symlink", symlink.toString(), "--bin-dir must not be a symlink."),
+                new UnsafeCommandDirectory(
+                        "symlink-parent", symlink.resolve("bin").toString(), "--bin-dir must not be a symlink."),
+                new UnsafeCommandDirectory(
+                        "symlink-traversal", symlink.resolve("../bin").toString(), "--bin-dir must not be a symlink."),
+                new UnsafeCommandDirectory(
+                        "symlink-after-traversal",
+                        temporaryDirectory
+                                .resolve("missing")
+                                .resolve("../" + symlinkName)
+                                .resolve("bin")
+                                .toString(),
+                        "--bin-dir must not be a symlink."));
+    }
+
+    private List<UnsafeInstallerPath> posixUnsafeAppPaths(
+            Path home, Path file, Path symlink, String symlinkName, UnsafeInstallerPath extraCase) {
+        List<UnsafeInstallerPath> cases = new ArrayList<>(posixUnsafeAppPaths(home, file, symlink, symlinkName));
+        cases.add(extraCase);
+        return List.copyOf(cases);
+    }
+
+    private List<UnsafeInstallerPath> posixUnsafeAppPaths(Path home, Path file, Path symlink, String symlinkName) {
+        List<UnsafeInstallerPath> cases = new ArrayList<>(List.of(
+                new UnsafeInstallerPath("root", "/", "--prefix must point to a dedicated app checkout directory."),
+                new UnsafeInstallerPath(
+                        "root-home", "/root", "--prefix must point to a dedicated app checkout directory."),
+                new UnsafeInstallerPath(
+                        "home", home.toString(), "--prefix must point to a dedicated app checkout directory."),
+                new UnsafeInstallerPath(
+                        "checkout",
+                        Path.of("").toAbsolutePath().normalize().toString(),
+                        "--prefix must point to a dedicated app checkout directory."),
+                new UnsafeInstallerPath("blank", "", "--prefix must not be blank."),
+                new UnsafeInstallerPath("whitespace", "   ", "--prefix must not be blank."),
+                new UnsafeInstallerPath("relative", "relative-app", "--prefix must be an absolute path."),
+                new UnsafeInstallerPath(
+                        "control", temporaryDirectory.resolve("app\nline").toString(), "control characters"),
+                new UnsafeInstallerPath("file", file.toString(), "--prefix must be a directory.")));
+        cases.addAll(unsafeAppSymlinkCases(symlink, symlinkName));
+        return List.copyOf(cases);
+    }
+
+    private List<UnsafeInstallerPath> unsafeAppSymlinkCases(Path symlink, String symlinkName) {
+        return List.of(
+                new UnsafeInstallerPath("symlink", symlink.toString(), "--prefix must not be a symlink."),
+                new UnsafeInstallerPath(
+                        "symlink-parent", symlink.resolve("app").toString(), "--prefix must not be a symlink."),
+                new UnsafeInstallerPath(
+                        "symlink-traversal", symlink.resolve("../app").toString(), "--prefix must not be a symlink."),
+                new UnsafeInstallerPath(
+                        "symlink-after-traversal",
+                        temporaryDirectory
+                                .resolve("missing")
+                                .resolve("../" + symlinkName)
+                                .toString(),
+                        "--prefix must not be a symlink."));
+    }
+
+    private List<UnsafeInstallerPath> powershellUnsafeAppPaths(
+            Path file, Path symlink, String symlinkName, UnsafeInstallerPath extraCase) {
+        List<UnsafeInstallerPath> cases = new ArrayList<>(powershellUnsafeAppPaths(file, symlink, symlinkName));
+        cases.add(extraCase);
+        return List.copyOf(cases);
+    }
+
+    private List<UnsafeInstallerPath> powershellUnsafeAppPaths(Path file, Path symlink, String symlinkName) {
+        List<UnsafeInstallerPath> cases = new ArrayList<>(List.of(
+                new UnsafeInstallerPath("root", "/", "--prefix must point to a dedicated app checkout directory."),
+                new UnsafeInstallerPath(
+                        "root-home", "/root", "--prefix must point to a dedicated app checkout directory."),
+                new UnsafeInstallerPath(
+                        "checkout",
+                        Path.of("").toAbsolutePath().normalize().toString(),
+                        "--prefix must point to a dedicated app checkout directory."),
+                new UnsafeInstallerPath("relative", "relative-app", "--prefix must be an absolute path."),
+                new UnsafeInstallerPath("drive-relative", "C:relative-app", "--prefix must be an absolute path."),
+                new UnsafeInstallerPath("root-relative", "\\relative-app", "--prefix must be an absolute path."),
+                new UnsafeInstallerPath(
+                        "control", temporaryDirectory.resolve("app\nline").toString(), "control characters"),
+                new UnsafeInstallerPath("file", file.toString(), "--prefix must be a directory.")));
+        cases.addAll(unsafeAppSymlinkCases(symlink, symlinkName));
+        return List.copyOf(cases);
+    }
+
+    private enum OutputStyle {
+        RAW {
+            @Override
+            String apply(String output) {
+                return output;
+            }
+        },
+        NORMALIZED {
+            @Override
+            String apply(String output) {
+                return normalizedWhitespace(output);
+            }
+        };
+
+        abstract String apply(String output);
     }
 
     private static boolean unsafeUninstallCommandDirectoryCase(UnsafeCommandDirectory commandDirectory) {
