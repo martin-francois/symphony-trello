@@ -7,6 +7,7 @@ import com.sun.net.httpserver.HttpServer;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
@@ -79,5 +80,30 @@ final class LocalHealthCheckerTest {
         assertThat(thrown)
                 .isInstanceOf(TrelloBoardSetupException.class)
                 .hasMessageContaining("SYMPHONY_HTTP_PORT/QUARKUS_HTTP_PORT must be between 1 and 65535");
+    }
+
+    @Test
+    void managedHealthPortResolvesWorkflowServerPortFromDotenv() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Path dotenv = tempDir.resolve(".env");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                server:
+                  port: $SYMPHONY_TEST_PORT
+                ---
+                Prompt
+                """,
+                StandardCharsets.UTF_8);
+        Files.writeString(dotenv, "SYMPHONY_TEST_PORT=19091\n", StandardCharsets.UTF_8);
+        LocalHealthChecker checker = new LocalHealthChecker(Map.of(), new WorkflowConfigEditor());
+
+        // when
+        int port = checker.managedHealthPort(workflow, 18080, dotenv);
+
+        // then
+        assertThat(port).isEqualTo(19091);
     }
 }

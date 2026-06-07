@@ -13,7 +13,9 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 
 @ApplicationScoped
@@ -31,6 +33,16 @@ public class ConfigResolver {
             "priority: medium", 3,
             "priority: low", 4);
 
+    private final Function<String, Optional<String>> environmentResolver;
+
+    public ConfigResolver() {
+        this(LocalEnvironment::get);
+    }
+
+    ConfigResolver(Function<String, Optional<String>> environmentResolver) {
+        this.environmentResolver = environmentResolver;
+    }
+
     public EffectiveConfig resolve(WorkflowDefinition workflow) {
         Map<String, Object> root = workflow.config();
         Map<String, Object> tracker = object(root, "tracker");
@@ -47,8 +59,8 @@ public class ConfigResolver {
         String apiKey = secret(workflow.path().getParent(), tracker, "api_key", "tracker.api_key", "TRELLO_API_KEY");
         String apiToken =
                 secret(workflow.path().getParent(), tracker, "api_token", "tracker.api_token", "TRELLO_API_TOKEN");
-        String boardId = string(tracker, "board_id", null);
-        String resolvedBoardId = string(tracker, "resolved_board_id", boardId);
+        String boardId = environmentString(tracker, "board_id", null);
+        String resolvedBoardId = environmentString(tracker, "resolved_board_id", boardId);
 
         boolean writes = bool(trelloTools, "allow_writes", false);
         return new EffectiveConfig(
@@ -116,7 +128,7 @@ public class ConfigResolver {
                         bool(trelloTools, "allow_url_attachments", writes),
                         bool(trelloTools, "allow_destructive_operations", false),
                         bool(trelloTools, "assume_write_scope", false)),
-                new EffectiveConfig.ServerConfig(optionalInt(server, "port")));
+                new EffectiveConfig.ServerConfig(optionalEnvironmentInt(server, "port")));
     }
 
     public void validateForDispatch(EffectiveConfig config) {
@@ -171,16 +183,28 @@ public class ConfigResolver {
         return blank(value) ? null : value;
     }
 
-    private static String secret(
+    private String environmentString(Map<String, Object> root, String key, String defaultValue) {
+        String configured = string(root, key, defaultValue);
+        if (configured != null && configured.startsWith("$") && configured.length() > 1) {
+            return environmentValueOrDefault(configured.substring(1), defaultValue);
+        }
+        return configured;
+    }
+
+    private String secret(
             Path workflowDirectory, Map<String, Object> root, String key, String displayName, String defaultEnv) {
         String configured = string(root, key, "$" + defaultEnv);
         if (configured != null && configured.startsWith("$") && configured.length() > 1) {
-            return LocalEnvironment.get(configured.substring(1)).orElse(null);
+            return environmentValueOrDefault(configured.substring(1), null);
         }
         if (configured != null && configured.startsWith(FILE_SECRET_PREFIX)) {
             return fileSecret(workflowDirectory, displayName, configured.substring(FILE_SECRET_PREFIX.length()));
         }
         return configured;
+    }
+
+    private String environmentValueOrDefault(String environmentName, String defaultValue) {
+        return environmentResolver.apply(environmentName).orElse(defaultValue);
     }
 
     private static String fileSecret(Path workflowDirectory, String displayName, String configuredPath) {
@@ -233,12 +257,16 @@ public class ConfigResolver {
         return Integer.parseInt(value.toString());
     }
 
-    private static OptionalInt optionalInt(Map<String, Object> root, String key) {
+    private OptionalInt optionalEnvironmentInt(Map<String, Object> root, String key) {
         Object value = root.get(key);
         if (value == null) {
             return OptionalInt.empty();
         }
-        return OptionalInt.of(value instanceof Number number ? number.intValue() : Integer.parseInt(value.toString()));
+        if (value instanceof Number number) {
+            return OptionalInt.of(number.intValue());
+        }
+        String text = environmentString(root, key, null);
+        return blank(text) ? OptionalInt.empty() : OptionalInt.of(Integer.parseInt(text));
     }
 
     private static boolean bool(Map<String, Object> root, String key, boolean defaultValue) {

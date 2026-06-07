@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
+import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
@@ -15,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.SequencedMap;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 
 final class WorkflowConfigEditor {
@@ -26,6 +28,10 @@ final class WorkflowConfigEditor {
             Pattern.compile("\\A---\\R(?<yaml>.*?)\\R---\\R(?<body>.*)\\z", Pattern.DOTALL);
 
     WorkflowValidation validate(ConnectedBoard board) {
+        return validate(board, LocalEnvironment::get);
+    }
+
+    WorkflowValidation validate(ConnectedBoard board, Function<String, Optional<String>> environmentResolver) {
         if (!Files.isRegularFile(board.workflowPath())) {
             return WorkflowValidation.warn(
                     "Workflow file is missing for \"" + board.boardName() + "\": " + board.workflowPath());
@@ -33,14 +39,14 @@ final class WorkflowConfigEditor {
         try {
             FrontMatter frontMatter = read(board.workflowPath());
             SequencedMap<String, Object> yaml = parseYaml(frontMatter);
-            WorkflowValidation boardIdValidation = boardId(yaml)
+            WorkflowValidation boardIdValidation = boardId(yaml, environmentResolver)
                     .map(configuredBoardId -> validateBoardId(board, configuredBoardId))
                     .orElseGet(() -> WorkflowValidation.warn("Workflow file is missing tracker.board_id for \""
                             + board.boardName() + "\": " + board.workflowPath()));
             if (!boardIdValidation.ok()) {
                 return boardIdValidation;
             }
-            return serverPort(yaml)
+            return serverPort(yaml, environmentResolver)
                     .map(configuredServerPort -> validateServerPort(board, configuredServerPort))
                     .orElseGet(() -> WorkflowValidation.warn("Workflow file is missing server.port for \""
                             + board.boardName() + "\": " + board.workflowPath()));
@@ -71,6 +77,10 @@ final class WorkflowConfigEditor {
         return serverPortSetting(workflowPath).value();
     }
 
+    Optional<Integer> serverPort(Path workflowPath, Function<String, Optional<String>> environmentResolver) {
+        return serverPortSetting(workflowPath, environmentResolver).value();
+    }
+
     WorkflowIntegerSetting serverPortSetting(Path workflowPath) {
         try {
             return serverPortSetting(parseYaml(read(workflowPath)));
@@ -79,11 +89,42 @@ final class WorkflowConfigEditor {
         }
     }
 
-    Optional<String> boardId(Path workflowPath) {
+    WorkflowIntegerSetting serverPortSetting(
+            Path workflowPath, Function<String, Optional<String>> environmentResolver) {
         try {
-            return boardId(parseYaml(read(workflowPath)));
+            return serverPortSetting(parseYaml(read(workflowPath)), environmentResolver);
+        } catch (IOException | RuntimeException ignored) {
+            return WorkflowIntegerSetting.omitted();
+        }
+    }
+
+    Optional<String> boardId(Path workflowPath) {
+        return boardId(workflowPath, ignored -> Optional.empty());
+    }
+
+    Optional<String> boardId(Path workflowPath, Function<String, Optional<String>> environmentResolver) {
+        try {
+            return boardId(parseYaml(read(workflowPath)), environmentResolver);
         } catch (IOException | TrelloBoardSetupException ignored) {
             return Optional.empty();
+        }
+    }
+
+    void validateStartEnvironmentReferences(Path workflowPath, Function<String, Optional<String>> environmentResolver) {
+        validateStartEnvironmentReferences(workflowPath, environmentResolver, true);
+    }
+
+    void validateStartEnvironmentReferences(
+            Path workflowPath, Function<String, Optional<String>> environmentResolver, boolean validateServerPort) {
+        try {
+            SequencedMap<String, Object> yaml = parseYaml(read(workflowPath));
+            validateResolvedTextReference(yaml, "tracker", "board_id", "tracker.board_id", environmentResolver);
+            if (validateServerPort) {
+                validateServerPortReference(yaml, environmentResolver);
+            }
+        } catch (IOException e) {
+            throw new TrelloBoardSetupException(
+                    "setup_workflow_read_failed", "Workflow file cannot be read before worker start.", e);
         }
     }
 
@@ -148,12 +189,17 @@ final class WorkflowConfigEditor {
     }
 
     WorkflowValidation diagnosticsValidation(Path workflowPath) {
+        return diagnosticsValidation(workflowPath, LocalEnvironment::get);
+    }
+
+    WorkflowValidation diagnosticsValidation(
+            Path workflowPath, Function<String, Optional<String>> environmentResolver) {
         if (!Files.isRegularFile(workflowPath)) {
             return WorkflowValidation.warn("missing workflow file");
         }
         try {
             SequencedMap<String, Object> yaml = parseYaml(read(workflowPath));
-            if (invalidServerPortSetting(yaml)) {
+            if (invalidServerPortSetting(yaml, environmentResolver)) {
                 return WorkflowValidation.warn("invalid server.port");
             }
             return WorkflowValidation.valid();
@@ -217,10 +263,20 @@ final class WorkflowConfigEditor {
     }
 
     private static Optional<Integer> serverPort(Map<String, Object> yaml) {
-        return serverPortSetting(yaml).value();
+        return serverPort(yaml, ignored -> Optional.empty());
+    }
+
+    private static Optional<Integer> serverPort(
+            Map<String, Object> yaml, Function<String, Optional<String>> environmentResolver) {
+        return serverPortSetting(yaml, environmentResolver).value();
     }
 
     private static WorkflowIntegerSetting serverPortSetting(Map<String, Object> yaml) {
+        return serverPortSetting(yaml, ignored -> Optional.empty());
+    }
+
+    private static WorkflowIntegerSetting serverPortSetting(
+            Map<String, Object> yaml, Function<String, Optional<String>> environmentResolver) {
         Object serverValue = yaml.get("server");
         if (!(serverValue instanceof Map<?, ?> server)) {
             return WorkflowIntegerSetting.omitted();
@@ -229,23 +285,105 @@ final class WorkflowConfigEditor {
             return WorkflowIntegerSetting.omitted();
         }
         Object port = server.get("port");
-        return workflowServerPortSetting(port);
+        return environmentReferenceName(port)
+                .flatMap(environmentResolver)
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .map(WorkflowConfigEditor::workflowServerPortSetting)
+                .orElseGet(() -> workflowServerPortSetting(port));
     }
 
     private static Optional<String> boardId(Map<String, Object> yaml) {
+        return boardId(yaml, ignored -> Optional.empty());
+    }
+
+    private static Optional<String> boardId(
+            Map<String, Object> yaml, Function<String, Optional<String>> environmentResolver) {
         Object trackerValue = yaml.get("tracker");
         if (!(trackerValue instanceof Map<?, ?> tracker)) {
             return Optional.empty();
         }
-        return optionalString(tracker.get("board_id"));
+        Object boardId = tracker.get("board_id");
+        return optionalString(boardId)
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .flatMap(value -> environmentReferenceName(value)
+                        .flatMap(environmentResolver)
+                        .map(String::trim)
+                        .filter(resolved -> !resolved.isBlank())
+                        .or(() -> Optional.of(value)));
     }
 
     private static boolean invalidServerPortSetting(Map<String, Object> yaml) {
+        return invalidServerPortSetting(yaml, ignored -> Optional.empty());
+    }
+
+    private static boolean invalidServerPortSetting(
+            Map<String, Object> yaml, Function<String, Optional<String>> environmentResolver) {
         Object serverValue = yaml.get("server");
         if (!(serverValue instanceof Map<?, ?> server) || !server.containsKey("port")) {
             return false;
         }
-        return serverPortSetting(yaml).invalid();
+        return serverPortSetting(yaml, environmentResolver).invalid();
+    }
+
+    private static void validateResolvedTextReference(
+            Map<String, Object> yaml,
+            String sectionName,
+            String key,
+            String displayName,
+            Function<String, Optional<String>> environmentResolver) {
+        Object sectionValue = yaml.get(sectionName);
+        if (!(sectionValue instanceof Map<?, ?> section)) {
+            return;
+        }
+        environmentReferenceName(section.get(key))
+                .filter(name -> environmentResolver
+                        .apply(name)
+                        .map(String::trim)
+                        .filter(value -> !value.isBlank())
+                        .isEmpty())
+                .ifPresent(name -> {
+                    throw unresolvedEnvironmentReference(displayName, name);
+                });
+    }
+
+    private static void validateServerPortReference(
+            Map<String, Object> yaml, Function<String, Optional<String>> environmentResolver) {
+        Object serverValue = yaml.get("server");
+        if (!(serverValue instanceof Map<?, ?> server)) {
+            return;
+        }
+        environmentReferenceName(server.get("port")).ifPresent(name -> {
+            environmentResolver
+                    .apply(name)
+                    .map(String::trim)
+                    .filter(value -> !value.isBlank())
+                    .ifPresentOrElse(value -> validateResolvedServerPort(value, name), () -> {
+                        throw unresolvedEnvironmentReference("server.port", name);
+                    });
+        });
+    }
+
+    private static void validateResolvedServerPort(String value, String environmentName) {
+        if (workflowServerPortSetting(value).invalid()) {
+            throw new TrelloBoardSetupException(
+                    "setup_invalid_server_port",
+                    "Workflow server.port environment variable " + environmentName
+                            + " must resolve to an integer between 0 and " + LocalPort.MAX + ".");
+        }
+    }
+
+    private static Optional<String> environmentReferenceName(Object value) {
+        return optionalString(value)
+                .filter(text -> text.startsWith("$") && text.length() > 1)
+                .map(text -> text.substring(1));
+    }
+
+    private static TrelloBoardSetupException unresolvedEnvironmentReference(String displayName, String name) {
+        return new TrelloBoardSetupException(
+                "setup_workflow_unresolved_environment",
+                "Workflow " + displayName + " references missing environment variable " + name + ".");
     }
 
     private static WorkflowIntegerSetting workflowServerPortSetting(Object value) {
