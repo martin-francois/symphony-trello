@@ -293,6 +293,126 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
+    void startRejectsUnresolvedWorkflowServerPortBeforeLaunchingPackagedApp() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        Files.writeString(
+                board.workflowPath(),
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: literal-key
+                  api_token: literal-token
+                  board_id: board-1
+                server:
+                  port: $SYMPHONY_TEST_PORT
+                ---
+                # Queue
+                """,
+                StandardCharsets.UTF_8);
+        fixture.save(board);
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_workflow_unresolved_environment");
+            assertThat(failure)
+                    .hasMessage("Workflow server.port references missing environment variable SYMPHONY_TEST_PORT.");
+        });
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void startAllowsUnresolvedWorkflowServerPortWhenHttpPortOverrideIsConfigured() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue").withServerPort(19094);
+        Files.writeString(
+                board.workflowPath(),
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: literal-key
+                  api_token: literal-token
+                  board_id: board-1
+                server:
+                  port: $SYMPHONY_TEST_PORT
+                ---
+                # Queue
+                """,
+                StandardCharsets.UTF_8);
+        Files.writeString(
+                board.envPath(),
+                """
+                TRELLO_API_KEY=test-key
+                TRELLO_API_TOKEN=test-token
+                SYMPHONY_HTTP_PORT=19094
+                """,
+                StandardCharsets.UTF_8);
+        fixture.save(board);
+        when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
+                .thenReturn(new ManagedProcessHandle(42));
+        when(fixture.healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), board.envPath()))
+                .thenReturn(19094);
+        when(fixture.healthChecker.externalHttpPortOverrideSource(board.envPath()))
+                .thenReturn(Optional.of("SYMPHONY_HTTP_PORT in " + board.envPath()));
+        when(fixture.healthChecker.waitForSameWorkflow(board, 19094))
+                .thenReturn(new BoardHealth(
+                        BoardHealthKind.SAME_WORKFLOW,
+                        19094,
+                        Optional.of(board.workflowPath().toString()),
+                        Optional.of(board.boardId())));
+        when(fixture.platform.isAlive(42)).thenReturn(true);
+        when(fixture.platform.isManaged(42, fixture.paths.appHome(), board.workflowPath()))
+                .thenReturn(true);
+
+        // when
+        WorkerRunResult result = fixture.start(fixture.startRequest("Queue"));
+
+        // then
+        result.assertSuccess().stdoutContains("Started Symphony for Trello: \"Queue\"");
+    }
+
+    @Test
+    void startRejectsUnresolvedWorkflowBoardIdBeforeLaunchingPackagedApp() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        Files.writeString(
+                board.workflowPath(),
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: literal-key
+                  api_token: literal-token
+                  board_id: $MISSING_BOARD_ID
+                server:
+                  port: 18080
+                ---
+                # Queue
+                """,
+                StandardCharsets.UTF_8);
+        fixture.save(board);
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_workflow_unresolved_environment");
+            assertThat(failure)
+                    .hasMessage("Workflow tracker.board_id references missing environment variable MISSING_BOARD_ID.");
+        });
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    @Test
     void startSkipsCredentialPreflightForUnsupportedTrackerKind() throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
@@ -443,7 +563,7 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
-    void startValidatesExplicitEnvOverrideBeforeAlreadyRunningFastPath() throws Exception {
+    void startIgnoresInvalidExplicitEnvOverrideWhenWorkerIsAlreadyRunning() throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
@@ -451,6 +571,25 @@ final class LocalWorkerManagerTest {
         Files.writeString(envPath, "TRELLO_API_KEY=test-key\n", StandardCharsets.UTF_8);
         fixture.save(board);
         fixture.stubManagedPid(board, 42);
+        fixture.stubWorkflowHealth(board, envPath, board.serverPort(), fixture.sameWorkflow(board));
+
+        // when
+        WorkerRunResult result = fixture.start(fixture.startRequest("Queue", envPath));
+
+        // then
+        result.assertSuccess().stdoutContains("already running");
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void startValidatesExplicitEnvOverrideBeforeLaunchingWorker() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        Path envPath = fixture.paths.configDir().resolve(".env.key-only");
+        Files.writeString(envPath, "TRELLO_API_KEY=test-key\n", StandardCharsets.UTF_8);
+        fixture.save(board);
+        fixture.stubWorkflowHealth(board, envPath, board.serverPort(), fixture.stopped(board));
 
         // when
         Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue", envPath)));
@@ -747,6 +886,44 @@ final class LocalWorkerManagerTest {
                         board.workflowPath().toString())
                 .stdoutDoesNotContain("stopped \"Queue\"");
         verify(fixture.healthChecker, never()).boardHealth(any());
+    }
+
+    @Test
+    void statusResolvesWorkflowServerPortFromConnectedBoardEnvFile() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue").withServerPort(19091);
+        Files.writeString(
+                board.workflowPath(),
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: board-1
+                server:
+                  port: $SYMPHONY_TEST_PORT
+                ---
+                # Queue
+                """,
+                StandardCharsets.UTF_8);
+        Files.writeString(
+                board.envPath(),
+                """
+                TRELLO_API_KEY=test-key
+                TRELLO_API_TOKEN=test-token
+                SYMPHONY_TEST_PORT=19091
+                """,
+                StandardCharsets.UTF_8);
+        fixture.save(board);
+        when(fixture.healthChecker.boardHealth(board)).thenReturn(fixture.stopped(19091));
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("stopped \"Queue\"")
+                .stdoutDoesNotContain("invalid \"Queue\"", "invalid server.port");
     }
 
     @Test
@@ -1090,6 +1267,176 @@ final class LocalWorkerManagerTest {
                 .waitForSameWorkflow(
                         argThat(board -> "direct-board".equals(board.boardId()) && board.serverPort() == 19090),
                         eq(19090));
+    }
+
+    @Test
+    void explicitWorkflowResolvesBoardIdFromDefaultEnvBeforeHealthMatching() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        Path workflow = fixture.paths.configDir().resolve("WORKFLOW.direct-env-board.md");
+        Path env = fixture.paths.defaultEnvPath();
+        Files.createDirectories(fixture.paths.configDir());
+        Files.writeString(
+                env,
+                """
+                TRELLO_API_KEY=test-key
+                TRELLO_API_TOKEN=test-token
+                DIRECT_BOARD_ID=resolved-direct-board
+                """,
+                StandardCharsets.UTF_8);
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  board_id: $DIRECT_BOARD_ID
+                server:
+                  port: 19092
+                ---
+                # Direct
+                """,
+                StandardCharsets.UTF_8);
+        when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
+                .thenReturn(new ManagedProcessHandle(42));
+        when(fixture.healthChecker.managedHealthPort(any(), anyInt(), nullable(Path.class)))
+                .thenReturn(19092);
+        when(fixture.healthChecker.waitForSameWorkflow(any(), eq(19092)))
+                .thenReturn(new BoardHealth(
+                        BoardHealthKind.SAME_WORKFLOW,
+                        19092,
+                        Optional.of(workflow.toString()),
+                        Optional.of("resolved-direct-board")));
+        when(fixture.platform.isAlive(42)).thenReturn(true);
+        when(fixture.platform.isManaged(
+                        42, fixture.paths.appHome(), workflow.toAbsolutePath().normalize()))
+                .thenReturn(true);
+
+        // when
+        WorkerRunResult result = fixture.start(fixture.startWorkflowRequest(workflow));
+
+        // then
+        result.assertSuccess();
+        verify(fixture.healthChecker)
+                .waitForSameWorkflow(
+                        argThat(board ->
+                                "resolved-direct-board".equals(board.boardId()) && board.serverPort() == 19092),
+                        eq(19092));
+    }
+
+    @Test
+    void statusHandlesExplicitWorkflowWithoutManifestEntryOrEnvPath() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        Path workflow = fixture.paths.configDir().resolve("WORKFLOW.direct-status.md");
+        Files.createDirectories(fixture.paths.configDir());
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  board_id: direct-status-board
+                server:
+                  port: 19091
+                ---
+                # Direct status
+                """,
+                StandardCharsets.UTF_8);
+        when(fixture.healthChecker.boardHealth(any()))
+                .thenReturn(new BoardHealth(BoardHealthKind.STOPPED, 19091, Optional.empty(), Optional.empty()));
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusWorkflowRequest(workflow));
+
+        // then
+        result.assertSuccess().stdoutContains("stopped \"WORKFLOW.direct-status.md\"");
+    }
+
+    @Test
+    void statusResolvesExplicitWorkflowFromDefaultEnvWhenManifestHasNoEntry() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        Path workflow = fixture.paths.configDir().resolve("WORKFLOW.direct-status-env.md");
+        Files.createDirectories(fixture.paths.configDir());
+        Files.writeString(
+                fixture.paths.defaultEnvPath(),
+                """
+                DIRECT_STATUS_BOARD_ID=resolved-status-board
+                DIRECT_STATUS_PORT=19093
+                """,
+                StandardCharsets.UTF_8);
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  board_id: $DIRECT_STATUS_BOARD_ID
+                server:
+                  port: $DIRECT_STATUS_PORT
+                ---
+                # Direct status
+                """,
+                StandardCharsets.UTF_8);
+        when(fixture.healthChecker.boardHealth(argThat(
+                        board -> "resolved-status-board".equals(board.boardId()) && board.serverPort() == 19093)))
+                .thenReturn(new BoardHealth(BoardHealthKind.STOPPED, 19093, Optional.empty(), Optional.empty()));
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusWorkflowRequest(workflow));
+
+        // then
+        result.assertSuccess().stdoutContains("stopped \"WORKFLOW.direct-status-env.md\"");
+    }
+
+    @Test
+    void stopResolvesExplicitWorkflowFromDefaultEnvWhenManifestHasNoEntry() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        Path workflow = fixture.paths.configDir().resolve("WORKFLOW.direct-stop-env.md");
+        Files.createDirectories(fixture.paths.configDir());
+        Files.writeString(
+                fixture.paths.defaultEnvPath(),
+                """
+                DIRECT_STOP_BOARD_ID=resolved-stop-board
+                DIRECT_STOP_PORT=19094
+                """,
+                StandardCharsets.UTF_8);
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  board_id: $DIRECT_STOP_BOARD_ID
+                server:
+                  port: $DIRECT_STOP_PORT
+                ---
+                # Direct stop
+                """,
+                StandardCharsets.UTF_8);
+        ConnectedBoard expectedBoard = new ConnectedBoard(
+                "resolved-stop-board",
+                "resolved-stop-board",
+                "WORKFLOW.direct-stop-env.md",
+                "",
+                workflow.toAbsolutePath().normalize(),
+                null,
+                TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT,
+                19094,
+                false,
+                List.of(),
+                false);
+        fixture.writeManagedPid(expectedBoard, 42);
+        when(fixture.platform.isAlive(42)).thenReturn(true);
+        when(fixture.platform.isManaged(
+                        42, fixture.paths.appHome(), workflow.toAbsolutePath().normalize()))
+                .thenReturn(true);
+        when(fixture.platform.stop(42, Duration.ofSeconds(15), Duration.ofSeconds(5)))
+                .thenReturn(true);
+
+        // when
+        WorkerRunResult result = fixture.stop(fixture.stopWorkflowRequest(workflow));
+
+        // then
+        result.assertSuccess().stdoutContains("Stopped WORKFLOW.direct-stop-env");
     }
 
     @Test

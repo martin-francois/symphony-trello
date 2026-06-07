@@ -290,7 +290,8 @@ public final class LocalSetup {
             if (!localValidation.ok()) {
                 ok = false;
             } else {
-                WorkflowValidation workflow = workflowConfig.validate(board);
+                WorkflowValidation workflow = workflowConfig.validate(
+                        board, WorkflowEnvironmentResolver.resolver(environment, board.envPath()));
                 if (workflow.ok() || isHealthyStaleManifestPort(board, healthBoard, workflow, health)) {
                     out.println("  OK      Workflow: " + board.workflowPath());
                 } else {
@@ -495,7 +496,7 @@ public final class LocalSetup {
             return board;
         }
         return workflowConfig
-                .serverPort(board.workflowPath())
+                .serverPort(board.workflowPath(), WorkflowEnvironmentResolver.resolver(environment, board.envPath()))
                 .map(board::withServerPort)
                 .orElse(board);
     }

@@ -34,6 +34,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.SequencedSet;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -143,6 +144,7 @@ final class SetupDiagnosticReporter {
             "setup_workflow_codex_missing",
             "setup_workflow_exists",
             "setup_workflow_frontmatter_missing",
+            "setup_workflow_unresolved_environment",
             "trello_auth_failed",
             "trello_board_closed",
             "trello_invalid_request",
@@ -1070,7 +1072,7 @@ final class SetupDiagnosticReporter {
                 reportWorkflowPaths(manifest, paths, args, workflowPathResolution, !hasBoardOption(args));
         MarkdownTable table = workflowTable();
         for (Path workflow : workflowPaths) {
-            appendWorkflowRow(table, editor, workflow);
+            appendWorkflowRow(table, editor, workflow, workflowEnvironmentResolver(manifest, workflow));
         }
         table.appendTo(body);
     }
@@ -1079,7 +1081,7 @@ final class SetupDiagnosticReporter {
         WorkflowConfigEditor editor = new WorkflowConfigEditor();
         MarkdownTable table = workflowTable();
         for (Path workflow : workflowPaths) {
-            appendWorkflowRow(table, editor, workflow);
+            appendWorkflowRow(table, editor, workflow, WorkflowEnvironmentResolver.resolver(environment, null));
         }
         table.appendTo(body);
     }
@@ -1098,12 +1100,16 @@ final class SetupDiagnosticReporter {
                         MarkdownTable.Alignment.LEFT));
     }
 
-    private void appendWorkflowRow(MarkdownTable table, WorkflowConfigEditor editor, Path workflow) {
+    private void appendWorkflowRow(
+            MarkdownTable table,
+            WorkflowConfigEditor editor,
+            Path workflow,
+            Function<String, Optional<String>> environmentResolver) {
         WorkflowListConfiguration lists = editor.listConfiguration(workflow);
         table.row(
                 sanitize(workflow.toString()),
                 editor.boardId(workflow).map(this::hash).orElse(""),
-                editor.serverPortSetting(workflow).diagnosticsCell(),
+                editor.serverPortSetting(workflow, environmentResolver).diagnosticsCell(),
                 editor.maxAgentsSetting(workflow).diagnosticsCell(),
                 lists.activeStatesDiagnosticsCell(),
                 lists.terminalStatesDiagnosticsCell(),
@@ -1152,9 +1158,9 @@ final class SetupDiagnosticReporter {
         table.appendTo(body);
     }
 
-    private static Optional<InvalidConnectedBoardWorkflow> invalidConnectedBoardWorkflow(
+    private Optional<InvalidConnectedBoardWorkflow> invalidConnectedBoardWorkflow(
             WorkflowConfigEditor editor, ConnectedBoard board) {
-        WorkflowValidation validation = editor.validate(board);
+        WorkflowValidation validation = editor.validate(board, workflowEnvironmentResolver(board.envPath()));
         if (validation.ok()) {
             return Optional.empty();
         }
@@ -1204,6 +1210,19 @@ final class SetupDiagnosticReporter {
                     lists.blockedState().isPresent());
         }
         table.appendTo(body);
+    }
+
+    private Function<String, Optional<String>> workflowEnvironmentResolver(
+            ConnectedBoardManifest manifest, Path workflowPath) {
+        return manifest.boards().stream()
+                .filter(board -> PathsEqual.samePath(board.workflowPath(), workflowPath))
+                .findAny()
+                .map(board -> workflowEnvironmentResolver(board.envPath()))
+                .orElseGet(() -> WorkflowEnvironmentResolver.resolver(environment, null));
+    }
+
+    private Function<String, Optional<String>> workflowEnvironmentResolver(Path envPath) {
+        return WorkflowEnvironmentResolver.resolver(environment, envPath);
     }
 
     private void appendHealthProbes(

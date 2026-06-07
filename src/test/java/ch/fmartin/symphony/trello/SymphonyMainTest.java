@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -54,6 +55,40 @@ final class SymphonyMainTest {
 
         // then
         assertThat(port).contains("9090");
+    }
+
+    @Test
+    void resolvesServerPortEnvironmentReferenceBeforeQuarkusStarts() {
+        // given
+        String frontMatter =
+                """
+                server:
+                  port: $SYMPHONY_TEST_PORT
+                """;
+
+        // when
+        var port = SymphonyMain.configuredServerPort(
+                frontMatter, name -> "SYMPHONY_TEST_PORT".equals(name) ? Optional.of("19092") : Optional.empty());
+
+        // then
+        assertThat(port).contains("19092");
+    }
+
+    @Test
+    void rejectsUnresolvedServerPortEnvironmentReferenceBeforeQuarkusStarts() {
+        // given
+        String frontMatter =
+                """
+                server:
+                  port: $SYMPHONY_TEST_PORT
+                """;
+
+        // when
+        var thrown = assertThatThrownBy(() -> SymphonyMain.configuredServerPort(frontMatter, name -> Optional.empty()));
+
+        // then
+        thrown.isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Workflow server.port references missing environment variable SYMPHONY_TEST_PORT.");
     }
 
     @Test
