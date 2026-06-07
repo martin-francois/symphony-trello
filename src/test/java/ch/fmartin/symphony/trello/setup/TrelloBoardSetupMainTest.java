@@ -86,7 +86,7 @@ final class TrelloBoardSetupMainTest {
                 exchange -> respond(
                         exchange,
                         """
-                {"id":"board-1","name":"Existing Board","shortLink":"existing","url":"https://trello.com/b/existing/board","closed":false}
+                {"id":"board-1","name":"Existing Board","shortLink":"SYNTH001","url":"https://trello.com/b/SYNTH001/board","closed":false}
                 """));
         server.createContext(
                 "/1/boards/board-1/lists",
@@ -1487,9 +1487,9 @@ final class TrelloBoardSetupMainTest {
         Files.writeString(oldWorkflow, "old workflow", StandardCharsets.UTF_8);
         ConnectedBoard oldBoard = new ConnectedBoard(
                 "board-1",
-                "existing",
+                "SYNTH001",
                 "Existing Board",
-                "https://trello.com/b/existing/board",
+                "https://trello.com/b/SYNTH001/board",
                 oldWorkflow.toAbsolutePath().normalize(),
                 oldEnv.toAbsolutePath().normalize(),
                 TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT.toAbsolutePath().normalize(),
@@ -2682,9 +2682,9 @@ final class TrelloBoardSetupMainTest {
         ConnectedBoardManifest manifest = new ConnectedBoardRepository(tempDir.resolve("connected-boards.json")).load();
         assertThat(manifest.boards()).singleElement().satisfies(board -> {
             assertThat(board.boardId()).isEqualTo("board-1");
-            assertThat(board.boardKey()).isEqualTo("existing");
+            assertThat(board.boardKey()).isEqualTo("SYNTH001");
             assertThat(board.boardName()).isEqualTo("Existing Board");
-            assertThat(board.boardUrl()).isEqualTo("https://trello.com/b/existing/board");
+            assertThat(board.boardUrl()).isEqualTo("https://trello.com/b/SYNTH001/board");
             assertThat(board.workflowPath()).isEqualTo(workflow.toAbsolutePath().normalize());
             assertThat(board.envPath()).isEqualTo(env.toAbsolutePath().normalize());
             assertThat(board.workspaceRoot())
@@ -2695,7 +2695,7 @@ final class TrelloBoardSetupMainTest {
         });
         assertThat(stdout.toString(StandardCharsets.UTF_8))
                 .contains("Imported Trello board: Existing Board")
-                .contains("Board identifier for WORKFLOW.md: existing")
+                .contains("Board identifier for WORKFLOW.md: SYNTH001")
                 .contains("Active lists: Queue for Codex, Doing")
                 .contains("In-progress list: Doing")
                 .contains("Terminal lists: Released")

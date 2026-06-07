@@ -66,17 +66,17 @@ final class TrelloClientTest {
                     exchange,
                     """
                     [
-                      {"id":"65df9f70b4a22a1234567890","name":"A","desc":"","idList":"list-todo","idBoard":"board-1","closed":false,"idShort":7,"shortLink":"abc","shortUrl":"u","url":"u","labels":[{"id":"l1","name":"P1"}],"dateLastActivity":"2026-02-24T20:10:12.000Z","pos":2},
-                      {"id":"65df9f71b4a22a1234567891","name":"B","desc":"","idList":"list-done","idBoard":"board-1","closed":false,"shortLink":"def","labels":[],"pos":1}
+                      {"id":"000000000000000000000101","name":"A","desc":"","idList":"list-todo","idBoard":"board-1","closed":false,"idShort":7,"shortLink":"abc","shortUrl":"u","url":"u","labels":[{"id":"l1","name":"P1"}],"dateLastActivity":"2026-02-24T20:10:12.000Z","pos":2},
+                      {"id":"000000000000000000000102","name":"B","desc":"","idList":"list-done","idBoard":"board-1","closed":false,"shortLink":"def","labels":[],"pos":1}
                     ]
                     """);
         });
-        server.createContext("/1/cards/65df9f70b4a22a1234567890", exchange -> {
+        server.createContext("/1/cards/000000000000000000000101", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
             respond(
                     exchange,
                     """
-                    {"id":"65df9f70b4a22a1234567890","name":"A","desc":"","idList":"list-todo","idBoard":"board-1","closed":false,"idShort":7,"shortLink":"abc","shortUrl":"u","url":"u","labels":[{"id":"l1","name":"P1"}],"actions":[{"id":"comment-1","date":"2026-02-24T20:11:12.000Z","data":{"text":"Please rework the edge case."},"memberCreator":{"fullName":"Reviewer"}}],"dateLastActivity":"2026-02-24T20:10:12.000Z","pos":2}
+                    {"id":"000000000000000000000101","name":"A","desc":"","idList":"list-todo","idBoard":"board-1","closed":false,"idShort":7,"shortLink":"abc","shortUrl":"u","url":"u","labels":[{"id":"l1","name":"P1"}],"actions":[{"id":"comment-1","date":"2026-02-24T20:11:12.000Z","data":{"text":"Please rework the edge case."},"memberCreator":{"fullName":"Reviewer"}}],"dateLastActivity":"2026-02-24T20:10:12.000Z","pos":2}
                     """);
         });
         server.createContext(
@@ -99,9 +99,9 @@ final class TrelloClientTest {
                         exchange,
                         """
                         [
-                          {"id":"65df9f72b4a22a1234567892","name":"Done","idList":"terminal-done","idBoard":"terminal-board","closed":false,"shortLink":"done","labels":[],"pos":1},
-                          {"id":"65df9f73b4a22a1234567893","name":"Archived card","idList":"terminal-todo","idBoard":"terminal-board","closed":true,"shortLink":"archived","labels":[],"pos":2},
-                          {"id":"65df9f74b4a22a1234567894","name":"Archived list duplicate","idList":"terminal-archived","idBoard":"terminal-board","closed":false,"shortLink":"dup","labels":[],"pos":3}
+                          {"id":"000000000000000000000103","name":"Done","idList":"terminal-done","idBoard":"terminal-board","closed":false,"shortLink":"done","labels":[],"pos":1},
+                          {"id":"000000000000000000000104","name":"Archived card","idList":"terminal-todo","idBoard":"terminal-board","closed":true,"shortLink":"archived","labels":[],"pos":2},
+                          {"id":"000000000000000000000105","name":"Archived list duplicate","idList":"terminal-archived","idBoard":"terminal-board","closed":false,"shortLink":"dup","labels":[],"pos":3}
                         ]
                         """));
         server.createContext(
@@ -110,8 +110,8 @@ final class TrelloClientTest {
                         exchange,
                         """
                         [
-                          {"id":"65df9f74b4a22a1234567894","name":"Archived list duplicate","idList":"terminal-archived","idBoard":"terminal-board","closed":false,"shortLink":"dup","labels":[],"pos":3},
-                          {"id":"65df9f75b4a22a1234567895","name":"Archived list only","idList":"terminal-archived","idBoard":"terminal-board","closed":false,"shortLink":"list-only","labels":[],"pos":4}
+                          {"id":"000000000000000000000105","name":"Archived list duplicate","idList":"terminal-archived","idBoard":"terminal-board","closed":false,"shortLink":"dup","labels":[],"pos":3},
+                          {"id":"000000000000000000000106","name":"Archived list only","idList":"terminal-archived","idBoard":"terminal-board","closed":false,"shortLink":"list-only","labels":[],"pos":4}
                         ]
                         """));
         server.createContext(
@@ -164,16 +164,16 @@ final class TrelloClientTest {
                     exchange,
                     "{\"id\":\"card-malformed\",\"idList\":\"lookup-review\",\"idBoard\":\"lookup-board\",\"closed\":false,\"labels\":[]}");
         });
-        server.createContext("/1/cards/65df9f76b4a22a1234567896/idList", exchange -> {
+        server.createContext("/1/cards/000000000000000000000107/idList", exchange -> {
             writeRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
-            respond(exchange, "{\"id\":\"65df9f76b4a22a1234567896\"}");
+            respond(exchange, "{\"id\":\"000000000000000000000107\"}");
         });
-        server.createContext("/1/cards/65df9f76b4a22a1234567896", exchange -> {
+        server.createContext("/1/cards/000000000000000000000107", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
             respond(
                     exchange,
                     """
-                    {"id":"65df9f76b4a22a1234567896","name":"Picked up","desc":"","idList":"list-progress","idBoard":"board-1","closed":false,"idShort":8,"shortLink":"pickup","shortUrl":"u","url":"u","labels":[],"actions":[],"dateLastActivity":"2026-02-24T20:10:12.000Z","pos":1}
+                    {"id":"000000000000000000000107","name":"Picked up","desc":"","idList":"list-progress","idBoard":"board-1","closed":false,"idShort":8,"shortLink":"pickup","shortUrl":"u","url":"u","labels":[],"actions":[],"dateLastActivity":"2026-02-24T20:10:12.000Z","pos":1}
                     """);
         });
         server.createContext(
@@ -416,7 +416,7 @@ final class TrelloClientTest {
         TrelloClient client = new TrelloClient(new ObjectMapper());
         var config = config(
                 "input", Map.of("active_states", List.of("Todo", "In Progress"), "in_progress_state", "In Progress"));
-        Card queueCard = card("65df9f76b4a22a1234567896", "TRELLO-pickup", "Todo", "list-todo", null, BigDecimal.ONE);
+        Card queueCard = card("000000000000000000000107", "TRELLO-pickup", "Todo", "list-todo", null, BigDecimal.ONE);
 
         // when
         Card prepared = client.prepareForDispatch(config, queueCard);
@@ -424,9 +424,9 @@ final class TrelloClientTest {
         // then
         assertThat(prepared.state()).isEqualTo("In Progress");
         assertThat(prepared.listId()).isEqualTo("list-progress");
-        assertThat(writeRequests).containsExactly("PUT /1/cards/65df9f76b4a22a1234567896/idList?value=list-progress");
+        assertThat(writeRequests).containsExactly("PUT /1/cards/000000000000000000000107/idList?value=list-progress");
         assertThat(readRequests)
-                .anySatisfy(request -> assertThat(request).startsWith("GET /1/cards/65df9f76b4a22a1234567896?"));
+                .anySatisfy(request -> assertThat(request).startsWith("GET /1/cards/000000000000000000000107?"));
     }
 
     @Test
@@ -436,13 +436,13 @@ final class TrelloClientTest {
         var config = config(
                 "input", Map.of("active_states", List.of("Todo", "In Progress"), "in_progress_state", "In Progress"));
         Card inProgressCard =
-                card("65df9f76b4a22a1234567896", "TRELLO-pickup", "In Progress", "list-progress", null, BigDecimal.ONE);
+                card("000000000000000000000107", "TRELLO-pickup", "In Progress", "list-progress", null, BigDecimal.ONE);
 
         // when
         client.releaseFromDispatch(config, inProgressCard);
 
         // then
-        assertThat(writeRequests).containsExactly("PUT /1/cards/65df9f76b4a22a1234567896/idList?value=list-todo");
+        assertThat(writeRequests).containsExactly("PUT /1/cards/000000000000000000000107/idList?value=list-todo");
     }
 
     @Test

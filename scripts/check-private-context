@@ -1,0 +1,207 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage:
+  scripts/check-private-context --stdin [--label NAME]
+  scripts/check-private-context --file PATH [--file PATH...]
+  scripts/check-private-context --git-range RANGE
+  scripts/check-private-context --worktree
+
+Scans text for secrets and private operational context with BetterLeaks.
+Findings are printed with redacted matched values.
+EOF
+}
+
+die() {
+  printf 'check-private-context: %s\n' "$*" >&2
+  exit 2
+}
+
+if [ "$#" -eq 0 ]; then
+  usage >&2
+  exit 2
+fi
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+repo_root="$(cd "$script_dir/.." && pwd -P)"
+private_config="$repo_root/config/betterleaks/private-context.toml"
+
+stdin=false
+label="<stdin>"
+worktree=false
+files=()
+git_ranges=()
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+  --stdin)
+    stdin=true
+    shift
+    ;;
+  --label)
+    [ "$#" -ge 2 ] || die "Missing value for --label"
+    label="$2"
+    shift 2
+    ;;
+  --file)
+    [ "$#" -ge 2 ] || die "Missing value for --file"
+    files+=("$2")
+    shift 2
+    ;;
+  --git-range)
+    [ "$#" -ge 2 ] || die "Missing value for --git-range"
+    git_ranges+=("$2")
+    shift 2
+    ;;
+  --worktree)
+    worktree=true
+    shift
+    ;;
+  --help | -h)
+    usage
+    exit 0
+    ;;
+  *)
+    die "Unknown argument: $1"
+    ;;
+  esac
+done
+
+if [ "$stdin" = false ] && [ "$worktree" = false ] && [ "${#files[@]}" -eq 0 ] && [ "${#git_ranges[@]}" -eq 0 ]; then
+  die "Choose at least one scan input"
+fi
+
+betterleaks_command=()
+if [ -n "${BETTERLEAKS_COMMAND:-}" ]; then
+  betterleaks_command=("$BETTERLEAKS_COMMAND")
+elif command -v betterleaks >/dev/null 2>&1; then
+  betterleaks_command=("betterleaks")
+else
+  betterleaks_command=("$script_dir/betterleaks-docker.sh")
+fi
+
+common_args=(--redact --no-banner --no-color --log-level=warn --exit-code=1 -v)
+temporary_files=()
+finding_status=0
+
+cleanup() {
+  if [ "${#temporary_files[@]}" -gt 0 ]; then
+    rm -f "${temporary_files[@]}"
+  fi
+}
+trap cleanup EXIT
+
+scan_with_betterleaks() {
+  local config_arg="$1"
+  shift
+
+  if [ -n "$config_arg" ]; then
+    "${betterleaks_command[@]}" "$@" -c "$config_arg" "${common_args[@]}"
+  else
+    "${betterleaks_command[@]}" "$@" "${common_args[@]}"
+  fi
+}
+
+run_scan_pair() {
+  local kind="$1"
+  shift
+
+  if ! scan_with_betterleaks "" "$kind" "$@"; then
+    finding_status=1
+  fi
+  if ! scan_with_betterleaks "$private_config" "$kind" "$@"; then
+    finding_status=1
+  fi
+}
+
+run_stdin_scan_pair() {
+  local file="$1"
+
+  if ! scan_with_betterleaks "" stdin <"$file"; then
+    finding_status=1
+  fi
+  if ! scan_with_betterleaks "$private_config" stdin <"$file"; then
+    finding_status=1
+  fi
+}
+
+scan_stream_file() {
+  local source="$1"
+  local file="$2"
+
+  printf 'check-private-context: scanning %s\n' "$source" >&2
+  run_stdin_scan_pair "$file"
+}
+
+extract_added_patch_lines() {
+  awk '
+    /^@@ / {
+      in_hunk = 1
+      next
+    }
+    /^diff --git / {
+      in_hunk = 0
+      next
+    }
+    in_hunk && /^\+/ {
+      sub(/^\+/, "")
+      print
+    }
+  '
+}
+
+scan_explicit_file() {
+  local file="$1"
+
+  [ -f "$file" ] || die "File does not exist: $file"
+  if [ -s "$file" ] && ! grep -Iq '' "$file"; then
+    die "File cannot be inspected as text: $file"
+  fi
+  scan_stream_file "$file" "$file"
+}
+
+if [ "$stdin" = true ]; then
+  stdin_file="$(mktemp)"
+  temporary_files+=("$stdin_file")
+  cat >"$stdin_file"
+  scan_stream_file "$label" "$stdin_file"
+fi
+
+for file in "${files[@]}"; do
+  scan_explicit_file "$file"
+done
+
+for range in "${git_ranges[@]}"; do
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "--git-range requires a Git worktree"
+  log_file="$(mktemp)"
+  temporary_files+=("$log_file")
+  git log --format='%s%n%b' "$range" >"$log_file"
+  scan_stream_file "git-range:$range" "$log_file"
+
+  printf 'check-private-context: scanning git patches for %s\n' "$range" >&2
+  while IFS= read -r commit; do
+    short_commit="$(git rev-parse --short=12 "$commit")"
+    patch_file="$(mktemp)"
+    temporary_files+=("$patch_file")
+    git show --format= --no-ext-diff --unified=0 "$commit" -- . ':(exclude)config/betterleaks/private-context.toml' |
+      extract_added_patch_lines >"$patch_file"
+    scan_stream_file "git-patch:$range:$short_commit" "$patch_file"
+  done < <(git rev-list --reverse "$range")
+done
+
+if [ "$worktree" = true ]; then
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "--worktree requires a Git worktree"
+  printf 'check-private-context: scanning worktree\n' >&2
+  run_scan_pair dir .
+fi
+
+if [ "$finding_status" -ne 0 ]; then
+  cat >&2 <<'EOF'
+check-private-context: found private-context finding(s)
+Replace live Trello-shaped values with clearly synthetic same-shape fixtures, and redact secrets,
+private host paths, account names, and other private operational context before committing or posting.
+EOF
+  exit "$finding_status"
+fi

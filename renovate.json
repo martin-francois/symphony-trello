@@ -68,6 +68,15 @@
       "matchStrings": ["(?<depName>semgrep/semgrep):(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
       "datasourceTemplate": "docker",
       "versioningTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^scripts/betterleaks-docker\\.sh$/"
+      ],
+      "matchStrings": ["(?<depName>ghcr\\.io/betterleaks/betterleaks):v(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
     }
   ],
   "customDatasources": {

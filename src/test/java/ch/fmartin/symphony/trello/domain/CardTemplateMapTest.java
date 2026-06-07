@@ -29,13 +29,13 @@ final class CardTemplateMapTest {
                 false,
                 1,
                 "abc",
-                "https://trello.com/c/abc",
+                "https://trello.com/c/SYNTH101",
                 null,
-                "https://trello.com/c/abc",
+                "https://trello.com/c/SYNTH101",
                 List.of("p1"),
                 List.of("label-1"),
                 List.of("member-1"),
-                List.of(new BlockerRef("blocker-1", "TRELLO-blocker", "Done", "https://trello.com/c/blocker")),
+                List.of(new BlockerRef("blocker-1", "TRELLO-blocker", "Done", "https://trello.com/c/SYNTH102")),
                 List.of(new Card.Comment(
                         "comment-1",
                         "Please handle the review note.",
@@ -58,7 +58,7 @@ final class CardTemplateMapTest {
                 .containsEntry("id", "blocker-1")
                 .containsEntry("identifier", "TRELLO-blocker")
                 .containsEntry("state", "Done")
-                .containsEntry("url", "https://trello.com/c/blocker");
+                .containsEntry("url", "https://trello.com/c/SYNTH102");
         assertThat(template.get("comments"))
                 .asList()
                 .singleElement()
