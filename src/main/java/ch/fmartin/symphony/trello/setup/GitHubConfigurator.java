@@ -3,12 +3,19 @@ package ch.fmartin.symphony.trello.setup;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.GitHubIntegration;
 import java.io.IOException;
 import java.util.Locale;
+import java.util.function.Supplier;
 
 final class GitHubConfigurator {
     private final CommandRunner commands;
+    private final Supplier<String> osName;
 
     GitHubConfigurator(CommandRunner commands) {
+        this(commands, () -> System.getProperty("os.name", ""));
+    }
+
+    GitHubConfigurator(CommandRunner commands, Supplier<String> osName) {
         this.commands = commands;
+        this.osName = osName;
     }
 
     GitHubIntegration resolve(LocalSetup.Options options, Prerequisites prerequisites, Terminal terminal)
@@ -128,7 +135,7 @@ final class GitHubConfigurator {
                     ? "winget install --id GitHub.cli --source winget"
                     : "";
         }
-        String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
+        String os = normalizedOsName();
         if (os.contains("mac") && commands.available("brew", "--version").available()) {
             return "brew install gh";
         }
@@ -181,8 +188,13 @@ final class GitHubConfigurator {
         return "root".equals(System.getProperty("user.name", ""));
     }
 
-    private static boolean isWindows() {
-        return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
+    private boolean isWindows() {
+        return normalizedOsName().contains("win");
+    }
+
+    private String normalizedOsName() {
+        String value = osName.get();
+        return value == null ? "" : value.toLowerCase(Locale.ROOT);
     }
 
     private static void printGithubLaterCommands(Terminal terminal) {

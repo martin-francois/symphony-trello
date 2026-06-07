@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -81,22 +82,13 @@ final class SymphonyMainTest {
                 ---
                 Prompt
                 """);
-        String oldValue = System.getProperty("quarkus.http.port");
-        try {
-            System.setProperty("quarkus.http.port", "8181");
 
-            // when
-            var port = SymphonyMain.configuredPort(SymphonyMain.CliOptions.parse("WORKFLOW.md"), workflow);
+        // when
+        var port = SymphonyMain.configuredPort(
+                SymphonyMain.CliOptions.parse("WORKFLOW.md"), workflow, "8181", Optional.empty());
 
-            // then
-            assertThat(port).isEmpty();
-        } finally {
-            if (oldValue == null) {
-                System.clearProperty("quarkus.http.port");
-            } else {
-                System.setProperty("quarkus.http.port", oldValue);
-            }
-        }
+        // then
+        assertThat(port).isEmpty();
     }
 
     @Test
@@ -112,43 +104,23 @@ final class SymphonyMainTest {
                 ---
                 Prompt
                 """);
-        String oldValue = System.getProperty("quarkus.http.port");
-        try {
-            System.setProperty("quarkus.http.port", "8181");
 
-            // when
-            var port =
-                    SymphonyMain.configuredPort(SymphonyMain.CliOptions.parse("WORKFLOW.md", "--port=8282"), workflow);
+        // when
+        var port = SymphonyMain.configuredPort(
+                SymphonyMain.CliOptions.parse("WORKFLOW.md", "--port=8282"), workflow, "8181", Optional.empty());
 
-            // then
-            assertThat(port).contains("8282");
-        } finally {
-            if (oldValue == null) {
-                System.clearProperty("quarkus.http.port");
-            } else {
-                System.setProperty("quarkus.http.port", oldValue);
-            }
-        }
+        // then
+        assertThat(port).contains("8282");
     }
 
     @Test
     void prebootWorkflowPathHonorsSystemPropertyBeforeDefault() {
         // given
-        String oldValue = System.getProperty("symphony.workflow.path");
-        try {
-            System.setProperty("symphony.workflow.path", "custom/WORKFLOW.md");
 
-            // when
-            String workflowPath = SymphonyMain.configuredWorkflowPath();
+        // when
+        String workflowPath = SymphonyMain.configuredWorkflowPath("custom/WORKFLOW.md", Optional.empty());
 
-            // then
-            assertThat(workflowPath).isEqualTo("custom/WORKFLOW.md");
-        } finally {
-            if (oldValue == null) {
-                System.clearProperty("symphony.workflow.path");
-            } else {
-                System.setProperty("symphony.workflow.path", oldValue);
-            }
-        }
+        // then
+        assertThat(workflowPath).isEqualTo("custom/WORKFLOW.md");
     }
 }

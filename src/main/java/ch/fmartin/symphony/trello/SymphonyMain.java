@@ -38,27 +38,35 @@ public class SymphonyMain {
     }
 
     static String configuredWorkflowPath() {
-        String systemProperty = System.getProperty("symphony.workflow.path");
-        if (systemProperty != null && !systemProperty.isBlank()) {
+        return configuredWorkflowPath(
+                System.getProperty("symphony.workflow.path"), LocalEnvironment.get("SYMPHONY_WORKFLOW_PATH"));
+    }
+
+    static String configuredWorkflowPath(String systemProperty, Optional<String> environmentValue) {
+        if (hasText(systemProperty)) {
             return systemProperty;
         }
-        Optional<String> env = LocalEnvironment.get("SYMPHONY_WORKFLOW_PATH");
-        if (env.isPresent()) {
-            return env.get();
+        if (environmentValue.isPresent()) {
+            return environmentValue.get();
         }
         return "WORKFLOW.md";
     }
 
     static Optional<String> configuredPort(CliOptions options, Path workflowPath) {
+        return configuredPort(
+                options, workflowPath, System.getProperty("quarkus.http.port"), externalHttpPortOverride());
+    }
+
+    static Optional<String> configuredPort(
+            CliOptions options, Path workflowPath, String quarkusHttpPort, Optional<String> externalHttpPort) {
         if (options.port().isPresent()) {
             return options.port();
         }
-        if (hasText(System.getProperty("quarkus.http.port"))) {
+        if (hasText(quarkusHttpPort)) {
             return Optional.empty();
         }
-        Optional<String> externalPort = externalHttpPortOverride();
-        if (externalPort.isPresent()) {
-            return externalPort;
+        if (externalHttpPort.isPresent()) {
+            return externalHttpPort;
         }
         return configuredServerPort(workflowPath);
     }

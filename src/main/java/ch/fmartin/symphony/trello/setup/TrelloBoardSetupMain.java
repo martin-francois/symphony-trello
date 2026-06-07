@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.Callable;
+import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 import picocli.CommandLine;
 import picocli.CommandLine.ArgGroup;
@@ -52,6 +53,8 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
     private static final String CONFIG_DIR_PROPERTY = "symphony.trello.config.dir";
     private static final String SHELL_PROPERTY = "symphony.trello.shell";
     private static final String CLI_COMMAND_PROPERTY = "symphony.trello.command";
+    private static final ThreadLocal<PropertyLookup> PROPERTY_LOOKUP =
+            ThreadLocal.withInitial(() -> System::getProperty);
 
     private final TrelloBoardSetupService boardSetup;
     private final LocalWorkerManager workerManager;
@@ -94,6 +97,15 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             String[] args,
             PrintStream out,
             PrintStream err,
+            TrelloBoardSetup.CodexModelDefaults codexModelDefaults,
+            Map<String, String> properties) {
+        return runWithPropertyLookup(properties::get, () -> run(args, out, err, codexModelDefaults));
+    }
+
+    static int run(
+            String[] args,
+            PrintStream out,
+            PrintStream err,
             Supplier<TrelloBoardSetup.CodexModelDefaults> codexModelDefaults) {
         return runWithSelectionDefaults(args, out, err, () -> CodexModelSelectionDefaults.of(codexModelDefaults.get()));
     }
@@ -118,6 +130,15 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
     private static CodexModelSelectionDefaults codexModelSelectionDefaults(
             TrelloBoardSetup.CodexModelDefaults codexModelDefaults) {
         return CodexModelSelectionDefaults.of(codexModelDefaults);
+    }
+
+    private static int runWithPropertyLookup(PropertyLookup properties, IntSupplier run) {
+        PROPERTY_LOOKUP.set(properties);
+        try {
+            return run.getAsInt();
+        } finally {
+            PROPERTY_LOOKUP.remove();
+        }
     }
 
     private static BufferedReader standardInputReader() {
@@ -875,7 +896,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
     }
 
     private static Path defaultWorkflowPath() {
-        String configDir = System.getProperty(CONFIG_DIR_PROPERTY);
+        String configDir = property(CONFIG_DIR_PROPERTY);
         if (configDir == null || configDir.isBlank()) {
             return TrelloBoardSetup.DEFAULT_WORKFLOW_PATH;
         }
@@ -925,7 +946,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
     }
 
     private static String installedCliCommand() {
-        String configured = System.getProperty(CLI_COMMAND_PROPERTY);
+        String configured = property(CLI_COMMAND_PROPERTY);
         if (configured == null || configured.isBlank()) {
             return "symphony-trello";
         }
@@ -933,14 +954,14 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
     }
 
     private static String shellCommand(String command) {
-        if ("powershell".equalsIgnoreCase(System.getProperty(SHELL_PROPERTY)) && !"symphony-trello".equals(command)) {
+        if ("powershell".equalsIgnoreCase(property(SHELL_PROPERTY)) && !"symphony-trello".equals(command)) {
             return "& " + shellQuote(command);
         }
         return "symphony-trello".equals(command) ? command : shellQuote(command);
     }
 
     private static String shellQuote(String value) {
-        String shell = System.getProperty(SHELL_PROPERTY);
+        String shell = property(SHELL_PROPERTY);
         if ("powershell".equalsIgnoreCase(shell)) {
             return "'" + value.replace("'", "''") + "'";
         }
@@ -948,6 +969,14 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             return "\"" + value.replace("\"", "\\\"") + "\"";
         }
         return "'" + value.replace("'", "'\\''") + "'";
+    }
+
+    private static String property(String name) {
+        return PROPERTY_LOOKUP.get().get(name);
+    }
+
+    private interface PropertyLookup {
+        String get(String name);
     }
 
     private static String optionalListName(String value) {

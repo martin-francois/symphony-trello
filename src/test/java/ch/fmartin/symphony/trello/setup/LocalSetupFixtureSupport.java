@@ -56,6 +56,10 @@ abstract class LocalSetupFixtureSupport {
         return runSetupWithInput(localSetup, "", args);
     }
 
+    protected SetupRunResult runSetupWithProductionDefaultPort(String... args) {
+        return fixture.runSetupWithProductionDefaultPort(args);
+    }
+
     protected SetupRunResult connectLocalBoardWithoutGithub(Path workflow, Path env, String boardName) {
         return runSetup(
                 "--non-interactive",
@@ -85,7 +89,7 @@ abstract class LocalSetupFixtureSupport {
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
         int exitCode = localSetup.run(
-                args,
+                fixture.argsWithFixtureServerPort(args),
                 new BufferedReader(new StringReader(input)),
                 new PrintStream(stdout, true, StandardCharsets.UTF_8),
                 new PrintStream(stderr, true, StandardCharsets.UTF_8));
@@ -117,6 +121,20 @@ abstract class LocalSetupFixtureSupport {
                         "symphony-trello"),
                 new WorkflowConfigEditor(),
                 workerManager);
+    }
+
+    protected LocalSetup setupWithOperatingSystem(String osName) {
+        return new LocalSetup(
+                new TrelloBoardSetup(new ObjectMapper()),
+                commands,
+                Map.of(
+                        "SYMPHONY_TRELLO_CONFIG_DIR",
+                        tempDir.resolve("config").toString(),
+                        "SYMPHONY_TRELLO_COMMAND",
+                        "symphony-trello"),
+                new WorkflowConfigEditor(),
+                workerManager,
+                () -> osName);
     }
 
     protected void writeWorkflow(Path workflow, String boardId, int port) throws IOException {

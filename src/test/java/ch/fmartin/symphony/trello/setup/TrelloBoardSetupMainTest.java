@@ -1551,37 +1551,27 @@ final class TrelloBoardSetupMainTest {
         Path workflow = tempDir.resolve("wrapped-command.WORKFLOW.md");
         Path env = tempDir.resolve(".env.wrapped-command");
         Path command = tempDir.resolve("bin/symphony-trello");
-        String previousCommand = System.getProperty(CLI_COMMAND_PROPERTY);
-        System.setProperty(CLI_COMMAND_PROPERTY, command.toString());
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode;
-        try {
-            exitCode = run(
-                    stdout,
-                    stderr,
-                    "new-board",
-                    "--endpoint",
-                    endpoint(),
-                    "--key",
-                    "key",
-                    "--token",
-                    "token",
-                    "--name",
-                    "Wrapped Command Queue",
-                    "--workflow",
-                    workflow.toString(),
-                    "--env",
-                    env.toString());
-        } finally {
-            if (previousCommand == null) {
-                System.clearProperty(CLI_COMMAND_PROPERTY);
-            } else {
-                System.setProperty(CLI_COMMAND_PROPERTY, previousCommand);
-            }
-        }
+        int exitCode = run(
+                Map.of(CLI_COMMAND_PROPERTY, command.toString()),
+                stdout,
+                stderr,
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--name",
+                "Wrapped Command Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString());
 
         // then
         assertThat(exitCode).isZero();
@@ -2442,36 +2432,25 @@ final class TrelloBoardSetupMainTest {
         Path defaultWorkflow = configDirectory.resolve("WORKFLOW.md");
         Path env = configDirectory.resolve(".env.second-board");
         Files.writeString(defaultWorkflow, "existing", StandardCharsets.UTF_8);
-        String previousConfigDir = System.getProperty(CONFIG_DIR_PROPERTY);
-        System.setProperty(CONFIG_DIR_PROPERTY, configDirectory.toString());
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode;
-        try {
-            exitCode = run(
-                    stdout,
-                    stderr,
-                    "new-board",
-                    "--endpoint",
-                    endpoint(),
-                    "--key",
-                    "key",
-                    "--token",
-                    "token",
-                    "--name",
-                    "Second Board",
-                    "--env",
-                    env.toString());
-
-        } finally {
-            if (previousConfigDir == null) {
-                System.clearProperty(CONFIG_DIR_PROPERTY);
-            } else {
-                System.setProperty(CONFIG_DIR_PROPERTY, previousConfigDir);
-            }
-        }
+        int exitCode = run(
+                Map.of(CONFIG_DIR_PROPERTY, configDirectory.toString()),
+                stdout,
+                stderr,
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--name",
+                "Second Board",
+                "--env",
+                env.toString());
 
         // then
         assertThat(exitCode).isZero();
@@ -2499,44 +2478,27 @@ final class TrelloBoardSetupMainTest {
         Path workflow = tempDir.resolve("generated O'Brien.WORKFLOW.md");
         Path env = tempDir.resolve(".env.powershell");
         Path command = tempDir.resolve("bin/Symphony O'Brien/symphony-trello.ps1");
-        String previousShell = System.getProperty(SHELL_PROPERTY);
-        String previousCommand = System.getProperty(CLI_COMMAND_PROPERTY);
-        System.setProperty(SHELL_PROPERTY, "powershell");
-        System.setProperty(CLI_COMMAND_PROPERTY, command.toString());
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode;
-        try {
-            exitCode = run(
-                    stdout,
-                    stderr,
-                    "new-board",
-                    "--endpoint",
-                    endpoint(),
-                    "--key",
-                    "key",
-                    "--token",
-                    "token",
-                    "--name",
-                    "PowerShell Work Queue",
-                    "--workflow",
-                    workflow.toString(),
-                    "--env",
-                    env.toString());
-        } finally {
-            if (previousShell == null) {
-                System.clearProperty(SHELL_PROPERTY);
-            } else {
-                System.setProperty(SHELL_PROPERTY, previousShell);
-            }
-            if (previousCommand == null) {
-                System.clearProperty(CLI_COMMAND_PROPERTY);
-            } else {
-                System.setProperty(CLI_COMMAND_PROPERTY, previousCommand);
-            }
-        }
+        int exitCode = run(
+                Map.of(SHELL_PROPERTY, "powershell", CLI_COMMAND_PROPERTY, command.toString()),
+                stdout,
+                stderr,
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--name",
+                "PowerShell Work Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString());
 
         // then
         assertThat(exitCode).isZero();
@@ -2563,37 +2525,27 @@ final class TrelloBoardSetupMainTest {
         // given
         Path workflow = tempDir.resolve("generated command prompt.WORKFLOW.md");
         Path env = tempDir.resolve(".env.cmd");
-        String previousShell = System.getProperty(SHELL_PROPERTY);
-        System.setProperty(SHELL_PROPERTY, "cmd");
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode;
-        try {
-            exitCode = run(
-                    stdout,
-                    stderr,
-                    "new-board",
-                    "--endpoint",
-                    endpoint(),
-                    "--key",
-                    "key",
-                    "--token",
-                    "token",
-                    "--name",
-                    "Command Prompt Work Queue",
-                    "--workflow",
-                    workflow.toString(),
-                    "--env",
-                    env.toString());
-        } finally {
-            if (previousShell == null) {
-                System.clearProperty(SHELL_PROPERTY);
-            } else {
-                System.setProperty(SHELL_PROPERTY, previousShell);
-            }
-        }
+        int exitCode = run(
+                Map.of(SHELL_PROPERTY, "cmd"),
+                stdout,
+                stderr,
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--name",
+                "Command Prompt Work Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString());
 
         // then
         assertThat(exitCode).isZero();
@@ -3643,6 +3595,19 @@ final class TrelloBoardSetupMainTest {
                 new PrintStream(stdout, true, StandardCharsets.UTF_8),
                 new PrintStream(stderr, true, StandardCharsets.UTF_8),
                 TrelloBoardSetup.CodexModelDefaults.fallback());
+    }
+
+    private int run(
+            Map<String, String> properties,
+            ByteArrayOutputStream stdout,
+            ByteArrayOutputStream stderr,
+            String... args) {
+        return TrelloBoardSetupMain.run(
+                args,
+                new PrintStream(stdout, true, StandardCharsets.UTF_8),
+                new PrintStream(stderr, true, StandardCharsets.UTF_8),
+                TrelloBoardSetup.CodexModelDefaults.fallback(),
+                properties);
     }
 
     private static Stream<Arguments> directCommandHelp() {
