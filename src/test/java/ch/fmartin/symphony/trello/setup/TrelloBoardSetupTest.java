@@ -125,6 +125,7 @@ final class TrelloBoardSetupTest {
                 1,
                 false,
                 false));
+        int expectedPort = result.serverPort();
 
         // then
         assertThat(result.boardKey()).isEqualTo("abc123");
@@ -255,14 +256,14 @@ final class TrelloBoardSetupTest {
                 .contains("undeclared host paths")
                 .contains("docs/deployment.md#allow-host-path-access")
                 .contains("server:")
-                .contains("port: " + ConfigDefaults.DEFAULT_SERVER_PORT)
+                .contains("port: " + expectedPort)
                 .contains("command: " + ConfigDefaults.DEFAULT_CODEX_COMMAND)
                 .contains("model: \"gpt-5.5\"")
                 .contains("reasoning_effort: \"medium\"")
                 .contains("polling:")
                 .contains("interval_ms: " + ConfigDefaults.DEFAULT_POLLING_INTERVAL_MS)
                 .contains("max_concurrent_agents: " + ConfigDefaults.DEFAULT_SETUP_MAX_CONCURRENT_AGENTS);
-        assertThat(result.serverPort()).isEqualTo(ConfigDefaults.DEFAULT_SERVER_PORT);
+        assertThat(result.serverPort()).isEqualTo(expectedPort);
         EffectiveConfig config = resolve(workflow);
         assertThat(config.tracker().boardId()).isEqualTo("abc123");
         assertThat(config.codex().command()).isEqualTo(ConfigDefaults.DEFAULT_CODEX_COMMAND);
@@ -425,6 +426,7 @@ final class TrelloBoardSetupTest {
                 Path.of("./agent-workspaces"),
                 2,
                 false));
+        int expectedPort = result.serverPort();
 
         // then
         assertThat(result.openLists())
@@ -438,7 +440,7 @@ final class TrelloBoardSetupTest {
                 .content(StandardCharsets.UTF_8)
                 .contains("board_id: \"SYNTH001\"")
                 .contains("root: \"./agent-workspaces\"")
-                .contains("port: " + ConfigDefaults.DEFAULT_SERVER_PORT)
+                .contains("port: " + expectedPort)
                 .contains("model: \"gpt-5.5\"")
                 .contains("reasoning_effort: \"medium\"")
                 .contains("polling:")
@@ -497,7 +499,7 @@ final class TrelloBoardSetupTest {
                 .contains("## Completion Bar Before \"Human Review\"")
                 .contains("move the card to \"Done\"")
                 .contains("max_concurrent_agents: 2");
-        assertThat(result.serverPort()).isEqualTo(ConfigDefaults.DEFAULT_SERVER_PORT);
+        assertThat(result.serverPort()).isEqualTo(expectedPort);
         EffectiveConfig config = resolve(workflow);
         assertThat(config.tracker().boardId()).isEqualTo("SYNTH001");
         assertThat(config.codex().model()).isEqualTo("gpt-5.5");
@@ -1306,9 +1308,11 @@ final class TrelloBoardSetupTest {
                 false,
                 true));
 
+        int expectedPort = firstAvailableManagedPort();
+
         // then
-        assertThat(result.serverPort()).isEqualTo(ConfigDefaults.DEFAULT_SERVER_PORT);
-        assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: 18080");
+        assertThat(result.serverPort()).isEqualTo(expectedPort);
+        assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: " + expectedPort);
     }
 
     @Test
@@ -1404,6 +1408,8 @@ final class TrelloBoardSetupTest {
     void newBoardUsesNextServerPortWhenExistingWorkflowUsesDefaultPort() throws IOException {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
+        int existingPort = ConfigDefaults.DEFAULT_SERVER_PORT;
+        int expectedPort = firstAvailableManagedPort(existingPort);
         Files.writeString(
                 workflow,
                 """
@@ -1413,9 +1419,12 @@ final class TrelloBoardSetupTest {
                   api_key: $TRELLO_API_KEY
                   api_token: $TRELLO_API_TOKEN
                   board_id: "existing"
+                server:
+                  port: %d
                 ---
                 # Existing
-                """,
+                """
+                        .formatted(existingPort),
                 StandardCharsets.UTF_8);
 
         // when
@@ -1432,14 +1441,15 @@ final class TrelloBoardSetupTest {
 
         // then
         Path generatedWorkflow = tempDir.resolve("WORKFLOW.my-project.md");
-        assertThat(result.serverPort()).isEqualTo(18081);
-        assertThat(generatedWorkflow).content(StandardCharsets.UTF_8).contains("port: 18081");
+        assertThat(result.serverPort()).isEqualTo(expectedPort);
+        assertThat(generatedWorkflow).content(StandardCharsets.UTF_8).contains("port: " + expectedPort);
     }
 
     @Test
     void newBoardUsesRequestedServerPortWhenItDoesNotConflict() {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
+        int requestedPort = firstAvailableManagedPort();
 
         // when
         var result = setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
@@ -1449,14 +1459,14 @@ final class TrelloBoardSetupTest {
                 null,
                 workflow,
                 Path.of("./workspaces"),
-                18081,
+                requestedPort,
                 1,
                 false,
                 true));
 
         // then
-        assertThat(result.serverPort()).isEqualTo(18081);
-        assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: 18081");
+        assertThat(result.serverPort()).isEqualTo(requestedPort);
+        assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: " + requestedPort);
     }
 
     @Test
@@ -1564,14 +1574,16 @@ final class TrelloBoardSetupTest {
                 true));
 
         // then
-        assertThat(result.serverPort()).isEqualTo(ConfigDefaults.DEFAULT_SERVER_PORT);
-        assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: " + ConfigDefaults.DEFAULT_SERVER_PORT);
+        int expectedPort = firstAvailableManagedPort();
+        assertThat(result.serverPort()).isEqualTo(expectedPort);
+        assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: " + expectedPort);
     }
 
     @Test
     void forceNewBoardPreservesExistingServerPortWhenItDoesNotConflict() throws IOException {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
+        int expectedPort = firstAvailableManagedPort();
         Files.writeString(
                 workflow,
                 """
@@ -1580,10 +1592,11 @@ final class TrelloBoardSetupTest {
                   kind: trello
                   board_id: "existing"
                 server:
-                  port: 18081
+                  port: %d
                 ---
                 # Existing
-                """,
+                """
+                        .formatted(expectedPort),
                 StandardCharsets.UTF_8);
 
         // when
@@ -1599,8 +1612,8 @@ final class TrelloBoardSetupTest {
                 true));
 
         // then
-        assertThat(result.serverPort()).isEqualTo(18081);
-        assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: 18081");
+        assertThat(result.serverPort()).isEqualTo(expectedPort);
+        assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: " + expectedPort);
     }
 
     @Test
@@ -1653,6 +1666,7 @@ final class TrelloBoardSetupTest {
     void forceNewBoardDoesNotPreserveExistingServerPortWhenSiblingAlreadyUsesIt() throws IOException {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
+        int siblingPort = firstAvailableManagedPort();
         Files.writeString(
                 workflow,
                 """
@@ -1661,12 +1675,14 @@ final class TrelloBoardSetupTest {
                   kind: trello
                   board_id: "old"
                 server:
-                  port: 18081
+                  port: %d
                 ---
                 # Existing
-                """,
+                """
+                        .formatted(siblingPort),
                 StandardCharsets.UTF_8);
         Path siblingWorkflow = tempDir.resolve("project-a.WORKFLOW.md");
+        int expectedPort = firstAvailableManagedPort(siblingPort);
         Files.writeString(
                 siblingWorkflow,
                 """
@@ -1675,10 +1691,11 @@ final class TrelloBoardSetupTest {
                   kind: trello
                   board_id: "sibling"
                 server:
-                  port: 18081
+                  port: %d
                 ---
                 # Sibling
-                """,
+                """
+                        .formatted(siblingPort),
                 StandardCharsets.UTF_8);
 
         // when
@@ -1694,14 +1711,15 @@ final class TrelloBoardSetupTest {
                 true));
 
         // then
-        assertThat(result.serverPort()).isEqualTo(ConfigDefaults.DEFAULT_SERVER_PORT);
-        assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: " + ConfigDefaults.DEFAULT_SERVER_PORT);
+        assertThat(result.serverPort()).isEqualTo(expectedPort);
+        assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: " + expectedPort);
     }
 
     @Test
     void forceNewBoardCanReplaceMalformedExistingWorkflow() throws IOException {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
+        int expectedPort = ConfigDefaults.DEFAULT_SERVER_PORT;
         Files.writeString(
                 workflow,
                 """
@@ -1727,8 +1745,8 @@ final class TrelloBoardSetupTest {
                 true));
 
         // then
-        assertThat(result.serverPort()).isEqualTo(ConfigDefaults.DEFAULT_SERVER_PORT);
-        assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: " + ConfigDefaults.DEFAULT_SERVER_PORT);
+        assertThat(result.serverPort()).isEqualTo(expectedPort);
+        assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: " + expectedPort);
     }
 
     @Test
@@ -1828,6 +1846,24 @@ final class TrelloBoardSetupTest {
                 HttpServer.create(new InetSocketAddress(LocalHealthChecker.loopbackIpv4ForTests(), 0), 0);
         listeningServer.start();
         return listeningServer;
+    }
+
+    private static int firstAvailableManagedPort(int... reservedPorts) {
+        for (int port = ConfigDefaults.DEFAULT_SERVER_PORT; port <= LocalPort.MAX; port++) {
+            if (!contains(reservedPorts, port) && !LocalHealthChecker.portAcceptsConnections(port)) {
+                return port;
+            }
+        }
+        throw new AssertionError("No free managed test port found.");
+    }
+
+    private static boolean contains(int[] ports, int candidate) {
+        for (int port : ports) {
+            if (port == candidate) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void forceRegenerateExistingWorkflow(Path workflow) {

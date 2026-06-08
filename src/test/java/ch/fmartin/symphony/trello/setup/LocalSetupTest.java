@@ -2039,8 +2039,11 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                     "--no-github");
 
             // then
-            result.assertSuccess().stdoutContains("Local server port selected for \"Bound Port Queue\": 18081");
-            assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: 18081");
+            result.assertSuccess();
+            int selectedPort = portFromSetupResult(result);
+            assertThat(selectedPort).isNotEqualTo(TrelloBoardSetup.DEFAULT_SERVER_PORT);
+            result.stdoutContains("Local server port selected for \"Bound Port Queue\": " + selectedPort);
+            assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: " + selectedPort);
         }
     }
 
@@ -2268,7 +2271,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--no-github");
 
         // then
-        int expectedPort = ConfigDefaults.DEFAULT_SERVER_PORT + 1;
+        int expectedPort = firstAvailableManagedPort(ConfigDefaults.DEFAULT_SERVER_PORT);
         result.assertSuccess().stdoutContains("Local server port selected for \"Imported Queue\": " + expectedPort);
         assertThatWorkflow(workflow).hasServerPort(expectedPort);
         assertThatManifest(manifest).hasBoardWithPort("Imported Queue", expectedPort);
@@ -2419,7 +2422,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--no-github");
 
         // then
-        int expectedPort = ConfigDefaults.DEFAULT_SERVER_PORT + 1;
+        int expectedPort = firstAvailableManagedPort(ConfigDefaults.DEFAULT_SERVER_PORT);
         result.assertSuccess().stdoutContains("Local server port selected for \"Imported Queue\": " + expectedPort);
         assertThatWorkflow(workflow).hasServerPort(expectedPort);
         assertThatManifest(config.resolve("connected-boards.json")).hasBoardWithPort("Imported Queue", expectedPort);
@@ -3937,7 +3940,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.github-upgrade-env-port.md");
         Path env = tempDir.resolve(".env");
-        int configuredPort = 18_091;
+        int configuredPort = firstAvailableManagedPort();
         SetupRunResult firstResult = runSetup(
                 "--non-interactive",
                 "--endpoint",
@@ -3955,6 +3958,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--server-port",
                 String.valueOf(configuredPort),
                 "--no-github");
+        firstResult.assertSuccess();
         Files.writeString(
                 workflow,
                 Files.readString(workflow, StandardCharsets.UTF_8)
@@ -5263,6 +5267,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
             }
         }
         throw new AssertionError("No free managed test port found.");
+    }
+
+    private static int portFromSetupResult(SetupRunResult result) {
+        String marker = "Local server port selected for \"";
+        return result.stdoutLines().stream()
+                .filter(line -> line.contains(marker))
+                .findFirst()
+                .map(line -> line.substring(line.lastIndexOf(':') + 1).trim())
+                .map(Integer::parseInt)
+                .orElseThrow(() -> new AssertionError("Expected server port selection line in setup output."));
     }
 
     private static boolean contains(int[] ports, int candidate) {

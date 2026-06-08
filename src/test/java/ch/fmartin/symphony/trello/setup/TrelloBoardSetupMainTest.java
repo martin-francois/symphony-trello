@@ -10,6 +10,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
@@ -1723,6 +1724,7 @@ final class TrelloBoardSetupMainTest {
         // given
         Path workflow = tempDir.resolve("generated workflow.WORKFLOW.md");
         Path env = tempDir.resolve(".env.next-steps");
+        int expectedPort = firstAvailableManagedPort();
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
 
@@ -1744,7 +1746,7 @@ final class TrelloBoardSetupMainTest {
                 "--env",
                 env.toString(),
                 "--server-port",
-                "18081");
+                String.valueOf(expectedPort));
 
         // then
         assertThat(exitCode).isZero();
@@ -1755,7 +1757,7 @@ final class TrelloBoardSetupMainTest {
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("board_id: \"abc123\"")
-                .contains("port: 18081");
+                .contains("port: " + expectedPort);
         ConnectedBoardManifest manifest = new ConnectedBoardRepository(tempDir.resolve("connected-boards.json")).load();
         assertThat(manifest.boards()).singleElement().satisfies(board -> {
             assertThat(board.boardId()).isEqualTo("board-1");
@@ -1768,13 +1770,13 @@ final class TrelloBoardSetupMainTest {
                     .isEqualTo(TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT
                             .toAbsolutePath()
                             .normalize());
-            assertThat(board.serverPort()).isEqualTo(18081);
+            assertThat(board.serverPort()).isEqualTo(expectedPort);
         });
         assertThat(stdout.toString(StandardCharsets.UTF_8))
                 .contains("Created Trello board: Symphony Work Queue")
                 .contains("Board identifier for WORKFLOW.md: abc123")
                 .contains("Wrote workflow:")
-                .contains("HTTP status port: 18081")
+                .contains("HTTP status port: " + expectedPort)
                 .contains(
                         "symphony-trello start --env "
                                 + shellQuote(env.toAbsolutePath().normalize().toString())
@@ -2199,6 +2201,7 @@ final class TrelloBoardSetupMainTest {
                 "target", "trello-board-setup-main-test", tempDir.getFileName().toString());
         Path relativeWorkflow = relativeDirectory.resolve("relative.WORKFLOW.md");
         Path relativeEnv = relativeDirectory.resolve(".env.relative");
+        Files.createDirectories(relativeDirectory);
 
         // when
         CliRunResult result = runCli(
@@ -2602,6 +2605,26 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
+    void newBoardRejectsMissingRuntimeEnvParentBeforeCreatingBoard() throws Exception {
+        // given
+        Path missingParent = tempDir.resolve("missing-parent");
+        Path env = missingParent.resolve(".env.runtime");
+        Path workflow = tempDir.resolve("missing-parent-runtime-env.WORKFLOW.md");
+
+        // when
+        CliRunResult result = runNewBoardWithRuntimeEnv(workflow, env, true);
+
+        // then
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(createdBoardName.get()).isNull();
+        assertThat(workflow).doesNotExist();
+        assertThat(result.stdout()).doesNotContain("Created Trello board", "Troubleshooting report written");
+        assertThat(result.stderr())
+                .contains("setup_failed code=setup_env_write_failed", "Choose a writable .env or .env.NAME file")
+                .doesNotContain(env.toString(), missingParent.toString(), tempDir.toString());
+    }
+
+    @Test
     void newBoardRejectsUnsafeRuntimeEnvPathBeforeWritingCredentials() throws Exception {
         // given
         Path env = tempDir.resolve("README.md");
@@ -2890,6 +2913,29 @@ final class TrelloBoardSetupMainTest {
                 .contains(workflow.toAbsolutePath().normalize() + "\nRe-run with --force")
                 .doesNotContain(workflow.toAbsolutePath().normalize() + ".")
                 .doesNotContain("direct-key", "direct-token", "trello_api_request", "trello_auth_failed");
+    }
+
+    @Test
+    void importBoardRejectsMissingRuntimeEnvParentBeforeImportingBoard() throws Exception {
+        // given
+        Path missingParent = tempDir.resolve("missing-import-parent");
+        Path env = missingParent.resolve(".env.runtime");
+        Path workflow = tempDir.resolve("missing-parent-import-runtime-env.WORKFLOW.md");
+
+        // when
+        CliRunResult result = runImportBoardWithRuntimeEnv(workflow, env, true);
+
+        // then
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(boardInfoLookups).hasValue(0);
+        assertThat(createdBoardName.get()).isNull();
+        assertThat(workflow).doesNotExist();
+        assertThat(result.stdout())
+                .doesNotContain("Imported Trello board", "Troubleshooting report written", "Saving Trello credentials");
+        assertThat(result.stderr())
+                .contains("setup_failed code=setup_env_write_failed", "Choose a writable .env or .env.NAME file")
+                .doesNotContain(
+                        env.toString(), missingParent.toString(), tempDir.toString(), "direct-key", "direct-token");
     }
 
     @Test
@@ -3621,12 +3667,13 @@ final class TrelloBoardSetupMainTest {
 
         // then
         assertThat(exitCode).isZero();
+        int expectedPort = firstAvailableManagedPort(18080);
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
-                .contains("port: 18081")
+                .contains("port: " + expectedPort)
                 .doesNotContain("port: 18080");
-        assertConnectedBoardUsesWorkflowEnvAndPort(workflow, env, 18081);
-        assertThat(stdout.toString(StandardCharsets.UTF_8)).contains("HTTP status port: 18081");
+        assertConnectedBoardUsesWorkflowEnvAndPort(workflow, env, expectedPort);
+        assertThat(stdout.toString(StandardCharsets.UTF_8)).contains("HTTP status port: " + expectedPort);
         assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
     }
 
@@ -3675,12 +3722,13 @@ final class TrelloBoardSetupMainTest {
 
         // then
         assertThat(exitCode).isZero();
+        int expectedPort = firstAvailableManagedPort(18080);
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
-                .contains("port: 18081")
+                .contains("port: " + expectedPort)
                 .doesNotContain("port: 18080");
-        assertConnectedBoardUsesWorkflowEnvAndPort(workflow, env, 18081);
-        assertThat(stdout.toString(StandardCharsets.UTF_8)).contains("HTTP status port: 18081");
+        assertConnectedBoardUsesWorkflowEnvAndPort(workflow, env, expectedPort);
+        assertThat(stdout.toString(StandardCharsets.UTF_8)).contains("HTTP status port: " + expectedPort);
         assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
     }
 
@@ -4871,6 +4919,27 @@ final class TrelloBoardSetupMainTest {
         return runCli(args.toArray(String[]::new));
     }
 
+    private CliRunResult runImportBoardWithRuntimeEnv(Path workflow, Path env, boolean includeCredentials) {
+        List<String> args = new ArrayList<>(List.of(
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--board",
+                "https://trello.com/b/input/existing-board",
+                "--active",
+                "Queue for Codex",
+                "--terminal",
+                "Released",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString()));
+        if (includeCredentials) {
+            args.addAll(1, List.of("--key", "direct-key", "--token", "direct-token"));
+        }
+        return runCli(args.toArray(new String[0]));
+    }
+
     private String[] setupCommandWithRuntimeEnv(String command, Path workflow, String envValue) {
         List<String> args = new ArrayList<>(
                 List.of(command, "--endpoint", endpoint(), "--key", "direct-key", "--token", "direct-token"));
@@ -5208,6 +5277,24 @@ final class TrelloBoardSetupMainTest {
             assertThat(board.envPath()).isEqualTo(env.toAbsolutePath().normalize());
             assertThat(board.serverPort()).isEqualTo(serverPort);
         });
+    }
+
+    private static int firstAvailableManagedPort(int... reservedPorts) {
+        for (int port = ConfigDefaults.DEFAULT_SERVER_PORT; port <= LocalPort.MAX; port++) {
+            if (!contains(reservedPorts, port) && !LocalHealthChecker.portAcceptsConnections(port)) {
+                return port;
+            }
+        }
+        throw new AssertionError("No free managed test port found.");
+    }
+
+    private static boolean contains(int[] ports, int candidate) {
+        for (int port : ports) {
+            if (port == candidate) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static HttpServer startLoopbackServer() throws IOException {
