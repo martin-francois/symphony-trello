@@ -187,14 +187,17 @@ final class TrelloCredentialStore {
             }
         }
         Path parent = absolute.getParent();
-        if (parent != null && Files.exists(parent) && !Files.isDirectory(parent)) {
+        if (parent == null) {
+            return;
+        }
+        if (!Files.exists(parent)) {
+            throw new IOException("Selected dotenv parent directory does not exist.");
+        }
+        if (!Files.isDirectory(parent)) {
             throw new IOException("Selected dotenv parent is not a directory.");
         }
-        if (parent != null) {
-            Files.createDirectories(parent);
-            Path probe = Files.createTempFile(parent, ".env-write-probe-", ".tmp");
-            Files.deleteIfExists(probe);
-        }
+        Path probe = Files.createTempFile(parent, ".env-write-probe-", ".tmp");
+        Files.deleteIfExists(probe);
     }
 
     private static void secureEnvPermissions(Path envPath) throws IOException {
