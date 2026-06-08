@@ -837,10 +837,11 @@ public final class LocalSetup {
             out.println("  " + (i + 1) + ". \"" + manifest.boards().get(i).boardName() + "\"");
         }
         return manifest.boards()
-                .get(parseChoice(
-                                terminal.readLine("Board [1]: "),
-                                1,
-                                manifest.boards().size())
+                .get(PromptSupport.requiredChoice(
+                                terminal.readLine("Board: "),
+                                manifest.boards().size(),
+                                "setup_board_selection_required",
+                                "Board selection is required.")
                         - 1);
     }
 
@@ -1054,7 +1055,12 @@ public final class LocalSetup {
         for (int i = 0; i < candidates.size(); i++) {
             out.println("  " + (i + 1) + ". \"" + candidates.get(i).boardName() + "\"");
         }
-        return candidates.get(parseChoice(terminal.readLine("Board [1]: "), 1, candidates.size()) - 1);
+        return candidates.get(PromptSupport.requiredChoice(
+                        terminal.readLine("Board: "),
+                        candidates.size(),
+                        "setup_github_upgrade_board_required",
+                        "Board selection is required.")
+                - 1);
     }
 
     private static ConnectedBoard nonGithubBoard(List<ConnectedBoard> candidates, String requested) {

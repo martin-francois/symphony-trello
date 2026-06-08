@@ -208,7 +208,11 @@ final class TrelloBoardConnector {
                     "setup_workspace_id_required",
                     "This token can access multiple Trello Workspaces. Re-run with --workspace-id.");
         }
-        int selected = PromptSupport.choice(terminal.readLine("Workspace [1]: "), 1, workspaces.size());
+        int selected = PromptSupport.requiredChoice(
+                terminal.readLine("Workspace: "),
+                workspaces.size(),
+                "setup_workspace_id_required",
+                "Workspace selection is required.");
         return workspaces.get(selected - 1).id();
     }
 

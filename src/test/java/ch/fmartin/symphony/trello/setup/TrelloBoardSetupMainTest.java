@@ -3666,15 +3666,7 @@ final class TrelloBoardSetupMainTest {
                 env.toString());
 
         // then
-        assertThat(exitCode).isZero();
-        int expectedPort = firstAvailableManagedPort(18080);
-        assertThat(workflow)
-                .content(StandardCharsets.UTF_8)
-                .contains("port: " + expectedPort)
-                .doesNotContain("port: 18080");
-        assertConnectedBoardUsesWorkflowEnvAndPort(workflow, env, expectedPort);
-        assertThat(stdout.toString(StandardCharsets.UTF_8)).contains("HTTP status port: " + expectedPort);
-        assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
+        assertSiblingWorkflowPortUsesEnvironmentVariable(exitCode, workflow, env, stdout, stderr);
     }
 
     @Test
@@ -3721,8 +3713,15 @@ final class TrelloBoardSetupMainTest {
                 env.toString());
 
         // then
-        assertThat(exitCode).isZero();
+        assertSiblingWorkflowPortUsesEnvironmentVariable(exitCode, workflow, env, stdout, stderr);
+    }
+
+    private void assertSiblingWorkflowPortUsesEnvironmentVariable(
+            int exitCode, Path workflow, Path env, ByteArrayOutputStream stdout, ByteArrayOutputStream stderr)
+            throws Exception {
         int expectedPort = firstAvailableManagedPort(18080);
+
+        assertThat(exitCode).isZero();
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("port: " + expectedPort)
