@@ -449,12 +449,11 @@ final class SetupDiagnosticReporter {
     }
 
     String renderReport(DiagnosticsRequest request, boolean privateContext) throws IOException {
-        if (privateContext && request.deep()) {
+        if (privateContext) {
             DiagnosticsTokenHasher sharedTokenHasher = diagnosticsTokenHasher(request);
-            return renderDiagnostics(request, Optional.of(sharedTokenHasher)) + "\n"
-                    + renderPrivateContext(request, Optional.of(sharedTokenHasher));
+            return renderPrivateContext(request, Optional.of(sharedTokenHasher));
         }
-        return privateContext ? renderPrivateContext(request) : renderDiagnostics(request);
+        return renderDiagnostics(request);
     }
 
     String renderDiagnostics(DiagnosticsRequest request) throws IOException {

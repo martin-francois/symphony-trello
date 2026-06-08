@@ -638,15 +638,16 @@ final class SetupDiagnosticReporterTest {
         // then
         assertThat(report)
                 .contains(
-                        "# Symphony for Trello Diagnostics",
-                        "deep:** enabled",
-                        "codex-cli 1.2.3; login=ok",
-                        "gh version 2.70.0; auth=ok",
                         "# Symphony for Trello Private Context",
+                        "Private diagnostics context. Do not paste this output into public issues.",
                         "command:** diagnostics --show-private-context --config-dir "
                                 + configDir.normalize()
                                 + " --deep")
-                .doesNotContain("--probe-auth", "auth_probe");
+                .doesNotContain(
+                        "# Symphony for Trello Diagnostics",
+                        "deep:** enabled",
+                        "codex-cli 1.2.3; login=ok",
+                        "gh version 2.70.0; auth=ok");
     }
 
     @Test
@@ -798,7 +799,7 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
-    void deepPrivateContextReusesTemporaryTokenKeyAcrossCombinedReport() throws Exception {
+    void deepPrivateContextReusesTemporaryTokenKeyAcrossPrivateContextReport() throws Exception {
         // given
         Path configDir = tempDir.resolve("deep-private-temporary-key-config");
         Path workspaceRoot = tempDir.resolve("deep-private-temporary-key-workspaces");
@@ -840,17 +841,19 @@ final class SetupDiagnosticReporterTest {
                 true);
 
         // then
-        String publicBoardToken =
-                firstMatch(report, Pattern.compile("\\| ([0-9a-f]{12}) \\| [0-9a-f]{12} \\| false \\| 19198 \\|"));
+        String workflowToken = firstMatch(
+                report,
+                Pattern.compile("\\| (<path:[0-9a-f]{12}>) \\| " + Pattern.quote(workflow.toString()) + " \\|"));
         assertThat(report)
                 .contains(
-                        "# Symphony for Trello Diagnostics",
                         "# Symphony for Trello Private Context",
+                        "Private diagnostics context. Do not paste this output into public issues.",
                         "diagnostics_token_key:** temporary",
                         "Diagnostics tokens are stable only for this run because the local diagnostics key could not be read or written.",
-                        "| " + publicBoardToken + " |")
-                .containsPattern(
-                        "\\| " + publicBoardToken + " \\| [0-9a-f]{12} \\| Private Board \\| private-board-id \\|");
+                        workflow.toString())
+                .contains(workflowToken)
+                .contains("| " + workflowToken + " | " + workflow.toString() + " |")
+                .doesNotContain("# Symphony for Trello Diagnostics");
     }
 
     @Test
