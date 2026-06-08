@@ -1504,6 +1504,47 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
+    void startRejectsDirectoryEnvPathBeforeLaunchingWorker() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("start-directory-env-config");
+        Path workspaceRoot = tempDir.resolve("start-directory-env-workspaces");
+        Path stateHome = tempDir.resolve("start-directory-env-state");
+        Path appHome = tempDir.resolve("start-directory-env-app");
+        Path workflow = configDir.resolve("WORKFLOW.queue.md");
+        Path envDirectory = tempDir.resolve("start-directory-env");
+        Files.createDirectories(configDir);
+        Files.createDirectories(workspaceRoot);
+        Files.createDirectories(envDirectory);
+        Files.writeString(workflow, workflowWithBoardAndPort("board-start-id", 19194), StandardCharsets.UTF_8);
+        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
+                        "board-start-id",
+                        "board-start-key",
+                        "Queue",
+                        "https://trello.com/b/board-start-key/queue",
+                        workflow,
+                        envDirectory,
+                        workspaceRoot,
+                        19194,
+                        false,
+                        List.of(),
+                        false))));
+
+        // when
+        MainProcessResult result =
+                runStartWithoutTrelloCredentials(configDir, workspaceRoot, stateHome, appHome, workflow, envDirectory);
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isEqualTo(2);
+        assertThat(result.stdout()).doesNotContain("Started Symphony", "Troubleshooting report written");
+        assertThat(result.stderr())
+                .contains(
+                        "setup_failed code=setup_invalid_arguments",
+                        "--env must point to a dotenv file path, not a directory.")
+                .doesNotContain("Troubleshooting report written", envDirectory.toString(), tempDir.toString());
+    }
+
+    @Test
     void startRejectsSpecialFileWorkflowBeforeLaunchingWorker() throws Exception {
         // given
         assumeTrue(!javaExecutable().endsWith(".exe"), "POSIX FIFO support is required");
