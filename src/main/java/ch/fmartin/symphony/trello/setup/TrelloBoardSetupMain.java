@@ -372,7 +372,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         @Override
         public Integer call() throws Exception {
             options.validateCliPaths();
-            CliInputValidation.rejectControlCharacters("--env", envPath);
+            TrelloCredentialStore.validateEnvPathOption(envPath);
             return parent.workerManager.start(
                     new StartWorkerRequest(
                             options.board,
