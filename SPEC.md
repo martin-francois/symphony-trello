@@ -3399,24 +3399,29 @@ When this profile is used:
 
 ### 19.5 Local Installer And Plan B Onboarding Profile
 
-This Java repository ships an OpenClaw-inspired local onboarding profile. The repository-hosted
-install scripts are bootstrap wrappers; Java setup code owns Trello, Codex, GitHub, board, and
-workflow decisions so shell and PowerShell do not duplicate product behavior.
+This Java repository ships an OpenClaw-inspired local onboarding profile. The public install scripts
+download versioned GitHub Release archives by default. Java setup code owns Trello, Codex, GitHub,
+board, and workflow decisions so shell and PowerShell do not duplicate product behavior.
 
 When this profile is used:
 
-- `install.sh`, `install.ps1`, `uninstall.sh`, and `uninstall.ps1` are repository-hosted entrypoints
-  for first install, update-oriented reruns, and conservative uninstall
-- the source-checkout installer MUST detect the supported OS/architecture, Git, a Java 25+ JDK
-  including `javac`, Codex CLI, and Codex CLI authentication before delegating to product setup.
-  Supported local platforms are macOS arm64/amd64, Linux arm64/amd64, WSL2 through the Linux path,
-  Windows amd64, and best-effort Windows arm64
-- missing Git, Java, Codex CLI, or Codex npm-fallback Node/npm prerequisites MUST produce concrete
-  assisted installation. The installer MUST reuse an existing authenticated Codex CLI first and
-  otherwise fall back to a user-local Codex npm install under `SYMPHONY_HOME`. For this
-  source-checkout installer, Node/npm MAY be reused from `PATH` or installed through the platform
-  package manager. The installer MUST ask before privileged or system-wide commands and print the
-  exact install steps first
+- `install.sh`, `install.ps1`, `uninstall.sh`, and `uninstall.ps1` are stable public entrypoints for
+  first install, update-oriented reruns, and conservative uninstall
+- the default installer MUST download a release archive, verify its SHA3-256 checksum from the
+  release's `checksums.txt`, and unpack it into the installer-managed app directory. It MUST NOT
+  require Git or Maven for the default release-archive path
+- the installer MAY support an explicit source-checkout mode for development and testing. In that
+  mode it MUST clone or update the configured Git ref, run the Maven wrapper to build the packaged
+  Quarkus app, and keep the rest of setup behavior equivalent to release-archive installs
+- the installer MUST detect the supported OS/architecture, a Java 25+ JDK including `javac`, Codex
+  CLI, and Codex CLI authentication before delegating to product setup. Source-checkout mode MUST
+  also detect Git. Supported local platforms are macOS arm64/amd64, Linux arm64/amd64, WSL2 through
+  the Linux path, Windows amd64, and best-effort Windows arm64
+- missing Java, Codex CLI, Codex npm-fallback Node/npm, or source-checkout Git prerequisites MUST
+  produce concrete assisted installation. The installer MUST reuse an existing authenticated Codex
+  CLI first and otherwise fall back to a user-local Codex npm install under `SYMPHONY_HOME`. Node/npm
+  MAY be reused from `PATH` or installed through the platform package manager. The installer MUST ask
+  before privileged or system-wide commands and print the exact install steps first
 - if Codex CLI authentication is missing, the installer MUST ask whether the machine can open a
   browser before choosing `codex login` or `codex login --device-auth`
 - `setup-local` is the Java-owned setup/check command for local onboarding

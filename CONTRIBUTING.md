@@ -257,6 +257,17 @@ requests before reaching `main`. If repository rules require full PR CI on every
 repository owner may need to use an explicit maintainer bypass for generated release pull requests
 after reviewing the release automation output.
 
+When Release Please creates a GitHub release, the release workflow checks out the tag, builds the
+packaged Quarkus app, uploads `install.sh`, `install.ps1`, `uninstall.sh`, `uninstall.ps1`, Linux
+and Windows release archives, and a SHA3-256 `checksums.txt` file. To validate the packaging step
+locally, run:
+
+```bash
+scripts/package-release-assets.sh 0.2.0
+```
+
+Replace `0.2.0` with the release version being tested.
+
 ## Issues
 
 Before opening a pull request, search the existing issues and pull requests. Open a new issue when
