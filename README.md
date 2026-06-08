@@ -71,26 +71,24 @@ All Symphony for Trello features work with Trello's Free plan.
 ## Quick Start
 
 The easiest path is the installer. It installs or updates Symphony for Trello, runs guided setup,
-and starts the managed local worker unless you pass `--no-onboard`.
+and starts the managed local worker unless you pass `--no-onboard`. The installer downloads the
+latest GitHub Release archive, verifies its SHA3-256 checksum, and unpacks it into the local app
+directory.
 
 macOS, Linux, and Windows through WSL2:
 
-<!-- x-release-please-start-version -->
 ```bash
-curl -fsSL https://raw.githubusercontent.com/martin-francois/symphony-trello/v0.2.0/install.sh | bash
+curl -fsSL https://symphony-trello.fmartin.ch/install.sh | bash
 ```
-<!-- x-release-please-end -->
 
 For Windows, WSL2 is the recommended setup path. Run the Linux installer inside WSL2, keep Codex
 CLI and Git on the WSL2 `PATH`, and use Linux paths for allowed local files and folders.
 
 Native Windows PowerShell is implemented as best effort:
 
-<!-- x-release-please-start-version -->
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/martin-francois/symphony-trello/v0.2.0/install.ps1)))
+powershell -c "irm https://symphony-trello.fmartin.ch/install.ps1 | iex"
 ```
-<!-- x-release-please-end -->
 
 The guided setup supports these local platforms:
 
@@ -102,12 +100,13 @@ The guided setup supports these local platforms:
 | Windows amd64 PowerShell | Best effort |
 | Windows arm64 PowerShell | Best effort |
 
-It checks Git, a Java 25+ JDK, Codex CLI auth, Trello credentials, and optional GitHub CLI auth.
-When Git, Java, or Codex CLI is missing, the installer offers a concrete install command before it
-continues. GitHub is not required unless you want Symphony to create and land GitHub pull requests.
-If GitHub is not configured, setup creates a Trello board without the GitHub-specific `Merging` list
-and writes a non-GitHub starter workflow. If you enable GitHub while importing an existing board,
-setup creates the missing `Merging` list when needed.
+It checks a Java 25+ JDK, Codex CLI auth, Trello credentials, and optional GitHub CLI auth. It checks
+Git only when you install from a source checkout. When a required local tool is missing, the
+installer offers a concrete install command before it continues. GitHub is not required unless you
+want Symphony to create and land GitHub pull requests. If GitHub is not configured, setup creates a
+Trello board without the GitHub-specific `Merging` list and writes a non-GitHub starter workflow. If
+you enable GitHub while importing an existing board, setup creates the missing `Merging` list when
+needed.
 
 With WSL2, browser login may open in Windows; if that is awkward, choose device login when setup asks
 whether the machine can open a browser. The managed `start`, `stop`, `status`, and `logs` commands
@@ -124,6 +123,9 @@ The installer writes the command to `$HOME/.local/bin/symphony-trello` on macOS,
 `--no-update-path` if you want to manage `PATH` yourself. Open a new terminal after PATH setup. If
 `symphony-trello` is still not found, add the printed directory to `PATH` manually.
 
+Pass `--version 0.x.y` to install a specific release. Pass `--from-source --repo URL --ref REF` only
+when you are developing or testing from a Git checkout instead of the published release archive.
+
 During setup, you can keep the default Codex workspace access or allow extra local files/folders.
 Extra paths are opt-in because Trello cards should not make Codex read or edit unrelated files by
 accident. You can also opt into `danger-full-access`, but setup asks for confirmation because that
@@ -131,35 +133,27 @@ disables Codex's command/filesystem sandbox for that workflow.
 
 If you want to inspect the installer first:
 
-<!-- x-release-please-start-version -->
 ```bash
-curl -fsSL https://raw.githubusercontent.com/martin-francois/symphony-trello/v0.2.0/install.sh -o install.sh
+curl -fsSL https://symphony-trello.fmartin.ch/install.sh -o install.sh
 less install.sh
 bash install.sh
 ```
-<!-- x-release-please-end -->
 
-<!-- x-release-please-start-version -->
 ```powershell
-irm https://raw.githubusercontent.com/martin-francois/symphony-trello/v0.2.0/install.ps1 -OutFile install.ps1
+irm https://symphony-trello.fmartin.ch/install.ps1 -OutFile install.ps1
 notepad install.ps1
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
-<!-- x-release-please-end -->
 
 Pass installer flags like this:
 
-<!-- x-release-please-start-version -->
 ```bash
-curl -fsSL https://raw.githubusercontent.com/martin-francois/symphony-trello/v0.2.0/install.sh | bash -s -- --dry-run
+curl -fsSL https://symphony-trello.fmartin.ch/install.sh | bash -s -- --dry-run
 ```
-<!-- x-release-please-end -->
 
-<!-- x-release-please-start-version -->
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/martin-francois/symphony-trello/v0.2.0/install.ps1))) --dry-run --no-onboard
+powershell -c "& ([scriptblock]::Create((irm https://symphony-trello.fmartin.ch/install.ps1))) --dry-run --no-onboard"
 ```
-<!-- x-release-please-end -->
 
 Useful commands after install:
 
@@ -181,29 +175,23 @@ Uninstall removes only the installer-managed command and app checkout by default
 `.env` files, workflows, connected-board metadata, workspaces, logs/state, Codex auth, GitHub auth,
 Trello boards, and any PATH entry you accepted during install.
 
-<!-- x-release-please-start-version -->
 ```bash
-curl -fsSL https://raw.githubusercontent.com/martin-francois/symphony-trello/v0.2.0/uninstall.sh | bash
+curl -fsSL https://symphony-trello.fmartin.ch/uninstall.sh | bash
 ```
-<!-- x-release-please-end -->
 
-<!-- x-release-please-start-version -->
 ```powershell
-powershell -c "irm https://raw.githubusercontent.com/martin-francois/symphony-trello/v0.2.0/uninstall.ps1 | iex"
+powershell -c "irm https://symphony-trello.fmartin.ch/uninstall.ps1 | iex"
 ```
-<!-- x-release-please-end -->
 
 To inspect uninstall first or pass cleanup scopes:
 
-<!-- x-release-please-start-version -->
 ```bash
-curl -fsSL https://raw.githubusercontent.com/martin-francois/symphony-trello/v0.2.0/uninstall.sh -o uninstall.sh
+curl -fsSL https://symphony-trello.fmartin.ch/uninstall.sh -o uninstall.sh
 less uninstall.sh
 bash uninstall.sh --dry-run
 bash uninstall.sh --remove-config --remove-workspaces --remove-state
 bash uninstall.sh --yes --yes-local-data --remove-all-local-data
 ```
-<!-- x-release-please-end -->
 
 `--yes` only skips the prompt for installer-managed app files. Add `--yes-local-data` only when you
 also want unattended deletion of local `.env` files, workflows, workspaces, state, and logs.

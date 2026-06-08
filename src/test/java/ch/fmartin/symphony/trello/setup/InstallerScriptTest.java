@@ -270,7 +270,7 @@ final class InstallerScriptTest {
 
         // then
         result.assertSuccess();
-        assertThat(result.output()).contains("Install: " + app, "WOULD clone or update: " + app);
+        assertThat(result.output()).contains("Install: " + app, "WOULD unpack release archive into: " + app);
     }
 
     @Test
@@ -788,12 +788,41 @@ final class InstallerScriptTest {
         assertThat(result.exitCode()).isZero();
         assertThat(result.output())
                 .contains(
-                        "Repository: https://github.com/martin-francois/symphony-trello.git",
-                        "Ref: " + installerDefaultRef(),
-                        "WOULD offer to install Git",
+                        "Install source: release-archive",
+                        "Version: " + installerDefaultRef().substring(1),
+                        "WOULD download release archive:",
+                        "WOULD verify SHA3-256 checksum from:",
                         "WOULD offer to install Java 25+ JDK",
                         "WOULD offer to install Codex CLI with Symphony-managed npm:",
                         "Node.js/npm installed: no");
+    }
+
+    @Test
+    void posixInstallerNormalizesLeadingVVersionBeforeReleaseAssetUrls() throws Exception {
+        // given
+        Assumptions.assumeTrue(Files.exists(Path.of("/bin/bash")));
+        String version = installerDefaultRef().substring(1);
+        Map<String, String> environment = Map.of(
+                "PATH",
+                temporaryDirectory.resolve("empty-bin").toString(),
+                "SYMPHONY_TRELLO_TEST_OS",
+                "Linux",
+                "SYMPHONY_TRELLO_TEST_ARCH",
+                "x86_64",
+                "SYMPHONY_TRELLO_VERSION",
+                "v" + version);
+
+        // when
+        ProcessResult result = run(environment, "/bin/bash", "install.sh", "--dry-run", "--no-onboard");
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output())
+                .contains(
+                        "Version: " + version,
+                        "releases/download/v" + version + "/symphony-trello-" + version + ".tar.gz",
+                        "releases/download/v" + version + "/checksums.txt")
+                .doesNotContain("vv" + version);
     }
 
     @Test
@@ -1470,7 +1499,6 @@ final class InstallerScriptTest {
         result.assertSuccess();
         assertThat(result.output())
                 .contains(
-                        "OK      Git available",
                         "NEEDED  Java 25+ JDK",
                         "OK      Codex CLI available",
                         "WOULD offer to install Java 25+ JDK with: apt-get update && apt-get install -y openjdk-25-jdk")
@@ -1499,7 +1527,9 @@ final class InstallerScriptTest {
 
         // when
         ProcessResult result = runWithPseudoTerminal(
-                environment, "n\n", "/bin/bash " + shellQuote(installScript.toString()) + " --no-onboard");
+                environment,
+                "n\n",
+                "/bin/bash " + shellQuote(installScript.toString()) + " --no-onboard --from-source");
 
         // then
         assertThat(result.exitCode()).isEqualTo(2);
@@ -1528,7 +1558,7 @@ final class InstallerScriptTest {
                 "SYMPHONY_TRELLO_TEST_ARCH", "x86_64");
 
         // when
-        ProcessResult result = run(environment, "/bin/bash", "install.sh", "--no-onboard");
+        ProcessResult result = run(environment, "/bin/bash", "install.sh", "--no-onboard", "--from-source");
 
         // then
         assertThat(result.exitCode()).isEqualTo(2);
@@ -1560,7 +1590,8 @@ final class InstallerScriptTest {
                 "SYMPHONY_TRELLO_TEST_ARCH", "x86_64");
 
         // when
-        ProcessResult result = run(environment, "/bin/bash", "install.sh", "--dry-run", "--no-onboard");
+        ProcessResult result =
+                run(environment, "/bin/bash", "install.sh", "--dry-run", "--no-onboard", "--from-source");
 
         // then
         assertThat(result.exitCode()).isZero();
@@ -1708,7 +1739,9 @@ final class InstallerScriptTest {
 
         // when
         ProcessResult result = runWithPseudoTerminal(
-                environment, "y\nn\n", "/bin/bash " + shellQuote(installScript.toString()) + " --no-onboard");
+                environment,
+                "y\nn\n",
+                "/bin/bash " + shellQuote(installScript.toString()) + " --no-onboard --from-source");
 
         // then
         assertThat(result.exitCode()).as(result.output()).isEqualTo(2);
@@ -1860,6 +1893,31 @@ final class InstallerScriptTest {
     }
 
     @Test
+    void powershellInstallerNormalizesLeadingVVersionBeforeReleaseAssetUrlsWhenAvailable() throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        Assumptions.assumeFalse(pwsh.isEmpty());
+        String version = installerDefaultRef().substring(1);
+        Map<String, String> environment = new LinkedHashMap<>(nonWindowsPowerShellEnvironment());
+        environment.put("SYMPHONY_TRELLO_VERSION", "v" + version);
+
+        // when
+        ProcessResult result = run(
+                environment,
+                command(pwsh, "-NoProfile", "-File", "./install.ps1", "--dry-run", "--no-onboard")
+                        .toArray(String[]::new));
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output())
+                .contains(
+                        "Version: " + version,
+                        "releases/download/v" + version + "/symphony-trello-" + version + ".zip",
+                        "releases/download/v" + version + "/checksums.txt")
+                .doesNotContain("vv" + version);
+    }
+
+    @Test
     void powershellInstallerRejectsRemovedUpdatePathOptionWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
@@ -1985,7 +2043,7 @@ final class InstallerScriptTest {
 
         // then
         result.assertSuccess();
-        assertThat(result.output()).contains("Install: " + app, "WOULD clone or update: " + app);
+        assertThat(result.output()).contains("Install: " + app, "WOULD unpack release archive to: " + app);
     }
 
     @Test
@@ -3700,6 +3758,47 @@ final class InstallerScriptTest {
     }
 
     @Test
+    void posixInstallerReplacesMarkedArchiveInstallWhenSwitchingToSourceCheckout() throws Exception {
+        // given
+        Assumptions.assumeTrue(commandExists("bash"));
+        Assumptions.assumeTrue(commandExists("git"));
+        Path sourceRepository = createSourceRepository(temporaryDirectory);
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path symphonyHome = temporaryDirectory.resolve("archive-to-source-home");
+        Path appHome = symphonyHome.resolve("app");
+        Path binDirectory = temporaryDirectory.resolve("archive-to-source-bin");
+        Path fakeLog = temporaryDirectory.resolve("archive-to-source.log");
+        Files.createDirectories(appHome);
+        Files.writeString(
+                appHome.resolve(".symphony-trello-install"), "installer-managed archive\n", StandardCharsets.UTF_8);
+        Files.writeString(appHome.resolve("old-archive-file.txt"), "old archive content\n", StandardCharsets.UTF_8);
+        Map<String, String> environment = Map.of(
+                "PATH", fakeBin + File.pathSeparator + System.getenv("PATH"),
+                "SYMPHONY_HOME", symphonyHome.toString(),
+                "SYMPHONY_FAKE_LOG", fakeLog.toString());
+
+        // when
+        ProcessResult result = run(
+                environment,
+                "bash",
+                "install.sh",
+                "--no-onboard",
+                "--from-source",
+                "--repo",
+                sourceRepository.toUri().toString(),
+                "--ref",
+                "main",
+                "--bin-dir",
+                binDirectory.toString());
+
+        // then
+        result.assertSuccess();
+        assertThat(appHome.resolve(".git")).isDirectory();
+        assertThat(appHome.resolve("old-archive-file.txt")).doesNotExist();
+        assertThat(result.output()).contains("rm -rf " + appHome, "git clone");
+    }
+
+    @Test
     void powershellInstallerRefusesUnmarkedUnrelatedExistingCheckoutWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
@@ -3741,6 +3840,75 @@ final class InstallerScriptTest {
                         "Use",
                         "a dedicated app checkout path");
         assertThat(existingCheckout.resolve(".symphony-trello-install")).doesNotExist();
+    }
+
+    @Test
+    void powershellInstallerReplacesMarkedArchiveInstallWhenSwitchingToSourceCheckoutWhenAvailable() throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        Assumptions.assumeFalse(pwsh.isEmpty());
+        Assumptions.assumeTrue(commandExists("git"));
+        Path sourceRepository = temporaryDirectory.resolve("ps source executable cmd");
+        Files.createDirectories(sourceRepository);
+        Files.writeString(sourceRepository.resolve("pom.xml"), "<project />\n", StandardCharsets.UTF_8);
+        Files.writeString(
+                sourceRepository.resolve("mvnw.cmd"),
+                """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                echo "mvnw.cmd $*" >> "${SYMPHONY_FAKE_LOG:?}"
+                app_home="$(cd "$(dirname "$0")" && pwd -P)"
+                mkdir -p "$app_home/target/quarkus-app/app" "$app_home/target/quarkus-app/lib/main" "$app_home/target/quarkus-app/quarkus"
+                : > "$app_home/target/quarkus-app/quarkus-run.jar"
+                """,
+                StandardCharsets.UTF_8);
+        sourceRepository.resolve("mvnw.cmd").toFile().setExecutable(true);
+        run(Map.of(), "git", "-C", sourceRepository.toString(), "init", "-b", "main")
+                .assertSuccess();
+        run(Map.of(), "git", "-C", sourceRepository.toString(), "config", "user.name", "Test User")
+                .assertSuccess();
+        run(Map.of(), "git", "-C", sourceRepository.toString(), "config", "user.email", "test@example.invalid")
+                .assertSuccess();
+        run(Map.of(), "git", "-C", sourceRepository.toString(), "add", ".").assertSuccess();
+        run(Map.of(), "git", "-C", sourceRepository.toString(), "commit", "-m", "Initial test source")
+                .assertSuccess();
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path symphonyHome = temporaryDirectory.resolve("ps-archive-to-source-home");
+        Path appHome = symphonyHome.resolve("app");
+        Path binDirectory = temporaryDirectory.resolve("ps-archive-to-source-bin");
+        Path fakeLog = temporaryDirectory.resolve("ps-archive-to-source.log");
+        Files.createDirectories(appHome);
+        Files.writeString(
+                appHome.resolve(".symphony-trello-install"), "installer-managed archive\n", StandardCharsets.UTF_8);
+        Files.writeString(appHome.resolve("old-archive-file.txt"), "old archive content\n", StandardCharsets.UTF_8);
+        Map<String, String> environment = new LinkedHashMap<>(nonWindowsPowerShellEnvironment());
+        environment.put("PATH", fakeBin + File.pathSeparator + System.getenv("PATH"));
+        environment.put("SYMPHONY_HOME", symphonyHome.toString());
+        environment.put("SYMPHONY_FAKE_LOG", fakeLog.toString());
+
+        // when
+        ProcessResult result = run(
+                environment,
+                command(
+                                pwsh,
+                                "-NoProfile",
+                                "-File",
+                                "./install.ps1",
+                                "--no-onboard",
+                                "--from-source",
+                                "--repo",
+                                sourceRepository.toUri().toString(),
+                                "--ref",
+                                "main",
+                                "--bin-dir",
+                                binDirectory.toString())
+                        .toArray(String[]::new));
+
+        // then
+        result.assertSuccess();
+        assertThat(appHome.resolve(".git")).isDirectory();
+        assertThat(appHome.resolve("old-archive-file.txt")).doesNotExist();
+        assertThat(result.output()).contains("remove existing release archive app " + appHome, "git clone");
     }
 
     @Test

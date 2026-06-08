@@ -14,8 +14,8 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 final class InstallerScriptFixture {
-    private static final Pattern POSIX_INSTALLER_DEFAULT_REF =
-            Pattern.compile("(?m)^DEFAULT_REF=\"([^\"]+)\" # x-release-please-version$");
+    private static final Pattern POSIX_INSTALLER_DEFAULT_VERSION =
+            Pattern.compile("(?m)^DEFAULT_VERSION=\"([^\"]+)\" # x-release-please-version$");
 
     private InstallerScriptFixture() {}
 
@@ -198,11 +198,11 @@ final class InstallerScriptFixture {
 
     static String installerDefaultRef() throws IOException {
         String installScript = Files.readString(Path.of("install.sh"), StandardCharsets.UTF_8);
-        return POSIX_INSTALLER_DEFAULT_REF
+        return POSIX_INSTALLER_DEFAULT_VERSION
                 .matcher(installScript)
                 .results()
                 .findAny()
-                .map(match -> match.group(1))
+                .map(match -> "v" + match.group(1))
                 .orElseThrow(() -> new IllegalStateException("install.sh is missing the Release Please default ref"));
     }
 
