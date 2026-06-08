@@ -854,6 +854,39 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 duplicates.secondWorkflow().toString());
     }
 
+    @Test
+    void setupLocalWithInteractiveMultipleBoardsRejectsBlankBoardSelectionForCodexAccessUpdate() throws Exception {
+        // given
+        duplicateConnectedBoards();
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                "\n",
+                "--no-github",
+                "--add-path",
+                tempDir.resolve("selected-path").toString());
+
+        // then
+        result.assertFailure(2)
+                .stderrContains("setup_failed code=setup_board_selection_required", "Board selection is required.")
+                .stderrDoesNotContain("Duplicate Private Board", "Troubleshooting report written");
+    }
+
+    @Test
+    void configureGithubWithInteractiveMultipleNonGithubBoardsRejectsBlankBoardSelection() throws Exception {
+        // given
+        duplicateConnectedBoards();
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                "\n", "configure-github", "--endpoint", endpoint(), "--key", "key", "--token", "token");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains("setup_failed code=setup_github_upgrade_board_required", "Board selection is required.")
+                .stderrDoesNotContain("Troubleshooting report written");
+    }
+
     private static Stream<AmbiguousSelectorCommand> ambiguousConnectedBoardSelectorCommands() {
         return Stream.of(
                 ambiguousSelectorCommand("check", "check", "--board", "Duplicate Private Board"),
@@ -1273,6 +1306,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 Map.of("gpt-existing", "high", "gpt-5.5", "medium")));
         Path workflow = tempDir.resolve("WORKFLOW.existing-model-reasoning-omitted.md");
         Path env = tempDir.resolve(".env.existing-model-reasoning-omitted");
+        int selectedPort = firstAvailableManagedPort(18080);
         Files.writeString(
                 workflow,
                 """
@@ -1300,6 +1334,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--workflow",
                 workflow.toString(),
                 "--force",
+                "--server-port",
+                Integer.toString(selectedPort),
                 "--env",
                 env.toString(),
                 "--no-github");
@@ -3789,6 +3825,44 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // then
         result.assertFailure(2).stderrContains("setup_workspace_id_required", "--workspace-id");
+        assertThat(trello.createdLists()).isEmpty();
+        assertThat(workflow).doesNotExist();
+    }
+
+    @Test
+    void interactiveNewBoardWithMultipleWorkspacesRejectsBlankWorkspaceSelection() {
+        // given
+        trello.givenWorkspaces(
+                """
+                [
+                  {"id":"workspace-1","name":"first","displayName":"First"},
+                  {"id":"workspace-2","name":"second","displayName":"Second"}
+                ]
+        """);
+        Path workflow = tempDir.resolve("WORKFLOW.multi-workspace-blank.md");
+        Path env = tempDir.resolve(".env.blank-workspace");
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                "\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Interactive Workspace Selection",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains("setup_failed code=setup_workspace_id_required", "Workspace selection is required.")
+                .stderrDoesNotContain("Troubleshooting report written");
         assertThat(trello.createdLists()).isEmpty();
         assertThat(workflow).doesNotExist();
     }
