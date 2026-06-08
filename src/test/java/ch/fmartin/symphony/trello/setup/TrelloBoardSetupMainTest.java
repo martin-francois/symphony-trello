@@ -3548,7 +3548,7 @@ final class TrelloBoardSetupMainTest {
                 "--board",
                 "https://trello.com/b/input/existing-board",
                 "--active",
-                "Queue for Codex, Doing",
+                "Queue for Codex,Doing",
                 "--in-progress",
                 "Doing",
                 "--terminal",
@@ -3597,6 +3597,47 @@ final class TrelloBoardSetupMainTest {
                                 + shellQuote(
                                         workflow.toAbsolutePath().normalize().toString()))
                 .doesNotContain("./mvnw quarkus:dev");
+        assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
+    }
+
+    @Test
+    void importBoardPreservesWhitespaceInListSelectors() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("imported-space-lists.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.imported-space");
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+
+        // when
+        int exitCode = run(
+                stdout,
+                stderr,
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "https://trello.com/b/input/existing-board",
+                "--active",
+                " Queue for Codex ,Released ",
+                "--terminal",
+                " Doing ",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString());
+
+        // then
+        assertThat(exitCode).isZero();
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("- \" Queue for Codex \"")
+                .contains("- \"Released \"")
+                .contains("- \" Doing \"");
+        assertThat(stdout.toString(StandardCharsets.UTF_8)).contains("Imported Trello board: Existing Board");
         assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
     }
 

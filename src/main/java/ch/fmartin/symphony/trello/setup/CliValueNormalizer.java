@@ -14,6 +14,10 @@ final class CliValueNormalizer {
                 .toList();
     }
 
+    static List<String> nonBlank(List<String> values) {
+        return values.stream().filter(value -> !value.isBlank()).toList();
+    }
+
     static List<String> commaSeparatedValues(String value) {
         return Arrays.asList(value.split(",", -1));
     }
