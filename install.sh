@@ -2,9 +2,21 @@
 set -euo pipefail
 
 ORIGINAL_PATH="$PATH"
+DEFAULT_VERSION="0.2.0" # x-release-please-version
+VERSION="${SYMPHONY_TRELLO_VERSION:-$DEFAULT_VERSION}"
+VERSION="${VERSION#v}"
+RELEASE_TAG="${SYMPHONY_TRELLO_RELEASE_TAG:-v$VERSION}"
+RELEASE_BASE_URL="${SYMPHONY_TRELLO_RELEASE_BASE_URL:-https://github.com/martin-francois/symphony-trello/releases/download/$RELEASE_TAG}"
 REPO_URL="${SYMPHONY_TRELLO_REPO_URL:-https://github.com/martin-francois/symphony-trello.git}"
-DEFAULT_REF="v0.2.0" # x-release-please-version
+DEFAULT_REF="v$DEFAULT_VERSION"
 REF="${SYMPHONY_TRELLO_REF:-$DEFAULT_REF}"
+if [[ -n "${SYMPHONY_TRELLO_INSTALL_SOURCE:-}" ]]; then
+  INSTALL_SOURCE="$SYMPHONY_TRELLO_INSTALL_SOURCE"
+elif [[ -n "${SYMPHONY_TRELLO_REPO_URL:-}" || -n "${SYMPHONY_TRELLO_REF:-}" ]]; then
+  INSTALL_SOURCE="source-checkout"
+else
+  INSTALL_SOURCE="release-archive"
+fi
 HOME="${HOME:-}"
 if [[ -z "$HOME" ]]; then
   echo "HOME must be set to a user home directory before running the installer." >&2
@@ -31,18 +43,19 @@ PATH_BLOCK_END="# <<< Symphony for Trello PATH <<<"
 usage() {
   cat <<USAGE
 Usage:
-  export SYMPHONY_TRELLO_REF=${DEFAULT_REF}
-  curl -fsSL "https://raw.githubusercontent.com/martin-francois/symphony-trello/\${SYMPHONY_TRELLO_REF}/install.sh" | bash
-  curl -fsSL "https://raw.githubusercontent.com/martin-francois/symphony-trello/\${SYMPHONY_TRELLO_REF}/install.sh" | bash -s -- --dry-run
+  curl -fsSL https://symphony-trello.fmartin.ch/install.sh | bash
+  curl -fsSL https://symphony-trello.fmartin.ch/install.sh | bash -s -- --dry-run
 
 Options:
   --dry-run          Print planned actions without changing files.
   --no-onboard      Install or update the command without running setup-local.
   --no-update-path   Do not edit shell profile files.
-  --prefix PATH     App checkout path. Default: \$SYMPHONY_HOME/app
+  --prefix PATH     App install path. Default: \$SYMPHONY_HOME/app
   --bin-dir PATH    Command directory. Default: ~/.local/bin
-  --repo URL        Git repository URL.
-  --ref REF         Git ref to check out. Default: ${DEFAULT_REF}
+  --version VERSION Release version to install. Default: ${DEFAULT_VERSION}
+  --from-source     Install from a Git checkout instead of release assets.
+  --repo URL        Git repository URL for --from-source.
+  --ref REF         Git ref for --from-source. Default: ${DEFAULT_REF}
   --help            Show this help.
 
 Environment:
@@ -55,6 +68,23 @@ while [[ $# -gt 0 ]]; do
   --dry-run) DRY_RUN=true ;;
   --no-onboard) NO_ONBOARD=true ;;
   --no-update-path) SKIP_PATH_SETUP=true ;;
+  --from-source)
+    INSTALL_SOURCE="source-checkout"
+    ;;
+  --version)
+    if [[ $# -lt 2 ]]; then
+      echo "Missing value for --version" >&2
+      exit 2
+    fi
+    if [[ "$2" == -* ]]; then
+      echo "Missing value for --version" >&2
+      exit 2
+    fi
+    VERSION="${2#v}"
+    RELEASE_TAG="v$VERSION"
+    RELEASE_BASE_URL="${SYMPHONY_TRELLO_RELEASE_BASE_URL:-https://github.com/martin-francois/symphony-trello/releases/download/$RELEASE_TAG}"
+    shift
+    ;;
   --prefix)
     if [[ $# -lt 2 ]]; then
       echo "Missing value for --prefix" >&2
@@ -82,6 +112,7 @@ while [[ $# -gt 0 ]]; do
       exit 2
     fi
     REPO_URL="$2"
+    INSTALL_SOURCE="source-checkout"
     shift
     ;;
   --ref)
@@ -94,6 +125,7 @@ while [[ $# -gt 0 ]]; do
       exit 2
     fi
     REF="$2"
+    INSTALL_SOURCE="source-checkout"
     shift
     ;;
   --help | -h)
@@ -146,6 +178,11 @@ write_install_context() {
   mkdir -p "$STATE_HOME" 2>/dev/null || return
   {
     printf 'installer=install.sh\n'
+    printf 'install_format_version=1\n'
+    printf 'install_source=%s\n' "$INSTALL_SOURCE"
+    printf 'app_version=%s\n' "$VERSION"
+    printf 'release_tag=%s\n' "$RELEASE_TAG"
+    printf 'release_base_url=%s\n' "$RELEASE_BASE_URL"
     printf 'platform=%s\n' "$(platform_name)"
     printf 'os_name=%s\n' "$OS_NAME"
     printf 'os_arch=%s\n' "$OS_ARCH"
@@ -476,6 +513,36 @@ validate_source_inputs() {
   validate_ref_source "$REF"
 }
 
+validate_release_inputs() {
+  case "$INSTALL_SOURCE" in
+  release | release-archive) INSTALL_SOURCE="release-archive" ;;
+  source | source-checkout) INSTALL_SOURCE="source-checkout" ;;
+  *)
+    echo "SYMPHONY_TRELLO_INSTALL_SOURCE must be release-archive or source-checkout." >&2
+    exit 2
+    ;;
+  esac
+  if [[ "$INSTALL_SOURCE" == "source-checkout" ]]; then
+    return
+  fi
+  if is_blank "$VERSION"; then
+    echo "--version must not be blank." >&2
+    exit 2
+  fi
+  if has_space_or_control "$VERSION" || [[ ! "$VERSION" =~ ^[0-9]+[.][0-9]+[.][0-9]+([-+][A-Za-z0-9._-]+)?$ ]]; then
+    echo "--version must be a semantic version without the leading v." >&2
+    exit 2
+  fi
+  if is_blank "$RELEASE_BASE_URL" || has_space_or_control "$RELEASE_BASE_URL"; then
+    echo "SYMPHONY_TRELLO_RELEASE_BASE_URL must be a URL without whitespace or control characters." >&2
+    exit 2
+  fi
+  if [[ "$RELEASE_BASE_URL" != *://* && "$RELEASE_BASE_URL" != file://* ]]; then
+    echo "SYMPHONY_TRELLO_RELEASE_BASE_URL must be a URL." >&2
+    exit 2
+  fi
+}
+
 display_repo_source() {
   local value="$1"
   local scheme rest userinfo
@@ -539,8 +606,21 @@ ensure_checkout_origin() {
   fi
 }
 
+assert_existing_app_safe() {
+  if [[ ! -e "$APP_DIR" || -f "$APP_DIR/.symphony-trello-install" ]]; then
+    return
+  fi
+  echo "Refusing to replace existing app directory without Symphony installer marker: $APP_DIR" >&2
+  echo "Use a dedicated app install path or remove the directory manually after backing up anything important." >&2
+  exit 2
+}
+
 install_or_update_checkout() {
   if [[ ! -d "$APP_DIR/.git" ]]; then
+    if [[ -e "$APP_DIR" ]]; then
+      assert_existing_app_safe
+      run rm -rf "$APP_DIR"
+    fi
     run mkdir -p "$(dirname "$APP_DIR")"
     if [[ "$DRY_RUN" == false ]] && remote_has_branch "$REPO_URL" "$REF"; then
       run_with_label "git clone --branch $REF $(display_repo_source "$REPO_URL") $APP_DIR" git clone --branch "$REF" "$REPO_URL" "$APP_DIR"
@@ -555,6 +635,86 @@ install_or_update_checkout() {
     run git -C "$APP_DIR" fetch --tags --prune origin
     checkout_ref "$APP_DIR" "$REF"
   fi
+}
+
+download_file() {
+  local url="$1"
+  local output="$2"
+  if need curl; then
+    run curl -fsSL "$url" -o "$output"
+  elif need wget; then
+    run wget -q -O "$output" "$url"
+  else
+    echo "curl or wget is required to download release assets." >&2
+    echo "Install curl or wget, then rerun this installer." >&2
+    exit 2
+  fi
+}
+
+sha3_256_file() {
+  local file="$1"
+  local helper_dir helper
+  helper_dir="$(mktemp -d)"
+  trap 'rm -rf "$helper_dir"' RETURN
+  helper="$helper_dir/Sha3File.java"
+  cat >"$helper" <<'JAVA'
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.util.HexFormat;
+
+class Sha3File {
+    public static void main(String[] args) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA3-256");
+        System.out.println(HexFormat.of().formatHex(digest.digest(Files.readAllBytes(Path.of(args[0])))));
+    }
+}
+JAVA
+  java "$helper" "$file"
+  rm -rf "$helper_dir"
+  trap - RETURN
+}
+
+verify_release_archive_checksum() {
+  local archive="$1"
+  local checksums="$2"
+  local archive_name expected actual
+  archive_name="$(basename "$archive")"
+  expected="$(awk -v name="$archive_name" '$2 == name { print $1 }' "$checksums" | head -1)"
+  if [[ -z "$expected" ]]; then
+    echo "checksums.txt does not contain $archive_name." >&2
+    exit 2
+  fi
+  actual="$(sha3_256_file "$archive")"
+  if [[ "$actual" != "$expected" ]]; then
+    echo "Release archive checksum verification failed for $archive_name." >&2
+    exit 2
+  fi
+}
+
+install_release_archive() {
+  local archive_name archive_url checksums_url temp_dir archive checksums extracted_root
+  assert_existing_app_safe
+  archive_name="symphony-trello-$VERSION.tar.gz"
+  archive_url="$RELEASE_BASE_URL/$archive_name"
+  checksums_url="$RELEASE_BASE_URL/checksums.txt"
+  temp_dir="$(mktemp -d)"
+  archive="$temp_dir/$archive_name"
+  checksums="$temp_dir/checksums.txt"
+  download_file "$archive_url" "$archive"
+  download_file "$checksums_url" "$checksums"
+  verify_release_archive_checksum "$archive" "$checksums"
+  mkdir -p "$temp_dir/extract"
+  run tar -xzf "$archive" -C "$temp_dir/extract"
+  extracted_root="$temp_dir/extract/symphony-trello-$VERSION"
+  if [[ ! -f "$extracted_root/target/quarkus-app/quarkus-run.jar" ]]; then
+    echo "Release archive is missing target/quarkus-app/quarkus-run.jar." >&2
+    exit 2
+  fi
+  run rm -rf "$APP_DIR"
+  run mkdir -p "$(dirname "$APP_DIR")"
+  run mv "$extracted_root" "$APP_DIR"
+  rm -rf "$temp_dir"
 }
 
 shell_literal() {
@@ -1083,7 +1243,7 @@ install_codex_or_exit() {
 }
 
 ensure_prerequisites() {
-  if ! need git; then
+  if [[ "$INSTALL_SOURCE" == "source-checkout" ]] && ! need git; then
     install_package_or_exit "Git" "git" "Install Git from https://git-scm.com/downloads or your OS package manager."
   fi
   if ! jdk_compatible; then
@@ -1127,7 +1287,7 @@ print_dry_run_codex_plan() {
 }
 
 print_dry_run_prerequisite_plan() {
-  if ! need git; then
+  if [[ "$INSTALL_SOURCE" == "source-checkout" ]] && ! need git; then
     print_dry_run_package_offer "Git" git
   fi
   if ! jdk_compatible; then
@@ -1150,7 +1310,10 @@ jdk_compatible() {
   [[ -n "$java_version" && -n "$javac_version" && "$java_version" -ge 25 && "$javac_version" -ge 25 ]]
 }
 
-validate_source_inputs
+validate_release_inputs
+if [[ "$INSTALL_SOURCE" == "source-checkout" ]]; then
+  validate_source_inputs
+fi
 validate_app_path_option_values
 validate_bin_dir_option_value
 SYMPHONY_HOME="$(absolutize_path "$SYMPHONY_HOME")"
@@ -1175,11 +1338,19 @@ echo "Config: $CONFIG_DIR"
 echo "Workspaces: $WORKSPACE_ROOT"
 echo "State/logs: $STATE_HOME"
 echo "Command: $BIN_DIR/symphony-trello"
-echo "Repository: $(display_repo_source "$REPO_URL")"
-echo "Ref: $REF"
+echo "Install source: $INSTALL_SOURCE"
+if [[ "$INSTALL_SOURCE" == "source-checkout" ]]; then
+  echo "Repository: $(display_repo_source "$REPO_URL")"
+  echo "Ref: $REF"
+else
+  echo "Version: $VERSION"
+  echo "Release assets: $RELEASE_BASE_URL"
+fi
 echo
 echo "Checking prerequisites..."
-if need git; then echo "  OK      Git available"; else echo "  NEEDED  Git"; fi
+if [[ "$INSTALL_SOURCE" == "source-checkout" ]]; then
+  if need git; then echo "  OK      Git available"; else echo "  NEEDED  Git"; fi
+fi
 if jdk_compatible; then echo "  OK      Java 25+ JDK available"; else echo "  NEEDED  Java 25+ JDK"; fi
 if need codex; then
   echo "  OK      Codex CLI available"
@@ -1193,8 +1364,14 @@ if [[ "$DRY_RUN" == true ]]; then
   echo
   echo "Dry run: no files changed."
   print_dry_run_prerequisite_plan
-  echo "  WOULD clone or update: $APP_DIR"
-  echo "  WOULD build packaged Quarkus app with Maven wrapper"
+  if [[ "$INSTALL_SOURCE" == "source-checkout" ]]; then
+    echo "  WOULD clone or update: $APP_DIR"
+    echo "  WOULD build packaged Quarkus app with Maven wrapper"
+  else
+    echo "  WOULD download release archive: $RELEASE_BASE_URL/symphony-trello-$VERSION.tar.gz"
+    echo "  WOULD verify SHA3-256 checksum from: $RELEASE_BASE_URL/checksums.txt"
+    echo "  WOULD unpack release archive into: $APP_DIR"
+  fi
   echo "  WOULD install command: $BIN_DIR/symphony-trello"
   offer_path_setup
   if [[ "$NO_ONBOARD" == false ]]; then
@@ -1238,12 +1415,12 @@ fi
 
 echo
 echo "Installing Symphony..."
-UPDATING_EXISTING_CHECKOUT=false
-if [[ -d "$APP_DIR/.git" ]]; then
-  UPDATING_EXISTING_CHECKOUT=true
+UPDATING_EXISTING_APP=false
+if [[ -d "$APP_DIR" ]]; then
+  UPDATING_EXISTING_APP=true
 fi
 RESTART_MANAGED_WORKERS=false
-if [[ "$UPDATING_EXISTING_CHECKOUT" == true ]] && has_managed_pid_files; then
+if [[ "$UPDATING_EXISTING_APP" == true ]] && has_managed_pid_files; then
   if [[ -x "$BIN_DIR/symphony-trello" ]]; then
     RESTART_MANAGED_WORKERS=true
     echo "Stopping managed workers before update..."
@@ -1259,8 +1436,12 @@ if [[ "$UPDATING_EXISTING_CHECKOUT" == true ]] && has_managed_pid_files; then
     fi
   fi
 fi
-install_or_update_checkout
-run "$APP_DIR/mvnw" -q -f "$APP_DIR/pom.xml" -DskipTests clean package
+if [[ "$INSTALL_SOURCE" == "source-checkout" ]]; then
+  install_or_update_checkout
+  run "$APP_DIR/mvnw" -q -f "$APP_DIR/pom.xml" -DskipTests clean package
+else
+  install_release_archive
+fi
 run mkdir -p "$BIN_DIR" "$CONFIG_DIR" "$WORKSPACE_ROOT" "$STATE_HOME"
 if [[ "$DRY_RUN" == false ]]; then
   APP_DIR_LITERAL="$(shell_literal "$APP_DIR")"

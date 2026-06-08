@@ -28,8 +28,28 @@ jobs:
             echo "config_file=release-please-public-baseline-config.json" >> "$GITHUB_OUTPUT"
           fi
       - name: Release Please
+        id: release
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0; packages release-please ^17.6.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           config-file: ${{ steps.release-config.outputs.config_file }}
           manifest-file: .release-please-manifest.json
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        if: ${{ steps.release.outputs.release_created == 'true' }}
+        with:
+          ref: ${{ steps.release.outputs.tag_name }}
+      - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5
+        if: ${{ steps.release.outputs.release_created == 'true' }}
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+      - name: Build release assets
+        if: ${{ steps.release.outputs.release_created == 'true' }}
+        run: ./scripts/package-release-assets.sh "${{ steps.release.outputs.version }}"
+      - name: Upload release assets
+        if: ${{ steps.release.outputs.release_created == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
+        run: gh release upload "$RELEASE_TAG" dist/release-assets/* --clobber

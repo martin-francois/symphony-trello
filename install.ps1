@@ -11,10 +11,14 @@ param(
   [string]$Prefix = "",
   [Alias("-bin-dir", "bin-dir", "--bin-dir")]
   [string]$BinDir = $(Join-Path $(if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }) (Join-Path ".local" "bin")),
+  [Alias("-version", "--version")]
+  [string]$Version = $(if ($env:SYMPHONY_TRELLO_VERSION) { $env:SYMPHONY_TRELLO_VERSION } else { "0.2.0" }), # x-release-please-version
+  [Alias("-from-source", "from-source", "--from-source")]
+  [switch]$FromSource,
   [Alias("-repo", "--repo")]
-  [string]$Repo = "https://github.com/martin-francois/symphony-trello.git",
+  [string]$Repo = $(if ($env:SYMPHONY_TRELLO_REPO_URL) { $env:SYMPHONY_TRELLO_REPO_URL } else { "https://github.com/martin-francois/symphony-trello.git" }),
   [Alias("-ref", "--ref")]
-  [string]$Ref = "v0.2.0", # x-release-please-version
+  [string]$Ref = $(if ($env:SYMPHONY_TRELLO_REF) { $env:SYMPHONY_TRELLO_REF } else { "v0.2.0" }), # x-release-please-version
   [switch]$Help,
   [Parameter(ValueFromRemainingArguments = $true)]
   [string[]]$RemainingArgs = @()
@@ -26,8 +30,24 @@ $OriginalPath = $env:PATH
 $DefaultSymphonyHome = if ($env:SYMPHONY_HOME) { $env:SYMPHONY_HOME } else { "$env:LOCALAPPDATA\SymphonyTrello" }
 $DefaultPrefix = ""
 $DefaultBinDir = Join-Path $(if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }) (Join-Path ".local" "bin")
+$DefaultVersion = "0.2.0" # x-release-please-version
 $DefaultRepo = "https://github.com/martin-francois/symphony-trello.git"
-$DefaultRef = "v0.2.0" # x-release-please-version
+$DefaultRef = "v$DefaultVersion"
+$ReleaseBaseUrl = if ($env:SYMPHONY_TRELLO_RELEASE_BASE_URL) {
+  $env:SYMPHONY_TRELLO_RELEASE_BASE_URL
+} else {
+  "https://github.com/martin-francois/symphony-trello/releases/download/v$Version"
+}
+if ($env:SYMPHONY_TRELLO_INSTALL_SOURCE) {
+  $InstallSource = $env:SYMPHONY_TRELLO_INSTALL_SOURCE
+} elseif ($env:SYMPHONY_TRELLO_REPO_URL -or $env:SYMPHONY_TRELLO_REF) {
+  $InstallSource = "source-checkout"
+} else {
+  $InstallSource = "release-archive"
+}
+if ($FromSource -or $ScriptBoundParameters.ContainsKey("Repo") -or $ScriptBoundParameters.ContainsKey("Ref")) {
+  $InstallSource = "source-checkout"
+}
 
 function Apply-PositionalFlag([string]$Token) {
   switch ($Token) {
@@ -41,6 +61,11 @@ function Apply-PositionalFlag([string]$Token) {
     }
     { $_ -in @("-no-update-path", "--no-update-path") } {
       Set-Variable -Name NoUpdatePath -Value $true -Scope 1
+      return $true
+    }
+    { $_ -in @("-from-source", "--from-source") } {
+      Set-Variable -Name FromSource -Value $true -Scope 1
+      Set-Variable -Name InstallSource -Value "source-checkout" -Scope 1
       return $true
     }
     { $_ -in @("-help", "--help", "-h") } {
@@ -248,6 +273,10 @@ function Test-PublicOptionToken([string]$Token) {
     "--prefix",
     "-bin-dir",
     "--bin-dir",
+    "-version",
+    "--version",
+    "-from-source",
+    "--from-source",
     "-repo",
     "--repo",
     "-ref",
@@ -304,6 +333,11 @@ function Apply-PublicArgs([string[]]$Tokens) {
         Set-Variable -Name NoUpdatePath -Value $true -Scope 1
         break
       }
+      { $_ -in @("-from-source", "--from-source") } {
+        Set-Variable -Name FromSource -Value $true -Scope 1
+        Set-Variable -Name InstallSource -Value "source-checkout" -Scope 1
+        break
+      }
       { $_ -in @("-help", "--help", "-h") } {
         Set-Variable -Name Help -Value $true -Scope 1
         break
@@ -318,14 +352,28 @@ function Apply-PublicArgs([string[]]$Tokens) {
         Set-Variable -Name BinDir -Value (Read-PublicPathOptionValue $Tokens $i $token) -Scope 1
         break
       }
+      { $_ -in @("-version", "--version") } {
+        $i++
+        $value = Read-PublicSourceOptionValue $Tokens $i $token
+        if ($value.StartsWith("v")) {
+          $value = $value.Substring(1)
+        }
+        Set-Variable -Name Version -Value $value -Scope 1
+        if (-not $env:SYMPHONY_TRELLO_RELEASE_BASE_URL) {
+          Set-Variable -Name ReleaseBaseUrl -Value "https://github.com/martin-francois/symphony-trello/releases/download/v$value" -Scope 1
+        }
+        break
+      }
       { $_ -in @("-repo", "--repo") } {
         $i++
         Set-Variable -Name Repo -Value (Read-PublicSourceOptionValue $Tokens $i $token) -Scope 1
+        Set-Variable -Name InstallSource -Value "source-checkout" -Scope 1
         break
       }
       { $_ -in @("-ref", "--ref") } {
         $i++
         Set-Variable -Name Ref -Value (Read-PublicSourceOptionValue $Tokens $i $token) -Scope 1
+        Set-Variable -Name InstallSource -Value "source-checkout" -Scope 1
         break
       }
       { $_ -in @("-symphony-home", "--symphony-home") } {
@@ -393,6 +441,43 @@ function Assert-SourceInputs {
   }
 }
 
+function Assert-ReleaseInputs {
+  switch ($InstallSource) {
+    { $_ -in @("release", "release-archive") } {
+      Set-Variable -Name InstallSource -Value "release-archive" -Scope 1
+      break
+    }
+    { $_ -in @("source", "source-checkout") } {
+      Set-Variable -Name InstallSource -Value "source-checkout" -Scope 1
+      break
+    }
+    default {
+      throw "SYMPHONY_TRELLO_INSTALL_SOURCE must be release-archive or source-checkout."
+    }
+  }
+  if ([string]::IsNullOrWhiteSpace($Version)) {
+    throw "--version must not be blank."
+  }
+  if ($Version.StartsWith("v")) {
+    Set-Variable -Name Version -Value $Version.Substring(1) -Scope 1
+  }
+  if ($InstallSource -eq "source-checkout") {
+    return
+  }
+  if (-not ($Version -match "^[0-9]+[.][0-9]+[.][0-9]+([-+][A-Za-z0-9._-]+)?$")) {
+    throw "--version must be a semantic version without the leading v."
+  }
+  if (-not $env:SYMPHONY_TRELLO_RELEASE_BASE_URL) {
+    Set-Variable -Name ReleaseBaseUrl -Value "https://github.com/martin-francois/symphony-trello/releases/download/v$Version" -Scope 1
+  }
+  if ([string]::IsNullOrWhiteSpace($ReleaseBaseUrl) -or [regex]::IsMatch($ReleaseBaseUrl, "[\p{Cc}\s]")) {
+    throw "SYMPHONY_TRELLO_RELEASE_BASE_URL must be a URL without whitespace or control characters."
+  }
+  if (-not ($ReleaseBaseUrl.Contains("://"))) {
+    throw "SYMPHONY_TRELLO_RELEASE_BASE_URL must be a URL."
+  }
+}
+
 function Test-LocalGitRepository([string]$Path) {
   if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
     return $false
@@ -409,6 +494,7 @@ function Test-ImplicitDefaultToken([string]$Token) {
   return $Token -eq $DefaultSymphonyHome -or
     $Token -eq $DefaultPrefix -or
     $Token -eq $DefaultBinDir -or
+    $Token -eq $DefaultVersion -or
     $Token -eq $DefaultRepo -or
     $Token -eq $DefaultRef
 }
@@ -417,14 +503,18 @@ function Format-RepositoryForOutput([string]$Value) {
   return $Value -replace '^([A-Za-z][A-Za-z0-9+.-]*://)[^/]*@(.+)$', '${1}<redacted>@$2'
 }
 
-$positionalTokens = @($SymphonyHome, $Prefix, $BinDir, $Repo, $Ref) + $RemainingArgs |
+$positionalTokens = @($SymphonyHome, $Prefix, $BinDir, $Version, $Repo, $Ref) + $RemainingArgs |
   Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
 if (($positionalTokens | Where-Object { $_.StartsWith("-") } | Select-Object -First 1)) {
   $SymphonyHome = $DefaultSymphonyHome
   $Prefix = $DefaultPrefix
   $BinDir = $DefaultBinDir
+  $Version = $DefaultVersion
   $Repo = $DefaultRepo
   $Ref = $DefaultRef
+  if (-not $env:SYMPHONY_TRELLO_RELEASE_BASE_URL) {
+    $ReleaseBaseUrl = "https://github.com/martin-francois/symphony-trello/releases/download/v$Version"
+  }
   Apply-PublicArgs $positionalTokens
 } else {
   if (Apply-PositionalFlag $SymphonyHome) {
@@ -452,24 +542,29 @@ if (($positionalTokens | Where-Object { $_.StartsWith("-") } | Select-Object -Fi
 if ($Help) {
   @"
 Usage:
-  `$env:SYMPHONY_TRELLO_REF = "$DefaultRef"
-  & ([scriptblock]::Create((irm "https://raw.githubusercontent.com/martin-francois/symphony-trello/`$env:SYMPHONY_TRELLO_REF/install.ps1"))) --ref `$env:SYMPHONY_TRELLO_REF
+  powershell -c "irm https://symphony-trello.fmartin.ch/install.ps1 | iex"
 
 Options:
   --dry-run     Print planned actions without changing files.
   --no-onboard  Install or update the command without running setup-local.
   --no-update-path
                  Do not edit the current user PATH.
+  --version VERSION
+                 Release version to install. Default: $DefaultVersion.
+  --from-source Install from a Git checkout instead of release assets.
   -DryRun       Alias for --dry-run.
   -NoOnboard    Alias for --no-onboard.
-  -Prefix PATH  App checkout path. Default: <SYMPHONY_HOME>\app.
+  -Prefix PATH  App install path. Default: <SYMPHONY_HOME>\app.
   -BinDir PATH  Command directory.
 "@
   exit 0
 }
 
 Assert-SupportedPowerShellPlatform
-Assert-SourceInputs
+Assert-ReleaseInputs
+if ($InstallSource -eq "source-checkout") {
+  Assert-SourceInputs
+}
 Assert-AppPathOptionValues
 Assert-BinDirOptionValue
 $SymphonyHome = [System.IO.Path]::GetFullPath($SymphonyHome)
@@ -514,6 +609,11 @@ function Write-InstallContext {
     $packageManager = if (Test-Command "winget") { "winget" } else { "none" }
     @(
       "installer=install.ps1",
+      "install_format_version=1",
+      "install_source=$InstallSource",
+      "app_version=$Version",
+      "release_tag=v$Version",
+      "release_base_url=$ReleaseBaseUrl",
       "platform=$(Get-PlatformLabel)",
       "repo_url=$Repo",
       "ref=$Ref",
@@ -803,7 +903,7 @@ function Install-CodexOrExit {
 }
 
 function Ensure-Prerequisites {
-  if (-not (Test-Command "git")) {
+  if ($InstallSource -eq "source-checkout" -and -not (Test-Command "git")) {
     Install-PackageOrExit "Git" "git" "Install Git from https://git-scm.com/download/win or the Windows Package Manager."
     Assert-AvailableAfterInstall { Test-Command "git" } "Git" "Open a new PowerShell window with Git on PATH."
   }
@@ -817,7 +917,7 @@ function Ensure-Prerequisites {
 }
 
 function Write-DryRunPrerequisitePlan {
-  if (-not (Test-Command "git")) {
+  if ($InstallSource -eq "source-checkout" -and -not (Test-Command "git")) {
     $command = Get-WingetPackageCommand "git"
     Write-Host "  WOULD offer to install Git$(if ($command) { " with: $command" })"
   }
@@ -877,6 +977,98 @@ function Assert-ExistingCheckoutSafe {
   throw "Refusing to update existing Git checkout without Symphony installer marker:`n  $Prefix`nUse a dedicated app checkout path, or pass a checkout whose origin remote is:`n  $displayRepo"
 }
 
+function Assert-ExistingAppSafe {
+  if ((-not (Test-Path -LiteralPath $Prefix)) -or (Test-Path -LiteralPath (Join-Path $Prefix ".symphony-trello-install"))) {
+    return
+  }
+  throw "Refusing to replace existing app directory without Symphony installer marker:`n  $Prefix`nUse a dedicated app install path or remove the directory manually after backing up anything important."
+}
+
+function Invoke-DownloadFile([string]$Url, [string]$OutputPath) {
+  Invoke-Step "download $Url" {
+    Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $OutputPath
+  }
+}
+
+function Get-Sha3FileHash([string]$Path) {
+  $helperDir = Join-Path ([System.IO.Path]::GetTempPath()) ([System.Guid]::NewGuid().ToString("N"))
+  New-Item -ItemType Directory -Force -Path $helperDir | Out-Null
+  try {
+    $helper = Join-Path $helperDir "Sha3File.java"
+@'
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.util.HexFormat;
+
+class Sha3File {
+    public static void main(String[] args) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA3-256");
+        System.out.println(HexFormat.of().formatHex(digest.digest(Files.readAllBytes(Path.of(args[0])))));
+    }
+}
+'@ | Set-Content -Encoding ASCII -Path $helper
+    $output = (& java $helper $Path) 2>&1
+    if ($LASTEXITCODE -ne 0) {
+      throw "SHA3-256 checksum calculation failed."
+    }
+    return ($output | Select-Object -First 1).ToString().Trim()
+  } finally {
+    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $helperDir
+  }
+}
+
+function Assert-ReleaseArchiveChecksum([string]$ArchivePath, [string]$ChecksumsPath) {
+  $archiveName = Split-Path -Leaf $ArchivePath
+  $expected = Get-Content -Path $ChecksumsPath |
+    ForEach-Object {
+      $parts = $_ -split "\s+", 2
+      if ($parts.Count -eq 2 -and $parts[1] -eq $archiveName) {
+        $parts[0]
+      }
+    } |
+    Select-Object -First 1
+  if ([string]::IsNullOrWhiteSpace($expected)) {
+    throw "checksums.txt does not contain $archiveName."
+  }
+  $actual = Get-Sha3FileHash $ArchivePath
+  if ($actual -ne $expected) {
+    throw "Release archive checksum verification failed for $archiveName."
+  }
+}
+
+function Install-ReleaseArchive {
+  Assert-ExistingAppSafe
+  $archiveName = "symphony-trello-$Version.zip"
+  $archiveUrl = "$ReleaseBaseUrl/$archiveName"
+  $checksumsUrl = "$ReleaseBaseUrl/checksums.txt"
+  $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ([System.Guid]::NewGuid().ToString("N"))
+  New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
+  try {
+    $archive = Join-Path $tempDir $archiveName
+    $checksums = Join-Path $tempDir "checksums.txt"
+    Invoke-DownloadFile $archiveUrl $archive
+    Invoke-DownloadFile $checksumsUrl $checksums
+    Assert-ReleaseArchiveChecksum $archive $checksums
+    $extractDir = Join-Path $tempDir "extract"
+    New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
+    Invoke-Step "expand $archiveName" {
+      Expand-Archive -LiteralPath $archive -DestinationPath $extractDir -Force
+    }
+    $extractedRoot = Join-Path $extractDir "symphony-trello-$Version"
+    if (-not (Test-Path -LiteralPath (Join-Path $extractedRoot "target\quarkus-app\quarkus-run.jar") -PathType Leaf)) {
+      throw "Release archive is missing target/quarkus-app/quarkus-run.jar."
+    }
+    Invoke-Step "install release archive to $Prefix" {
+      Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $Prefix
+      New-Item -ItemType Directory -Force -Path (Split-Path $Prefix) | Out-Null
+      Move-Item -LiteralPath $extractedRoot -Destination $Prefix
+    }
+  } finally {
+    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $tempDir
+  }
+}
+
 Write-Host "Symphony for Trello installer"
 Write-Host
 Enable-ManagedCodexPath
@@ -886,11 +1078,19 @@ Write-Host "Config: $ConfigDir"
 Write-Host "Workspaces: $WorkspaceRoot"
 Write-Host "State/logs: $StateHome"
 Write-Host "Command: $BinDir\symphony-trello.ps1"
-Write-Host "Repository: $(Format-RepositoryForOutput $Repo)"
-Write-Host "Ref: $Ref"
+Write-Host "Install source: $InstallSource"
+if ($InstallSource -eq "source-checkout") {
+  Write-Host "Repository: $(Format-RepositoryForOutput $Repo)"
+  Write-Host "Ref: $Ref"
+} else {
+  Write-Host "Version: $Version"
+  Write-Host "Release assets: $ReleaseBaseUrl"
+}
 Write-Host
 Write-Host "Checking prerequisites..."
-Write-Host ($(if (Test-Command "git") { "  OK      Git available" } else { "  NEEDED  Git" }))
+if ($InstallSource -eq "source-checkout") {
+  Write-Host ($(if (Test-Command "git") { "  OK      Git available" } else { "  NEEDED  Git" }))
+}
 Write-Host ($(if (Test-Java25) { "  OK      Java 25+ JDK available" } else { "  NEEDED  Java 25+ JDK" }))
 Write-Host ($(if (Test-Command "codex") {
       "  OK      Codex CLI available"
@@ -904,8 +1104,14 @@ if ($DryRun) {
   Write-Host
   Write-Host "Dry run: no files changed."
   Write-DryRunPrerequisitePlan
-  Write-Host "  WOULD clone or update: $Prefix"
-  Write-Host "  WOULD build packaged Quarkus app with Maven wrapper"
+  if ($InstallSource -eq "source-checkout") {
+    Write-Host "  WOULD clone or update: $Prefix"
+    Write-Host "  WOULD build packaged Quarkus app with Maven wrapper"
+  } else {
+    Write-Host "  WOULD download release archive: $ReleaseBaseUrl/symphony-trello-$Version.zip"
+    Write-Host "  WOULD verify SHA3-256 checksum with: $ReleaseBaseUrl/checksums.txt"
+    Write-Host "  WOULD unpack release archive to: $Prefix"
+  }
   Write-Host "  WOULD install CLI executable: $BinDir\symphony-trello.ps1"
   Offer-PathSetup
   if (-not $NoOnboard) {
@@ -950,38 +1156,49 @@ if (-not $NoOnboard) {
 
 Write-Host
 Write-Host "Installing Symphony..."
-$UpdatingExistingCheckout = Test-Path -LiteralPath (Join-Path $Prefix ".git")
+$UpdatingExistingApp = Test-Path -LiteralPath $Prefix
 $RestartManagedWorkers = $false
-if ($UpdatingExistingCheckout -and (Get-ManagedPidFile)) {
+if ($UpdatingExistingApp -and (Get-ManagedPidFile)) {
   $RestartManagedWorkers = $true
   Write-Host "Stopping managed workers before update..."
   Invoke-Step "$BinDir\symphony-trello.ps1 stop" { & "$BinDir\symphony-trello.ps1" stop }
 }
-if (-not $UpdatingExistingCheckout) {
-  $displayRepo = Format-RepositoryForOutput $Repo
-  if (Test-RemoteBranch $Repo $Ref) {
-    Invoke-Step "git clone --branch $Ref $displayRepo $Prefix" {
-      New-Item -ItemType Directory -Force -Path (Split-Path $Prefix) | Out-Null
-      & git clone --branch $Ref $Repo $Prefix
+if ($InstallSource -eq "source-checkout") {
+  $UpdatingExistingCheckout = Test-Path -LiteralPath (Join-Path $Prefix ".git")
+  if (-not $UpdatingExistingCheckout) {
+    if (Test-Path -LiteralPath $Prefix) {
+      Assert-ExistingAppSafe
+      Invoke-Step "remove existing release archive app $Prefix" {
+        Remove-Item -Recurse -Force $Prefix
+      }
+    }
+    $displayRepo = Format-RepositoryForOutput $Repo
+    if (Test-RemoteBranch $Repo $Ref) {
+      Invoke-Step "git clone --branch $Ref $displayRepo $Prefix" {
+        New-Item -ItemType Directory -Force -Path (Split-Path $Prefix) | Out-Null
+        & git clone --branch $Ref $Repo $Prefix
+      }
+    } else {
+      Invoke-Step "git clone $displayRepo $Prefix" {
+        New-Item -ItemType Directory -Force -Path (Split-Path $Prefix) | Out-Null
+        & git clone $Repo $Prefix
+      }
+      Invoke-Step "git -C $Prefix fetch --tags --prune origin" {
+        & git -C $Prefix fetch --tags --prune origin
+      }
+      Invoke-CheckoutRef $Prefix $Ref
     }
   } else {
-    Invoke-Step "git clone $displayRepo $Prefix" {
-      New-Item -ItemType Directory -Force -Path (Split-Path $Prefix) | Out-Null
-      & git clone $Repo $Prefix
-    }
+    Assert-ExistingCheckoutSafe
     Invoke-Step "git -C $Prefix fetch --tags --prune origin" {
       & git -C $Prefix fetch --tags --prune origin
     }
     Invoke-CheckoutRef $Prefix $Ref
   }
+  Invoke-Step "$Prefix\mvnw.cmd -q -DskipTests clean package" { & "$Prefix\mvnw.cmd" -q -f "$Prefix\pom.xml" -DskipTests clean package }
 } else {
-  Assert-ExistingCheckoutSafe
-  Invoke-Step "git -C $Prefix fetch --tags --prune origin" {
-    & git -C $Prefix fetch --tags --prune origin
-  }
-  Invoke-CheckoutRef $Prefix $Ref
+  Install-ReleaseArchive
 }
-Invoke-Step "$Prefix\mvnw.cmd -q -DskipTests clean package" { & "$Prefix\mvnw.cmd" -q -f "$Prefix\pom.xml" -DskipTests clean package }
 Invoke-Step "create $BinDir\symphony-trello.ps1" {
   New-Item -ItemType Directory -Force -Path $BinDir, $ConfigDir, $WorkspaceRoot, $StateHome | Out-Null
   Set-Content -Encoding ASCII -Path "$Prefix\.symphony-trello-install" -Value "symphony-trello installer-managed app directory"
