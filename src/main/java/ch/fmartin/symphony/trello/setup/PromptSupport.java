@@ -28,4 +28,13 @@ final class PromptSupport {
         checkArgument(parsed >= 1 && parsed <= maxChoice, "Choice must be between 1 and %s", maxChoice);
         return parsed;
     }
+
+    static int requiredChoice(String answer, int maxChoice, String errorCode, String errorMessage) {
+        if (answer == null || answer.isBlank()) {
+            throw new TrelloBoardSetupException(errorCode, errorMessage);
+        }
+        int parsed = Integer.parseInt(answer.strip());
+        checkArgument(parsed >= 1 && parsed <= maxChoice, "Choice must be between 1 and %s", maxChoice);
+        return parsed;
+    }
 }
