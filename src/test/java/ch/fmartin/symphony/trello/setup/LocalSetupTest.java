@@ -3298,6 +3298,32 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void dryRunReportsNoStartWhenNoStartIsSet() throws Exception {
+        // given
+        String boardName = "No Start Plan Queue";
+
+        // when
+        SetupRunResult result = runSetup(
+                "--dry-run",
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                boardName,
+                "--no-start",
+                "--no-github");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("WOULD NOT start Symphony after setup because --no-start is set")
+                .stdoutDoesNotContain("WOULD start Symphony after setup");
+    }
+
+    @Test
     void repairPortReportsNoRepairNeededWhenConfiguredPortIsAvailable() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.repair-dry-run.md");
