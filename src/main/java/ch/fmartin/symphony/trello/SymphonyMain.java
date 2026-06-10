@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello;
 
+import ch.fmartin.symphony.trello.config.EnvironmentReferences;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import ch.fmartin.symphony.trello.orchestrator.SymphonyOrchestrator;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -147,13 +148,11 @@ public class SymphonyMain {
 
     private static Optional<String> environmentValue(String value, Function<String, Optional<String>> resolver) {
         String trimmed = value.trim();
-        if (trimmed.startsWith("$") && trimmed.length() > 1) {
-            String name = trimmed.substring(1);
-            return Optional.of(resolver.apply(name)
-                    .orElseThrow(() -> new IllegalArgumentException(
-                            "Workflow server.port references missing environment variable " + name + ".")));
-        }
-        return Optional.of(trimmed);
+        return EnvironmentReferences.referenceName(trimmed)
+                .map(name -> resolver.apply(name)
+                        .orElseThrow(() -> new IllegalArgumentException(
+                                "Workflow server.port references missing environment variable " + name + ".")))
+                .or(() -> Optional.of(trimmed));
     }
 
     private static Optional<String> frontMatter(List<String> lines) {

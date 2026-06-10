@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
+import ch.fmartin.symphony.trello.config.EnvironmentReferences;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.TrelloCredentials;
 import java.io.IOException;
@@ -30,10 +31,10 @@ final class TrelloCredentialStore {
 
     CredentialSelection loadOrPrompt(LocalSetup.Options options, Path envPath, Terminal terminal) throws IOException {
         Map<String, String> dotenv = LocalEnvironment.load(envPath);
-        CredentialValue key =
-                credentialValue(options.apiKey(), envValue("TRELLO_API_KEY"), dotenv.get("TRELLO_API_KEY"));
-        CredentialValue token =
-                credentialValue(options.apiToken(), envValue("TRELLO_API_TOKEN"), dotenv.get("TRELLO_API_TOKEN"));
+        CredentialValue key = credentialValue(
+                "TRELLO_API_KEY", options.apiKey(), envValue("TRELLO_API_KEY"), dotenv.get("TRELLO_API_KEY"));
+        CredentialValue token = credentialValue(
+                "TRELLO_API_TOKEN", options.apiToken(), envValue("TRELLO_API_TOKEN"), dotenv.get("TRELLO_API_TOKEN"));
         if ((blank(key) || blank(token)) && options.nonInteractive()) {
             throw new TrelloBoardSetupException(
                     "setup_missing_trello_credentials",
@@ -75,10 +76,10 @@ final class TrelloCredentialStore {
 
     CredentialSelection loadExisting(LocalSetup.Options options, Path envPath) {
         Map<String, String> dotenv = LocalEnvironment.load(envPath);
-        CredentialValue key =
-                credentialValue(options.apiKey(), envValue("TRELLO_API_KEY"), dotenv.get("TRELLO_API_KEY"));
-        CredentialValue token =
-                credentialValue(options.apiToken(), envValue("TRELLO_API_TOKEN"), dotenv.get("TRELLO_API_TOKEN"));
+        CredentialValue key = credentialValue(
+                "TRELLO_API_KEY", options.apiKey(), envValue("TRELLO_API_KEY"), dotenv.get("TRELLO_API_KEY"));
+        CredentialValue token = credentialValue(
+                "TRELLO_API_TOKEN", options.apiToken(), envValue("TRELLO_API_TOKEN"), dotenv.get("TRELLO_API_TOKEN"));
         return new CredentialSelection(key, token);
     }
 
@@ -88,11 +89,30 @@ final class TrelloCredentialStore {
     }
 
     private static CredentialValue credentialValue(
-            Optional<String> directValue, Optional<String> environmentValue, String dotenvValue) {
+            String name, Optional<String> directValue, Optional<String> environmentValue, String dotenvValue) {
         return directValue
                 .map(CredentialValue::direct)
                 .or(() -> environmentValue.map(CredentialValue::environment))
-                .orElseGet(() -> CredentialValue.dotenv(dotenvValue));
+                .orElseGet(() -> dotenvCredential(name, dotenvValue));
+    }
+
+    /**
+     * Credential file values are used literally and never expanded. A value that looks like an
+     * environment reference is a local configuration mistake that would otherwise reach Trello as
+     * a literal credential and fail as a misleading authentication error.
+     */
+    static CredentialValue dotenvCredential(String name, String value) {
+        if (value != null
+                && (EnvironmentReferences.referenceName(value).isPresent()
+                        || value.trim().startsWith("${"))) {
+            throw new TrelloBoardSetupException(
+                    "setup_credentials_environment_reference",
+                    name + " in the credential file looks like the environment reference " + value.trim()
+                            + ", but credential file values are used literally. Put the actual value in the"
+                            + " credential file, or remove the line and export " + name
+                            + " in the shell environment.");
+        }
+        return CredentialValue.dotenv(value);
     }
 
     static void validateWritableEnvUpdate(CredentialSelection credentials, Path envPath, boolean validatePath)

@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
+import ch.fmartin.symphony.trello.config.EnvironmentReferences;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import com.google.common.util.concurrent.Striped;
 import java.io.IOException;
@@ -430,7 +431,13 @@ final class LocalWorkerManager {
                 apiKeyEnvironment,
                 apiTokenEnvironment,
                 credentialSource(apiKeyEnvironment, dotenv),
-                credentialSource(apiTokenEnvironment, dotenv));
+                credentialSource(apiTokenEnvironment, dotenv),
+                dotenvValue(apiKeyEnvironment, dotenv),
+                dotenvValue(apiTokenEnvironment, dotenv));
+    }
+
+    private static Optional<String> dotenvValue(Optional<String> environmentName, Map<String, String> dotenv) {
+        return environmentName.map(dotenv::get).filter(value -> !TrelloCredentialStore.blank(value));
     }
 
     private TrelloBoardSetupException.TrelloCredentialSource credentialSource(
@@ -510,6 +517,36 @@ final class LocalWorkerManager {
             throw missingWorkerCredentialException(
                     "setup_worker_missing_api_token", "Missing Trello API token for worker start.", usage);
         }
+        rejectReferenceLookingDotenvCredential(
+                usage.envPath(), usage.apiKeyEnvironment(), usage.apiKeySource(), usage.apiKeyDotenvValue());
+        rejectReferenceLookingDotenvCredential(
+                usage.envPath(), usage.apiTokenEnvironment(), usage.apiTokenSource(), usage.apiTokenDotenvValue());
+    }
+
+    /**
+     * The worker uses a dotenv value only when the shell environment does not provide the
+     * variable, so only a value the dotenv file actually contributes is checked against the
+     * shared credential-file contract in {@link TrelloCredentialStore#dotenvCredential}. The
+     * check runs before the Trello credential preflight and before the worker launch, so a
+     * reference-looking value fails locally instead of reaching Trello as a literal credential.
+     */
+    private static void rejectReferenceLookingDotenvCredential(
+            Path envPath,
+            Optional<String> environmentName,
+            TrelloBoardSetupException.TrelloCredentialSource source,
+            Optional<String> dotenvValue) {
+        if (source != TrelloBoardSetupException.TrelloCredentialSource.DOTENV_FILE) {
+            return;
+        }
+        environmentName.ifPresent(name -> {
+            try {
+                TrelloCredentialStore.dotenvCredential(name, dotenvValue.orElse(null));
+            } catch (TrelloBoardSetupException e) {
+                // withDotenvPath copies code, message, and cause into a context-enriched copy,
+                // and the fresh trace still names this rejection site.
+                throw e.withDotenvPath(envPath); // NOPMD - PreserveStackTrace: enriched copy
+            }
+        });
     }
 
     private static TrelloBoardSetupException missingWorkerCredentialException(
@@ -530,9 +567,7 @@ final class LocalWorkerManager {
     }
 
     private static Optional<String> environmentCredentialName(String configuredValue) {
-        return configuredValue.startsWith("$") && configuredValue.length() > 1
-                ? Optional.of(configuredValue.substring(1))
-                : Optional.empty();
+        return EnvironmentReferences.referenceName(configuredValue);
     }
 
     private static void throwKnownStartupFailure(
@@ -620,7 +655,9 @@ final class LocalWorkerManager {
             Optional<String> apiKeyEnvironment,
             Optional<String> apiTokenEnvironment,
             TrelloBoardSetupException.TrelloCredentialSource apiKeySource,
-            TrelloBoardSetupException.TrelloCredentialSource apiTokenSource) {}
+            TrelloBoardSetupException.TrelloCredentialSource apiTokenSource,
+            Optional<String> apiKeyDotenvValue,
+            Optional<String> apiTokenDotenvValue) {}
 
     private record StartupLogSnapshot(long size, long modifiedMillis) {
         private static StartupLogSnapshot snapshot(Path path) {
