@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
@@ -259,7 +260,12 @@ public class ConfigResolver {
         } catch (URISyntaxException e) {
             throw new ConfigException("invalid_tracker_endpoint", "tracker.endpoint must be a valid http(s) URL", e);
         }
-        if ((!"http".equals(uri.getScheme()) && !"https".equals(uri.getScheme())) || uri.getHost() == null) {
+        // Scheme comparison is case-insensitive like TrelloApiEndpoint.normalize on the setup
+        // side, so a workflow endpoint accepted during setup cannot fail here over letter case.
+        String scheme = uri.getScheme() == null ? null : uri.getScheme().toLowerCase(Locale.ROOT);
+        boolean httpScheme = "http".equals(scheme) || "https".equals(scheme);
+        boolean hasHost = uri.getHost() != null;
+        if (!httpScheme || !hasHost) {
             throw new ConfigException(
                     "invalid_tracker_endpoint", "tracker.endpoint must be an absolute http(s) URL with a host");
         }

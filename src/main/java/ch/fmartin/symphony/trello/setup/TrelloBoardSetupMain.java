@@ -704,21 +704,16 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         @Option(names = "--manifest", description = "Connected-board manifest path.")
         Optional<Path> manifest = Optional.empty();
 
-        @Option(names = "--server-port", description = "Local HTTP status port.")
+        @Option(names = "--server-port", description = SetupOptionHelp.SERVER_PORT)
         Integer serverPort;
 
-        @Option(
-                names = "--max-agents",
-                description =
-                        "Maximum cards from this board that may run at once (1-32). Each concurrent card runs its own Codex agent plus builds and tests; keep 1 until cards are safe to run in parallel.")
+        @Option(names = "--max-agents", description = SetupOptionHelp.MAX_AGENTS)
         int maxConcurrentAgents = TrelloBoardSetup.DEFAULT_MAX_CONCURRENT_AGENTS;
 
-        @Option(names = "--codex-model", description = "Codex model to write into generated workflows.")
+        @Option(names = "--codex-model", description = SetupOptionHelp.CODEX_MODEL)
         Optional<String> codexModel = Optional.empty();
 
-        @Option(
-                names = "--codex-reasoning-effort",
-                description = "Codex reasoning effort to write into generated workflows.")
+        @Option(names = "--codex-reasoning-effort", description = SetupOptionHelp.CODEX_REASONING_EFFORT)
         Optional<String> codexReasoningEffort = Optional.empty();
 
         @Option(names = "--force", description = "Overwrite the workflow file when needed.")
