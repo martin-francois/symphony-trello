@@ -335,4 +335,31 @@ final class ConfigResolverTest {
         // then
         assertThat(error).isNull();
     }
+
+    @Test
+    void acceptsUppercaseSchemeInTrackerEndpointLikeSetupNormalization() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  endpoint: "HTTPS://api.trello.com/1"
+                  api_key: key
+                  api_token: token
+                  board_id: board-1
+                ---
+                Prompt
+                """);
+        ConfigResolver resolver = new ConfigResolver();
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+        resolver.validateForDispatch(config);
+
+        // then
+        assertThat(config.tracker().endpoint()).isEqualTo("HTTPS://api.trello.com/1");
+    }
 }
