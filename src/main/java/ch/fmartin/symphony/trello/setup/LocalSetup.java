@@ -1307,7 +1307,11 @@ public final class LocalSetup {
         }
         out.println("  WOULD configure Trello credentials: " + options.envPath());
         out.println("  WOULD write workflows under: " + options.configDir());
-        out.println("  WOULD start Symphony after setup unless --no-start is used");
+        if (options.noStart()) {
+            out.println("  WOULD NOT start Symphony after setup because --no-start is set");
+        } else {
+            out.println("  WOULD start Symphony after setup unless --no-start is used");
+        }
     }
 
     private static void printMiniTutorial(
