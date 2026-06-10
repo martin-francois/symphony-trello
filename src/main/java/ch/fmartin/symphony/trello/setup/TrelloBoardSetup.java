@@ -1971,7 +1971,19 @@ public final class TrelloBoardSetup {
 
     private static String boardKey(Map<String, Object> board) {
         String shortLink = string(board.get("shortLink"));
-        return blank(shortLink) ? requiredString(board, "id") : shortLink;
+        if (!blank(shortLink)) {
+            return shortLink;
+        }
+        // Board-creation responses can omit shortLink while still returning the board URL, so
+        // derive the short link from the URL to keep boardKey consistent across create and import.
+        String url = string(board.get("url"));
+        if (!blank(url)) {
+            String urlBoardKey = TrelloBoardIds.parseStoredBoardUrl(url);
+            if (!blank(urlBoardKey) && !urlBoardKey.equals(url)) {
+                return urlBoardKey;
+            }
+        }
+        return requiredString(board, "id");
     }
 
     private static Map<String, String> createBoardQuery(String boardName, String workspaceId) {
