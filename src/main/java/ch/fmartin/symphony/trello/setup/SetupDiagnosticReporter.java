@@ -34,6 +34,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.SequencedSet;
 import java.util.Set;
@@ -194,6 +195,7 @@ final class SetupDiagnosticReporter {
     }
 
     private enum ManifestStatus {
+        INVALID,
         LOADED,
         MISSING,
         NOT_A_FILE,
@@ -919,7 +921,15 @@ final class SetupDiagnosticReporter {
             return new ManifestSnapshot(new ConnectedBoardManifest(List.of()), ManifestStatus.MISSING);
         }
         try {
-            return new ManifestSnapshot(new ConnectedBoardRepository(manifestPath, json).load(), ManifestStatus.LOADED);
+            // loadForCheck instead of load(): a literal null document or a non-array boards field
+            // must report as invalid manifest data instead of becoming a null manifest or a clean
+            // empty one. Rows that are objects still render as safe partial rows.
+            ConnectedBoardRepository.ManifestLoadResult result =
+                    new ConnectedBoardRepository(manifestPath, json).loadForCheck();
+            if (!result.usableRows()) {
+                return new ManifestSnapshot(new ConnectedBoardManifest(List.of()), ManifestStatus.INVALID);
+            }
+            return new ManifestSnapshot(result.manifest(), ManifestStatus.LOADED);
         } catch (IOException | RuntimeException ignored) {
             return new ManifestSnapshot(new ConnectedBoardManifest(List.of()), ManifestStatus.UNREADABLE);
         }
@@ -958,11 +968,11 @@ final class SetupDiagnosticReporter {
                     hash(board.boardKey()),
                     board.githubEnabled(),
                     board.serverPort(),
-                    board.additionalWritableRoots().size(),
+                    writableRootsCount(board),
                     board.dangerFullAccess(),
-                    sanitize(board.workspaceRoot().toString()),
-                    sanitize(board.workflowPath().toString()),
-                    sanitize(effectiveEnvPath(board, defaultEnvPath).toString()));
+                    sanitize(safePathText(board.workspaceRoot())),
+                    sanitize(safePathText(board.workflowPath())),
+                    sanitize(safePathText(effectiveEnvPath(board, defaultEnvPath))));
         }
         table.appendTo(body);
     }
@@ -1017,15 +1027,15 @@ final class SetupDiagnosticReporter {
                     board.boardKey(),
                     board.boardUrl(),
                     board.serverPort(),
-                    pathToken(board.workflowPath().toString()),
-                    board.workflowPath(),
-                    pathToken(effectiveEnvPath(board, defaultEnvPath).toString()),
-                    effectiveEnvPath(board, defaultEnvPath),
-                    pathToken(board.workspaceRoot().toString()),
-                    board.workspaceRoot(),
+                    pathToken(safePathText(board.workflowPath())),
+                    safePathText(board.workflowPath()),
+                    pathToken(safePathText(effectiveEnvPath(board, defaultEnvPath))),
+                    safePathText(effectiveEnvPath(board, defaultEnvPath)),
+                    pathToken(safePathText(board.workspaceRoot())),
+                    safePathText(board.workspaceRoot()),
                     board.githubEnabled(),
                     board.dangerFullAccess(),
-                    board.additionalWritableRoots().size());
+                    writableRootsCount(board));
         }
         table.appendTo(body);
     }
@@ -1046,6 +1056,9 @@ final class SetupDiagnosticReporter {
             case UNREADABLE ->
                 body.append(
                         "The connected-board manifest could not be read. Local workflow files may still be summarized below.\n");
+            case INVALID ->
+                body.append(
+                        "The connected-board manifest is not valid connected-board JSON. Local workflow files may still be summarized below.\n");
         }
     }
 
@@ -1223,7 +1236,7 @@ final class SetupDiagnosticReporter {
                 List.of(MarkdownTable.Alignment.LEFT, MarkdownTable.Alignment.LEFT, MarkdownTable.Alignment.LEFT));
         invalidWorkflows.forEach(workflow -> table.row(
                 hash(workflow.board().boardId()),
-                sanitize(workflow.board().workflowPath().toString()),
+                sanitize(safePathText(workflow.board().workflowPath())),
                 workflow.problem()));
         table.appendTo(body);
     }
@@ -1235,8 +1248,9 @@ final class SetupDiagnosticReporter {
         if (validation.ok()) {
             return Optional.empty();
         }
-        String problem =
-                Files.isRegularFile(board.workflowPath()) ? "unusable workflow configuration" : "missing workflow file";
+        String problem = board.workflowPath() != null && Files.isRegularFile(board.workflowPath())
+                ? "unusable workflow configuration"
+                : "missing workflow file";
         return Optional.of(new InvalidConnectedBoardWorkflow(board, problem));
     }
 
@@ -1286,7 +1300,8 @@ final class SetupDiagnosticReporter {
     private Function<String, Optional<String>> workflowEnvironmentResolver(
             ConnectedBoardManifest manifest, Path workflowPath, Path defaultEnvPath) {
         return manifest.boards().stream()
-                .filter(board -> PathsEqual.samePath(board.workflowPath(), workflowPath))
+                .filter(board ->
+                        board.workflowPath() != null && PathsEqual.samePath(board.workflowPath(), workflowPath))
                 .findAny()
                 .map(board -> workflowEnvironmentResolver(board.envPath(), defaultEnvPath))
                 .orElseGet(() -> WorkflowEnvironmentResolver.resolver(environment, defaultEnvPath));
@@ -2172,6 +2187,16 @@ final class SetupDiagnosticReporter {
     private static PrintStream borrowedOut(Terminal terminal) {
         // Terminal owns the stream. Diagnostics can write to it but must not close it.
         return terminal.out();
+    }
+
+    private static String safePathText(Path path) {
+        return path == null ? "unavailable" : path.toString();
+    }
+
+    private static int writableRootsCount(ConnectedBoard board) {
+        return board.additionalWritableRoots() == null
+                ? 0
+                : board.additionalWritableRoots().size();
     }
 
     private String hash(String value) {

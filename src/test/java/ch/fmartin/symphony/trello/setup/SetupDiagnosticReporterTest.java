@@ -204,6 +204,128 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
+    void diagnosticsRendersIncompleteManifestRowsSafely() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("incomplete-manifest-config");
+        Path stateHome = tempDir.resolve("state");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.writeString(
+                configDir.resolve("connected-boards.json"),
+                """
+                {"boards":[{},{"boardName":"Private Board","boardId":"abc","boardKey":"def","serverPort":18199}]}
+                """,
+                StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.empty(),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.empty()));
+
+        // then
+        assertThat(report)
+                .contains("- **board_count:** 2", "unavailable")
+                .doesNotContain("Cannot invoke", "NullPointerException", "Private Board");
+    }
+
+    @Test
+    void selectedWorkflowDiagnosticsTolerateEmptyManifestBoardRow() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("empty-row-config");
+        Path workspaceRoot = tempDir.resolve("empty-row-workspaces");
+        Path stateHome = tempDir.resolve("empty-row-state");
+        Path workflow = configDir.resolve("WORKFLOW.empty-row.md");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.writeString(workflow, workflowWithPort(20723), StandardCharsets.UTF_8);
+        Files.writeString(
+                configDir.resolve("connected-boards.json"),
+                """
+                {"boards":[{}]}
+                """,
+                StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = renderWorkflowDiagnostics(reporter, configDir, workspaceRoot, stateHome, workflow);
+
+        // then
+        assertThat(report)
+                .contains("selector:** workflow", "selected_workflow_in_manifest:** false")
+                .doesNotContain("Cannot invoke", "NullPointerException", tempDir.toString());
+    }
+
+    @Test
+    void selectedWorkflowDiagnosticsKeepPartialManifestRowFieldsPrivate() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("partial-row-config");
+        Path workspaceRoot = tempDir.resolve("partial-row-workspaces");
+        Path stateHome = tempDir.resolve("partial-row-state");
+        Path workflow = configDir.resolve("WORKFLOW.partial-row.md");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.writeString(workflow, workflowWithPort(20724), StandardCharsets.UTF_8);
+        Files.writeString(
+                configDir.resolve("connected-boards.json"),
+                """
+                {"boards":[{"boardName":"Private Board","boardId":"abc","boardKey":"def","serverPort":18199}]}
+                """,
+                StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = renderWorkflowDiagnostics(reporter, configDir, workspaceRoot, stateHome, workflow);
+
+        // then
+        assertThat(report)
+                .contains("selector:** workflow", "selected_workflow_in_manifest:** false")
+                .doesNotContain("Cannot invoke", "NullPointerException", "Private Board", "18199", tempDir.toString());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"null", "{\"boards\":null}"})
+    void diagnosticsReportsStructurallyInvalidManifestContentAsInvalid(String manifestContent) throws Exception {
+        // given
+        Path configDir = tempDir.resolve("invalid-content-config-" + manifestContent.hashCode());
+        Path stateHome = tempDir.resolve("state");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Path manifest = configDir.resolve("connected-boards.json");
+        Files.writeString(manifest, manifestContent, StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.empty(),
+                Optional.of(stateHome),
+                Optional.of(manifest),
+                Optional.empty()));
+
+        // then
+        assertThat(report)
+                .contains(
+                        "- **manifest_status:** invalid",
+                        "- **board_count:** 0",
+                        "The connected-board manifest is not valid connected-board JSON.")
+                .doesNotContain("Cannot invoke", "NullPointerException", "manifest_status:** loaded");
+    }
+
+    @Test
     void diagnosticsReportsDirectoryManifestPathAsNotAFile() throws Exception {
         // given
         Path configDir = tempDir.resolve("manifest-dir-config");

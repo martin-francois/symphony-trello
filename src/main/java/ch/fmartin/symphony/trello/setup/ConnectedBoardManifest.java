@@ -74,7 +74,8 @@ record ConnectedBoardManifest(List<ConnectedBoard> boards) {
 
     List<ConnectedBoard> findAllByWorkflow(Path workflowPath) {
         return boards.stream()
-                .filter(board -> PathsEqual.samePath(board.workflowPath(), workflowPath))
+                .filter(board ->
+                        board.workflowPath() != null && PathsEqual.samePath(board.workflowPath(), workflowPath))
                 .toList();
     }
 

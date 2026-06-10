@@ -972,6 +972,20 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
+    void lifecycleCommandsClassifyIncompleteManifestRowsAsExpectedConfigErrors() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        Files.createDirectories(fixture.paths.configDir());
+        Files.writeString(fixture.paths.manifestPath(), "{\"boards\":[{}]}", StandardCharsets.UTF_8);
+
+        // when
+        List<Throwable> failures = lifecycleCommandFailures(fixture);
+
+        // then
+        assertLifecycleManifestRejections(fixture, failures, "incomplete row");
+    }
+
+    @Test
     void startAllSkipsBoardAlreadyManagedByAnotherRunningWorkflow() throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
