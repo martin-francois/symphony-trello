@@ -85,6 +85,10 @@ full project.
 
 ### Use Picocli For Java Command Parsing And Delegate To Setup Services
 
+Adopt the Picocli library as the single Java command-line boundary: each setup command becomes a
+thin annotated command class that declares its options, lets Picocli parse and validate them, and
+delegates the actual work to the existing setup services.
+
 * Good, because it provides typed options, generated help, arity checks, and parse errors.
 * Good, because command classes stay thin and testable.
 * Good, because it avoids implementing parser edge cases by hand.
@@ -92,12 +96,18 @@ full project.
 
 ### Keep Hand-Written Java Parsers And Improve Them Incrementally
 
+Keep the existing custom argument-parsing code in the Java entrypoints and clean it up command by
+command as the CLI surface changes.
+
 * Good, because it avoids adding a dependency.
 * Bad, because the existing parser code already duplicated help, option parsing, defaults, and error
   handling.
 * Bad, because every new CLI option would require more custom validation code.
 
 ### Move Setup Command Parsing Into Bash And PowerShell Wrappers
+
+Parse setup command options inside the Bash and PowerShell wrapper scripts and pass already-parsed
+values to the Java services.
 
 * Good, because installer scripts already exist.
 * Bad, because behavior would be duplicated across scripting languages.

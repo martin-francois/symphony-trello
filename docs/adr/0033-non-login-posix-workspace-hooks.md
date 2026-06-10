@@ -55,17 +55,25 @@ configured workspace and that the shell is not a login shell.
 
 ### Keep `bash -lc <script>`
 
+Run hook snippets through a login shell, which sources the user's profile files before executing
+the snippet.
+
 * Good, because login profile setup may expose user tools without extra hook text.
 * Bad, because profile startup can make hook behavior depend on host shell configuration.
 * Bad, because hosted CI showed relative hook output could land outside the workspace.
 
 ### Use `bash -c <script>`
 
+Run hook snippets through a non-login, non-interactive shell that executes the snippet directly in
+the per-card workspace working directory.
+
 * Good, because it keeps shell features while preserving the configured working directory.
 * Good, because it avoids hidden login profile side effects.
 * Bad, because workflows that need profile-managed tools must source setup explicitly.
 
 ### Invoke hook scripts directly without a shell
+
+Execute hook entries as programs with arguments, without wrapping them in any shell.
 
 * Good, because it avoids shell startup behavior entirely.
 * Bad, because current hook fields are shell snippets, not executable paths with argument arrays.

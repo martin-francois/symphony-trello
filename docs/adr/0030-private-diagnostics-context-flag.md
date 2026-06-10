@@ -90,12 +90,17 @@ that the normal diagnostics command still redacts them.
 
 ### `--show-private-context`
 
+Name the local-only mode after what it reveals: the private context - Trello identifiers, Trello
+URLs, and local paths - that the public-safe report tokenizes.
+
 * Good, because it warns that the output is private.
 * Good, because it does not imply credentials are printed.
 * Good, because it covers current and likely future private diagnostic data.
 * Bad, because users need the help text or report warning to know the exact fields shown.
 
 ### `--local-identifiers`
+
+Name the flag after where the data stays (local) and what kind of data it is (identifiers).
 
 * Good, because it describes the original lookup need for `board_hash`, `key_hash`, and
   `<path:...>` tokens.
@@ -105,11 +110,16 @@ that the normal diagnostics command still redacts them.
 
 ### `--unredacted`
 
+Name the flag as the opposite of redaction, implying the report disables redaction entirely.
+
 * Good, because it is short and easy to recognize as sensitive.
 * Bad, because it incorrectly suggests the command may reveal secrets or raw log contents.
 * Bad, because diagnostics must still keep credentials and auth/session contents redacted.
 
 ### `--only-secrets-redacted`
+
+Name the flag after the remaining protection: credential values stay redacted while every other
+private identifier and path is printed.
 
 * Good, because it tries to clarify that credentials stay hidden.
 * Bad, because `secret` is ambiguous. Trello board ids, Trello board URLs, and local paths are not
@@ -118,17 +128,24 @@ that the normal diagnostics command still redacts them.
 
 ### `--show-identifiers-and-paths`
 
+Name the flag after the two main data categories it reveals.
+
 * Good, because it names two major categories of currently shown data.
 * Bad, because Trello board URLs do not clearly fit either word for many users.
 * Bad, because the name would age poorly if future diagnostics need other private context.
 
 ### `--show-local-references`
 
+Name the flag after the local reference values the report would print.
+
 * Good, because it is broad.
 * Bad, because `references` is vague and does not clearly communicate privacy risk.
 * Bad, because users may not understand that it reveals Trello board identifiers, URLs, and paths.
 
 ### `--reveal-hashes`
+
+Name the flag after the reverse mapping it enables from public-safe hash tokens back to private
+values.
 
 * Good, because it connects to the visible hashed diagnostics values.
 * Bad, because hashes are not actually reversed; the command prints local mappings.

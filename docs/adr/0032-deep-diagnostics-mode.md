@@ -82,16 +82,24 @@ commands, and `--show-private-context` is still the only flag that prints privat
 
 ### `--deep`
 
+Add one flag that enables all deeper public-safe checks at once; currently that means running the
+Codex and GitHub auth-status probes in addition to the default report.
+
 * Good, because it is short and understandable.
 * Good, because it can cover future public-safe probes.
 * Bad, because users may need help understanding exactly what extra checks run.
 
 ### `--probe-auth`
 
+Add a narrower flag named after the specific auth-status probes it would enable.
+
 * Good, because it names the current extra behavior.
 * Bad, because it is too narrow if deeper diagnostics later includes non-auth checks.
 
 ### `--show-private-context`
+
+Reuse the existing private-context flag so one flag both reveals private values and runs the deeper
+checks.
 
 * Good, because it already exists for local debugging.
 * Bad, because it prints private local identifiers and paths, while auth probes should remain
@@ -102,6 +110,8 @@ commands, and `--show-private-context` is still the only flag that prints privat
 
 ### Private-Context Name Variants
 
+Rename the private-context mode and fold the deeper checks into that renamed mode.
+
 * Good, because names such as `--show-identifiers-and-paths` describe some current private-context
   fields.
 * Bad, because the extra auth checks do not reveal those private fields by themselves.
@@ -109,6 +119,8 @@ commands, and `--show-private-context` is still the only flag that prints privat
   diagnostics that may collect other public-safe status checks.
 
 ### Enable Auth Probes By Default
+
+Run the Codex and GitHub auth-status probes in every diagnostics run without any flag.
 
 * Good, because it could catch auth problems without another flag.
 * Good, because the report could still print only `ok`, `not-ok`, or `unknown`.

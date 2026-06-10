@@ -56,15 +56,28 @@ Trello board is created, and the `--max-agents` help text documents the range.
 
 ### Documented upper bound enforced by setup validation
 
+Setup commands validate `--max-agents` against a fixed, documented range of 1 to
+`TrelloBoardSetup.MAX_SETUP_CONCURRENT_AGENTS` (32) inside the setup request records and reject
+out-of-range values with the expected `setup_invalid_max_agents` error before any Trello request.
+The bound applies to setup inputs only; a deliberately larger value remains possible by editing
+`agent.max_concurrent_agents` in the workflow file, which the runtime only requires to be positive.
+
 - Good, because it is deterministic, testable, and needs no new flags or prompts.
 - Bad, because the specific number is a judgment call.
 
 ### Explicit confirmation flag above a safe threshold
 
+Values above a safe threshold would be accepted only when the user also passes a dedicated opt-in
+flag such as `--allow-high-max-agents`; without the flag, setup would fail with a hint naming the
+flag.
+
 - Good, because expert users could opt in to any value.
 - Bad, because it adds a rarely used positive flag, which the CLI guidelines avoid.
 
 ### Interactive confirmation prompt
+
+Setup would pause when the requested value exceeds the threshold and ask the user to confirm
+interactively before writing the value into the generated workflow.
 
 - Good, because it explains the risk at decision time.
 - Bad, because direct setup commands are intentionally non-interactive and scriptable.

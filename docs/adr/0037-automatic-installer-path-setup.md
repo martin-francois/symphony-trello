@@ -93,12 +93,19 @@ Local validation for this change included:
 
 ### Ask before editing PATH
 
+Prompt during installation and edit shell profile files or the Windows user `PATH` only after the
+user explicitly agrees.
+
 * Good, because the user sees the profile or PATH change before it happens.
 * Bad, because it adds another prompt during first-time setup.
 * Bad, because many users do not know how to evaluate the choice.
 * Bad, because it diverges from the smoother OpenClaw and Hermes installer behavior.
 
 ### Update PATH automatically by default and provide `--no-update-path`
+
+Edit the managed `PATH` block in the relevant shell profiles (or the Windows user `PATH`) by
+default during install, offer `--no-update-path` as the opt-out, and print the manual instructions
+whenever the automatic update is skipped or fails.
 
 * Good, because it optimizes for the common install path.
 * Good, because users still have an explicit opt-out for managed environments.
@@ -107,11 +114,15 @@ Local validation for this change included:
 
 ### Never update PATH
 
+Only print manual `PATH` setup instructions and never edit profile files.
+
 * Good, because the installer avoids shell profile and PATH writes.
 * Bad, because users must keep using a full binary path or edit PATH themselves.
 * Bad, because the install can appear incomplete even after success.
 
 ### Add broader shell support in the same change
+
+Extend the automatic profile editing to additional shells beyond the defaults in the same change.
 
 * Good, because more users would get automatic PATH setup.
 * Bad, because it expands the scope beyond the current installer need.
