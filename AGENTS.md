@@ -148,6 +148,23 @@ matters, and easy for another engineer to understand without asking the original
    host-specific details redacted. Reproduce locally when feasible, fix the underlying issue once
    enough information is available, add regression coverage, and update expected-vs-unexpected setup
    failure classification when the failure was misclassified.
+19. Fix bugs in this order: investigate first, reproduce second, fix third. The investigation must
+   name the exact mechanism that produces the failure - the specific code path, lock, state,
+   timing, or interaction - and why it exists, before any fix is designed. A plausible category
+   such as "flaky", "transient", "timing", "GC", "race", or "host load" is a symptom description,
+   not a root cause; for behavior in code this project owns, keep digging until the failing
+   mechanism is identified in the code, and accept an environmental explanation only after the
+   owned code has been ruled out. Then reproduce the bug and turn the reproduction into the
+   smallest regression test, confirm that the test fails for the identified mechanism and not for
+   an incidental reason, and only then implement the fix at the mechanism. A tolerance mechanism
+   such as a retry, longer timeout, or fallback is acceptable only as a documented compatibility or
+   defense-in-depth layer on top of the mechanism fix, never as a replacement for finding it.
+20. Never present a guess as a finding. Before stating a cause, behavior, or fact about this
+   system, verify it against the code, the issue evidence, a reproduction, or documentation, and
+   base decisions on what the verification showed. When something cannot be verified with
+   reasonable effort, label it explicitly as unverified and say what evidence would confirm it.
+   This applies doubly to explanations given to the user: a mechanism asserted from pattern
+   matching that later turns out wrong costs more than saying "not verified yet".
 
 ## Design Preferences
 
