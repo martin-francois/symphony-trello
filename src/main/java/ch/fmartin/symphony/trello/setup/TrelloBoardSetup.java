@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -209,8 +210,20 @@ public final class TrelloBoardSetup {
                                 + "\" for this token. Check the Trello Workspace id, or run symphony-trello list-workspaces to see the Workspaces visible to this token.",
                         e);
             }
+            if (isBoardLimitFailure(e)) {
+                throw new TrelloBoardSetupException(
+                        "setup_trello_board_limit",
+                        "Cannot create another Trello board because the selected Trello Workspace is at its board limit.",
+                        e);
+            }
             throw e;
         }
+    }
+
+    private static boolean isBoardLimitFailure(TrelloBoardSetupException e) {
+        return "trello_invalid_request".equals(e.code())
+                && e.getMessage() != null
+                && e.getMessage().toLowerCase(Locale.ROOT).contains("board limit");
     }
 
     private static boolean isAuthFailure(TrelloBoardSetupException e) {
