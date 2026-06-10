@@ -222,9 +222,13 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                 CliInputValidation.rejectWorkspaceIdReference("--workspace-id", workspaceId);
                 options.validateCliPaths();
                 options.validateRuntimeEnvTarget();
-                parent.boardSetup.preflightConnectedBoardManifest(options.manifestPath());
+                parent.boardSetup.preflightConnectedBoardManifest(
+                        options.manifestPath(parent.boardSetup.environment()));
                 parent.boardSetup.preflightRequestedServerPort(
-                        options.serverPort, options.workflowPath, options.force, options.manifestPath());
+                        options.serverPort,
+                        options.workflowPath,
+                        options.force,
+                        options.manifestPath(parent.boardSetup.environment()));
                 NewBoardRequest request = options.newBoardRequest(boardName, workspaceId);
                 TrelloBoardSetup.NewBoardResult result = parent.boardSetup.createRecommendedBoard(request, options);
                 options.persistRuntimeCredentials(parent.input, parent.out, parent.err);
@@ -233,7 +237,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                         options.runtimeEnvPath(),
                         options.workspaceRoot,
                         options.gitHubIntegration(),
-                        options.manifestPath(),
+                        options.manifestPath(parent.boardSetup.environment()),
                         parent.out);
                 printNewBoardResult(parent.out, result, options.runtimeEnvPath());
                 return 0;
@@ -302,10 +306,14 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                 CliInputValidation.rejectControlCharacters("--blocked", blockedState);
                 options.validateCliPaths();
                 options.validateRuntimeEnvTarget();
-                parent.boardSetup.preflightConnectedBoardManifest(options.manifestPath());
+                parent.boardSetup.preflightConnectedBoardManifest(
+                        options.manifestPath(parent.boardSetup.environment()));
                 parent.boardSetup.preflightWorkflowWrite(options.workflowPath, options.force);
                 parent.boardSetup.preflightRequestedServerPort(
-                        options.serverPort, options.workflowPath, options.force, options.manifestPath());
+                        options.serverPort,
+                        options.workflowPath,
+                        options.force,
+                        options.manifestPath(parent.boardSetup.environment()));
                 ImportBoardRequest request = options.importBoardRequest(
                         TrelloBoardIds.parseImportBoardSelector(boardId),
                         activeStates,
@@ -320,7 +328,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                         options.runtimeEnvPath(),
                         options.workspaceRoot,
                         options.gitHubIntegration(),
-                        options.manifestPath(),
+                        options.manifestPath(parent.boardSetup.environment()),
                         parent.out);
                 printImportBoardResult(parent.out, result, options.runtimeEnvPath());
                 return 0;
@@ -693,6 +701,9 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         @Option(names = "--env", description = "Dotenv file to save Trello credentials for the generated worker.")
         Optional<Path> envPath = Optional.empty();
 
+        @Option(names = "--manifest", description = "Connected-board manifest path.")
+        Optional<Path> manifest = Optional.empty();
+
         @Option(names = "--server-port", description = "Local HTTP status port.")
         Integer serverPort;
 
@@ -799,11 +810,10 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             }
         }
 
-        private Path manifestPath() {
-            Path workflow = workflowPath.toAbsolutePath().normalize();
-            Path parent = workflow.getParent();
-            return (parent == null ? Path.of(".").toAbsolutePath().normalize() : parent)
-                    .resolve("connected-boards.json");
+        private Path manifestPath(Map<String, String> environment) {
+            return manifest.map(path -> path.toAbsolutePath().normalize())
+                    .or(TrelloBoardSetupMain::configuredConfigDirManifestPath)
+                    .orElseGet(() -> LocalWorkerPaths.defaultManifestPath(environment));
         }
 
         private boolean shouldUseRuntimeEnvTarget() {
@@ -841,6 +851,9 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                         "--workspace-root", workspaceRoot, "--workspace-root must be an absolute path.");
             }
             CliInputValidation.rejectExistingNonDirectoryPath("--workspace-root", workspaceRoot);
+            CliInputValidation.rejectBlankPath("--manifest", manifest, "--manifest must not be empty.");
+            CliInputValidation.rejectControlCharacters("--manifest", manifest);
+            manifest.ifPresent(path -> CliInputValidation.rejectDirectoryPath("--manifest", path));
             TrelloCredentialStore.validateEnvPathOption(envPath);
             validateCodexModelOverrides();
             if (serverPort != null) {
@@ -915,6 +928,14 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
     private static Optional<String> processEnv(String name) {
         String value = System.getenv(name);
         return value == null || value.isBlank() ? Optional.empty() : Optional.of(value);
+    }
+
+    private static Optional<Path> configuredConfigDirManifestPath() {
+        String configDir = property(CONFIG_DIR_PROPERTY);
+        if (configDir == null || configDir.isBlank()) {
+            return Optional.empty();
+        }
+        return Optional.of(Path.of(configDir).toAbsolutePath().normalize().resolve("connected-boards.json"));
     }
 
     private static Path defaultWorkflowPath() {

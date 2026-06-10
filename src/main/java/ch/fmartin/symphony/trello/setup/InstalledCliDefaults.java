@@ -87,7 +87,18 @@ final class InstalledCliDefaults {
     private static List<String> boardSetup(List<String> args, InstalledPaths paths) {
         List<String> defaults = new ArrayList<>();
         addIfMissing(defaults, args, "--workspace-root", paths.workspaceRoot());
+        // Keep connected-board rows in the installed manifest even for explicit external workflow
+        // paths, so default diagnostics and board-selector lifecycle commands keep seeing them.
+        addIfMissing(defaults, args, "--manifest", paths.configDir().map(InstalledCliDefaults::installedManifest));
         return injectAfterCommand(args, defaults);
+    }
+
+    private static String installedManifest(String configDir) {
+        return Path.of(configDir)
+                .toAbsolutePath()
+                .normalize()
+                .resolve("connected-boards.json")
+                .toString();
     }
 
     private static List<String> lifecycle(List<String> args, InstalledPaths paths) {
