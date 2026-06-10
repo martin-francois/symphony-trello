@@ -24,7 +24,7 @@ final class TrelloBoardIds {
             return selector;
         }
         return boardIdFromTrelloBoardUrl(selector, InvalidBoardSelector.CONNECTED_BOARD)
-                .orElse(selector);
+                .orElseGet(() -> normalizeBareSelector(selector));
     }
 
     static String parseStoredBoardUrl(String value) {
@@ -47,7 +47,8 @@ final class TrelloBoardIds {
                 .orElseGet(() -> parseOpaqueImportBoardSelector(selector));
     }
 
-    private static String parseOpaqueImportBoardSelector(String selector) {
+    private static String parseOpaqueImportBoardSelector(String rawSelector) {
+        String selector = normalizeBareSelector(rawSelector);
         if (isUrlLike(selector) || selector.contains("/") || selector.contains("\\")) {
             throw invalidImportBoardSelector();
         }
@@ -55,6 +56,41 @@ final class TrelloBoardIds {
             throw invalidImportBoardSelector();
         }
         return selector;
+    }
+
+    /**
+     * Copied or shell-completed bare short links often gain a harmless trailing slash, query
+     * string, or fragment, such as {@code SYNTH001/}, {@code SYNTH001?utm=test}, or
+     * {@code SYNTH001#fragment}. Strip those decorations only when the remainder is a plain
+     * board id or short link, so board names containing the same characters stay untouched.
+     */
+    private static String normalizeBareSelector(String selector) {
+        String candidate = withoutQueryAndFragment(selector);
+        if (candidate.endsWith("/")) {
+            candidate = candidate.substring(0, candidate.length() - 1);
+        }
+        if (OPAQUE_BOARD_SELECTOR.matcher(candidate).matches()) {
+            return candidate;
+        }
+        return selector;
+    }
+
+    /**
+     * URI parsing decides whether {@code ?} or {@code #} starts a real query or fragment: board
+     * names that merely contain those characters, such as {@code What? Board}, are not parseable
+     * URIs and are returned unchanged.
+     */
+    private static String withoutQueryAndFragment(String selector) {
+        if (selector.indexOf('?') < 0 && selector.indexOf('#') < 0) {
+            return selector;
+        }
+        try {
+            String path = new URI(selector).getPath();
+            return path == null ? selector : path;
+        } catch (URISyntaxException e) {
+            // Not URI-shaped, so the '?' or '#' belongs to a board name; keep the selector.
+            return selector;
+        }
     }
 
     private static Optional<String> boardIdFromTrelloBoardUrl(String selector, InvalidBoardSelector invalidSelector) {
