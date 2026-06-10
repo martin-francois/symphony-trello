@@ -1248,6 +1248,12 @@ function Invoke-SetupCli {
   `$shell = if (`$env:SYMPHONY_TRELLO_WRAPPER_SHELL -eq "cmd") { "cmd" } else { "powershell" }
   `$commandPath = if (`$env:SYMPHONY_TRELLO_WRAPPER_COMMAND) { `$env:SYMPHONY_TRELLO_WRAPPER_COMMAND } else { `$PSCommandPath }
   `$env:SYMPHONY_TRELLO_COMMAND = `$commandPath
+  if (-not (Get-Command java -ErrorAction SilentlyContinue)) {
+    [Console]::Error.WriteLine("Symphony for Trello needs Java 25+ on PATH, but no java command was found.")
+    [Console]::Error.WriteLine("Install a Java 25+ JDK or rerun the installer, then try again:")
+    [Console]::Error.WriteLine("  `$commandPath")
+    exit 2
+  }
   & java "-Dsymphony.trello.app.home=`$AppHome" "-Dsymphony.trello.config.dir=`$ConfigDir" "-Dsymphony.trello.installed.app.home=`$InstalledAppHome" "-Dsymphony.trello.installed.config.dir=`$InstalledConfigDir" "-Dsymphony.trello.installed.workspace.root=`$InstalledWorkspaceRoot" "-Dsymphony.trello.installed.state.home=`$InstalledStateHome" "-Dsymphony.trello.shell=`$shell" "-Dsymphony.trello.command=`$commandPath" -cp `$classpath ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain @CliArgs
   exit `$LASTEXITCODE
 }

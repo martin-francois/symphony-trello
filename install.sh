@@ -1484,6 +1484,12 @@ exec_setup_cli() {
   export SYMPHONY_TRELLO_STATE_HOME="\$STATE_HOME"
   export SYMPHONY_TRELLO_CALLER_DIR="\$caller_dir"
   export SYMPHONY_TRELLO_DOTENV="\${SYMPHONY_TRELLO_DOTENV:-\$CONFIG_DIR/.env}"
+  if ! command -v java >/dev/null 2>&1; then
+    echo "Symphony for Trello needs Java 25+ on PATH, but no java command was found." >&2
+    echo "Install a Java 25+ JDK or rerun the installer, then try again:" >&2
+    echo "  \$BIN_DIR/symphony-trello" >&2
+    exit 2
+  fi
   exec java -Dsymphony.trello.app.home="\$APP_HOME" -Dsymphony.trello.config.dir="\$CONFIG_DIR" -Dsymphony.trello.installed.app.home="\$INSTALLED_APP_HOME" -Dsymphony.trello.installed.config.dir="\$INSTALLED_CONFIG_DIR" -Dsymphony.trello.installed.workspace.root="\$INSTALLED_WORKSPACE_ROOT" -Dsymphony.trello.installed.state.home="\$INSTALLED_STATE_HOME" -Dsymphony.trello.shell=posix -Dsymphony.trello.command="\$SYMPHONY_TRELLO_COMMAND" -cp "\$classpath" ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain "\$@"
 }
 exec_setup_cli "\$@"
