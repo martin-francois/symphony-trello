@@ -5,6 +5,7 @@ import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import com.google.common.util.concurrent.Striped;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
@@ -30,6 +31,18 @@ final class LocalWorkerManager {
     private final LocalHealthChecker healthChecker;
     private final ManagedProcessPlatform platform;
     private final LocalLogTailer logTailer;
+    private final TrelloCredentialPreflight credentialPreflight;
+
+    /**
+     * Verifies resolved Trello credentials against the configured endpoint before a worker launch.
+     * Implementations throw {@link TrelloBoardSetupException} with code {@code trello_auth_failed}
+     * or {@code trello_permission_denied} for credential problems and {@code trello_api_request}
+     * for transport problems.
+     */
+    @FunctionalInterface
+    interface TrelloCredentialPreflight {
+        void verify(URI endpoint, String apiKey, String apiToken);
+    }
 
     LocalWorkerManager(Map<String, String> environment) {
         this(environment, new WorkflowConfigEditor());
@@ -41,7 +54,8 @@ final class LocalWorkerManager {
                 workflowConfig,
                 new LocalHealthChecker(environment, workflowConfig),
                 platformForCurrentOs(),
-                new LocalLogTailer());
+                new LocalLogTailer(),
+                defaultCredentialPreflight());
     }
 
     LocalWorkerManager(
@@ -49,12 +63,20 @@ final class LocalWorkerManager {
             WorkflowConfigEditor workflowConfig,
             LocalHealthChecker healthChecker,
             ManagedProcessPlatform platform,
-            LocalLogTailer logTailer) {
+            LocalLogTailer logTailer,
+            TrelloCredentialPreflight credentialPreflight) {
         this.environment = Map.copyOf(environment);
         this.workflowConfig = workflowConfig;
         this.healthChecker = healthChecker;
         this.platform = platform;
         this.logTailer = logTailer;
+        this.credentialPreflight = credentialPreflight;
+    }
+
+    private static TrelloCredentialPreflight defaultCredentialPreflight() {
+        return (endpoint, apiKey, apiToken) -> new TrelloBoardSetup(ConnectedBoardRepository.jsonMapper())
+                .getMemberInfo(new TrelloBoardSetup.MemberInfoRequest(
+                        endpoint, new TrelloBoardSetup.TrelloCredentials(apiKey, apiToken)));
     }
 
     int start(StartWorkerRequest request, PrintStream out) throws IOException {
@@ -307,6 +329,8 @@ final class LocalWorkerManager {
                             + "\nStop that worker or change the workflow server.port, then rerun symphony-trello start.");
         }
 
+        verifyTrelloCredentialsBeforeLaunch(launchConfig, credentialUsage);
+
         List<String> command = List.of(
                 javaExecutable(),
                 "-Dsymphony.trello.managed.app_home=" + paths.appHome(),
@@ -424,6 +448,53 @@ final class LocalWorkerManager {
                 .orElse(TrelloBoardSetupException.TrelloCredentialSource.WORKFLOW_CONFIG);
     }
 
+    private void verifyTrelloCredentialsBeforeLaunch(
+            EffectiveConfig launchConfig, Optional<WorkerCredentialUsage> credentialUsage) {
+        try {
+            credentialPreflight.verify(
+                    URI.create(launchConfig.tracker().endpoint()),
+                    launchConfig.tracker().apiKey(),
+                    launchConfig.tracker().apiToken());
+        } catch (TrelloBoardSetupException e) {
+            if (isCredentialFailure(e)) {
+                throw withCredentialContext(e, credentialUsage);
+            }
+            if (isMalformedCredentialRejection(e)) {
+                // The preflight request only carries the resolved key and token, so a Trello
+                // invalid-request rejection here means the resolved credential values are
+                // malformed, not that the request shape is wrong.
+                throw withCredentialContext(
+                        new TrelloBoardSetupException(
+                                "trello_auth_failed",
+                                "Trello rejected the resolved API credentials while starting Symphony.",
+                                e),
+                        credentialUsage);
+            }
+            // Transport or transient Trello API problems must not block the launch; the worker
+            // retries them and the post-start health check still classifies startup failures.
+        }
+    }
+
+    private static boolean isCredentialFailure(TrelloBoardSetupException e) {
+        return "trello_auth_failed".equals(e.code()) || "trello_permission_denied".equals(e.code());
+    }
+
+    private static boolean isMalformedCredentialRejection(TrelloBoardSetupException e) {
+        return "trello_invalid_request".equals(e.code());
+    }
+
+    private static TrelloBoardSetupException withCredentialContext(
+            TrelloBoardSetupException exception, Optional<WorkerCredentialUsage> credentialUsage) {
+        return credentialUsage
+                .map(usage -> exception
+                        .withDotenvPath(usage.envPath())
+                        .withTrelloCredentialEnvironmentNames(
+                                usage.apiKeyEnvironment().orElse("TRELLO_API_KEY"),
+                                usage.apiTokenEnvironment().orElse("TRELLO_API_TOKEN"))
+                        .withTrelloCredentialSources(usage.apiKeySource(), usage.apiTokenSource()))
+                .orElse(exception);
+    }
+
     private void validateWorkerCredentials(WorkerCredentialUsage usage) {
         boolean hasApiKey = usage.apiKeySource() != TrelloBoardSetupException.TrelloCredentialSource.MISSING;
         boolean hasApiToken = usage.apiTokenSource() != TrelloBoardSetupException.TrelloCredentialSource.MISSING;
@@ -471,16 +542,10 @@ final class LocalWorkerManager {
             Optional<WorkerCredentialUsage> credentialUsage) {
         String logs = startupLogs(files, logOffsets, appendsToExistingLogs);
         if (logs.contains("Trello authentication failed")) {
-            TrelloBoardSetupException exception = new TrelloBoardSetupException(
-                    "trello_auth_failed", "Trello authentication failed while starting Symphony.");
-            throw credentialUsage
-                    .map(usage -> exception
-                            .withDotenvPath(usage.envPath())
-                            .withTrelloCredentialEnvironmentNames(
-                                    usage.apiKeyEnvironment().orElse("TRELLO_API_KEY"),
-                                    usage.apiTokenEnvironment().orElse("TRELLO_API_TOKEN"))
-                            .withTrelloCredentialSources(usage.apiKeySource(), usage.apiTokenSource()))
-                    .orElse(exception);
+            throw withCredentialContext(
+                    new TrelloBoardSetupException(
+                            "trello_auth_failed", "Trello authentication failed while starting Symphony."),
+                    credentialUsage);
         }
         if (logs.contains("Trello permission denied")) {
             throw new TrelloBoardSetupException(

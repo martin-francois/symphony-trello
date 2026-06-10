@@ -24,6 +24,7 @@ final class LocalWorkerManagerTestFixture {
     final LocalWorkerPaths paths;
     final ManagedProcessPlatform platform;
     final LocalHealthChecker healthChecker;
+    final LocalWorkerManager.TrelloCredentialPreflight credentialPreflight;
     final LocalWorkerManager manager;
 
     LocalWorkerManagerTestFixture(Path tempDir) {
@@ -54,8 +55,14 @@ final class LocalWorkerManagerTestFixture {
                         ConfigDefaults.DEFAULT_SERVER_PORT,
                         Optional.empty(),
                         Optional.empty()));
+        this.credentialPreflight = mock();
         this.manager = new LocalWorkerManager(
-                environment, new WorkflowConfigEditor(), healthChecker, platform, new LocalLogTailer());
+                environment,
+                new WorkflowConfigEditor(),
+                healthChecker,
+                platform,
+                new LocalLogTailer(),
+                credentialPreflight);
     }
 
     WorkerRunResult start(StartWorkerRequest request) throws Exception {
@@ -88,6 +95,17 @@ final class LocalWorkerManagerTestFixture {
         when(healthChecker.waitForSameWorkflow(board, board.serverPort())).thenReturn(sameWorkflow(board));
         when(platform.isAlive(pid)).thenReturn(true);
         when(platform.isManaged(pid, paths.appHome(), board.workflowPath())).thenReturn(true);
+    }
+
+    ManagedProcessStore.ManagedProcessFiles stubStoppedStartedWorkerWithStartupLog(
+            ConnectedBoard board, long pid, String startupLog) throws Exception {
+        ManagedProcessStore.ManagedProcessFiles files = managedFiles(board);
+        stubStoppedStartedWorker(board, pid);
+        when(platform.start(any(), eq(paths.appHome()), any(), any(), any())).thenAnswer(invocation -> {
+            Files.writeString(files.stdoutLog(), startupLog, StandardCharsets.UTF_8);
+            return new ManagedProcessHandle(pid);
+        });
+        return files;
     }
 
     void stubStoppedStartedWorker(ConnectedBoard board, long pid) throws Exception {
