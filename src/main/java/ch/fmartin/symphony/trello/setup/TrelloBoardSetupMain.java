@@ -222,6 +222,9 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                 CliInputValidation.rejectWorkspaceIdReference("--workspace-id", workspaceId);
                 options.validateCliPaths();
                 options.validateRuntimeEnvTarget();
+                if (options.workflowPathExplicit) {
+                    parent.boardSetup.preflightWorkflowWrite(options.workflowPath, options.force);
+                }
                 parent.boardSetup.preflightConnectedBoardManifest(
                         options.manifestPath(parent.boardSetup.environment()));
                 parent.boardSetup.preflightRequestedServerPort(
@@ -306,9 +309,9 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                 CliInputValidation.rejectControlCharacters("--blocked", blockedState);
                 options.validateCliPaths();
                 options.validateRuntimeEnvTarget();
+                parent.boardSetup.preflightWorkflowWrite(options.workflowPath, options.force);
                 parent.boardSetup.preflightConnectedBoardManifest(
                         options.manifestPath(parent.boardSetup.environment()));
-                parent.boardSetup.preflightWorkflowWrite(options.workflowPath, options.force);
                 parent.boardSetup.preflightRequestedServerPort(
                         options.serverPort,
                         options.workflowPath,

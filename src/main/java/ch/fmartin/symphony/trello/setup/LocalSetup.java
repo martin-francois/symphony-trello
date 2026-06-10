@@ -142,6 +142,7 @@ public final class LocalSetup {
             }
             if (options.dryRun()) {
                 rejectInvalidUnconnectedBoardSelector(connectedBoardsUnchecked(options), options);
+                preflightLocalWorkflowWrite(options);
                 printDryRun(out, options, prerequisites);
                 return 0;
             }
@@ -231,14 +232,14 @@ public final class LocalSetup {
         }
     }
 
-    private static void preflightLocalWorkflowWrite(Options options) {
-        if (options.workflowPathExplicit()
-                && !options.force()
-                && Files.exists(options.workflowPath().toAbsolutePath().normalize())) {
-            throw new TrelloBoardSetupException(
-                    "setup_workflow_exists",
-                    "Workflow file already exists: " + options.workflowPath() + "\nPass --force to replace it.");
+    private void preflightLocalWorkflowWrite(Options options) {
+        if (!options.workflowPathExplicit()) {
+            return;
         }
+        // Same workflow write preflight as direct new-board/import-board: directory paths,
+        // file-valued parents, existing files without --force, and unwritable parents are
+        // expected input errors before any dry-run plan or Trello member validation.
+        boardSetup.preflightWorkflowWrite(options.workflowPath(), options.force());
     }
 
     private static ConnectedBoardRepository connectedBoards(Options options) {
