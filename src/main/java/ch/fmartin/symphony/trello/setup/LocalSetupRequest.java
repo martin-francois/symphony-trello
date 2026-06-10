@@ -38,6 +38,9 @@ public record LocalSetupRequest(
         boolean noStart,
         URI endpoint) {
     public LocalSetupRequest {
+        // Centralized bound so programmatic construction cannot bypass the CLI option check and
+        // reach Trello lookups or local writes with an unbounded agent count.
+        TrelloBoardSetup.validateSetupMaxAgents(maxAgents);
         activeStates = List.copyOf(activeStates);
         terminalStates = List.copyOf(terminalStates);
         additionalWritableRoots = List.copyOf(additionalWritableRoots);

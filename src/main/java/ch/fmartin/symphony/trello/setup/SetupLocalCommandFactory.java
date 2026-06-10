@@ -317,7 +317,10 @@ final class SetupLocalCommandFactory {
         @Option(names = "--server-port", description = "Local HTTP status port.")
         Optional<Integer> serverPort = Optional.empty();
 
-        @Option(names = "--max-agents", description = "Maximum cards from this board that may run at once.")
+        @Option(
+                names = "--max-agents",
+                description =
+                        "Maximum cards from this board that may run at once (1-32). Each concurrent card runs its own Codex agent plus builds and tests; keep 1 until cards are safe to run in parallel.")
         Optional<Integer> maxAgents = Optional.empty();
 
         @Option(names = "--codex-model", description = "Codex model to write into generated workflows.")
@@ -390,9 +393,7 @@ final class SetupLocalCommandFactory {
                     .map(WorkspaceAccessFlow::resolveCliAccessPath)
                     .toList();
             serverPort.ifPresent(LocalPort::validateCliServerPort);
-            if (maxAgents.filter(value -> value < 1).isPresent()) {
-                throw new TrelloBoardSetupException("setup_invalid_max_agents", "--max-agents must be at least 1.");
-            }
+            maxAgents.ifPresent(TrelloBoardSetup::validateSetupMaxAgents);
             if (action == Action.SETUP && board.isPresent() && boardName.isPresent()) {
                 throw new TrelloBoardSetupException(
                         "setup_invalid_arguments", "--board and --board-name cannot be used together.");
