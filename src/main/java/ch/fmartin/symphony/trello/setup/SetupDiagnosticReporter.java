@@ -115,6 +115,7 @@ final class SetupDiagnosticReporter {
             "setup_invalid_path",
             "setup_invalid_port",
             "setup_invalid_server_port",
+            "setup_invalid_workspace_id",
             "setup_logs_missing",
             "setup_managed_port_required",
             "setup_manifest_unavailable",

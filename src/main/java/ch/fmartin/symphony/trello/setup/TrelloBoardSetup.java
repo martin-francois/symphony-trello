@@ -156,11 +156,7 @@ public final class TrelloBoardSetup {
         ensureWorkflowWritable(workflowPath, request.force());
         int serverPort = resolveServerPort(workflowPath, request.serverPort(), request.force(), request.envPath());
         String workspaceId = resolveWorkspaceId(request);
-        Map<String, Object> board = postMap(
-                request.endpoint(),
-                "boards/",
-                createBoardQuery(request.boardName(), workspaceId),
-                request.credentials());
+        Map<String, Object> board = createBoard(request, workspaceId);
         String boardId = requiredString(board, "id");
         String boardKey = boardKey(board);
         String boardUrl = string(board.get("url"));
@@ -196,6 +192,43 @@ public final class TrelloBoardSetup {
 
         return new NewBoardResult(
                 boardId, boardKey, request.boardName(), boardUrl, createdLists, workflowPath, serverPort);
+    }
+
+    private Map<String, Object> createBoard(NewBoardRequest request, String workspaceId) {
+        try {
+            return postMap(
+                    request.endpoint(),
+                    "boards/",
+                    createBoardQuery(request.boardName(), workspaceId),
+                    request.credentials());
+        } catch (TrelloBoardSetupException e) {
+            if (!blank(request.workspaceId()) && isAuthFailure(e) && credentialsUsable(request)) {
+                throw new TrelloBoardSetupException(
+                        "setup_invalid_workspace_id",
+                        "Trello rejected the workspace id \"" + request.workspaceId()
+                                + "\" for this token. Check the Trello Workspace id, or run symphony-trello list-workspaces to see the Workspaces visible to this token.",
+                        e);
+            }
+            throw e;
+        }
+    }
+
+    private static boolean isAuthFailure(TrelloBoardSetupException e) {
+        return "trello_auth_failed".equals(e.code()) || "trello_permission_denied".equals(e.code());
+    }
+
+    /**
+     * Distinguishes an invalid workspace id from genuinely bad credentials: when the same
+     * credentials can read the member profile, the earlier authorization failure was about the
+     * requested Workspace, not the API key or token.
+     */
+    private boolean credentialsUsable(NewBoardRequest request) {
+        try {
+            getMemberInfo(new MemberInfoRequest(request.endpoint(), request.credentials()));
+            return true;
+        } catch (TrelloBoardSetupException ignored) {
+            return false;
+        }
     }
 
     private String resolveWorkspaceId(NewBoardRequest request) {
