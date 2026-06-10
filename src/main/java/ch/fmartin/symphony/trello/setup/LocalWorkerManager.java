@@ -869,7 +869,10 @@ final class LocalWorkerManager {
             return;
         }
         if (!platform.isManaged(pid, paths.appHome(), board.workflowPath())) {
+            // The process is not ours, but the pid file is managed state pointing at a foreign
+            // process; remove it so repeated stops do not keep reporting the same stale pid.
             out.println("Skipped unmanaged stale pid " + files.displayName() + " pid=" + pid);
+            removeStalePidFile(store, files.pidFile(), out);
             return;
         }
         stopPid(store, files, pid);
@@ -957,9 +960,29 @@ final class LocalWorkerManager {
                 out.println("Stopped " + name);
             } else if (pid != null && platform.isAlive(pid)) {
                 out.println("Skipped unmanaged stale pid " + name + " pid=" + pid);
+                removeStalePidFile(store, pidFile, out);
             } else {
                 store.deletePid(pidFile);
             }
+        }
+    }
+
+    /**
+     * Refusing to kill the unrelated process is the safety contract; the pid file cleanup is only
+     * best effort on top. A failed or already-done removal must say so instead of claiming the
+     * file was removed.
+     */
+    private void removeStalePidFile(ManagedProcessStore store, Path pidFile, PrintStream out) {
+        try {
+            if (store.deletePid(pidFile)) {
+                out.println("Removed the stale managed pid file. The unrelated process was not stopped.");
+            } else {
+                out.println("The stale managed pid file was already removed. The unrelated process was not stopped.");
+            }
+        } catch (IOException e) {
+            out.println("Could not remove the stale managed pid file: "
+                    + pidFile.toAbsolutePath().normalize());
+            out.println("Remove it manually, then rerun stop. The unrelated process was not stopped.");
         }
     }
 

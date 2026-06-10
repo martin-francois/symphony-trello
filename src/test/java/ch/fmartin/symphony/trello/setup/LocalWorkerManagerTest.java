@@ -2,6 +2,8 @@ package ch.fmartin.symphony.trello.setup;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -2450,10 +2452,78 @@ final class LocalWorkerManagerTest {
                 .thenReturn(false);
 
         // when
-        WorkerRunResult result = fixture.stop(fixture.stopRequest("Queue"));
+        WorkerRunResult firstStop = fixture.stop(fixture.stopRequest("Queue"));
+        WorkerRunResult secondStop = fixture.stop(fixture.stopRequest("Queue"));
 
         // then
-        result.assertSuccess().stdoutContains("Skipped unmanaged stale pid");
+        firstStop.assertSuccess().stdoutContains("Skipped unmanaged stale pid", "Removed the stale managed pid file.");
+        secondStop.assertSuccess().stdoutDoesNotContain("Skipped unmanaged stale pid");
+        ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
+        assertThat(store.readPid(store.files(board.workflowPath()).pidFile())).isNull();
+        verify(fixture.platform, never()).stop(anyLong(), any(Duration.class), any(Duration.class));
+    }
+
+    @Test
+    void stopReportsFailedStalePidCleanupActionablyWithoutKillingTheProcess() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
+        Path pidFile = store.files(board.workflowPath()).pidFile();
+        store.writePid(pidFile, 42);
+        when(fixture.platform.isAlive(42L)).thenReturn(true);
+        when(fixture.platform.isManaged(42L, fixture.paths.appHome(), board.workflowPath()))
+                .thenReturn(false);
+        // Stop opens the process lock file in the same directory, so it must exist before the
+        // directory becomes read-only. Then only the pid file delete fails; reads still work.
+        Files.writeString(store.files(board.workflowPath()).processLockFile(), "", StandardCharsets.UTF_8);
+        Path stateHome = fixture.paths.stateHome();
+        assumeTrue(stateHome.toFile().setWritable(false));
+        assumeFalse(Files.isWritable(stateHome));
+
+        // when
+        WorkerRunResult result;
+        try {
+            result = fixture.stop(fixture.stopRequest("Queue"));
+        } finally {
+            assertThat(stateHome.toFile().setWritable(true)).isTrue();
+        }
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "Skipped unmanaged stale pid",
+                        "Could not remove the stale managed pid file:",
+                        "Remove it manually, then rerun stop. The unrelated process was not stopped.")
+                .stdoutDoesNotContain("Removed the stale managed pid file.");
+        verify(fixture.platform, never()).stop(anyLong(), any(Duration.class), any(Duration.class));
+        assertThat(pidFile).exists();
+    }
+
+    @Test
+    void stopAllTreatsConcurrentlyRemovedStalePidFileAsAlreadyCleaned() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
+        Path workflow = fixture.paths.configDir().resolve("WORKFLOW.vanishing.md");
+        Path pidFile = store.files(workflow).pidFile();
+        store.writePid(pidFile, 42);
+        when(fixture.platform.isAlive(42L)).thenAnswer(invocation -> {
+            Files.deleteIfExists(pidFile);
+            return true;
+        });
+        when(fixture.platform.isManaged(42L, fixture.paths.appHome())).thenReturn(false);
+
+        // when
+        WorkerRunResult result = fixture.stop(fixture.stopAllRequest());
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "Skipped unmanaged stale pid WORKFLOW.vanishing.md",
+                        "The stale managed pid file was already removed.")
+                .stdoutDoesNotContain("Could not remove the stale managed pid file");
         verify(fixture.platform, never()).stop(anyLong(), any(Duration.class), any(Duration.class));
     }
 

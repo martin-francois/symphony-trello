@@ -58,8 +58,8 @@ final class ManagedProcessStore {
         Files.writeString(pidFile, Long.toString(pid), StandardCharsets.US_ASCII);
     }
 
-    void deletePid(Path pidFile) throws IOException {
-        Files.deleteIfExists(pidFile);
+    boolean deletePid(Path pidFile) throws IOException {
+        return Files.deleteIfExists(pidFile);
     }
 
     /**
