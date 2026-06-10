@@ -356,10 +356,26 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         @Option(names = "--endpoint", description = "Trello API endpoint.")
         URI endpoint = TrelloBoardSetup.DEFAULT_ENDPOINT;
 
+        @Option(names = "--env", description = "Dotenv file with Trello credentials. Defaults to the installed .env.")
+        Optional<Path> envPath = Optional.empty();
+
+        @Option(
+                names = "--config-dir",
+                description = "Directory whose .env file provides Trello credentials. --env wins when both are set.")
+        Optional<Path> configDir = Optional.empty();
+
         @Override
         public Integer call() {
+            TrelloCredentialStore.validateEnvPathOption(envPath);
+            CliInputValidation.rejectBlankPath("--config-dir", configDir, "--config-dir must not be empty.");
+            CliInputValidation.rejectControlCharacters("--config-dir", configDir);
+            CliInputValidation.rejectExistingNonDirectoryPath("--config-dir", configDir);
+            Path dotenv = envPath.or(() -> configDir.map(dir -> dir.resolve(".env")))
+                    .map(path -> path.toAbsolutePath().normalize())
+                    .orElseGet(LocalEnvironment::defaultDotenv);
             parent.boardSetup.listWorkspaces(
-                    new WorkspaceListRequest(TrelloApiEndpoint.normalize(endpoint), auth.credentials()), parent.out);
+                    new WorkspaceListRequest(TrelloApiEndpoint.normalize(endpoint), auth.credentials(dotenv)),
+                    parent.out);
             return 0;
         }
     }
