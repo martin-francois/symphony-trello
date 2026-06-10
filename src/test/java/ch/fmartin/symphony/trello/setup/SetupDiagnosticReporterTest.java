@@ -157,32 +157,17 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
-    void selectedDiagnosticsProbesOnlyCurrentWorkflowPortAfterPortChange() throws Exception {
+    void diagnosticsReportsDirectoryManifestPathAsNotAFile() throws Exception {
         // given
-        Path configDir = tempDir.resolve("reused-port-config");
+        Path configDir = tempDir.resolve("manifest-dir-config");
         Path stateHome = tempDir.resolve("state");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Path workflow = configDir.resolve("WORKFLOW.reused.md");
-        Files.writeString(workflow, workflowWithPort(20991), StandardCharsets.UTF_8);
-        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
-                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
-                        "000000000000000000000001",
-                        "SYNTH001",
-                        "Reused Board",
-                        "https://trello.com/b/SYNTH001/reused-board",
-                        workflow,
-                        configDir.resolve(".env"),
-                        tempDir.resolve("workspaces"),
-                        20990,
-                        false,
-                        List.of(),
-                        false))));
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
         String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.of("Reused Board"),
+                Optional.empty(),
                 Optional.empty(),
                 false,
                 false,
@@ -190,13 +175,44 @@ final class SetupDiagnosticReporterTest {
                 Optional.of(configDir),
                 Optional.empty(),
                 Optional.of(stateHome),
-                Optional.empty(),
+                Optional.of(configDir),
                 Optional.empty()));
 
         // then
         assertThat(report)
-                .contains("http://127.0.0.1:20991/api/v1/local-status")
-                .doesNotContain("http://127.0.0.1:20990/");
+                .contains(
+                        "- **manifest_status:** not_a_file",
+                        "The connected-board manifest path exists but is not a regular file.")
+                .doesNotContain("No connected-board manifest was found.");
+    }
+
+    @Test
+    void diagnosticsRejectsFileValuedStateHomeAsExpectedInput() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("state-file-config");
+        Path stateHomeFile = tempDir.resolve("state-file");
+        Files.createDirectories(configDir);
+        Files.writeString(stateHomeFile, "plain", StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        Throwable thrown =
+                catchThrowable(() -> reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                        Optional.empty(),
+                        Optional.empty(),
+                        false,
+                        false,
+                        Optional.empty(),
+                        Optional.of(configDir),
+                        Optional.empty(),
+                        Optional.of(stateHomeFile),
+                        Optional.empty(),
+                        Optional.empty())));
+
+        // then
+        assertThat(thrown)
+                .isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> assertThat(failure.getMessage())
+                        .contains("--state-home must be a directory."));
     }
 
     @Test
@@ -260,6 +276,49 @@ final class SetupDiagnosticReporterTest {
         assertThat(report)
                 .as("exhausted same-second names degrade to no report instead of looping")
                 .isEmpty();
+    }
+
+    @Test
+    void selectedDiagnosticsProbesOnlyCurrentWorkflowPortAfterPortChange() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("reused-port-config");
+        Path stateHome = tempDir.resolve("state");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Path workflow = configDir.resolve("WORKFLOW.reused.md");
+        Files.writeString(workflow, workflowWithPort(20991), StandardCharsets.UTF_8);
+        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
+                        "000000000000000000000001",
+                        "SYNTH001",
+                        "Reused Board",
+                        "https://trello.com/b/SYNTH001/reused-board",
+                        workflow,
+                        configDir.resolve(".env"),
+                        tempDir.resolve("workspaces"),
+                        20990,
+                        false,
+                        List.of(),
+                        false))));
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.of("Reused Board"),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.empty(),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.empty()));
+
+        // then
+        assertThat(report)
+                .contains("http://127.0.0.1:20991/api/v1/local-status")
+                .doesNotContain("http://127.0.0.1:20990/");
     }
 
     @Test
