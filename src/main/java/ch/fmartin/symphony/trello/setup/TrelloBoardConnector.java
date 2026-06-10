@@ -190,7 +190,8 @@ final class TrelloBoardConnector {
             List<TrelloBoardSetup.WorkspaceInfo> workspaces, Terminal terminal, boolean nonInteractive)
             throws IOException {
         if (workspaces.size() == 1) {
-            terminal.info("  OK  Trello Workspace: \"" + workspaces.getFirst().displayName() + "\"");
+            terminal.info("  OK  Trello Workspace: "
+                    + DisplayNames.quotedName(workspaces.getFirst().displayName()));
             return workspaces.getFirst().id();
         }
         if (workspaces.isEmpty()) {
@@ -201,7 +202,8 @@ final class TrelloBoardConnector {
         terminal.info("");
         terminal.info("Choose Trello Workspace:");
         for (int i = 0; i < workspaces.size(); i++) {
-            terminal.info("  " + (i + 1) + ". \"" + workspaces.get(i).displayName() + "\"");
+            terminal.info("  " + (i + 1) + ". "
+                    + DisplayNames.quotedName(workspaces.get(i).displayName()));
         }
         if (nonInteractive) {
             throw new TrelloBoardSetupException(
@@ -243,7 +245,7 @@ final class TrelloBoardConnector {
         if (!options.nonInteractive()) {
             terminal.info("");
             terminal.info("Existing board lists");
-            terminal.info("Open lists: " + String.join(", ", openListNames));
+            terminal.info("Open lists: " + DisplayNames.quotedList(openListNames));
             if (activeStates.isEmpty()) {
                 activeStates = promptCsv(terminal, "Queued-work list names, comma-separated: ");
             }

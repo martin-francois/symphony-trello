@@ -208,10 +208,11 @@ public final class LocalSetup {
 
             out.println();
             out.println("Trello board");
-            out.println("  OK  Board connected: \"" + result.boardName() + "\"");
+            out.println("  OK  Board connected: " + DisplayNames.quotedName(result.boardName()));
             out.println("  OK  Board lists: " + quoted(result.lists()));
             out.println("  OK  Workflow written: " + result.workflowPath());
-            out.println("  OK  Local server port selected for \"" + result.boardName() + "\": " + result.serverPort());
+            out.println("  OK  Local server port selected for " + DisplayNames.quotedName(result.boardName()) + ": "
+                    + result.serverPort());
             printWorkspaceAndSandboxSummary(options, out);
             startBoard(options, connectedBoard, out);
             out.println();
@@ -303,7 +304,8 @@ public final class LocalSetup {
                 }
             }
             if (board.githubEnabled() && !prerequisites.githubAuth().available()) {
-                out.println("  WARN    GitHub CLI is not authenticated for \"" + board.boardName() + "\"");
+                out.println(
+                        "  WARN    GitHub CLI is not authenticated for " + DisplayNames.quotedName(board.boardName()));
                 ok = false;
             }
             if (localValidation.envUsable() && !checkTrelloCredentials(options, board, out)) {
@@ -334,34 +336,36 @@ public final class LocalSetup {
         List<String> warnings = new ArrayList<>();
         boolean envUsable = true;
         if (board.workflowPath() == null) {
-            warnings.add("Workflow path for \"" + board.boardName() + "\" is missing from connected-boards.json.");
+            warnings.add("Workflow path for " + DisplayNames.quotedName(board.boardName())
+                    + " is missing from connected-boards.json.");
         } else if (Files.isDirectory(board.workflowPath())) {
-            warnings.add("Workflow path for \"" + board.boardName()
-                    + "\" must be a workflow file, but it is a directory: " + board.workflowPath());
+            warnings.add("Workflow path for " + DisplayNames.quotedName(board.boardName())
+                    + " must be a workflow file, but it is a directory: " + board.workflowPath());
         }
         if (board.workspaceRoot() == null) {
-            warnings.add("Workspace root for \"" + board.boardName() + "\" is missing from connected-boards.json.");
+            warnings.add("Workspace root for " + DisplayNames.quotedName(board.boardName())
+                    + " is missing from connected-boards.json.");
         } else if (Files.exists(board.workspaceRoot()) && !Files.isDirectory(board.workspaceRoot())) {
-            warnings.add(
-                    "Workspace root for \"" + board.boardName() + "\" must be a directory: " + board.workspaceRoot());
+            warnings.add("Workspace root for " + DisplayNames.quotedName(board.boardName()) + " must be a directory: "
+                    + board.workspaceRoot());
         }
         if (board.serverPort() < 1 || board.serverPort() > 65535) {
-            warnings.add("Connected board \"" + board.boardName() + "\" has invalid server port " + board.serverPort()
-                    + "; expected 1 to 65535.");
+            warnings.add("Connected board " + DisplayNames.quotedName(board.boardName()) + " has invalid server port "
+                    + board.serverPort() + "; expected 1 to 65535.");
         }
         if (board.envPath() == null) {
-            warnings.add(
-                    "Trello credential path for \"" + board.boardName() + "\" is missing from connected-boards.json.");
+            warnings.add("Trello credential path for " + DisplayNames.quotedName(board.boardName())
+                    + " is missing from connected-boards.json.");
             envUsable = false;
         } else if (Files.isDirectory(board.envPath())) {
-            warnings.add("Trello credential path for \"" + board.boardName()
-                    + "\" must be a dotenv file, but it is a directory: " + board.envPath());
+            warnings.add("Trello credential path for " + DisplayNames.quotedName(board.boardName())
+                    + " must be a dotenv file, but it is a directory: " + board.envPath());
             envUsable = false;
         }
         for (Path root : board.additionalWritableRoots()) {
             if (!root.isAbsolute()) {
-                warnings.add(
-                        "Additional writable root for \"" + board.boardName() + "\" must be an absolute path: " + root);
+                warnings.add("Additional writable root for " + DisplayNames.quotedName(board.boardName())
+                        + " must be an absolute path: " + root);
             }
         }
         return new ConnectedBoardLocalValidation(List.copyOf(warnings), envUsable);
@@ -374,23 +378,23 @@ public final class LocalSetup {
             BoardHealth health,
             PrintStream out) {
         if (health.kind() == BoardHealthKind.SAME_WORKFLOW) {
-            out.println("  OK    \"" + board.boardName() + "\" local server: "
+            out.println("  OK    " + DisplayNames.quotedName(board.boardName()) + " local server: "
                     + LocalHealthChecker.localServerUrl(health.port()) + " (already running)");
             return;
         }
         if (health.kind() == BoardHealthKind.STOPPED) {
-            out.println("  WARN  \"" + board.boardName() + "\" local server is not running");
+            out.println("  WARN  " + DisplayNames.quotedName(board.boardName()) + " local server is not running");
             out.println("        Start: " + options.command() + " start --env " + board.envPath() + " --workflow "
                     + board.workflowPath());
             return;
         }
         if (health.kind() == BoardHealthKind.PORT_USED) {
-            out.println("  WARN  \"" + board.boardName() + "\" configured port " + health.port()
+            out.println("  WARN  " + DisplayNames.quotedName(board.boardName()) + " configured port " + health.port()
                     + " is in use by another process");
             out.println("        Suggested fix: " + repairPortCommand(options, manifest, board));
             return;
         }
-        out.println("  WARN  \"" + board.boardName() + "\" local server: "
+        out.println("  WARN  " + DisplayNames.quotedName(board.boardName()) + " local server: "
                 + LocalHealthChecker.localServerUrl(health.port()) + " (wrong Symphony workflow or board)");
         out.println("        Expected workflow: "
                 + board.workflowPath().toAbsolutePath().normalize());
@@ -408,13 +412,36 @@ public final class LocalSetup {
         long sameNameCount = manifest.boards().stream()
                 .filter(candidate -> equalsIgnoreCase(candidate.boardName(), board.boardName()))
                 .count();
-        if (sameNameCount <= 1) {
+        if (sameNameCount <= 1 && commandSafeSelector(board.boardName())) {
             return board.boardName();
         }
-        if (!blank(board.boardKey())) {
+        if (!blank(board.boardKey()) && commandSafeSelector(board.boardKey())) {
             return board.boardKey();
         }
         return board.boardId();
+    }
+
+    /**
+     * The suggested repair command wraps the selector in plain double quotes, where {@code $} and
+     * backticks still expand in POSIX shells and PowerShell, {@code !} still triggers history
+     * expansion in interactive bash, paired {@code %} still expands in cmd, backslashes and
+     * embedded quotes break the quoting itself, and the CLI rejects control characters in its own
+     * arguments. A board name containing any of those can never become a copyable runnable
+     * suggestion, so the opaque board key or id selects the same board safely instead. All other
+     * characters, including spaces and the remaining punctuation, are literal inside double quotes
+     * in POSIX shells, PowerShell, and cmd.
+     */
+    private static boolean commandSafeSelector(String value) {
+        return value != null
+                && !value.isBlank()
+                && value.chars()
+                        .noneMatch(c -> c == '"'
+                                || c == '\\'
+                                || c == '$'
+                                || c == '`'
+                                || c == '!'
+                                || c == '%'
+                                || Character.isISOControl(c));
     }
 
     private boolean checkTrelloCredentials(Options options, ConnectedBoard board, PrintStream out) {
@@ -422,17 +449,18 @@ public final class LocalSetup {
             CredentialSelection credentials = credentialStore.loadExisting(options, board.envPath());
             if (TrelloCredentialStore.blank(credentials.apiKeyValue())
                     || TrelloCredentialStore.blank(credentials.apiTokenValue())) {
-                out.println("  WARN    Trello credentials are missing for \"" + board.boardName() + "\": "
-                        + board.envPath());
+                out.println("  WARN    Trello credentials are missing for " + DisplayNames.quotedName(board.boardName())
+                        + ": " + board.envPath());
                 return false;
             }
             TrelloBoardSetup.MemberInfo member = boardSetup.getMemberInfo(
                     new TrelloBoardSetup.MemberInfoRequest(options.endpoint(), credentials.credentials()));
-            out.println("  OK      Trello credentials for \"" + board.boardName() + "\" as " + member.displayName());
+            out.println("  OK      Trello credentials for " + DisplayNames.quotedName(board.boardName()) + " as "
+                    + member.displayName());
             return true;
         } catch (RuntimeException e) {
-            out.println(
-                    "  WARN    Trello credential check failed for \"" + board.boardName() + "\": " + e.getMessage());
+            out.println("  WARN    Trello credential check failed for " + DisplayNames.quotedName(board.boardName())
+                    + ": " + e.getMessage());
             return false;
         }
     }
@@ -470,9 +498,8 @@ public final class LocalSetup {
         if (reconciledBoard.serverPort() == board.serverPort()
                 && !serverPortReservedByOtherBoard(manifest, reconciledBoard)
                 && (health.kind() == BoardHealthKind.SAME_WORKFLOW || health.kind() == BoardHealthKind.STOPPED)) {
-            out.println("  OK      No port repair needed. \"" + reconciledBoard.boardName()
-                    + "\" is already configured for an available port: http://127.0.0.1:"
-                    + reconciledBoard.serverPort());
+            out.println("  OK      No port repair needed. " + DisplayNames.quotedName(reconciledBoard.boardName())
+                    + " is already configured for an available port: http://127.0.0.1:" + reconciledBoard.serverPort());
             return 0;
         }
         boolean wasRunning = health.kind() == BoardHealthKind.SAME_WORKFLOW;
@@ -480,9 +507,10 @@ public final class LocalSetup {
         if (options.dryRun()) {
             out.println();
             out.println("Dry run");
-            out.println("  WOULD   update \"" + reconciledBoard.boardName() + "\" to use http://127.0.0.1:" + port);
+            out.println("  WOULD   update " + DisplayNames.quotedName(reconciledBoard.boardName())
+                    + " to use http://127.0.0.1:" + port);
             if (wasRunning) {
-                out.println("  WOULD   restart Symphony for \"" + reconciledBoard.boardName() + "\"");
+                out.println("  WOULD   restart Symphony for " + DisplayNames.quotedName(reconciledBoard.boardName()));
             } else {
                 out.println("          Restart: " + options.command() + " start --env " + reconciledBoard.envPath()
                         + " --workflow " + reconciledBoard.workflowPath());
@@ -495,7 +523,8 @@ public final class LocalSetup {
         }
         workflowConfig.updateServerPort(reconciledBoard.workflowPath(), port);
         boards.save(manifest.withBoard(reconciledBoard.withServerPort(port)));
-        out.println("  OK      Updated \"" + reconciledBoard.boardName() + "\" to use http://127.0.0.1:" + port);
+        out.println("  OK      Updated " + DisplayNames.quotedName(reconciledBoard.boardName())
+                + " to use http://127.0.0.1:" + port);
         if (wasRunning) {
             startBoard(options, reconciledBoard.withServerPort(port), out);
         } else {
@@ -526,14 +555,15 @@ public final class LocalSetup {
         if (options.dryRun()) {
             out.println();
             out.println("Dry run");
-            out.println("  WOULD   update connected-board manifest for \"" + staleBoard.boardName()
-                    + "\" to use http://127.0.0.1:" + reconciledBoard.serverPort());
+            out.println(
+                    "  WOULD   update connected-board manifest for " + DisplayNames.quotedName(staleBoard.boardName())
+                            + " to use http://127.0.0.1:" + reconciledBoard.serverPort());
             out.println("          Workflow and running Symphony worker already use this port.");
             return 0;
         }
         boards.save(manifest.withBoard(reconciledBoard));
-        out.println("  OK      Updated connected-board manifest for \"" + staleBoard.boardName()
-                + "\" to use http://127.0.0.1:" + reconciledBoard.serverPort());
+        out.println("  OK      Updated connected-board manifest for " + DisplayNames.quotedName(staleBoard.boardName())
+                + " to use http://127.0.0.1:" + reconciledBoard.serverPort());
         return 0;
     }
 
@@ -691,7 +721,8 @@ public final class LocalSetup {
         out.println("Trello boards configured for Symphony:");
         for (int i = 0; i < manifest.boards().size(); i++) {
             ConnectedBoard board = manifest.boards().get(i);
-            out.println("  " + (i + 1) + ". \"" + board.boardName() + "\"     " + board.boardUrl());
+            out.println(
+                    "  " + (i + 1) + ". " + DisplayNames.quotedName(board.boardName()) + "     " + board.boardUrl());
         }
         out.println();
         out.println("What do you want to do?");
@@ -867,7 +898,8 @@ public final class LocalSetup {
         out.println();
         out.println("Choose the Trello board to update:");
         for (int i = 0; i < manifest.boards().size(); i++) {
-            out.println("  " + (i + 1) + ". \"" + manifest.boards().get(i).boardName() + "\"");
+            out.println("  " + (i + 1) + ". "
+                    + DisplayNames.quotedName(manifest.boards().get(i).boardName()));
         }
         return manifest.boards()
                 .get(PromptSupport.requiredChoice(
@@ -959,7 +991,9 @@ public final class LocalSetup {
         ConnectedBoard board = selectNonGithubBoardForUpgrade(options, manifest, terminal);
         if (!options.nonInteractive()
                 && !PromptSupport.yesDefaultTrue(
-                        terminal, "Configure GitHub PR handling for \"" + board.boardName() + "\"? [Y/n] ")) {
+                        terminal,
+                        "Configure GitHub PR handling for " + DisplayNames.quotedName(board.boardName())
+                                + "? [Y/n] ")) {
             out.println("GitHub upgrade cancelled.");
             return;
         }
@@ -1036,7 +1070,7 @@ public final class LocalSetup {
                 access.dangerFullAccess());
         connectedBoards(options).save(manifest.withBoard(upgraded));
         out.println();
-        out.println("  OK  GitHub workflow enabled for \"" + board.boardName() + "\"");
+        out.println("  OK  GitHub workflow enabled for " + DisplayNames.quotedName(board.boardName()));
         if (previousHealth.kind() == BoardHealthKind.SAME_WORKFLOW && !options.noStart()) {
             stopBoard(options, board.boardName(), board.workflowPath());
             startBoard(options, upgraded, out);
@@ -1086,7 +1120,8 @@ public final class LocalSetup {
         out.println();
         out.println("Choose the Trello board to configure for GitHub:");
         for (int i = 0; i < candidates.size(); i++) {
-            out.println("  " + (i + 1) + ". \"" + candidates.get(i).boardName() + "\"");
+            out.println("  " + (i + 1) + ". "
+                    + DisplayNames.quotedName(candidates.get(i).boardName()));
         }
         return candidates.get(PromptSupport.requiredChoice(
                         terminal.readLine("Board: "),
@@ -1141,7 +1176,7 @@ public final class LocalSetup {
         ConnectedBoard removed = manifest.boards().get(selected - 1);
         stopBoard(options, removed.boardName(), removed.workflowPath());
         connectedBoards(options).save(manifest.withoutBoard(removed.boardId()));
-        out.println("  OK  Symphony will stop managing \"" + removed.boardName() + "\"");
+        out.println("  OK  Symphony will stop managing " + DisplayNames.quotedName(removed.boardName()));
         out.println("  Trello board unchanged: " + removed.boardUrl());
     }
 
@@ -1166,10 +1201,11 @@ public final class LocalSetup {
         } catch (IOException e) {
             throw new TrelloBoardSetupException(
                     "setup_start_failed",
-                    "Could not start Symphony for \"" + board.boardName() + "\": " + e.getMessage(),
+                    "Could not start Symphony for " + DisplayNames.quotedName(board.boardName()) + ": "
+                            + e.getMessage(),
                     e);
         }
-        out.println("  OK  Symphony is connected to \"" + board.boardName() + "\"");
+        out.println("  OK  Symphony is connected to " + DisplayNames.quotedName(board.boardName()));
     }
 
     private void printMiniTutorial(PrintStream out, ConnectedBoardManifest manifest) {
@@ -1211,7 +1247,9 @@ public final class LocalSetup {
             }
         } catch (IOException e) {
             throw new TrelloBoardSetupException(
-                    "setup_stop_failed", "Could not stop Symphony for \"" + boardName + "\": " + e.getMessage(), e);
+                    "setup_stop_failed",
+                    "Could not stop Symphony for " + DisplayNames.quotedName(boardName) + ": " + e.getMessage(),
+                    e);
         }
     }
 
@@ -1226,14 +1264,13 @@ public final class LocalSetup {
         } catch (IOException e) {
             throw new TrelloBoardSetupException(
                     "setup_worker_state_unreadable",
-                    "Could not inspect managed worker state for \"" + board.boardName() + "\": " + e.getMessage(),
+                    "Could not inspect managed worker state for " + DisplayNames.quotedName(board.boardName()) + ": "
+                            + e.getMessage(),
                     e);
         }
         throw new TrelloBoardSetupException(
                 "setup_worker_untracked",
-                "Symphony is already running for \""
-                        + board.boardName()
-                        + "\" at "
+                "Symphony is already running for " + DisplayNames.quotedName(board.boardName()) + " at "
                         + LocalHealthChecker.localServerUrl(health.port())
                         + ", but this checkout has no managed pid for it. Stop that process manually, then rerun the setup command so Symphony can apply the workflow change and restart it.");
     }
@@ -1341,7 +1378,7 @@ public final class LocalSetup {
         String queueTarget = tutorialQueueTarget(listConfiguration);
         String runningText = listConfiguration
                 .inProgressState()
-                .map(state -> "moves it to " + code(state) + ", runs Codex")
+                .map(state -> "moves it to " + DisplayNames.quotedName(state) + ", runs Codex")
                 .orElse("runs Codex from that Trello list");
         String doneTarget = tutorialDoneTarget(listConfiguration);
         out.println("You're good to go - your Trello board is now a queue for Codex work.");
@@ -1387,17 +1424,22 @@ public final class LocalSetup {
                 .filter(state -> !state.equalsIgnoreCase(TrelloBoardSetup.RECOMMENDED_MERGING_STATE))
                 .findFirst()
                 .or(() -> listConfiguration.activeStates().stream().findFirst())
-                .map(LocalSetup::code)
+                .map(DisplayNames::quotedName)
                 .orElse("a configured active Trello list");
     }
 
     private static String tutorialDoneTarget(WorkflowListConfiguration listConfiguration) {
         return listConfiguration.terminalStates().stream()
                 .findFirst()
-                .map(LocalSetup::code)
+                .map(DisplayNames::quotedName)
                 .orElse("a completed Trello list outside the active queue");
     }
 
+    /**
+     * Backtick code formatting for fixed literal tokens only. External Trello names render
+     * through {@link DisplayNames#quotedName(String)} instead, because they can contain
+     * backticks and control characters that would break the backtick wrapping.
+     */
     private static String code(String value) {
         return "`" + value + "`";
     }
@@ -1407,10 +1449,7 @@ public final class LocalSetup {
     }
 
     private static String quoted(List<String> values) {
-        return values.stream()
-                .map(value -> "\"" + value + "\"")
-                .reduce((left, right) -> left + ", " + right)
-                .orElse("");
+        return DisplayNames.quotedList(values);
     }
 
     private static int parseChoice(String answer, int defaultChoice, int maxChoice) {

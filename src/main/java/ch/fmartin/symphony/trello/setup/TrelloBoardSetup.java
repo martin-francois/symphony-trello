@@ -372,7 +372,7 @@ public final class TrelloBoardSetup {
             throw new TrelloBoardSetupException(
                     "setup_active_state_required",
                     "No active list was provided and the board has no 'Ready for Codex' list. Pass --active with the list Codex should poll. Open lists: "
-                            + String.join(", ", openListNames));
+                            + DisplayNames.quotedList(openListNames));
         }
 
         List<String> terminalStates =
@@ -1655,30 +1655,30 @@ public final class TrelloBoardSetup {
             return """
                     When the work is ready for human review, update the workpad with the final summary and validation evidence, leave the workspace in a reviewable state, and summarize the status in the Codex response.
                     If the work is blocked or unsafe to hand off, update the workpad with the blocker, call trello_add_comment with the blocker, then call
-                    trello_move_current_card with list_name "%s".
+                    trello_move_current_card with list_name %s.
                     If a human returns a reviewed card to an active list, reread the card, the Trello comments rendered above, and linked PR feedback when available before changing code again.
                     A Merging list, when configured, is a human approval signal for a landing flow; do not merge from human review. %s"""
-                    .formatted(blockedDestination, FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION);
+                    .formatted(quote(blockedDestination), FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION);
         }
         if (blank(blockedState)) {
             return """
                     When the work is ready for human review, update the workpad with the final summary and validation evidence, call trello_add_comment with a concise summary and
-                    verification notes, then call trello_move_current_card with list_name "%s". If the work is
+                    verification notes, then call trello_move_current_card with list_name %s. If the work is
                     blocked or unsafe to hand off, update the workpad with the blocker, add a Trello comment explaining the blocker, then call
-                    trello_move_current_card with list_name "%s" so the card leaves the active list. Do not leave
+                    trello_move_current_card with list_name %s so the card leaves the active list. Do not leave
                     blocked work in an active list; Symphony may run it again.
                     If a human returns a reviewed card to an active list, treat it as rework: reread the card, the Trello comments rendered above, and linked PR feedback when available before changing code again.
                     A Merging list, when configured, is a human approval signal for a landing flow; do not merge from human review. %s"""
-                    .formatted(reviewState, blockedDestination, FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION);
+                    .formatted(quote(reviewState), quote(blockedDestination), FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION);
         }
         return """
                 When the work is ready for human review, update the workpad with the final summary and validation evidence, call trello_add_comment with a concise summary and
-                verification notes, then call trello_move_current_card with list_name "%s". If the work is
+                verification notes, then call trello_move_current_card with list_name %s. If the work is
                 blocked or unsafe to hand off, update the workpad with the blocker, add a Trello comment explaining the blocker, then call
-                trello_move_current_card with list_name "%s".
+                trello_move_current_card with list_name %s.
                 If a human returns a reviewed card to an active list, treat it as rework: reread the card, the Trello comments rendered above, and linked PR feedback when available before changing code again.
                 A Merging list, when configured, is a human approval signal for a landing flow; do not merge from human review. %s"""
-                .formatted(reviewState, blockedDestination, FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION);
+                .formatted(quote(reviewState), quote(blockedDestination), FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION);
     }
 
     private static String nonGithubHandoffPrompt(
@@ -1698,37 +1698,40 @@ public final class TrelloBoardSetup {
         if (blank(reviewState)) {
             return """
                     When the work is ready for human review, %sleave the workspace in a reviewable state and summarize the status in the Codex response.
-                    If the work is blocked or unsafe to hand off, %scall trello_add_comment with the blocker, then call trello_move_current_card with list_name "%s".
+                    If the work is blocked or unsafe to hand off, %scall trello_add_comment with the blocker, then call trello_move_current_card with list_name %s.
                     If a human returns a reviewed card to an active list, reread the card and Trello comments before changing code again.
                     %s"""
                     .formatted(
-                            workpadReview, workpadBlocker, blockedDestination, FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION)
+                            workpadReview,
+                            workpadBlocker,
+                            quote(blockedDestination),
+                            FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION)
                     .stripTrailing();
         }
         if (blank(blockedDestination) || reviewState.equalsIgnoreCase(blockedDestination)) {
             return """
-                    When the work is ready for human review, %scall trello_add_comment with a concise summary and verification notes, then call trello_move_current_card with list_name "%s".
-                    If the work is blocked or unsafe to hand off, %sadd a Trello comment explaining the blocker, then call trello_move_current_card with list_name "%s" so the card leaves the active list. Do not leave blocked work in an active list; Symphony may run it again.
+                    When the work is ready for human review, %scall trello_add_comment with a concise summary and verification notes, then call trello_move_current_card with list_name %s.
+                    If the work is blocked or unsafe to hand off, %sadd a Trello comment explaining the blocker, then call trello_move_current_card with list_name %s so the card leaves the active list. Do not leave blocked work in an active list; Symphony may run it again.
                     If a human returns a reviewed card to an active list, treat it as rework: reread the card and Trello comments before changing code again.
                     %s"""
                     .formatted(
                             workpadReview,
-                            reviewState,
+                            quote(reviewState),
                             workpadBlocker,
-                            reviewState,
+                            quote(reviewState),
                             FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION)
                     .stripTrailing();
         }
         return """
-                When the work is ready for human review, %scall trello_add_comment with a concise summary and verification notes, then call trello_move_current_card with list_name "%s".
-                If the work is blocked or unsafe to hand off, %sadd a Trello comment explaining the blocker, then call trello_move_current_card with list_name "%s".
+                When the work is ready for human review, %scall trello_add_comment with a concise summary and verification notes, then call trello_move_current_card with list_name %s.
+                If the work is blocked or unsafe to hand off, %sadd a Trello comment explaining the blocker, then call trello_move_current_card with list_name %s.
                 If a human returns a reviewed card to an active list, treat it as rework: reread the card and Trello comments before changing code again.
                 %s"""
                 .formatted(
                         workpadReview,
-                        reviewState,
+                        quote(reviewState),
                         workpadBlocker,
-                        blockedDestination,
+                        quote(blockedDestination),
                         FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION)
                 .stripTrailing();
     }
@@ -1750,9 +1753,9 @@ public final class TrelloBoardSetup {
                 .toList();
         String queueText = queueStates.isEmpty() ? "an active queue list" : quotedList(queueStates);
         return """
-                Symphony moves cards from %s to "%s" before Codex starts when tracker.in_progress_state is configured.
-                If the card is already in "%s", continue the existing execution flow."""
-                .formatted(queueText, inProgressState, inProgressState);
+                Symphony moves cards from %s to %s before Codex starts when tracker.in_progress_state is configured.
+                If the card is already in %s, continue the existing execution flow."""
+                .formatted(queueText, quote(inProgressState), quote(inProgressState));
     }
 
     private static String completionBarPrompt(
@@ -1848,16 +1851,39 @@ public final class TrelloBoardSetup {
                 .collect(Collectors.joining(System.lineSeparator()));
     }
 
+    /**
+     * Double-quoted YAML scalar whose parsed value round-trips the input exactly. Raw control
+     * characters such as newlines would fold or break the scalar (and make the generated file
+     * unreadable), so they are emitted as YAML escape sequences instead.
+     */
     private static String yamlScalar(String value) {
-        return "\"%s\"".formatted(value.replace("\\", "\\\\").replace("\"", "\\\""));
+        StringBuilder safe = new StringBuilder(value.length());
+        for (int index = 0; index < value.length(); index++) {
+            char current = value.charAt(index);
+            switch (current) {
+                case '\\' -> safe.append("\\\\");
+                case '"' -> safe.append("\\\"");
+                case '\n' -> safe.append("\\n");
+                case '\r' -> safe.append("\\r");
+                case '\t' -> safe.append("\\t");
+                default -> {
+                    if (Character.isISOControl(current)) {
+                        safe.append("\\u%04X".formatted((int) current));
+                    } else {
+                        safe.append(current);
+                    }
+                }
+            }
+        }
+        return "\"" + safe + "\"";
     }
 
     private static String quotedList(List<String> values) {
-        return values.stream().map(value -> "\"" + value + "\"").collect(Collectors.joining(", "));
+        return DisplayNames.quotedList(values);
     }
 
     private static String quote(String value) {
-        return "\"" + value + "\"";
+        return DisplayNames.quotedName(value);
     }
 
     private static List<String> defaultActiveStates(List<String> openListNames) {
@@ -1954,8 +1980,8 @@ public final class TrelloBoardSetup {
         if (!missing.isEmpty()) {
             throw new TrelloBoardSetupException(
                     "setup_unknown_" + errorCodeSegment + "_state",
-                    "Unknown " + label + " list(s): " + String.join(", ", missing) + ". Open lists: "
-                            + String.join(", ", openListNames));
+                    "Unknown " + label + " list(s): " + DisplayNames.quotedList(missing) + ". Open lists: "
+                            + DisplayNames.quotedList(openListNames));
         }
         List<String> ambiguous = configured.stream()
                 .filter(name -> hasDuplicateMatchingOpenListName(name, openListNames))
@@ -1964,7 +1990,7 @@ public final class TrelloBoardSetup {
             throw new TrelloBoardSetupException(
                     "setup_ambiguous_" + errorCodeSegment + "_state",
                     "Multiple open Trello lists match " + label + " list selector(s): "
-                            + String.join(", ", ambiguous)
+                            + DisplayNames.quotedList(ambiguous)
                             + ". Rename one of those Trello lists before running import-board.");
         }
     }

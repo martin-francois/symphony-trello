@@ -270,7 +270,7 @@ final class ConnectedBoardRepository {
     private static String boardLabel(JsonNode board, int index) {
         JsonNode boardName = board.get("boardName");
         return boardName != null && boardName.isTextual() && !boardName.asText().isBlank()
-                ? "\"" + boardName.asText() + "\""
+                ? DisplayNames.quotedName(boardName.asText())
                 : String.valueOf(index + 1);
     }
 

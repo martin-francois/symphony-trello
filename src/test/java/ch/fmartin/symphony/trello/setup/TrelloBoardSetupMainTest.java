@@ -96,7 +96,7 @@ final class TrelloBoardSetupMainTest {
                     """
                     {"id":"board-1","name":"%s","shortLink":"abc123","url":"https://trello.com/b/abc123/board"}
                     """
-                            .formatted(query.get("name")));
+                            .formatted(jsonEscaped(query.get("name"))));
         });
         server.createContext("/1/lists", exchange -> {
             Map<String, String> query = query(exchange);
@@ -118,6 +118,61 @@ final class TrelloBoardSetupMainTest {
     @AfterEach
     void stopServer() {
         server.stop(0);
+    }
+
+    @Test
+    void importBoardDisplaysTrelloProvidedDirtyListNamesEscaped() throws Exception {
+        // given
+        // Trello allows control characters in list names; the CLI rejects them in its own
+        // arguments, so the dirty name arrives from the Trello API and must render escaped on
+        // one physical line.
+        boardListsResponse.set(
+                """
+                [
+                  {"id":"list-1","name":"Ready for Codex","closed":false,"pos":1},
+                  {"id":"list-2","name":"Sneaky\\nList\\t\\"Q\\"","closed":false,"pos":2},
+                  {"id":"list-3","name":"Released","closed":false,"pos":3}
+                ]
+                """);
+        Path workflow = tempDir.resolve("dirty-lists.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.dirty-lists");
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+
+        // when
+        int exitCode = run(
+                stdout,
+                stderr,
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "https://trello.com/b/input/existing-board",
+                "--active",
+                "Ready for Codex",
+                "--terminal",
+                "Released",
+                "--workflow",
+                workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
+                "--env",
+                env.toString());
+
+        // then
+        assertThat(exitCode).as(stderr.toString(StandardCharsets.UTF_8)).isZero();
+        String openListsLine = stdout.toString(StandardCharsets.UTF_8)
+                .lines()
+                .filter(line -> line.startsWith("Open lists: "))
+                .findAny()
+                .orElseThrow();
+        assertThat(openListsLine)
+                .as("one logical message must stay on one physical line with unambiguous quoting")
+                .isEqualTo("Open lists: \"Ready for Codex\", \"Sneaky\\nList\\t\\\"Q\\\"\", \"Released\"");
     }
 
     @Test
@@ -1837,7 +1892,7 @@ final class TrelloBoardSetupMainTest {
             assertThat(board.serverPort()).isEqualTo(expectedPort);
         });
         assertThat(stdout.toString(StandardCharsets.UTF_8))
-                .contains("Created Trello board: Symphony Work Queue")
+                .contains("Created Trello board: \"Symphony Work Queue\"")
                 .contains("Board identifier for WORKFLOW.md: abc123")
                 .contains("Wrote workflow:")
                 .contains("HTTP status port: " + expectedPort)
@@ -2194,7 +2249,7 @@ final class TrelloBoardSetupMainTest {
         // then
         assertThat(exitCode).isZero();
         assertThat(stdout.toString(StandardCharsets.UTF_8))
-                .contains("Imported Trello board: Existing Board", "HTTP status port: " + listeningPort);
+                .contains("Imported Trello board: \"Existing Board\"", "HTTP status port: " + listeningPort);
         assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
         verify(workerManager, times(2)).canStopRunningWorker(any(LocalWorkerPaths.class), eq(oldBoard));
         verify(workerManager).stop(any(LocalWorkerPaths.class), eq(oldBoard), any(PrintStream.class));
@@ -4121,13 +4176,13 @@ final class TrelloBoardSetupMainTest {
             assertThat(board.serverPort()).isGreaterThanOrEqualTo(TrelloBoardSetup.DEFAULT_SERVER_PORT);
         });
         assertThat(stdout.toString(StandardCharsets.UTF_8))
-                .contains("Imported Trello board: Existing Board")
+                .contains("Imported Trello board: \"Existing Board\"")
                 .contains("Board identifier for WORKFLOW.md: SYNTH001")
-                .contains("Active lists: Queue for Codex, Doing")
-                .contains("In-progress list: Doing")
-                .contains("Terminal lists: Released")
+                .contains("Active lists: \"Queue for Codex\", \"Doing\"")
+                .contains("In-progress list: \"Doing\"")
+                .contains("Terminal lists: \"Released\"")
                 .contains(
-                        "Blocked list: Blocked",
+                        "Blocked list: \"Blocked\"",
                         "symphony-trello start --env "
                                 + shellQuote(env.toAbsolutePath().normalize().toString())
                                 + " --workflow "
@@ -4179,7 +4234,7 @@ final class TrelloBoardSetupMainTest {
                 .contains("- \" Queue for Codex \"")
                 .contains("- \"Released \"")
                 .contains("- \" Doing \"");
-        assertThat(stdout.toString(StandardCharsets.UTF_8)).contains("Imported Trello board: Existing Board");
+        assertThat(stdout.toString(StandardCharsets.UTF_8)).contains("Imported Trello board: \"Existing Board\"");
         assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
     }
 
@@ -4393,7 +4448,7 @@ final class TrelloBoardSetupMainTest {
         result.assertFailure(2)
                 .stderrContains(
                         "setup_failed code=setup_unknown_in_progress_state",
-                        "Unknown in-progress list(s): No Such List 123")
+                        "Unknown in-progress list(s): \"No Such List 123\"")
                 .stderrDoesNotContain("setup_unknown_active_state", "Unknown active list(s)");
         assertThat(workflow).doesNotExist();
     }
@@ -5116,25 +5171,25 @@ final class TrelloBoardSetupMainTest {
                         "--active",
                         "Queue for Codex",
                         "setup_ambiguous_active_state",
-                        "Multiple open Trello lists match active list selector(s): Queue for Codex"),
+                        "Multiple open Trello lists match active list selector(s): \"Queue for Codex\""),
                 Arguments.of(
                         "ambiguous-terminal-list",
                         "--terminal",
                         "Released",
                         "setup_ambiguous_terminal_state",
-                        "Multiple open Trello lists match terminal list selector(s): Released"),
+                        "Multiple open Trello lists match terminal list selector(s): \"Released\""),
                 Arguments.of(
                         "ambiguous-in-progress-list",
                         "--in-progress",
                         "Doing",
                         "setup_ambiguous_in_progress_state",
-                        "Multiple open Trello lists match in-progress list selector(s): Doing"),
+                        "Multiple open Trello lists match in-progress list selector(s): \"Doing\""),
                 Arguments.of(
                         "ambiguous-blocked-list",
                         "--blocked",
                         "Blocked",
                         "setup_ambiguous_blocked_state",
-                        "Multiple open Trello lists match blocked list selector(s): Blocked"));
+                        "Multiple open Trello lists match blocked list selector(s): \"Blocked\""));
     }
 
     @Test
@@ -5177,7 +5232,7 @@ final class TrelloBoardSetupMainTest {
         result.assertFailure(2)
                 .stderrContains(
                         "setup_failed code=setup_ambiguous_active_state",
-                        "Multiple open Trello lists match active list selector(s): Ready for Codex")
+                        "Multiple open Trello lists match active list selector(s): \"Ready for Codex\"")
                 .stderrDoesNotContain("Troubleshooting report written")
                 .stdoutDoesNotContain("Imported Trello board", "Wrote workflow");
         assertThat(workflow).doesNotExist();
@@ -5886,6 +5941,15 @@ final class TrelloBoardSetupMainTest {
                 Arguments.of("official-host-prefix", "https://api.trello.com/foo/1"),
                 Arguments.of("query-string", "https://api.trello.com/1?x=y"),
                 Arguments.of("fragment", "https://api.trello.com/1#frag"));
+    }
+
+    /** Trello returns valid JSON for any board name, so the fake must JSON-escape echoes. */
+    private static String jsonEscaped(String value) {
+        return value.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t");
     }
 
     private static String shellQuote(String value) {
