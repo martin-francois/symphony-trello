@@ -110,6 +110,44 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
+    void newBoardDerivesBoardKeyFromUrlWhenCreateResponseOmitsShortLink() {
+        // given
+        server.removeContext("/1/boards/");
+        server.createContext("/1/boards/", exchange -> {
+            Map<String, String> query = query(exchange);
+            respond(
+                    exchange,
+                    """
+                    {"id":"000000000000000000000001","name":"%s","url":"https://trello.com/b/SYNTH777/synthetic-board"}
+                    """
+                            .formatted(query.get("name")));
+        });
+        server.removeContext("/1/lists");
+        server.createContext("/1/lists", exchange -> {
+            Map<String, String> query = query(exchange);
+            createdLists.add(query.get("name"));
+            respond(exchange, "{\"id\":\"list-" + createdLists.size() + "\",\"name\":\"" + query.get("name") + "\"}");
+        });
+        Path workflow = tempDir.resolve("no-short-link-workflow.md");
+
+        // when
+        var result = setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "Synthetic Board",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                1,
+                false,
+                false));
+
+        // then
+        assertThat(result.boardKey()).isEqualTo("SYNTH777");
+        assertThat(workflow).content(StandardCharsets.UTF_8).contains("board_id: \"SYNTH777\"");
+    }
+
+    @Test
     void newBoardRejectsUnsafeHighMaxAgentsBeforeCreatingTrelloBoard() {
         // given
         Path workflow = tempDir.resolve("high-max-agents-workflow.md");
