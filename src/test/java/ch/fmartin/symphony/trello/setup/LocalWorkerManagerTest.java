@@ -730,6 +730,22 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
+    void statusResolvesSymlinkedWorkflowSelectorToConnectedBoard() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        Path link = tempDir.resolve("workflow-link.md");
+        Files.createSymbolicLink(link, board.workflowPath());
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusWorkflowRequest(link));
+
+        // then
+        result.assertSuccess().stdoutContains("stopped \"Queue\"").stdoutDoesNotContain("workflow-link.md");
+    }
+
+    @Test
     void statusDisambiguatesDuplicateConnectedBoardNames() throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);

@@ -85,19 +85,25 @@ final class ManagedProcessStore {
     private static String workflowStateName(Path workflowPath) {
         Path resolved = resolvedWorkflowPath(workflowPath);
         String hash = Sha3.sha3_256(resolved.toString()).substring(0, 12);
-        return PathNames.fileName(workflowPath) + "." + hash;
+        return PathNames.fileName(resolved) + "." + hash;
     }
 
     private static Path resolvedWorkflowPath(Path workflowPath) {
         Path absolute = workflowPath.toAbsolutePath().normalize();
-        Path parent = absolute.getParent();
-        if (parent == null || !Files.isDirectory(parent)) {
-            return absolute;
-        }
         try {
-            return parent.toRealPath().resolve(absolute.getFileName());
+            // Resolve file and directory symlinks so a symlinked workflow selector shares the
+            // managed pid and log files of its target workflow.
+            return absolute.toRealPath();
         } catch (IOException ignored) {
-            return absolute;
+            Path parent = absolute.getParent();
+            if (parent == null || !Files.isDirectory(parent)) {
+                return absolute;
+            }
+            try {
+                return parent.toRealPath().resolve(absolute.getFileName());
+            } catch (IOException alsoIgnored) {
+                return absolute;
+            }
         }
     }
 
