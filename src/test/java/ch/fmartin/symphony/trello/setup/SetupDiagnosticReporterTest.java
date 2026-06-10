@@ -802,6 +802,37 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
+    void diagnosticsSelectsBoardForBareSelectorWithAccidentalQueryOrFragment() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("decorated-selector-config");
+        Path stateHome = tempDir.resolve("state");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
+                        "000000000000000000000001",
+                        "SYNTH001",
+                        "Synthetic Board",
+                        "https://trello.com/b/SYNTH001/synthetic-board",
+                        configDir.resolve("WORKFLOW.md"),
+                        configDir.resolve(".env"),
+                        tempDir.resolve("workspaces"),
+                        20992,
+                        false,
+                        List.of(),
+                        false))));
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String byQuery = renderBoardDiagnostics(reporter, "SYNTH001?utm=test", configDir, stateHome);
+        String byFragment = renderBoardDiagnostics(reporter, "SYNTH001#fragment", configDir, stateHome);
+
+        // then
+        assertThat(byQuery).contains("selected_board_matched:** true", "selected_manifest_board_count:** 1");
+        assertThat(byFragment).contains("selected_board_matched:** true", "selected_manifest_board_count:** 1");
+    }
+
+    @Test
     void diagnosticsDoesNotCountMissingManifestWorkflowFilesAsIncluded() throws Exception {
         // given
         Path configDir = tempDir.resolve("missing-manifest-workflow-config");
