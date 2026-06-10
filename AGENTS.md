@@ -167,6 +167,14 @@ matters, and easy for another engineer to understand without asking the original
   down a future maintainer.
 - Use Java 25 LTS language/runtime features where they make the code clearer, but do not be clever
   for its own sake.
+- Treat JDK module exports, not package name prefixes, as the API support boundary. Packages that a
+  JDK module exports are supported API even under `com.sun`; for example, the Compiler Tree API
+  `com.sun.source.*` from the `jdk.compiler` module is documented and fine to use through the
+  standard `javax.tools.JavaCompiler` entry point. Do not use non-exported internals such as
+  `com.sun.tools.javac.*`, `sun.*`, or `jdk.internal.*`, and do not add `--add-exports` or
+  `--add-opens` flags to project code to reach them. Toolchain dependencies such as Error Prone
+  that need those flags manage their own compiler arguments; that is not a precedent for
+  application or test code.
 - For project-owned hashes, prefer SHA3-family algorithms. Use `HmacSHA3-256` for tokens that
   represent private context and may appear in diagnostics, public issue reports, logs, or
   user-facing troubleshooting output. Use `SHA3-256` for deterministic project-owned hashes that do
