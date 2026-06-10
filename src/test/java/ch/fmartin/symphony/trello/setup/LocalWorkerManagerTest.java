@@ -13,6 +13,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -585,6 +586,153 @@ final class LocalWorkerManagerTest {
         // then
         result.assertSuccess().stdoutContains("already running", "http://127.0.0.1:" + board.serverPort());
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void startWorkflowRejectsBoardAlreadyManagedByAnotherRunningWorkflow() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        fixture.stubManagedPid(board, 4242L);
+        Path staleWorkflow = fixture.paths.configDir().resolve("WORKFLOW.stale-copy.md");
+        Files.writeString(
+                staleWorkflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: board-1
+                server:
+                  port: 18081
+                ---
+                Body
+                """,
+                StandardCharsets.UTF_8);
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startWorkflowRequest(staleWorkflow)));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_worker_board_already_managed");
+            assertThat(failure.getMessage()).contains("Queue", "already managed by a running worker");
+        });
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void startWorkflowRejectsBoardManagedThroughStoredUrlShortLink() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        Path rowWorkflow = fixture.paths.configDir().resolve("WORKFLOW.shortlink-row.md");
+        Files.createDirectories(fixture.paths.configDir());
+        Files.writeString(
+                rowWorkflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: "000000000000000000000002"
+                server:
+                  port: %d
+                ---
+                # Shortlink Queue
+                """
+                        .formatted(ConfigDefaults.DEFAULT_SERVER_PORT),
+                StandardCharsets.UTF_8);
+        fixture.writeEnv(fixture.paths.defaultEnvPath());
+        ConnectedBoard row = new ConnectedBoard(
+                "000000000000000000000002",
+                "000000000000000000000002",
+                "Shortlink Queue",
+                "https://trello.com/b/SYNTH002/synthetic-board",
+                rowWorkflow.toAbsolutePath().normalize(),
+                fixture.paths.defaultEnvPath(),
+                fixture.paths.workspaceRoot(),
+                ConfigDefaults.DEFAULT_SERVER_PORT,
+                false,
+                List.of(),
+                false);
+        fixture.save(row);
+        fixture.stubManagedPid(row, 4242L);
+        Path staleWorkflow = fixture.paths.configDir().resolve("WORKFLOW.shortlink-stale.md");
+        Files.writeString(
+                staleWorkflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: SYNTH002
+                server:
+                  port: 18081
+                ---
+                Body
+                """,
+                StandardCharsets.UTF_8);
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startWorkflowRequest(staleWorkflow)));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_worker_board_already_managed");
+            assertThat(failure.getMessage()).contains("Shortlink Queue", "already managed by a running worker");
+        });
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void startAllSkipsBoardAlreadyManagedByAnotherRunningWorkflow() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard running = fixture.connectedBoard("board-1", "Queue", "queue-running");
+        ConnectedBoard stale = fixture.connectedBoard("board-1", "Queue", "queue-stale");
+        fixture.save(running, stale);
+        fixture.stubManagedPid(running, 4242L);
+        fixture.stubWorkflowHealth(running, fixture.sameWorkflow(running));
+
+        // when
+        WorkerRunResult result = fixture.start(fixture.startAllRequest());
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("Skipped workflow WORKFLOW.queue-stale.md", "already managed by the running workflow");
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void startWorkflowAttemptsLaunchWhenOtherWorkflowForSameBoardIsNotRunning() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        Path staleWorkflow = fixture.paths.configDir().resolve("WORKFLOW.stale-copy.md");
+        Files.writeString(
+                staleWorkflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: board-1
+                server:
+                  port: 18081
+                ---
+                Body
+                """,
+                StandardCharsets.UTF_8);
+        when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
+                .thenReturn(new ManagedProcessHandle(99L));
+        when(fixture.platform.stop(eq(99L), any(Duration.class), any(Duration.class)))
+                .thenReturn(true);
+        when(fixture.healthChecker.waitForSameWorkflow(any(), anyInt())).thenReturn(fixture.stopped(18081));
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startWorkflowRequest(staleWorkflow)));
+
+        // then
+        assertThat(thrown).isInstanceOf(TrelloBoardSetupException.class).hasMessageContaining("did not report");
+        verify(fixture.platform).start(any(), eq(fixture.paths.appHome()), any(), any(), any());
     }
 
     @Test

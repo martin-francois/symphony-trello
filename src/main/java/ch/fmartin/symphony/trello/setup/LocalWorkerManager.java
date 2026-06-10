@@ -12,10 +12,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.locks.Lock;
 
 final class LocalWorkerManager {
@@ -81,8 +83,78 @@ final class LocalWorkerManager {
         ConnectedBoard board = request.workflow().isPresent() && selectedBoard.envPath() == null
                 ? workflowBoard(selectedBoard.workflowPath(), envPath)
                 : selectedBoard;
+        rejectBoardManagedByAnotherWorkflow(paths, manifest, board);
         start(paths, board, envPath, request.envPath().isPresent(), out);
         return 0;
+    }
+
+    private void rejectBoardManagedByAnotherWorkflow(
+            LocalWorkerPaths paths, ConnectedBoardManifest manifest, ConnectedBoard board) throws IOException {
+        boardManagedByAnotherRunningWorkflow(paths, manifest, board).ifPresent(row -> {
+            throw new TrelloBoardSetupException(
+                    "setup_worker_board_already_managed",
+                    "Trello board \"" + row.boardName()
+                            + "\" is already managed by a running worker for another workflow:\n  "
+                            + row.workflowPath()
+                            + "\nStop that worker first with symphony-trello stop --workflow, or start that workflow instead.");
+        });
+    }
+
+    private Optional<ConnectedBoard> boardManagedByAnotherRunningWorkflow(
+            LocalWorkerPaths paths, ConnectedBoardManifest manifest, ConnectedBoard board) throws IOException {
+        for (ConnectedBoard row : manifest.boards()) {
+            if (PathsEqual.samePath(row.workflowPath(), board.workflowPath())) {
+                continue;
+            }
+            if (!sameTrelloBoard(row, board)) {
+                continue;
+            }
+            if (isRunningManagedWorker(paths, row)) {
+                return Optional.of(row);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static boolean sameTrelloBoard(ConnectedBoard row, ConnectedBoard board) {
+        Set<String> rowIdentifiers = stableBoardIdentifiers(row);
+        return stableBoardIdentifiers(board).stream().anyMatch(rowIdentifiers::contains);
+    }
+
+    /**
+     * Collects every stable Trello identifier of a board row. Created-board manifest rows can
+     * store the 24-character board id in boardKey, leaving the short link only recoverable from
+     * the stored board URL. Identifiers are lowercased to match connected-board selector
+     * case handling.
+     */
+    private static Set<String> stableBoardIdentifiers(ConnectedBoard board) {
+        Set<String> identifiers = new HashSet<>();
+        addBoardIdentifier(identifiers, board.boardId());
+        addBoardIdentifier(identifiers, board.boardKey());
+        String urlIdentifier = TrelloBoardIds.parseStoredBoardUrl(board.boardUrl());
+        if (!urlIdentifier.equals(board.boardUrl())) {
+            addBoardIdentifier(identifiers, urlIdentifier);
+        }
+        return identifiers;
+    }
+
+    private static void addBoardIdentifier(Set<String> identifiers, String identifier) {
+        if (identifier != null && !identifier.isBlank()) {
+            identifiers.add(identifier.toLowerCase(Locale.ROOT));
+        }
+    }
+
+    private boolean isRunningManagedWorker(LocalWorkerPaths paths, ConnectedBoard row) throws IOException {
+        if (canStopManagedWorker(paths, row)) {
+            return true;
+        }
+        try {
+            return healthChecker.boardHealth(row).kind() == BoardHealthKind.SAME_WORKFLOW;
+        } catch (TrelloBoardSetupException e) {
+            // A row with unresolvable port configuration cannot be probed; do not block this start
+            // because of an unrelated broken manifest row.
+            return false;
+        }
     }
 
     private void startAll(
@@ -99,6 +171,15 @@ final class LocalWorkerManager {
                     "setup_worker_board_not_found", "No Trello boards are connected to Symphony.");
         }
         for (ConnectedBoard board : manifest.boards()) {
+            // Plain branching because the absent branch starts the worker with checked IO.
+            Optional<ConnectedBoard> managedElsewhere = boardManagedByAnotherRunningWorkflow(paths, manifest, board);
+            if (managedElsewhere.isPresent()) {
+                ConnectedBoard running = managedElsewhere.get();
+                out.println("Skipped workflow " + PathNames.fileName(board.workflowPath()) + " because Trello board \""
+                        + running.boardName() + "\" is already managed by the running workflow:\n  "
+                        + running.workflowPath());
+                continue;
+            }
             Path envPath = (board.envPath() == null ? paths.defaultEnvPath() : board.envPath())
                     .toAbsolutePath()
                     .normalize();
