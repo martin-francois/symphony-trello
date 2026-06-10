@@ -15,6 +15,7 @@ import java.net.http.HttpResponse;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -655,15 +656,36 @@ final class SetupDiagnosticReporter {
         try {
             Path reportDir = paths.stateHome().resolve("troubleshooting");
             Files.createDirectories(reportDir);
-            Path report = reportDir.resolve("setup-failure-" + FILE_TIMESTAMP.format(now()) + ".md");
-            Files.writeString(
-                    report,
-                    render(exception, args, paths, manifestPath, workflowPathResolution),
-                    StandardCharsets.UTF_8);
-            return Optional.of(report);
+            String content = render(exception, args, paths, manifestPath, workflowPathResolution);
+            return Optional.of(writeUniqueReport(reportDir, FILE_TIMESTAMP.format(now()), content));
         } catch (RuntimeException | IOException ignored) {
             return Optional.empty();
         }
+    }
+
+    /**
+     * Creates the report with CREATE_NEW and a numeric suffix so two failures in the same second
+     * cannot overwrite each other's report.
+     */
+    /**
+     * More same-second failure reports than this means something is looping; give up instead of
+     * scanning the directory forever. The caller treats the failure as report-write-unavailable.
+     */
+    private static final int MAX_REPORT_NAME_ATTEMPTS = 100;
+
+    private static Path writeUniqueReport(Path reportDir, String timestamp, String content) throws IOException {
+        for (int attempt = 1; attempt <= MAX_REPORT_NAME_ATTEMPTS; attempt++) {
+            String suffix = attempt == 1 ? "" : "-" + attempt;
+            Path report = reportDir.resolve("setup-failure-" + timestamp + suffix + ".md");
+            try {
+                Files.writeString(report, content, StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
+                return report;
+            } catch (FileAlreadyExistsException retry) { // NOPMD - retry with the next numeric suffix
+                continue;
+            }
+        }
+        throw new IOException("Could not choose a unique troubleshooting report name after " + MAX_REPORT_NAME_ATTEMPTS
+                + " attempts in " + reportDir);
     }
 
     private String render(
