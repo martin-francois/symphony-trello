@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Objects;
 
@@ -59,6 +60,26 @@ final class ManagedProcessStore {
 
     void deletePid(Path pidFile) throws IOException {
         Files.deleteIfExists(pidFile);
+    }
+
+    /**
+     * Moves the worker logs aside when a workflow path is reused for a different Trello board, so
+     * diagnostics for the new board do not surface the previous board's history. Rotated files use
+     * a suffix that the diagnostics log selection does not match.
+     */
+    void rotateLogsForNewBoardIdentity(Path workflowPath) throws IOException {
+        ManagedProcessFiles files = files(workflowPath);
+        rotateLog(files.stdoutLog());
+        rotateLog(files.stderrLog());
+    }
+
+    private static void rotateLog(Path log) throws IOException {
+        if (Files.isRegularFile(log)) {
+            Files.move(
+                    log,
+                    log.resolveSibling(PathNames.fileName(log) + ".previous"),
+                    StandardCopyOption.REPLACE_EXISTING);
+        }
     }
 
     private static String workflowStateName(Path workflowPath) {
