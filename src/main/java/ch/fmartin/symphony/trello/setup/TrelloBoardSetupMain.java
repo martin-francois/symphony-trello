@@ -899,10 +899,14 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
     }
 
     static final class TrelloAuthOptions {
-        @Option(names = "--key", description = "Trello API key. Defaults to TRELLO_API_KEY or .env.")
+        @Option(
+                names = "--key",
+                description = "Trello API key. Defaults to TRELLO_API_KEY or the configured credential file.")
         String key;
 
-        @Option(names = "--token", description = "Trello API token. Defaults to TRELLO_API_TOKEN or .env.")
+        @Option(
+                names = "--token",
+                description = "Trello API token. Defaults to TRELLO_API_TOKEN or the configured credential file.")
         String token;
 
         TrelloCredentials credentials() {

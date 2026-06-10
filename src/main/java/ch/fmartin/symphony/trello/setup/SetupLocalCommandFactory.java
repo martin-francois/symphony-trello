@@ -260,10 +260,14 @@ final class SetupLocalCommandFactory {
         @Option(names = "--force", description = "Overwrite the selected workflow file when needed.")
         boolean force;
 
-        @Option(names = "--key", description = "Trello API key. Defaults to TRELLO_API_KEY or .env.")
+        @Option(
+                names = "--key",
+                description = "Trello API key. Defaults to TRELLO_API_KEY or the configured credential file.")
         Optional<String> apiKey = Optional.empty();
 
-        @Option(names = "--token", description = "Trello API token. Defaults to TRELLO_API_TOKEN or .env.")
+        @Option(
+                names = "--token",
+                description = "Trello API token. Defaults to TRELLO_API_TOKEN or the configured credential file.")
         Optional<String> apiToken = Optional.empty();
 
         @Option(names = "--board-name", description = "Trello board name when creating a board.")
