@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -59,13 +60,23 @@ public final class LocalEnvironment {
         }
         try {
             Map<String, String> values = new LinkedHashMap<>();
-            for (String rawLine : Files.readAllLines(dotenv)) {
+            List<String> lines = Files.readAllLines(dotenv);
+            for (int index = 0; index < lines.size(); index++) {
+                String rawLine = index == 0 ? stripLeadingByteOrderMark(lines.get(index)) : lines.get(index);
                 parseLine(rawLine).ifPresent(entry -> values.put(entry.key(), entry.value()));
             }
             return Map.copyOf(values);
         } catch (IOException ignored) {
             return Map.of();
         }
+    }
+
+    /**
+     * UTF-8 editors, notably on Windows, commonly write a byte order mark at the start of the
+     * file. Exactly one leading mark is ignorable so the first key is not silently dropped.
+     */
+    private static String stripLeadingByteOrderMark(String firstLine) {
+        return firstLine.startsWith("\uFEFF") ? firstLine.substring(1) : firstLine;
     }
 
     public static Path defaultDotenv(Map<String, String> environment) {
@@ -98,7 +109,7 @@ public final class LocalEnvironment {
         if (!validKey(key)) {
             return Optional.empty();
         }
-        String value = unquote(line.substring(separator + 1).strip());
+        String value = parseValue(line.substring(separator + 1).strip());
         return Optional.of(new Entry(key, value));
     }
 
@@ -113,6 +124,59 @@ public final class LocalEnvironment {
             }
         }
         return true;
+    }
+
+    private static String parseValue(String raw) {
+        if (raw.startsWith("\"")) {
+            return parseQuoted(raw, '"', true).orElseGet(() -> unquote(raw));
+        }
+        if (raw.startsWith("'")) {
+            return parseQuoted(raw, '\'', false).orElseGet(() -> unquote(raw));
+        }
+        return stripUnquotedTrailingComment(raw);
+    }
+
+    /**
+     * Parses a quoted value and tolerates a trailing {@code # comment} after the closing quote.
+     * Returns empty when the text after the closing quote is not a comment, so unusual legacy
+     * lines keep their previous whole-line interpretation.
+     */
+    private static Optional<String> parseQuoted(String raw, char quote, boolean unescape) {
+        int closing = closingQuoteIndex(raw, quote, unescape);
+        if (closing < 0) {
+            return Optional.empty();
+        }
+        String rest = raw.substring(closing + 1).strip();
+        if (!rest.isEmpty() && !rest.startsWith("#")) {
+            return Optional.empty();
+        }
+        String inner = raw.substring(1, closing);
+        return Optional.of(unescape ? unescapeDoubleQuoted(inner) : inner);
+    }
+
+    private static int closingQuoteIndex(String raw, char quote, boolean honorEscapes) {
+        int index = 1;
+        while (index < raw.length()) {
+            char current = raw.charAt(index);
+            if (honorEscapes && current == '\\' && index < raw.length() - 1) {
+                index += 2;
+                continue;
+            }
+            if (current == quote) {
+                return index;
+            }
+            index++;
+        }
+        return -1;
+    }
+
+    private static String stripUnquotedTrailingComment(String value) {
+        for (int index = 1; index < value.length(); index++) {
+            if (value.charAt(index) == '#' && Character.isWhitespace(value.charAt(index - 1))) {
+                return value.substring(0, index).strip();
+            }
+        }
+        return value;
     }
 
     private static String unquote(String value) {
