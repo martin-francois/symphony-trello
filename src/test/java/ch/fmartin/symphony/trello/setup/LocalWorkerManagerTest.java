@@ -784,6 +784,57 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
+    void statusEscapesEmbeddedQuotesInBoardNames() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Quote \" Board");
+        fixture.save(board);
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusRequest("Quote \" Board"));
+
+        // then
+        result.assertSuccess().stdoutContains("stopped \"Quote \\\" Board\"");
+    }
+
+    @Test
+    void statusEscapesNewlinesInBoardNames() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Line1\nLine2");
+        fixture.save(board);
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusRequest("Line1\nLine2"));
+
+        // then
+        result.assertSuccess().stdoutContains("stopped \"Line1\\nLine2\"");
+        assertThat(result.stdout().lines().filter(line -> line.equals("Line2")).count())
+                .as("a newline in a Trello board name must not split the status line")
+                .isZero();
+    }
+
+    @Test
+    void stopEscapesEmbeddedQuotesInBoardNamesWhenSkippingStalePids() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Quote \" Board");
+        fixture.save(board);
+        ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
+        store.writePid(store.files(board.workflowPath()).pidFile(), 42);
+        when(fixture.platform.isAlive(42L)).thenReturn(true);
+        when(fixture.platform.isManaged(42L, fixture.paths.appHome(), board.workflowPath()))
+                .thenReturn(false);
+
+        // when
+        WorkerRunResult result = fixture.stop(fixture.stopRequest("Quote \" Board"));
+
+        // then
+        result.assertSuccess().stdoutContains("Skipped unmanaged stale pid for \"Quote \\\" Board\" pid=42");
+        verify(fixture.platform, never()).stop(anyLong(), any(Duration.class), any(Duration.class));
+    }
+
+    @Test
     void statusResolvesSymlinkedWorkflowSelectorToConnectedBoard() throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);

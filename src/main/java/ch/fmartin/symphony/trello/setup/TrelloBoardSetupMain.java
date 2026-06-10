@@ -965,12 +965,12 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
     }
 
     private static void printNewBoardResult(PrintStream out, TrelloBoardSetup.NewBoardResult result, Path envPath) {
-        out.println("Created Trello board: " + result.boardName());
+        out.println("Created Trello board: " + DisplayNames.quotedName(result.boardName()));
         if (result.boardUrl() != null && !result.boardUrl().isBlank()) {
             out.println("Board URL: " + result.boardUrl());
         }
         out.println("Board identifier for WORKFLOW.md: " + result.boardKey());
-        out.println("Created lists: " + String.join(", ", result.lists()));
+        out.println("Created lists: " + DisplayNames.quotedList(result.lists()));
         out.println("Wrote workflow: " + result.workflowPath().toAbsolutePath().normalize());
         out.println("HTTP status port: " + result.serverPort());
         out.println();
@@ -980,15 +980,15 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
 
     private static void printImportBoardResult(
             PrintStream out, TrelloBoardSetup.ImportBoardResult result, Path envPath) {
-        out.println("Imported Trello board: " + result.boardName());
+        out.println("Imported Trello board: " + DisplayNames.quotedName(result.boardName()));
         if (result.boardUrl() != null && !result.boardUrl().isBlank()) {
             out.println("Board URL: " + result.boardUrl());
         }
         out.println("Board identifier for WORKFLOW.md: " + result.boardKey());
-        out.println("Open lists: " + String.join(", ", result.openLists()));
-        out.println("Active lists: " + String.join(", ", result.activeStates()));
+        out.println("Open lists: " + DisplayNames.quotedList(result.openLists()));
+        out.println("Active lists: " + DisplayNames.quotedList(result.activeStates()));
         out.println("In-progress list: " + optionalListName(result.inProgressState()));
-        out.println("Terminal lists: " + String.join(", ", result.terminalStates()));
+        out.println("Terminal lists: " + DisplayNames.quotedList(result.terminalStates()));
         out.println("Blocked list: " + optionalListName(result.blockedState()));
         out.println("Wrote workflow: " + result.workflowPath().toAbsolutePath().normalize());
         out.println("HTTP status port: " + result.serverPort());
@@ -1041,6 +1041,6 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
     }
 
     private static String optionalListName(String value) {
-        return value == null || value.isBlank() ? "<none>" : value;
+        return value == null || value.isBlank() ? "<none>" : DisplayNames.quotedName(value);
     }
 }

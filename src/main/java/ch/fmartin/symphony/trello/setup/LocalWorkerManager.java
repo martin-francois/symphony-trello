@@ -117,8 +117,8 @@ final class LocalWorkerManager {
         boardManagedByAnotherRunningWorkflow(paths, manifest, board).ifPresent(row -> {
             throw new TrelloBoardSetupException(
                     "setup_worker_board_already_managed",
-                    "Trello board \"" + row.boardName()
-                            + "\" is already managed by a running worker for another workflow:\n  "
+                    "Trello board " + DisplayNames.quotedName(row.boardName())
+                            + " is already managed by a running worker for another workflow:\n  "
                             + row.workflowPath()
                             + "\nStop that worker first with symphony-trello stop --workflow, or start that workflow instead.");
         });
@@ -199,8 +199,9 @@ final class LocalWorkerManager {
             Optional<ConnectedBoard> managedElsewhere = boardManagedByAnotherRunningWorkflow(paths, manifest, board);
             if (managedElsewhere.isPresent()) {
                 ConnectedBoard running = managedElsewhere.get();
-                out.println("Skipped workflow " + PathNames.fileName(board.workflowPath()) + " because Trello board \""
-                        + running.boardName() + "\" is already managed by the running workflow:\n  "
+                out.println("Skipped workflow " + PathNames.fileName(board.workflowPath()) + " because Trello board "
+                        + DisplayNames.quotedName(running.boardName())
+                        + " is already managed by the running workflow:\n  "
                         + running.workflowPath());
                 continue;
             }
@@ -276,8 +277,8 @@ final class LocalWorkerManager {
                     healthChecker.workflowHealth(board.workflowPath(), board.boardId(), board.boardKey(), healthPort);
             if (health.kind() == BoardHealthKind.SAME_WORKFLOW) {
                 printIgnoredEnvOverride(paths, board, envPath, explicitEnvOverride, out);
-                out.println(
-                        "Symphony for Trello is already running for \"" + board.boardName() + "\" pid=" + existingPid);
+                out.println("Symphony for Trello is already running for " + DisplayNames.quotedName(board.boardName())
+                        + " pid=" + existingPid);
                 return;
             }
             stopPid(store, files, existingPid);
@@ -289,8 +290,8 @@ final class LocalWorkerManager {
                 healthChecker.workflowHealth(board.workflowPath(), board.boardId(), board.boardKey(), healthPort);
         if (existingHealth.kind() == BoardHealthKind.SAME_WORKFLOW) {
             printIgnoredEnvOverride(paths, board, envPath, explicitEnvOverride, out);
-            out.println("Symphony for Trello is already running for \"" + board.boardName() + "\" at "
-                    + LocalHealthChecker.localServerUrl(existingHealth.port()));
+            out.println("Symphony for Trello is already running for " + DisplayNames.quotedName(board.boardName())
+                    + " at " + LocalHealthChecker.localServerUrl(existingHealth.port()));
             repairOrReportUntrackedWorker(paths, board, existingHealth, store, files, out);
             return;
         }
@@ -312,10 +313,9 @@ final class LocalWorkerManager {
         if (existingHealth.kind() == BoardHealthKind.PORT_USED) {
             throw new TrelloBoardSetupException(
                     "setup_worker_port_in_use",
-                    "Local HTTP status port " + healthPort
-                            + " is already in use by another process, so the worker for \""
-                            + board.boardName()
-                            + "\" cannot start.\nFree the port or change the workflow server.port, then rerun symphony-trello start.");
+                    "Local HTTP status port " + healthPort + " is already in use by another process, so the worker for "
+                            + DisplayNames.quotedName(board.boardName())
+                            + " cannot start.\nFree the port or change the workflow server.port, then rerun symphony-trello start.");
         }
         if (existingHealth.kind() == BoardHealthKind.WRONG_WORKFLOW) {
             String servingWorkflow = existingHealth
@@ -325,8 +325,8 @@ final class LocalWorkerManager {
             throw new TrelloBoardSetupException(
                     "setup_worker_port_in_use",
                     "Local HTTP status port " + healthPort
-                            + " is already serving another Symphony workflow, so the worker for \""
-                            + board.boardName() + "\" cannot start." + servingWorkflow
+                            + " is already serving another Symphony workflow, so the worker for "
+                            + DisplayNames.quotedName(board.boardName()) + " cannot start." + servingWorkflow
                             + "\nStop that worker or change the workflow server.port, then rerun symphony-trello start.");
         }
 
@@ -354,8 +354,9 @@ final class LocalWorkerManager {
             throw new TrelloBoardSetupException(
                     "setup_start_unhealthy",
                     "Symphony start returned successfully, but " + LocalHealthChecker.localStateUrl(health.port())
-                            + " did not report the expected workflow and board for \"" + board.boardName()
-                            + "\". Logs: " + files.stdoutLog() + " and " + files.stderrLog());
+                            + " did not report the expected workflow and board for "
+                            + DisplayNames.quotedName(board.boardName()) + ". Logs: " + files.stdoutLog() + " and "
+                            + files.stderrLog());
         }
         if (!platform.isAlive(handle.pid())
                 || !platform.isManaged(handle.pid(), paths.appHome(), board.workflowPath())) {
@@ -367,7 +368,7 @@ final class LocalWorkerManager {
                             + ", but the newly started managed process is not running for this install. Logs: "
                             + files.stdoutLog() + " and " + files.stderrLog());
         }
-        out.println("Started Symphony for Trello: \"" + board.boardName() + "\"");
+        out.println("Started Symphony for Trello: " + DisplayNames.quotedName(board.boardName()));
     }
 
     private void repairOrReportUntrackedWorker(
@@ -801,7 +802,7 @@ final class LocalWorkerManager {
     }
 
     private static String statusBoardLabel(ConnectedBoard board, Set<String> duplicateBoardNames) {
-        String label = "\"" + board.boardName() + "\"";
+        String label = DisplayNames.quotedName(board.boardName());
         if (!duplicateBoardNames.contains(board.boardName())) {
             return label;
         }
@@ -853,31 +854,32 @@ final class LocalWorkerManager {
                 // Plain branching because the present branch stops the worker with checked IO.
                 if (verifiedPid.isPresent()) {
                     stopPid(store, files, verifiedPid.get());
-                    out.println("Stopped untracked managed worker for \"" + board.boardName() + "\" pid="
-                            + verifiedPid.get());
+                    out.println("Stopped untracked managed worker for " + DisplayNames.quotedName(board.boardName())
+                            + " pid=" + verifiedPid.get());
                     return;
                 }
                 throw new TrelloBoardSetupException(
                         "setup_worker_untracked",
-                        "Cannot stop the worker for \""
-                                + board.boardName()
-                                + "\" because the worker is healthy but has no managed pid. Stop the process manually, then start it again with symphony-trello start."
+                        "Cannot stop the worker for "
+                                + DisplayNames.quotedName(board.boardName())
+                                + " because the worker is healthy but has no managed pid. Stop the process manually, then start it again with symphony-trello start."
                                 + health.workerPid()
                                         .map(reportedPid -> " Reported worker pid=" + reportedPid)
                                         .orElse(""));
             }
-            out.println("Symphony for Trello is already stopped for \"" + board.boardName() + "\"");
+            out.println("Symphony for Trello is already stopped for " + DisplayNames.quotedName(board.boardName()));
             return;
         }
         if (!platform.isManaged(pid, paths.appHome(), board.workflowPath())) {
             // The process is not ours, but the pid file is managed state pointing at a foreign
             // process; remove it so repeated stops do not keep reporting the same stale pid.
-            out.println("Skipped unmanaged stale pid for \"" + board.boardName() + "\" pid=" + pid);
+            out.println(
+                    "Skipped unmanaged stale pid for " + DisplayNames.quotedName(board.boardName()) + " pid=" + pid);
             removeStalePidFile(store, files.pidFile(), out);
             return;
         }
         stopPid(store, files, pid);
-        out.println("Stopped Symphony for Trello for \"" + board.boardName() + "\"");
+        out.println("Stopped Symphony for Trello for " + DisplayNames.quotedName(board.boardName()));
     }
 
     private void stopPid(ManagedProcessStore store, ManagedProcessStore.ManagedProcessFiles files, long pid)

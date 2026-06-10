@@ -606,7 +606,8 @@ final class TrelloBoardSetupTest {
         assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
             assertThat(failure.code()).isEqualTo("setup_ambiguous_in_progress_state");
             assertThat(failure)
-                    .hasMessageContaining("Multiple open Trello lists match in-progress list selector(s): in progress");
+                    .hasMessageContaining(
+                            "Multiple open Trello lists match in-progress list selector(s): \"in progress\"");
         });
         assertThat(workflow).doesNotExist();
     }
@@ -1587,6 +1588,149 @@ final class TrelloBoardSetupTest {
         // then
         assertThat(result.serverPort()).isEqualTo(expectedPort);
         assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: " + expectedPort);
+    }
+
+    @Test
+    void importExistingBoardRoundTripsControlCharacterListNames() throws IOException {
+        // given
+        // Trello list names can contain control characters; the request bypasses the CLI option
+        // validation exactly like names fetched from Trello do, so the generated workflow must
+        // escape them physically while parsing back to the original names.
+        String dirtyActive = "Ready\nfor \"Codex\"";
+        String dirtyTerminal = "Done\tList";
+        boardListsResponse.set(
+                """
+                [
+                  {"id":"list-1","name":"Ready\\nfor \\"Codex\\"","closed":false,"pos":1},
+                  {"id":"list-2","name":"Done\\tList","closed":false,"pos":2}
+                ]
+                """);
+        Path workflow = tempDir.resolve("dirty-roundtrip.WORKFLOW.md");
+
+        // when
+        var result = setup.importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "input",
+                List.of(dirtyActive),
+                List.of(dirtyTerminal),
+                null,
+                workflow,
+                Path.of("./agent-workspaces"),
+                1,
+                false));
+
+        // then
+        assertThat(result.activeStates()).containsExactly(dirtyActive);
+        assertThat(result.terminalStates()).containsExactly(dirtyTerminal);
+        String content = Files.readString(workflow, StandardCharsets.UTF_8);
+        assertThat(content).contains("Done\\tList");
+        assertThat(content)
+                .as("generated text must escape control characters instead of emitting them raw")
+                .contains("Ready\\nfor \\\"Codex\\\"")
+                .doesNotContain(dirtyActive)
+                .doesNotContain("\t");
+        EffectiveConfig parsed =
+                new ConfigResolver(ignored -> Optional.empty()).resolve(new WorkflowLoader().load(workflow));
+        assertThat(parsed.tracker().activeStates())
+                .as("the YAML escapes must round-trip to the actual Trello list name")
+                .containsExactly(dirtyActive);
+    }
+
+    @Test
+    void importExistingBoardEscapesControlCharacterListNamesInGeneratedPromptProse() throws IOException {
+        // given
+        // Trello list names can contain quotes and control characters; the generated workflow
+        // prompt prose must render them display-escaped on one physical line, while the YAML
+        // values still round-trip the actual Trello list names.
+        String dirtyInProgress = "Codex \"Live\"\tNow";
+        String dirtyBlocked = "Hold\n\"Up\"";
+        boardListsResponse.set(
+                """
+                [
+                  {"id":"list-1","name":"Ready for Codex","closed":false,"pos":1},
+                  {"id":"list-2","name":"Codex \\"Live\\"\\tNow","closed":false,"pos":2},
+                  {"id":"list-3","name":"Hold\\n\\"Up\\"","closed":false,"pos":3},
+                  {"id":"list-4","name":"Released","closed":false,"pos":4}
+                ]
+                """);
+        Path workflow = tempDir.resolve("dirty-prompt-prose.WORKFLOW.md");
+
+        // when
+        setup.importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "input",
+                List.of("Ready for Codex"),
+                List.of("Released"),
+                dirtyInProgress,
+                false,
+                dirtyBlocked,
+                workflow,
+                Path.of("./agent-workspaces"),
+                1,
+                false));
+
+        // then
+        String content = Files.readString(workflow, StandardCharsets.UTF_8);
+        assertThat(content)
+                .as("handoff instruction must keep the escaped blocked list name on one line")
+                .contains("trello_move_current_card with list_name \"Hold\\n\\\"Up\\\"\"")
+                .doesNotContain(dirtyBlocked);
+        assertThat(content)
+                .as("pickup prose must keep the escaped in-progress list name on one line")
+                .contains("to \"Codex \\\"Live\\\"\\tNow\" before Codex starts")
+                .contains("If the card is already in \"Codex \\\"Live\\\"\\tNow\", continue")
+                .doesNotContain(dirtyInProgress)
+                .doesNotContain("\t");
+        EffectiveConfig parsed =
+                new ConfigResolver(ignored -> Optional.empty()).resolve(new WorkflowLoader().load(workflow));
+        assertThat(parsed.tracker().inProgressState())
+                .as("YAML must still round-trip the actual Trello list name")
+                .isEqualTo(dirtyInProgress);
+        assertThat(parsed.tracker().blockedState()).isEqualTo(dirtyBlocked);
+    }
+
+    @Test
+    void importExistingBoardEscapesQuotedAmbiguousListSelectors() {
+        // given
+        // Configured selectors reach this validation without CLI option validation when they are
+        // supplied programmatically, exactly like the control-character round-trip above, so the
+        // ambiguous-selector error must display-escape quotes and control characters instead of
+        // letting them forge or split the message.
+        String dirtySelector = "Plan \"B\"\nQueue";
+        boardListsResponse.set(
+                """
+                [
+                  {"id":"list-1","name":"Plan \\"B\\"\\nQueue","closed":false,"pos":1},
+                  {"id":"list-2","name":"PLAN \\"B\\"\\nQUEUE","closed":false,"pos":2},
+                  {"id":"list-3","name":"Released","closed":false,"pos":3}
+                ]
+                """);
+        Path workflow = tempDir.resolve("ambiguous-quoted.WORKFLOW.md");
+
+        // when
+        Throwable thrown = catchThrowable(() -> setup.importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "input",
+                List.of(dirtySelector),
+                List.of("Released"),
+                null,
+                workflow,
+                Path.of("./agent-workspaces"),
+                1,
+                false)));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_ambiguous_active_state");
+            assertThat(failure)
+                    .hasMessageContaining(
+                            "Multiple open Trello lists match active list selector(s): \"Plan \\\"B\\\"\\nQueue\"")
+                    .hasMessageNotContaining(dirtySelector);
+        });
+        assertThat(workflow).doesNotExist();
     }
 
     @Test

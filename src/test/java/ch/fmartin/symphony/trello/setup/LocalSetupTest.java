@@ -929,6 +929,100 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void setupLocalCheckSuggestsShortLinkRepairSelectorForQuoteContainingBoardNames() throws Exception {
+        // given
+        // The suggested command wraps the selector in plain double quotes and the CLI rejects
+        // control characters in arguments, so a quote-containing board name can never be a
+        // copyable runnable suggestion; the opaque board key must be suggested instead.
+        Path workflow = tempDir.resolve("WORKFLOW.quoted-name-repair.md");
+        Path env = tempDir.resolve(".env.quoted-name-repair");
+        int port = availablePort();
+        writeWorkflow(workflow, "board-1", port);
+        Files.writeString(env, "TRELLO_API_KEY=key%nTRELLO_API_TOKEN=token%n".formatted(), StandardCharsets.UTF_8);
+        writeManifest(
+                """
+                {
+                  "boards": [
+                    {
+                      "boardId": "board-1",
+                      "boardKey": "abc123",
+                      "boardName": "Plan \\"B\\" Queue",
+                      "boardUrl": "https://trello.example/abc123",
+                      "workflowPath": "%s",
+                      "envPath": "%s",
+                      "workspaceRoot": "%s",
+                      "serverPort": %d,
+                      "githubEnabled": false,
+                      "additionalWritableRoots": [],
+                      "dangerFullAccess": false
+                    }
+                  ]
+                }
+                """
+                        .formatted(json(workflow), json(env), json(tempDir.resolve("workspaces")), port));
+        commands.stopHealthServer(workflow.toString());
+        commands.startHealthServer(workflow, "other-board");
+
+        // when
+        SetupRunResult result = runSetup("check", "--board", "board-1");
+
+        // then
+        result.assertFailure(2)
+                .stdoutContains(
+                        "  WARN  \"Plan \\\"B\\\" Queue\" local server:",
+                        "Suggested fix: symphony-trello setup-local repair-port --board \"abc123\"")
+                .stdoutDoesNotContain("repair-port --board \"Plan");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"Pay $(touch /tmp/probe) Queue", "Tick `id` Queue", "Try!Boom Queue", "Deploy 100% Done"})
+    void setupLocalCheckSuggestsShortLinkRepairSelectorForShellExpandingBoardNames(String boardName) throws Exception {
+        // given
+        // Inside the suggestion's plain double quotes, $ and backticks expand in POSIX shells and
+        // PowerShell, ! triggers interactive bash history expansion, and paired % expands in cmd.
+        // Board names are external Trello data, so the generated command must use the opaque key
+        // instead; the human-readable WARN line still shows the display-quoted name.
+        Path workflow = tempDir.resolve("WORKFLOW.expanding-name-repair.md");
+        Path env = tempDir.resolve(".env.expanding-name-repair");
+        int port = availablePort();
+        writeWorkflow(workflow, "board-1", port);
+        Files.writeString(env, "TRELLO_API_KEY=key%nTRELLO_API_TOKEN=token%n".formatted(), StandardCharsets.UTF_8);
+        writeManifest(
+                """
+                {
+                  "boards": [
+                    {
+                      "boardId": "board-1",
+                      "boardKey": "abc123",
+                      "boardName": "%s",
+                      "boardUrl": "https://trello.example/abc123",
+                      "workflowPath": "%s",
+                      "envPath": "%s",
+                      "workspaceRoot": "%s",
+                      "serverPort": %d,
+                      "githubEnabled": false,
+                      "additionalWritableRoots": [],
+                      "dangerFullAccess": false
+                    }
+                  ]
+                }
+                """
+                        .formatted(boardName, json(workflow), json(env), json(tempDir.resolve("workspaces")), port));
+        commands.stopHealthServer(workflow.toString());
+        commands.startHealthServer(workflow, "other-board");
+
+        // when
+        SetupRunResult result = runSetup("check", "--board", "board-1");
+
+        // then
+        result.assertFailure(2)
+                .stdoutContains(
+                        "  WARN  \"" + boardName + "\" local server:",
+                        "Suggested fix: symphony-trello setup-local repair-port --board \"abc123\"")
+                .stdoutDoesNotContain("repair-port --board \"" + boardName + "\"");
+    }
+
+    @Test
     void setupLocalCheckUsesShortLinkRepairSelectorForDuplicateBoardNames() throws Exception {
         // given
         DuplicateConnectedBoardsFixture duplicates = duplicateConnectedBoards();
@@ -1019,7 +1113,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "Starting Symphony",
                         "Symphony is connected to \"Local Queue\"",
                         "You're good to go - your Trello board is now a queue for Codex work.",
-                        "Symphony picks it up, moves it to `In Progress`, runs Codex, and keeps the Trello card updated.",
+                        "Symphony picks it up, moves it to \"In Progress\", runs Codex, and keeps the Trello card updated.",
                         "GitHub PR flow to a connected board")
                 .stdoutDoesNotContain(
                         "TRELLO_API_TOKEN=token", "Log:", "workflow's Trello handoff lists", "\u2019", "\u2014");
@@ -2618,7 +2712,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         result.assertFailure(2)
                 .stderrContains(
                         "setup_failed code=setup_unknown_in_progress_state",
-                        "Unknown in-progress list(s): No Such List 123")
+                        "Unknown in-progress list(s): \"No Such List 123\"")
                 .stderrDoesNotContain("setup_unknown_active_state", "Unknown active list(s)");
         assertThat(workflow).doesNotExist();
         assertThat(trello.createdLists()).isEmpty();
@@ -2768,10 +2862,11 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "Existing board lists",
                         "Queued-work list names",
                         "In-progress list name",
-                        "move it to `Queue`",
-                        "moves it to `Working`",
-                        "move it to `Finished`")
-                .stdoutDoesNotContain("move it to `Ready for Codex`", "moves it to `In Progress`", "move it to `Done`");
+                        "move it to \"Queue\"",
+                        "moves it to \"Working\"",
+                        "move it to \"Finished\"")
+                .stdoutDoesNotContain(
+                        "move it to \"Ready for Codex\"", "moves it to \"In Progress\"", "move it to \"Done\"");
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("- \"Queue\"", "in_progress_state: \"Working\"", "- \"Finished\"", "list_name \"Blocked\"");
@@ -3872,6 +3967,81 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         assertThat(commands.commandEvents).containsExactly("stop:" + workflow, "start:" + workflow);
     }
 
+    @Test
+    void repairPortStopFailureEscapesControlCharacterBoardNames() throws Exception {
+        // given
+        // Legacy persisted manifests may hold board names with quotes and control characters;
+        // the stop-failure message must stay one escaped line, and the failure must happen
+        // before the workflow or manifest port is updated.
+        Path workflow = tempDir.resolve("WORKFLOW.dirty-name-stop-failure.md");
+        Path otherWorkflow = tempDir.resolve("WORKFLOW.dirty-name-port-owner.md");
+        Path env = tempDir.resolve(".env.dirty-name-stop-failure");
+        Path otherEnv = tempDir.resolve(".env.dirty-name-port-owner");
+        Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
+        int conflictingPort = availablePort();
+        writeWorkflow(workflow, "board-1", conflictingPort);
+        writeWorkflow(otherWorkflow, "board-2", conflictingPort);
+        Files.writeString(env, "TRELLO_API_KEY=key%nTRELLO_API_TOKEN=token%n".formatted(), StandardCharsets.UTF_8);
+        Files.writeString(otherEnv, "TRELLO_API_KEY=key%nTRELLO_API_TOKEN=token%n".formatted(), StandardCharsets.UTF_8);
+        writeManifest(
+                """
+                {
+                  "boards": [
+                    {
+                      "boardId": "board-1",
+                      "boardKey": "abc123",
+                      "boardName": "Plan \\"B\\"\\nQueue",
+                      "boardUrl": "https://trello.example/abc123",
+                      "workflowPath": "%s",
+                      "envPath": "%s",
+                      "workspaceRoot": "%s",
+                      "serverPort": %d,
+                      "githubEnabled": false,
+                      "additionalWritableRoots": [],
+                      "dangerFullAccess": false
+                    },
+                    {
+                      "boardId": "board-2",
+                      "boardKey": "def456",
+                      "boardName": "Other Port Owner",
+                      "boardUrl": "https://trello.example/def456",
+                      "workflowPath": "%s",
+                      "envPath": "%s",
+                      "workspaceRoot": "%s",
+                      "serverPort": %d,
+                      "githubEnabled": false,
+                      "additionalWritableRoots": [],
+                      "dangerFullAccess": false
+                    }
+                  ]
+                }
+                """
+                        .formatted(
+                                json(workflow),
+                                json(env),
+                                json(tempDir.resolve("workspaces")),
+                                ConfigDefaults.DEFAULT_SERVER_PORT,
+                                json(otherWorkflow),
+                                json(otherEnv),
+                                json(tempDir.resolve("workspaces")),
+                                conflictingPort));
+        commands.startHealthServer(workflow);
+        doThrow(new IOException("simulated stop failure")).when(workerManager).stop(any(), any(), any());
+
+        // when
+        SetupRunResult result = runSetup("repair-port", "--board", "board-1");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_stop_failed",
+                        "Could not stop Symphony for \"Plan \\\"B\\\"\\nQueue\": simulated stop failure")
+                .stderrDoesNotContain("Plan \"B\"\nQueue");
+        assertThatWorkflow(workflow).hasServerPort(conflictingPort);
+        assertThatManifest(manifest).hasBoardWithPort("Plan \"B\"\nQueue", ConfigDefaults.DEFAULT_SERVER_PORT);
+        assertThat(commands.commandEvents).isEmpty();
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"Repair Selector Queue", "board-1", "abc123", "https://trello.com/b/abc123/board"})
     void repairPortAcceptsConnectedBoardNameIdKeyOrUrl(String selector) throws Exception {
@@ -4052,6 +4222,51 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "You're good to go - your Trello board is now a queue for Codex work.");
         assertThat(commands.startedWorkflows).containsExactly(workflow.toString());
         assertThat(commands.startedEnvFiles).containsExactly(env.toString());
+    }
+
+    @Test
+    void setupKeepTutorialEscapesControlCharacterWorkflowListNames() throws Exception {
+        // given
+        // Workflow YAML can carry Trello list names containing quotes and control characters;
+        // the keep-existing tutorial must render them display-escaped on one physical line
+        // instead of letting a list name split or garble the tutorial text.
+        Path workflow = tempDir.resolve("WORKFLOW.dirty-tutorial.md");
+        Path env = tempDir.resolve(".env.dirty-tutorial");
+        SetupRunResult firstResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Dirty Tutorial Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+        String content = Files.readString(workflow, StandardCharsets.UTF_8);
+        content = content.replace("- \"Ready for Codex\"", "- \"Ready\\nCodex\"")
+                .replace("in_progress_state: \"In Progress\"", "in_progress_state: \"Doing\\tNow\"")
+                .replace("- \"In Progress\"", "- \"Doing\\tNow\"")
+                .replace("- \"Done\"", "- \"Done \\\"Q\\\"\"");
+        Files.writeString(workflow, content, StandardCharsets.UTF_8);
+
+        // when
+        SetupRunResult secondResult = runSetup("--non-interactive", "--no-github");
+
+        // then
+        firstResult.assertSuccess();
+        secondResult
+                .assertSuccess()
+                .stdoutContains(
+                        "Keeping connected Trello boards.",
+                        "Create a Trello card with a clear task and move it to \"Ready\\nCodex\".",
+                        "Symphony picks it up, moves it to \"Doing\\tNow\", runs Codex",
+                        "If you accept it, move it to \"Done \\\"Q\\\"\".")
+                .stdoutDoesNotContain("Ready\nCodex", "Doing\tNow", "Done \"Q\"");
     }
 
     @Test
@@ -5369,9 +5584,9 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 .stdoutContains(
                         "GitHub CLI authenticated",
                         "You're good to go - your Trello board is now a queue for Codex work.",
-                        "Symphony picks it up, moves it to `In Progress`, runs Codex, and opens or updates a pull request.",
-                        "Review the PR. If you want changes, comment on the PR or Trello card, then move the Trello card back to `Ready for Codex`.",
-                        "When the PR is ready to merge, move the Trello card to `Merging`; Symphony will re-check it, merge it, and move the Trello card to `Done`.")
+                        "Symphony picks it up, moves it to \"In Progress\", runs Codex, and opens or updates a pull request.",
+                        "Review the PR. If you want changes, comment on the PR or Trello card, then move the Trello card back to \"Ready for Codex\".",
+                        "When the PR is ready to merge, move the Trello card to `Merging`; Symphony will re-check it, merge it, and move the Trello card to \"Done\".")
                 .stdoutDoesNotContain("workflow's Trello handoff lists", "\u2019", "\u2014");
         assertThat(trello.createdLists())
                 .containsExactly(
