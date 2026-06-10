@@ -140,6 +140,7 @@ final class SetupDiagnosticReporter {
             "setup_worker_missing_api_key",
             "setup_worker_missing_api_token",
             "setup_worker_missing_trello_credentials",
+            "setup_worker_port_in_use",
             "setup_worker_selection_conflict",
             "setup_worker_untracked",
             "setup_worker_workflow_ambiguous",

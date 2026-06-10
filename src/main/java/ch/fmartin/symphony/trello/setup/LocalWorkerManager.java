@@ -272,6 +272,9 @@ final class LocalWorkerManager {
             return;
         }
 
+        // Workflow-local launch problems must win over port classification: an invalid workflow
+        // falls back to a default health port, so an occupied fallback port would otherwise mask
+        // the setup_workflow_invalid error the user needs.
         EffectiveConfig launchConfig = workflowConfig.resolveLaunchConfig(
                 board.workflowPath(), WorkflowEnvironmentResolver.resolver(environment, envPath));
         boolean workflowServerPortUsed =
@@ -282,6 +285,27 @@ final class LocalWorkerManager {
                 workflowServerPortUsed);
         credentialUsage.ifPresent(this::validateWorkerCredentials);
         workflowConfig.validateLaunchDispatch(board.workflowPath(), launchConfig);
+
+        if (existingHealth.kind() == BoardHealthKind.PORT_USED) {
+            throw new TrelloBoardSetupException(
+                    "setup_worker_port_in_use",
+                    "Local HTTP status port " + healthPort
+                            + " is already in use by another process, so the worker for \""
+                            + board.boardName()
+                            + "\" cannot start.\nFree the port or change the workflow server.port, then rerun symphony-trello start.");
+        }
+        if (existingHealth.kind() == BoardHealthKind.WRONG_WORKFLOW) {
+            String servingWorkflow = existingHealth
+                    .actualWorkflowPath()
+                    .map(workflow -> " It currently serves this workflow:\n  " + workflow)
+                    .orElse("");
+            throw new TrelloBoardSetupException(
+                    "setup_worker_port_in_use",
+                    "Local HTTP status port " + healthPort
+                            + " is already serving another Symphony workflow, so the worker for \""
+                            + board.boardName() + "\" cannot start." + servingWorkflow
+                            + "\nStop that worker or change the workflow server.port, then rerun symphony-trello start.");
+        }
 
         List<String> command = List.of(
                 javaExecutable(),
