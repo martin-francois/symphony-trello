@@ -581,10 +581,16 @@ final class SetupDiagnosticReporter {
                 body,
                 "selected_manifest_board_count",
                 context.selectedManifest().boards().size());
-        line(
-                body,
-                "selected_workflow_file_count",
-                context.selectedWorkflowPaths().size());
+        long readableSelectedWorkflows = context.selectedWorkflowPaths().stream()
+                .filter(Files::isRegularFile)
+                .count();
+        line(body, "selected_workflow_file_count", readableSelectedWorkflows);
+        long missingSelectedWorkflows = context.selectedWorkflowPaths().size() - readableSelectedWorkflows;
+        if (missingSelectedWorkflows > 0) {
+            // A requested workflow selector that is missing or not a regular file must not look
+            // like an included workflow file.
+            line(body, "selected_workflow_missing_count", missingSelectedWorkflows);
+        }
         appendSelectionMatch(body, context.selection());
     }
 
