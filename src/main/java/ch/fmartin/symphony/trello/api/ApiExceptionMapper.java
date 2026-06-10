@@ -14,9 +14,12 @@ public class ApiExceptionMapper implements ExceptionMapper<Throwable> {
     @Override
     public Response toResponse(Throwable exception) {
         if (exception instanceof NotFoundException) {
+            // Only card lookups report card_not_found; unknown local routes must not imply a
+            // Trello card lookup failed.
+            String code = exception instanceof CardNotFoundException ? "card_not_found" : "not_found";
             return Response.status(Response.Status.NOT_FOUND)
                     .type(MediaType.APPLICATION_JSON)
-                    .entity(error("card_not_found", exception.getMessage()))
+                    .entity(error(code, exception.getMessage()))
                     .build();
         }
         if (exception instanceof WebApplicationException webApplication) {

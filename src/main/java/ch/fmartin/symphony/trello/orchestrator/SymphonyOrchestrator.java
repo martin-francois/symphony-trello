@@ -5,6 +5,7 @@ import static com.google.common.base.Preconditions.checkState;
 import ch.fmartin.symphony.trello.agent.AgentEvent;
 import ch.fmartin.symphony.trello.agent.AgentRunResult;
 import ch.fmartin.symphony.trello.agent.AgentRunner;
+import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.config.StateNames;
@@ -226,6 +227,14 @@ public class SymphonyOrchestrator {
     public String selectedConfiguredBoardId() {
         EffectiveConfig current = config;
         return current == null ? null : current.tracker().boardId();
+    }
+
+    /** The configured card identifier prefix, or the documented default before configuration loads. */
+    public String cardIdentifierPrefix() {
+        EffectiveConfig current = config;
+        return current == null
+                ? ConfigDefaults.DEFAULT_CARD_IDENTIFIER_PREFIX
+                : current.tracker().cardIdentifierPrefix();
     }
 
     public void requestRefresh() {

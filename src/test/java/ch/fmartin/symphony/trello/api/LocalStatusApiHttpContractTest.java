@@ -101,14 +101,87 @@ final class LocalStatusApiHttpContractTest {
     }
 
     @Test
-    void unknownCardLookupKeepsItsNotFoundMapping() {
+    void absentCardWithValidIdentifierShapeReportsCardNotFound() {
         // given
-        String path = "/api/v1/UNKNOWN-card";
+        // TRELLO is the configured card identifier prefix, so this is an intentional
+        // card-details lookup whose card is absent, and a raw 24-character Trello card id is the
+        // documented identifier fallback.
+        String prefixedIdentifier = "/api/v1/TRELLO-abc";
+        String rawTrelloCardId = "/api/v1/000000000000000000000001";
 
         // when
-        Response response = given().get(path);
+        Response prefixed = given().get(prefixedIdentifier);
+        Response raw = given().get(rawTrelloCardId);
 
         // then
-        response.then().statusCode(404).body("error.code", equalTo("card_not_found"));
+        prefixed.then().statusCode(404).body("error.code", equalTo("card_not_found"));
+        raw.then().statusCode(404).body("error.code", equalTo("card_not_found"));
+    }
+
+    @MethodSource("unknownSingleSegmentPaths")
+    @ParameterizedTest(name = "{0}")
+    void unknownSingleSegmentApiPathsReportNeutralNotFound(String name, String path) {
+        // given
+        String unknownPath = path;
+
+        // when
+        Response response = given().get(unknownPath);
+
+        // then
+        response.then().statusCode(404).body("error.code", equalTo("not_found"));
+        assertThat(response.body().asString()).doesNotContain("card_not_found").doesNotContain("Unknown card");
+    }
+
+    private static Stream<Arguments> unknownSingleSegmentPaths() {
+        return Stream.of(
+                Arguments.of("foreign prefix", "/api/v1/UNKNOWN-card"),
+                Arguments.of("route-looking name", "/api/v1/cards"),
+                Arguments.of("post-only route name", "/api/v1/refresh"),
+                Arguments.of("encoded blank", "/api/v1/%20"),
+                Arguments.of("empty suffix", "/api/v1/TRELLO-"),
+                Arguments.of("non-alphanumeric suffix", "/api/v1/TRELLO-not%20alnum"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"/api/v1/cards/unknown", "/api/v1/local-status/extra", "/api/v1/state/extra"})
+    void unknownNestedApiPathsReportNeutralNotFound(String path) {
+        // given
+        String unknownPath = path;
+
+        // when
+        Response response = given().get(unknownPath);
+
+        // then
+        response.then().statusCode(404);
+        assertThat(response.body().asString()).doesNotContain("card_not_found").doesNotContain("Unknown card");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"/q/health", "/q/health/live", "/q/health/ready"})
+    void healthStylePathsStayNeutralWhenNoHealthExtensionIsInstalled(String path) {
+        // given
+        // The health extension is not part of this application, so these are unknown routes; the
+        // contract is that they never masquerade as a failed Trello card lookup.
+        String healthPath = path;
+
+        // when
+        Response response = given().get(healthPath);
+
+        // then
+        assertThat(response.statusCode()).isEqualTo(404);
+        assertThat(response.body().asString()).doesNotContain("card_not_found").doesNotContain("Unknown card");
+    }
+
+    @Test
+    void encodedSlashSegmentsStayNeutral() {
+        // given
+        String encodedSlash = "/api/v1/%2f";
+
+        // when
+        Response response = given().urlEncodingEnabled(false).get(encodedSlash);
+
+        // then
+        assertThat(response.statusCode()).isIn(400, 404);
+        assertThat(response.body().asString()).doesNotContain("card_not_found").doesNotContain("Unknown card");
     }
 }

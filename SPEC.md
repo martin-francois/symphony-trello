@@ -2298,6 +2298,10 @@ Minimum endpoints:
 
   - If the card is unknown to the current in-memory state, return `404` with an error response, for
     example `{"error":{"code":"card_not_found","message":"..."}}`.
+  - `card_not_found` SHOULD be reserved for card-details lookups whose path segment is a
+    syntactically valid card identifier for this worker; any other unknown local API route SHOULD
+    return `404` with one neutral route-miss code such as `not_found`, so a route typo never reads
+    as a failed Trello card lookup.
 
 - `POST /api/v1/refresh`
   - Queues an immediate Trello poll + reconciliation cycle, best-effort trigger; implementations
