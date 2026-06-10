@@ -3370,6 +3370,62 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void repairPortAvoidsPortsReservedByLocalWorkflowFiles() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.repair-avoid.md");
+        Path env = tempDir.resolve(".env.repair-avoid");
+        int boardPort = availablePort();
+        SetupRunResult firstResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Avoid Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--server-port",
+                String.valueOf(boardPort),
+                "--no-start",
+                "--no-github");
+        firstResult.assertSuccess();
+        // Force a repair by occupying the configured port with a foreign listener.
+        try (ServerSocket portBlocker = new ServerSocket(boardPort, 1, InetAddress.getLoopbackAddress())) {
+            assertThat(portBlocker.isBound()).isTrue();
+            int stalePort = boardPort + 1;
+            Path staleWorkflow = tempDir.resolve("config").resolve("WORKFLOW.stale-port.md");
+            Files.writeString(
+                    staleWorkflow,
+                    """
+                    ---
+                    tracker:
+                      kind: trello
+                      board_id: "stale-board"
+                    server:
+                      port: %d
+                    ---
+                    Body
+                    """
+                            .formatted(stalePort),
+                    StandardCharsets.UTF_8);
+            commands.startedWorkflows.clear();
+            commands.stoppedWorkflows.clear();
+
+            // when
+            SetupRunResult result = runSetup("repair-port", "--board", "Avoid Queue");
+
+            // then
+            result.assertSuccess();
+            assertThat(result.stdout()).doesNotContain("to use http://127.0.0.1:" + stalePort);
+        }
+    }
+
+    @Test
     void repairPortReportsNoRepairNeededWhenConfiguredPortIsAvailable() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.repair-dry-run.md");
