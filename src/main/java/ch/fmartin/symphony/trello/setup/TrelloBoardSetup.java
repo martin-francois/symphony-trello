@@ -347,7 +347,9 @@ public final class TrelloBoardSetup {
         preflightRequestedServerPort(request.workflowPath(), request.serverPort(), request.force(), request.envPath());
         Map<String, Object> board = importBoardInfo(request);
         if (bool(board.get("closed"))) {
-            throw new TrelloBoardSetupException("trello_board_closed", "Trello board is closed");
+            throw new TrelloBoardSetupException(
+                    "trello_board_closed",
+                    "Trello board is archived. Unarchive it in Trello, or choose another board. Trello's API reports archived boards as closed.");
         }
 
         String resolvedBoardId = requiredString(board, "id");
