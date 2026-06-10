@@ -2379,6 +2379,75 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
+    void importBoardRejectsDirectoryWorkflowPathAsExpectedInputError() throws Exception {
+        // given
+        Path workflowDirectory = tempDir.resolve("workflow-dir");
+        Files.createDirectories(workflowDirectory);
+        Path env = tempDir.resolve(".env.directory-workflow");
+
+        // when
+        CliRunResult result = runCli(
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "https://trello.com/b/input/existing-board",
+                "--active",
+                "Queue for Codex",
+                "--terminal",
+                "Released",
+                "--workflow",
+                workflowDirectory.toString(),
+                "--env",
+                env.toString(),
+                "--force");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains("setup_failed code=setup_invalid_path", "directory")
+                .stderrDoesNotContain("Troubleshooting report written");
+    }
+
+    @Test
+    void importBoardRejectsWorkflowUnderFileParentWithoutBlamingManifest() throws Exception {
+        // given
+        Path plainFile = tempDir.resolve("not-a-directory");
+        Files.writeString(plainFile, "plain", StandardCharsets.UTF_8);
+        Path workflow = plainFile.resolve("WORKFLOW.import.md");
+        Path env = tempDir.resolve(".env.file-parent-workflow");
+
+        // when
+        CliRunResult result = runCli(
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "https://trello.com/b/input/existing-board",
+                "--active",
+                "Queue for Codex",
+                "--terminal",
+                "Released",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--force");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains("setup_failed code=setup_invalid_path", "not a directory")
+                .stderrDoesNotContain("setup_manifest_unavailable", "Troubleshooting report written");
+    }
+
+    @Test
     void importBoardPersistsExternalWorkflowIntoExplicitManifest() throws Exception {
         // given
         Path externalDir = tempDir.resolve("external-workflows");

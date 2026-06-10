@@ -3373,6 +3373,69 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void dryRunRejectsDirectoryWorkflowPathAsExpectedInput() throws Exception {
+        // given
+        Path workflowDirectory = tempDir.resolve("dry-run-workflow-dir");
+        Files.createDirectories(workflowDirectory);
+
+        // when
+        SetupRunResult result = runSetup(
+                "--dry-run", "--non-interactive", "--workflow", workflowDirectory.toString(), "--force");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains("setup_failed code=setup_invalid_path", "directory")
+                .stderrDoesNotContain("Troubleshooting report written");
+        assertThat(result.stdout()).doesNotContain("Dry run");
+    }
+
+    @Test
+    void dryRunRejectsWorkflowUnderFileParentAsExpectedInput() throws Exception {
+        // given
+        Path plainFile = tempDir.resolve("dry-run-not-a-directory");
+        Files.writeString(plainFile, "plain", StandardCharsets.UTF_8);
+        Path workflow = plainFile.resolve("child.WORKFLOW.md");
+
+        // when
+        SetupRunResult result =
+                runSetup("--dry-run", "--non-interactive", "--workflow", workflow.toString(), "--force");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains("setup_failed code=setup_invalid_path", "not a directory")
+                .stderrDoesNotContain("Troubleshooting report written");
+        assertThat(result.stdout()).doesNotContain("Dry run");
+    }
+
+    @Test
+    void guidedSetupValidatesWorkflowDestinationBeforeTrelloMemberValidation() throws Exception {
+        // given
+        Path workflowDirectory = tempDir.resolve("guided-workflow-dir");
+        Files.createDirectories(workflowDirectory);
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                "http://127.0.0.1:1/",
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Preflight Queue",
+                "--workflow",
+                workflowDirectory.toString(),
+                "--force",
+                "--no-github");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains("setup_failed code=setup_invalid_path", "directory")
+                .stderrDoesNotContain("trello_api_request", "Troubleshooting report written");
+    }
+
+    @Test
     void checkReportsOverlappingConnectedWorkflowListRoles() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.overlap-check.md");
