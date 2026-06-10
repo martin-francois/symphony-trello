@@ -476,7 +476,7 @@ public final class LocalSetup {
             return 0;
         }
         boolean wasRunning = health.kind() == BoardHealthKind.SAME_WORKFLOW;
-        int port = nextAvailablePort(manifest, reconciledBoard);
+        int port = nextAvailablePort(options, manifest, reconciledBoard);
         if (options.dryRun()) {
             out.println();
             out.println("Dry run");
@@ -543,11 +543,14 @@ public final class LocalSetup {
                 .anyMatch(connectedBoard -> connectedBoard.serverPort() == board.serverPort());
     }
 
-    private static int nextAvailablePort(ConnectedBoardManifest manifest, ConnectedBoard ignoredBoard) {
+    private int nextAvailablePort(Options options, ConnectedBoardManifest manifest, ConnectedBoard ignoredBoard) {
         Set<Integer> reserved = manifest.boards().stream()
                 .filter(board -> !board.boardId().equals(ignoredBoard.boardId()))
                 .map(ConnectedBoard::serverPort)
                 .collect(Collectors.toCollection(HashSet::new));
+        // Local workflow files outside the manifest still reserve their ports, so a repaired
+        // board cannot collide with a stale or disconnected workflow that may be started later.
+        reserved.addAll(localWorkflowFilePortReservations(options, ignoredBoard));
         for (int port = TrelloBoardSetup.DEFAULT_SERVER_PORT; port <= 65535; port++) {
             if (!reserved.contains(port) && !LocalHealthChecker.portAcceptsConnections(port)) {
                 return port;
@@ -556,6 +559,25 @@ public final class LocalSetup {
         throw new TrelloBoardSetupException("setup_server_port_unavailable", "No free local server port was found.");
     }
 
+    private Set<Integer> localWorkflowFilePortReservations(Options options, ConnectedBoard ignoredBoard) {
+        Set<Integer> reserved = new HashSet<>();
+        Path configDir = options.configDir();
+        if (configDir == null || !Files.isDirectory(configDir)) {
+            return reserved;
+        }
+        try (var files = Files.list(configDir)) {
+            files.filter(Files::isRegularFile)
+                    .filter(file -> PathNames.fileName(file).endsWith(".md"))
+                    .filter(file -> ignoredBoard.workflowPath() == null
+                            || !PathsEqual.samePath(file, ignoredBoard.workflowPath()))
+                    .forEach(file -> workflowConfig
+                            .serverPort(file, WorkflowEnvironmentResolver.resolver(environment, options.envPath()))
+                            .ifPresent(reserved::add));
+        } catch (IOException ignored) {
+            // A config directory that cannot be listed leaves only the manifest and probe checks.
+        }
+        return reserved;
+    }
 
     private Prerequisites prerequisites() {
         return prerequisiteChecker.check();
