@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
+import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import com.google.common.util.concurrent.Striped;
 import java.io.IOException;
@@ -271,6 +272,8 @@ final class LocalWorkerManager {
             return;
         }
 
+        EffectiveConfig launchConfig = workflowConfig.resolveLaunchConfig(
+                board.workflowPath(), WorkflowEnvironmentResolver.resolver(environment, envPath));
         boolean workflowServerPortUsed =
                 healthChecker.externalHttpPortOverrideSource(envPath).isEmpty();
         workflowConfig.validateStartEnvironmentReferences(
@@ -278,6 +281,7 @@ final class LocalWorkerManager {
                 WorkflowEnvironmentResolver.resolver(environment, envPath),
                 workflowServerPortUsed);
         credentialUsage.ifPresent(this::validateWorkerCredentials);
+        workflowConfig.validateLaunchDispatch(board.workflowPath(), launchConfig);
 
         List<String> command = List.of(
                 javaExecutable(),
@@ -884,21 +888,17 @@ final class LocalWorkerManager {
                 () -> board.envPath() == null ? fallbackWorkflowEnvPath : board.envPath());
     }
 
-    private void validateExplicitWorkflowSelector(Path workflowPath, Path envPath, boolean validateServerPort) {
-        validateWorkerWorkflowPath(workflowPath);
+    private void validateExplicitWorkflowSelector(Path workflowPath, Path envPath, boolean validateForLaunch) {
+        if (validateForLaunch) {
+            // start reports unusable explicit workflows through the launch validation path so the
+            // error carries the underlying loader or resolver cause; content problems are raised
+            // by resolveLaunchConfig before any worker is launched. stop, status, and logs keep
+            // the lenient recovery behavior for invalid explicit workflows.
+            workflowConfig.requireLaunchableWorkflowFile(workflowPath);
+        } else {
+            validateWorkerWorkflowPath(workflowPath);
+        }
         validateWorkerEnvPath(envPath);
-        if (!validateServerPort) {
-            return;
-        }
-        boolean workflowServerPortUsed =
-                healthChecker.externalHttpPortOverrideSource(envPath).isEmpty();
-        WorkflowValidation validation = workflowConfig.diagnosticsValidation(
-                workflowPath, WorkflowEnvironmentResolver.resolver(environment, envPath), workflowServerPortUsed);
-        if (!validation.ok()) {
-            throw new TrelloBoardSetupException(
-                    "setup_invalid_arguments",
-                    "--workflow must reference a readable workflow file with usable workflow front matter.");
-        }
     }
 
     private ConnectedBoard defaultSelectedBoard(ConnectedBoardManifest manifest, String command) {

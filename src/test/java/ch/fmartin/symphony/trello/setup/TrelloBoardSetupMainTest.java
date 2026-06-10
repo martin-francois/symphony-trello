@@ -1573,14 +1573,10 @@ final class TrelloBoardSetupMainTest {
         assertThat(result.stdout()).doesNotContain("Started Symphony", "Troubleshooting report written");
         assertThat(result.stderr())
                 .contains(
-                        "setup_failed code=setup_invalid_arguments",
-                        "--workflow must point to a regular workflow file.")
-                .doesNotContain(
-                        "Troubleshooting report written",
-                        workflow.toString(),
-                        privateDir.toString(),
-                        tempDir.toString(),
-                        "Jane Doe");
+                        "setup_failed code=setup_workflow_invalid",
+                        "workflow path is not a regular workflow file",
+                        "Fix the workflow front matter")
+                .doesNotContain("Troubleshooting report written");
         assertThat(stateHome).doesNotExist();
     }
 
@@ -2352,139 +2348,40 @@ final class TrelloBoardSetupMainTest {
     @Test
     void importBoardRestartsPreviouslyRunningReplacedWorker() throws Exception {
         // given
-        Path oldWorkflow = tempDir.resolve("restart-old.WORKFLOW.md");
-        Path newWorkflow = tempDir.resolve("restart-new.WORKFLOW.md");
-        Path env = tempDir.resolve(".env.restart");
-        Files.writeString(oldWorkflow, "old workflow", StandardCharsets.UTF_8);
-        ConnectedBoard oldBoard = new ConnectedBoard(
-                "board-1",
-                "SYNTH001",
-                "Existing Board",
-                "https://trello.com/b/SYNTH001/board",
-                oldWorkflow.toAbsolutePath().normalize(),
-                env.toAbsolutePath().normalize(),
-                TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT.toAbsolutePath().normalize(),
-                18080,
-                true,
-                List.of(),
-                false);
-        new ConnectedBoardRepository(tempDir.resolve("connected-boards.json"))
-                .save(new ConnectedBoardManifest(List.of(oldBoard)));
-        LocalWorkerManager workerManager = mock();
-        when(workerManager.canStopRunningWorker(any(LocalWorkerPaths.class), eq(oldBoard)))
-                .thenReturn(true);
-        TrelloBoardSetup boardSetup = new TrelloBoardSetup(
-                new ObjectMapper(),
-                () -> CodexModelSelectionDefaults.of(TrelloBoardSetup.CodexModelDefaults.fallback()));
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
+        ReplacedRunningWorkerFixture fixture = replacedRunningWorkerFixture("restart");
 
         // when
-        int exitCode = TrelloBoardSetupMain.run(
-                new String[] {
-                    "import-board",
-                    "--endpoint",
-                    endpoint(),
-                    "--key",
-                    "key",
-                    "--token",
-                    "token",
-                    "--board",
-                    "https://trello.com/b/input/existing-board",
-                    "--active",
-                    "Queue for Codex",
-                    "--terminal",
-                    "Released",
-                    "--workflow",
-                    newWorkflow.toString(),
-                    "--env",
-                    env.toString(),
-                    "--force"
-                },
-                new TrelloBoardSetupService(boardSetup, workerManager, Map.of()),
-                new LocalSetup(boardSetup, new ProcessCommandRunner()),
-                workerManager,
-                new PrintStream(stdout, true, StandardCharsets.UTF_8),
-                new PrintStream(stderr, true, StandardCharsets.UTF_8));
+        ForcedImportResult run = runForcedImportBoard(fixture);
 
         // then
-        assertThat(exitCode).isZero();
-        assertThat(stdout.toString(StandardCharsets.UTF_8))
+        assertThat(run.exitCode()).isZero();
+        assertThat(run.stdout())
                 .contains(
                         "This update stopped the running worker for \"Existing Board\". Restarting it with the updated workflow.");
-        verify(workerManager).stop(any(LocalWorkerPaths.class), eq(oldBoard), any(PrintStream.class));
+        verify(fixture.workerManager())
+                .stop(any(LocalWorkerPaths.class), eq(fixture.oldBoard()), any(PrintStream.class));
         ArgumentCaptor<ConnectedBoard> restartedBoard = ArgumentCaptor.forClass(ConnectedBoard.class);
-        verify(workerManager)
+        verify(fixture.workerManager())
                 .start(any(LocalWorkerPaths.class), restartedBoard.capture(), any(Path.class), any(PrintStream.class));
         assertThat(restartedBoard.getValue().boardId()).isEqualTo("board-1");
         assertThat(restartedBoard.getValue().workflowPath())
-                .isEqualTo(newWorkflow.toAbsolutePath().normalize());
+                .isEqualTo(fixture.newWorkflow().toAbsolutePath().normalize());
     }
 
     @Test
     void importBoardPrintsRecoveryStepWhenReplacedWorkerRestartFails() throws Exception {
         // given
-        Path oldWorkflow = tempDir.resolve("restart-fail-old.WORKFLOW.md");
-        Path newWorkflow = tempDir.resolve("restart-fail-new.WORKFLOW.md");
-        Path env = tempDir.resolve(".env.restart-fail");
-        Files.writeString(oldWorkflow, "old workflow", StandardCharsets.UTF_8);
-        ConnectedBoard oldBoard = new ConnectedBoard(
-                "board-1",
-                "SYNTH001",
-                "Existing Board",
-                "https://trello.com/b/SYNTH001/board",
-                oldWorkflow.toAbsolutePath().normalize(),
-                env.toAbsolutePath().normalize(),
-                TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT.toAbsolutePath().normalize(),
-                18080,
-                true,
-                List.of(),
-                false);
-        new ConnectedBoardRepository(tempDir.resolve("connected-boards.json"))
-                .save(new ConnectedBoardManifest(List.of(oldBoard)));
-        LocalWorkerManager workerManager = mock();
-        when(workerManager.canStopRunningWorker(any(LocalWorkerPaths.class), eq(oldBoard)))
-                .thenReturn(true);
+        ReplacedRunningWorkerFixture fixture = replacedRunningWorkerFixture("restart-fail");
         doThrow(new TrelloBoardSetupException("setup_start_unhealthy", "worker did not become healthy"))
-                .when(workerManager)
+                .when(fixture.workerManager())
                 .start(any(LocalWorkerPaths.class), any(ConnectedBoard.class), any(Path.class), any(PrintStream.class));
-        TrelloBoardSetup boardSetup = new TrelloBoardSetup(
-                new ObjectMapper(),
-                () -> CodexModelSelectionDefaults.of(TrelloBoardSetup.CodexModelDefaults.fallback()));
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode = TrelloBoardSetupMain.run(
-                new String[] {
-                    "import-board",
-                    "--endpoint",
-                    endpoint(),
-                    "--key",
-                    "key",
-                    "--token",
-                    "token",
-                    "--board",
-                    "https://trello.com/b/input/existing-board",
-                    "--active",
-                    "Queue for Codex",
-                    "--terminal",
-                    "Released",
-                    "--workflow",
-                    newWorkflow.toString(),
-                    "--env",
-                    env.toString(),
-                    "--force"
-                },
-                new TrelloBoardSetupService(boardSetup, workerManager, Map.of()),
-                new LocalSetup(boardSetup, new ProcessCommandRunner()),
-                workerManager,
-                new PrintStream(stdout, true, StandardCharsets.UTF_8),
-                new PrintStream(stderr, true, StandardCharsets.UTF_8));
+        ForcedImportResult run = runForcedImportBoard(fixture);
 
         // then
-        assertThat(exitCode).isZero();
-        assertThat(stdout.toString(StandardCharsets.UTF_8))
+        assertThat(run.exitCode()).isZero();
+        assertThat(run.stdout())
                 .contains(
                         "Could not restart the worker for \"Existing Board\": worker did not become healthy",
                         "Start it again with the start command shown under Next.");
@@ -4927,6 +4824,53 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
+    void startRejectsOutOfRangeLiteralServerPortBeforeLaunchingWorker() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("literal-port-config");
+        Path stateHome = tempDir.resolve("literal-port-state");
+        Files.createDirectories(configDir);
+        Path workflow = configDir.resolve("WORKFLOW.literal-port.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: board-1
+                server:
+                  port: 70000
+                ---
+                Body
+                """,
+                StandardCharsets.UTF_8);
+        Path env = configDir.resolve(".env");
+        Files.writeString(env, "TRELLO_API_KEY=key\nTRELLO_API_TOKEN=token\n", StandardCharsets.UTF_8);
+
+        // when
+        CliRunResult result = runCli(
+                "start",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--config-dir",
+                configDir.toString(),
+                "--state-home",
+                stateHome.toString());
+
+        // then
+        result.assertFailure(2)
+                .stderrContains("setup_failed code=setup_workflow_invalid", "server.port")
+                .stderrDoesNotContain("Troubleshooting report written", ".log", ".err")
+                .stdoutDoesNotContain("Started Symphony for Trello");
+        try (var stateFiles = Files.list(stateHome)) {
+            assertThat(stateFiles.filter(file -> file.getFileName().toString().endsWith(".pid")))
+                    .as("rejected start writes no managed pid state")
+                    .isEmpty();
+        }
+    }
+
+    @Test
     void startRejectsMissingExplicitWorkflowWithoutTroubleshootingReport() {
         // given
         Path configDir = tempDir.resolve("missing-start-config");
@@ -4949,9 +4893,10 @@ final class TrelloBoardSetupMainTest {
         // then
         result.assertFailure(2)
                 .stderrContains(
-                        "setup_failed code=setup_invalid_arguments",
-                        "--workflow must reference a readable workflow file with usable workflow front matter.")
-                .stderrDoesNotContain(workflow.toString(), tempDir.toString(), "Troubleshooting report written")
+                        "setup_failed code=setup_workflow_invalid",
+                        "missing workflow file",
+                        "Fix the workflow front matter")
+                .stderrDoesNotContain("Troubleshooting report written")
                 .stdoutDoesNotContain("Started Symphony for Trello", "running ", "stopped ", "Logs for ");
         assertThat(stateHome).doesNotExist();
     }
@@ -5559,5 +5504,71 @@ final class TrelloBoardSetupMainTest {
 
     private String endpointRoot() {
         return "http://127.0.0.1:" + server.getAddress().getPort();
+    }
+
+    private record ReplacedRunningWorkerFixture(
+            ConnectedBoard oldBoard, Path newWorkflow, Path env, LocalWorkerManager workerManager) {}
+
+    private record ForcedImportResult(int exitCode, String stdout, String stderr) {}
+
+    private ReplacedRunningWorkerFixture replacedRunningWorkerFixture(String slug) throws Exception {
+        Path oldWorkflow = tempDir.resolve(slug + "-old.WORKFLOW.md");
+        Path newWorkflow = tempDir.resolve(slug + "-new.WORKFLOW.md");
+        Path env = tempDir.resolve(".env." + slug);
+        Files.writeString(oldWorkflow, "old workflow", StandardCharsets.UTF_8);
+        ConnectedBoard oldBoard = new ConnectedBoard(
+                "board-1",
+                "SYNTH001",
+                "Existing Board",
+                "https://trello.com/b/SYNTH001/board",
+                oldWorkflow.toAbsolutePath().normalize(),
+                env.toAbsolutePath().normalize(),
+                TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT.toAbsolutePath().normalize(),
+                18080,
+                true,
+                List.of(),
+                false);
+        new ConnectedBoardRepository(tempDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(oldBoard)));
+        LocalWorkerManager workerManager = mock();
+        when(workerManager.canStopRunningWorker(any(LocalWorkerPaths.class), eq(oldBoard)))
+                .thenReturn(true);
+        return new ReplacedRunningWorkerFixture(oldBoard, newWorkflow, env, workerManager);
+    }
+
+    private ForcedImportResult runForcedImportBoard(ReplacedRunningWorkerFixture fixture) throws Exception {
+        TrelloBoardSetup boardSetup = new TrelloBoardSetup(
+                new ObjectMapper(),
+                () -> CodexModelSelectionDefaults.of(TrelloBoardSetup.CodexModelDefaults.fallback()));
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+        int exitCode = TrelloBoardSetupMain.run(
+                new String[] {
+                    "import-board",
+                    "--endpoint",
+                    endpoint(),
+                    "--key",
+                    "key",
+                    "--token",
+                    "token",
+                    "--board",
+                    "https://trello.com/b/input/existing-board",
+                    "--active",
+                    "Queue for Codex",
+                    "--terminal",
+                    "Released",
+                    "--workflow",
+                    fixture.newWorkflow().toString(),
+                    "--env",
+                    fixture.env().toString(),
+                    "--force"
+                },
+                new TrelloBoardSetupService(boardSetup, fixture.workerManager(), Map.of()),
+                new LocalSetup(boardSetup, new ProcessCommandRunner()),
+                fixture.workerManager(),
+                new PrintStream(stdout, true, StandardCharsets.UTF_8),
+                new PrintStream(stderr, true, StandardCharsets.UTF_8));
+        return new ForcedImportResult(
+                exitCode, stdout.toString(StandardCharsets.UTF_8), stderr.toString(StandardCharsets.UTF_8));
     }
 }

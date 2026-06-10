@@ -253,4 +253,86 @@ final class ConfigResolverTest {
         // then
         assertThat(error).isNull();
     }
+
+    @Test
+    void rejectsNonPositivePollingInterval() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: literal-key
+                  api_token: literal-token
+                  board_id: board-1
+                polling:
+                  interval_ms: 0
+                ---
+                Prompt
+                """);
+        ConfigResolver resolver = new ConfigResolver(name -> Optional.empty());
+
+        // when
+        ConfigException error = catchThrowableOfType(
+                ConfigException.class, () -> resolver.resolve(new WorkflowLoader().load(workflow)));
+
+        // then
+        assertThat(error).hasMessageContaining("interval_ms must be positive");
+    }
+
+    @Test
+    void rejectsInvalidTrackerEndpointBeforeDispatch() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: literal-key
+                  api_token: literal-token
+                  board_id: board-1
+                  endpoint: "not-a-url"
+                ---
+                Prompt
+                """);
+        ConfigResolver resolver = new ConfigResolver(name -> Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+        ConfigException error = catchThrowableOfType(ConfigException.class, () -> resolver.validateForDispatch(config));
+
+        // then
+        assertThat(error).hasMessageContaining("tracker.endpoint must be an absolute http(s) URL");
+    }
+
+    @Test
+    void acceptsLoopbackHttpTrackerEndpointForDispatch() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: literal-key
+                  api_token: literal-token
+                  board_id: board-1
+                  endpoint: "http://127.0.0.1:18099/1"
+                ---
+                Prompt
+                """);
+        ConfigResolver resolver = new ConfigResolver(name -> Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+        Throwable error = catchThrowableOfType(ConfigException.class, () -> resolver.validateForDispatch(config));
+
+        // then
+        assertThat(error).isNull();
+    }
 }
