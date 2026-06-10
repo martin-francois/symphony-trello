@@ -466,6 +466,34 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
+    void broadDiagnosticsSeparatesUnconnectedWorkflowFilesAndSkipsTheirProbes() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("broad-split-config");
+        Path stateHome = tempDir.resolve("state");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Path connectedWorkflow = configDir.resolve("WORKFLOW.connected.md");
+        Files.writeString(connectedWorkflow, workflowWithPort(20987), StandardCharsets.UTF_8);
+        Path staleWorkflow = configDir.resolve("WORKFLOW.stale.md");
+        Files.writeString(staleWorkflow, workflowWithPort(20988), StandardCharsets.UTF_8);
+        saveSyntheticBoard(configDir, connectedWorkflow, 20987);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = renderGlobalDiagnostics(reporter, configDir, stateHome);
+
+        // then
+        assertThat(report)
+                .contains(
+                        "- **selected_workflow_file_count:** 1",
+                        "## Unconnected Workflow Files",
+                        "- **unconnected_workflow_file_count:** 1",
+                        "Their ports are not",
+                        "http://127.0.0.1:20987/api/v1/local-status")
+                .doesNotContain("http://127.0.0.1:20988/api/v1/local-status");
+    }
+
+    @Test
     void diagnosticsRendersIncompleteManifestRowsSafely() throws Exception {
         // given
         Path configDir = tempDir.resolve("incomplete-manifest-config");
