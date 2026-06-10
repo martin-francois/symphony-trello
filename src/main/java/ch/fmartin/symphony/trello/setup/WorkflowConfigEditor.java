@@ -3,6 +3,7 @@ package ch.fmartin.symphony.trello.setup;
 import ch.fmartin.symphony.trello.config.ConfigException;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
+import ch.fmartin.symphony.trello.config.EnvironmentReferences;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import ch.fmartin.symphony.trello.config.TrelloListRoleValidator;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
@@ -526,9 +527,7 @@ final class WorkflowConfigEditor {
     }
 
     private static Optional<String> environmentReferenceName(Object value) {
-        return optionalString(value)
-                .filter(text -> text.startsWith("$") && text.length() > 1)
-                .map(text -> text.substring(1));
+        return optionalString(value).flatMap(EnvironmentReferences::referenceName);
     }
 
     private static TrelloBoardSetupException unresolvedEnvironmentReference(String displayName, String name) {

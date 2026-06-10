@@ -918,8 +918,8 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             }
             return processEnv(envName)
                     .map(TrelloCredentialStore.CredentialValue::environment)
-                    .orElseGet(() -> TrelloCredentialStore.CredentialValue.dotenv(
-                            LocalEnvironment.get(envName, dotenv).orElse(null)));
+                    .orElseGet(() -> TrelloCredentialStore.dotenvCredential(
+                            envName, LocalEnvironment.get(envName, dotenv).orElse(null)));
         }
     }
 

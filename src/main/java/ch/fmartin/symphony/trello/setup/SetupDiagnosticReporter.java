@@ -109,6 +109,7 @@ final class SetupDiagnosticReporter {
             "setup_broad_path_requires_confirmation",
             "setup_codex_auth_required",
             "setup_codex_login_failed",
+            "setup_credentials_environment_reference",
             "setup_env_path_not_ignored",
             "setup_env_write_failed",
             "setup_env_value_multiline",
