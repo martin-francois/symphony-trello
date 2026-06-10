@@ -368,6 +368,10 @@ public class TrelloClient implements TrackerClient {
         return putMap(config, "actions/" + encodeSegment(actionId) + "/text", Map.of("value", text));
     }
 
+    public Map<String, Object> deleteComment(EffectiveConfig config, String actionId) {
+        return request("DELETE", config, "actions/" + encodeSegment(actionId), Map.of(), MAP_TYPE, false);
+    }
+
     public Map<String, Object> moveCardToList(EffectiveConfig config, String cardId, String listId) {
         return putMap(config, "cards/" + encodeSegment(cardId) + "/idList", Map.of("value", listId));
     }
@@ -561,6 +565,7 @@ public class TrelloClient implements TrackerClient {
                                         .build();
                             case "PUT" ->
                                 builder.PUT(HttpRequest.BodyPublishers.noBody()).build();
+                            case "DELETE" -> builder.DELETE().build();
                             default -> throw new IllegalArgumentException("Unsupported Trello method: " + method);
                         };
                 HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());

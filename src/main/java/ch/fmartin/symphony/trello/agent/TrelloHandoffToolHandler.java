@@ -17,13 +17,18 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
+import org.jboss.logging.Logger;
 
 @ApplicationScoped
 public class TrelloHandoffToolHandler {
+    private static final Logger LOG = Logger.getLogger(TrelloHandoffToolHandler.class);
+
     static final String ADD_COMMENT = "trello_add_comment";
     static final String UPSERT_WORKPAD = "trello_upsert_workpad";
     static final String MOVE_CURRENT_CARD = "trello_move_current_card";
     static final String WORKPAD_MARKER = TrelloClient.WORKPAD_MARKER;
+    static final String DUPLICATE_WORKPADS_NOTE_PREFIX = "> Duplicate Codex workpads found: ";
 
     private final ObjectMapper json;
     private final TrelloClient trello;
@@ -134,23 +139,112 @@ public class TrelloHandoffToolHandler {
     }
 
     private ObjectNode upsertWorkpadComment(EffectiveConfig config, String cardId, Card currentCard, String text) {
-        return currentCard.comments().stream()
-                .filter(this::isWorkpadComment)
+        List<Card.Comment> workpads =
+                currentCard.comments().stream().filter(this::isWorkpadComment).toList();
+        if (workpads.isEmpty()) {
+            return createWorkpad(config, cardId, currentCard, text);
+        }
+        // Trello lists comment actions newest first, so the first addressable workpad is the
+        // newest one and stays the authoritative comment deterministically.
+        Card.Comment primary = workpads.stream()
+                .filter(workpad -> !blank(workpad.id()))
                 .findFirst()
-                .map(workpad -> updateExistingWorkpad(config, cardId, workpad, text))
-                .orElseGet(() -> createWorkpad(config, cardId, currentCard, text));
+                .orElseGet(workpads::getFirst);
+        if (blank(primary.id())) {
+            return failure("trello_workpad_missing_action_id", "Existing workpad comment has no Trello action id.");
+        }
+        int duplicatesFound = workpads.size() - 1;
+        boolean destructiveAllowed = config.trelloTools().allowDestructiveOperations();
+        // Without the destructive opt-in, the duplicates stay on the card, so the canonical
+        // workpad itself must tell the next agent or human that manual cleanup is required.
+        String authoritativeText =
+                duplicatesFound > 0 && !destructiveAllowed ? text + manualCleanupNote(duplicatesFound) : text;
+        // The authoritative update runs before any duplicate cleanup: if it fails, every workpad
+        // stays in place and no comment content is lost to a delete that ran first.
+        trello.updateComment(config, primary.id(), authoritativeText);
+        // Deleting Trello comments is a destructive operation and disallowed by default. Without
+        // the opt-in, duplicate workpads stay in place and only the primary comment is updated.
+        DuplicateCleanup cleanup =
+                destructiveAllowed ? removeDuplicateWorkpads(config, workpads, primary) : DuplicateCleanup.none();
+        return success(Map.of(
+                "status",
+                "workpad_updated",
+                "card_id",
+                cardId,
+                "action_id",
+                primary.id(),
+                "duplicate_workpads_found",
+                Integer.toString(duplicatesFound),
+                "duplicate_workpads_removed",
+                Integer.toString(cleanup.removed()),
+                "duplicate_workpads_delete_failed",
+                Integer.toString(cleanup.deleteFailed()),
+                "duplicate_workpads_cleanup_status",
+                cleanupStatus(duplicatesFound, destructiveAllowed, cleanup)));
+    }
+
+    private static String cleanupStatus(int duplicatesFound, boolean destructiveAllowed, DuplicateCleanup cleanup) {
+        if (duplicatesFound == 0) {
+            return "not_needed";
+        }
+        if (!destructiveAllowed) {
+            return "skipped_destructive_operations_disabled";
+        }
+        return cleanup.removed() == duplicatesFound ? "removed" : "delete_failed";
+    }
+
+    private static String manualCleanupNote(int duplicatesFound) {
+        String existence = duplicatesFound == 1 ? "comment exists" : "comments exist";
+        return System.lineSeparator()
+                + System.lineSeparator()
+                + DUPLICATE_WORKPADS_NOTE_PREFIX
+                + duplicatesFound
+                + " other Codex workpad "
+                + existence
+                + " on this card. Deleting Trello comments is disabled by"
+                + " trello_tools.allow_destructive_operations, so delete the duplicate workpad"
+                + " comments manually and keep this one.";
+    }
+
+    /**
+     * A card should end with a single authoritative workpad comment, so when destructive Trello
+     * operations are allowed, duplicates left by earlier runs or humans are deleted. Deletions
+     * that fail are left in place and reported; the already-applied update stays successful. A
+     * duplicate without an addressable comment action id cannot be deleted, so it counts as
+     * failed cleanup instead of disappearing from the reported totals.
+     */
+    private DuplicateCleanup removeDuplicateWorkpads(
+            EffectiveConfig config, List<Card.Comment> workpads, Card.Comment primary) {
+        int removed = 0;
+        int deleteFailed = 0;
+        for (Card.Comment duplicate : workpads) {
+            if (duplicate.equals(primary)) {
+                continue;
+            }
+            if (blank(duplicate.id())) {
+                deleteFailed++;
+                LOG.warn("workpad_duplicate_delete outcome=missing_action_id");
+                continue;
+            }
+            try {
+                trello.deleteComment(config, duplicate.id());
+                removed++;
+            } catch (RuntimeException e) {
+                deleteFailed++;
+                LOG.warnf("workpad_duplicate_delete outcome=failed action_id=%s", duplicate.id());
+            }
+        }
+        return new DuplicateCleanup(removed, deleteFailed);
+    }
+
+    private record DuplicateCleanup(int removed, int deleteFailed) {
+        static DuplicateCleanup none() {
+            return new DuplicateCleanup(0, 0);
+        }
     }
 
     private boolean isWorkpadComment(Card.Comment comment) {
         return comment.text() != null && comment.text().startsWith(WORKPAD_MARKER);
-    }
-
-    private ObjectNode updateExistingWorkpad(EffectiveConfig config, String cardId, Card.Comment workpad, String text) {
-        if (blank(workpad.id())) {
-            return failure("trello_workpad_missing_action_id", "Existing workpad comment has no Trello action id.");
-        }
-        trello.updateComment(config, workpad.id(), text);
-        return success(Map.of("status", "workpad_updated", "card_id", cardId, "action_id", workpad.id()));
     }
 
     private ObjectNode createWorkpad(EffectiveConfig config, String cardId, Card currentCard, String text) {
@@ -164,7 +258,7 @@ public class TrelloHandoffToolHandler {
     }
 
     private static String workpadText(String text) {
-        String trimmed = text.strip();
+        String trimmed = stripManualCleanupNotes(text.strip());
         if (trimmed.startsWith(WORKPAD_MARKER)) {
             int markerEnd = markerLineEnd(trimmed);
             return trimmed.substring(0, markerEnd) + TrelloMarkdown.escapeLeadingHashtags(trimmed.substring(markerEnd));
@@ -173,6 +267,21 @@ public class TrelloHandoffToolHandler {
                 + System.lineSeparator()
                 + System.lineSeparator()
                 + TrelloMarkdown.escapeLeadingHashtags(trimmed);
+    }
+
+    /**
+     * Agents often echo the previous workpad body into the next upsert, so a cleanup note from an
+     * earlier update is dropped before the fresh state is decided. This keeps the note from
+     * accumulating and removes it once the duplicates are gone.
+     */
+    private static String stripManualCleanupNotes(String text) {
+        if (!text.contains(DUPLICATE_WORKPADS_NOTE_PREFIX)) {
+            return text;
+        }
+        return text.lines()
+                .filter(line -> !line.startsWith(DUPLICATE_WORKPADS_NOTE_PREFIX))
+                .collect(Collectors.joining("\n"))
+                .strip();
     }
 
     private static int markerLineEnd(String text) {
