@@ -3354,6 +3354,22 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void repairPortFailsActionablyWhenNoBoardsAreConnected() throws Exception {
+        // given
+        Path emptyManifest = tempDir.resolve("empty-connected-boards.json");
+        Files.writeString(emptyManifest, "{\"boards\":[]}", StandardCharsets.UTF_8);
+
+        // when
+        SetupRunResult result = runSetup(
+                "repair-port", "--board", "anything", "--non-interactive", "--manifest", emptyManifest.toString());
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_repair_board_not_found", "No Trello boards are connected to Symphony");
+    }
+
+    @Test
     void repairPortReportsNoRepairNeededWhenConfiguredPortIsAvailable() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.repair-dry-run.md");
