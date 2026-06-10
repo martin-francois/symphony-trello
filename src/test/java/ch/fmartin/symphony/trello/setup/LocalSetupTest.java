@@ -4,6 +4,7 @@ import static ch.fmartin.symphony.trello.setup.ManifestAssertions.assertThatMani
 import static ch.fmartin.symphony.trello.setup.TerminalTranscriptAssertions.assertThatTranscript;
 import static ch.fmartin.symphony.trello.setup.WorkflowAssertions.assertThatWorkflow;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assumptions.abort;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
@@ -22,7 +23,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -2053,8 +2053,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 occupiedPort.bind(
                         new InetSocketAddress(InetAddress.getLoopbackAddress(), TrelloBoardSetup.DEFAULT_SERVER_PORT));
             } catch (IOException e) {
-                Assumptions.abort(
-                        "Default setup port is already unavailable before the test can bind it: " + e.getMessage());
+                abort("Default setup port is already unavailable before the test can bind it: " + e.getMessage());
             }
 
             // when

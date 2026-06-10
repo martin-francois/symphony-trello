@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.setup;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.junit.jupiter.api.Assumptions.abort;
 
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
@@ -25,7 +26,6 @@ import java.util.Optional;
 import java.util.regex.Pattern;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -170,17 +170,7 @@ final class SetupDiagnosticReporterTest {
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
-        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.empty(),
-                Optional.empty(),
-                false,
-                false,
-                Optional.empty(),
-                Optional.of(configDir),
-                Optional.empty(),
-                Optional.of(stateHome),
-                Optional.empty(),
-                Optional.of(workflow)));
+        String report = renderWorkflowDiagnostics(reporter, configDir, stateHome, workflow);
 
         // then
         assertThat(report)
@@ -215,17 +205,7 @@ final class SetupDiagnosticReporterTest {
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
-        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.empty(),
-                Optional.empty(),
-                false,
-                false,
-                Optional.empty(),
-                Optional.of(configDir),
-                Optional.empty(),
-                Optional.of(stateHome),
-                Optional.empty(),
-                Optional.of(link)));
+        String report = renderWorkflowDiagnostics(reporter, configDir, stateHome, link);
 
         // then
         assertThat(report)
@@ -270,17 +250,7 @@ final class SetupDiagnosticReporterTest {
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
-        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.empty(),
-                Optional.empty(),
-                false,
-                false,
-                Optional.empty(),
-                Optional.of(configDir),
-                Optional.empty(),
-                Optional.of(stateHome),
-                Optional.empty(),
-                Optional.empty()));
+        String report = renderGlobalDiagnostics(reporter, configDir, stateHome);
 
         // then
         assertThat(report)
@@ -302,17 +272,7 @@ final class SetupDiagnosticReporterTest {
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
-        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.empty(),
-                Optional.empty(),
-                false,
-                false,
-                Optional.empty(),
-                Optional.of(configDir),
-                Optional.empty(),
-                Optional.of(stateHome),
-                Optional.empty(),
-                Optional.empty()));
+        String report = renderGlobalDiagnostics(reporter, configDir, stateHome);
 
         // then
         assertThat(report)
@@ -345,17 +305,7 @@ final class SetupDiagnosticReporterTest {
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
-        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.empty(),
-                Optional.empty(),
-                false,
-                false,
-                Optional.empty(),
-                Optional.of(configDir),
-                Optional.empty(),
-                Optional.of(stateHome),
-                Optional.empty(),
-                Optional.empty()));
+        String report = renderGlobalDiagnostics(reporter, configDir, stateHome);
 
         // then
         assertThat(report).contains("invalid").doesNotContain("http://127.0.0.1:20990/", "IllegalArgumentException");
@@ -384,17 +334,7 @@ final class SetupDiagnosticReporterTest {
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
-        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.empty(),
-                Optional.empty(),
-                false,
-                false,
-                Optional.empty(),
-                Optional.of(configDir),
-                Optional.empty(),
-                Optional.of(stateHome),
-                Optional.empty(),
-                Optional.empty()));
+        String report = renderGlobalDiagnostics(reporter, configDir, stateHome);
 
         // then
         assertThat(report).contains("http://127.0.0.1:20726/api/v1/local-status");
@@ -407,18 +347,7 @@ final class SetupDiagnosticReporterTest {
                 environmentBackedPortScenario("env-resolved-port", 20990, "LEGACY_STATUS_PORT=20991");
 
         // when
-        String report = scenario.reporter()
-                .renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                        Optional.empty(),
-                        Optional.empty(),
-                        false,
-                        false,
-                        Optional.empty(),
-                        Optional.of(scenario.configDir()),
-                        Optional.empty(),
-                        Optional.of(scenario.stateHome()),
-                        Optional.empty(),
-                        Optional.empty()));
+        String report = renderGlobalDiagnostics(scenario.reporter(), scenario.configDir(), scenario.stateHome());
 
         // then
         assertThat(report)
@@ -433,18 +362,7 @@ final class SetupDiagnosticReporterTest {
                 environmentBackedPortScenario("env-out-of-range-port", 20990, "LEGACY_STATUS_PORT=99999");
 
         // when
-        String report = scenario.reporter()
-                .renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                        Optional.empty(),
-                        Optional.empty(),
-                        false,
-                        false,
-                        Optional.empty(),
-                        Optional.of(scenario.configDir()),
-                        Optional.empty(),
-                        Optional.of(scenario.stateHome()),
-                        Optional.empty(),
-                        Optional.empty()));
+        String report = renderGlobalDiagnostics(scenario.reporter(), scenario.configDir(), scenario.stateHome());
 
         // then
         assertThat(report)
@@ -459,18 +377,7 @@ final class SetupDiagnosticReporterTest {
                 environmentBackedPortScenario("env-non-numeric-port", 20990, "LEGACY_STATUS_PORT=not-a-port");
 
         // when
-        String report = scenario.reporter()
-                .renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                        Optional.empty(),
-                        Optional.empty(),
-                        false,
-                        false,
-                        Optional.empty(),
-                        Optional.of(scenario.configDir()),
-                        Optional.empty(),
-                        Optional.of(scenario.stateHome()),
-                        Optional.empty(),
-                        Optional.empty()));
+        String report = renderGlobalDiagnostics(scenario.reporter(), scenario.configDir(), scenario.stateHome());
 
         // then
         assertThat(report)
@@ -488,18 +395,7 @@ final class SetupDiagnosticReporterTest {
         EnvironmentBackedPortScenario scenario = environmentBackedPortScenario("env-unresolved-port", 20727, "");
 
         // when
-        String report = scenario.reporter()
-                .renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                        Optional.empty(),
-                        Optional.empty(),
-                        false,
-                        false,
-                        Optional.empty(),
-                        Optional.of(scenario.configDir()),
-                        Optional.empty(),
-                        Optional.of(scenario.stateHome()),
-                        Optional.empty(),
-                        Optional.empty()));
+        String report = renderGlobalDiagnostics(scenario.reporter(), scenario.configDir(), scenario.stateHome());
 
         // then
         assertThat(report)
@@ -526,17 +422,7 @@ final class SetupDiagnosticReporterTest {
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
-        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.empty(),
-                Optional.empty(),
-                false,
-                false,
-                Optional.empty(),
-                Optional.of(configDir),
-                Optional.empty(),
-                Optional.of(stateHome),
-                Optional.empty(),
-                Optional.of(workflow)));
+        String report = renderWorkflowDiagnostics(reporter, configDir, stateHome, workflow);
 
         // then
         assertThat(report)
@@ -595,17 +481,7 @@ final class SetupDiagnosticReporterTest {
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
-        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.empty(),
-                Optional.empty(),
-                false,
-                false,
-                Optional.empty(),
-                Optional.of(configDir),
-                Optional.empty(),
-                Optional.of(stateHome),
-                Optional.empty(),
-                Optional.empty()));
+        String report = renderGlobalDiagnostics(reporter, configDir, stateHome);
 
         // then
         assertThat(report)
@@ -741,18 +617,7 @@ final class SetupDiagnosticReporterTest {
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
-        Throwable thrown =
-                catchThrowable(() -> reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                        Optional.empty(),
-                        Optional.empty(),
-                        false,
-                        false,
-                        Optional.empty(),
-                        Optional.of(configDir),
-                        Optional.empty(),
-                        Optional.of(stateHomeFile),
-                        Optional.empty(),
-                        Optional.empty())));
+        Throwable thrown = catchThrowable(() -> renderGlobalDiagnostics(reporter, configDir, stateHomeFile));
 
         // then
         assertThat(thrown)
@@ -763,23 +628,11 @@ final class SetupDiagnosticReporterTest {
     @Test
     void writesDistinctReportsForFailuresInTheSameSecond() throws Exception {
         // given
-        Path configDir = tempDir.resolve("collision-config");
-        Path workspaceRoot = tempDir.resolve("collision-workspaces");
-        Path manifest = configDir.resolve("connected-boards.json");
-        Path workflow = configDir.resolve("WORKFLOW.collision.md");
-        Path env = configDir.resolve(".env");
-        Files.createDirectories(configDir);
-        Instant now = Instant.parse("2026-05-02T03:04:05Z");
-        var reporter = new SetupDiagnosticReporter(
-                Map.of(), new FakeCommandRunner(), Files::list, Clock.fixed(now, ZoneOffset.UTC));
-        var terminal = new RecordingTerminal();
-        var failure = new TrelloBoardSetupException("trello_api_request", "Trello request failed");
+        SameSecondReportScenario scenario = sameSecondReportScenario("collision");
 
         // when
-        Optional<Path> first =
-                reporter.reportFailure(failure, request(configDir, workspaceRoot, manifest, workflow, env), terminal);
-        Optional<Path> second =
-                reporter.reportFailure(failure, request(configDir, workspaceRoot, manifest, workflow, env), terminal);
+        Optional<Path> first = scenario.reportFailure();
+        Optional<Path> second = scenario.reportFailure();
 
         // then
         assertThat(first).isPresent();
@@ -792,14 +645,8 @@ final class SetupDiagnosticReporterTest {
     @Test
     void givesUpOnReportNamesAfterBoundedSameSecondCollisions() throws Exception {
         // given
-        Path configDir = tempDir.resolve("exhausted-collision-config");
-        Path workspaceRoot = tempDir.resolve("exhausted-collision-workspaces");
-        Path manifest = configDir.resolve("connected-boards.json");
-        Path workflow = configDir.resolve("WORKFLOW.exhausted.md");
-        Path env = configDir.resolve(".env");
-        Files.createDirectories(configDir);
-        Instant now = Instant.parse("2026-05-02T03:04:05Z");
-        Path reportDir = configDir.resolveSibling("state").resolve("troubleshooting");
+        SameSecondReportScenario scenario = sameSecondReportScenario("exhausted-collision");
+        Path reportDir = scenario.configDir().resolveSibling("state").resolve("troubleshooting");
         Files.createDirectories(reportDir);
         Files.writeString(reportDir.resolve("setup-failure-20260502-030405.md"), "taken", StandardCharsets.UTF_8);
         for (int suffix = 2; suffix <= 100; suffix++) {
@@ -808,19 +655,41 @@ final class SetupDiagnosticReporterTest {
                     "taken",
                     StandardCharsets.UTF_8);
         }
-        var reporter = new SetupDiagnosticReporter(
-                Map.of(), new FakeCommandRunner(), Files::list, Clock.fixed(now, ZoneOffset.UTC));
-        var terminal = new RecordingTerminal();
-        var failure = new TrelloBoardSetupException("trello_api_request", "Trello request failed");
 
         // when
-        Optional<Path> report =
-                reporter.reportFailure(failure, request(configDir, workspaceRoot, manifest, workflow, env), terminal);
+        Optional<Path> report = scenario.reportFailure();
 
         // then
         assertThat(report)
                 .as("exhausted same-second names degrade to no report instead of looping")
                 .isEmpty();
+    }
+
+    private record SameSecondReportScenario(
+            Path configDir, SetupDiagnosticReporter reporter, LocalSetupRequest request, RecordingTerminal terminal) {
+
+        Optional<Path> reportFailure() throws IOException {
+            return reporter.reportFailure(
+                    new TrelloBoardSetupException("trello_api_request", "Trello request failed"), request, terminal);
+        }
+    }
+
+    /** The fixed clock matches the setup-failure-20260502-030405 report names asserted by callers. */
+    private SameSecondReportScenario sameSecondReportScenario(String prefix) throws IOException {
+        Path configDir = tempDir.resolve(prefix + "-config");
+        Path workspaceRoot = tempDir.resolve(prefix + "-workspaces");
+        Path manifest = configDir.resolve("connected-boards.json");
+        Path workflow = configDir.resolve("WORKFLOW.report.md");
+        Path env = configDir.resolve(".env");
+        Files.createDirectories(configDir);
+        Instant now = Instant.parse("2026-05-02T03:04:05Z");
+        var reporter = new SetupDiagnosticReporter(
+                Map.of(), new FakeCommandRunner(), Files::list, Clock.fixed(now, ZoneOffset.UTC));
+        return new SameSecondReportScenario(
+                configDir,
+                reporter,
+                request(configDir, workspaceRoot, manifest, workflow, env),
+                new RecordingTerminal());
     }
 
     @Test
@@ -848,17 +717,7 @@ final class SetupDiagnosticReporterTest {
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
-        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.of("Reused Board"),
-                Optional.empty(),
-                false,
-                false,
-                Optional.empty(),
-                Optional.of(configDir),
-                Optional.empty(),
-                Optional.of(stateHome),
-                Optional.empty(),
-                Optional.empty()));
+        String report = renderBoardDiagnostics(reporter, "Reused Board", configDir, stateHome);
 
         // then
         assertThat(report)
@@ -878,17 +737,7 @@ final class SetupDiagnosticReporterTest {
 
         // when
         Throwable thrown =
-                catchThrowable(() -> reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                        Optional.empty(),
-                        Optional.empty(),
-                        false,
-                        false,
-                        Optional.empty(),
-                        Optional.of(configDir),
-                        Optional.empty(),
-                        Optional.of(stateHome),
-                        Optional.empty(),
-                        Optional.of(missingWorkflow))));
+                catchThrowable(() -> renderWorkflowDiagnostics(reporter, configDir, stateHome, missingWorkflow));
 
         // then
         assertThat(thrown)
@@ -920,17 +769,7 @@ final class SetupDiagnosticReporterTest {
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
-        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.of("SYNTH001"),
-                Optional.empty(),
-                false,
-                false,
-                Optional.empty(),
-                Optional.of(configDir),
-                Optional.empty(),
-                Optional.of(stateHome),
-                Optional.empty(),
-                Optional.empty()));
+        String report = renderBoardDiagnostics(reporter, "SYNTH001", configDir, stateHome);
 
         // then
         assertThat(report)
@@ -1132,17 +971,8 @@ final class SetupDiagnosticReporterTest {
                 commands);
 
         // when
-        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.of("https://trello.com/b/SYNTH901/sensitive-board"),
-                Optional.empty(),
-                false,
-                false,
-                Optional.empty(),
-                Optional.of(configDir),
-                Optional.of(workspaceRoot),
-                Optional.of(stateHome),
-                Optional.empty(),
-                Optional.empty()));
+        String report = renderBoardDiagnostics(
+                reporter, "https://trello.com/b/SYNTH901/sensitive-board", configDir, workspaceRoot, stateHome);
 
         // then
         assertThat(report)
@@ -1219,17 +1049,7 @@ final class SetupDiagnosticReporterTest {
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
-        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.of("SYNTH003"),
-                Optional.empty(),
-                false,
-                false,
-                Optional.empty(),
-                Optional.of(configDir),
-                Optional.of(workspaceRoot),
-                Optional.of(stateHome),
-                Optional.empty(),
-                Optional.empty()));
+        String report = renderBoardDiagnostics(reporter, "SYNTH003", configDir, workspaceRoot, stateHome);
 
         // then
         assertThat(report)
@@ -1322,17 +1142,7 @@ final class SetupDiagnosticReporterTest {
                         "## Invalid Workflow Files",
                         tempDir.toString());
 
-        String selectedReport = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.empty(),
-                Optional.empty(),
-                false,
-                false,
-                Optional.empty(),
-                Optional.of(configDir),
-                Optional.of(workspaceRoot),
-                Optional.of(stateHome),
-                Optional.empty(),
-                Optional.of(workflow)));
+        String selectedReport = renderWorkflowDiagnostics(reporter, configDir, workspaceRoot, stateHome, workflow);
         assertThat(selectedReport)
                 .contains(
                         "selector:** workflow",
@@ -1361,17 +1171,7 @@ final class SetupDiagnosticReporterTest {
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
-        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.empty(),
-                Optional.empty(),
-                false,
-                false,
-                Optional.empty(),
-                Optional.of(configDir),
-                Optional.empty(),
-                Optional.of(Path.of("Jane Doe/state")),
-                Optional.empty(),
-                Optional.empty()));
+        String report = renderGlobalDiagnostics(reporter, configDir, Path.of("Jane Doe/state"));
 
         // then
         assertThat(report).contains("--state-home <redacted>").doesNotContain("Jane Doe", "Jane Doe/state");
@@ -2085,17 +1885,8 @@ final class SetupDiagnosticReporterTest {
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
-        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.empty(),
-                Optional.empty(),
-                false,
-                false,
-                Optional.empty(),
-                Optional.of(configDir),
-                Optional.of(workspaceRoot),
-                Optional.of(stateHome),
-                Optional.empty(),
-                Optional.of(Path.of("WORKFLOW.relative.md"))));
+        String report = renderWorkflowDiagnostics(
+                reporter, configDir, workspaceRoot, stateHome, Path.of("WORKFLOW.relative.md"));
 
         // then
         assertThat(report)
@@ -2203,17 +1994,7 @@ final class SetupDiagnosticReporterTest {
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
-        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.empty(),
-                Optional.empty(),
-                false,
-                false,
-                Optional.empty(),
-                Optional.of(configDir),
-                Optional.of(workspaceRoot),
-                Optional.of(stateHome),
-                Optional.empty(),
-                Optional.of(requestedWorkflow)));
+        String report = renderWorkflowDiagnostics(reporter, configDir, workspaceRoot, stateHome, requestedWorkflow);
 
         // then
         assertThat(report)
@@ -2279,18 +2060,8 @@ final class SetupDiagnosticReporterTest {
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
-        Throwable thrown =
-                catchThrowable(() -> reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                        Optional.of(privateBoardName),
-                        Optional.empty(),
-                        false,
-                        false,
-                        Optional.empty(),
-                        Optional.of(configDir),
-                        Optional.of(workspaceRoot),
-                        Optional.of(stateHome),
-                        Optional.empty(),
-                        Optional.empty())));
+        Throwable thrown = catchThrowable(
+                () -> renderBoardDiagnostics(reporter, privateBoardName, configDir, workspaceRoot, stateHome));
 
         // then
         assertThat(thrown)
@@ -2358,18 +2129,8 @@ final class SetupDiagnosticReporterTest {
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
-        Throwable thrown =
-                catchThrowable(() -> reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                        Optional.empty(),
-                        Optional.empty(),
-                        false,
-                        false,
-                        Optional.empty(),
-                        Optional.of(configDir),
-                        Optional.of(workspaceRoot),
-                        Optional.of(stateHome),
-                        Optional.empty(),
-                        Optional.of(workflow))));
+        Throwable thrown = catchThrowable(
+                () -> renderWorkflowDiagnostics(reporter, configDir, workspaceRoot, stateHome, workflow));
 
         // then
         assertThat(thrown)
@@ -2529,18 +2290,8 @@ final class SetupDiagnosticReporterTest {
 
         // when
         List<Throwable> thrown = unusableSelectors.stream()
-                .map(workflow ->
-                        catchThrowable(() -> reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                                Optional.empty(),
-                                Optional.empty(),
-                                false,
-                                false,
-                                Optional.empty(),
-                                Optional.of(configDir),
-                                Optional.of(workspaceRoot),
-                                Optional.of(stateHome),
-                                Optional.empty(),
-                                Optional.of(workflow)))))
+                .map(workflow -> catchThrowable(
+                        () -> renderWorkflowDiagnostics(reporter, configDir, workspaceRoot, stateHome, workflow)))
                 .toList();
 
         // then
@@ -2563,17 +2314,8 @@ final class SetupDiagnosticReporterTest {
                                     noFrontMatter.toString(),
                                     "private-board-id"));
         }
-        String invalidPortReport = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.empty(),
-                Optional.empty(),
-                false,
-                false,
-                Optional.empty(),
-                Optional.of(configDir),
-                Optional.of(workspaceRoot),
-                Optional.of(stateHome),
-                Optional.empty(),
-                Optional.of(invalidPort)));
+        String invalidPortReport =
+                renderWorkflowDiagnostics(reporter, configDir, workspaceRoot, stateHome, invalidPort);
         assertThat(invalidPortReport).contains("invalid server.port");
     }
 
@@ -3112,17 +2854,7 @@ final class SetupDiagnosticReporterTest {
                 Clock.fixed(Instant.parse("2026-05-02T03:04:05Z"), ZoneOffset.UTC));
 
         // when
-        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.empty(),
-                Optional.empty(),
-                false,
-                false,
-                Optional.empty(),
-                Optional.of(configDir),
-                Optional.of(workspaceRoot),
-                Optional.of(stateHome),
-                Optional.empty(),
-                Optional.empty()));
+        String report = renderGlobalDiagnostics(reporter, configDir, workspaceRoot, stateHome);
 
         // then
         assertThat(report)
@@ -3186,17 +2918,7 @@ final class SetupDiagnosticReporterTest {
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
-        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.empty(),
-                Optional.empty(),
-                false,
-                false,
-                Optional.empty(),
-                Optional.of(configDir),
-                Optional.of(workspaceRoot),
-                Optional.of(stateHome),
-                Optional.empty(),
-                Optional.empty()));
+        String report = renderGlobalDiagnostics(reporter, configDir, workspaceRoot, stateHome);
 
         // then
         assertThat(report)
@@ -3245,20 +2967,62 @@ final class SetupDiagnosticReporterTest {
                 .doesNotContain(tempDir.toString(), "Ready for Codex");
     }
 
+    private static String renderGlobalDiagnostics(SetupDiagnosticReporter reporter, Path configDir, Path stateHome)
+            throws IOException {
+        return renderDiagnostics(reporter, Optional.empty(), configDir, Optional.empty(), stateHome, Optional.empty());
+    }
+
+    private static String renderGlobalDiagnostics(
+            SetupDiagnosticReporter reporter, Path configDir, Path workspaceRoot, Path stateHome) throws IOException {
+        return renderDiagnostics(
+                reporter, Optional.empty(), configDir, Optional.of(workspaceRoot), stateHome, Optional.empty());
+    }
+
+    private static String renderBoardDiagnostics(
+            SetupDiagnosticReporter reporter, String board, Path configDir, Path stateHome) throws IOException {
+        return renderDiagnostics(
+                reporter, Optional.of(board), configDir, Optional.empty(), stateHome, Optional.empty());
+    }
+
+    private static String renderBoardDiagnostics(
+            SetupDiagnosticReporter reporter, String board, Path configDir, Path workspaceRoot, Path stateHome)
+            throws IOException {
+        return renderDiagnostics(
+                reporter, Optional.of(board), configDir, Optional.of(workspaceRoot), stateHome, Optional.empty());
+    }
+
+    private static String renderWorkflowDiagnostics(
+            SetupDiagnosticReporter reporter, Path configDir, Path stateHome, Path workflow) throws IOException {
+        return renderDiagnostics(
+                reporter, Optional.empty(), configDir, Optional.empty(), stateHome, Optional.of(workflow));
+    }
+
     private static String renderWorkflowDiagnostics(
             SetupDiagnosticReporter reporter, Path configDir, Path workspaceRoot, Path stateHome, Path workflow)
             throws IOException {
+        return renderDiagnostics(
+                reporter, Optional.empty(), configDir, Optional.of(workspaceRoot), stateHome, Optional.of(workflow));
+    }
+
+    private static String renderDiagnostics(
+            SetupDiagnosticReporter reporter,
+            Optional<String> board,
+            Path configDir,
+            Optional<Path> workspaceRoot,
+            Path stateHome,
+            Optional<Path> workflow)
+            throws IOException {
         return reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.empty(),
+                board,
                 Optional.empty(),
                 false,
                 false,
                 Optional.empty(),
                 Optional.of(configDir),
-                Optional.of(workspaceRoot),
+                workspaceRoot,
                 Optional.of(stateHome),
                 Optional.empty(),
-                Optional.of(workflow)));
+                workflow));
     }
 
     private static HttpServer fakeLocalServer(int port) throws IOException {
@@ -3306,7 +3070,7 @@ final class SetupDiagnosticReporterTest {
         try {
             Files.createSymbolicLink(link, target);
         } catch (IOException | UnsupportedOperationException e) {
-            Assumptions.abort("Symbolic links are not available in this test environment: "
+            abort("Symbolic links are not available in this test environment: "
                     + e.getClass().getSimpleName());
         }
     }
@@ -3372,17 +3136,7 @@ final class SetupDiagnosticReporterTest {
 
     private static String renderDefaultDiagnostics(
             SetupDiagnosticReporter reporter, Path configDir, Path workspaceRoot, Path stateHome) throws IOException {
-        return reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                Optional.empty(),
-                Optional.empty(),
-                false,
-                false,
-                Optional.empty(),
-                Optional.of(configDir),
-                Optional.of(workspaceRoot),
-                Optional.of(stateHome),
-                Optional.empty(),
-                Optional.empty()));
+        return renderGlobalDiagnostics(reporter, configDir, workspaceRoot, stateHome);
     }
 
     private static FakeCommandRunner authProbeCommandRunner() {

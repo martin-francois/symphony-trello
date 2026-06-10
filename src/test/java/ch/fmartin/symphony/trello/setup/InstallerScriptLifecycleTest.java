@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.setup;
 
 import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.*;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import ch.fmartin.symphony.trello.setup.InstallerScriptFixture.ProcessResult;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -15,7 +16,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -29,9 +29,9 @@ final class InstallerScriptLifecycleTest {
     @Test
     void posixInstallerLifecycleInstallsUpdatesStartsAndUninstallsWithTestDoubles() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
-        Assumptions.assumeTrue(commandExists("git"));
-        Assumptions.assumeTrue(commandExists("script"));
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
+        assumeTrue(commandExists("script"));
         Path installScript = Path.of("install.sh").toAbsolutePath();
         Path uninstallScript = Path.of("uninstall.sh").toAbsolutePath();
         Path sourceRepository = createSourceRepository(temporaryDirectory);
@@ -323,9 +323,9 @@ final class InstallerScriptLifecycleTest {
     @Test
     void powershellInstallerLifecycleInstallsStartsStopsAndUninstallsWithFakeJavaOnWindows() throws Exception {
         // given
-        Assumptions.assumeTrue(isWindows());
-        Assumptions.assumeTrue(commandExists("pwsh"));
-        Assumptions.assumeTrue(commandExists("git"));
+        assumeTrue(isWindows());
+        assumeTrue(commandExists("pwsh"));
+        assumeTrue(commandExists("git"));
         Path installScript = Path.of("install.ps1").toAbsolutePath();
         Path uninstallScript = Path.of("uninstall.ps1").toAbsolutePath();
         Path sourceRepository = createWindowsSourceRepository(temporaryDirectory);

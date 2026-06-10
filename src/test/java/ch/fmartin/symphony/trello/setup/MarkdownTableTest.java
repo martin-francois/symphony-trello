@@ -31,6 +31,20 @@ final class MarkdownTableTest {
     }
 
     @Test
+    void leftAlignedRendersLeftMarkerForEveryColumn() {
+        // given
+        MarkdownTable table =
+                MarkdownTable.leftAligned(List.of("name", "status", "detail")).row("git", "available", "system");
+        StringBuilder body = new StringBuilder();
+
+        // when
+        table.appendTo(body);
+
+        // then
+        assertThat(body.toString()).contains("| --- | --- | --- |");
+    }
+
+    @Test
     void rendersRightAlignmentMarker() {
         // given
         MarkdownTable table = MarkdownTable.of(

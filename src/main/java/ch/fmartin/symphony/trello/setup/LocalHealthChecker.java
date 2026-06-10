@@ -26,6 +26,7 @@ final class LocalHealthChecker {
     private static final TypeReference<Map<String, Object>> JSON_MAP_TYPE = new TypeReference<>() {};
     private static final Duration LOCAL_STATUS_TIMEOUT = Duration.ofMillis(500);
     private static final Duration PORT_USED_RETRY_DELAY = Duration.ofMillis(150);
+    private static final Duration SAME_WORKFLOW_POLL_DELAY = Duration.ofMillis(200);
     private static final InetAddress LOOPBACK_IPV4 = loopbackIpv4();
 
     private final Map<String, String> environment;
@@ -55,13 +56,7 @@ final class LocalHealthChecker {
         BoardHealth last = new BoardHealth(BoardHealthKind.STOPPED, port, Optional.empty(), Optional.empty());
         while (System.nanoTime() < deadline) {
             last = workflowHealth(board.workflowPath(), board.boardId(), board.boardKey(), port);
-            if (last.kind() == BoardHealthKind.SAME_WORKFLOW) {
-                return last;
-            }
-            try {
-                Thread.sleep(200);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+            if (last.kind() == BoardHealthKind.SAME_WORKFLOW || !sleptWithoutInterrupt(SAME_WORKFLOW_POLL_DELAY)) {
                 return last;
             }
         }
@@ -73,15 +68,24 @@ final class LocalHealthChecker {
         if (health.kind() != BoardHealthKind.PORT_USED) {
             return health;
         }
-        // A briefly busy worker can miss the short local-status timeout; one retry keeps healthy
-        // managed workers from transiently showing up as PORT_USED.
-        try {
-            Thread.sleep(PORT_USED_RETRY_DELAY.toMillis());
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+        // A briefly busy worker can miss the short local-status timeout; one delayed re-probe keeps
+        // healthy managed workers from transiently showing up as PORT_USED. A longer timeout would
+        // slow every probe of a genuinely foreign port instead.
+        if (!sleptWithoutInterrupt(PORT_USED_RETRY_DELAY)) {
             return health;
         }
         return probeWorkflowHealth(expectedWorkflowPath, expectedBoardId, expectedBoardKey, port);
+    }
+
+    /** Returns false when interrupted, so callers report the freshest health instead of probing on. */
+    private static boolean sleptWithoutInterrupt(Duration delay) {
+        try {
+            Thread.sleep(delay.toMillis());
+            return true;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
     }
 
     private BoardHealth probeWorkflowHealth(

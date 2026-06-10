@@ -54,6 +54,13 @@ final class SetupDiagnosticReporter {
     private static final int BODY_LIMIT = 4_000;
     private static final int LOG_LINE_LIMIT = 80;
     private static final int LOG_BYTE_LIMIT = 128 * 1024;
+
+    /**
+     * More same-second failure reports than this means something is looping; give up instead of
+     * scanning the directory forever. The caller treats the failure as report-write-unavailable.
+     */
+    private static final int MAX_REPORT_NAME_ATTEMPTS = 100;
+
     private static final List<String> DIAGNOSTIC_TOOL_COMMANDS =
             List.of("git", "java", "javac", "npm", "node", "codex", "gh", "docker");
     private static final List<String> SETUP_FAILURE_TOOL_COMMANDS = List.of(
@@ -676,12 +683,6 @@ final class SetupDiagnosticReporter {
      * Creates the report with CREATE_NEW and a numeric suffix so two failures in the same second
      * cannot overwrite each other's report.
      */
-    /**
-     * More same-second failure reports than this means something is looping; give up instead of
-     * scanning the directory forever. The caller treats the failure as report-write-unavailable.
-     */
-    private static final int MAX_REPORT_NAME_ATTEMPTS = 100;
-
     private static Path writeUniqueReport(Path reportDir, String timestamp, String content) throws IOException {
         for (int attempt = 1; attempt <= MAX_REPORT_NAME_ATTEMPTS; attempt++) {
             String suffix = attempt == 1 ? "" : "-" + attempt;
@@ -844,9 +845,7 @@ final class SetupDiagnosticReporter {
     }
 
     private void appendLocalPathIdentifiers(StringBuilder body, LocalWorkerPaths paths, Path manifestPath) {
-        MarkdownTable table = MarkdownTable.of(
-                List.of("name", "token", "value"),
-                List.of(MarkdownTable.Alignment.LEFT, MarkdownTable.Alignment.LEFT, MarkdownTable.Alignment.LEFT));
+        MarkdownTable table = MarkdownTable.leftAligned(List.of("name", "token", "value"));
         table.row("app_home", pathToken(paths.appHome().toString()), paths.appHome());
         table.row("config_dir", pathToken(paths.configDir().toString()), paths.configDir());
         table.row("workspace_root", pathToken(paths.workspaceRoot().toString()), paths.workspaceRoot());
@@ -865,9 +864,7 @@ final class SetupDiagnosticReporter {
     }
 
     private void appendToolStatus(StringBuilder body, List<String> tools) {
-        MarkdownTable table = MarkdownTable.of(
-                List.of("tool", "status", "detail"),
-                List.of(MarkdownTable.Alignment.LEFT, MarkdownTable.Alignment.LEFT, MarkdownTable.Alignment.LEFT));
+        MarkdownTable table = MarkdownTable.leftAligned(List.of("tool", "status", "detail"));
         for (String tool : tools) {
             ToolProbe probe = toolProbe(tool);
             table.row(tool, probe.available() ? "available" : "missing", sanitize(probe.detail()));
@@ -1218,8 +1215,7 @@ final class SetupDiagnosticReporter {
 
         section(body, "Invalid Workflow Files");
         line(body, "invalid_workflow_count", invalidWorkflows.size());
-        MarkdownTable table = MarkdownTable.of(
-                List.of("workflow", "problem"), List.of(MarkdownTable.Alignment.LEFT, MarkdownTable.Alignment.LEFT));
+        MarkdownTable table = MarkdownTable.leftAligned(List.of("workflow", "problem"));
         invalidWorkflows.forEach(workflow -> table.row(sanitize(workflow.path().toString()), workflow.warning()));
         table.appendTo(body);
     }
@@ -1237,9 +1233,7 @@ final class SetupDiagnosticReporter {
 
         section(body, "Invalid Connected Board Workflows");
         line(body, "invalid_connected_board_workflow_count", invalidWorkflows.size());
-        MarkdownTable table = MarkdownTable.of(
-                List.of("board_hash", "workflow", "problem"),
-                List.of(MarkdownTable.Alignment.LEFT, MarkdownTable.Alignment.LEFT, MarkdownTable.Alignment.LEFT));
+        MarkdownTable table = MarkdownTable.leftAligned(List.of("board_hash", "workflow", "problem"));
         invalidWorkflows.forEach(workflow -> table.row(
                 hash(workflow.board().boardId()),
                 sanitize(safePathText(workflow.board().workflowPath())),
@@ -1580,16 +1574,8 @@ final class SetupDiagnosticReporter {
             body.append(Files.exists(stateHome) ? "State home is not a directory.\n" : "State directory is missing.\n");
             return;
         }
-        MarkdownTable table = MarkdownTable.of(
-                List.of("path_token", "log_path", "workflow_token", "workflow_path", "stream", "exists", "has_content"),
-                List.of(
-                        MarkdownTable.Alignment.LEFT,
-                        MarkdownTable.Alignment.LEFT,
-                        MarkdownTable.Alignment.LEFT,
-                        MarkdownTable.Alignment.LEFT,
-                        MarkdownTable.Alignment.LEFT,
-                        MarkdownTable.Alignment.LEFT,
-                        MarkdownTable.Alignment.LEFT));
+        MarkdownTable table = MarkdownTable.leftAligned(List.of(
+                "path_token", "log_path", "workflow_token", "workflow_path", "stream", "exists", "has_content"));
         Set<Path> rows = new LinkedHashSet<>();
         rows.addAll(expectedLogFiles(stateHome, workflowPaths));
         if (!selected) {

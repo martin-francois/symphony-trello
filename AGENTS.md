@@ -46,7 +46,9 @@ matters, and easy for another engineer to understand without asking the original
    before committing instead of correcting only the one sentence the user pointed out.
 9. When a catch block intentionally ignores an exception or falls back, make that policy explicit.
    Prefer a small helper whose name states the fallback, a narrow debug log when the failure is useful
-   diagnostic context, or tests/spec wording that prove the quiet fallback is intentional. Do not
+   diagnostic context, or tests/spec wording that prove the quiet fallback is intentional. When the
+   quiet fallback stays inline, add a short comment at the catch site stating why ignoring the
+   exception is correct there, for example because another validation path already reports it. Do not
    leave comment-only or empty catch bodies in production code, and do not add noisy logs for
    expected optional data, spec-defined parse skips, non-POSIX filesystem behavior, or best-effort
    diagnostics.
@@ -162,7 +164,10 @@ matters, and easy for another engineer to understand without asking the original
   look the same today; leave them separate when they represent different concepts that could
   reasonably change independently. When duplicated logic would need to change together at multiple
   call sites, extract a shared helper or abstraction so the coupling is explicit and future
-  contributors only have one place to update.
+  contributors only have one place to update. Treat making the same edit, or copying the same
+  pattern, in two or more places during one change as that signal: those places will have to change
+  together again, so centralize them into a shared helper or constant before finishing instead of
+  leaving parallel copies.
 - Add comments only for non-obvious decisions, surprising constraints, or tradeoffs that would slow
   down a future maintainer.
 - Use Java 25 LTS language/runtime features where they make the code clearer, but do not be clever
@@ -494,6 +499,13 @@ matters, and easy for another engineer to understand without asking the original
   stateful fixture, or concurrency behavior more clearly than Mockito stubbing.
 - Prefer parameterized tests with `@MethodSource` for data-driven behavior.
 - Structure unit tests with `// given`, `// when`, and `// then` sections separated by blank lines.
+- Statically import test framework methods everywhere in tests: JUnit assertions and assumptions,
+  AssertJ assertions, and Mockito methods such as `assertThat`, `assertThatThrownBy`, `assumeTrue`,
+  `abort`, `mock`, `when`, and `verify`. Do not call them through the class name like
+  `Assumptions.assumeTrue(...)`.
+- When two or more tests repeat the same given-scaffolding or differ only in input data, extract a
+  shared fixture helper or use a parameterized test instead of copying the block. Keep each test's
+  distinctive inputs and assertions visible at the call site; share only the genuinely common setup.
 - Test names and assertion descriptions should make failures actionable without requiring a debug
   session.
 - Do not write low-value tests that only restate a constant. Do test parsing, policy enforcement,
