@@ -45,6 +45,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantLock;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
@@ -64,6 +65,21 @@ public class SymphonyOrchestrator {
     private final Clock clock;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
     private final ExecutorService workers = Executors.newVirtualThreadPerTaskExecutor();
+
+    /**
+     * Serializes the long-running operations (start, stop, tick, worker exit, retry timers, agent
+     * events) against each other, exactly like the previous synchronized methods did. Trello and
+     * filesystem I/O may run while holding this lock, but never while holding the instance
+     * monitor: status reads take only the monitor, so they must never queue behind a Trello
+     * round-trip. Every write to reader-visible state happens under both locks; reads inside
+     * operations need no monitor because all writers hold this lock. Exception: config and
+     * workflowPath are volatile and written under this lock only, because the lock-free
+     * local-status getters read each as one immutable reference and need no cross-field
+     * consistency; workflow and workflowLastModified are confined to lock holders and have no
+     * lock-free readers.
+     */
+    private final ReentrantLock operationLock = new ReentrantLock();
+
     private final Map<String, RunningEntry> running = new LinkedHashMap<>();
     private final Map<String, RetryEntry> retryAttempts = new LinkedHashMap<>();
     private final Set<String> claimed = new HashSet<>();
@@ -86,8 +102,15 @@ public class SymphonyOrchestrator {
     private volatile boolean tickRunning;
     private boolean started;
 
+    /**
+     * Runs inside finishTickAndScheduleNext between refresh consumption and the next schedule,
+     * the exact boundary where a concurrent refresh used to be overwritten by the interval
+     * schedule. Tests use it to pin the boundary contract; production keeps the no-op.
+     */
+    Runnable tickCompletionHookForTests = () -> {};
+
     @ConfigProperty(name = "symphony.workflow.path")
-    Path workflowPath;
+    volatile Path workflowPath;
 
     public SymphonyOrchestrator(
             WorkflowLoader workflowLoader,
@@ -117,62 +140,109 @@ public class SymphonyOrchestrator {
         this.clock = clock;
     }
 
-    public synchronized void start() {
-        if (started) {
-            return;
+    public void start() {
+        operationLock.lock();
+        try {
+            synchronized (this) {
+                if (started) {
+                    return;
+                }
+            }
+            reloadOrThrow();
+            startWorkflowWatcher();
+            startupTerminalWorkspaceCleanup();
+            synchronized (this) {
+                started = true;
+                scheduleTick(Duration.ZERO);
+            }
+        } finally {
+            operationLock.unlock();
         }
-        reloadOrThrow();
-        startWorkflowWatcher();
-        startupTerminalWorkspaceCleanup();
-        started = true;
-        scheduleTick(Duration.ZERO);
     }
 
-    public synchronized void stop() {
+    public void stop() {
+        operationLock.lock();
+        try {
+            markStoppingAndCancelTick();
+            stopWorkflowWatcher();
+            List<RunningEntry> entries;
+            synchronized (this) {
+                entries = List.copyOf(running.values());
+            }
+            entries.forEach(entry -> {
+                agentRunner.cancel(entry.workerIdentity);
+                cancelWorkerTask(entry);
+            });
+            scheduler.shutdownNow();
+            workers.shutdownNow();
+        } finally {
+            operationLock.unlock();
+        }
+    }
+
+    /**
+     * Marking not-started before anything else closes the refresh window: once this ran, a
+     * concurrent requestRefresh() is a no-op and cannot schedule a tick against the scheduler
+     * that stop is about to shut down.
+     */
+    private synchronized void markStoppingAndCancelTick() {
+        started = false;
         if (tickTimer != null) {
             tickTimer.cancel(false);
         }
-        stopWorkflowWatcher();
-        running.values().forEach(entry -> {
-            agentRunner.cancel(entry.workerIdentity);
-            cancelWorkerTask(entry);
-        });
-        scheduler.shutdownNow();
-        workers.shutdownNow();
-        started = false;
     }
 
-    public synchronized void setWorkflowPath(Path workflowPath) {
-        checkState(!started, "Workflow path cannot be changed after orchestrator start");
-        this.workflowPath = workflowPath;
+    public void setWorkflowPath(Path workflowPath) {
+        // The operation lock serializes this with start(): a path change requested while startup
+        // is loading the workflow waits for the operation boundary and is then rejected.
+        operationLock.lock();
+        try {
+            synchronized (this) {
+                checkState(!started, "Workflow path cannot be changed after orchestrator start");
+                this.workflowPath = workflowPath;
+            }
+        } finally {
+            operationLock.unlock();
+        }
     }
 
     public synchronized boolean isStarted() {
         return started;
     }
 
-    public synchronized Path selectedWorkflowPath() {
-        Path selected = config == null ? workflowPath : config.workflowPath();
+    // Lock-free on purpose: local-status health probes call these and must never wait for an
+    // in-flight Trello poll. Both fields are volatile and the config value is immutable.
+    public Path selectedWorkflowPath() {
+        EffectiveConfig current = config;
+        Path selected = current == null ? workflowPath : current.workflowPath();
         return selected.toAbsolutePath().normalize();
     }
 
-    public synchronized String selectedBoardId() {
-        return config == null ? null : config.tracker().resolvedBoardId();
+    public String selectedBoardId() {
+        EffectiveConfig current = config;
+        return current == null ? null : current.tracker().resolvedBoardId();
     }
 
-    public synchronized String selectedConfiguredBoardId() {
-        return config == null ? null : config.tracker().boardId();
+    public String selectedConfiguredBoardId() {
+        EffectiveConfig current = config;
+        return current == null ? null : current.tracker().boardId();
     }
 
     public void requestRefresh() {
         refreshRequested.set(true);
-        if (tickRunning) {
-            return;
-        }
-        synchronized (this) {
-            if (started && !tickRunning) {
-                scheduleTick(Duration.ZERO);
-            }
+        scheduleRefreshIfStartedAndIdle();
+    }
+
+    /**
+     * The monitor makes this atomic with tick completion: it runs entirely before or entirely
+     * after finishTickAndScheduleNext, so a refresh either gets consumed by the finishing tick or
+     * replaces the interval schedule with a zero-delay tick, never the other way around. After
+     * stop marked the orchestrator as not started, this is a no-op, so a late refresh cannot
+     * schedule against the shut-down scheduler.
+     */
+    private synchronized void scheduleRefreshIfStartedAndIdle() {
+        if (started && !tickRunning) {
+            scheduleTick(Duration.ZERO);
         }
     }
 
@@ -180,24 +250,19 @@ public class SymphonyOrchestrator {
         return refreshRequested.getAndSet(false);
     }
 
-    private void requestRefreshAfterCurrentTickIfNeeded() {
-        if (consumeRefreshRequest()) {
-            scheduleTick(Duration.ZERO);
-        } else {
-            scheduleTick(config.polling().interval());
-        }
-    }
-
     public void tickNowForTests() {
         tick();
     }
 
     private void tick() {
-        synchronized (this) {
-            if (!started) {
-                return;
+        operationLock.lock();
+        try {
+            synchronized (this) {
+                if (!started) {
+                    return;
+                }
+                tickRunning = true;
             }
-            tickRunning = true;
             consumeRefreshRequest();
             reloadIfChanged();
             reconcileRunningCards();
@@ -221,10 +286,26 @@ public class SymphonyOrchestrator {
             } catch (RuntimeException e) {
                 LOG.errorf("dispatch outcome=skipped reason=%s", e.getMessage());
             } finally {
-                tickRunning = false;
-                requestRefreshAfterCurrentTickIfNeeded();
+                finishTickAndScheduleNext();
             }
+        } finally {
+            operationLock.unlock();
         }
+    }
+
+    /**
+     * Tick completion is atomic: clearing tickRunning, consuming the refresh flag, and scheduling
+     * the next tick happen under one monitor section. A concurrent requestRefresh() therefore
+     * runs entirely before this (and is consumed here as the zero-delay schedule) or entirely
+     * after it (and replaces the interval schedule), so a refresh at the completion boundary can
+     * never be overwritten by the normal polling interval.
+     */
+    private synchronized void finishTickAndScheduleNext() {
+        tickRunning = false;
+        boolean refreshRequestedDuringTick = consumeRefreshRequest();
+        tickCompletionHookForTests.run();
+        scheduleTick(
+                refreshRequestedDuringTick ? Duration.ZERO : config.polling().interval());
     }
 
     private void reloadOrThrow() {
@@ -370,7 +451,9 @@ public class SymphonyOrchestrator {
                 } else if (TrelloClient.isActive(card, config)) {
                     RunningEntry entry = running.get(card.id());
                     if (entry != null) {
-                        entry.card = card;
+                        synchronized (this) {
+                            entry.card = card;
+                        }
                     }
                 } else {
                     terminateRunning(card.id(), false, true, "card no longer active");
@@ -395,21 +478,25 @@ public class SymphonyOrchestrator {
     }
 
     private void terminateRunning(String cardId, boolean cleanupWorkspace, boolean suppressRetry, String reason) {
-        RunningEntry entry = running.remove(cardId);
-        if (entry == null) {
-            return;
+        RunningEntry entry;
+        synchronized (this) {
+            entry = running.remove(cardId);
+            if (entry == null) {
+                return;
+            }
+            ignoredWorkers.put(entry.workerIdentity, clock.instant().plus(IGNORED_WORKER_TTL));
+            trimIgnoredWorkers();
+            addRuntime(entry);
+            if (suppressRetry) {
+                claimed.remove(cardId);
+            }
         }
-        ignoredWorkers.put(entry.workerIdentity, clock.instant().plus(IGNORED_WORKER_TTL));
-        trimIgnoredWorkers();
         agentRunner.cancel(entry.workerIdentity);
         cancelWorkerTask(entry);
-        addRuntime(entry);
         if (cleanupWorkspace) {
             workspaces.removeForIdentifierIfPresent(entry.identifier(), config);
         }
-        if (suppressRetry) {
-            claimed.remove(cardId);
-        } else {
+        if (!suppressRetry) {
             releaseCurrentFromDispatch(entry.card, reason);
             scheduleRetry(cardId, nextAttempt(entry.retryAttempt), entry.identifier(), reason, false);
         }
@@ -417,8 +504,11 @@ public class SymphonyOrchestrator {
     }
 
     private void dispatch(Card card, Integer attempt) {
-        claimed.add(card.id());
-        RetryEntry retry = retryAttempts.remove(card.id());
+        RetryEntry retry;
+        synchronized (this) {
+            claimed.add(card.id());
+            retry = retryAttempts.remove(card.id());
+        }
         if (retry != null) {
             retry.timer().cancel(false);
         }
@@ -426,19 +516,25 @@ public class SymphonyOrchestrator {
         try {
             dispatchCard = tracker.prepareForDispatch(config, card);
         } catch (RuntimeException e) {
-            claimed.remove(card.id());
+            synchronized (this) {
+                claimed.remove(card.id());
+            }
             releaseCurrentFromDispatch(card, "prepare for dispatch failed");
             scheduleRetry(card.id(), nextAttempt(attempt), card.identifier(), e.getMessage(), false);
             return;
         }
         String workerIdentity = UUID.randomUUID().toString();
         RunningEntry entry = new RunningEntry(dispatchCard, workerIdentity, attempt, clock.instant());
-        running.put(dispatchCard.id(), entry);
+        synchronized (this) {
+            running.put(dispatchCard.id(), entry);
+        }
         String prompt;
         try {
             prompt = prompts.render(workflow.promptTemplate(), dispatchCard, attempt);
         } catch (RuntimeException e) {
-            running.remove(dispatchCard.id());
+            synchronized (this) {
+                running.remove(dispatchCard.id());
+            }
             releaseFromDispatch(dispatchCard, "prompt render failed");
             scheduleRetry(dispatchCard.id(), nextAttempt(attempt), dispatchCard.identifier(), e.getMessage(), false);
             return;
@@ -472,16 +568,25 @@ public class SymphonyOrchestrator {
         }
     }
 
-    private synchronized void onWorkerExit(String cardId, String workerIdentity, AgentRunResult result) {
-        currentRunningEntry(cardId, workerIdentity).ifPresent(entry -> handleWorkerExit(cardId, result, entry));
+    private void onWorkerExit(String cardId, String workerIdentity, AgentRunResult result) {
+        operationLock.lock();
+        try {
+            currentRunningEntry(cardId, workerIdentity).ifPresent(entry -> handleWorkerExit(cardId, result, entry));
+        } finally {
+            operationLock.unlock();
+        }
     }
 
     private void handleWorkerExit(String cardId, AgentRunResult result, RunningEntry entry) {
-        running.remove(cardId);
-        addRuntime(entry);
+        synchronized (this) {
+            running.remove(cardId);
+            addRuntime(entry);
+        }
         WorkerExitState state = workerExitState(cardId, entry.identifier());
         if (result.success()) {
-            completed.add(cardId);
+            synchronized (this) {
+                completed.add(cardId);
+            }
             if (state.retry()) {
                 scheduleRetry(cardId, 1, entry.identifier(), null, true);
             } else {
@@ -532,7 +637,9 @@ public class SymphonyOrchestrator {
     }
 
     private void completeWorkerExit(String cardId, RunningEntry entry, WorkerExitState state) {
-        claimed.remove(cardId);
+        synchronized (this) {
+            claimed.remove(cardId);
+        }
         if (state.cleanupWorkspace()) {
             workspaces.removeForIdentifierIfPresent(entry.identifier(), config);
         }
@@ -552,16 +659,21 @@ public class SymphonyOrchestrator {
         }
     }
 
-    private synchronized void onAgentEvent(AgentEvent event) {
-        running.values().stream()
-                .filter(entry -> entry.workerIdentity.equals(event.workerIdentity()))
-                .map(entry -> entry.cardId)
-                .findAny()
-                .ifPresent(cardId -> currentRunningEntry(cardId, event.workerIdentity())
-                        .ifPresent(entry -> applyAgentEvent(cardId, entry, event)));
+    private void onAgentEvent(AgentEvent event) {
+        operationLock.lock();
+        try {
+            running.values().stream()
+                    .filter(entry -> entry.workerIdentity.equals(event.workerIdentity()))
+                    .map(entry -> entry.cardId)
+                    .findAny()
+                    .ifPresent(cardId -> currentRunningEntry(cardId, event.workerIdentity())
+                            .ifPresent(entry -> applyAgentEvent(cardId, entry, event)));
+        } finally {
+            operationLock.unlock();
+        }
     }
 
-    private void applyAgentEvent(String cardId, RunningEntry entry, AgentEvent event) {
+    private synchronized void applyAgentEvent(String cardId, RunningEntry entry, AgentEvent event) {
         entry.lastEvent = event.event();
         entry.lastMessage = event.message();
         entry.lastEventAt = event.timestamp();
@@ -582,7 +694,7 @@ public class SymphonyOrchestrator {
         addRecentEvent(cardId, new CardDebugDetails.EventInfo(event.timestamp(), event.event(), event.message()));
     }
 
-    private Optional<RunningEntry> currentRunningEntry(String cardId, String workerIdentity) {
+    private synchronized Optional<RunningEntry> currentRunningEntry(String cardId, String workerIdentity) {
         removeExpiredIgnoredWorkers();
         if (ignoredWorkers.remove(workerIdentity) != null) {
             LOG.debugf("card_id=%s worker_identity=%s outcome=ignored_stale_worker", cardId, workerIdentity);
@@ -618,17 +730,31 @@ public class SymphonyOrchestrator {
         Duration delay = continuation ? CONTINUATION_DELAY : backoff(attempt);
         ScheduledFuture<?> timer =
                 scheduler.schedule(() -> onRetryTimer(cardId), delay.toMillis(), TimeUnit.MILLISECONDS);
-        retryAttempts.put(
-                cardId,
-                new RetryEntry(cardId, identifier, attempt, clock.instant().plus(delay), timer, error));
-        claimed.add(cardId);
+        synchronized (this) {
+            retryAttempts.put(
+                    cardId,
+                    new RetryEntry(cardId, identifier, attempt, clock.instant().plus(delay), timer, error));
+            claimed.add(cardId);
+        }
         LOG.infof(
                 "card_id=%s card_identifier=%s outcome=retrying attempt=%d delay_ms=%d",
                 cardId, identifier, attempt, delay.toMillis());
     }
 
-    private synchronized void onRetryTimer(String cardId) {
-        RetryEntry retry = retryAttempts.remove(cardId);
+    private void onRetryTimer(String cardId) {
+        operationLock.lock();
+        try {
+            handleRetryTimer(cardId);
+        } finally {
+            operationLock.unlock();
+        }
+    }
+
+    private void handleRetryTimer(String cardId) {
+        RetryEntry retry;
+        synchronized (this) {
+            retry = retryAttempts.remove(cardId);
+        }
         if (retry == null) {
             return;
         }
@@ -641,19 +767,19 @@ public class SymphonyOrchestrator {
         }
         CardLookupResult result = refreshed.get(cardId);
         if (result instanceof CardLookupResult.Missing) {
-            claimed.remove(cardId);
+            removeClaim(cardId);
             workspaces.removeForIdentifierIfPresent(retry.identifier(), config);
         } else if (result instanceof CardLookupResult.Failed) {
             scheduleRetry(cardId, retry.attempt() + 1, retry.identifier(), "retry card refresh failed", false);
         } else if (result instanceof CardLookupResult.Found found) {
             Card card = found.card();
             if (isOutOfBoardScope(card)) {
-                claimed.remove(cardId);
+                removeClaim(cardId);
             } else if (TrelloClient.isTerminal(card, config)) {
-                claimed.remove(cardId);
+                removeClaim(cardId);
                 workspaces.removeForIdentifierIfPresent(card.identifier(), config);
             } else if (!TrelloClient.isActive(card, config)) {
-                claimed.remove(cardId);
+                removeClaim(cardId);
             } else if (!shouldDispatchIgnoringSlots(card, true)) {
                 releaseFromDispatch(card, "card is active but not currently dispatch-eligible");
                 scheduleRetry(
@@ -674,10 +800,14 @@ public class SymphonyOrchestrator {
                         "no available orchestrator slots for card state",
                         false);
             } else {
-                claimed.remove(cardId);
+                removeClaim(cardId);
                 refreshForDispatch(card).ifPresent(promptCard -> dispatch(promptCard, retry.attempt()));
             }
         }
+    }
+
+    private synchronized void removeClaim(String cardId) {
+        claimed.remove(cardId);
     }
 
     private boolean shouldDispatch(Card card, boolean ignoreClaim) {
@@ -827,19 +957,19 @@ public class SymphonyOrchestrator {
         }
     }
 
-    private void removeExpiredIgnoredWorkers() {
+    private synchronized void removeExpiredIgnoredWorkers() {
         Instant now = clock.instant();
         ignoredWorkers.entrySet().removeIf(entry -> entry.getValue().isBefore(now));
     }
 
-    private void trimIgnoredWorkers() {
+    private synchronized void trimIgnoredWorkers() {
         while (ignoredWorkers.size() > IGNORED_WORKER_LIMIT) {
             String first = ignoredWorkers.keySet().iterator().next();
             ignoredWorkers.remove(first);
         }
     }
 
-    private void scheduleTick(Duration delay) {
+    private synchronized void scheduleTick(Duration delay) {
         if (tickTimer != null) {
             tickTimer.cancel(false);
         }
