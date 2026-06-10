@@ -852,15 +852,15 @@ final class LocalWorkerManager {
                 // Plain branching because the present branch stops the worker with checked IO.
                 if (verifiedPid.isPresent()) {
                     stopPid(store, files, verifiedPid.get());
-                    out.println(
-                            "Stopped untracked managed worker " + files.displayName() + " pid=" + verifiedPid.get());
+                    out.println("Stopped untracked managed worker for \"" + board.boardName() + "\" pid="
+                            + verifiedPid.get());
                     return;
                 }
                 throw new TrelloBoardSetupException(
                         "setup_worker_untracked",
-                        "Cannot stop "
-                                + files.displayName()
-                                + " because the worker is healthy but has no managed pid. Stop the process manually, then start it again with symphony-trello start."
+                        "Cannot stop the worker for \""
+                                + board.boardName()
+                                + "\" because the worker is healthy but has no managed pid. Stop the process manually, then start it again with symphony-trello start."
                                 + health.workerPid()
                                         .map(reportedPid -> " Reported worker pid=" + reportedPid)
                                         .orElse(""));
@@ -871,12 +871,12 @@ final class LocalWorkerManager {
         if (!platform.isManaged(pid, paths.appHome(), board.workflowPath())) {
             // The process is not ours, but the pid file is managed state pointing at a foreign
             // process; remove it so repeated stops do not keep reporting the same stale pid.
-            out.println("Skipped unmanaged stale pid " + files.displayName() + " pid=" + pid);
+            out.println("Skipped unmanaged stale pid for \"" + board.boardName() + "\" pid=" + pid);
             removeStalePidFile(store, files.pidFile(), out);
             return;
         }
         stopPid(store, files, pid);
-        out.println("Stopped " + files.displayName());
+        out.println("Stopped Symphony for Trello for \"" + board.boardName() + "\"");
     }
 
     private void stopPid(ManagedProcessStore store, ManagedProcessStore.ManagedProcessFiles files, long pid)
@@ -954,17 +954,26 @@ final class LocalWorkerManager {
         }
         for (Path pidFile : pidFiles) {
             Long pid = store.readPid(pidFile);
-            String name = PathNames.fileName(pidFile).replaceFirst("\\.pid$", "");
+            String label = stateFileLabel(pidFile);
             if (pid != null && platform.isAlive(pid) && platform.isManaged(pid, paths.appHome())) {
                 stopPid(store, store.filesFromPidFile(pidFile), pid);
-                out.println("Stopped " + name);
+                out.println("Stopped " + label);
             } else if (pid != null && platform.isAlive(pid)) {
-                out.println("Skipped unmanaged stale pid " + name + " pid=" + pid);
+                out.println("Skipped unmanaged stale pid " + label + " pid=" + pid);
                 removeStalePidFile(store, pidFile, out);
             } else {
                 store.deletePid(pidFile);
             }
         }
+    }
+
+    /**
+     * Pid-file fallback output runs only when no boards are connected, so no board name exists;
+     * the label is the workflow file name without the internal state-file hash suffix.
+     */
+    private static String stateFileLabel(Path pidFile) {
+        String name = PathNames.fileName(pidFile).replaceFirst("\\.pid$", "");
+        return name.replaceFirst("\\.[0-9a-f]{12}$", "");
     }
 
     /**
@@ -995,14 +1004,14 @@ final class LocalWorkerManager {
         }
         for (Path pidFile : pidFiles) {
             Long pid = store.readPid(pidFile);
-            String name = PathNames.fileName(pidFile).replaceFirst("\\.pid$", "");
+            String label = stateFileLabel(pidFile);
             if (pid != null && platform.isAlive(pid) && platform.isManaged(pid, paths.appHome())) {
-                out.println("running " + name + " pid=" + pid);
+                out.println("running " + label + " pid=" + pid);
             } else if (pid != null && platform.isAlive(pid)) {
-                out.println("stale " + name + " pid=" + pid + " does not belong to this install");
+                out.println("stale " + label + " pid=" + pid + " does not belong to this install");
             } else {
                 store.deletePid(pidFile);
-                out.println("stopped " + name);
+                out.println("stopped " + label);
             }
         }
     }

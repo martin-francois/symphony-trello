@@ -513,7 +513,8 @@ final class InstallerScriptFixture {
 		                    env_file="$(sed -n 's/.*"envPath"[[:blank:]]*:[[:blank:]]*"\\([^"]*\\)".*/\\1/p' "$config_dir/connected-boards.json" | head -1)"
 		                  fi
 		                  mkdir -p "$state_home"
-	                  state_name="$(basename "${workflow:-WORKFLOW.md}").fake"
+	                  display_name="$(basename "${workflow:-WORKFLOW.md}")"
+                  state_name="$display_name.abcdef123456"
 	                  pid_file="$state_home/$state_name.pid"
 	                  log_file="$state_home/$state_name.log"
 	                  case "$command" in
@@ -537,9 +538,9 @@ final class InstallerScriptFixture {
 	                      ;;
 	                    status)
 		                      if [[ -f "$pid_file" ]]; then
-		                        echo "running $state_name pid=$(cat "$pid_file")"
+		                        echo "running $display_name pid=$(cat "$pid_file")"
 	                      elif [[ -n "$workflow" ]]; then
-	                        echo "stopped $state_name"
+	                        echo "stopped $display_name"
 	                      else
 	                        echo "No managed Symphony process found"
 	                      fi
@@ -550,7 +551,7 @@ final class InstallerScriptFixture {
 	                        kill "$(cat "$pid_file")" >/dev/null 2>&1 || true
 	                        rm -f "$pid_file"
 	                      fi
-	                      echo "Stopped $state_name"
+	                      echo "Stopped $display_name"
 	                      exit 0
 	                      ;;
 	                    logs)
@@ -688,7 +689,8 @@ final class InstallerScriptFixture {
 	                      }
 	                    }
 	                    New-Item -ItemType Directory -Force -Path $stateHome | Out-Null
-	                    $stateName = "$(Split-Path -Leaf $workflow).fake"
+	                    $displayName = Split-Path -Leaf $workflow
+	                    $stateName = "$displayName.abcdef123456"
 	                    $pidFile = Join-Path $stateHome "$stateName.pid"
 	                    $logFile = Join-Path $stateHome "$stateName.log"
 	                    if ($command -eq "start") {
@@ -698,12 +700,12 @@ final class InstallerScriptFixture {
 	                      exit 0
 	                    }
 	                    if ($command -eq "status") {
-	                      Write-Output "running $stateName pid=$PID"
+	                      Write-Output "running $displayName pid=$PID"
 	                      exit 0
 	                    }
 	                    if ($command -eq "stop") {
 	                      Remove-Item -Force -ErrorAction SilentlyContinue $pidFile
-	                      Write-Output "Stopped $stateName"
+	                      Write-Output "Stopped $displayName"
 	                      exit 0
 	                    }
 	                    if ($command -eq "logs") {

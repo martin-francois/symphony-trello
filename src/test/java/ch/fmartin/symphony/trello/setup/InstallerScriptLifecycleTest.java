@@ -186,7 +186,9 @@ final class InstallerScriptLifecycleTest {
         assertThat(unknownCommand.output())
                 .contains("setup_failed code=setup_invalid_arguments")
                 .contains("definitely-not-a-command");
-        assertThat(statusAfterInstall.output()).contains("running WORKFLOW.lifecycle-board.md.");
+        assertThat(statusAfterInstall.output())
+                .contains("running WORKFLOW.lifecycle-board.md pid=")
+                .doesNotContain("running WORKFLOW.lifecycle-board.md.");
         assertThat(noArgStart.output()).contains("already running", "WORKFLOW.lifecycle-board.md");
         assertThat(isolatedSetupLocalHelp.exitCode())
                 .as(isolatedSetupLocalHelp.output())
@@ -203,9 +205,13 @@ final class InstallerScriptLifecycleTest {
         assertThat(update.exitCode()).isZero();
         assertThat(secondUpdate.exitCode()).isZero();
         assertThat(markerContentAfterUpdate).isEqualTo("updated\n");
-        assertThat(statusWhileRunning.output()).contains("running WORKFLOW.lifecycle-board.md.");
+        assertThat(statusWhileRunning.output())
+                .contains("running WORKFLOW.lifecycle-board.md pid=")
+                .doesNotContain("running WORKFLOW.lifecycle-board.md.");
         assertThat(stop.exitCode()).isZero();
-        assertThat(stop.output()).contains("Stopped WORKFLOW.lifecycle-board.md");
+        assertThat(stop.output())
+                .contains("Stopped WORKFLOW.lifecycle-board.md")
+                .doesNotContain("Stopped WORKFLOW.lifecycle-board.md.");
         assertThat(processStopsWithin(managedPid, 5)).isTrue();
         assertThat(restart.exitCode()).isZero();
         assertThat(restart.output()).contains("Started Symphony for Trello");

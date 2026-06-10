@@ -608,13 +608,23 @@ function Stop-AndWaitManagedProcess([int]$ManagedPid) {
   }
 }
 
+# Lifecycle output shows the workflow file name; the trailing 12-hex segment of a pid file name
+# is internal state naming, not user-facing context.
+function Get-WorkerLabel {
+  param([string] $PidFileBaseName)
+  if ($PidFileBaseName -match '\.[0-9a-f]{12}$') {
+    return $PidFileBaseName.Substring(0, $PidFileBaseName.LastIndexOf('.'))
+  }
+  return $PidFileBaseName
+}
+
 function Stop-ManagedProcesses {
   $pidFiles = @(Get-ChildItem -Path $StateHome -Filter "*.pid" -ErrorAction SilentlyContinue)
   foreach ($pidFile in $pidFiles) {
     $pidText = Get-Content -LiteralPath $pidFile.FullName -Raw -ErrorAction SilentlyContinue
     $managedPid = 0
     if (($null -eq $pidText) -or (-not [int]::TryParse($pidText.Trim(), [ref]$managedPid))) {
-      Write-Host "  SKIP  invalid stale pid: $($pidFile.BaseName)"
+      Write-Host "  SKIP  invalid stale pid: $(Get-WorkerLabel $pidFile.BaseName)"
       if (-not $DryRun) {
         Remove-Item -LiteralPath $pidFile.FullName -Force
       }
@@ -623,14 +633,14 @@ function Stop-ManagedProcesses {
     $process = Get-Process -Id $managedPid -ErrorAction SilentlyContinue
     if ($process -and (Test-ManagedPid $managedPid)) {
       if ($DryRun) {
-        Write-Host "  WOULD STOP  $($pidFile.BaseName) pid=$managedPid"
+        Write-Host "  WOULD STOP  $(Get-WorkerLabel $pidFile.BaseName) pid=$managedPid"
       } else {
-        Write-Host "  STOP  $($pidFile.BaseName) pid=$managedPid"
+        Write-Host "  STOP  $(Get-WorkerLabel $pidFile.BaseName) pid=$managedPid"
         Stop-AndWaitManagedProcess $managedPid
         Remove-Item -LiteralPath $pidFile.FullName -Force
       }
     } elseif ($process) {
-      Write-Host "  SKIP  stale pid does not belong to this install: $($pidFile.BaseName) pid=$managedPid"
+      Write-Host "  SKIP  stale pid does not belong to this install: $(Get-WorkerLabel $pidFile.BaseName) pid=$managedPid"
     } elseif (-not $DryRun) {
       Remove-Item -LiteralPath $pidFile.FullName -Force
     }
