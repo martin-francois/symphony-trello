@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
 import com.sun.net.httpserver.HttpServer;
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -31,19 +32,11 @@ final class LocalHealthCheckerTest {
     void workflowHealthAcceptsConfiguredBoardKeyWhenRuntimeReportsResolvedBoardId() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md").toAbsolutePath().normalize();
-        server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
-        server.createContext("/api/v1/local-status", exchange -> {
-            byte[] body =
-                    """
-                    {"workflowPath":"%s","boardId":"full-board-id","configuredBoardId":"abc123"}
-                    """
-                            .formatted(workflow)
-                            .getBytes(StandardCharsets.UTF_8);
-            exchange.sendResponseHeaders(200, body.length);
-            exchange.getResponseBody().write(body);
-            exchange.close();
-        });
-        server.start();
+        startLocalStatusServer(
+                """
+                {"workflowPath":"%s","boardId":"full-board-id","configuredBoardId":"abc123"}
+                """
+                        .formatted(workflow));
         LocalHealthChecker checker = new LocalHealthChecker(Map.of(), new WorkflowConfigEditor());
 
         // when
@@ -60,19 +53,11 @@ final class LocalHealthCheckerTest {
     void workflowHealthParsesReportedWorkerPid() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md").toAbsolutePath().normalize();
-        server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
-        server.createContext("/api/v1/local-status", exchange -> {
-            byte[] body =
-                    """
-                    {"workflowPath":"%s","boardId":"full-board-id","configuredBoardId":"abc123","pid":4242}
-                    """
-                            .formatted(workflow)
-                            .getBytes(StandardCharsets.UTF_8);
-            exchange.sendResponseHeaders(200, body.length);
-            exchange.getResponseBody().write(body);
-            exchange.close();
-        });
-        server.start();
+        startLocalStatusServer(
+                """
+                {"workflowPath":"%s","boardId":"full-board-id","configuredBoardId":"abc123","pid":4242}
+                """
+                        .formatted(workflow));
         LocalHealthChecker checker = new LocalHealthChecker(Map.of(), new WorkflowConfigEditor());
 
         // when
@@ -134,5 +119,16 @@ final class LocalHealthCheckerTest {
 
         // then
         assertThat(port).isEqualTo(19091);
+    }
+
+    private void startLocalStatusServer(String responseJson) throws IOException {
+        server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        server.createContext("/api/v1/local-status", exchange -> {
+            byte[] body = responseJson.getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        server.start();
     }
 }

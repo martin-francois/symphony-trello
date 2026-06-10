@@ -554,6 +554,7 @@ Fields:
 
 - `interval_ms` (integer)
   - Default: `5000`
+  - MUST be positive; configuration resolution rejects zero or negative values.
   - Changes SHOULD be re-applied at runtime and affect future tick scheduling without restart.
 
 #### 5.3.3 `workspace` (object)
@@ -1011,7 +1012,8 @@ recognizing or validating extension fields unless that extension or conformance 
 implemented.
 
 - `tracker.kind`: string, REQUIRED, currently `trello`
-- `tracker.endpoint`: string, default `https://api.trello.com/1` when `tracker.kind=trello`
+- `tracker.endpoint`: string, must be an absolute `http(s)` URL with a host, default
+  `https://api.trello.com/1` when `tracker.kind=trello`
 - `tracker.api_key`: string, `$VAR`, or implementation-defined file reference, default environment
   variable `TRELLO_API_KEY` when `tracker.kind=trello`
 - `tracker.api_token`: string, `$VAR`, or implementation-defined file reference, default
@@ -1031,7 +1033,7 @@ implemented.
 - `tracker.request_timeout_ms`: integer, default `30000`
 - `tracker.max_api_retries`: integer, default `3`
 - `tracker.api_retry_base_delay_ms`: integer, default `1000`
-- `polling.interval_ms`: integer, default `5000`
+- `polling.interval_ms`: integer, must be positive, default `5000`
 - `workspace.root`: path resolved to absolute, default `<system-temp>/symphony_workspaces`
 - `hooks.after_create`: shell script or null
 - `hooks.before_run`: shell script or null

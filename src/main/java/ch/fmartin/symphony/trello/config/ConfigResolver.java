@@ -4,6 +4,8 @@ import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.io.File;
 import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -39,7 +41,7 @@ public class ConfigResolver {
         this(LocalEnvironment::get);
     }
 
-    ConfigResolver(Function<String, Optional<String>> environmentResolver) {
+    public ConfigResolver(Function<String, Optional<String>> environmentResolver) {
         this.environmentResolver = environmentResolver;
     }
 
@@ -91,7 +93,7 @@ public class ConfigResolver {
                                 "api_retry_base_delay_ms",
                                 ConfigDefaults.DEFAULT_TRACKER_API_RETRY_BASE_DELAY_MS)),
                 new EffectiveConfig.PollingConfig(
-                        millis(polling, "interval_ms", ConfigDefaults.DEFAULT_POLLING_INTERVAL_MS)),
+                        positiveMillis(polling, "interval_ms", ConfigDefaults.DEFAULT_POLLING_INTERVAL_MS)),
                 new EffectiveConfig.WorkspaceConfig(
                         path(workflow.path().getParent(), string(workspace, "root", systemTempRoot()))),
                 new EffectiveConfig.HooksConfig(
@@ -136,6 +138,7 @@ public class ConfigResolver {
         if (!"trello".equals(config.tracker().kind())) {
             throw new ConfigException("unsupported_tracker_kind", "tracker.kind must be trello");
         }
+        validateEndpoint(config.tracker().endpoint());
         if (blank(config.tracker().apiKey())) {
             throw new ConfigException("missing_tracker_api_key", "tracker.api_key is required");
         }
@@ -244,6 +247,30 @@ public class ConfigResolver {
             stripped = stripped.substring(0, stripped.length() - 1);
         }
         return stripped;
+    }
+
+    private static void validateEndpoint(String endpoint) {
+        if (blank(endpoint)) {
+            throw new ConfigException("invalid_tracker_endpoint", "tracker.endpoint must not be blank");
+        }
+        URI uri;
+        try {
+            uri = new URI(endpoint);
+        } catch (URISyntaxException e) {
+            throw new ConfigException("invalid_tracker_endpoint", "tracker.endpoint must be a valid http(s) URL", e);
+        }
+        if ((!"http".equals(uri.getScheme()) && !"https".equals(uri.getScheme())) || uri.getHost() == null) {
+            throw new ConfigException(
+                    "invalid_tracker_endpoint", "tracker.endpoint must be an absolute http(s) URL with a host");
+        }
+    }
+
+    private static Duration positiveMillis(Map<String, Object> root, String key, long defaultValue) {
+        Duration value = millis(root, key, defaultValue);
+        if (value.isZero()) {
+            throw new ConfigException("config_value_error", key + " must be positive");
+        }
+        return value;
     }
 
     private static Duration millis(Map<String, Object> root, String key, long defaultValue) {

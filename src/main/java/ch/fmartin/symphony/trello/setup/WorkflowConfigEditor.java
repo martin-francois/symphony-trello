@@ -1,7 +1,13 @@
 package ch.fmartin.symphony.trello.setup;
 
+import ch.fmartin.symphony.trello.config.ConfigException;
+import ch.fmartin.symphony.trello.config.ConfigResolver;
+import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import ch.fmartin.symphony.trello.config.TrelloListRoleValidator;
+import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
+import ch.fmartin.symphony.trello.workflow.WorkflowException;
+import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
@@ -27,6 +33,8 @@ final class WorkflowConfigEditor {
     private static final TypeReference<SequencedMap<String, Object>> YAML_MAP_TYPE = new TypeReference<>() {};
     private static final Pattern FRONT_MATTER =
             Pattern.compile("\\A---\\R(?<yaml>.*?)\\R---\\R(?<body>.*)\\z", Pattern.DOTALL);
+
+    private final WorkflowLoader workflowLoader = new WorkflowLoader();
 
     WorkflowValidation validate(ConnectedBoard board) {
         return validate(board, LocalEnvironment::get);
@@ -125,15 +133,40 @@ final class WorkflowConfigEditor {
 
     void validateStartEnvironmentReferences(
             Path workflowPath, Function<String, Optional<String>> environmentResolver, boolean validateServerPort) {
+        SequencedMap<String, Object> yaml;
         try {
-            SequencedMap<String, Object> yaml = parseYaml(read(workflowPath));
-            validateResolvedTextReference(yaml, "tracker", "board_id", "tracker.board_id", environmentResolver);
-            if (validateServerPort) {
-                validateServerPortReference(yaml, environmentResolver);
-            }
+            yaml = parseYaml(read(workflowPath));
         } catch (IOException e) {
             throw new TrelloBoardSetupException(
                     "setup_workflow_read_failed", "Workflow file cannot be read before worker start.", e);
+        } catch (TrelloBoardSetupException e) {
+            // This method only runs on the start launch path, which reports every
+            // workflow-content failure, including missing front matter, through the
+            // setup_workflow_invalid classification with the underlying cause.
+            throw invalidWorkflowForLaunch(workflowPath, e);
+        }
+        validateResolvedTextReference(yaml, "tracker", "board_id", "tracker.board_id", environmentResolver);
+        if (validateServerPort) {
+            validateServerPortReference(yaml, environmentResolver);
+            validateLaunchServerPort(workflowPath, yaml, environmentResolver);
+        }
+    }
+
+    /**
+     * Rejects literal server.port values outside the local port range before a worker launch.
+     * Environment-reference problems are reported by validateServerPortReference first, so this
+     * check only flags literal values such as 70000, -1, or fractional YAML numbers.
+     */
+    private void validateLaunchServerPort(
+            Path workflowPath,
+            SequencedMap<String, Object> yaml,
+            Function<String, Optional<String>> environmentResolver) {
+        if (invalidServerPortSetting(yaml, environmentResolver)) {
+            throw invalidWorkflowForLaunch(
+                    workflowPath,
+                    new ConfigException(
+                            "invalid_server_port",
+                            "server.port must be an integer between 0 and " + LocalPort.MAX + "."));
         }
     }
 
@@ -208,6 +241,46 @@ final class WorkflowConfigEditor {
     WorkflowValidation diagnosticsValidation(
             Path workflowPath, Function<String, Optional<String>> environmentResolver) {
         return diagnosticsValidation(workflowPath, environmentResolver, true);
+    }
+
+    EffectiveConfig resolveLaunchConfig(Path workflowPath, Function<String, Optional<String>> environmentResolver) {
+        requireLaunchableWorkflowFile(workflowPath);
+        try {
+            WorkflowDefinition workflow = workflowLoader.load(workflowPath);
+            return new ConfigResolver(environmentResolver).resolve(workflow);
+        } catch (WorkflowException | ConfigException | IllegalArgumentException | ClassCastException e) {
+            throw invalidWorkflowForLaunch(workflowPath, e);
+        }
+    }
+
+    /**
+     * Rejects workflow paths that cannot possibly launch, with the same expected
+     * setup_workflow_invalid classification as unusable workflow content.
+     */
+    void requireLaunchableWorkflowFile(Path workflowPath) {
+        if (Files.isRegularFile(workflowPath)) {
+            return;
+        }
+        String problem =
+                Files.exists(workflowPath) ? "workflow path is not a regular workflow file" : "missing workflow file";
+        throw invalidWorkflowForLaunch(workflowPath, new ConfigException("workflow_file_unusable", problem));
+    }
+
+    void validateLaunchDispatch(Path workflowPath, EffectiveConfig launchConfig) {
+        try {
+            new ConfigResolver().validateForDispatch(launchConfig);
+        } catch (ConfigException e) {
+            throw invalidWorkflowForLaunch(workflowPath, e);
+        }
+    }
+
+    private static TrelloBoardSetupException invalidWorkflowForLaunch(Path workflowPath, RuntimeException cause) {
+        return new TrelloBoardSetupException(
+                "setup_workflow_invalid",
+                "Invalid workflow configuration: " + cause.getMessage() + "\nWorkflow file:\n  "
+                        + workflowPath.toAbsolutePath().normalize()
+                        + "\nFix the workflow front matter, then rerun symphony-trello start.",
+                cause);
     }
 
     WorkflowValidation diagnosticsValidation(
