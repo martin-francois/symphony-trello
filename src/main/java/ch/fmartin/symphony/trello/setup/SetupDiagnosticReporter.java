@@ -194,6 +194,7 @@ final class SetupDiagnosticReporter {
     private enum ManifestStatus {
         LOADED,
         MISSING,
+        NOT_A_FILE,
         UNREADABLE
     }
 
@@ -909,6 +910,9 @@ final class SetupDiagnosticReporter {
     }
 
     private ManifestSnapshot manifest(Path manifestPath) {
+        if (Files.exists(manifestPath) && !Files.isRegularFile(manifestPath)) {
+            return new ManifestSnapshot(new ConnectedBoardManifest(List.of()), ManifestStatus.NOT_A_FILE);
+        }
         if (!Files.isRegularFile(manifestPath)) {
             return new ManifestSnapshot(new ConnectedBoardManifest(List.of()), ManifestStatus.MISSING);
         }
@@ -1034,6 +1038,9 @@ final class SetupDiagnosticReporter {
             case MISSING ->
                 body.append(
                         "No connected-board manifest was found. Local workflow files may still be summarized below.\n");
+            case NOT_A_FILE ->
+                body.append(
+                        "The connected-board manifest path exists but is not a regular file. Local workflow files may still be summarized below.\n");
             case UNREADABLE ->
                 body.append(
                         "The connected-board manifest could not be read. Local workflow files may still be summarized below.\n");
@@ -1453,7 +1460,7 @@ final class SetupDiagnosticReporter {
 
     private void appendRecentLogs(StringBuilder body, Path stateHome, Optional<SequencedSet<Path>> selectedWorkflows) {
         if (!Files.isDirectory(stateHome)) {
-            body.append("State directory is missing.\n");
+            body.append(Files.exists(stateHome) ? "State home is not a directory.\n" : "State directory is missing.\n");
             return;
         }
         Set<Path> selectedLogs = selectedWorkflows
@@ -1491,7 +1498,7 @@ final class SetupDiagnosticReporter {
     private void appendLocalLogIdentifiers(
             StringBuilder body, Path stateHome, SequencedSet<Path> workflowPaths, boolean selected) {
         if (!Files.isDirectory(stateHome)) {
-            body.append("State directory is missing.\n");
+            body.append(Files.exists(stateHome) ? "State home is not a directory.\n" : "State directory is missing.\n");
             return;
         }
         MarkdownTable table = MarkdownTable.of(
