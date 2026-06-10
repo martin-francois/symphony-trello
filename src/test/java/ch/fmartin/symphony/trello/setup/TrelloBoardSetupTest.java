@@ -110,6 +110,60 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
+    void newBoardRejectsUnsafeHighMaxAgentsBeforeCreatingTrelloBoard() {
+        // given
+        Path workflow = tempDir.resolve("high-max-agents-workflow.md");
+
+        // when
+        Throwable thrown = catchThrowable(() -> setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "High Max Agents Board",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                999999,
+                false,
+                false)));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_invalid_max_agents");
+            assertThat(failure.getMessage()).contains("between 1 and " + TrelloBoardSetup.MAX_SETUP_CONCURRENT_AGENTS);
+        });
+        assertThat(authorization.get()).as("no Trello board must be created").isNull();
+        assertThat(createdLists).isEmpty();
+    }
+
+    @Test
+    void importBoardRejectsUnsafeHighMaxAgentsBeforeTrelloRequests() {
+        // given
+        Path workflow = tempDir.resolve("high-max-agents-import.md");
+
+        // when
+        Throwable thrown = catchThrowable(() -> setup.importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "input",
+                List.of("Ready for Codex"),
+                List.of("Done"),
+                null,
+                workflow,
+                Path.of("./agent-workspaces"),
+                999999,
+                false)));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_invalid_max_agents");
+            assertThat(failure.getMessage()).contains("between 1 and " + TrelloBoardSetup.MAX_SETUP_CONCURRENT_AGENTS);
+        });
+        assertThat(boardInfoLookups.get())
+                .as("no Trello lookups before validation")
+                .isZero();
+    }
+
+    @Test
     void newBoardRejectsDirectoryWorkflowPathBeforeCreatingTrelloBoard() {
         // given
         Path workflowDirectory = tempDir;
