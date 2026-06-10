@@ -30,6 +30,9 @@ import java.util.function.BooleanSupplier;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 final class LocalWorkerManagerTest {
     @TempDir
@@ -379,7 +382,7 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
-    void startSkipsCredentialPreflightForUnsupportedTrackerKind() throws Exception {
+    void startRejectsUnsupportedTrackerKindWithoutCredentialPreflightError() throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
@@ -398,14 +401,18 @@ final class LocalWorkerManagerTest {
                 StandardCharsets.UTF_8);
         Files.deleteIfExists(board.envPath());
         fixture.save(board);
-        fixture.stubHealthyStartedWorker(board, 42);
 
         // when
-        WorkerRunResult result = fixture.start(fixture.startRequest("Queue"));
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
 
         // then
-        result.assertSuccess().stdoutContains("Started Symphony for Trello");
-        verify(fixture.platform).start(any(), eq(fixture.paths.appHome()), any(), any(), any());
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_workflow_invalid");
+            assertThat(failure.getMessage())
+                    .contains("tracker.kind must be trello")
+                    .doesNotContain("credential");
+        });
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -588,6 +595,119 @@ final class LocalWorkerManagerTest {
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
     }
 
+    @MethodSource("invalidWorkflowConfigurations")
+    @ParameterizedTest
+    void startRejectsInvalidWorkflowConfigurationBeforeLaunch(String workflowContent, String expectedMessagePart)
+            throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        Files.writeString(board.workflowPath(), workflowContent, StandardCharsets.UTF_8);
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_workflow_invalid");
+            assertThat(failure.getMessage()).contains(expectedMessagePart);
+        });
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    static Stream<Arguments> invalidWorkflowConfigurations() {
+        return Stream.of(
+                Arguments.of(
+                        """
+                        ---
+                        tracker: [
+                        ---
+                        Body
+                        """,
+                        "invalid YAML"),
+                Arguments.of(
+                        """
+                        ---
+                        server:
+                          port: 18080
+                        ---
+                        Body
+                        """,
+                        "tracker.kind must be trello"),
+                Arguments.of(
+                        """
+                        ---
+                        tracker:
+                          kind: trello
+                          board_id: board-1
+                          endpoint: "not-a-url"
+                        server:
+                          port: 18080
+                        ---
+                        Body
+                        """,
+                        "tracker.endpoint must be an absolute http(s) URL"),
+                Arguments.of(
+                        """
+                        ---
+                        tracker:
+                          kind: trello
+                          board_id: board-1
+                        agent:
+                          max_concurrent_agents: 0
+                        server:
+                          port: 18080
+                        ---
+                        Body
+                        """,
+                        "max_concurrent_agents must be positive"),
+                Arguments.of(
+                        """
+                        ---
+                        tracker:
+                          kind: trello
+                          board_id: board-1
+                        polling:
+                          interval_ms: -1
+                        server:
+                          port: 18080
+                        ---
+                        Body
+                        """,
+                        "interval_ms must be non-negative"),
+                Arguments.of(
+                        """
+                        ---
+                        tracker:
+                          kind: trello
+                          board_id: board-1
+                        codex:
+                          command: ""
+                        server:
+                          port: 18080
+                        ---
+                        Body
+                        """,
+                        "codex.command is required"));
+    }
+
+    @Test
+    void startRejectsMissingWorkflowFileBeforeLaunch() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        Files.delete(board.workflowPath());
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
+
+        // then
+        assertWorkflowInvalidForLaunch(thrown, "missing workflow file");
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
     @Test
     void startWorkflowRejectsBoardAlreadyManagedByAnotherRunningWorkflow() throws Exception {
         // given
@@ -741,13 +861,7 @@ final class LocalWorkerManagerTest {
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Docs Queue");
         fixture.save(board);
-        long workerPid = 4242L;
-        when(fixture.healthChecker.workflowHealth(
-                        board.workflowPath(), board.boardId(), board.boardKey(), board.serverPort()))
-                .thenReturn(fixture.sameWorkflowWithPid(board, workerPid));
-        when(fixture.platform.isAlive(workerPid)).thenReturn(true);
-        when(fixture.platform.isManaged(workerPid, fixture.paths.appHome(), board.workflowPath()))
-                .thenReturn(true);
+        long workerPid = stubUntrackedWorkerStartHealth(fixture, board, true);
 
         // when
         WorkerRunResult result = fixture.start(fixture.startRequest("Docs Queue"));
@@ -766,13 +880,7 @@ final class LocalWorkerManagerTest {
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Docs Queue");
         fixture.save(board);
-        long workerPid = 4242L;
-        when(fixture.healthChecker.workflowHealth(
-                        board.workflowPath(), board.boardId(), board.boardKey(), board.serverPort()))
-                .thenReturn(fixture.sameWorkflowWithPid(board, workerPid));
-        when(fixture.platform.isAlive(workerPid)).thenReturn(true);
-        when(fixture.platform.isManaged(workerPid, fixture.paths.appHome(), board.workflowPath()))
-                .thenReturn(false);
+        long workerPid = stubUntrackedWorkerStartHealth(fixture, board, false);
 
         // when
         WorkerRunResult result = fixture.start(fixture.startRequest("Docs Queue"));
@@ -1124,11 +1232,7 @@ final class LocalWorkerManagerTest {
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
-        long workerPid = 4242L;
-        when(fixture.healthChecker.boardHealth(board)).thenReturn(fixture.sameWorkflowWithPid(board, workerPid));
-        when(fixture.platform.isAlive(workerPid)).thenReturn(true);
-        when(fixture.platform.isManaged(workerPid, fixture.paths.appHome(), board.workflowPath()))
-                .thenReturn(true);
+        long workerPid = stubUntrackedWorkerStopHealth(fixture, board, true);
         when(fixture.platform.stop(workerPid, Duration.ofSeconds(15), Duration.ofSeconds(5)))
                 .thenReturn(true);
 
@@ -1146,11 +1250,7 @@ final class LocalWorkerManagerTest {
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
-        long workerPid = 4242L;
-        when(fixture.healthChecker.boardHealth(board)).thenReturn(fixture.sameWorkflowWithPid(board, workerPid));
-        when(fixture.platform.isAlive(workerPid)).thenReturn(true);
-        when(fixture.platform.isManaged(workerPid, fixture.paths.appHome(), board.workflowPath()))
-                .thenReturn(false);
+        long workerPid = stubUntrackedWorkerStopHealth(fixture, board, false);
 
         // when
         var thrown = catchThrowable(() -> fixture.stop(fixture.stopRequest("Queue")));
@@ -1521,8 +1621,7 @@ final class LocalWorkerManagerTest {
         WorkerRunResult logs = fixture.logs(fixture.logsWorkflowRequest(workflow));
 
         // then
-        assertInvalidExplicitWorkflowSelector(
-                start, "--workflow must reference a readable workflow file with usable workflow front matter.");
+        assertWorkflowInvalidForLaunch(start, "missing workflow file");
         status.assertSuccess().stdoutContains("invalid \"missing.WORKFLOW.md\"", "missing workflow file");
         stop.assertSuccess().stdoutContains("Symphony for Trello is already stopped for \"missing.WORKFLOW.md\"");
         logs.assertSuccess();
@@ -1538,7 +1637,10 @@ final class LocalWorkerManagerTest {
 
         // when
         assertLifecycleRejectsExplicitWorkflow(
-                fixture, workflowDirectory, "--workflow must point to a regular workflow file.");
+                fixture,
+                workflowDirectory,
+                "--workflow must point to a regular workflow file.",
+                "workflow path is not a regular workflow file");
 
         // then
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
@@ -1562,8 +1664,11 @@ final class LocalWorkerManagerTest {
             WorkerRunResult stop = fixture.stop(fixture.stopWorkflowRequest(workflow));
             WorkerRunResult logs = fixture.logs(fixture.logsWorkflowRequest(workflow));
 
-            assertInvalidExplicitWorkflowSelector(
-                    start, "--workflow must reference a readable workflow file with usable workflow front matter.");
+            assertThat(start).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+                assertThat(failure.code()).isEqualTo("setup_workflow_invalid");
+                assertThat(failure.getMessage())
+                        .contains("Invalid workflow configuration:", "Workflow has no YAML front matter.");
+            });
             status.assertSuccess().stdoutContains("invalid \"" + workflow.getFileName() + "\"");
             stop.assertSuccess()
                     .stdoutContains("Symphony for Trello is already stopped for \"" + workflow.getFileName() + "\"");
@@ -1571,6 +1676,74 @@ final class LocalWorkerManagerTest {
         }
 
         // then
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void startWorkflowReportsInvalidContentThroughLaunchValidation() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        Files.createDirectories(fixture.paths.configDir());
+        fixture.writeEnv(fixture.paths.defaultEnvPath());
+        record InvalidWorkflowCase(String fileName, String content, String expectedCode, String expectedCause) {}
+        List<InvalidWorkflowCase> cases = List.of(
+                new InvalidWorkflowCase(
+                        "unclosed.WORKFLOW.md",
+                        "---\ntracker:\n  kind: trello\n  board_id: board-1\n",
+                        "setup_workflow_invalid",
+                        "Invalid workflow configuration:"),
+                new InvalidWorkflowCase(
+                        "malformed.WORKFLOW.md",
+                        "---\ntracker: [unclosed\n---\nBody\n",
+                        "setup_workflow_invalid",
+                        "Invalid workflow configuration:"),
+                new InvalidWorkflowCase(
+                        "nonmap.WORKFLOW.md",
+                        "---\n- first\n- second\n---\nBody\n",
+                        "setup_workflow_invalid",
+                        "Invalid workflow configuration:"),
+                new InvalidWorkflowCase(
+                        "badport.WORKFLOW.md",
+                        "---\ntracker:\n  kind: trello\n  board_id: board-1\nserver:\n  port: \"not-a-port\"\n---\nBody\n",
+                        "setup_workflow_invalid",
+                        "Invalid workflow configuration:"),
+                new InvalidWorkflowCase(
+                        "port-above-range.WORKFLOW.md",
+                        "---\ntracker:\n  kind: trello\n  board_id: board-1\nserver:\n  port: 70000\n---\nBody\n",
+                        "setup_workflow_invalid",
+                        "server.port"),
+                new InvalidWorkflowCase(
+                        "port-negative.WORKFLOW.md",
+                        "---\ntracker:\n  kind: trello\n  board_id: board-1\nserver:\n  port: -1\n---\nBody\n",
+                        "setup_workflow_invalid",
+                        "server.port"),
+                new InvalidWorkflowCase(
+                        "port-fractional.WORKFLOW.md",
+                        "---\ntracker:\n  kind: trello\n  board_id: board-1\nserver:\n  port: 18080.5\n---\nBody\n",
+                        "setup_workflow_invalid",
+                        "server.port"));
+
+        for (InvalidWorkflowCase invalidCase : cases) {
+            Path workflow = fixture.paths.configDir().resolve(invalidCase.fileName());
+            Files.writeString(workflow, invalidCase.content(), StandardCharsets.UTF_8);
+
+            // when
+            Throwable thrown = catchThrowable(() -> fixture.start(fixture.startWorkflowRequest(workflow)));
+
+            // then
+            assertThat(thrown)
+                    .as(invalidCase.fileName())
+                    .isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+                        assertThat(failure.code()).as(invalidCase.fileName()).isEqualTo(invalidCase.expectedCode());
+                        assertThat(failure.getMessage()).contains(invalidCase.expectedCause());
+                    });
+            assertThat(new ManagedProcessStore(fixture.paths.stateHome())
+                            .readPid(new ManagedProcessStore(fixture.paths.stateHome())
+                                    .files(workflow)
+                                    .pidFile()))
+                    .as(invalidCase.fileName())
+                    .isNull();
+        }
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
     }
 
@@ -1587,6 +1760,7 @@ final class LocalWorkerManagerTest {
                 """
                 ---
                 tracker:
+                  kind: trello
                   board_id: direct-board
                 server:
                   port: 19090
@@ -1640,6 +1814,7 @@ final class LocalWorkerManagerTest {
                 """
                 ---
                 tracker:
+                  kind: trello
                   board_id: $DIRECT_BOARD_ID
                 server:
                   port: 19092
@@ -1936,20 +2111,28 @@ final class LocalWorkerManagerTest {
         assertLifecycleRejectsExplicitWorkflow(
                 fixture,
                 workflow,
-                "--workflow must reference a readable workflow file with usable workflow front matter.");
+                "--workflow must reference a readable workflow file with usable workflow front matter.",
+                "Invalid workflow configuration:");
     }
 
     private void assertLifecycleRejectsExplicitWorkflow(
-            LocalWorkerManagerTestFixture fixture, Path workflow, String expectedMessage) {
+            LocalWorkerManagerTestFixture fixture, Path workflow, String expectedMessage, String expectedStartCause) {
         Throwable status = catchThrowable(() -> fixture.status(fixture.statusWorkflowRequest(workflow)));
         Throwable start = catchThrowable(() -> fixture.start(fixture.startWorkflowRequest(workflow)));
         Throwable stop = catchThrowable(() -> fixture.stop(fixture.stopWorkflowRequest(workflow)));
         Throwable logs = catchThrowable(() -> fixture.logs(fixture.logsWorkflowRequest(workflow)));
 
         assertInvalidExplicitWorkflowSelector(status, expectedMessage);
-        assertInvalidExplicitWorkflowSelector(start, expectedMessage);
+        assertWorkflowInvalidForLaunch(start, expectedStartCause);
         assertInvalidExplicitWorkflowSelector(stop, expectedMessage);
         assertInvalidExplicitWorkflowSelector(logs, expectedMessage);
+    }
+
+    private void assertWorkflowInvalidForLaunch(Throwable thrown, String expectedCause) {
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_workflow_invalid");
+            assertThat(failure.getMessage()).contains("Invalid workflow configuration:", expectedCause);
+        });
     }
 
     private void assertInvalidExplicitWorkflowSelector(Throwable thrown, String expectedMessage) {
@@ -2135,5 +2318,30 @@ final class LocalWorkerManagerTest {
             return paths.filter(path -> path.getFileName().toString().endsWith(".pid"))
                     .toList();
         }
+    }
+
+    private static long stubUntrackedWorkerStartHealth(
+            LocalWorkerManagerTestFixture fixture, ConnectedBoard board, boolean managed) {
+        long workerPid = 4242L;
+        when(fixture.healthChecker.workflowHealth(
+                        board.workflowPath(), board.boardId(), board.boardKey(), board.serverPort()))
+                .thenReturn(fixture.sameWorkflowWithPid(board, workerPid));
+        stubWorkerProcessState(fixture, board, workerPid, managed);
+        return workerPid;
+    }
+
+    private static long stubUntrackedWorkerStopHealth(
+            LocalWorkerManagerTestFixture fixture, ConnectedBoard board, boolean managed) {
+        long workerPid = 4242L;
+        when(fixture.healthChecker.boardHealth(board)).thenReturn(fixture.sameWorkflowWithPid(board, workerPid));
+        stubWorkerProcessState(fixture, board, workerPid, managed);
+        return workerPid;
+    }
+
+    private static void stubWorkerProcessState(
+            LocalWorkerManagerTestFixture fixture, ConnectedBoard board, long workerPid, boolean managed) {
+        when(fixture.platform.isAlive(workerPid)).thenReturn(true);
+        when(fixture.platform.isManaged(workerPid, fixture.paths.appHome(), board.workflowPath()))
+                .thenReturn(managed);
     }
 }
