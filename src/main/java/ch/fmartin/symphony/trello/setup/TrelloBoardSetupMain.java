@@ -395,7 +395,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         @Option(names = "--env", description = "Dotenv file with Trello credentials for this worker.")
         Optional<Path> envPath = Optional.empty();
 
-        @Option(names = "--all", hidden = true)
+        @Option(names = "--all", description = "Start all connected Trello boards from the connected-board manifest.")
         boolean all;
 
         @Override
