@@ -15,6 +15,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -710,6 +711,25 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
+    void lifecycleCommandsReportMalformedManifestAsExpectedConfigError() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        Files.createDirectories(fixture.paths.configDir());
+        Files.writeString(fixture.paths.manifestPath(), "not-valid-json", StandardCharsets.UTF_8);
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.status(fixture.statusRequest("Queue")));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_manifest_unavailable");
+            assertThat(failure.getMessage())
+                    .contains("not valid JSON", "connected-boards.json")
+                    .doesNotContain("double-quote", "Unexpected character");
+        });
+    }
+
+    @Test
     void statusDisambiguatesDuplicateConnectedBoardNames() throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
@@ -906,6 +926,33 @@ final class LocalWorkerManagerTest {
             assertThat(failure.getMessage()).contains("Shortlink Queue", "already managed by a running worker");
         });
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    @MethodSource("invalidManifestContents")
+    @ParameterizedTest
+    void lifecycleCommandsClassifyInvalidManifestShapesAsExpectedConfigErrors(String name, String content)
+            throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        Files.createDirectories(fixture.paths.configDir());
+        Files.writeString(fixture.paths.manifestPath(), content, StandardCharsets.UTF_8);
+
+        // when
+        List<Throwable> failures = lifecycleCommandFailures(fixture);
+
+        // then
+        assertLifecycleManifestRejections(fixture, failures, name);
+    }
+
+    private static Stream<Arguments> invalidManifestContents() {
+        return Stream.of(
+                Arguments.of("malformed", "not-valid-json"),
+                Arguments.of("empty file", ""),
+                Arguments.of("top-level null", "null"),
+                Arguments.of("top-level array", "[]"),
+                Arguments.of("null boards", "{\"boards\":null}"),
+                Arguments.of("non-array boards", "{\"boards\":\"not-array\"}"),
+                Arguments.of("null board row", "{\"boards\":[null]}"));
     }
 
     @Test
@@ -2428,6 +2475,28 @@ final class LocalWorkerManagerTest {
         when(fixture.platform.isManaged(workerPid, fixture.paths.appHome(), board.workflowPath()))
                 .thenReturn(managed);
         return board;
+    }
+
+    private static List<Throwable> lifecycleCommandFailures(LocalWorkerManagerTestFixture fixture) {
+        return List.of(
+                catchThrowable(() -> fixture.status(fixture.statusRequest("Queue"))),
+                catchThrowable(() -> fixture.start(fixture.startRequest("Queue"))),
+                catchThrowable(() -> fixture.stop(fixture.stopRequest("Queue"))),
+                catchThrowable(() -> fixture.logs(fixture.logsRequest("Queue"))));
+    }
+
+    private static void assertLifecycleManifestRejections(
+            LocalWorkerManagerTestFixture fixture, List<Throwable> failures, String label) throws IOException {
+        for (Throwable thrown : failures) {
+            assertThat(thrown).as(label).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+                assertThat(failure.code()).as(label).isEqualTo("setup_manifest_unavailable");
+                assertThat(failure.getMessage())
+                        .as(label)
+                        .contains("connected-boards.json")
+                        .doesNotContain("Cannot invoke", "NullPointerException");
+            });
+        }
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
     }
 
     private static void writeManagedLog(LocalWorkerManagerTestFixture fixture, Path workflow) throws Exception {

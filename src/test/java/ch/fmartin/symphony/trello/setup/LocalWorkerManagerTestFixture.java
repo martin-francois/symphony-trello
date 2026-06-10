@@ -248,6 +248,17 @@ final class LocalWorkerManagerTestFixture {
                 Optional.of(paths.stateHome()));
     }
 
+    WorkerLogsRequest logsRequest(String boardName) {
+        return new WorkerLogsRequest(
+                Optional.of(boardName),
+                Optional.empty(),
+                false,
+                Optional.of(paths.appHome()),
+                Optional.of(paths.configDir()),
+                Optional.of(paths.workspaceRoot()),
+                Optional.of(paths.stateHome()));
+    }
+
     WorkerLogsRequest logsWorkflowRequest(Path workflow) {
         return new WorkerLogsRequest(
                 Optional.empty(),

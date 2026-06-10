@@ -54,7 +54,7 @@ final class TrelloBoardSetupService {
     void preflightConnectedBoardManifest(Path manifestPath) {
         ConnectedBoardRepository boards = new ConnectedBoardRepository(manifestPath);
         try {
-            boards.loadValidated();
+            boards.loadForLifecycle();
             boards.validateWritable();
         } catch (IOException exception) {
             throw new TrelloBoardSetupException(
@@ -71,7 +71,7 @@ final class TrelloBoardSetupService {
 
         ConnectedBoardManifest manifest;
         try {
-            manifest = new ConnectedBoardRepository(manifestPath).loadValidated();
+            manifest = new ConnectedBoardRepository(manifestPath).loadForLifecycle();
         } catch (IOException exception) {
             throw new TrelloBoardSetupException(
                     "setup_manifest_unavailable",
@@ -157,7 +157,7 @@ final class TrelloBoardSetupService {
         boolean restartReplacedWorker;
         ConnectedBoardRepository boards = new ConnectedBoardRepository(manifestPath);
         try {
-            ConnectedBoardManifest manifest = boards.loadValidated();
+            ConnectedBoardManifest manifest = boards.loadForLifecycle();
             List<ConnectedBoard> replacedBoards = manifest.boardsReplacedBy(board);
             restartReplacedWorker = replacedBoards.stream()
                     .anyMatch(replacedBoard -> canStopRunningWorker(manifestPath, replacedBoard));

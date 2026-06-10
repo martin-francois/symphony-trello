@@ -147,7 +147,7 @@ public final class LocalSetup {
                 return 0;
             }
             ConnectedBoardRepository boards = connectedBoards(options);
-            ConnectedBoardManifest manifest = boards.load();
+            ConnectedBoardManifest manifest = boards.loadForLifecycle();
             rejectInvalidUnconnectedBoardSelector(manifest, options);
             if (!manifest.boards().isEmpty() && !options.forceNewSetup()) {
                 ExistingSetupAction action = existingSetupAction(manifest, terminal, options);
@@ -441,7 +441,7 @@ public final class LocalSetup {
 
     private int repairPort(Options options, PrintStream out) throws IOException {
         ConnectedBoardRepository boards = connectedBoards(options);
-        ConnectedBoardManifest manifest = boards.load();
+        ConnectedBoardManifest manifest = boards.loadForLifecycle();
         if (manifest.boards().isEmpty()) {
             out.println("  WARN    No Trello boards connected to Symphony");
             return 2;
@@ -1530,7 +1530,10 @@ public final class LocalSetup {
             if (!manifestPathExplicit) {
                 return;
             }
-            if (action == LocalSetupRequest.Action.CHECK) {
+            // repair-port operates on the existing manifest like the lifecycle commands, so
+            // corrupt manifest content is an expected setup_manifest_unavailable error from the
+            // strict load, not an invalid --manifest argument.
+            if (action == LocalSetupRequest.Action.CHECK || action == LocalSetupRequest.Action.REPAIR_PORT) {
                 ConnectedBoardRepository.validateManifestPathForCheck(manifest);
             } else {
                 ConnectedBoardRepository.validateManifestPathForSetup(manifest);
