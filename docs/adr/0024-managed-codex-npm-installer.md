@@ -95,6 +95,9 @@ checks when native `pwsh` is unavailable:
 
 ### Install Codex CLI With `npm install -g @openai/codex`
 
+Offer the stock global npm install command and let npm pick the install prefix from the user's own
+npm configuration.
+
 * Good, because it is the shortest and most familiar npm command.
 * Good, because it matches the common Codex CLI installation shape users may already know.
 * Bad, because the target prefix depends on the user's npm configuration.
@@ -104,6 +107,10 @@ checks when native `pwsh` is unavailable:
 
 ### Install Into A Managed Prefix And Show One Long Combined Shell Command
 
+Install Codex into a Symphony-managed npm prefix, but present the whole installation (package
+manager work, npm install, command linking) as a single combined shell command that the user
+approves once.
+
 * Good, because it prints the exact work the installer will perform.
 * Good, because it can combine Node.js/npm installation, Codex installation, and command linking into
   one accepted action.
@@ -112,6 +119,10 @@ checks when native `pwsh` is unavailable:
 
 ### Install Into A Managed Prefix And Show Readable Install Steps
 
+Install Codex into the same Symphony-managed npm prefix, presenting the work as separate labeled
+steps - package-manager installation, `npm --prefix` installation, and command linking - that the
+user reviews and approves.
+
 * Good, because each step has a clear purpose.
 * Good, because users still see the exact package-manager and npm commands before approving.
 * Good, because the installer can run the same steps without global npm side effects.
@@ -119,6 +130,9 @@ checks when native `pwsh` is unavailable:
 * Bad, because the prompt prints more lines than a single command.
 
 ### Support A User-Provided Prebuilt Codex Binary Path Or URL
+
+Let the user point the installer at an existing Codex binary path or a download URL instead of
+installing Codex through npm.
 
 * Good, because it could help constrained environments that cannot use npm.
 * Bad, because it is not a normal Codex CLI installation path.
