@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.orchestrator;
 
 import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
@@ -23,13 +24,16 @@ import ch.fmartin.symphony.trello.workspace.WorkspaceManager;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
@@ -464,6 +468,173 @@ final class SymphonyOrchestratorTest {
 
         // then
         assertThat(tracker.candidateFetches.get()).isGreaterThanOrEqualTo(2);
+    }
+
+    @Test
+    void statusReadsAnswerWhileTickIsBlockedInsideTrelloFetch() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        writeWorkflow(workflow, "60000");
+        BlockingTracker tracker = new BlockingTracker();
+        AgentRunner runner = mock();
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
+
+        // when
+        orchestrator.start();
+        assertThat(tracker.firstFetchStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        CompletableFuture<String> boardId = CompletableFuture.supplyAsync(orchestrator::selectedBoardId);
+        CompletableFuture<String> configuredBoardId =
+                CompletableFuture.supplyAsync(orchestrator::selectedConfiguredBoardId);
+        CompletableFuture<Path> workflowPath = CompletableFuture.supplyAsync(orchestrator::selectedWorkflowPath);
+        CompletableFuture<RuntimeSnapshot> snapshot = CompletableFuture.supplyAsync(orchestrator::snapshot);
+
+        // then
+        try {
+            assertThat(boardId)
+                    .as("local-status board id read must not wait for the in-flight Trello poll")
+                    .succeedsWithin(Duration.ofSeconds(2))
+                    .isEqualTo("board-1");
+            assertThat(configuredBoardId)
+                    .as("local-status configured board id read must not wait for the in-flight Trello poll")
+                    .succeedsWithin(Duration.ofSeconds(2));
+            assertThat(workflowPath)
+                    .as("local-status workflow path read must not wait for the in-flight Trello poll")
+                    .succeedsWithin(Duration.ofSeconds(2))
+                    .isEqualTo(workflow.toAbsolutePath().normalize());
+            assertThat(snapshot)
+                    .as("state snapshot must not wait for the in-flight Trello poll")
+                    .succeedsWithin(Duration.ofSeconds(2));
+        } finally {
+            tracker.releaseFirstFetch.countDown();
+            orchestrator.stop();
+        }
+    }
+
+    @Test
+    void refreshAtTickCompletionBoundaryIsNotOverwrittenByIntervalSchedule() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        writeWorkflow(workflow, "60000");
+        FakeTracker tracker = new FakeTracker(List.of());
+        AgentRunner runner = mock();
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
+        AtomicBoolean boundaryRefreshInjected = new AtomicBoolean();
+        orchestrator.tickCompletionHookForTests = () -> {
+            if (!boundaryRefreshInjected.compareAndSet(false, true)) {
+                return;
+            }
+            Thread refresher = new Thread(orchestrator::requestRefresh);
+            refresher.start();
+            try {
+                refresher.join(1_000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        };
+
+        // when
+        orchestrator.start();
+        waitUntil(() -> tracker.candidateFetches.get() >= 2);
+        orchestrator.stop();
+
+        // then
+        assertThat(tracker.candidateFetches.get())
+                .as("a refresh at the tick completion boundary must schedule the next tick "
+                        + "immediately instead of waiting for the 60s polling interval")
+                .isGreaterThanOrEqualTo(2);
+    }
+
+    @Test
+    void refreshRequestedDuringAndAfterStopIsANoOpAndDoesNotThrow() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        writeWorkflow(workflow, "60000");
+        FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
+        CountDownLatch agentStarted = new CountDownLatch(1);
+        AtomicReference<SymphonyOrchestrator> orchestratorReference = new AtomicReference<>();
+        AtomicReference<Throwable> refreshDuringStopFailure = new AtomicReference<>();
+        AgentRunner runner = mock();
+        doAnswer(invocation -> {
+                    agentStarted.countDown();
+                    try {
+                        Thread.sleep(Duration.ofSeconds(5));
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                    return AgentRunResult.ok();
+                })
+                .when(runner)
+                .run(any());
+        doAnswer(invocation -> {
+                    refreshDuringStopFailure.set(
+                            catchThrowable(() -> orchestratorReference.get().requestRefresh()));
+                    return null;
+                })
+                .when(runner)
+                .cancel(any());
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
+        orchestratorReference.set(orchestrator);
+        orchestrator.start();
+        assertThat(agentStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        int fetchesBeforeStop = tracker.candidateFetches.get();
+
+        // when
+        orchestrator.stop();
+        Throwable refreshAfterStopFailure = catchThrowable(orchestrator::requestRefresh);
+
+        // then
+        assertThat(refreshDuringStopFailure.get())
+                .as("requestRefresh during stop must be a no-op instead of throwing")
+                .isNull();
+        assertThat(refreshAfterStopFailure)
+                .as("requestRefresh after stop must not schedule against the shut-down scheduler")
+                .isNull();
+        assertThat(tracker.candidateFetches.get()).isEqualTo(fetchesBeforeStop);
+    }
+
+    @Test
+    void workflowPathCannotChangeOnceStartHasBegun() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        writeWorkflow(workflow, "60000");
+        StartBlockingTracker tracker = new StartBlockingTracker();
+        AgentRunner runner = mock();
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
+        Thread starter = new Thread(orchestrator::start);
+        starter.start();
+        assertThat(tracker.terminalFetchStarted.await(5, TimeUnit.SECONDS)).isTrue();
+
+        // when
+        CountDownLatch changeAttempted = new CountDownLatch(1);
+        CompletableFuture<Throwable> rejection = CompletableFuture.supplyAsync(() -> {
+            changeAttempted.countDown();
+            return catchThrowable(() -> orchestrator.setWorkflowPath(tempDir.resolve("WORKFLOW.other.md")));
+        });
+        assertThat(changeAttempted.await(5, TimeUnit.SECONDS)).isTrue();
+        waitForBoundedQuietPeriod(rejection);
+        tracker.releaseTerminalFetch.countDown();
+        starter.join(TimeUnit.SECONDS.toMillis(5));
+
+        // then
+        assertThat(rejection)
+                .as("a workflow path change racing startup must wait for the operation boundary and be rejected")
+                .succeedsWithin(Duration.ofSeconds(5))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(orchestrator.selectedWorkflowPath())
+                .isEqualTo(workflow.toAbsolutePath().normalize());
+        orchestrator.stop();
+    }
+
+    /**
+     * Gives a racing change that does not block (the old bug) time to complete while startup is
+     * still latched; a correctly blocking change leaves the future incomplete and this returns
+     * after the bound.
+     */
+    private static void waitForBoundedQuietPeriod(CompletableFuture<Throwable> future) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
+        while (System.nanoTime() < deadline && !future.isDone()) {
+            Thread.sleep(25);
+        }
     }
 
     @Test
@@ -910,6 +1081,38 @@ final class SymphonyOrchestratorTest {
         public void releaseFromDispatch(EffectiveConfig config, Card card) {
             releasedCards.add(card.identifier());
             setCardState(TestCards.card(card.id(), card.identifier(), "Todo"));
+        }
+    }
+
+    private static final class StartBlockingTracker implements TrackerClient {
+        private final CountDownLatch terminalFetchStarted = new CountDownLatch(1);
+        private final CountDownLatch releaseTerminalFetch = new CountDownLatch(1);
+
+        @Override
+        public String resolveBoardId(EffectiveConfig config) {
+            return "board-1";
+        }
+
+        @Override
+        public List<Card> fetchCandidateCards(EffectiveConfig config) {
+            return List.of();
+        }
+
+        @Override
+        public List<Card> fetchTerminalCards(EffectiveConfig config) {
+            terminalFetchStarted.countDown();
+            try {
+                assertThat(releaseTerminalFetch.await(5, TimeUnit.SECONDS)).isTrue();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError(e);
+            }
+            return List.of();
+        }
+
+        @Override
+        public Map<String, CardLookupResult> fetchCardStatesByIds(EffectiveConfig config, List<String> cardIds) {
+            return Map.of();
         }
     }
 
