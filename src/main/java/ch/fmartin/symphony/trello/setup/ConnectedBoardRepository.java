@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.module.SimpleModule;
@@ -28,38 +29,83 @@ final class ConnectedBoardRepository {
         if (!Files.isRegularFile(manifestPath)) {
             return new ConnectedBoardManifest(List.of());
         }
-        return json.readValue(manifestPath.toFile(), ConnectedBoardManifest.class);
+        try {
+            ConnectedBoardManifest manifest = json.readValue(manifestPath.toFile(), ConnectedBoardManifest.class);
+            if (manifest == null) {
+                // A literal null document is valid JSON, so readValue returns null instead of
+                // failing; callers must never have to null-check an expected config problem.
+                throw invalidManifestContent(List.of("Connected-board manifest must be a JSON object."));
+            }
+            return manifest;
+        } catch (JsonProcessingException e) {
+            // A hand-edited or corrupted manifest is an expected local configuration problem, not
+            // an unexpected failure that needs a troubleshooting report or a raw parser message.
+            throw new TrelloBoardSetupException(
+                    "setup_manifest_unavailable",
+                    "Connected-board manifest is not valid JSON:\n  "
+                            + manifestPath.toAbsolutePath().normalize()
+                            + "\nRepair or remove connected-boards.json, then rerun the command.",
+                    e);
+        }
     }
 
     ManifestLoadResult loadForCheck() throws IOException {
         if (!Files.isRegularFile(manifestPath)) {
             return new ManifestLoadResult(new ConnectedBoardManifest(List.of()), List.of());
         }
-        JsonNode root = json.readTree(manifestPath.toFile());
+        JsonNode root;
+        try {
+            root = json.readTree(manifestPath.toFile());
+        } catch (JsonProcessingException e) {
+            return new ManifestLoadResult(
+                    new ConnectedBoardManifest(List.of()),
+                    List.of("Connected-board manifest is not valid JSON."),
+                    false);
+        }
         List<String> warnings = manifestShapeWarnings(root);
         if (root == null || !root.isObject() || !root.path("boards").isArray()) {
-            return new ManifestLoadResult(new ConnectedBoardManifest(List.of()), warnings);
+            return new ManifestLoadResult(new ConnectedBoardManifest(List.of()), warnings, false);
+        }
+        // Reject non-object rows before treeToValue: Jackson maps a null row to a null list
+        // element, and downstream board iteration must never see a null board.
+        if (hasNonObjectBoardRow(root)) {
+            return new ManifestLoadResult(new ConnectedBoardManifest(List.of()), unloadable(warnings), false);
         }
         try {
             return new ManifestLoadResult(json.treeToValue(root, ConnectedBoardManifest.class), warnings);
         } catch (IOException | RuntimeException e) {
-            return new ManifestLoadResult(
-                    new ConnectedBoardManifest(List.of()),
-                    append(
-                            warnings,
-                            "Connected-board manifest contains invalid values and could not be loaded for checks."));
+            return new ManifestLoadResult(new ConnectedBoardManifest(List.of()), unloadable(warnings), false);
         }
     }
 
-    ConnectedBoardManifest loadValidated() throws IOException {
+    private static List<String> unloadable(List<String> warnings) {
+        return append(warnings, "Connected-board manifest contains invalid values and could not be loaded for checks.");
+    }
+
+    /**
+     * Strict load for lifecycle and setup commands: any invalid manifest shape or incomplete board
+     * row is an expected local configuration error here, never a null dereference deeper in the
+     * command. Only diagnostics and setup-local check load more leniently, via loadForCheck().
+     */
+    ConnectedBoardManifest loadForLifecycle() throws IOException {
         ConnectedBoardManifest manifest = load();
-        if (manifest == null) {
-            throw new IOException("Connected-board manifest is not an object.");
+        if (!Files.isRegularFile(manifestPath)) {
+            return manifest;
         }
-        for (ConnectedBoard board : manifest.boards()) {
-            validateBoard(board);
+        List<String> warnings = loadForCheck().warnings();
+        if (!warnings.isEmpty()) {
+            throw invalidManifestContent(warnings);
         }
         return manifest;
+    }
+
+    private TrelloBoardSetupException invalidManifestContent(List<String> warnings) {
+        return new TrelloBoardSetupException(
+                "setup_manifest_unavailable",
+                "Connected-board manifest is not valid connected-board JSON:\n  "
+                        + manifestPath.toAbsolutePath().normalize()
+                        + "\n  - " + String.join("\n  - ", warnings)
+                        + "\nRepair or remove connected-boards.json, then rerun the command.");
     }
 
     void save(ConnectedBoardManifest manifest) throws IOException {
@@ -133,16 +179,14 @@ final class ConnectedBoardRepository {
         }
     }
 
-    private static void validateBoard(ConnectedBoard board) throws IOException {
-        if (board == null
-                || blank(board.boardId())
-                || blank(board.boardKey())
-                || blank(board.boardName())
-                || board.workflowPath() == null
-                || board.serverPort() < 1
-                || board.serverPort() > 65535) {
-            throw new IOException("Connected-board manifest contains an invalid board entry.");
+    private static boolean hasNonObjectBoardRow(JsonNode root) {
+        JsonNode boards = root.path("boards");
+        for (JsonNode board : boards) {
+            if (!board.isObject()) {
+                return true;
+            }
         }
+        return false;
     }
 
     private static List<String> manifestShapeWarnings(JsonNode root) {
@@ -236,10 +280,6 @@ final class ConnectedBoardRepository {
         return List.copyOf(appended);
     }
 
-    private static boolean blank(String value) {
-        return value == null || value.isBlank();
-    }
-
     static ObjectMapper jsonMapper() {
         SimpleModule module = new SimpleModule()
                 .addSerializer(Path.class, new PathJsonSerializer())
@@ -247,7 +287,11 @@ final class ConnectedBoardRepository {
         return new ObjectMapper().registerModule(module);
     }
 
-    record ManifestLoadResult(ConnectedBoardManifest manifest, List<String> warnings) {
+    record ManifestLoadResult(ConnectedBoardManifest manifest, List<String> warnings, boolean usableRows) {
+        ManifestLoadResult(ConnectedBoardManifest manifest, List<String> warnings) {
+            this(manifest, warnings, true);
+        }
+
         ManifestLoadResult {
             warnings = List.copyOf(warnings);
         }

@@ -82,7 +82,7 @@ final class LocalWorkerManager {
     int start(StartWorkerRequest request, PrintStream out) throws IOException {
         LocalWorkerPaths paths = LocalWorkerPaths.from(
                 request.appHome(), request.configDir(), request.workspaceRoot(), request.stateHome(), environment);
-        ConnectedBoardManifest manifest = new ConnectedBoardRepository(paths.manifestPath()).load();
+        ConnectedBoardManifest manifest = new ConnectedBoardRepository(paths.manifestPath()).loadForLifecycle();
         if (!request.all()
                 && request.envPath().isPresent()
                 && request.board().isEmpty()
@@ -648,7 +648,7 @@ final class LocalWorkerManager {
     int stop(StopWorkerRequest request, PrintStream out) throws IOException {
         LocalWorkerPaths paths = LocalWorkerPaths.from(
                 request.appHome(), request.configDir(), request.workspaceRoot(), request.stateHome(), environment);
-        ConnectedBoardManifest manifest = new ConnectedBoardRepository(paths.manifestPath()).load();
+        ConnectedBoardManifest manifest = new ConnectedBoardRepository(paths.manifestPath()).loadForLifecycle();
         List<ConnectedBoard> boards =
                 selectForStop(manifest, request.board(), request.workflow(), paths.defaultEnvPath());
         boards = withDefaultEnvForExplicitWorkflow(paths, request.workflow(), boards);
@@ -703,7 +703,7 @@ final class LocalWorkerManager {
     int status(WorkerStatusRequest request, PrintStream out) throws IOException {
         LocalWorkerPaths paths = LocalWorkerPaths.from(
                 request.appHome(), request.configDir(), request.workspaceRoot(), request.stateHome(), environment);
-        ConnectedBoardManifest manifest = new ConnectedBoardRepository(paths.manifestPath()).load();
+        ConnectedBoardManifest manifest = new ConnectedBoardRepository(paths.manifestPath()).loadForLifecycle();
         List<ConnectedBoard> boards =
                 selectForStatus(manifest, request.board(), request.workflow(), paths.defaultEnvPath());
         boards = withDefaultEnvForExplicitWorkflow(paths, request.workflow(), boards);
@@ -775,7 +775,7 @@ final class LocalWorkerManager {
     int logs(WorkerLogsRequest request, PrintStream out) throws IOException {
         LocalWorkerPaths paths = LocalWorkerPaths.from(
                 request.appHome(), request.configDir(), request.workspaceRoot(), request.stateHome(), environment);
-        ConnectedBoardManifest manifest = new ConnectedBoardRepository(paths.manifestPath()).load();
+        ConnectedBoardManifest manifest = new ConnectedBoardRepository(paths.manifestPath()).loadForLifecycle();
         ConnectedBoard board = selectOne(
                 manifest, request.board(), request.workflow(), "logs", Optional.empty(), paths.defaultEnvPath(), false);
         ManagedProcessStore.ManagedProcessFiles files =

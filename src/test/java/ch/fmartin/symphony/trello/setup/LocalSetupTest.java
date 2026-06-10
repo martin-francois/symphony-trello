@@ -3461,6 +3461,96 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 .stderrDoesNotContain("trello_api_request", "Troubleshooting report written");
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"null", "{\"boards\":null}", "{\"boards\":[{}]}"})
+    void repairPortClassifiesInvalidManifestShapesAsExpectedConfigErrors(String manifestContent) throws Exception {
+        // given
+        Path manifest = tempDir.resolve("invalid-shape-connected-boards.json");
+        Files.writeString(manifest, manifestContent, StandardCharsets.UTF_8);
+
+        // when
+        SetupRunResult result = runSetup(
+                "repair-port", "--dry-run", "--manifest", manifest.toString(), "--board", "Broken Manifest Queue");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_manifest_unavailable",
+                        "Repair or remove connected-boards.json, then rerun the command.")
+                .stderrDoesNotContain(
+                        "NullPointerException",
+                        "Cannot invoke",
+                        "JsonParseException",
+                        "MismatchedInputException",
+                        "com.fasterxml",
+                        "No Trello boards connected",
+                        "Troubleshooting report written");
+    }
+
+    @MethodSource("invalidManifestShapes")
+    @ParameterizedTest
+    void guidedSetupClassifiesInvalidManifestShapesAsExpectedConfigErrors(String name, String manifestContent)
+            throws Exception {
+        // given
+        Files.createDirectories(fixture.configDir());
+        Files.writeString(fixture.manifestPath(), manifestContent, StandardCharsets.UTF_8);
+        Path workflow = tempDir.resolve("WORKFLOW.invalid-manifest.md");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                "http://127.0.0.1:1/",
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Corrupt Manifest Queue",
+                "--workflow",
+                workflow.toString(),
+                "--no-github");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_manifest_unavailable",
+                        "Repair or remove connected-boards.json, then rerun the command.")
+                .stderrDoesNotContain(
+                        "NullPointerException",
+                        "Cannot invoke",
+                        "JsonParseException",
+                        "MismatchedInputException",
+                        "com.fasterxml",
+                        "trello_api_request",
+                        "Troubleshooting report written");
+    }
+
+    private static Stream<Arguments> invalidManifestShapes() {
+        return Stream.of(
+                Arguments.of("top-level null", "null"),
+                Arguments.of("null boards", "{\"boards\":null}"),
+                Arguments.of("top-level array", "[]"),
+                Arguments.of("non-array boards", "{\"boards\":\"not-array\"}"),
+                Arguments.of("null board row", "{\"boards\":[null]}"),
+                Arguments.of("incomplete row", "{\"boards\":[{}]}"));
+    }
+
+    @Test
+    void checkWarnsOnMalformedManifestJsonWithoutRawParserInternals() throws Exception {
+        // given
+        Path manifest = tempDir.resolve("malformed-connected-boards.json");
+        Files.writeString(manifest, "not-valid-json", StandardCharsets.UTF_8);
+
+        // when
+        SetupRunResult result = runSetup("check", "--non-interactive", "--manifest", manifest.toString());
+
+        // then
+        result.assertFailure(2)
+                .stdoutContains("WARN", "Connected-board manifest is not valid JSON.")
+                .stderrDoesNotContain("JsonParseException", "Cannot invoke", "Troubleshooting report written");
+    }
+
     @Test
     void checkReportsOverlappingConnectedWorkflowListRoles() throws Exception {
         // given
