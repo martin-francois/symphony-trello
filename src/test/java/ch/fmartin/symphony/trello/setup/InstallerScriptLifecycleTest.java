@@ -185,7 +185,8 @@ final class InstallerScriptLifecycleTest {
         assertThat(unknownCommand.exitCode()).isEqualTo(2);
         assertThat(unknownCommand.output())
                 .contains("setup_failed code=setup_invalid_arguments")
-                .contains("definitely-not-a-command");
+                .contains("Unmatched argument: 'definitely-not-a-command'")
+                .doesNotContain("at index", "from index");
         assertThat(statusAfterInstall.output())
                 .contains("running WORKFLOW.lifecycle-board.md pid=")
                 .doesNotContain("running WORKFLOW.lifecycle-board.md.");
@@ -472,7 +473,8 @@ final class InstallerScriptLifecycleTest {
         assertThat(unknownCommand.exitCode()).isEqualTo(2);
         assertThat(unknownCommand.output())
                 .contains("setup_failed code=setup_invalid_arguments")
-                .contains("definitely-not-a-command");
+                .contains("Unmatched argument: 'definitely-not-a-command'")
+                .doesNotContain("at index", "from index");
         assertThat(start.exitCode()).as(start.output()).isZero();
         assertThat(status.output()).contains("running WORKFLOW $value & (demo).md");
         assertThat(logs.output()).contains("fake wrapper log");
