@@ -200,6 +200,77 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
+    void diagnosticsRejectsMissingWorkflowSelectorAsExpectedInput() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("missing-workflow-config");
+        Path stateHome = tempDir.resolve("state");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Path missingWorkflow = configDir.resolve("WORKFLOW.definitely-missing.md");
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        Throwable thrown =
+                catchThrowable(() -> reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                        Optional.empty(),
+                        Optional.empty(),
+                        false,
+                        false,
+                        Optional.empty(),
+                        Optional.of(configDir),
+                        Optional.empty(),
+                        Optional.of(stateHome),
+                        Optional.empty(),
+                        Optional.of(missingWorkflow))));
+
+        // then
+        assertThat(thrown)
+                .isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> assertThat(failure.getMessage())
+                        .contains("--workflow must reference a readable workflow file"));
+    }
+
+    @Test
+    void diagnosticsDoesNotCountMissingManifestWorkflowFilesAsIncluded() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("missing-manifest-workflow-config");
+        Path stateHome = tempDir.resolve("state");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Path missingWorkflow = configDir.resolve("WORKFLOW.deleted.md");
+        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
+                        "000000000000000000000001",
+                        "SYNTH001",
+                        "Deleted Workflow Board",
+                        "https://trello.com/b/SYNTH001/deleted-workflow-board",
+                        missingWorkflow,
+                        configDir.resolve(".env"),
+                        tempDir.resolve("workspaces"),
+                        20991,
+                        false,
+                        List.of(),
+                        false))));
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.of("SYNTH001"),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.empty(),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.empty()));
+
+        // then
+        assertThat(report)
+                .contains("- **selected_workflow_file_count:** 0", "- **selected_workflow_missing_count:** 1");
+    }
+
+    @Test
     void displayPathShowsResolvedPathForFilesUnderUserHome() {
         // given
         Path underHome = Path.of(System.getProperty("user.home"), ".local", "share", "symphony-trello", ".env");
