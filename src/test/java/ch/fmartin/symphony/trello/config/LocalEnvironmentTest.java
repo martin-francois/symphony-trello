@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
@@ -33,6 +34,60 @@ final class LocalEnvironmentTest {
         // then
         assertThat(apiKey).contains("key-from-dotenv");
         assertThat(apiToken).contains("token-from-dotenv");
+    }
+
+    @Test
+    void ignoresOneLeadingUtf8ByteOrderMarkBeforeTheFirstKey() throws Exception {
+        // given
+        Path dotenv = tempDir.resolve(".env");
+        Files.writeString(dotenv, "\uFEFFTRELLO_API_KEY=key-behind-bom\n", StandardCharsets.UTF_8);
+
+        // when
+        var apiKey = LocalEnvironment.get("TRELLO_API_KEY", dotenv, Map.of());
+
+        // then
+        assertThat(apiKey).contains("key-behind-bom");
+    }
+
+    @Test
+    void parsesQuotedValueWithTrailingCommentBehindAByteOrderMark() throws Exception {
+        // given
+        Path dotenv = tempDir.resolve(".env");
+        Files.writeString(dotenv, "\uFEFFTRELLO_API_KEY=\"quoted-key\" # personal key\n", StandardCharsets.UTF_8);
+
+        // when
+        var apiKey = LocalEnvironment.get("TRELLO_API_KEY", dotenv, Map.of());
+
+        // then
+        assertThat(apiKey).contains("quoted-key");
+    }
+
+    @Test
+    void parsesExportPrefixBehindAByteOrderMark() throws Exception {
+        // given
+        Path dotenv = tempDir.resolve(".env");
+        Files.writeString(dotenv, "\uFEFFexport TRELLO_API_KEY=exported-key\n", StandardCharsets.UTF_8);
+
+        // when
+        var apiKey = LocalEnvironment.get("TRELLO_API_KEY", dotenv, Map.of());
+
+        // then
+        assertThat(apiKey).contains("exported-key");
+    }
+
+    @Test
+    void treatsADoubledByteOrderMarkAsAnInvalidLineLikeBefore() throws Exception {
+        // given
+        Path dotenv = tempDir.resolve(".env");
+        Files.writeString(dotenv, "\uFEFF\uFEFFTRELLO_API_KEY=value\nTRELLO_API_TOKEN=token\n", StandardCharsets.UTF_8);
+
+        // when
+        var apiKey = LocalEnvironment.get("TRELLO_API_KEY", dotenv, Map.of());
+        var apiToken = LocalEnvironment.get("TRELLO_API_TOKEN", dotenv, Map.of());
+
+        // then
+        assertThat(apiKey).isEmpty();
+        assertThat(apiToken).contains("token");
     }
 
     @Test
@@ -116,5 +171,33 @@ final class LocalEnvironmentTest {
 
         // then
         assertThat(values).containsExactly(Map.entry("VALID", "value"));
+    }
+
+    @Test
+    void loadStripsTrailingCommentsAfterQuotedAndUnquotedValues(@TempDir Path tempDir) throws Exception {
+        // given
+        Path dotenv = tempDir.resolve(".env");
+        Files.writeString(
+                dotenv,
+                """
+                # credentials with comments
+                TRELLO_API_KEY="synthetic-key" # key comment
+                TRELLO_API_TOKEN='synthetic-token' # token comment
+                PLAIN=plain-value # plain comment
+                HASH_IN_VALUE=abc#def
+                HASH_IN_QUOTES="value # not a comment"
+                """,
+                StandardCharsets.UTF_8);
+
+        // when
+        Map<String, String> values = LocalEnvironment.load(dotenv);
+
+        // then
+        assertThat(values)
+                .containsEntry("TRELLO_API_KEY", "synthetic-key")
+                .containsEntry("TRELLO_API_TOKEN", "synthetic-token")
+                .containsEntry("PLAIN", "plain-value")
+                .containsEntry("HASH_IN_VALUE", "abc#def")
+                .containsEntry("HASH_IN_QUOTES", "value # not a comment");
     }
 }
