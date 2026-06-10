@@ -6,11 +6,13 @@ import io.vertx.ext.web.RoutingContext;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.NotFoundException;
+import jakarta.ws.rs.OPTIONS;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.Context;
+import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import java.net.InetAddress;
@@ -22,6 +24,11 @@ import java.util.function.BooleanSupplier;
 
 @Path("/")
 public class StatusResource {
+    // Without explicit OPTIONS methods, RESTEasy Reactive advertises the union of every method on
+    // the resource class in Allow, which wrongly offers POST on the read-only routes.
+    private static final String READ_ONLY_ALLOW = "GET, HEAD, OPTIONS";
+    private static final String REFRESH_ALLOW = "OPTIONS, POST";
+
     private final SymphonyOrchestrator orchestrator;
     private final BooleanSupplier loopbackClient;
     private final Clock clock;
@@ -121,6 +128,38 @@ public class StatusResource {
         return orchestrator
                 .cardDetails(cardIdentifier)
                 .orElseThrow(() -> new NotFoundException("Unknown card: " + cardIdentifier));
+    }
+
+    @OPTIONS
+    public Response indexOptions() {
+        return allowOnly(READ_ONLY_ALLOW);
+    }
+
+    @OPTIONS
+    @Path("/api/v1/state")
+    public Response stateOptions() {
+        return allowOnly(READ_ONLY_ALLOW);
+    }
+
+    @OPTIONS
+    @Path("/api/v1/local-status")
+    public Response localStatusOptions() {
+        // The local-status payload is hidden from non-loopback clients, so its OPTIONS answer
+        // must not reveal the endpoint either.
+        if (!isLoopbackClient()) {
+            throw new NotFoundException();
+        }
+        return allowOnly(READ_ONLY_ALLOW);
+    }
+
+    @OPTIONS
+    @Path("/api/v1/refresh")
+    public Response refreshOptions() {
+        return allowOnly(REFRESH_ALLOW);
+    }
+
+    private static Response allowOnly(String allow) {
+        return Response.ok().header(HttpHeaders.ALLOW, allow).build();
     }
 
     @POST

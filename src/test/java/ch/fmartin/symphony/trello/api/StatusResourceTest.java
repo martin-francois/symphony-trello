@@ -94,6 +94,26 @@ final class StatusResourceTest {
     }
 
     @Test
+    void hidesLocalStatusOptionsFromNonLoopbackClients() {
+        // given
+        SymphonyOrchestrator orchestrator = mock();
+        var loopbackResource = new StatusResource(orchestrator, () -> true);
+        var remoteResource = new StatusResource(orchestrator, () -> false);
+
+        // when
+        var loopbackOptions = loopbackResource.localStatusOptions();
+        Throwable remoteFailure = catchThrowable(remoteResource::localStatusOptions);
+
+        // then
+        try (loopbackOptions) {
+            assertThat(loopbackOptions.getHeaderString("Allow")).isEqualTo("GET, HEAD, OPTIONS");
+        }
+        assertThat(remoteFailure)
+                .as("OPTIONS must not reveal the loopback-only endpoint to remote clients")
+                .isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
     void returnsCardDetailsOrTypedNotFound() {
         // given
         CardDebugDetails details = new CardDebugDetails(
