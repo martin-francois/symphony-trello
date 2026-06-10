@@ -11,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -67,6 +68,40 @@ final class LocalHealthCheckerTest {
         // then
         assertThat(health.kind()).isEqualTo(BoardHealthKind.SAME_WORKFLOW);
         assertThat(health.workerPid()).contains(4242L);
+    }
+
+    @Test
+    void workflowHealthRetriesTransientLocalStatusFailureBeforeReportingPortUsed() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md").toAbsolutePath().normalize();
+        AtomicInteger requests = new AtomicInteger();
+        server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        server.createContext("/api/v1/local-status", exchange -> {
+            if (requests.incrementAndGet() == 1) {
+                exchange.sendResponseHeaders(500, -1);
+                exchange.close();
+                return;
+            }
+            byte[] body =
+                    """
+                    {"workflowPath":"%s","boardId":"full-board-id","configuredBoardId":"abc123"}
+                    """
+                            .formatted(workflow)
+                            .getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        server.start();
+        LocalHealthChecker checker = new LocalHealthChecker(Map.of(), new WorkflowConfigEditor());
+
+        // when
+        BoardHealth health = checker.workflowHealth(
+                workflow, "abc123", "abc123", server.getAddress().getPort());
+
+        // then
+        assertThat(health.kind()).isEqualTo(BoardHealthKind.SAME_WORKFLOW);
+        assertThat(requests.get()).isEqualTo(2);
     }
 
     @Test

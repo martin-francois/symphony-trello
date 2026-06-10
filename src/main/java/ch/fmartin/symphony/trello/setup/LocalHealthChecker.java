@@ -25,6 +25,7 @@ final class LocalHealthChecker {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final TypeReference<Map<String, Object>> JSON_MAP_TYPE = new TypeReference<>() {};
     private static final Duration LOCAL_STATUS_TIMEOUT = Duration.ofMillis(500);
+    private static final Duration PORT_USED_RETRY_DELAY = Duration.ofMillis(150);
     private static final InetAddress LOOPBACK_IPV4 = loopbackIpv4();
 
     private final Map<String, String> environment;
@@ -68,6 +69,23 @@ final class LocalHealthChecker {
     }
 
     BoardHealth workflowHealth(Path expectedWorkflowPath, String expectedBoardId, String expectedBoardKey, int port) {
+        BoardHealth health = probeWorkflowHealth(expectedWorkflowPath, expectedBoardId, expectedBoardKey, port);
+        if (health.kind() != BoardHealthKind.PORT_USED) {
+            return health;
+        }
+        // A briefly busy worker can miss the short local-status timeout; one retry keeps healthy
+        // managed workers from transiently showing up as PORT_USED.
+        try {
+            Thread.sleep(PORT_USED_RETRY_DELAY.toMillis());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return health;
+        }
+        return probeWorkflowHealth(expectedWorkflowPath, expectedBoardId, expectedBoardKey, port);
+    }
+
+    private BoardHealth probeWorkflowHealth(
+            Path expectedWorkflowPath, String expectedBoardId, String expectedBoardKey, int port) {
         if (port <= 0 || !portAcceptsConnections(port)) {
             return new BoardHealth(BoardHealthKind.STOPPED, port, Optional.empty(), Optional.empty());
         }
