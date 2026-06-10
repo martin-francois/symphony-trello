@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.fmartin.symphony.trello.setup.InstallerScriptFixture.ProcessResult;
 import java.io.File;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -1117,6 +1118,112 @@ final class InstallerScriptTest {
                         home.resolve(".bashrc").toString());
         assertThat(home.resolve(".bashrc")).doesNotExist();
         assertThat(home.resolve(".profile")).doesNotExist();
+    }
+
+    @Test
+    void posixWrapperReportsActionableErrorWhenJavaIsMissing() throws Exception {
+        // given
+        Assumptions.assumeTrue(commandExists("bash"));
+        Assumptions.assumeTrue(commandExists("git"));
+        Path sourceRepository = createSourceRepository(temporaryDirectory);
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path home = temporaryDirectory.resolve("missing-java-home");
+        Path symphonyHome = temporaryDirectory.resolve("missing-java-symphony-home");
+        Path binDirectory = temporaryDirectory.resolve("missing-java-bin");
+        Path fakeLog = temporaryDirectory.resolve("missing-java.log");
+        Files.createDirectories(home);
+        Map<String, String> environment = Map.of(
+                "PATH", fakeBin + File.pathSeparator + System.getenv("PATH"),
+                "HOME", home.toString(),
+                "SHELL", "/bin/bash",
+                "SYMPHONY_TRELLO_REPO_URL", sourceRepository.toUri().toString(),
+                "SYMPHONY_HOME", symphonyHome.toString(),
+                "SYMPHONY_FAKE_LOG", fakeLog.toString());
+        ProcessResult install = run(
+                environment,
+                "bash",
+                "install.sh",
+                "--no-onboard",
+                "--no-update-path",
+                "--bin-dir",
+                binDirectory.toString());
+        Path runtimeBin = createWrapperRuntimePathWithoutJava(temporaryDirectory);
+        Map<String, String> environmentWithoutJava = Map.of(
+                "PATH",
+                runtimeBin.toString(),
+                "HOME",
+                home.toString(),
+                "SHELL",
+                "/bin/bash",
+                "SYMPHONY_HOME",
+                symphonyHome.toString());
+        ProcessResult javaLookup =
+                run(environmentWithoutJava, runtimeBin.resolve("bash").toString(), "-c", "command -v java");
+
+        // when
+        ProcessResult status = run(
+                environmentWithoutJava, binDirectory.resolve("symphony-trello").toString(), "status");
+
+        // then
+        install.assertSuccess();
+        assertThat(javaLookup.exitCode())
+                .as("the controlled runtime PATH must not resolve java, but found: %s", javaLookup.output())
+                .isNotZero();
+        assertThat(status.exitCode()).as(status.output()).isEqualTo(2);
+        assertThat(status.output())
+                .contains("Symphony for Trello needs Java 25+ on PATH", "rerun the installer")
+                .doesNotContain("exec: java: not found");
+    }
+
+    @Test
+    void powerShellWrapperSourceGuardsMissingJavaBeforeLaunch() throws Exception {
+        // given
+        // Runtime coverage for the missing-java branch is POSIX-only: the PowerShell wrapper only
+        // exists after a full install.ps1 run, and pwsh is not available in every verification
+        // environment. This pins the generated wrapper text so the guard cannot silently drop.
+        String installer = Files.readString(Path.of("install.ps1"), StandardCharsets.UTF_8);
+
+        // when
+        int javaGuard = installer.indexOf("if (-not (Get-Command java -ErrorAction SilentlyContinue))");
+        int javaLaunch = installer.indexOf("& java \"-Dsymphony.trello.app.home=");
+
+        // then
+        assertThat(javaGuard)
+                .as("generated PowerShell wrapper must guard the java lookup")
+                .isNotNegative();
+        assertThat(javaLaunch)
+                .as("generated PowerShell wrapper must launch java")
+                .isNotNegative();
+        assertThat(javaGuard)
+                .as("the java guard must run before the java launch")
+                .isLessThan(javaLaunch);
+        assertThat(installer)
+                .contains(
+                        "Symphony for Trello needs Java 25+ on PATH, but no java command was found.",
+                        "Install a Java 25+ JDK or rerun the installer, then try again:");
+    }
+
+    /**
+     * A runtime PATH for negative wrapper tests holding only the commands the installed POSIX
+     * wrapper needs before its java lookup. Hosts commonly have /usr/bin/java or /bin/java, so a
+     * host-directory PATH cannot prove the missing-java branch runs.
+     */
+    private static Path createWrapperRuntimePathWithoutJava(Path temporaryDirectory) throws IOException {
+        Path runtimeBin = temporaryDirectory.resolve("runtime-bin-without-java");
+        Files.createDirectories(runtimeBin);
+        for (String tool : List.of("bash", "mkdir")) {
+            Files.createSymbolicLink(runtimeBin.resolve(tool), hostTool(tool));
+        }
+        return runtimeBin;
+    }
+
+    private static Path hostTool(String tool) {
+        return Stream.of(System.getenv("PATH").split(File.pathSeparator))
+                .filter(directory -> !directory.isBlank())
+                .map(directory -> Path.of(directory).resolve(tool))
+                .filter(Files::isExecutable)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Required tool is missing on the host PATH: " + tool));
     }
 
     @Test
