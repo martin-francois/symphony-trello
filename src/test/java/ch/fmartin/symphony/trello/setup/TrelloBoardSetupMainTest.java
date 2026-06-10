@@ -175,6 +175,82 @@ final class TrelloBoardSetupMainTest {
                 .isEqualTo("Open lists: \"Ready for Codex\", \"Sneaky\\nList\\t\\\"Q\\\"\", \"Released\"");
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"input?utm=test", "input#fragment", "input/?utm=test"})
+    void importBoardStripsAccidentalQueryOrFragmentFromBareBoardSelectors(String selector) {
+        // given
+        Path workflow = tempDir.resolve("decorated-selector.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.decorated-selector");
+
+        // when
+        CliRunResult result = runCli(
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                selector,
+                "--active",
+                "Queue for Codex",
+                "--terminal",
+                "Released",
+                "--workflow",
+                workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
+                "--env",
+                env.toString());
+
+        // then
+        result.assertSuccess().stdoutContains("Imported Trello board: \"Existing Board\"");
+        assertThat(boardInfoLookups).hasValue(1);
+        assertThat(workflow).exists();
+    }
+
+    @Test
+    void importBoardRejectsNameLikeBoardSelectorsWithoutContactingTrello() {
+        // given
+        // A selector that merely contains '?' is not URI-parseable, so it is not a decorated
+        // short link; import-board has no board-name matching and must fail locally instead of
+        // sending the bad selector to Trello.
+        Path workflow = tempDir.resolve("name-like-selector.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.name-like-selector");
+
+        // when
+        CliRunResult result = runCli(
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "What? Board",
+                "--active",
+                "Queue for Codex",
+                "--terminal",
+                "Released",
+                "--workflow",
+                workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
+                "--env",
+                env.toString());
+
+        // then
+        result.assertFailure(2)
+                .stderrContains("setup_failed code=setup_invalid_arguments", "Invalid --board value.")
+                .stderrDoesNotContain("trello_invalid_request")
+                .stdoutDoesNotContain("Imported Trello board");
+        assertThat(boardInfoLookups).hasValue(0);
+        assertThat(workflow).doesNotExist();
+        assertThat(env).doesNotExist();
+    }
+
     @Test
     void printsHelpWithoutRequiringCredentials() {
         // given

@@ -61,6 +61,60 @@ final class ConnectedBoardManifestTest {
     }
 
     @Test
+    void findByBoardStripsAccidentalQueryAndFragmentFromBareShortLinkSelectors() {
+        // given
+        ConnectedBoard board = board(
+                "000000000000000000000001",
+                "SYNTH003",
+                "Queue",
+                "https://trello.com/b/SYNTH003/synthetic-board",
+                Path.of("WORKFLOW.md"));
+        ConnectedBoardManifest manifest = new ConnectedBoardManifest(List.of(board));
+
+        // when
+        var byQuery = manifest.findByBoard("SYNTH003?utm=test");
+        var byFragment = manifest.findByBoard("SYNTH003#fragment");
+        var byQueryAfterSlash = manifest.findByBoard("SYNTH003/?utm=test");
+
+        // then
+        assertThat(byQuery).contains(board);
+        assertThat(byFragment).contains(board);
+        assertThat(byQueryAfterSlash).contains(board);
+    }
+
+    @Test
+    void findByBoardPrefersExactNameMatchOverQueryStrippedSelector() {
+        // given
+        ConnectedBoard literallyNamed = board("board-1", "first", "SYNTH003?utm=test", Path.of("WORKFLOW.first.md"));
+        ConnectedBoard shortLinked = board(
+                "000000000000000000000002",
+                "SYNTH003",
+                "Queue",
+                "https://trello.com/b/SYNTH003/synthetic-board",
+                Path.of("WORKFLOW.second.md"));
+        ConnectedBoardManifest manifest = new ConnectedBoardManifest(List.of(literallyNamed, shortLinked));
+
+        // when
+        var selected = manifest.findAllByBoard("SYNTH003?utm=test");
+
+        // then
+        assertThat(selected).containsExactly(literallyNamed);
+    }
+
+    @Test
+    void findByBoardLeavesNameLikeSelectorsContainingQuestionMarksUnmatched() {
+        // given
+        ConnectedBoard board = board("board-1", "SYNTH003", "Queue", Path.of("WORKFLOW.md"));
+        ConnectedBoardManifest manifest = new ConnectedBoardManifest(List.of(board));
+
+        // when
+        var unmatched = manifest.findByBoard("What? Board");
+
+        // then
+        assertThat(unmatched).isEmpty();
+    }
+
+    @Test
     void findByBoardRejectsNonTrelloUrlHosts() {
         // given
         ConnectedBoard board = board(
