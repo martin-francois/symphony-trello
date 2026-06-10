@@ -1015,6 +1015,37 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
+    void failedArchivedBoardStartLeavesNoMisleadingStoppedLifecycleState() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        ManagedProcessStore.ManagedProcessFiles files = fixture.managedFiles(board);
+        fixture.stubStoppedStartedWorker(board, 42);
+        when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
+                .thenAnswer(invocation -> {
+                    Files.writeString(files.stdoutLog(), "Configured Trello board is closed\n", StandardCharsets.UTF_8);
+                    return new ManagedProcessHandle(42);
+                });
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
+        WorkerRunResult status = fixture.status(fixture.statusRequest("Queue"));
+        WorkerRunResult stop = fixture.stop(fixture.stopRequest("Queue"));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> assertThat(failure.code())
+                .isEqualTo("trello_board_closed"));
+        assertThat(pidFiles(fixture.paths.stateHome()))
+                .as("failed start leaves no managed pid state")
+                .isEmpty();
+        status.assertSuccess().stdoutContains("stopped \"Queue\"").stdoutDoesNotContain("pid=");
+        stop.assertSuccess()
+                .stdoutContains("Symphony for Trello is already stopped for \"Queue\"")
+                .stdoutDoesNotContain("Stopped Queue", "Stopped WORKFLOW");
+    }
+
+    @Test
     void startSurfacesTrelloAuthFailureFromWorkerStartupLogs() throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
