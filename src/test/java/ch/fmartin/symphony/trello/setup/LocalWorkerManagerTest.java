@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -1020,13 +1021,7 @@ final class LocalWorkerManagerTest {
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
-        ManagedProcessStore.ManagedProcessFiles files = fixture.managedFiles(board);
-        fixture.stubStoppedStartedWorker(board, 42);
-        when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
-                .thenAnswer(invocation -> {
-                    Files.writeString(files.stdoutLog(), "Configured Trello board is closed\n", StandardCharsets.UTF_8);
-                    return new ManagedProcessHandle(42);
-                });
+        fixture.stubStoppedStartedWorkerWithStartupLog(board, 42, "Configured Trello board is closed\n");
 
         // when
         Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
@@ -1046,24 +1041,86 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
+    void startClassifiesInvalidTrelloCredentialsBeforeLaunch() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        doThrow(new TrelloBoardSetupException(
+                        "trello_auth_failed", "Trello authentication failed while starting Symphony."))
+                .when(fixture.credentialPreflight)
+                .verify(any(), any(), any());
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("trello_auth_failed");
+            assertThat(failure.dotenvPath()).contains(fixture.paths.defaultEnvPath());
+            assertThat(failure.getMessage()).doesNotContain(".log", ".err");
+        });
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+        assertThat(pidFiles(fixture.paths.stateHome())).isEmpty();
+    }
+
+    @Test
+    void startClassifiesMalformedCredentialRejectionBeforeLaunch() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        doThrow(new TrelloBoardSetupException(
+                        "trello_invalid_request", "Trello rejected the setup request: invalid key"))
+                .when(fixture.credentialPreflight)
+                .verify(any(), any(), any());
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("trello_auth_failed");
+            assertThat(failure.getMessage()).contains("Trello rejected the resolved API credentials");
+            assertThat(failure.dotenvPath()).contains(fixture.paths.defaultEnvPath());
+            assertThat(failure.getMessage()).doesNotContain(".log", ".err");
+        });
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+        assertThat(pidFiles(fixture.paths.stateHome())).isEmpty();
+    }
+
+    @Test
+    void startProceedsWhenCredentialPreflightHitsTransportProblems() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        doThrow(new TrelloBoardSetupException("trello_api_request", "Trello request failed"))
+                .when(fixture.credentialPreflight)
+                .verify(any(), any(), any());
+        fixture.stubHealthyStartedWorker(board, 42);
+
+        // when
+        WorkerRunResult result = fixture.start(fixture.startRequest("Queue"));
+
+        // then
+        result.assertSuccess().stdoutContains("Started Symphony for Trello");
+        verify(fixture.platform).start(any(), eq(fixture.paths.appHome()), any(), any(), any());
+    }
+
+    @Test
     void startSurfacesTrelloAuthFailureFromWorkerStartupLogs() throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
-        ManagedProcessStore.ManagedProcessFiles files = fixture.managedFiles(board);
-        fixture.stubStoppedStartedWorker(board, 42);
-        when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
-                .thenAnswer(invocation -> {
-                    Files.writeString(
-                            files.stdoutLog(),
-                            """
-                            Caused by: ch.fmartin.symphony.trello.tracker.TrelloException: Trello authentication failed
-                            \tat ch.fmartin.symphony.trello.tracker.TrelloClient.statusException(TrelloClient.java:600)
-                            """,
-                            StandardCharsets.UTF_8);
-                    return new ManagedProcessHandle(42);
-                });
+        fixture.stubStoppedStartedWorkerWithStartupLog(
+                board,
+                42,
+                """
+                Caused by: ch.fmartin.symphony.trello.tracker.TrelloException: Trello authentication failed
+                \tat ch.fmartin.symphony.trello.tracker.TrelloClient.statusException(TrelloClient.java:600)
+                """);
 
         // when
         Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
