@@ -441,8 +441,9 @@ public final class LocalSetup {
         ConnectedBoardRepository boards = connectedBoards(options);
         ConnectedBoardManifest manifest = boards.loadForLifecycle();
         if (manifest.boards().isEmpty()) {
-            out.println("  WARN    No Trello boards connected to Symphony");
-            return 2;
+            throw new TrelloBoardSetupException(
+                    "setup_repair_board_not_found",
+                    "No Trello boards are connected to Symphony in the selected manifest. Run setup-local or import-board first, or rerun repair-port with the correct --config-dir or --manifest.");
         }
         String boardSelector = options.repairBoardName()
                 .orElseThrow(() -> new TrelloBoardSetupException(
@@ -554,6 +555,7 @@ public final class LocalSetup {
         }
         throw new TrelloBoardSetupException("setup_server_port_unavailable", "No free local server port was found.");
     }
+
 
     private Prerequisites prerequisites() {
         return prerequisiteChecker.check();
