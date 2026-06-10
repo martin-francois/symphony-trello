@@ -709,6 +709,36 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
+    void startRejectsOccupiedNonSymphonyStatusPortBeforeLaunch() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        when(fixture.healthChecker.workflowHealth(
+                        board.workflowPath(), board.boardId(), board.boardKey(), board.serverPort()))
+                .thenReturn(new BoardHealth(
+                        BoardHealthKind.PORT_USED, board.serverPort(), Optional.empty(), Optional.empty()));
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_worker_port_in_use");
+            assertThat(failure.getMessage())
+                    .contains("port " + board.serverPort() + " is already in use", "Queue")
+                    .doesNotContain(".log", ".err");
+        });
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+        assertThat(new ManagedProcessStore(fixture.paths.stateHome())
+                        .readPid(new ManagedProcessStore(fixture.paths.stateHome())
+                                .files(board.workflowPath())
+                                .pidFile()))
+                .as("no managed pid state for the failed attempt")
+                .isNull();
+    }
+
+    @Test
     void startWorkflowRejectsBoardAlreadyManagedByAnotherRunningWorkflow() throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
@@ -921,20 +951,67 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
-    void startAttemptsNormalLaunchWhenPidFileIsMissingAndHealthReportsWrongWorkflow() throws Exception {
+    void startReportsInvalidWorkflowInsteadOfOccupiedFallbackPort() throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
-        fixture.stubWorkflowHealth(board, fixture.wrongWorkflow(board));
-        fixture.stubStartedWorkerHealth(board, 42, fixture.wrongWorkflow(board));
+        Files.writeString(
+                board.workflowPath(),
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: board-1
+                server:
+                  port: "not-a-port"
+                ---
+                Body
+                """,
+                StandardCharsets.UTF_8);
+        fixture.stubWorkflowHealth(
+                board,
+                new BoardHealth(BoardHealthKind.PORT_USED, board.serverPort(), Optional.empty(), Optional.empty()));
 
         // when
         Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
 
         // then
-        assertThat(thrown).isInstanceOf(TrelloBoardSetupException.class).hasMessageContaining("did not report");
-        verify(fixture.platform).start(any(), eq(fixture.paths.appHome()), any(), any(), any());
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code())
+                    .as("invalid workflow must not be masked by the occupied fallback port")
+                    .isEqualTo("setup_workflow_invalid");
+            assertThat(failure.getMessage()).contains("Invalid workflow configuration:");
+        });
+        assertThat(pidFiles(fixture.paths.stateHome())).isEmpty();
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void startRejectsPortAlreadyServingAnotherWorkflowBeforeLaunch() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        fixture.stubWorkflowHealth(board, fixture.wrongWorkflow(board));
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_worker_port_in_use");
+            assertThat(failure.getMessage())
+                    .contains(
+                            "already serving another Symphony workflow",
+                            "Queue",
+                            "WORKFLOW.other.md",
+                            "Stop that worker or change the workflow server.port");
+        });
+        assertThat(pidFiles(fixture.paths.stateHome()))
+                .as("rejected start leaves no managed pid state")
+                .isEmpty();
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
     }
 
     @Test
