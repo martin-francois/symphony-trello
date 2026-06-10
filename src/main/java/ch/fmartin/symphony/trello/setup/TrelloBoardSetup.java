@@ -790,12 +790,38 @@ public final class TrelloBoardSetup {
 
     private static Path ensureWorkflowWritable(Path workflowPath, boolean force) {
         Path absolute = workflowPath.toAbsolutePath().normalize();
+        if (Files.isDirectory(absolute)) {
+            throw new TrelloBoardSetupException(
+                    "setup_invalid_path",
+                    "--workflow must point to a workflow file path. This path is a directory:\n  " + absolute);
+        }
         if (Files.exists(absolute) && !force) {
             throw new TrelloBoardSetupException(
                     "setup_workflow_exists",
                     "Workflow file already exists: " + absolute + "\nRe-run with --force to overwrite it.");
         }
+        if (Files.exists(absolute) && !Files.isWritable(absolute)) {
+            throw new TrelloBoardSetupException(
+                    "setup_invalid_path", "The workflow file is not writable:\n  " + absolute);
+        }
+        Path existingAncestor = closestExistingAncestor(absolute);
+        if (existingAncestor != null && !Files.isDirectory(existingAncestor)) {
+            throw new TrelloBoardSetupException(
+                    "setup_invalid_path", "--workflow parent path is not a directory:\n  " + existingAncestor);
+        }
+        if (existingAncestor != null && !Files.exists(absolute) && !Files.isWritable(existingAncestor)) {
+            throw new TrelloBoardSetupException(
+                    "setup_invalid_path", "--workflow parent directory is not writable:\n  " + existingAncestor);
+        }
         return absolute;
+    }
+
+    private static Path closestExistingAncestor(Path absolute) {
+        Path ancestor = absolute.getParent();
+        while (ancestor != null && !Files.exists(ancestor)) {
+            ancestor = ancestor.getParent();
+        }
+        return ancestor;
     }
 
     private static String workflowTemplate(
