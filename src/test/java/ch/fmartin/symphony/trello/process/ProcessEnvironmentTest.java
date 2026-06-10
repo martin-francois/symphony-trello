@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.process;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -8,7 +9,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -55,7 +55,7 @@ final class ProcessEnvironmentTest {
     @Test
     void limitGitDiscoveryStopsRepositoryDiscoveryAboveWorkspacesRoot() throws Exception {
         // given
-        Assumptions.assumeTrue(gitAvailable(), "git is required for this discovery boundary test");
+        assumeTrue(gitAvailable(), "git is required for this discovery boundary test");
         Path parentRepo = tempDir.resolve("parent-repo");
         Path workspacesRoot = parentRepo.resolve("workspaces");
         Path workspace = workspacesRoot.resolve("TRELLO-SYNTH001");

@@ -2,6 +2,8 @@ package ch.fmartin.symphony.trello.setup;
 
 import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.*;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import ch.fmartin.symphony.trello.setup.InstallerScriptFixture.ProcessResult;
 import java.io.File;
@@ -14,7 +16,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -30,7 +31,7 @@ final class InstallerScriptTest {
     @ValueSource(strings = {"install.sh", "uninstall.sh"})
     void posixInstallAndUninstallScriptsHaveValidBashSyntax(String script) throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("bash"));
 
         // when
         ProcessResult result = run(Map.of(), "bash", "-n", script);
@@ -44,7 +45,7 @@ final class InstallerScriptTest {
     void posixPublicDryRunCommandsStopBeforeChangingFiles(String name, String[] command, String[] expectedOutput)
             throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("bash"));
 
         // when
         ProcessResult result = run(Map.of(), command);
@@ -73,7 +74,7 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerRejectsUnsafeCommandDirectoriesBeforeDryRunPlan() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("bash"));
         Path home = temporaryDirectory.resolve("install-bin-home");
         Path symphonyHome = temporaryDirectory.resolve("install-bin-symphony-home");
         Path app = temporaryDirectory.resolve("install-bin-app");
@@ -124,7 +125,7 @@ final class InstallerScriptTest {
     @Test
     void posixUninstallDryRunPrintsPlannedWorkerStopsWithoutStopping() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("bash"));
         Path home = temporaryDirectory.resolve("would-stop-home");
         Path symphonyHome = temporaryDirectory.resolve("would-stop-symphony-home");
         Path app = symphonyHome.resolve("app");
@@ -169,7 +170,7 @@ final class InstallerScriptTest {
     @Test
     void posixUninstallerRejectsUnsafeCommandDirectoriesBeforeDryRunPlan() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("bash"));
         Path home = temporaryDirectory.resolve("uninstall-bin-home");
         Path symphonyHome = temporaryDirectory.resolve("uninstall-bin-symphony-home");
         Path app = temporaryDirectory.resolve("uninstall-bin-app");
@@ -223,7 +224,7 @@ final class InstallerScriptTest {
     @Test
     void posixUninstallerAllowsLegacySymlinkedCommandDirectory() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("bash"));
         Path home = temporaryDirectory.resolve("uninstall-symlink-bin-home");
         Path app = temporaryDirectory.resolve("uninstall-symlink-bin-app");
         Path realBin = temporaryDirectory.resolve("uninstall-symlink-bin-target");
@@ -253,7 +254,7 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerRejectsUnsafeAppPathsBeforeDryRunPlan() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("bash"));
         Path home = temporaryDirectory.resolve("install-app-home");
         Path symphonyHome = temporaryDirectory.resolve("install-app-symphony-home");
         Path file = temporaryDirectory.resolve("install-app-file");
@@ -286,7 +287,7 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerAcceptsDedicatedAppPathDirectlyUnderHome() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("bash"));
         Path home = temporaryDirectory.resolve("install-home-child-home");
         Path app = home.resolve("symphony-trello");
         Path safeBin = temporaryDirectory.resolve("install-home-child-bin");
@@ -322,7 +323,7 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerRejectsAppPathInsideRootScopedConfigDirectory() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("bash"));
         Path home = temporaryDirectory.resolve("install-root-config-home");
         Path app = home.resolve(".local/share/symphony-trello/app");
         Path safeBin = temporaryDirectory.resolve("install-root-config-bin");
@@ -350,7 +351,7 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerRejectsUnsafeSymphonyHomeBeforeDryRunPlan() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("bash"));
         Path home = temporaryDirectory.resolve("install-home-base-home");
         Path safeBin = temporaryDirectory.resolve("install-home-base-bin");
         Files.createDirectories(home);
@@ -394,7 +395,7 @@ final class InstallerScriptTest {
     @Test
     void posixUninstallerRejectsUnsafeAppPathsBeforeDryRunPlan() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("bash"));
         Path home = temporaryDirectory.resolve("uninstall-app-home");
         Path symphonyHome = temporaryDirectory.resolve("uninstall-app-symphony-home");
         Path file = temporaryDirectory.resolve("uninstall-app-file");
@@ -419,7 +420,7 @@ final class InstallerScriptTest {
     @Test
     void posixUninstallerAcceptsDedicatedAppPathDirectlyUnderHome() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("bash"));
         Path home = temporaryDirectory.resolve("uninstall-home-child-home");
         Path app = home.resolve("symphony-trello");
         Path safeBin = temporaryDirectory.resolve("uninstall-home-child-bin");
@@ -446,7 +447,7 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerAllowsDefaultCommandDirectoryWhenRunFromThatDirectory() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("bash"));
         Path installScript = Path.of("install.sh").toAbsolutePath();
         Path home = temporaryDirectory.resolve("install-run-from-bin-home");
         Path binDirectory = home.resolve(".local/bin");
@@ -465,7 +466,7 @@ final class InstallerScriptTest {
     @Test
     void posixUninstallerAllowsDefaultCommandDirectoryWhenRunFromThatDirectory() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("bash"));
         Path uninstallScript = Path.of("uninstall.sh").toAbsolutePath();
         Path home = temporaryDirectory.resolve("uninstall-run-from-bin-home");
         Path binDirectory = home.resolve(".local/bin");
@@ -483,7 +484,7 @@ final class InstallerScriptTest {
     @Test
     void posixUninstallerRejectsAppPathInsideRootScopedConfigDirectory() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("bash"));
         Path home = temporaryDirectory.resolve("uninstall-root-config-home");
         Path app = home.resolve(".local/share/symphony-trello/app");
         Path safeBin = temporaryDirectory.resolve("uninstall-root-config-bin");
@@ -511,7 +512,7 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerRejectsMissingHomeBeforeResolvingDefaultPaths() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("bash"));
 
         // when
         ProcessResult result = runWithoutHome(
@@ -534,7 +535,7 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerRejectsEmptyHomeBeforeResolvingDefaultPaths() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("bash"));
 
         // when
         ProcessResult result = run(
@@ -558,7 +559,7 @@ final class InstallerScriptTest {
     @Test
     void posixUninstallerRejectsMissingHomeBeforeResolvingDefaultPaths() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("bash"));
 
         // when
         ProcessResult result = runWithoutHome(
@@ -581,7 +582,7 @@ final class InstallerScriptTest {
     @Test
     void posixUninstallerRejectsEmptyHomeBeforeResolvingDefaultPaths() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("bash"));
 
         // when
         ProcessResult result = run(
@@ -607,7 +608,7 @@ final class InstallerScriptTest {
     void posixInstallerRejectsInvalidSourceInputsBeforeDryRunPlan(
             String name, String[] sourceArgs, String expectedMessage) throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("bash"));
         Path prefix = temporaryDirectory
                 .resolve(name.replaceAll("[^A-Za-z0-9]+", "-"))
                 .resolve("app");
@@ -675,7 +676,7 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerAcceptsScpStyleRepoAndRedactsCredentialUrlBeforeDryRunPlan() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("bash"));
 
         // when
         ProcessResult scpRepo = run(
@@ -711,7 +712,7 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerRejectsExistingNonGitRepoPathBeforeDryRunPlan() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("bash"));
         Path notGitRepository = temporaryDirectory.resolve("not-git-repository");
         Path prefix = temporaryDirectory.resolve("non-git-repo-prefix").resolve("app");
         Files.createDirectories(notGitRepository);
@@ -739,7 +740,7 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerAcceptsLocalGitRepoPathWithSpacesBeforeDryRunPlan() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("bash"));
         Path localRepository = temporaryDirectory.resolve("local repo with spaces");
         Path prefix = temporaryDirectory.resolve("local-repo-space-prefix").resolve("app");
         Files.createDirectories(localRepository.resolve(".git"));
@@ -765,7 +766,7 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerRedactsCredentialRepoUrlInRealGitStepLabels() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("bash"));
         Path fakeBin = createFakeToolchain(temporaryDirectory);
         Path prefix = temporaryDirectory.resolve("credential-repo-label-prefix").resolve("app");
         Path binDirectory = temporaryDirectory.resolve("credential-repo-label-bin");
@@ -821,7 +822,7 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerDryRunReportsConcreteMissingPrerequisiteActions() throws Exception {
         // given
-        Assumptions.assumeTrue(Files.exists(Path.of("/bin/bash")));
+        assumeTrue(Files.exists(Path.of("/bin/bash")));
         Map<String, String> environment = Map.of(
                 "PATH", temporaryDirectory.resolve("empty-bin").toString(),
                 "SYMPHONY_TRELLO_TEST_OS", "Linux",
@@ -846,7 +847,7 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerNormalizesLeadingVVersionBeforeReleaseAssetUrls() throws Exception {
         // given
-        Assumptions.assumeTrue(Files.exists(Path.of("/bin/bash")));
+        assumeTrue(Files.exists(Path.of("/bin/bash")));
         String version = installerDefaultRef().substring(1);
         Map<String, String> environment = Map.of(
                 "PATH",
@@ -874,7 +875,7 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerRejectsRemovedUpdatePathOption() throws Exception {
         // given
-        Assumptions.assumeTrue(Files.exists(Path.of("/bin/bash")));
+        assumeTrue(Files.exists(Path.of("/bin/bash")));
 
         // when
         ProcessResult result = run(Map.of(), "/bin/bash", "install.sh", "--dry-run", "--update-path", "--no-onboard");
@@ -887,7 +888,7 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerNoOnboardFailsCleanlyWithoutTerminalWhenPrerequisitePromptWouldRun() throws Exception {
         // given
-        Assumptions.assumeTrue(Files.exists(Path.of("/bin/bash")));
+        assumeTrue(Files.exists(Path.of("/bin/bash")));
         Path fakeBin = temporaryDirectory.resolve("noninteractive-bin");
         Files.createDirectories(fakeBin);
         writeExecutable(fakeBin.resolve("git"), "#!/usr/bin/env bash\nexit 0\n");
@@ -913,8 +914,8 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerDoesNotOfferPathSetupWhenBinDirIsAlreadyOnPath() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
-        Assumptions.assumeTrue(commandExists("git"));
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
         Path sourceRepository = createSourceRepository(temporaryDirectory);
         Path fakeBin = createFakeToolchain(temporaryDirectory);
         Path symphonyHome = temporaryDirectory.resolve("path-present-home");
@@ -938,9 +939,9 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerAddsPathSetupByDefaultWithoutDuplicates() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
-        Assumptions.assumeTrue(commandExists("git"));
-        Assumptions.assumeTrue(commandExists("script"));
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
+        assumeTrue(commandExists("script"));
         Path installScript = Path.of("install.sh").toAbsolutePath();
         Path sourceRepository = createSourceRepository(temporaryDirectory);
         Path fakeBin = createFakeToolchain(temporaryDirectory);
@@ -992,9 +993,9 @@ final class InstallerScriptTest {
     @Test
     void posixPipedInstallerAddsPathSetupByDefault() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
-        Assumptions.assumeTrue(commandExists("git"));
-        Assumptions.assumeTrue(commandExists("script"));
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
+        assumeTrue(commandExists("script"));
         Path installScript = Path.of("install.sh").toAbsolutePath();
         Path sourceRepository = createSourceRepository(temporaryDirectory);
         Path fakeBin = createFakeToolchain(temporaryDirectory);
@@ -1032,9 +1033,9 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerAddsPathSetupBeforeGuidedSetupFailure() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
-        Assumptions.assumeTrue(commandExists("git"));
-        Assumptions.assumeTrue(commandExists("script"));
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
+        assumeTrue(commandExists("script"));
         Path installScript = Path.of("install.sh").toAbsolutePath();
         Path sourceRepository = createSourceRepository(temporaryDirectory);
         Path fakeBin = createFakeToolchain(temporaryDirectory);
@@ -1094,8 +1095,8 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerGuidedSetupWithoutTerminalSuggestsNoOnboardWhenPrerequisitesExist() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
-        Assumptions.assumeTrue(commandExists("git"));
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
         Path sourceRepository = createSourceRepository(temporaryDirectory);
         Path fakeBin = createFakeToolchain(temporaryDirectory);
         Path home = temporaryDirectory.resolve("guided-no-tty-home");
@@ -1125,9 +1126,9 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerLeavesProfileUnchangedWhenPathSetupIsDisabled() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
-        Assumptions.assumeTrue(commandExists("git"));
-        Assumptions.assumeTrue(commandExists("script"));
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
+        assumeTrue(commandExists("script"));
         Path installScript = Path.of("install.sh").toAbsolutePath();
         Path sourceRepository = createSourceRepository(temporaryDirectory);
         Path fakeBin = createFakeToolchain(temporaryDirectory);
@@ -1168,31 +1169,12 @@ final class InstallerScriptTest {
     @Test
     void posixUninstallDryRunPlanSeparatesRemovalsFromPreservedData() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
-        Path home = temporaryDirectory.resolve("uninstall-plan-home");
-        Path symphonyHome = temporaryDirectory.resolve("uninstall-plan-symphony-home");
-        Path binDirectory = temporaryDirectory.resolve("uninstall-plan-bin");
-        Files.createDirectories(home);
-        Files.createDirectories(symphonyHome.resolve("state"));
-        Map<String, String> environment = Map.of(
-                "PATH", System.getenv("PATH"),
-                "HOME", home.toString(),
-                "SYMPHONY_HOME", symphonyHome.toString());
+        assumeTrue(commandExists("bash"));
 
         // when
-        ProcessResult result = run(
-                environment,
-                "bash",
-                "uninstall.sh",
-                "--dry-run",
-                "--yes",
-                "--remove-all-local-data",
-                "--bin-dir",
-                binDirectory.toString());
+        String output = posixUninstallDryRunPlanOutput("uninstall-plan", "--remove-all-local-data");
 
         // then
-        result.assertSuccess();
-        String output = result.output();
         int removeSection = output.indexOf("Will remove if present:");
         int preserveSection = output.indexOf("Will preserve:");
         assertThat(removeSection).as(output).isNotNegative();
@@ -1209,35 +1191,41 @@ final class InstallerScriptTest {
     @Test
     void posixUninstallDryRunPreservesLocalDataByDefault() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
-        Path home = temporaryDirectory.resolve("uninstall-default-home");
-        Path symphonyHome = temporaryDirectory.resolve("uninstall-default-symphony-home");
-        Path binDirectory = temporaryDirectory.resolve("uninstall-default-bin");
-        Files.createDirectories(home);
-        Files.createDirectories(symphonyHome.resolve("state"));
-        Map<String, String> environment = Map.of(
-                "PATH", System.getenv("PATH"),
-                "HOME", home.toString(),
-                "SYMPHONY_HOME", symphonyHome.toString());
+        assumeTrue(commandExists("bash"));
 
         // when
-        ProcessResult result =
-                run(environment, "bash", "uninstall.sh", "--dry-run", "--yes", "--bin-dir", binDirectory.toString());
+        String output = posixUninstallDryRunPlanOutput("uninstall-default");
 
         // then
-        result.assertSuccess();
-        String output = result.output();
         int preserveSection = output.indexOf("Will preserve:");
         assertThat(preserveSection).as(output).isNotNegative();
         assertThat(output.substring(preserveSection)).contains("CONFIG", "WORKSPACES", "STATE/LOGS", "AUTH", "TRELLO");
         assertThat(output.substring(0, preserveSection)).doesNotContain("CONFIG          ");
     }
 
+    private String posixUninstallDryRunPlanOutput(String prefix, String... extraFlags) throws Exception {
+        Path home = temporaryDirectory.resolve(prefix + "-home");
+        Path symphonyHome = temporaryDirectory.resolve(prefix + "-symphony-home");
+        Path binDirectory = temporaryDirectory.resolve(prefix + "-bin");
+        Files.createDirectories(home);
+        Files.createDirectories(symphonyHome.resolve("state"));
+        Map<String, String> environment = Map.of(
+                "PATH", System.getenv("PATH"),
+                "HOME", home.toString(),
+                "SYMPHONY_HOME", symphonyHome.toString());
+        List<String> command = new ArrayList<>(List.of("bash", "uninstall.sh", "--dry-run", "--yes"));
+        command.addAll(List.of(extraFlags));
+        command.addAll(List.of("--bin-dir", binDirectory.toString()));
+        ProcessResult result = run(environment, command.toArray(String[]::new));
+        result.assertSuccess();
+        return result.output();
+    }
+
     @Test
     void posixWrapperReportsActionableErrorWhenJavaIsMissing() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
-        Assumptions.assumeTrue(commandExists("git"));
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
         Path sourceRepository = createSourceRepository(temporaryDirectory);
         Path fakeBin = createFakeToolchain(temporaryDirectory);
         Path home = temporaryDirectory.resolve("missing-java-home");
@@ -1342,8 +1330,8 @@ final class InstallerScriptTest {
     @Test
     void posixNonInteractiveInstallerUpdatesProfileByDefault() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
-        Assumptions.assumeTrue(commandExists("git"));
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
         Path sourceRepository = createSourceRepository(temporaryDirectory);
         Path fakeBin = createFakeToolchain(temporaryDirectory);
         Path home = temporaryDirectory.resolve("path-noninteractive-home");
@@ -1380,7 +1368,7 @@ final class InstallerScriptTest {
     @Test
     void posixUninstallerDryRunReportsManagedPathProfileCleanup() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("bash"));
         Path home = temporaryDirectory.resolve("path-cleanup-dry-run-home");
         Path symphonyHome = temporaryDirectory.resolve("path-cleanup-dry-run-symphony-home");
         Path binDirectory = temporaryDirectory.resolve("path-cleanup-dry-run-bin");
@@ -1419,7 +1407,7 @@ final class InstallerScriptTest {
     @Test
     void posixUninstallerKeepsProfileWithUnterminatedManagedPathBlock() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("bash"));
         Path home = temporaryDirectory.resolve("path-cleanup-corrupt-home");
         Path symphonyHome = temporaryDirectory.resolve("path-cleanup-corrupt-symphony-home");
         Path binDirectory = temporaryDirectory.resolve("path-cleanup-corrupt-bin");
@@ -1451,7 +1439,7 @@ final class InstallerScriptTest {
     @Test
     void posixUninstallerKeepsManagedPathBlocksForDifferentBinDirectories() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("bash"));
         Path home = temporaryDirectory.resolve("path-cleanup-other-bin-home");
         Path symphonyHome = temporaryDirectory.resolve("path-cleanup-other-bin-symphony-home");
         Path binDirectory = temporaryDirectory.resolve("path-cleanup-other-bin-current");
@@ -1497,7 +1485,7 @@ final class InstallerScriptTest {
     @Test
     void posixUninstallerContinuesWhenManagedPathProfileCannotBeWritten() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("bash"));
         Path home = temporaryDirectory.resolve("path-cleanup-read-only-home");
         Path symphonyHome = temporaryDirectory.resolve("path-cleanup-read-only-symphony-home");
         Path binDirectory = temporaryDirectory.resolve("path-cleanup-read-only-bin");
@@ -1515,7 +1503,7 @@ final class InstallerScriptTest {
         Path shellProfile = home.resolve(".bashrc");
         Files.writeString(shellProfile, profile, StandardCharsets.UTF_8);
         assertThat(shellProfile.toFile().setWritable(false, false)).isTrue();
-        Assumptions.assumeFalse(Files.isWritable(shellProfile));
+        assumeFalse(Files.isWritable(shellProfile));
         Map<String, String> environment = Map.of(
                 "HOME", home.toString(),
                 "SHELL", "/bin/bash",
@@ -1534,10 +1522,10 @@ final class InstallerScriptTest {
     @Test
     void posixUninstallerContinuesWhenManagedPathProfileCannotBeRead() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
-        Assumptions.assumeFalse(isWindows());
-        Assumptions.assumeTrue(commandExists("runuser"));
-        Assumptions.assumeTrue(canRunAsNobody());
+        assumeTrue(commandExists("bash"));
+        assumeFalse(isWindows());
+        assumeTrue(commandExists("runuser"));
+        assumeTrue(canRunAsNobody());
         Path home = temporaryDirectory.resolve("path-cleanup-unreadable-home");
         Path symphonyHome = temporaryDirectory.resolve("path-cleanup-unreadable-symphony-home");
         Path binDirectory = temporaryDirectory.resolve("path-cleanup-unreadable-bin");
@@ -1587,7 +1575,7 @@ final class InstallerScriptTest {
     @Test
     void posixUninstallerRemovesLegacyManagedPathProfileBlocks() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("bash"));
         Path home = temporaryDirectory.resolve("path-cleanup-legacy-home");
         Path symphonyHome = temporaryDirectory.resolve("path-cleanup-legacy-symphony-home");
         Path binDirectory = temporaryDirectory.resolve("path-cleanup-legacy-bin");
@@ -1649,8 +1637,8 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerContinuesWhenAutomaticPathSetupCannotWriteProfile() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
-        Assumptions.assumeTrue(commandExists("git"));
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
         Path sourceRepository = createSourceRepository(temporaryDirectory);
         Path fakeBin = createFakeToolchain(temporaryDirectory);
         Path homeFile = temporaryDirectory.resolve("not-a-directory-home");
@@ -1682,7 +1670,7 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerDryRunOffersJava25WhenJava24IsOnPath() throws Exception {
         // given
-        Assumptions.assumeTrue(Files.exists(Path.of("/bin/bash")));
+        assumeTrue(Files.exists(Path.of("/bin/bash")));
         Path fakeBin = temporaryDirectory.resolve("java-24-bin");
         Files.createDirectories(fakeBin);
         String success = """
@@ -1728,8 +1716,8 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerProposesPackageManagerCommandWithoutSudoWhenRoot() throws Exception {
         // given
-        Assumptions.assumeTrue(Files.exists(Path.of("/bin/bash")));
-        Assumptions.assumeTrue(commandExists("script"));
+        assumeTrue(Files.exists(Path.of("/bin/bash")));
+        assumeTrue(commandExists("script"));
         Path installScript = Path.of("install.sh").toAbsolutePath();
         Path fakeBin = temporaryDirectory.resolve("package-manager-bin");
         Files.createDirectories(fakeBin);
@@ -1762,7 +1750,7 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerExplainsManualRootCommandWhenNonRootWithoutPrivilegeHelper() throws Exception {
         // given
-        Assumptions.assumeTrue(Files.exists(Path.of("/bin/bash")));
+        assumeTrue(Files.exists(Path.of("/bin/bash")));
         Path fakeBin = temporaryDirectory.resolve("package-manager-without-sudo");
         Files.createDirectories(fakeBin);
         writeExecutable(
@@ -1794,7 +1782,7 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerDryRunShowsManualPlanWhenNonRootWithoutPrivilegeHelper() throws Exception {
         // given
-        Assumptions.assumeTrue(Files.exists(Path.of("/bin/bash")));
+        assumeTrue(Files.exists(Path.of("/bin/bash")));
         Path fakeBin = temporaryDirectory.resolve("dry-run-package-manager-without-sudo");
         Files.createDirectories(fakeBin);
         writeExecutable(
@@ -1831,7 +1819,7 @@ final class InstallerScriptTest {
             String name, Map<String, String> commandStubs, Map<String, String> extraEnvironment, String expected)
             throws Exception {
         // given
-        Assumptions.assumeTrue(Files.exists(Path.of("/bin/bash")));
+        assumeTrue(Files.exists(Path.of("/bin/bash")));
         Path fakeBin = temporaryDirectory.resolve(name.replaceAll("[^a-zA-Z0-9]+", "-"));
         Files.createDirectories(fakeBin);
         for (Map.Entry<String, String> stub : commandStubs.entrySet()) {
@@ -1865,7 +1853,7 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerFindsManagedCodexFromInterruptedPreviousRun() throws Exception {
         // given
-        Assumptions.assumeTrue(Files.exists(Path.of("/bin/bash")));
+        assumeTrue(Files.exists(Path.of("/bin/bash")));
         Path fakeBin = temporaryDirectory.resolve("managed-codex-rerun-tools");
         Files.createDirectories(fakeBin);
         writeExecutable(
@@ -1919,8 +1907,8 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerRunsAptUpdateOnlyForFirstAcceptedPackageInstall() throws Exception {
         // given
-        Assumptions.assumeTrue(Files.exists(Path.of("/bin/bash")));
-        Assumptions.assumeTrue(commandExists("script"));
+        assumeTrue(Files.exists(Path.of("/bin/bash")));
+        assumeTrue(commandExists("script"));
         Path installScript = Path.of("install.sh").toAbsolutePath();
         Path fakeBin = temporaryDirectory.resolve("apt-update-once-bin");
         Files.createDirectories(fakeBin);
@@ -1976,8 +1964,8 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerOffersSingleCodexCommandWhenNodeIsMissing() throws Exception {
         // given
-        Assumptions.assumeTrue(Files.exists(Path.of("/bin/bash")));
-        Assumptions.assumeTrue(commandExists("script"));
+        assumeTrue(Files.exists(Path.of("/bin/bash")));
+        assumeTrue(commandExists("script"));
         Path installScript = Path.of("install.sh").toAbsolutePath();
         Path fakeBin = temporaryDirectory.resolve("codex-node-missing-bin");
         Files.createDirectories(fakeBin);
@@ -2048,7 +2036,7 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerDryRunUsesAbsoluteManagedCodexPathsWhenHomeIsRelative() throws Exception {
         // given
-        Assumptions.assumeTrue(Files.exists(Path.of("/bin/bash")));
+        assumeTrue(Files.exists(Path.of("/bin/bash")));
         Path installScript = Path.of("install.sh").toAbsolutePath();
         Path fakeBin = temporaryDirectory.resolve("relative-home-tools");
         Files.createDirectories(fakeBin);
@@ -2079,7 +2067,7 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerRejectsUnsupportedPlatforms() throws Exception {
         // given
-        Assumptions.assumeTrue(Files.exists(Path.of("/bin/bash")));
+        assumeTrue(Files.exists(Path.of("/bin/bash")));
         Map<String, String> environment = Map.of(
                 "SYMPHONY_TRELLO_TEST_OS", "FreeBSD",
                 "SYMPHONY_TRELLO_TEST_ARCH", "riscv64");
@@ -2099,7 +2087,7 @@ final class InstallerScriptTest {
     void powershellInstallerAcceptsPublicDryRunFlagsWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
-        Assumptions.assumeFalse(pwsh.isEmpty());
+        assumeFalse(pwsh.isEmpty());
 
         // when
         ProcessResult result = run(
@@ -2116,7 +2104,7 @@ final class InstallerScriptTest {
     void powershellInstallerNormalizesLeadingVVersionBeforeReleaseAssetUrlsWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
-        Assumptions.assumeFalse(pwsh.isEmpty());
+        assumeFalse(pwsh.isEmpty());
         String version = installerDefaultRef().substring(1);
         Map<String, String> environment = new LinkedHashMap<>(nonWindowsPowerShellEnvironment());
         environment.put("SYMPHONY_TRELLO_VERSION", "v" + version);
@@ -2141,7 +2129,7 @@ final class InstallerScriptTest {
     void powershellInstallerRejectsRemovedUpdatePathOptionWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
-        Assumptions.assumeFalse(pwsh.isEmpty());
+        assumeFalse(pwsh.isEmpty());
 
         // when
         ProcessResult result = run(
@@ -2158,7 +2146,7 @@ final class InstallerScriptTest {
     void powershellInstallerAcceptsPublicFlagsThroughScriptblockWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
-        Assumptions.assumeFalse(pwsh.isEmpty());
+        assumeFalse(pwsh.isEmpty());
 
         // when
         ProcessResult result = run(
@@ -2179,7 +2167,7 @@ final class InstallerScriptTest {
     void powershellInstallerRejectsBlankPathValuesThroughScriptblockWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
-        Assumptions.assumeFalse(pwsh.isEmpty());
+        assumeFalse(pwsh.isEmpty());
 
         // when
         ProcessResult result = run(
@@ -2203,7 +2191,7 @@ final class InstallerScriptTest {
     void powershellInstallerRejectsUnsafeAppPathsWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
-        Assumptions.assumeFalse(pwsh.isEmpty());
+        assumeFalse(pwsh.isEmpty());
         Path home = temporaryDirectory.resolve("ps-install-app-home");
         Path symphonyHome = temporaryDirectory.resolve("ps-install-app-symphony-home");
         Path file = temporaryDirectory.resolve("ps-install-app-file");
@@ -2237,7 +2225,7 @@ final class InstallerScriptTest {
     void powershellInstallerAcceptsDedicatedAppPathDirectlyUnderHomeWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
-        Assumptions.assumeFalse(pwsh.isEmpty());
+        assumeFalse(pwsh.isEmpty());
         Path home = temporaryDirectory.resolve("ps-install-home-child-home");
         Path app = home.resolve("symphony-trello");
         Path safeBin = temporaryDirectory.resolve("ps-install-home-child-bin");
@@ -2270,7 +2258,7 @@ final class InstallerScriptTest {
     void powershellInstallerRejectsUnsafeSymphonyHomeWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
-        Assumptions.assumeFalse(pwsh.isEmpty());
+        assumeFalse(pwsh.isEmpty());
         Path home = temporaryDirectory.resolve("ps-install-home-base-home");
         Path safeBin = temporaryDirectory.resolve("ps-install-home-base-bin");
         Files.createDirectories(home);
@@ -2320,7 +2308,7 @@ final class InstallerScriptTest {
     void powershellInstallerRejectsUnsafeCommandDirectoriesWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
-        Assumptions.assumeFalse(pwsh.isEmpty());
+        assumeFalse(pwsh.isEmpty());
         Path home = temporaryDirectory.resolve("ps-install-bin-home");
         Path symphonyHome = temporaryDirectory.resolve("ps-install-bin-symphony-home");
         Path app = temporaryDirectory.resolve("ps-install-bin-app");
@@ -2376,7 +2364,7 @@ final class InstallerScriptTest {
     void powershellInstallerAllowsDefaultCommandDirectoryWhenRunFromThatDirectoryWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommandForDifferentWorkingDirectory();
-        Assumptions.assumeFalse(pwsh.isEmpty());
+        assumeFalse(pwsh.isEmpty());
         Path installScript = Path.of("install.ps1").toAbsolutePath();
         Path home = temporaryDirectory.resolve("ps-install-run-from-bin-home");
         Path binDirectory = home.resolve(".local/bin");
@@ -2403,7 +2391,7 @@ final class InstallerScriptTest {
             String name, String[] sourceArgs, String expectedMessage) throws Exception {
         // given
         List<String> pwsh = powershellCommand();
-        Assumptions.assumeFalse(pwsh.isEmpty());
+        assumeFalse(pwsh.isEmpty());
         Path prefix = temporaryDirectory
                 .resolve(name.replaceAll("[^A-Za-z0-9]+", "-"))
                 .resolve("app");
@@ -2452,7 +2440,7 @@ final class InstallerScriptTest {
     void powershellInstallerAcceptsScpStyleRepoAndRedactsCredentialUrlBeforeDryRunPlanWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
-        Assumptions.assumeFalse(pwsh.isEmpty());
+        assumeFalse(pwsh.isEmpty());
 
         // when
         ProcessResult scpRepo = run(
@@ -2507,7 +2495,7 @@ final class InstallerScriptTest {
     void powershellInstallerRejectsExistingNonGitRepoPathBeforeDryRunPlanWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
-        Assumptions.assumeFalse(pwsh.isEmpty());
+        assumeFalse(pwsh.isEmpty());
         Path notGitRepository = temporaryDirectory.resolve("ps-not-git-repository");
         Path prefix = temporaryDirectory.resolve("ps-non-git-repo-prefix").resolve("app");
         Files.createDirectories(notGitRepository);
@@ -2540,7 +2528,7 @@ final class InstallerScriptTest {
     void powershellInstallerAcceptsLocalGitRepoPathWithSpacesBeforeDryRunPlanWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
-        Assumptions.assumeFalse(pwsh.isEmpty());
+        assumeFalse(pwsh.isEmpty());
         Path localRepository = temporaryDirectory.resolve("ps local repo with spaces");
         Path prefix = temporaryDirectory.resolve("ps-local-repo-space-prefix").resolve("app");
         Files.createDirectories(localRepository.resolve(".git"));
@@ -2571,7 +2559,7 @@ final class InstallerScriptTest {
     void powershellInstallerRejectsBlankSourceValueThroughScriptblockWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
-        Assumptions.assumeFalse(pwsh.isEmpty());
+        assumeFalse(pwsh.isEmpty());
         Path prefix = temporaryDirectory.resolve("ps-scriptblock-source").resolve("app");
 
         // when
@@ -2596,7 +2584,7 @@ final class InstallerScriptTest {
     void powershellInstallerAcceptsDashPrefixedRelativePathValuesThroughScriptblockWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
-        Assumptions.assumeFalse(pwsh.isEmpty());
+        assumeFalse(pwsh.isEmpty());
         Path binDirectory = temporaryDirectory.resolve("-dash-bin");
         Path prefix = temporaryDirectory.resolve("-dash-prefix-app");
 
@@ -2623,7 +2611,7 @@ final class InstallerScriptTest {
     void powershellInstallerAcceptsPublicValueFlagsWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
-        Assumptions.assumeFalse(pwsh.isEmpty());
+        assumeFalse(pwsh.isEmpty());
         Path home = temporaryDirectory.resolve("ps home $value (quoted)");
         Path bin = temporaryDirectory.resolve("ps bin & tools");
 
@@ -2667,7 +2655,7 @@ final class InstallerScriptTest {
     void powershellInstallerDryRunReportsDefaultUserPathSetupWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
-        Assumptions.assumeFalse(pwsh.isEmpty());
+        assumeFalse(pwsh.isEmpty());
         Path bin = temporaryDirectory.resolve("ps default path bin");
 
         // when
@@ -2693,7 +2681,7 @@ final class InstallerScriptTest {
     void powershellInstallerDryRunSkipsPathSetupWhenBinDirIsAlreadyOnPathWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
-        Assumptions.assumeFalse(pwsh.isEmpty());
+        assumeFalse(pwsh.isEmpty());
         Path bin = temporaryDirectory.resolve("ps path present bin");
         Map<String, String> environment = new LinkedHashMap<>(nonWindowsPowerShellEnvironment());
         environment.put("PATH", bin + File.pathSeparator + System.getenv("PATH"));
@@ -2720,7 +2708,7 @@ final class InstallerScriptTest {
     @Test
     void powershellInstallerRejectsNonWindowsWithoutTestOverrideWhenAvailable() throws Exception {
         // given
-        Assumptions.assumeTrue(dockerDaemonIsUsable());
+        assumeTrue(dockerDaemonIsUsable());
         String[] command = {
             "docker",
             "run",
@@ -2750,7 +2738,7 @@ final class InstallerScriptTest {
     void powershellInstallerAcceptsPublicValueFlagsThroughScriptblockWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
-        Assumptions.assumeFalse(pwsh.isEmpty());
+        assumeFalse(pwsh.isEmpty());
         Path home = temporaryDirectory.resolve("scriptblock home");
         Path bin = temporaryDirectory.resolve("scriptblock bin");
 
@@ -2779,7 +2767,7 @@ final class InstallerScriptTest {
     void powershellUninstallerAcceptsPublicDryRunFlagsWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
-        Assumptions.assumeFalse(pwsh.isEmpty());
+        assumeFalse(pwsh.isEmpty());
         Path home = temporaryDirectory.resolve("uninstall ps home");
         Path bin = temporaryDirectory.resolve("uninstall ps bin");
 
@@ -2812,7 +2800,7 @@ final class InstallerScriptTest {
     void powershellUninstallerAcceptsMultiplePublicFlagsThroughScriptblockWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
-        Assumptions.assumeFalse(pwsh.isEmpty());
+        assumeFalse(pwsh.isEmpty());
 
         // when
         ProcessResult result = run(
@@ -2835,7 +2823,7 @@ final class InstallerScriptTest {
     void powershellUninstallerRejectsBlankPathValuesThroughScriptblockWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
-        Assumptions.assumeFalse(pwsh.isEmpty());
+        assumeFalse(pwsh.isEmpty());
 
         // when
         ProcessResult result = run(
@@ -2859,7 +2847,7 @@ final class InstallerScriptTest {
     void powershellUninstallerRejectsUnsafeAppPathsWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
-        Assumptions.assumeFalse(pwsh.isEmpty());
+        assumeFalse(pwsh.isEmpty());
         Path home = temporaryDirectory.resolve("ps-uninstall-app-home");
         Path symphonyHome = temporaryDirectory.resolve("ps-uninstall-app-symphony-home");
         Path file = temporaryDirectory.resolve("ps-uninstall-app-file");
@@ -2886,7 +2874,7 @@ final class InstallerScriptTest {
     void powershellUninstallerAcceptsDedicatedAppPathDirectlyUnderHomeWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
-        Assumptions.assumeFalse(pwsh.isEmpty());
+        assumeFalse(pwsh.isEmpty());
         Path home = temporaryDirectory.resolve("ps-uninstall-home-child-home");
         Path app = home.resolve("symphony-trello");
         Path safeBin = temporaryDirectory.resolve("ps-uninstall-home-child-bin");
@@ -2919,7 +2907,7 @@ final class InstallerScriptTest {
     void powershellUninstallerRejectsUnsafeCommandDirectoriesWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
-        Assumptions.assumeFalse(pwsh.isEmpty());
+        assumeFalse(pwsh.isEmpty());
         Path home = temporaryDirectory.resolve("ps-uninstall-bin-home");
         Path symphonyHome = temporaryDirectory.resolve("ps-uninstall-bin-symphony-home");
         Path app = temporaryDirectory.resolve("ps-uninstall-bin-app");
@@ -2978,7 +2966,7 @@ final class InstallerScriptTest {
     void powershellUninstallerAllowsLegacySymlinkedCommandDirectoryWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
-        Assumptions.assumeFalse(pwsh.isEmpty());
+        assumeFalse(pwsh.isEmpty());
         Path home = temporaryDirectory.resolve("ps-uninstall-symlink-bin-home");
         Path app = temporaryDirectory.resolve("ps-uninstall-symlink-bin-app");
         Path realBin = temporaryDirectory.resolve("ps-uninstall-symlink-bin-target");
@@ -3014,7 +3002,7 @@ final class InstallerScriptTest {
     void powershellUninstallerAllowsDefaultCommandDirectoryWhenRunFromThatDirectoryWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommandForDifferentWorkingDirectory();
-        Assumptions.assumeFalse(pwsh.isEmpty());
+        assumeFalse(pwsh.isEmpty());
         Path uninstallScript = Path.of("uninstall.ps1").toAbsolutePath();
         Path home = temporaryDirectory.resolve("ps-uninstall-run-from-bin-home");
         Path binDirectory = home.resolve(".local/bin");
@@ -3039,7 +3027,7 @@ final class InstallerScriptTest {
     void powershellUninstallerAcceptsDashPrefixedRelativePathValuesThroughScriptblockWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
-        Assumptions.assumeFalse(pwsh.isEmpty());
+        assumeFalse(pwsh.isEmpty());
         Path binDirectory = temporaryDirectory.resolve("-dash-bin");
         Path prefix = temporaryDirectory.resolve("-dash-prefix-app");
 
@@ -3067,7 +3055,7 @@ final class InstallerScriptTest {
     void powershellUninstallerSkipsInvalidStalePidFilesWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
-        Assumptions.assumeFalse(pwsh.isEmpty());
+        assumeFalse(pwsh.isEmpty());
         Path home = temporaryDirectory.resolve("invalid pid ps home");
         Path prefix = home.resolve("app");
         Path stateHome = home.resolve("state");
@@ -3104,7 +3092,7 @@ final class InstallerScriptTest {
     @Test
     void posixUninstallerRequiresSeparateConfirmationForLocalUserData() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("bash"));
         Path symphonyHome = temporaryDirectory.resolve("protected-user-data-home");
         Files.createDirectories(symphonyHome.resolve("config"));
         Files.writeString(symphonyHome.resolve("config/.env"), "TRELLO_API_KEY=secret\n", StandardCharsets.UTF_8);
@@ -3122,7 +3110,7 @@ final class InstallerScriptTest {
     @Test
     void posixUninstallerRefusesToRemoveAppDirectoryContainingPreservedCurrentData() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("bash"));
         Path symphonyHome = temporaryDirectory.resolve("embedded-current-layout-home");
         Files.createDirectories(symphonyHome.resolve("config"));
         Files.createDirectories(symphonyHome.resolve("workspaces"));
@@ -3156,7 +3144,7 @@ final class InstallerScriptTest {
     @Test
     void posixUninstallerRejectsAppDirectoryThatWouldContainCurrentDataPaths() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("bash"));
         Path symphonyHome = temporaryDirectory.resolve("embedded-empty-home");
         Files.createDirectories(symphonyHome);
         Files.createFile(symphonyHome.resolve(".symphony-trello-install"));
@@ -3185,8 +3173,8 @@ final class InstallerScriptTest {
     @Test
     void posixUninstallerCleansSelectedLocalDataWhenUnmarkedAppRemovalIsDeclined() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
-        Assumptions.assumeTrue(commandExists("script"));
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("script"));
         Path uninstallScript = Path.of("uninstall.sh").toAbsolutePath();
         Path symphonyHome = temporaryDirectory.resolve("unmarked-declined-home");
         Path appHome = symphonyHome.resolve("app");
@@ -3214,7 +3202,7 @@ final class InstallerScriptTest {
     @Test
     void posixUninstallerAllowsRemovingAppDirectoryContainingCurrentDataWithExplicitCleanupScopes() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("bash"));
         Path symphonyHome = temporaryDirectory.resolve("embedded-cleanup-home");
         Files.createDirectories(symphonyHome.resolve("config"));
         Files.createDirectories(symphonyHome.resolve("workspaces"));
@@ -3247,8 +3235,8 @@ final class InstallerScriptTest {
     @Test
     void posixUninstallerPromptsBeforeRemovingAppDirectoryContainingCleanupScopedCurrentData() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
-        Assumptions.assumeTrue(commandExists("script"));
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("script"));
         Path uninstallScript = Path.of("uninstall.sh").toAbsolutePath();
         Path symphonyHome = temporaryDirectory.resolve("embedded-prompted-cleanup-home");
         Files.createDirectories(symphonyHome.resolve("config"));
@@ -3276,7 +3264,7 @@ final class InstallerScriptTest {
     @Test
     void posixUninstallerRefusesCanonicalEquivalentHomeDirectoryCleanup() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("bash"));
         Path symphonyHome = temporaryDirectory.resolve("home-equivalent");
         Files.createDirectories(symphonyHome);
         Map<String, String> environment = Map.of(
@@ -3491,9 +3479,9 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerAddsPathSetupAfterInstallingCodexWithUserLocalNpm() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
-        Assumptions.assumeTrue(commandExists("git"));
-        Assumptions.assumeTrue(commandExists("script"));
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
+        assumeTrue(commandExists("script"));
         Path installScript = Path.of("install.sh").toAbsolutePath();
         Path sourceRepository = createSourceRepository(temporaryDirectory);
         Path fakeBin = createFakeToolchain(temporaryDirectory);
@@ -3584,8 +3572,8 @@ final class InstallerScriptTest {
     @ValueSource(strings = {"tag", "sha"})
     void posixInstallerRerunsPinnedNonBranchRefsWithoutPulling(String refType) throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
-        Assumptions.assumeTrue(commandExists("git"));
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
         Path installScript = Path.of("install.sh").toAbsolutePath();
         Path sourceRepository = createSourceRepository(temporaryDirectory);
         String ref = pinnedRef(sourceRepository, refType);
@@ -3617,9 +3605,9 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerUpdateRunsCleanBuildAndRestartsManagedWorkers() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
-        Assumptions.assumeTrue(commandExists("git"));
-        Assumptions.assumeTrue(commandExists("script"));
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
+        assumeTrue(commandExists("script"));
         Path installScript = Path.of("install.sh").toAbsolutePath();
         Path sourceRepository = createSourceRepository(temporaryDirectory);
         Path fakeBin = createFakeToolchain(temporaryDirectory);
@@ -3675,9 +3663,9 @@ final class InstallerScriptTest {
     @Test
     void posixNoOnboardUpdateRestartsStoppedWorkersWithStartAll() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
-        Assumptions.assumeTrue(commandExists("git"));
-        Assumptions.assumeTrue(commandExists("script"));
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
+        assumeTrue(commandExists("script"));
         Path installScript = Path.of("install.sh").toAbsolutePath();
         Path sourceRepository = createSourceRepository(temporaryDirectory);
         Path fakeBin = createFakeToolchain(temporaryDirectory);
@@ -3726,9 +3714,9 @@ final class InstallerScriptTest {
     @Test
     void posixUpdateRemovesStalePidFilesWhenInstalledCommandIsMissing() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
-        Assumptions.assumeTrue(commandExists("git"));
-        Assumptions.assumeTrue(commandExists("sleep"));
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
+        assumeTrue(commandExists("sleep"));
         Path installScript = Path.of("install.sh").toAbsolutePath();
         Path sourceRepository = createSourceRepository(temporaryDirectory);
         Path fakeBin = createFakeToolchain(temporaryDirectory);
@@ -3786,8 +3774,8 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerGeneratedCommandHandlesPathsWithShellMetacharacters() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
-        Assumptions.assumeTrue(commandExists("git"));
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
         Path installScript = Path.of("install.sh").toAbsolutePath();
         Path sourceRepository = createSourceRepository(temporaryDirectory);
         Path fakeBin = createFakeToolchain(temporaryDirectory);
@@ -3842,8 +3830,8 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerPersistsHomebrewOpenJdkPathInWrapper() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
-        Assumptions.assumeTrue(commandExists("git"));
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
         Path sourceRepository = createSourceRepository(temporaryDirectory);
         Path fakeBin = temporaryDirectory.resolve("fake-brew-bin");
         Path brewOpenJdkBin = temporaryDirectory
@@ -3907,8 +3895,8 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerRefusesUnmarkedUnrelatedExistingCheckout() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
-        Assumptions.assumeTrue(commandExists("git"));
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
         Path sourceRepository = createSourceRepository(temporaryDirectory);
         Path existingCheckout = createUnmarkedCheckout("unrelated-posix-checkout");
         Path fakeBin = createFakeToolchain(temporaryDirectory);
@@ -3939,8 +3927,8 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerUpdatesMarkedCheckoutOriginBeforeFetching() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
-        Assumptions.assumeTrue(commandExists("git"));
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
         Path oldRepository = createSourceRepository(temporaryDirectory.resolve("old-origin"));
         Path sourceRepository = createSourceRepository(temporaryDirectory.resolve("new-origin"));
         Path fakeBin = createFakeToolchain(temporaryDirectory);
@@ -3982,8 +3970,8 @@ final class InstallerScriptTest {
     @Test
     void posixInstallerReplacesMarkedArchiveInstallWhenSwitchingToSourceCheckout() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
-        Assumptions.assumeTrue(commandExists("git"));
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
         Path sourceRepository = createSourceRepository(temporaryDirectory);
         Path fakeBin = createFakeToolchain(temporaryDirectory);
         Path symphonyHome = temporaryDirectory.resolve("archive-to-source-home");
@@ -4024,8 +4012,8 @@ final class InstallerScriptTest {
     void powershellInstallerRefusesUnmarkedUnrelatedExistingCheckoutWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
-        Assumptions.assumeFalse(pwsh.isEmpty());
-        Assumptions.assumeTrue(commandExists("git"));
+        assumeFalse(pwsh.isEmpty());
+        assumeTrue(commandExists("git"));
         Path sourceRepository = createSourceRepository(temporaryDirectory);
         Path existingCheckout = createUnmarkedCheckout("unrelated-powershell-checkout");
         Path fakeBin = createFakeToolchain(temporaryDirectory);
@@ -4068,8 +4056,8 @@ final class InstallerScriptTest {
     void powershellInstallerReplacesMarkedArchiveInstallWhenSwitchingToSourceCheckoutWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
-        Assumptions.assumeFalse(pwsh.isEmpty());
-        Assumptions.assumeTrue(commandExists("git"));
+        assumeFalse(pwsh.isEmpty());
+        assumeTrue(commandExists("git"));
         Path sourceRepository = temporaryDirectory.resolve("ps source executable cmd");
         Files.createDirectories(sourceRepository);
         Files.writeString(sourceRepository.resolve("pom.xml"), "<project />\n", StandardCharsets.UTF_8);
@@ -4136,9 +4124,9 @@ final class InstallerScriptTest {
     @Test
     void posixStartResolvesRelativeEnvAndWorkflowFromCallerDirectory() throws Exception {
         // given
-        Assumptions.assumeTrue(commandExists("bash"));
-        Assumptions.assumeTrue(commandExists("git"));
-        Assumptions.assumeTrue(commandExists("timeout"));
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
+        assumeTrue(commandExists("timeout"));
         Path installScript = Path.of("install.sh").toAbsolutePath();
         Path uninstallScript = Path.of("uninstall.sh").toAbsolutePath();
         Path sourceRepository = createSourceRepository(temporaryDirectory);
