@@ -38,6 +38,7 @@ import java.util.Optional;
 import java.util.SequencedSet;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -1842,7 +1843,7 @@ final class SetupDiagnosticReporter {
         }
         String sanitized = redactSensitivePaths(value);
         for (String sensitiveValue : sensitiveValues) {
-            sanitized = sanitized.replace(sensitiveValue, "<value:" + hash(sensitiveValue) + ">");
+            sanitized = replaceSensitiveValue(sanitized, sensitiveValue);
         }
         sanitized = AUTHORIZATION_HEADER.matcher(sanitized).replaceAll("$1<redacted>");
         sanitized = BEARER_TOKEN.matcher(sanitized).replaceAll("$1<redacted>");
@@ -1867,6 +1868,24 @@ final class SetupDiagnosticReporter {
                 .replaceAll(match -> match.group(1) + pathToken(match.group(2)) + match.group(1));
         sanitized = WINDOWS_PATH.matcher(sanitized).replaceAll(match -> pathToken(match.group()));
         return CliInputValidation.safeDiagnosticsText(redactAbsolutePosixPaths(sanitized));
+    }
+
+    /**
+     * Replaces a sensitive value. An absolute-path value extends over a following path remainder
+     * and always renders as a path token, so one private path renders as one stable token that
+     * matches the path tokens elsewhere in the report instead of a value token or adjacent value
+     * and path tokens.
+     */
+    private String replaceSensitiveValue(String text, String sensitiveValue) {
+        if (!looksLikeAbsolutePath(sensitiveValue)) {
+            return text.replace(sensitiveValue, "<value:" + hash(sensitiveValue) + ">");
+        }
+        Pattern sensitivePath = Pattern.compile(Pattern.quote(sensitiveValue) + "(?:[/\\\\][^\\s\"'`|)\\]]*)?");
+        return sensitivePath.matcher(text).replaceAll(match -> Matcher.quoteReplacement(pathToken(match.group())));
+    }
+
+    private static boolean looksLikeAbsolutePath(String value) {
+        return value.startsWith("/") || value.matches("[A-Za-z]:\\\\.*");
     }
 
     private String redactUrlUserInfo(String value) {
