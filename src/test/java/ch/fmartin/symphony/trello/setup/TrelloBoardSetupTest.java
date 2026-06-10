@@ -148,6 +148,38 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
+    void newBoardClassifiesTrelloBoardLimitAsExpectedGuidance() {
+        // given
+        server.removeContext("/1/boards/");
+        server.createContext("/1/boards/", exchange -> {
+            byte[] body = "{\"message\":\"Cannot create board as organization is at its board limit\"}"
+                    .getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(400, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        Path workflow = tempDir.resolve("board-limit-workflow.md");
+
+        // when
+        Throwable thrown = catchThrowable(() -> setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "Board Limit Board",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                1,
+                false,
+                false)));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_trello_board_limit");
+            assertThat(failure.getMessage()).contains("board limit").doesNotContain("{\"message\"");
+        });
+    }
+
+    @Test
     void importBoardReportsActionableErrorForUnresolvableBoardSelector() {
         // given
         server.createContext("/1/boards/notreal", exchange -> {

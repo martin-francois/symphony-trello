@@ -144,6 +144,7 @@ final class SetupDiagnosticReporter {
             "setup_repair_port_http_override",
             "setup_server_port_conflict",
             "setup_server_port_unavailable",
+            "setup_trello_board_limit",
             "setup_workflow_invalid",
             "setup_worker_board_already_managed",
             "setup_worker_board_ambiguous",
@@ -318,6 +319,9 @@ final class SetupDiagnosticReporter {
                 Optional.of(trelloAuthFailureHint(
                         setupException,
                         setupException.dotenvPath().or(() -> dotenvPath).orElseGet(LocalEnvironment::defaultDotenv)));
+            case "setup_trello_board_limit" ->
+                Optional.of(
+                        "Archive or delete unused Trello boards, choose a different Trello Workspace with --workspace-id, or connect an existing board with import-board.");
             case "setup_workspace_id_required" ->
                 Optional.of(
                         "Re-run with --workspace-id, or use setup-local to choose a Trello Workspace interactively.");
