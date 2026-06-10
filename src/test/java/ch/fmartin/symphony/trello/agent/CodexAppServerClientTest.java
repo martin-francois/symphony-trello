@@ -9,6 +9,7 @@ import ch.fmartin.symphony.trello.tracker.TrelloClient;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
@@ -25,6 +26,54 @@ final class CodexAppServerClientTest {
 
     @TempDir
     Path tempDir;
+
+    @Test
+    void launchesCodexWithGitDiscoveryLimitedToWorkspacesRoot() throws Exception {
+        // given
+        Path appServer = tempDir.resolve("ceiling-app-server.sh");
+        Path ceilingOutput = tempDir.resolve("ceiling.txt");
+        Files.writeString(
+                appServer,
+                """
+                #!/usr/bin/env bash
+                # Absolute output path: the codex launch uses a login shell, and hosted CI login
+                # profiles can change the working directory before the script body runs.
+                printf '%s' "$GIT_CEILING_DIRECTORIES" > '__CEILING_OUTPUT__'
+                while IFS= read -r line; do
+                  case "$line" in
+                    *\\"method\\":\\"initialize\\"*) echo '{"id":1,"result":{"userAgent":"ceiling-test"}}' ;;
+                    *\\"method\\":\\"thread/start\\"*) echo '{"id":2,"result":{"thread":{"id":"thread-ceiling"}}}' ;;
+                    *\\"method\\":\\"turn/start\\"*)
+                      echo '{"id":3,"result":{"turn":{"id":"turn-ceiling"}}}'
+                      echo '{"method":"turn/completed","params":{"threadId":"thread-ceiling","turn":{"id":"turn-ceiling","error":null}}}'
+                      ;;
+                  esac
+                done
+                """
+                        .replace("__CEILING_OUTPUT__", ceilingOutput.toString()));
+        appServer.toFile().setExecutable(true);
+        EffectiveConfig config = config(appServer);
+        Path workspace = config.workspace().root().resolve("TRELLO-ceiling");
+        Files.createDirectories(workspace);
+        CodexAppServerClient client =
+                new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
+
+        // when
+        AgentRunResult result = client.runTurn(
+                config,
+                TestCards.card("card-1", "TRELLO-ceiling", "Ready for Codex"),
+                workspace,
+                "Do a no-op turn.",
+                "worker-ceiling",
+                event -> {});
+
+        // then
+        assertThat(result).isEqualTo(AgentRunResult.ok());
+        assertThat(ceilingOutput)
+                .content(StandardCharsets.UTF_8)
+                .isEqualTo(
+                        config.workspace().root().toAbsolutePath().normalize().toString());
+    }
 
     @Test
     void handlesTurnCompletedArrivingBeforeAwaiterIsRegistered() throws Exception {
