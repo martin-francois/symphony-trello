@@ -157,6 +157,53 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
+    void symlinkedWorkflowSelectorReportsOneSelectedWorkflowIdentity() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("symlink-selector-config");
+        Path stateHome = tempDir.resolve("state");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Path workflow = configDir.resolve("WORKFLOW.symlink-target.md");
+        Files.writeString(workflow, workflowWithPort(20992), StandardCharsets.UTF_8);
+        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
+                        "000000000000000000000001",
+                        "SYNTH001",
+                        "Symlink Board",
+                        "https://trello.com/b/SYNTH001/symlink-board",
+                        workflow,
+                        configDir.resolve(".env"),
+                        tempDir.resolve("workspaces"),
+                        20992,
+                        false,
+                        List.of(),
+                        false))));
+        Path link = tempDir.resolve("symlink-selector-link.md");
+        Files.createSymbolicLink(link, workflow);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.empty(),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.of(link)));
+
+        // then
+        assertThat(report)
+                .contains(
+                        "- **selected_manifest_board_count:** 1",
+                        "- **selected_workflow_in_manifest:** true",
+                        "- **selected_workflow_file_count:** 1");
+    }
+
+    @Test
     void diagnosticsReportsDirectoryManifestPathAsNotAFile() throws Exception {
         // given
         Path configDir = tempDir.resolve("manifest-dir-config");
