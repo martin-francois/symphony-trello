@@ -2485,6 +2485,9 @@ final class TrelloBoardSetupMainTest {
         // then
         assertThat(exitCode).isZero();
         verify(workerManager).stop(any(LocalWorkerPaths.class), eq(oldBoard), any(PrintStream.class));
+        verify(workerManager)
+                .rotateLogsForReplacedBoards(
+                        any(LocalWorkerPaths.class), any(ConnectedBoard.class), eq(List.of(oldBoard)));
         verify(workerManager, never())
                 .start(any(LocalWorkerPaths.class), any(ConnectedBoard.class), any(Path.class), any(PrintStream.class));
         ConnectedBoardManifest manifest = new ConnectedBoardRepository(tempDir.resolve("connected-boards.json")).load();

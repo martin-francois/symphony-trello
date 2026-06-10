@@ -162,6 +162,8 @@ final class TrelloBoardSetupService {
             restartReplacedWorker = replacedBoards.stream()
                     .anyMatch(replacedBoard -> canStopRunningWorker(manifestPath, replacedBoard));
             stopReplacedBoards(manifestPath, board.workspaceRoot(), replacedBoards);
+            workerManager.rotateLogsForReplacedBoards(
+                    localWorkerPaths(manifestPath, board.workspaceRoot()), board, replacedBoards);
             boards.save(manifest.withBoard(board));
         } catch (IOException exception) {
             throw new TrelloBoardSetupException(

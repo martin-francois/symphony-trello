@@ -710,6 +710,43 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
+    void rotateLogsForReplacedBoardsMovesLogsWhenWorkflowPathIsReusedForDifferentBoard() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard oldBoard = fixture.connectedBoard("board-old", "Queue", "queue");
+        ConnectedBoard newBoard = fixture.connectedBoard("board-new", "Queue Reborn", "queue");
+        ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
+        ManagedProcessStore.ManagedProcessFiles files = store.files(oldBoard.workflowPath());
+        Files.createDirectories(fixture.paths.stateHome());
+        Files.writeString(files.stdoutLog(), "old board startup failure", StandardCharsets.UTF_8);
+
+        // when
+        fixture.manager.rotateLogsForReplacedBoards(fixture.paths, newBoard, List.of(oldBoard));
+
+        // then
+        assertThat(files.stdoutLog()).doesNotExist();
+        Path rotated = files.stdoutLog().resolveSibling(files.stdoutLog().getFileName() + ".previous");
+        assertThat(rotated).content(StandardCharsets.UTF_8).isEqualTo("old board startup failure");
+    }
+
+    @Test
+    void rotateLogsForReplacedBoardsKeepsLogsForSameBoardIdentity() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
+        ManagedProcessStore.ManagedProcessFiles files = store.files(board.workflowPath());
+        Files.createDirectories(fixture.paths.stateHome());
+        Files.writeString(files.stdoutLog(), "same board history", StandardCharsets.UTF_8);
+
+        // when
+        fixture.manager.rotateLogsForReplacedBoards(fixture.paths, board, List.of(board));
+
+        // then
+        assertThat(files.stdoutLog()).content(StandardCharsets.UTF_8).isEqualTo("same board history");
+    }
+
+    @Test
     void startRejectsOccupiedNonSymphonyStatusPortBeforeLaunch() throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
