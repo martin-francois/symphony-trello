@@ -148,6 +148,77 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
+    void newBoardClassifiesUnauthorizedWorkspaceIdAsWorkspaceInputError() {
+        // given
+        server.removeContext("/1/boards/");
+        server.createContext("/1/boards/", exchange -> {
+            exchange.sendResponseHeaders(401, 0);
+            exchange.getResponseBody().write("unauthorized org access".getBytes(StandardCharsets.UTF_8));
+            exchange.close();
+        });
+        server.createContext(
+                "/1/members/me",
+                exchange -> respond(
+                        exchange,
+                        """
+                {"id":"member-1","username":"alex","fullName":"Alex Example"}
+                """));
+        Path workflow = tempDir.resolve("invalid-workspace-workflow.md");
+
+        // when
+        Throwable thrown = catchThrowable(() -> setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "Invalid Workspace Board",
+                "not-a-workspace-id",
+                workflow,
+                Path.of("./workspaces"),
+                1,
+                false,
+                false)));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_invalid_workspace_id");
+            assertThat(failure.getMessage())
+                    .contains("not-a-workspace-id", "list-workspaces")
+                    .doesNotContain("API key");
+        });
+    }
+
+    @Test
+    void newBoardKeepsAuthFailureWhenCredentialsCannotReadMemberProfile() {
+        // given
+        server.removeContext("/1/boards/");
+        server.createContext("/1/boards/", exchange -> {
+            exchange.sendResponseHeaders(401, 0);
+            exchange.getResponseBody().write("invalid token".getBytes(StandardCharsets.UTF_8));
+            exchange.close();
+        });
+        server.createContext("/1/members/me", exchange -> {
+            exchange.sendResponseHeaders(401, 0);
+            exchange.close();
+        });
+        Path workflow = tempDir.resolve("invalid-token-workflow.md");
+
+        // when
+        Throwable thrown = catchThrowable(() -> setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "bad-token"),
+                "Bad Token Board",
+                "workspace-1",
+                workflow,
+                Path.of("./workspaces"),
+                1,
+                false,
+                false)));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> assertThat(failure.code())
+                .isEqualTo("trello_auth_failed"));
+    }
+
+    @Test
     void newBoardRejectsUnsafeHighMaxAgentsBeforeCreatingTrelloBoard() {
         // given
         Path workflow = tempDir.resolve("high-max-agents-workflow.md");
