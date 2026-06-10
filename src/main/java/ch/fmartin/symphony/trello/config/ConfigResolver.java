@@ -86,7 +86,7 @@ public class ConfigResolver {
                                 List.of("Done", "Archived", "ArchivedList", "ArchivedBoard", "Deleted")),
                         list(tracker, "terminal_list_ids", List.of()),
                         priorityLabels(object(tracker, "priority_labels")),
-                        string(tracker, "card_identifier_prefix", "TRELLO"),
+                        string(tracker, "card_identifier_prefix", ConfigDefaults.DEFAULT_CARD_IDENTIFIER_PREFIX),
                         millis(tracker, "request_timeout_ms", ConfigDefaults.DEFAULT_TRACKER_REQUEST_TIMEOUT_MS),
                         integer(tracker, "max_api_retries", ConfigDefaults.DEFAULT_TRACKER_MAX_API_RETRIES),
                         millis(
