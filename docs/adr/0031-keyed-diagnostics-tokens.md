@@ -97,6 +97,10 @@ and neither output prints the diagnostics key.
 
 ### Local Random Key With `HmacSHA3-256`
 
+Generate a random key once per install, store it in the local config directory, and tokenize
+private values with `HmacSHA3-256(key, value)`, so tokens stay stable per install but cannot be
+verified or brute-forced from value guesses without the local key.
+
 * Good, because it prevents simple dictionary guessing without adding dependencies.
 * Good, because SHA-3 uses a sponge construction instead of SHA-2's Merkle-Damgard construction and
   is not affected by length-extension properties. HMAC already protects `HmacSHA256` from that
@@ -106,6 +110,9 @@ and neither output prints the diagnostics key.
 
 ### Local Random Key With `HmacSHA256`
 
+Use the same locally stored random key, but compute tokens with the SHA-2-based `HmacSHA256`
+algorithm instead of the SHA-3 family.
+
 * Good, because it also prevents simple dictionary guessing.
 * Good, because it is widely available.
 * Bad, because `HmacSHA3-256` is available in Java 25 and gives the project a newer standardized
@@ -113,17 +120,24 @@ and neither output prints the diagnostics key.
 
 ### Unkeyed `SHA3-256`
 
+Tokenize private values with plain truncated `SHA3-256(value)` and no key.
+
 * Good, because it is a modern hash and available in Java 25.
 * Bad, because low-entropy values can still be guessed from candidate lists.
 * Bad, because the same private value has the same token across installations.
 
 ### Keep Unkeyed `SHA-256`
 
+Keep the original truncated `SHA-256(value)` tokens unchanged.
+
 * Good, because it is simple and widely available.
 * Bad, because it has the same privacy limits as unkeyed `SHA3-256`.
 * Bad, because users may question why a privacy feature uses a plain unsalted hash.
 
 ### Random Per-Report Key Or Salt
+
+Generate a fresh random key or salt for every report run, making tokens consistent within one
+report but different across reports.
 
 * Good, because tokens from different reports cannot be linked.
 * Bad, because a later `--show-private-context` command cannot map old tokens unless the report key

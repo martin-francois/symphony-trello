@@ -112,6 +112,10 @@ Run `./mvnw -q spotless:check verify` before merging.
 
 ### Classify Setup Failure Codes As Expected Or Unexpected Before Writing Diagnostics
 
+Maintain an explicit list of expected, user-correctable setup failure codes. Commands print a short
+next step for expected codes and write a sanitized troubleshooting report (optionally offering a
+GitHub issue) only for codes that are not on the list.
+
 * Good, because the command can distinguish user mistakes from report-worthy failures.
 * Good, because expected failures can provide short next steps without generating report files.
 * Good, because unexpected failures still produce sanitized debug context.
@@ -119,11 +123,17 @@ Run `./mvnw -q spotless:check verify` before merging.
 
 ### Write Diagnostics For Every Setup Failure
 
+Generate a sanitized troubleshooting report for every setup failure, regardless of whether the user
+can fix the problem from the error message alone.
+
 * Good, because every failure has debug context.
 * Bad, because users see long reports for simple mistakes such as missing credentials.
 * Bad, because users may open GitHub issues for expected local configuration problems.
 
 ### Never Write Diagnostics Automatically
+
+Print only the error message for every failure and rely on users to collect diagnostics manually
+with a separate command when a maintainer asks for them.
 
 * Good, because setup output stays short.
 * Bad, because unexpected failures lose the context needed to debug path, OS, tool, workflow, and

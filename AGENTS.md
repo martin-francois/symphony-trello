@@ -623,6 +623,10 @@ matters, and easy for another engineer to understand without asking the original
   supersedes an earlier accepted decision, update the earlier ADR status to
   `superseded by [ADR 0000](0000-short-name.md)` and add a short note near the top explaining what
   superseded it. Do not leave an ADR as simply `accepted` when the decision is no longer current.
+- In the `Pros and Cons of the Options` section, start every option subsection with one or two
+  sentences that describe what the option concretely is or does before any Good/Bad bullets. A
+  reader must be able to understand the chosen approach from its option subsection alone; bullets
+  judge an approach, they do not define it.
 - Write ADRs in simple, factual language. Avoid flowery wording, vague emphasis, and unnecessarily
   long sentences. Use words and sentence structures that are clear for non-native English speakers,
   while still following the MADR template exactly. Prefer clear, unambiguous user-manual style over
