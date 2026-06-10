@@ -131,7 +131,15 @@ final class SetupLocalCommandFactory {
         if ("diagnostics".equals(commandLine.getCommandName()) && isDiagnosticsSelectorGroupError(exception)) {
             return "Only one diagnostics selector may be provided.";
         }
-        return exception.getMessage();
+        return stripInternalArgumentIndex(exception.getMessage());
+    }
+
+    /**
+     * The installed wrapper injects default options, so picocli's argument indexes do not match
+     * the command line the user typed. The index adds nothing once the offending value is shown.
+     */
+    private static String stripInternalArgumentIndex(String message) {
+        return message == null ? null : message.replaceFirst("^(Unmatched arguments?) (at|from) index \\d+", "$1");
     }
 
     private static boolean isDiagnosticsSelectorGroupError(ParameterException exception) {

@@ -2646,6 +2646,18 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
+    void unmatchedArgumentErrorsOmitInternalArgumentIndexes() {
+        // given
+        String extra = "extra";
+
+        // when
+        CliRunResult result = runCli("diagnostics", extra);
+
+        // then
+        result.assertFailure(2).stderrContains("Unmatched argument: 'extra'").stderrDoesNotContain("at index");
+    }
+
+    @Test
     void startHelpDocumentsTheAllOption() {
         // given
         String command = "start";
@@ -5634,7 +5646,7 @@ final class TrelloBoardSetupMainTest {
                             "setup_failed code=setup_invalid_arguments", "Unknown option: '--unknown'"
                         }),
                 Arguments.of("unknown command", new String[] {"create-board"}, 2, new String[] {
-                    "setup_failed code=setup_invalid_arguments", "Unmatched argument at index 0: 'create-board'"
+                    "setup_failed code=setup_invalid_arguments", "Unmatched argument: 'create-board'"
                 }),
                 Arguments.of("repair-port missing board", new String[] {"setup-local", "repair-port"}, 2, new String[] {
                     "setup_failed code=setup_invalid_arguments", "Missing required option: '--board=<board>'"
