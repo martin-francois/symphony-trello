@@ -477,7 +477,7 @@ final class InstallerScriptFixture {
                   fi
                   echo "setup-cli cwd=$PWD ${java_args[*]} ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain ${effective_cli_args[*]} dotenv=${SYMPHONY_TRELLO_DOTENV:-} workspace_env=${SYMPHONY_TRELLO_WORKSPACE_ROOT:-} state_env=${SYMPHONY_TRELLO_STATE_HOME:-}" >> "${SYMPHONY_FAKE_LOG:?}"
                   if [[ "$*" == *"definitely-not-a-command"* ]]; then
-                    echo "setup_failed code=setup_invalid_arguments message=Unmatched argument at index 0: 'definitely-not-a-command'" >&2
+                    echo "setup_failed code=setup_invalid_arguments message=Unmatched argument: 'definitely-not-a-command'" >&2
                     exit 2
                   fi
                   if [[ "$*" == *"--help"* || "$*" == *" -h"* ]]; then
@@ -661,7 +661,7 @@ final class InstallerScriptFixture {
                   } | ConvertTo-Json -Compress -Depth 4 |
                     Add-Content -Path $env:SYMPHONY_FAKE_LOG
                   if (($args -join " ") -like "*definitely-not-a-command*") {
-                    [Console]::Error.WriteLine("setup_failed code=setup_invalid_arguments message=Unmatched argument at index 0: 'definitely-not-a-command'")
+                    [Console]::Error.WriteLine("setup_failed code=setup_invalid_arguments message=Unmatched argument: 'definitely-not-a-command'")
                     exit 2
                   }
                   if (($args -join " ") -like "*--help*" -or ($args -join " ") -like "* -h*") {
