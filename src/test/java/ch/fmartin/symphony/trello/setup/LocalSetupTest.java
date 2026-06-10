@@ -3289,14 +3289,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // then
         firstResult.assertSuccess();
-        result.assertSuccess().stdoutContains("Updated \"Running Name Queue\"", "Restart: symphony-trello start --env");
+        result.assertSuccess()
+                .stdoutContains("No port repair needed.", "\"Running Name Queue\"")
+                .stdoutDoesNotContain("WOULD   restart", "Starting Symphony");
         assertThat(commands.commandEvents).isEmpty();
         assertThat(commands.stoppedWorkflows).isEmpty();
         assertThat(commands.startedEnvFiles).isEmpty();
     }
 
     @Test
-    void repairPortDryRunReportsPlannedPortWithoutChangingFilesOrWorker() throws Exception {
+    void repairPortReportsNoRepairNeededWhenConfiguredPortIsAvailable() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.repair-dry-run.md");
         Path env = tempDir.resolve(".env.repair-dry-run");
@@ -3327,11 +3329,15 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         commands.commandEvents.clear();
 
         // when
-        SetupRunResult result = runSetup("repair-port", "--dry-run", "--board", "Dry Run Repair Queue");
+        SetupRunResult dryRunResult = runSetup("repair-port", "--dry-run", "--board", "Dry Run Repair Queue");
+        SetupRunResult repairResult = runSetup("repair-port", "--board", "Dry Run Repair Queue");
 
         // then
-        result.assertSuccess()
-                .stdoutContains("Dry run", "WOULD   update \"Dry Run Repair Queue\"", "WOULD   restart Symphony");
+        dryRunResult
+                .assertSuccess()
+                .stdoutContains("No port repair needed.", "already configured for an available port")
+                .stdoutDoesNotContain("WOULD   update");
+        repairResult.assertSuccess().stdoutContains("No port repair needed.").stdoutDoesNotContain("Updated ");
         assertThat(Files.readString(workflow, StandardCharsets.UTF_8)).isEqualTo(originalWorkflow);
         assertThat(Files.readString(manifest, StandardCharsets.UTF_8)).isEqualTo(originalManifest);
         assertThat(commands.commandEvents).isEmpty();
@@ -3574,7 +3580,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // then
         firstResult.assertSuccess();
-        result.assertSuccess().stdoutContains("Updated \"Repair Selector Queue\"");
+        result.assertSuccess().stdoutContains("No port repair needed.", "\"Repair Selector Queue\"");
     }
 
     @Test
