@@ -29,6 +29,7 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 final class SetupDiagnosticReporterTest {
@@ -156,6 +157,37 @@ final class SetupDiagnosticReporterTest {
                 .doesNotContain("shell-key", "shell-token", tempDir.toString()));
     }
 
+    @CsvSource({"-1", "99999"})
+    @ParameterizedTest
+    void selectedWorkflowDiagnosticsSkipsOutOfRangeFrontMatterPorts(int port) throws Exception {
+        // given
+        Path configDir = tempDir.resolve("front-matter-port-config-" + (port < 0 ? "negative" : port));
+        Path stateHome = tempDir.resolve("state");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Path workflow = configDir.resolve("WORKFLOW.front-matter-port.md");
+        Files.writeString(workflow, workflowWithPort(port), StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.empty(),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.of(workflow)));
+
+        // then
+        assertThat(report)
+                .contains("Configured port " + port + " is outside the valid TCP port range; health probes skipped.")
+                .doesNotContain("IllegalArgumentException", "port out of range", "http://127.0.0.1:" + port + "/");
+    }
+
     @Test
     void symlinkedWorkflowSelectorReportsOneSelectedWorkflowIdentity() throws Exception {
         // given
@@ -201,6 +233,350 @@ final class SetupDiagnosticReporterTest {
                         "- **selected_manifest_board_count:** 1",
                         "- **selected_workflow_in_manifest:** true",
                         "- **selected_workflow_file_count:** 1");
+    }
+
+    @Test
+    void diagnosticsSkipsHealthProbesForOutOfRangePorts() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("bad-port-config");
+        Path stateHome = tempDir.resolve("state");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Path workflow = configDir.resolve("WORKFLOW.badport.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: "synthetic-board"
+                ---
+                Body
+                """,
+                StandardCharsets.UTF_8);
+        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
+                        "000000000000000000000001",
+                        "SYNTH001",
+                        "Bad Port Board",
+                        "https://trello.com/b/SYNTH001/bad-port-board",
+                        workflow,
+                        configDir.resolve(".env"),
+                        tempDir.resolve("workspaces"),
+                        99999,
+                        false,
+                        List.of(),
+                        false))));
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.empty(),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.empty()));
+
+        // then
+        assertThat(report)
+                .contains("Configured port 99999 is outside the valid TCP port range; health probes skipped.")
+                .doesNotContain("IllegalArgumentException", "port out of range", "http://127.0.0.1:99999");
+    }
+
+    @CsvSource({"-1", "99999"})
+    @ParameterizedTest
+    void diagnosticsSkipDeclaredOutOfRangeWorkflowPortWithoutManifestFallback(int port) throws Exception {
+        // given
+        Path configDir = tempDir.resolve("declared-bad-port-config-" + (port < 0 ? "negative" : port));
+        Path stateHome = tempDir.resolve("state");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Path workflow = configDir.resolve("WORKFLOW.declared-bad-port.md");
+        Files.writeString(workflow, workflowWithPort(port), StandardCharsets.UTF_8);
+        saveSyntheticBoard(configDir, workflow, 20990);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.empty(),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.empty()));
+
+        // then
+        assertThat(report)
+                .contains("Configured port " + port + " is outside the valid TCP port range; health probes skipped.")
+                .doesNotContain("http://127.0.0.1:20990/", "IllegalArgumentException");
+    }
+
+    @Test
+    void diagnosticsDoNotProbeManifestPortWhenWorkflowDeclaresNonNumericPort() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("non-numeric-port-config");
+        Path stateHome = tempDir.resolve("state");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Path workflow = configDir.resolve("WORKFLOW.non-numeric-port.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: "synthetic-board"
+                server:
+                  port: "not-a-port"
+                ---
+                Body
+                """,
+                StandardCharsets.UTF_8);
+        saveSyntheticBoard(configDir, workflow, 20990);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.empty(),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.empty()));
+
+        // then
+        assertThat(report).contains("invalid").doesNotContain("http://127.0.0.1:20990/", "IllegalArgumentException");
+    }
+
+    @Test
+    void diagnosticsProbeManifestPortWhenWorkflowOmitsServerPort() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("omitted-port-config");
+        Path stateHome = tempDir.resolve("state");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Path workflow = configDir.resolve("WORKFLOW.omitted-port.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: "synthetic-board"
+                ---
+                Body
+                """,
+                StandardCharsets.UTF_8);
+        saveSyntheticBoard(configDir, workflow, 20726);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.empty(),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.empty()));
+
+        // then
+        assertThat(report).contains("http://127.0.0.1:20726/api/v1/local-status");
+    }
+
+    @Test
+    void diagnosticsProbeEnvironmentResolvedWorkflowPortInsteadOfManifestFallback() throws Exception {
+        // given
+        EnvironmentBackedPortScenario scenario =
+                environmentBackedPortScenario("env-resolved-port", 20990, "LEGACY_STATUS_PORT=20991");
+
+        // when
+        String report = scenario.reporter()
+                .renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                        Optional.empty(),
+                        Optional.empty(),
+                        false,
+                        false,
+                        Optional.empty(),
+                        Optional.of(scenario.configDir()),
+                        Optional.empty(),
+                        Optional.of(scenario.stateHome()),
+                        Optional.empty(),
+                        Optional.empty()));
+
+        // then
+        assertThat(report)
+                .contains("http://127.0.0.1:20991/api/v1/local-status")
+                .doesNotContain("http://127.0.0.1:20990/");
+    }
+
+    @Test
+    void diagnosticsSkipEnvironmentResolvedOutOfRangeWorkflowPortWithoutManifestFallback() throws Exception {
+        // given
+        EnvironmentBackedPortScenario scenario =
+                environmentBackedPortScenario("env-out-of-range-port", 20990, "LEGACY_STATUS_PORT=99999");
+
+        // when
+        String report = scenario.reporter()
+                .renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                        Optional.empty(),
+                        Optional.empty(),
+                        false,
+                        false,
+                        Optional.empty(),
+                        Optional.of(scenario.configDir()),
+                        Optional.empty(),
+                        Optional.of(scenario.stateHome()),
+                        Optional.empty(),
+                        Optional.empty()));
+
+        // then
+        assertThat(report)
+                .contains("Configured port 99999 is outside the valid TCP port range; health probes skipped.")
+                .doesNotContain("http://127.0.0.1:20990/");
+    }
+
+    @Test
+    void diagnosticsDoNotProbeManifestPortWhenEnvironmentResolvesNonNumericWorkflowPort() throws Exception {
+        // given
+        EnvironmentBackedPortScenario scenario =
+                environmentBackedPortScenario("env-non-numeric-port", 20990, "LEGACY_STATUS_PORT=not-a-port");
+
+        // when
+        String report = scenario.reporter()
+                .renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                        Optional.empty(),
+                        Optional.empty(),
+                        false,
+                        false,
+                        Optional.empty(),
+                        Optional.of(scenario.configDir()),
+                        Optional.empty(),
+                        Optional.of(scenario.stateHome()),
+                        Optional.empty(),
+                        Optional.empty()));
+
+        // then
+        assertThat(report)
+                .contains("invalid")
+                .doesNotContain("http://127.0.0.1:20990/", "not-a-port", "IllegalArgumentException");
+    }
+
+    /**
+     * Compatibility contract: a server.port environment reference the board environment does not
+     * define keeps the manifest fallback, because diagnostics cannot know the effective port.
+     */
+    @Test
+    void diagnosticsProbeManifestPortWhenWorkflowPortReferenceIsUnresolved() throws Exception {
+        // given
+        EnvironmentBackedPortScenario scenario = environmentBackedPortScenario("env-unresolved-port", 20727, "");
+
+        // when
+        String report = scenario.reporter()
+                .renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                        Optional.empty(),
+                        Optional.empty(),
+                        false,
+                        false,
+                        Optional.empty(),
+                        Optional.of(scenario.configDir()),
+                        Optional.empty(),
+                        Optional.of(scenario.stateHome()),
+                        Optional.empty(),
+                        Optional.empty()));
+
+        // then
+        assertThat(report)
+                .contains("http://127.0.0.1:20727/api/v1/local-status")
+                .doesNotContain("$LEGACY_STATUS_PORT");
+    }
+
+    @Test
+    void selectedUnconnectedWorkflowDiagnosticsProbeEnvironmentResolvedPort() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("selected-env-port-config");
+        Path stateHome = tempDir.resolve("state");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Path workflow = configDir.resolve("WORKFLOW.selected-env-port.md");
+        Files.writeString(workflow, workflowWithEnvironmentBackedPort(), StandardCharsets.UTF_8);
+        Files.writeString(
+                configDir.resolve(".env"),
+                """
+                LEGACY_BOARD_ID=000000000000000000000001
+                LEGACY_STATUS_PORT=20728
+                """,
+                StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.empty(),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.of(workflow)));
+
+        // then
+        assertThat(report)
+                .contains("http://127.0.0.1:20728/api/v1/local-status")
+                .doesNotContain("$LEGACY_STATUS_PORT");
+    }
+
+    private record EnvironmentBackedPortScenario(SetupDiagnosticReporter reporter, Path configDir, Path stateHome) {}
+
+    private EnvironmentBackedPortScenario environmentBackedPortScenario(
+            String prefix, int manifestPort, String legacyStatusPortLine) throws IOException {
+        Path configDir = tempDir.resolve(prefix + "-config");
+        Path stateHome = tempDir.resolve(prefix + "-state");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Path workflow = configDir.resolve("WORKFLOW.env-port.md");
+        Files.writeString(workflow, workflowWithEnvironmentBackedPort(), StandardCharsets.UTF_8);
+        Files.writeString(
+                configDir.resolve(".env"),
+                "LEGACY_BOARD_ID=000000000000000000000001\n" + legacyStatusPortLine + "\n",
+                StandardCharsets.UTF_8);
+        saveSyntheticBoard(configDir, workflow, manifestPort);
+        return new EnvironmentBackedPortScenario(
+                new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner()), configDir, stateHome);
+    }
+
+    private static void saveSyntheticBoard(Path configDir, Path workflow, int serverPort) throws IOException {
+        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
+                        "000000000000000000000001",
+                        "SYNTH001",
+                        "Synthetic Port Board",
+                        "https://trello.com/b/SYNTH001/synthetic-port-board",
+                        workflow,
+                        configDir.resolve(".env"),
+                        configDir.resolveSibling("workspaces"),
+                        serverPort,
+                        false,
+                        List.of(),
+                        false))));
     }
 
     @Test
@@ -2147,7 +2523,9 @@ final class SetupDiagnosticReporterTest {
                 """,
                 StandardCharsets.UTF_8);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
-        List<Path> unusableSelectors = List.of(directory, missing, empty, noFrontMatter, invalidPort);
+        // Invalid server.port values stay selectable: diagnostics is the inspection tool for
+        // such workflows and reports the port problem inside the rendered report instead.
+        List<Path> unusableSelectors = List.of(directory, missing, empty, noFrontMatter);
 
         // when
         List<Throwable> thrown = unusableSelectors.stream()
@@ -2183,10 +2561,20 @@ final class SetupDiagnosticReporterTest {
                                     missing.toString(),
                                     empty.toString(),
                                     noFrontMatter.toString(),
-                                    invalidPort.toString(),
-                                    "private-board-id",
-                                    "not-a-port"));
+                                    "private-board-id"));
         }
+        String invalidPortReport = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.of(workspaceRoot),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.of(invalidPort)));
+        assertThat(invalidPortReport).contains("invalid server.port");
     }
 
     @Test
@@ -2747,7 +3135,14 @@ final class SetupDiagnosticReporterTest {
                         "<path:",
                         "invalid server.port",
                         " | 20999 | ")
-                .doesNotContain(tempDir.toString(), invalidPortValue.replace("\"", ""), "custom-board-id");
+                .doesNotContain(tempDir.toString(), "custom-board-id");
+        if (invalidPortValue.equals("-1") || invalidPortValue.equals("70000")) {
+            assertThat(report)
+                    .contains("Configured port " + invalidPortValue
+                            + " is outside the valid TCP port range; health probes skipped.");
+        } else {
+            assertThat(report).doesNotContain(invalidPortValue.replace("\"", ""));
+        }
     }
 
     @Test

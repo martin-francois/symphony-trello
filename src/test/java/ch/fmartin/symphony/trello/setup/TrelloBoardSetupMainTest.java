@@ -633,12 +633,13 @@ final class TrelloBoardSetupMainTest {
                 """,
                 StandardCharsets.UTF_8);
         record UnusableWorkflowSelector(String name, Path workflow) {}
+        // Invalid server.port values stay selectable: diagnostics is the inspection tool for such
+        // workflows and reports the port problem inside the rendered report instead.
         List<UnusableWorkflowSelector> selectors = List.of(
                 new UnusableWorkflowSelector("directory", directory),
                 new UnusableWorkflowSelector("missing", missing),
                 new UnusableWorkflowSelector("empty", empty),
-                new UnusableWorkflowSelector("no-frontmatter", noFrontMatter),
-                new UnusableWorkflowSelector("invalid-port", invalidPort));
+                new UnusableWorkflowSelector("no-frontmatter", noFrontMatter));
 
         // when
         List<CliRunResult> results = selectors.stream()
@@ -678,6 +679,22 @@ final class TrelloBoardSetupMainTest {
         for (UnusableWorkflowSelector selector : selectors) {
             assertThat(tempDir.resolve(selector.name() + "-diagnostics.md")).doesNotExist();
         }
+        CliRunResult invalidPortResult = runCli(
+                "diagnostics",
+                "--config-dir",
+                configDir.toString(),
+                "--workspace-root",
+                workspaceRoot.toString(),
+                "--state-home",
+                stateHome.toString(),
+                "--workflow",
+                invalidPort.toString(),
+                "--output",
+                tempDir.resolve("invalid-port-diagnostics.md").toString());
+        invalidPortResult.assertSuccess();
+        assertThat(Files.readString(tempDir.resolve("invalid-port-diagnostics.md"), StandardCharsets.UTF_8))
+                .contains("invalid server.port")
+                .doesNotContain("IllegalArgumentException", "private-board-id");
     }
 
     @Test

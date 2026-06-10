@@ -119,6 +119,52 @@ final class WorkflowConfigEditor {
         }
     }
 
+    WorkflowServerPortClassification classifyServerPortForDiagnostics(Path workflowPath) {
+        return classifyServerPortForDiagnostics(workflowPath, ignored -> Optional.empty());
+    }
+
+    /**
+     * Classifies the effective workflow server.port for diagnostics health probing, resolving
+     * environment references through the given resolver. A reference the resolver cannot satisfy
+     * classifies as omitted: diagnostics without the board environment cannot know the real port,
+     * so the manifest fallback covers it like a missing setting.
+     */
+    WorkflowServerPortClassification classifyServerPortForDiagnostics(
+            Path workflowPath, Function<String, Optional<String>> environmentResolver) {
+        SequencedMap<String, Object> yaml;
+        try {
+            yaml = parseYaml(read(workflowPath));
+        } catch (IOException | TrelloBoardSetupException ignored) {
+            // An unreadable file or invalid front matter is already reported by the workflow
+            // summary; probing falls back to the manifest port like a missing setting.
+            return WorkflowServerPortClassification.unreadable();
+        }
+        Object serverValue = yaml.get("server");
+        if (!(serverValue instanceof Map<?, ?> server) || !server.containsKey("port")) {
+            return WorkflowServerPortClassification.omitted();
+        }
+        Object port = server.get("port");
+        return environmentReferenceName(port)
+                .map(name -> environmentResolver
+                        .apply(name)
+                        .map(String::trim)
+                        .filter(value -> !value.isBlank())
+                        .map(WorkflowConfigEditor::classifyServerPortValue)
+                        .orElseGet(WorkflowServerPortClassification::omitted))
+                .orElseGet(() -> classifyServerPortValue(port));
+    }
+
+    private static WorkflowServerPortClassification classifyServerPortValue(Object port) {
+        Optional<Integer> numeric =
+                switch (port) {
+                    case Number number -> integralInteger(number);
+                    case String text when !text.isBlank() -> parseInteger(text.trim());
+                    default -> Optional.empty();
+                };
+        return numeric.map(WorkflowServerPortClassification::numericPort)
+                .orElseGet(WorkflowServerPortClassification::invalidValue);
+    }
+
     Optional<String> boardId(Path workflowPath) {
         return boardId(workflowPath, ignored -> Optional.empty());
     }
@@ -621,6 +667,41 @@ final class WorkflowConfigEditor {
     }
 
     record TrackerCredentialReferences(Optional<String> apiKey, Optional<String> apiToken) {}
+
+    record WorkflowServerPortClassification(Kind kind, Optional<Integer> port) {
+        enum Kind {
+            VALID,
+            OMITTED,
+            OUT_OF_RANGE,
+            INVALID_VALUE,
+            UNREADABLE
+        }
+
+        static WorkflowServerPortClassification numericPort(int port) {
+            Kind kind = port >= 0 && port <= LocalPort.MAX ? Kind.VALID : Kind.OUT_OF_RANGE;
+            return new WorkflowServerPortClassification(kind, Optional.of(port));
+        }
+
+        static WorkflowServerPortClassification omitted() {
+            return new WorkflowServerPortClassification(Kind.OMITTED, Optional.empty());
+        }
+
+        static WorkflowServerPortClassification invalidValue() {
+            return new WorkflowServerPortClassification(Kind.INVALID_VALUE, Optional.empty());
+        }
+
+        static WorkflowServerPortClassification unreadable() {
+            return new WorkflowServerPortClassification(Kind.UNREADABLE, Optional.empty());
+        }
+
+        /**
+         * Ports the diagnostics report should list: valid ports get probed, out-of-range ports
+         * render the safe skip line. Omitted, unreadable, and non-numeric settings list nothing.
+         */
+        Optional<Integer> probeOrSkipPort() {
+            return kind == Kind.VALID || kind == Kind.OUT_OF_RANGE ? port : Optional.empty();
+        }
+    }
 
     record WorkflowIntegerSetting(Optional<Integer> value, boolean invalid) {
         static WorkflowIntegerSetting valid(int value) {
