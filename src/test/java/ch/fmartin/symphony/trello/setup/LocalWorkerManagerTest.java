@@ -588,6 +588,57 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
+    void startRestoresMissingManagedPidForHealthyUntrackedManagedWorker() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Docs Queue");
+        fixture.save(board);
+        long workerPid = 4242L;
+        when(fixture.healthChecker.workflowHealth(
+                        board.workflowPath(), board.boardId(), board.boardKey(), board.serverPort()))
+                .thenReturn(fixture.sameWorkflowWithPid(board, workerPid));
+        when(fixture.platform.isAlive(workerPid)).thenReturn(true);
+        when(fixture.platform.isManaged(workerPid, fixture.paths.appHome(), board.workflowPath()))
+                .thenReturn(true);
+
+        // when
+        WorkerRunResult result = fixture.start(fixture.startRequest("Docs Queue"));
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("already running", "Restored missing managed worker tracking pid=" + workerPid);
+        ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
+        assertThat(store.readPid(store.files(board.workflowPath()).pidFile())).isEqualTo(workerPid);
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void startReportsUntrackedWorkerPidWhenProcessIsNotManagedByThisInstall() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Docs Queue");
+        fixture.save(board);
+        long workerPid = 4242L;
+        when(fixture.healthChecker.workflowHealth(
+                        board.workflowPath(), board.boardId(), board.boardKey(), board.serverPort()))
+                .thenReturn(fixture.sameWorkflowWithPid(board, workerPid));
+        when(fixture.platform.isAlive(workerPid)).thenReturn(true);
+        when(fixture.platform.isManaged(workerPid, fixture.paths.appHome(), board.workflowPath()))
+                .thenReturn(false);
+
+        // when
+        WorkerRunResult result = fixture.start(fixture.startRequest("Docs Queue"));
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("already running", "Reported worker pid=" + workerPid)
+                .stdoutDoesNotContain("Restored missing managed worker tracking");
+        ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
+        assertThat(store.readPid(store.files(board.workflowPath()).pidFile())).isNull();
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    @Test
     void startIdempotencyHealthCheckUsesExplicitEnvOverrideWhenPidFileIsMissing() throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
@@ -916,6 +967,51 @@ final class LocalWorkerManagerTest {
 
         // then
         assertThat(thrown).isInstanceOf(TrelloBoardSetupException.class).hasMessageContaining("no managed pid");
+        verify(fixture.platform, never()).stop(anyLong(), any(Duration.class), any(Duration.class));
+    }
+
+    @Test
+    void stopStopsHealthyUntrackedWorkerWhenPidIsVerifiablyManaged() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        long workerPid = 4242L;
+        when(fixture.healthChecker.boardHealth(board)).thenReturn(fixture.sameWorkflowWithPid(board, workerPid));
+        when(fixture.platform.isAlive(workerPid)).thenReturn(true);
+        when(fixture.platform.isManaged(workerPid, fixture.paths.appHome(), board.workflowPath()))
+                .thenReturn(true);
+        when(fixture.platform.stop(workerPid, Duration.ofSeconds(15), Duration.ofSeconds(5)))
+                .thenReturn(true);
+
+        // when
+        WorkerRunResult result = fixture.stop(fixture.stopRequest("Queue"));
+
+        // then
+        result.assertSuccess().stdoutContains("Stopped untracked managed worker", "pid=" + workerPid);
+        verify(fixture.platform).stop(workerPid, Duration.ofSeconds(15), Duration.ofSeconds(5));
+    }
+
+    @Test
+    void stopReportsUntrackedWorkerPidWhenProcessIsNotManagedByThisInstall() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        long workerPid = 4242L;
+        when(fixture.healthChecker.boardHealth(board)).thenReturn(fixture.sameWorkflowWithPid(board, workerPid));
+        when(fixture.platform.isAlive(workerPid)).thenReturn(true);
+        when(fixture.platform.isManaged(workerPid, fixture.paths.appHome(), board.workflowPath()))
+                .thenReturn(false);
+
+        // when
+        var thrown = catchThrowable(() -> fixture.stop(fixture.stopRequest("Queue")));
+
+        // then
+        assertThat(thrown)
+                .isInstanceOf(TrelloBoardSetupException.class)
+                .hasMessageContaining("no managed pid")
+                .hasMessageContaining("Reported worker pid=%s", workerPid);
         verify(fixture.platform, never()).stop(anyLong(), any(Duration.class), any(Duration.class));
     }
 

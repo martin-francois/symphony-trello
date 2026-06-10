@@ -53,6 +53,35 @@ final class LocalHealthCheckerTest {
         // then
         assertThat(health.kind()).isEqualTo(BoardHealthKind.SAME_WORKFLOW);
         assertThat(health.actualBoardId()).contains("full-board-id");
+        assertThat(health.workerPid()).isEmpty();
+    }
+
+    @Test
+    void workflowHealthParsesReportedWorkerPid() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md").toAbsolutePath().normalize();
+        server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        server.createContext("/api/v1/local-status", exchange -> {
+            byte[] body =
+                    """
+                    {"workflowPath":"%s","boardId":"full-board-id","configuredBoardId":"abc123","pid":4242}
+                    """
+                            .formatted(workflow)
+                            .getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        server.start();
+        LocalHealthChecker checker = new LocalHealthChecker(Map.of(), new WorkflowConfigEditor());
+
+        // when
+        BoardHealth health = checker.workflowHealth(
+                workflow, "abc123", "abc123", server.getAddress().getPort());
+
+        // then
+        assertThat(health.kind()).isEqualTo(BoardHealthKind.SAME_WORKFLOW);
+        assertThat(health.workerPid()).contains(4242L);
     }
 
     @Test

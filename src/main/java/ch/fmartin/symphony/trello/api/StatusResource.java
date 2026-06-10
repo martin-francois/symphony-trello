@@ -108,6 +108,9 @@ public class StatusResource {
         status.put("boardId", orchestrator.selectedBoardId());
         status.put("configuredBoardId", orchestrator.selectedConfiguredBoardId());
         status.put("workflowPath", orchestrator.selectedWorkflowPath().toString());
+        // Lifecycle commands use this pid to repair missing managed pid metadata for healthy
+        // untracked workers.
+        status.put("pid", ProcessHandle.current().pid());
         return status;
     }
 

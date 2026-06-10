@@ -88,7 +88,8 @@ final class StatusResourceTest {
         assertThat(loopbackStatus).isInstanceOfSatisfying(Map.class, status -> assertThat(status)
                 .containsEntry("boardId", "board-1")
                 .containsEntry("configuredBoardId", "abc123")
-                .containsEntry("workflowPath", "/private/workflow.md"));
+                .containsEntry("workflowPath", "/private/workflow.md")
+                .containsEntry("pid", ProcessHandle.current().pid()));
         assertThat(remoteFailure).isInstanceOf(NotFoundException.class);
     }
 

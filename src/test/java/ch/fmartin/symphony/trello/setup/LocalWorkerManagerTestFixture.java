@@ -253,6 +253,15 @@ final class LocalWorkerManagerTestFixture {
                 Optional.of(board.boardId()));
     }
 
+    BoardHealth sameWorkflowWithPid(ConnectedBoard board, long workerPid) {
+        return new BoardHealth(
+                BoardHealthKind.SAME_WORKFLOW,
+                board.serverPort(),
+                Optional.of(board.workflowPath().toString()),
+                Optional.of(board.boardId()),
+                Optional.of(workerPid));
+    }
+
     BoardHealth stopped(ConnectedBoard board) {
         return new BoardHealth(BoardHealthKind.STOPPED, board.serverPort(), Optional.empty(), Optional.empty());
     }
