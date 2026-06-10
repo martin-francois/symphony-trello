@@ -3405,8 +3405,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Files.createDirectories(workflowDirectory);
 
         // when
-        SetupRunResult result = runSetup(
-                "--dry-run", "--non-interactive", "--workflow", workflowDirectory.toString(), "--force");
+        SetupRunResult result =
+                runSetup("--dry-run", "--non-interactive", "--workflow", workflowDirectory.toString(), "--force");
 
         // then
         result.assertFailure(2)

@@ -7,8 +7,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 final class WorkflowConfigEditorTest {
     @TempDir
@@ -47,6 +52,136 @@ final class WorkflowConfigEditorTest {
         assertThat(lists.activeStates()).containsExactly("Ready for Codex");
         assertThat(editor.serverPort(workflow)).contains(18081);
         assertThat(workflow).content(StandardCharsets.UTF_8).contains("# Body");
+    }
+
+    @MethodSource("serverPortClassifications")
+    @ParameterizedTest
+    void classifiesWorkflowServerPortForDiagnostics(
+            String name, String portLine, WorkflowConfigEditor.WorkflowServerPortClassification.Kind expected)
+            throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.classify.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: "board-1"
+                %s
+                ---
+                Body
+                """
+                        .formatted(portLine),
+                StandardCharsets.UTF_8);
+        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+
+        // when
+        WorkflowConfigEditor.WorkflowServerPortClassification classification =
+                editor.classifyServerPortForDiagnostics(workflow);
+
+        // then
+        assertThat(classification.kind()).as(name).isEqualTo(expected);
+    }
+
+    private static Stream<Arguments> serverPortClassifications() {
+        return Stream.of(
+                Arguments.of(
+                        "valid port",
+                        "server:\n  port: 18080",
+                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.VALID),
+                Arguments.of(
+                        "omitted port",
+                        "server: {}",
+                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.OMITTED),
+                Arguments.of(
+                        "negative port",
+                        "server:\n  port: -1",
+                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.OUT_OF_RANGE),
+                Arguments.of(
+                        "port above range",
+                        "server:\n  port: 99999",
+                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.OUT_OF_RANGE),
+                Arguments.of(
+                        "non-numeric port",
+                        "server:\n  port: \"not-a-port\"",
+                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.INVALID_VALUE),
+                Arguments.of(
+                        "unresolved environment reference",
+                        "server:\n  port: $MISSING_PORT_VARIABLE",
+                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.OMITTED));
+    }
+
+    @MethodSource("environmentResolvedServerPortClassifications")
+    @ParameterizedTest
+    void classifiesEnvironmentResolvedServerPortForDiagnostics(
+            String caseName, String resolvedValue, WorkflowConfigEditor.WorkflowServerPortClassification.Kind expected)
+            throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.env-classify.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: "board-1"
+                server:
+                  port: $STATUS_PORT
+                ---
+                Body
+                """,
+                StandardCharsets.UTF_8);
+        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+        Function<String, Optional<String>> resolver =
+                variable -> "STATUS_PORT".equals(variable) ? Optional.ofNullable(resolvedValue) : Optional.empty();
+
+        // when
+        WorkflowConfigEditor.WorkflowServerPortClassification classification =
+                editor.classifyServerPortForDiagnostics(workflow, resolver);
+
+        // then
+        assertThat(classification.kind()).as(caseName).isEqualTo(expected);
+    }
+
+    private static Stream<Arguments> environmentResolvedServerPortClassifications() {
+        return Stream.of(
+                Arguments.of(
+                        "resolved valid port",
+                        "20991",
+                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.VALID),
+                Arguments.of(
+                        "resolved out-of-range port",
+                        "99999",
+                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.OUT_OF_RANGE),
+                Arguments.of(
+                        "resolved non-numeric port",
+                        "not-a-port",
+                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.INVALID_VALUE),
+                Arguments.of(
+                        "unresolved reference",
+                        null,
+                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.OMITTED),
+                Arguments.of(
+                        "blank resolved value",
+                        "   ",
+                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.OMITTED));
+    }
+
+    @Test
+    void classifiesMissingWorkflowFileAsUnreadableForDiagnostics() {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.does-not-exist.md");
+        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+
+        // when
+        WorkflowConfigEditor.WorkflowServerPortClassification classification =
+                editor.classifyServerPortForDiagnostics(workflow);
+
+        // then
+        assertThat(classification.kind())
+                .isEqualTo(WorkflowConfigEditor.WorkflowServerPortClassification.Kind.UNREADABLE);
+        assertThat(classification.probeOrSkipPort()).isEmpty();
     }
 
     @Test
