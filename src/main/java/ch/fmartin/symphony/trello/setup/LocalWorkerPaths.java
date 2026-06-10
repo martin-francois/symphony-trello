@@ -50,6 +50,19 @@ record LocalWorkerPaths(Path appHome, Path configDir, Path workspaceRoot, Path s
         return configDir.resolve("connected-boards.json");
     }
 
+    /**
+     * Default connected-board manifest location for setup commands: the same configured or
+     * installed config directory that lifecycle commands resolve, never a path derived from a
+     * workflow file's parent directory.
+     */
+    static Path defaultManifestPath(Map<String, String> environment) {
+        return envPath(environment, CONFIG_DIR_ENV)
+                .orElseGet(() -> Path.of("."))
+                .toAbsolutePath()
+                .normalize()
+                .resolve("connected-boards.json");
+    }
+
     Path defaultEnvPath() {
         return configDir.resolve(".env");
     }

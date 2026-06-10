@@ -1784,6 +1784,8 @@ final class TrelloBoardSetupMainTest {
                 "Symphony Work Queue",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--env",
                 env.toString(),
                 "--server-port",
@@ -1850,6 +1852,8 @@ final class TrelloBoardSetupMainTest {
                 "Reserved Port Queue",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--env",
                 env.toString(),
                 "--server-port",
@@ -1891,6 +1895,8 @@ final class TrelloBoardSetupMainTest {
                 "Manifest Port Queue",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--env",
                 env.toString(),
                 "--server-port",
@@ -1933,6 +1939,8 @@ final class TrelloBoardSetupMainTest {
                     "Live Port Queue",
                     "--workflow",
                     workflow.toString(),
+                    "--manifest",
+                    tempDir.resolve("connected-boards.json").toString(),
                     "--env",
                     env.toString(),
                     "--server-port",
@@ -1978,6 +1986,8 @@ final class TrelloBoardSetupMainTest {
                 "Released",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--env",
                 env.toString(),
                 "--server-port",
@@ -2022,6 +2032,8 @@ final class TrelloBoardSetupMainTest {
                 "Released",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--env",
                 env.toString(),
                 "--server-port",
@@ -2067,6 +2079,8 @@ final class TrelloBoardSetupMainTest {
                     "Released",
                     "--workflow",
                     workflow.toString(),
+                    "--manifest",
+                    tempDir.resolve("connected-boards.json").toString(),
                     "--env",
                     env.toString(),
                     "--server-port",
@@ -2139,6 +2153,8 @@ final class TrelloBoardSetupMainTest {
                         "Released",
                         "--workflow",
                         workflow.toString(),
+                        "--manifest",
+                        tempDir.resolve("connected-boards.json").toString(),
                         "--env",
                         env.toString(),
                         "--server-port",
@@ -2183,6 +2199,8 @@ final class TrelloBoardSetupMainTest {
                 "Manifest Preflight Queue",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--env",
                 env.toString());
 
@@ -2219,6 +2237,8 @@ final class TrelloBoardSetupMainTest {
                 "Unusable Manifest Queue",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--env",
                 env.toString());
 
@@ -2257,6 +2277,8 @@ final class TrelloBoardSetupMainTest {
                 "Relative Paths Queue",
                 "--workflow",
                 relativeWorkflow.toString(),
+                "--manifest",
+                relativeDirectory.resolve("connected-boards.json").toString(),
                 "--env",
                 relativeEnv.toString());
 
@@ -2273,6 +2295,132 @@ final class TrelloBoardSetupMainTest {
                             .toAbsolutePath()
                             .normalize());
         });
+    }
+
+    @Test
+    void importBoardPersistsExternalWorkflowIntoInstalledManifestByDefault() throws Exception {
+        // given
+        Path externalDir = tempDir.resolve("external-default-import");
+        Files.createDirectories(externalDir);
+        Path externalWorkflow = externalDir.resolve("WORKFLOW.external-default.md");
+        Path installedConfig = tempDir.resolve("installed-default-config");
+        Files.createDirectories(installedConfig);
+        Path env = installedConfig.resolve(".env");
+
+        // when
+        CliRunResult result = runCliWithEnvironment(
+                Map.of("SYMPHONY_TRELLO_CONFIG_DIR", installedConfig.toString()),
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "https://trello.com/b/input/existing-board",
+                "--active",
+                "Queue for Codex",
+                "--terminal",
+                "Released",
+                "--workflow",
+                externalWorkflow.toString(),
+                "--env",
+                env.toString());
+
+        // then
+        result.assertSuccess();
+        ConnectedBoardManifest manifest =
+                new ConnectedBoardRepository(installedConfig.resolve("connected-boards.json")).load();
+        assertThat(manifest.boards()).singleElement().satisfies(board -> assertThat(board.workflowPath())
+                .isEqualTo(externalWorkflow.toAbsolutePath().normalize()));
+        assertThat(externalDir.resolve("connected-boards.json"))
+                .as("no stray manifest beside the external workflow")
+                .doesNotExist();
+    }
+
+    @Test
+    void newBoardPersistsExternalWorkflowIntoInstalledManifestByDefault() throws Exception {
+        // given
+        Path externalDir = tempDir.resolve("external-default-new");
+        Files.createDirectories(externalDir);
+        Path externalWorkflow = externalDir.resolve("WORKFLOW.external-new.md");
+        Path installedConfig = tempDir.resolve("installed-default-new-config");
+        Files.createDirectories(installedConfig);
+        Path env = installedConfig.resolve(".env");
+
+        // when
+        CliRunResult result = runCliWithEnvironment(
+                Map.of("SYMPHONY_TRELLO_CONFIG_DIR", installedConfig.toString()),
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--name",
+                "External Default Queue",
+                "--workflow",
+                externalWorkflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess();
+        ConnectedBoardManifest manifest =
+                new ConnectedBoardRepository(installedConfig.resolve("connected-boards.json")).load();
+        assertThat(manifest.boards()).singleElement().satisfies(board -> assertThat(board.workflowPath())
+                .isEqualTo(externalWorkflow.toAbsolutePath().normalize()));
+        assertThat(externalDir.resolve("connected-boards.json"))
+                .as("no stray manifest beside the external workflow")
+                .doesNotExist();
+    }
+
+    @Test
+    void importBoardPersistsExternalWorkflowIntoExplicitManifest() throws Exception {
+        // given
+        Path externalDir = tempDir.resolve("external-workflows");
+        Files.createDirectories(externalDir);
+        Path externalWorkflow = externalDir.resolve("WORKFLOW.external-import.md");
+        Path installedManifest = tempDir.resolve("installed-config").resolve("connected-boards.json");
+        Files.createDirectories(installedManifest.getParent());
+        Path env = tempDir.resolve(".env.external-import");
+
+        // when
+        CliRunResult result = runCli(
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "https://trello.com/b/input/existing-board",
+                "--active",
+                "Queue for Codex",
+                "--terminal",
+                "Released",
+                "--workflow",
+                externalWorkflow.toString(),
+                "--manifest",
+                installedManifest.toString(),
+                "--env",
+                env.toString());
+
+        // then
+        result.assertSuccess();
+        ConnectedBoardManifest manifest = new ConnectedBoardRepository(installedManifest).load();
+        assertThat(manifest.boards()).singleElement().satisfies(board -> {
+            assertThat(board.boardId()).isEqualTo("board-1");
+            assertThat(board.workflowPath())
+                    .isEqualTo(externalWorkflow.toAbsolutePath().normalize());
+        });
+        assertThat(externalDir.resolve("connected-boards.json"))
+                .as("no stray manifest beside the external workflow")
+                .doesNotExist();
     }
 
     @Test
@@ -2322,6 +2470,8 @@ final class TrelloBoardSetupMainTest {
                     "Released",
                     "--workflow",
                     newWorkflow.toString(),
+                    "--manifest",
+                    tempDir.resolve("connected-boards.json").toString(),
                     "--env",
                     newEnv.toString(),
                     "--force"
@@ -2412,6 +2562,8 @@ final class TrelloBoardSetupMainTest {
                 "Wrapped Command Queue",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--env",
                 env.toString());
 
@@ -2456,6 +2608,8 @@ final class TrelloBoardSetupMainTest {
                 "Runtime Env Queue",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--env",
                 env.toString());
 
@@ -2500,7 +2654,9 @@ final class TrelloBoardSetupMainTest {
                 "--name",
                 "Default Runtime Env Queue",
                 "--workflow",
-                workflow.toString());
+                workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString());
 
         // then
         assertThat(result.exitCode()).as(result.output()).isZero();
@@ -2539,6 +2695,8 @@ final class TrelloBoardSetupMainTest {
                 "Runtime Env Source Queue",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--env",
                 env.toString());
 
@@ -2576,7 +2734,9 @@ final class TrelloBoardSetupMainTest {
                 "--name",
                 "Configured Runtime Env Queue",
                 "--workflow",
-                workflow.toString());
+                workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString());
 
         // then
         assertThat(result.exitCode()).as(result.output()).isZero();
@@ -2618,17 +2778,13 @@ final class TrelloBoardSetupMainTest {
                 "--name",
                 "Configured Runtime Env Queue",
                 "--workflow",
-                workflow.toString());
+                workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString());
 
         // then
-        assertThat(result.exitCode()).isEqualTo(2);
-        assertThat(createdBoardName.get()).isNull();
-        assertThat(workflow).doesNotExist();
-        assertThat(env).content(StandardCharsets.UTF_8).isEqualTo("readme");
-        assertThat(result.stdout()).doesNotContain("Created Trello board", "Troubleshooting report written");
-        assertThat(result.stderr())
-                .contains("setup_failed code=setup_env_path_not_ignored", ".env or .env.NAME")
-                .doesNotContain("direct-key", "direct-token");
+        assertRejectedUnsafeRuntimeEnvPath(
+                result.exitCode(), result.stdout(), result.stderr(), workflow, env, "direct-key", "direct-token");
     }
 
     @Test
@@ -2655,17 +2811,19 @@ final class TrelloBoardSetupMainTest {
                 "--name",
                 "Configured Runtime Env Queue",
                 "--workflow",
-                workflow.toString());
+                workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString());
 
         // then
-        assertThat(result.exitCode()).isEqualTo(2);
-        assertThat(createdBoardName.get()).isNull();
-        assertThat(workflow).doesNotExist();
-        assertThat(env).content(StandardCharsets.UTF_8).isEqualTo("readme");
-        assertThat(result.stdout()).doesNotContain("Created Trello board", "Troubleshooting report written");
-        assertThat(result.stderr())
-                .contains("setup_failed code=setup_env_path_not_ignored", ".env or .env.NAME")
-                .doesNotContain("environment-key", "environment-token");
+        assertRejectedUnsafeRuntimeEnvPath(
+                result.exitCode(),
+                result.stdout(),
+                result.stderr(),
+                workflow,
+                env,
+                "environment-key",
+                "environment-token");
     }
 
     @Test
@@ -2720,14 +2878,8 @@ final class TrelloBoardSetupMainTest {
         CliRunResult result = runNewBoardWithRuntimeEnv(workflow, env, true);
 
         // then
-        assertThat(result.exitCode()).isEqualTo(2);
-        assertThat(createdBoardName.get()).isNull();
-        assertThat(workflow).doesNotExist();
-        assertThat(env).content(StandardCharsets.UTF_8).isEqualTo("readme");
-        assertThat(result.stdout()).doesNotContain("Created Trello board", "Troubleshooting report written");
-        assertThat(result.stderr())
-                .contains("setup_failed code=setup_env_path_not_ignored", ".env or .env.NAME")
-                .doesNotContain("direct-key", "direct-token");
+        assertRejectedUnsafeRuntimeEnvPath(
+                result.exitCode(), result.stdout(), result.stderr(), workflow, env, "direct-key", "direct-token");
     }
 
     @Test
@@ -2863,6 +3015,8 @@ final class TrelloBoardSetupMainTest {
                 "Runtime Env Queue",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--env",
                 env.toString());
 
@@ -2895,6 +3049,8 @@ final class TrelloBoardSetupMainTest {
                 "Runtime Env Queue",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--env",
                 env.toString());
 
@@ -2937,6 +3093,8 @@ final class TrelloBoardSetupMainTest {
                 "Runtime Env Queue",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--env",
                 env.toString());
 
@@ -2982,6 +3140,8 @@ final class TrelloBoardSetupMainTest {
                 "Released",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--env",
                 env.toString());
 
@@ -3043,6 +3203,8 @@ final class TrelloBoardSetupMainTest {
                 "Resolver Backed Queue",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--env",
                 env.toString());
 
@@ -3073,6 +3235,8 @@ final class TrelloBoardSetupMainTest {
                 "Explicit New Board Model",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--codex-model",
                 "gpt-explicit",
                 "--codex-reasoning-effort",
@@ -3105,6 +3269,8 @@ final class TrelloBoardSetupMainTest {
                 "Unsupported Explicit New Board Model",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--codex-model",
                 "gpt-explicit");
 
@@ -3137,6 +3303,8 @@ final class TrelloBoardSetupMainTest {
                 "workspace-1",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--env",
                 env.toString(),
                 optionName,
@@ -3237,6 +3405,8 @@ final class TrelloBoardSetupMainTest {
                 "Released",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--env",
                 env.toString(),
                 optionName,
@@ -3428,6 +3598,8 @@ final class TrelloBoardSetupMainTest {
                 "PowerShell Work Queue",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--env",
                 env.toString());
 
@@ -3475,6 +3647,8 @@ final class TrelloBoardSetupMainTest {
                 "Command Prompt Work Queue",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--env",
                 env.toString());
 
@@ -3514,6 +3688,8 @@ final class TrelloBoardSetupMainTest {
                 "Local Work Queue",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--env",
                 env.toString(),
                 "--no-github");
@@ -3557,6 +3733,8 @@ final class TrelloBoardSetupMainTest {
                 "Symmetry Queue",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--env",
                 env.toString());
 
@@ -3599,6 +3777,8 @@ final class TrelloBoardSetupMainTest {
                 "Released",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--env",
                 env.toString());
 
@@ -3671,6 +3851,8 @@ final class TrelloBoardSetupMainTest {
                 " Doing ",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--env",
                 env.toString());
 
@@ -3726,6 +3908,8 @@ final class TrelloBoardSetupMainTest {
                 "Released",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--env",
                 env.toString(),
                 "--force");
@@ -3788,6 +3972,8 @@ final class TrelloBoardSetupMainTest {
                 "Released",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--env",
                 env.toString());
 
@@ -3835,6 +4021,8 @@ final class TrelloBoardSetupMainTest {
                 "workspace-id",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--env",
                 env.toString());
 
@@ -3879,6 +4067,8 @@ final class TrelloBoardSetupMainTest {
                 "Released",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--force",
                 "--in-progress",
                 "No Such List 123");
@@ -3915,6 +4105,8 @@ final class TrelloBoardSetupMainTest {
                 "Released",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--codex-reasoning-effort",
                 "high");
 
@@ -3959,6 +4151,8 @@ final class TrelloBoardSetupMainTest {
                 "Released",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--force",
                 "--codex-model",
                 "gpt-explicit");
@@ -4007,6 +4201,8 @@ final class TrelloBoardSetupMainTest {
                 "Released",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--force",
                 "--codex-model",
                 "gpt-new");
@@ -4055,6 +4251,8 @@ final class TrelloBoardSetupMainTest {
                 "Released",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--force",
                 "--codex-model",
                 "gpt-custom");
@@ -4213,6 +4411,8 @@ final class TrelloBoardSetupMainTest {
                                 "Released",
                                 "--workflow",
                                 importWorkflow.toString(),
+                                "--manifest",
+                                tempDir.resolve("connected-boards.json").toString(),
                                 "--force",
                                 "--workspace-root",
                                 ".")),
@@ -4293,6 +4493,8 @@ final class TrelloBoardSetupMainTest {
                 "Released",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--force",
                 "--workspace-root",
                 "/");
@@ -4483,6 +4685,8 @@ final class TrelloBoardSetupMainTest {
                 "Released",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--force");
 
         // then
@@ -4564,6 +4768,8 @@ final class TrelloBoardSetupMainTest {
                 "https://trello.com/b/input/existing-board",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--no-github",
                 "--force"));
         if (!"--active".equals(optionName)) {
@@ -4646,6 +4852,8 @@ final class TrelloBoardSetupMainTest {
                 "Released",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--no-github",
                 "--force");
 
@@ -4693,6 +4901,8 @@ final class TrelloBoardSetupMainTest {
                 "https://trello.com/b/input/existing-board",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--force"));
         if (!"overlapping-github-merging-terminal".equals(name)) {
             args.add("--no-github");
@@ -4765,6 +4975,8 @@ final class TrelloBoardSetupMainTest {
                 "Released",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
                 "--force");
 
         // then
@@ -5088,7 +5300,15 @@ final class TrelloBoardSetupMainTest {
         if (includeCredentials) {
             args.addAll(List.of("--key", "direct-key", "--token", "direct-token"));
         }
-        args.addAll(List.of("--name", "Runtime Env Queue", "--workflow", workflow.toString(), "--env", env.toString()));
+        args.addAll(List.of(
+                "--name",
+                "Runtime Env Queue",
+                "--workflow",
+                workflow.toString(),
+                "--manifest",
+                workflow.resolveSibling("connected-boards.json").toString(),
+                "--env",
+                env.toString()));
         return runCli(args.toArray(String[]::new));
     }
 
@@ -5105,6 +5325,8 @@ final class TrelloBoardSetupMainTest {
                 "Released",
                 "--workflow",
                 workflow.toString(),
+                "--manifest",
+                workflow.resolveSibling("connected-boards.json").toString(),
                 "--env",
                 env.toString()));
         if (includeCredentials) {
@@ -5190,6 +5412,36 @@ final class TrelloBoardSetupMainTest {
         public String toString() {
             return name;
         }
+    }
+
+    private void assertRejectedUnsafeRuntimeEnvPath(
+            int exitCode, String stdout, String stderr, Path workflow, Path env, String... secrets) {
+        assertThat(exitCode).isEqualTo(2);
+        assertThat(createdBoardName.get()).isNull();
+        assertThat(workflow).doesNotExist();
+        assertThat(env).content(StandardCharsets.UTF_8).isEqualTo("readme");
+        assertThat(stdout).doesNotContain("Created Trello board", "Troubleshooting report written");
+        assertThat(stderr)
+                .contains("setup_failed code=setup_env_path_not_ignored", ".env or .env.NAME")
+                .doesNotContain(secrets);
+    }
+
+    private CliRunResult runCliWithEnvironment(Map<String, String> environment, String... args) {
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+        TrelloBoardSetup setup = new TrelloBoardSetup(
+                new ObjectMapper(),
+                () -> CodexModelSelectionDefaults.of(TrelloBoardSetup.CodexModelDefaults.fallback()));
+        LocalWorkerManager workerManager = new LocalWorkerManager(environment);
+        int exitCode = TrelloBoardSetupMain.run(
+                args,
+                new TrelloBoardSetupService(setup, workerManager, environment),
+                new LocalSetup(setup, new ProcessCommandRunner()),
+                workerManager,
+                new PrintStream(stdout, true, StandardCharsets.UTF_8),
+                new PrintStream(stderr, true, StandardCharsets.UTF_8));
+        return new CliRunResult(
+                exitCode, stdout.toString(StandardCharsets.UTF_8), stderr.toString(StandardCharsets.UTF_8));
     }
 
     private CliRunResult runCli(Supplier<TrelloBoardSetup.CodexModelDefaults> codexModelDefaults, String... args) {
@@ -5559,6 +5811,8 @@ final class TrelloBoardSetupMainTest {
                     "Released",
                     "--workflow",
                     fixture.newWorkflow().toString(),
+                    "--manifest",
+                    tempDir.resolve("connected-boards.json").toString(),
                     "--env",
                     fixture.env().toString(),
                     "--force"

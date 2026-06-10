@@ -145,6 +145,10 @@ final class TrelloBoardSetupService {
                 ConnectedBoard.from(result, envPath, workspaceRoot, githubIntegration), manifestPath, out);
     }
 
+    Map<String, String> environment() {
+        return environment;
+    }
+
     void listWorkspaces(WorkspaceListRequest request, PrintStream out) {
         printWorkspaces(out, setup.listWorkspaces(request));
     }

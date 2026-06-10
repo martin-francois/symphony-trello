@@ -123,7 +123,7 @@ final class InstalledCliDefaultsTest {
     }
 
     @Test
-    void boardSetupReceivesWorkspaceRootDefaultOnly() {
+    void boardSetupReceivesWorkspaceRootAndInstalledManifestDefaults() {
         // given
         InstalledCliDefaults.InstalledPaths paths = installedPaths();
 
@@ -133,7 +133,34 @@ final class InstalledCliDefaultsTest {
         // then
         assertThat(args)
                 .containsExactly(
-                        "new-board", "--workspace-root", workspaceRoot.toString(), "--name", "Synthetic Board");
+                        "new-board",
+                        "--workspace-root",
+                        workspaceRoot.toString(),
+                        "--manifest",
+                        configDir.resolve("connected-boards.json").toString(),
+                        "--name",
+                        "Synthetic Board");
+    }
+
+    @Test
+    void boardSetupKeepsExplicitManifestOption() {
+        // given
+        InstalledCliDefaults.InstalledPaths paths = installedPaths();
+
+        // when
+        List<String> args = InstalledCliDefaults.apply(
+                List.of("import-board", "--board", "SYNTH001", "--manifest", "/tmp/custom-manifest.json"), paths);
+
+        // then
+        assertThat(args)
+                .containsExactly(
+                        "import-board",
+                        "--workspace-root",
+                        workspaceRoot.toString(),
+                        "--board",
+                        "SYNTH001",
+                        "--manifest",
+                        "/tmp/custom-manifest.json");
     }
 
     @Test
