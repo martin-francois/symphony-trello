@@ -2646,6 +2646,18 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
+    void startHelpDocumentsTheAllOption() {
+        // given
+        String command = "start";
+
+        // when
+        CliRunResult result = runCli(command, "--help");
+
+        // then
+        result.assertSuccess().stdoutContains("--all", "Start all connected Trello boards");
+    }
+
+    @Test
     void listWorkspacesReadsCredentialsFromExplicitEnvFile() throws Exception {
         // given
         Path env = tempDir.resolve("custom-env-dir").resolve(".env.custom");
