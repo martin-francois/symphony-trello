@@ -2208,7 +2208,7 @@ final class TrelloBoardSetupMainTest {
         result.assertFailure(2)
                 .stderrContains(
                         "setup_failed code=setup_manifest_unavailable",
-                        "Could not read or write the connected-board manifest",
+                        "Connected-board manifest is not valid JSON",
                         "Next step: Check that the workflow directory is writable and connected-boards.json is valid JSON.")
                 .stdoutDoesNotContain(
                         "Created Trello board", "Saving Trello credentials", "Troubleshooting report written");
@@ -2246,13 +2246,59 @@ final class TrelloBoardSetupMainTest {
         result.assertFailure(2)
                 .stderrContains(
                         "setup_failed code=setup_manifest_unavailable",
-                        "Could not read or write the connected-board manifest",
+                        "Connected-board manifest is not valid connected-board JSON",
                         "Next step: Check that the workflow directory is writable and connected-boards.json is valid JSON.")
                 .stdoutDoesNotContain(
                         "Created Trello board", "Saving Trello credentials", "Troubleshooting report written");
         assertThat(createdBoardName.get()).isNull();
         assertThat(workflow).doesNotExist();
         assertThat(env).doesNotExist();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"{}", "{\"boards\":null}"})
+    void newBoardRejectsMissingOrNullBoardsManifestFieldBeforeCreatingTrelloBoard(String manifestContent)
+            throws Exception {
+        // given
+        Path workflow = tempDir.resolve("null-boards-preflight.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.null-boards-preflight");
+        Path manifest = tempDir.resolve("connected-boards.json");
+        Files.writeString(manifest, manifestContent, StandardCharsets.UTF_8);
+
+        // when
+        CliRunResult result = runCli(
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--name",
+                "Null Boards Queue",
+                "--workflow",
+                workflow.toString(),
+                "--manifest",
+                manifest.toString(),
+                "--env",
+                env.toString());
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_manifest_unavailable",
+                        "Connected-board manifest is not valid connected-board JSON")
+                .stderrDoesNotContain(
+                        "NullPointerException",
+                        "Cannot invoke",
+                        "JsonParseException",
+                        "MismatchedInputException",
+                        "com.fasterxml")
+                .stdoutDoesNotContain("Created Trello board", "Workflow written", "Troubleshooting report written");
+        assertThat(createdBoardName.get()).isNull();
+        assertThat(workflow).doesNotExist();
+        assertThat(env).doesNotExist();
+        assertThat(Files.readString(manifest, StandardCharsets.UTF_8)).isEqualTo(manifestContent);
     }
 
     @Test
