@@ -309,14 +309,29 @@ public final class TrelloBoardSetup {
                 .toList();
     }
 
+    private Map<String, Object> importBoardInfo(ImportBoardRequest request) {
+        try {
+            return getMap(
+                    request.endpoint(),
+                    "boards/" + encodeSegment(request.boardId()),
+                    Map.of("fields", "id,name,shortLink,url,closed"),
+                    request.credentials());
+        } catch (TrelloBoardSetupException e) {
+            if ("trello_invalid_request".equals(e.code()) || "trello_resource_not_found".equals(e.code())) {
+                throw new TrelloBoardSetupException(
+                        "setup_board_not_found",
+                        "Trello could not resolve --board \"" + request.boardId()
+                                + "\". Use a Trello board URL, short link, or board id that this token can access.",
+                        e);
+            }
+            throw e;
+        }
+    }
+
     public ImportBoardResult importExistingBoard(ImportBoardRequest request) {
         request.validate();
         preflightRequestedServerPort(request.workflowPath(), request.serverPort(), request.force(), request.envPath());
-        Map<String, Object> board = getMap(
-                request.endpoint(),
-                "boards/" + encodeSegment(request.boardId()),
-                Map.of("fields", "id,name,shortLink,url,closed"),
-                request.credentials());
+        Map<String, Object> board = importBoardInfo(request);
         if (bool(board.get("closed"))) {
             throw new TrelloBoardSetupException("trello_board_closed", "Trello board is closed");
         }

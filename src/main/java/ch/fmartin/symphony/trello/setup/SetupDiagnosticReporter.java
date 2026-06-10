@@ -95,6 +95,7 @@ final class SetupDiagnosticReporter {
     private static final Set<String> EXPECTED_SETUP_FAILURE_CODES = Set.of(
             "setup_active_state_required",
             "setup_allow_all_paths_without_root",
+            "setup_board_not_found",
             "setup_board_selection_required",
             "setup_broad_path_requires_confirmation",
             "setup_codex_auth_required",
