@@ -157,6 +157,20 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
+    void displayPathShowsResolvedPathForFilesUnderUserHome() {
+        // given
+        Path underHome = Path.of(System.getProperty("user.home"), ".local", "share", "symphony-trello", ".env");
+
+        // when
+        String displayed = SetupDiagnosticReporter.displayPath(underHome);
+
+        // then
+        assertThat(displayed)
+                .isEqualTo(underHome.toAbsolutePath().normalize().toString())
+                .doesNotContain("$HOME");
+    }
+
+    @Test
     void givesActionableHintForWorkerAuthFailureFromDotenvCredentials() {
         // given
         Path env = tempDir.resolve(".env");
