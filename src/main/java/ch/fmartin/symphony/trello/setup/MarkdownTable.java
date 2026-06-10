@@ -24,6 +24,11 @@ final class MarkdownTable {
         return new MarkdownTable(headers, alignments);
     }
 
+    static MarkdownTable leftAligned(List<String> headers) {
+        return new MarkdownTable(
+                headers, headers.stream().map(header -> Alignment.LEFT).toList());
+    }
+
     MarkdownTable row(Object... cells) {
         checkArgument(
                 cells.length == headers.size(),
