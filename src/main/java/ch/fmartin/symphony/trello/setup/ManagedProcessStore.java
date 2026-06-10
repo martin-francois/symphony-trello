@@ -116,10 +116,5 @@ final class ManagedProcessStore {
                 pidFile, parent.resolve(name + ".log"), parent.resolve(name + ".err"), parent.resolve(name + ".lock"));
     }
 
-    record ManagedProcessFiles(Path pidFile, Path stdoutLog, Path stderrLog, Path processLockFile) {
-        String displayName() {
-            String fileName = PathNames.fileName(pidFile);
-            return fileName.substring(0, fileName.length() - ".pid".length());
-        }
-    }
+    record ManagedProcessFiles(Path pidFile, Path stdoutLog, Path stderrLog, Path processLockFile) {}
 }

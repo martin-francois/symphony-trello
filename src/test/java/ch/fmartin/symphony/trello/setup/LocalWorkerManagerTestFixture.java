@@ -238,6 +238,16 @@ final class LocalWorkerManagerTestFixture {
                 Optional.of(paths.stateHome()));
     }
 
+    WorkerStatusRequest statusAllRequest() {
+        return new WorkerStatusRequest(
+                Optional.empty(),
+                Optional.empty(),
+                Optional.of(paths.appHome()),
+                Optional.of(paths.configDir()),
+                Optional.of(paths.workspaceRoot()),
+                Optional.of(paths.stateHome()));
+    }
+
     WorkerStatusRequest statusWorkflowRequest(Path workflow) {
         return new WorkerStatusRequest(
                 Optional.empty(),

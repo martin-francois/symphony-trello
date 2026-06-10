@@ -159,11 +159,50 @@ final class InstallerScriptTest {
             // then
             assertThat(result.exitCode()).as(result.output()).isZero();
             assertThat(result.output())
-                    .contains("WOULD STOP  WORKFLOW.would-stop.md.abcdef123456 pid=" + worker.pid())
+                    .contains("WOULD STOP  WORKFLOW.would-stop.md pid=" + worker.pid())
+                    .doesNotContain("WOULD STOP  WORKFLOW.would-stop.md.")
                     .doesNotContain("\n  STOP  ");
             assertThat(worker.isAlive()).as("dry run must not stop the worker").isTrue();
         } finally {
             worker.destroyForcibly();
+        }
+    }
+
+    @Test
+    void posixUninstallSkipsStaleUnmanagedPidWithHashFreeLabelWithoutStoppingIt() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("stale-skip-home");
+        Path symphonyHome = temporaryDirectory.resolve("stale-skip-symphony-home");
+        Path app = symphonyHome.resolve("app");
+        Path stateHome = symphonyHome.resolve("state");
+        Files.createDirectories(home);
+        Files.createDirectories(stateHome);
+        Files.createDirectories(app.resolve("target").resolve("quarkus-app"));
+        Files.writeString(app.resolve(".symphony-trello-install"), "marker", StandardCharsets.UTF_8);
+        Process unmanaged = new ProcessBuilder("bash", "-c", "while :; do sleep 1; done").start();
+        try {
+            Files.writeString(
+                    stateHome.resolve("WORKFLOW.stale-skip.md.abcdef123456.pid"),
+                    Long.toString(unmanaged.pid()),
+                    StandardCharsets.UTF_8);
+            Map<String, String> environment = Map.of("HOME", home.toString(), "SYMPHONY_HOME", symphonyHome.toString());
+
+            // when
+            ProcessResult result =
+                    runUnchecked(environment, "bash", "uninstall.sh", "--yes", "--prefix", app.toString());
+
+            // then
+            assertThat(result.exitCode()).as(result.output()).isZero();
+            assertThat(result.output())
+                    .contains("SKIP  stale pid does not belong to this install: WORKFLOW.stale-skip.md pid="
+                            + unmanaged.pid())
+                    .doesNotContain("WORKFLOW.stale-skip.md.abcdef123456");
+            assertThat(unmanaged.isAlive())
+                    .as("an unmanaged process must never be stopped")
+                    .isTrue();
+        } finally {
+            unmanaged.destroyForcibly();
         }
     }
 
@@ -3412,7 +3451,7 @@ final class InstallerScriptTest {
                         "kill",
                         "wait_for_exit",
                         "absolutize_path",
-                        "SKIP  stale pid",
+                        "SKIP  stale pid does not belong to this install: $(worker_label \"$pid_file\")",
                         "--remove-config",
                         "--remove-workspaces",
                         "--remove-state",
@@ -3435,7 +3474,7 @@ final class InstallerScriptTest {
                         "RemoveAllLocalData",
                         "YesLocalData",
                         ".symphony-trello-install",
-                        "SKIP  stale pid",
+                        "SKIP  stale pid does not belong to this install: $(Get-WorkerLabel $pidFile.BaseName)",
                         "Stop-AndWaitManagedProcess",
                         "Stop-Process",
                         "Wait-Process",
@@ -3643,7 +3682,7 @@ final class InstallerScriptTest {
                     .contains(
                             "Stopping managed workers before update...",
                             "Restarting managed workers after update...",
-                            "Stopped WORKFLOW.docs-queue.md.fake",
+                            "Stopped WORKFLOW.docs-queue.md",
                             "Starting setup...");
             assertThat(Files.readString(fakeLog, StandardCharsets.UTF_8))
                     .contains("mvnw -q -f " + symphonyHome.resolve("app/pom.xml") + " -DskipTests clean package")
