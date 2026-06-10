@@ -3297,6 +3297,37 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void interactiveSetupRejectsInvalidChoiceAsExpectedInputError() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.invalid-choice.md");
+        Path env = tempDir.resolve(".env.invalid-choice");
+        SetupRunResult firstResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Choice Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // when
+        SetupRunResult result = runSetupWithInput("x\n", "--endpoint", endpoint());
+
+        // then
+        firstResult.assertSuccess();
+        result.assertFailure(2)
+                .stderrContains("setup_failed code=setup_invalid_choice", "Choice must be a number between 1 and")
+                .stderrDoesNotContain("For input string", "Troubleshooting report written");
+    }
+
+    @Test
     void dryRunReportsNoStartWhenNoStartIsSet() throws Exception {
         // given
         String boardName = "No Start Plan Queue";

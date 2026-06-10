@@ -121,6 +121,7 @@ final class SetupDiagnosticReporter {
             "setup_github_upgrade_list_declined",
             "setup_github_upgrade_not_found",
             "setup_invalid_arguments",
+            "setup_invalid_choice",
             "setup_invalid_http_port_override",
             "setup_invalid_max_agents",
             "setup_invalid_path",

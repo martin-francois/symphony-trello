@@ -1,7 +1,5 @@
 package ch.fmartin.symphony.trello.setup;
 
-import static com.google.common.base.Preconditions.checkArgument;
-
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.GitHubIntegration;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.TrelloCredentials;
 import ch.fmartin.symphony.trello.setup.TrelloCredentialStore.CredentialSelection;
@@ -1392,12 +1390,7 @@ public final class LocalSetup {
     }
 
     private static int parseChoice(String answer, int defaultChoice, int maxChoice) {
-        if (blank(answer)) {
-            return defaultChoice;
-        }
-        int parsed = Integer.parseInt(answer.strip());
-        checkArgument(parsed >= 1 && parsed <= maxChoice, "Choice must be between 1 and %s", maxChoice);
-        return parsed;
+        return PromptSupport.choice(answer, defaultChoice, maxChoice);
     }
 
     private static boolean blank(String value) {
