@@ -466,6 +466,34 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
+    void sanitizesPrivatePathsAsSingleTokensWithoutAdjacentValueAndPathFragments() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("single-token-config");
+        Path stateHome = tempDir.resolve("state");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Path workflow = configDir.resolve("WORKFLOW.minimal.md");
+        Files.writeString(workflow, workflowWithPort(20986), StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.empty(),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.of(workflow)));
+
+        // then
+        assertThat(report).doesNotContain("><path:").doesNotContain(workflow.toString());
+    }
+
+    @Test
     void broadDiagnosticsSeparatesUnconnectedWorkflowFilesAndSkipsTheirProbes() throws Exception {
         // given
         Path configDir = tempDir.resolve("broad-split-config");
@@ -1584,6 +1612,44 @@ final class SetupDiagnosticReporterTest {
                         trelloToken,
                         openAiToken,
                         "super-secret-value");
+    }
+
+    @Test
+    void rendersEachPrivatePathOccurrenceInRecentLogsAsOneSinglePathToken() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("single-token-log-config");
+        Path workspaceRoot = tempDir.resolve("single-token-log-workspaces");
+        Path stateHome = tempDir.resolve("single-token-log-state");
+        Files.createDirectories(configDir);
+        Files.createDirectories(workspaceRoot);
+        Files.createDirectories(stateHome);
+        Files.writeString(
+                stateHome.resolve("single-token.log"),
+                """
+                exact %s end
+                nested %s/nested/output.txt end
+                ref private-ref-value end
+                """
+                        .formatted(configDir, configDir),
+                StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(
+                Map.of("SYMPHONY_TRELLO_REF", "private-ref-value"), new FakeCommandRunner());
+
+        // when
+        String report = renderDefaultDiagnostics(reporter, configDir, workspaceRoot, stateHome);
+
+        // then
+        byte[] key = diagnosticsKey(configDir);
+        assertThat(report)
+                .contains(
+                        "exact <path:" + token(key, configDir.toString()) + "> end",
+                        "nested <path:" + token(key, configDir + "/nested/output.txt") + "> end",
+                        "ref <value:" + token(key, "private-ref-value") + "> end")
+                .doesNotContain(
+                        "><path:",
+                        "<value:" + token(key, configDir.toString()) + ">",
+                        tempDir.toString(),
+                        "private-ref-value");
     }
 
     @Test
