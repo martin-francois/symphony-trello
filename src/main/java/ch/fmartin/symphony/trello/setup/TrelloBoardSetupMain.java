@@ -696,7 +696,10 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         @Option(names = "--server-port", description = "Local HTTP status port.")
         Integer serverPort;
 
-        @Option(names = "--max-agents", description = "Maximum cards from this board that may run at once.")
+        @Option(
+                names = "--max-agents",
+                description =
+                        "Maximum cards from this board that may run at once (1-32). Each concurrent card runs its own Codex agent plus builds and tests; keep 1 until cards are safe to run in parallel.")
         int maxConcurrentAgents = TrelloBoardSetup.DEFAULT_MAX_CONCURRENT_AGENTS;
 
         @Option(names = "--codex-model", description = "Codex model to write into generated workflows.")
@@ -857,9 +860,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             endpoint = TrelloApiEndpoint.normalize(endpoint);
             github.validate();
             validateCodexModelOverrides();
-            if (maxConcurrentAgents < 1) {
-                throw new TrelloBoardSetupException("setup_invalid_max_agents", "--max-agents must be at least 1.");
-            }
+            TrelloBoardSetup.validateSetupMaxAgents(maxConcurrentAgents);
         }
 
         private void validateCodexModelOverrides() {

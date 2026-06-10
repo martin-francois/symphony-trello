@@ -40,6 +40,9 @@ public final class TrelloBoardSetup {
     public static final Path DEFAULT_WORKFLOW_PATH = Path.of("WORKFLOW.md");
     public static final Path DEFAULT_WORKSPACE_ROOT = Path.of("./workspaces");
     public static final int DEFAULT_MAX_CONCURRENT_AGENTS = ConfigDefaults.DEFAULT_SETUP_MAX_CONCURRENT_AGENTS;
+    // Documented setup bound: each concurrent card runs its own Codex agent plus builds and tests,
+    // so unbounded values can overload the host and make Trello ordering assumptions unsafe.
+    public static final int MAX_SETUP_CONCURRENT_AGENTS = 32;
     public static final int DEFAULT_SERVER_PORT = ConfigDefaults.DEFAULT_SERVER_PORT;
     public static final String DEFAULT_CODEX_MODEL = "gpt-5.5";
     public static final String DEFAULT_CODEX_REASONING_EFFORT = "medium";
@@ -822,6 +825,14 @@ public final class TrelloBoardSetup {
             ancestor = ancestor.getParent();
         }
         return ancestor;
+    }
+
+    static void validateSetupMaxAgents(int maxConcurrentAgents) {
+        if (maxConcurrentAgents < 1 || maxConcurrentAgents > MAX_SETUP_CONCURRENT_AGENTS) {
+            throw new TrelloBoardSetupException(
+                    "setup_invalid_max_agents",
+                    "--max-agents must be between 1 and " + MAX_SETUP_CONCURRENT_AGENTS + ".");
+        }
     }
 
     private static String workflowTemplate(
@@ -2144,10 +2155,7 @@ public final class TrelloBoardSetup {
             if (blank(boardName)) {
                 throw new TrelloBoardSetupException("setup_missing_board_name", "Missing board name");
             }
-            if (maxConcurrentAgents < 1) {
-                throw new TrelloBoardSetupException(
-                        "setup_invalid_max_agents", "--max-agents must be greater than zero");
-            }
+            validateSetupMaxAgents(maxConcurrentAgents);
         }
     }
 
@@ -2404,10 +2412,7 @@ public final class TrelloBoardSetup {
             if (blank(boardId)) {
                 throw new TrelloBoardSetupException("setup_missing_board_id", "Missing board id");
             }
-            if (maxConcurrentAgents < 1) {
-                throw new TrelloBoardSetupException(
-                        "setup_invalid_max_agents", "--max-agents must be greater than zero");
-            }
+            validateSetupMaxAgents(maxConcurrentAgents);
         }
     }
 
