@@ -132,6 +132,7 @@ final class SetupDiagnosticReporter {
             "setup_repair_port_http_override",
             "setup_server_port_conflict",
             "setup_server_port_unavailable",
+            "setup_worker_board_already_managed",
             "setup_worker_board_ambiguous",
             "setup_worker_board_not_found",
             "setup_worker_board_required",
