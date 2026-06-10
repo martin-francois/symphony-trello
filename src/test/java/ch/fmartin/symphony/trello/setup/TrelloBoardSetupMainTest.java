@@ -43,6 +43,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
@@ -68,6 +69,8 @@ final class TrelloBoardSetupMainTest {
     private final AtomicInteger boardInfoLookups = new AtomicInteger();
     private final AtomicInteger workspaceLookups = new AtomicInteger();
 
+    private final AtomicReference<String> workspaceAuthorization = new AtomicReference<>();
+
     @TempDir
     Path tempDir;
 
@@ -76,6 +79,7 @@ final class TrelloBoardSetupMainTest {
         server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
         server.createContext("/1/members/me/organizations", exchange -> {
             workspaceLookups.incrementAndGet();
+            workspaceAuthorization.set(exchange.getRequestHeaders().getFirst("Authorization"));
             respond(
                     exchange,
                     """
@@ -2508,6 +2512,183 @@ final class TrelloBoardSetupMainTest {
         result.assertFailure(2)
                 .stderrContains("setup_failed code=setup_invalid_path", "not a directory")
                 .stderrDoesNotContain("setup_manifest_unavailable", "Troubleshooting report written");
+    }
+
+    @Test
+    void listWorkspacesReadsCredentialsFromExplicitEnvFile() throws Exception {
+        // given
+        Path env = tempDir.resolve("custom-env-dir").resolve(".env.custom");
+        Files.createDirectories(env.getParent());
+        Files.writeString(env, "TRELLO_API_KEY=env-key\nTRELLO_API_TOKEN=env-token\n", StandardCharsets.UTF_8);
+
+        // when
+        CliRunResult result = runCli("list-workspaces", "--endpoint", endpoint(), "--env", env.toString());
+
+        // then
+        result.assertSuccess().stdoutContains("Trello workspaces:", "workspace-1");
+        assertThat(workspaceAuthorization.get())
+                .contains("oauth_consumer_key=\"env-key\"", "oauth_token=\"env-token\"");
+    }
+
+    @Test
+    void listWorkspacesReadsCredentialsBehindAByteOrderMark() throws Exception {
+        // given
+        Path env = tempDir.resolve(".env.bom");
+        Files.writeString(env, "\uFEFFTRELLO_API_KEY=bom-key\nTRELLO_API_TOKEN=bom-token\n", StandardCharsets.UTF_8);
+
+        // when
+        CliRunResult result = runCli("list-workspaces", "--endpoint", endpoint(), "--env", env.toString());
+
+        // then
+        result.assertSuccess().stdoutContains("Trello workspaces:");
+        assertThat(workspaceAuthorization.get())
+                .contains("oauth_consumer_key=\"bom-key\"", "oauth_token=\"bom-token\"");
+    }
+
+    @CsvSource({"$REAL_KEY", "${REAL_KEY}", "${REAL_KEY:-fallback}"})
+    @ParameterizedTest
+    void rejectsReferenceLookingCredentialFileValuesBeforeAnyTrelloRequest(String dotenvValue) throws Exception {
+        // given
+        Path env = tempDir.resolve(".env.reference");
+        Files.writeString(
+                env, "TRELLO_API_KEY=" + dotenvValue + "\nTRELLO_API_TOKEN=real-token\n", StandardCharsets.UTF_8);
+
+        // when
+        CliRunResult result = runCli("list-workspaces", "--endpoint", endpoint(), "--env", env.toString());
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_credentials_environment_reference",
+                        "credential file values are used literally",
+                        "export TRELLO_API_KEY in the shell environment")
+                .stderrDoesNotContain(
+                        "trello_auth_failed", "Troubleshooting report written", "export $", "{TRELLO_API_KEY}");
+        assertThat(workspaceAuthorization.get())
+                .as("the expected local error must fire before any Trello request")
+                .isNull();
+    }
+
+    @Test
+    void directCredentialOptionsWinOverReferenceLookingCredentialFileValues() throws Exception {
+        // given
+        Path env = tempDir.resolve(".env.reference-overridden");
+        Files.writeString(env, "TRELLO_API_KEY=${REAL_KEY}\nTRELLO_API_TOKEN=${REAL_TOKEN}\n", StandardCharsets.UTF_8);
+
+        // when
+        CliRunResult result = runCli(
+                "list-workspaces",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "direct-key",
+                "--token",
+                "direct-token",
+                "--env",
+                env.toString());
+
+        // then
+        result.assertSuccess().stdoutContains("Trello workspaces:");
+        assertThat(workspaceAuthorization.get())
+                .contains("oauth_consumer_key=\"direct-key\"", "oauth_token=\"direct-token\"");
+    }
+
+    @Test
+    void listWorkspacesReadsCredentialsFromConfigDirEnvFile() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("installed-config-dir");
+        Files.createDirectories(configDir);
+        Files.writeString(
+                configDir.resolve(".env"),
+                "TRELLO_API_KEY=config-dir-key\nTRELLO_API_TOKEN=config-dir-token\n",
+                StandardCharsets.UTF_8);
+
+        // when
+        CliRunResult result = runCli("list-workspaces", "--endpoint", endpoint(), "--config-dir", configDir.toString());
+
+        // then
+        result.assertSuccess().stdoutContains("Trello workspaces:", "workspace-1");
+        assertThat(workspaceAuthorization.get())
+                .contains("oauth_consumer_key=\"config-dir-key\"", "oauth_token=\"config-dir-token\"");
+    }
+
+    @Test
+    void explicitEnvFileWinsOverConfigDirCredentials() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("losing-config-dir");
+        Files.createDirectories(configDir);
+        Files.writeString(
+                configDir.resolve(".env"),
+                "TRELLO_API_KEY=config-dir-key\nTRELLO_API_TOKEN=config-dir-token\n",
+                StandardCharsets.UTF_8);
+        Path env = tempDir.resolve(".env.winning");
+        Files.writeString(env, "TRELLO_API_KEY=env-key\nTRELLO_API_TOKEN=env-token\n", StandardCharsets.UTF_8);
+
+        // when
+        CliRunResult result = runCli(
+                "list-workspaces",
+                "--endpoint",
+                endpoint(),
+                "--env",
+                env.toString(),
+                "--config-dir",
+                configDir.toString());
+
+        // then
+        result.assertSuccess().stdoutContains("Trello workspaces:");
+        assertThat(workspaceAuthorization.get())
+                .contains("oauth_consumer_key=\"env-key\"", "oauth_token=\"env-token\"");
+    }
+
+    @Test
+    void directCredentialOptionsWinOverEnvFileAndConfigDirCredentials() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("overridden-config-dir");
+        Files.createDirectories(configDir);
+        Files.writeString(
+                configDir.resolve(".env"),
+                "TRELLO_API_KEY=config-dir-key\nTRELLO_API_TOKEN=config-dir-token\n",
+                StandardCharsets.UTF_8);
+        Path env = tempDir.resolve(".env.overridden");
+        Files.writeString(env, "TRELLO_API_KEY=env-key\nTRELLO_API_TOKEN=env-token\n", StandardCharsets.UTF_8);
+
+        // when
+        CliRunResult result = runCli(
+                "list-workspaces",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "direct-key",
+                "--token",
+                "direct-token",
+                "--env",
+                env.toString(),
+                "--config-dir",
+                configDir.toString());
+
+        // then
+        result.assertSuccess().stdoutContains("Trello workspaces:");
+        assertThat(workspaceAuthorization.get())
+                .contains("oauth_consumer_key=\"direct-key\"", "oauth_token=\"direct-token\"");
+    }
+
+    @Test
+    void listWorkspacesRejectsConfigDirPointingAtAFileBeforeAnyTrelloRequest() throws Exception {
+        // given
+        Path notADirectory = tempDir.resolve("config-dir-as-file");
+        Files.writeString(notADirectory, "not a directory", StandardCharsets.UTF_8);
+
+        // when
+        CliRunResult result =
+                runCli("list-workspaces", "--endpoint", endpoint(), "--config-dir", notADirectory.toString());
+
+        // then
+        result.assertFailure(2)
+                .stderrContains("setup_failed code=setup_invalid_arguments", "--config-dir must be a directory.")
+                .stderrDoesNotContain("Troubleshooting report written");
+        assertThat(workspaceAuthorization.get())
+                .as("the expected local error must fire before any Trello request")
+                .isNull();
     }
 
     @Test
