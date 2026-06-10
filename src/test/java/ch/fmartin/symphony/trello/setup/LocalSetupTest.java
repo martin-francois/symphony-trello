@@ -3552,6 +3552,21 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void checkWarnsOnIncompleteManifestRowsWithoutNullPointerInternals() throws Exception {
+        // given
+        Path manifest = tempDir.resolve("incomplete-connected-boards.json");
+        Files.writeString(manifest, "{\"boards\":[{}]}", StandardCharsets.UTF_8);
+
+        // when
+        SetupRunResult result = runSetup("check", "--non-interactive", "--manifest", manifest.toString());
+
+        // then
+        result.assertFailure(2)
+                .stdoutContains("WARN", "must be a non-blank string")
+                .stderrDoesNotContain("Cannot invoke", "NullPointerException", "Troubleshooting report written");
+    }
+
+    @Test
     void checkReportsOverlappingConnectedWorkflowListRoles() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.overlap-check.md");
