@@ -110,6 +110,60 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
+    void newBoardRejectsDirectoryWorkflowPathBeforeCreatingTrelloBoard() {
+        // given
+        Path workflowDirectory = tempDir;
+
+        // when
+        Throwable thrown = catchThrowable(() -> setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "Directory Workflow Board",
+                null,
+                workflowDirectory,
+                Path.of("./workspaces"),
+                1,
+                true,
+                false)));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_invalid_path");
+            assertThat(failure.getMessage()).contains("directory");
+        });
+        assertThat(authorization.get()).as("no Trello board must be created").isNull();
+        assertThat(createdLists).isEmpty();
+    }
+
+    @Test
+    void newBoardRejectsWorkflowPathUnderRegularFileBeforeCreatingTrelloBoard() throws Exception {
+        // given
+        Path plainFile = tempDir.resolve("not-a-directory");
+        Files.writeString(plainFile, "plain", StandardCharsets.UTF_8);
+        Path workflow = plainFile.resolve("WORKFLOW.generated.md");
+
+        // when
+        Throwable thrown = catchThrowable(() -> setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "File Parent Workflow Board",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                1,
+                true,
+                false)));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_invalid_path");
+            assertThat(failure.getMessage()).contains("not a directory");
+        });
+        assertThat(authorization.get()).as("no Trello board must be created").isNull();
+        assertThat(createdLists).isEmpty();
+    }
+
+    @Test
     void createsRecommendedBoardListsAndWorkflow() {
         // given
         Path workflow = tempDir.resolve("generated-workflow.md");
