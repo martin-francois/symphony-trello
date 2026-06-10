@@ -148,6 +148,38 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
+    void importBoardReportsActionableErrorForUnresolvableBoardSelector() {
+        // given
+        server.createContext("/1/boards/notreal", exchange -> {
+            exchange.sendResponseHeaders(400, 0);
+            exchange.getResponseBody().write("invalid id".getBytes(StandardCharsets.UTF_8));
+            exchange.close();
+        });
+        Path workflow = tempDir.resolve("unresolvable-board-workflow.md");
+
+        // when
+        Throwable thrown = catchThrowable(() -> setup.importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "notreal",
+                List.of("Ready for Codex"),
+                List.of("Done"),
+                null,
+                workflow,
+                Path.of("./agent-workspaces"),
+                1,
+                false)));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_board_not_found");
+            assertThat(failure.getMessage())
+                    .contains("--board", "notreal", "short link")
+                    .doesNotContain("invalid id");
+        });
+    }
+
+    @Test
     void newBoardClassifiesUnauthorizedWorkspaceIdAsWorkspaceInputError() {
         // given
         server.removeContext("/1/boards/");
