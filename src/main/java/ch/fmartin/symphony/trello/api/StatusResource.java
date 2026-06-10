@@ -125,9 +125,25 @@ public class StatusResource {
     @Path("/api/v1/{cardIdentifier}")
     @Produces(MediaType.APPLICATION_JSON)
     public Object card(@PathParam("cardIdentifier") String cardIdentifier) {
+        // The template also catches arbitrary unknown /api/v1 segments, and only an intentional
+        // card-details lookup may report card_not_found: the segment must look like one of this
+        // worker's card identifiers (configured prefix plus short link or id, or the raw
+        // 24-character Trello card id fallback) before a miss counts as a missing card.
+        if (!looksLikeCardIdentifier(cardIdentifier)) {
+            throw new NotFoundException("Unknown local API route.");
+        }
         return orchestrator
                 .cardDetails(cardIdentifier)
-                .orElseThrow(() -> new NotFoundException("Unknown card: " + cardIdentifier));
+                .orElseThrow(() -> new CardNotFoundException("Unknown card: " + cardIdentifier));
+    }
+
+    private boolean looksLikeCardIdentifier(String segment) {
+        String prefix = orchestrator.cardIdentifierPrefix() + "-";
+        if (segment.startsWith(prefix)) {
+            String suffix = segment.substring(prefix.length());
+            return !suffix.isEmpty() && suffix.chars().allMatch(Character::isLetterOrDigit);
+        }
+        return segment.matches("[0-9a-fA-F]{24}");
     }
 
     @OPTIONS

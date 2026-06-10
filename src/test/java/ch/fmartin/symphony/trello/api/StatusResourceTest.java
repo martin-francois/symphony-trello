@@ -129,8 +129,9 @@ final class StatusResourceTest {
                 null,
                 Map.of());
         SymphonyOrchestrator orchestrator = mock();
+        when(orchestrator.cardIdentifierPrefix()).thenReturn("TRELLO");
         when(orchestrator.cardDetails("TRELLO-abc")).thenReturn(Optional.of(details));
-        when(orchestrator.cardDetails("missing")).thenReturn(Optional.empty());
+        when(orchestrator.cardDetails("TRELLO-missing")).thenReturn(Optional.empty());
         var resource = new StatusResource(orchestrator);
 
         // when
@@ -138,9 +139,13 @@ final class StatusResourceTest {
 
         // then
         assertThat(found).isSameAs(details);
+        assertThatThrownBy(() -> resource.card("TRELLO-missing"))
+                .isInstanceOf(CardNotFoundException.class)
+                .hasMessageContaining("Unknown card: TRELLO-missing");
         assertThatThrownBy(() -> resource.card("missing"))
                 .isInstanceOf(NotFoundException.class)
-                .hasMessageContaining("Unknown card: missing");
+                .isNotInstanceOf(CardNotFoundException.class)
+                .hasMessageContaining("Unknown local API route.");
     }
 
     @Test
@@ -153,7 +158,7 @@ final class StatusResourceTest {
 
         // when
         try (Response refresh = resource.refresh();
-                Response notFound = mapper.toResponse(new NotFoundException("missing"));
+                Response notFound = mapper.toResponse(new CardNotFoundException("missing"));
                 Response internal = mapper.toResponse(new IllegalStateException("boom"))) {
 
             // then

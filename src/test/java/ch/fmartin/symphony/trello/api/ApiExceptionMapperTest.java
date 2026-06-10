@@ -26,9 +26,23 @@ final class ApiExceptionMapperTest {
     }
 
     @Test
+    void mapsUnknownRoutesToNeutralNotFound() {
+        // given
+        var routeNotFound = new NotFoundException("Unable to find matching target resource method");
+
+        // when
+        try (Response response = mapper.toResponse(routeNotFound)) {
+
+            // then
+            assertThat(response.getStatus()).isEqualTo(Response.Status.NOT_FOUND.getStatusCode());
+            assertThat(errorCode(response)).isEqualTo("not_found");
+        }
+    }
+
+    @Test
     void keepsNotFoundAsCardNotFound() {
         // given
-        var notFound = new NotFoundException("Unknown card: card-1");
+        var notFound = new CardNotFoundException("Unknown card: card-1");
 
         // when
         try (Response response = mapper.toResponse(notFound)) {
