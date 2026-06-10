@@ -186,6 +186,7 @@ final class LocalWorkerManager {
             printIgnoredEnvOverride(paths, board, envPath, explicitEnvOverride, out);
             out.println("Symphony for Trello is already running for \"" + board.boardName() + "\" at "
                     + LocalHealthChecker.localServerUrl(existingHealth.port()));
+            repairOrReportUntrackedWorker(paths, board, existingHealth, store, files, out);
             return;
         }
 
@@ -233,6 +234,35 @@ final class LocalWorkerManager {
                             + files.stdoutLog() + " and " + files.stderrLog());
         }
         out.println("Started Symphony for Trello: \"" + board.boardName() + "\"");
+    }
+
+    private void repairOrReportUntrackedWorker(
+            LocalWorkerPaths paths,
+            ConnectedBoard board,
+            BoardHealth health,
+            ManagedProcessStore store,
+            ManagedProcessStore.ManagedProcessFiles files,
+            PrintStream out)
+            throws IOException {
+        Optional<Long> verifiedPid = verifiedManagedWorkerPid(paths, board, health);
+        // Plain branching because the present branch writes the pid file with checked IO.
+        if (verifiedPid.isPresent()) {
+            store.writePid(files.pidFile(), verifiedPid.get());
+            out.println("Restored missing managed worker tracking pid=" + verifiedPid.get());
+            return;
+        }
+        out.println("This worker is untracked because it has no managed pid for this install.");
+        health.workerPid()
+                .ifPresentOrElse(
+                        pid -> out.println(
+                                "Stop the worker process manually, then rerun symphony-trello start. Reported worker pid="
+                                        + pid),
+                        () -> out.println("Stop the worker process manually, then rerun symphony-trello start."));
+    }
+
+    private Optional<Long> verifiedManagedWorkerPid(LocalWorkerPaths paths, ConnectedBoard board, BoardHealth health) {
+        return health.workerPid()
+                .filter(pid -> platform.isAlive(pid) && platform.isManaged(pid, paths.appHome(), board.workflowPath()));
     }
 
     private static void printIgnoredEnvOverride(
@@ -558,11 +588,22 @@ final class LocalWorkerManager {
             store.deletePid(files.pidFile());
             BoardHealth health = healthChecker.boardHealth(board);
             if (health.kind() == BoardHealthKind.SAME_WORKFLOW) {
+                Optional<Long> verifiedPid = verifiedManagedWorkerPid(paths, board, health);
+                // Plain branching because the present branch stops the worker with checked IO.
+                if (verifiedPid.isPresent()) {
+                    stopPid(store, files, verifiedPid.get());
+                    out.println(
+                            "Stopped untracked managed worker " + files.displayName() + " pid=" + verifiedPid.get());
+                    return;
+                }
                 throw new TrelloBoardSetupException(
                         "setup_worker_untracked",
                         "Cannot stop "
                                 + files.displayName()
-                                + " because the worker is healthy but has no managed pid. Stop the process manually, then start it again with symphony-trello start.");
+                                + " because the worker is healthy but has no managed pid. Stop the process manually, then start it again with symphony-trello start."
+                                + health.workerPid()
+                                        .map(reportedPid -> " Reported worker pid=" + reportedPid)
+                                        .orElse(""));
             }
             out.println("Symphony for Trello is already stopped for \"" + board.boardName() + "\"");
             return;

@@ -84,13 +84,15 @@ final class LocalHealthChecker {
             Optional<String> actualWorkflowPath = optionalString(status.get("workflowPath"));
             Optional<String> actualBoardId = optionalString(status.get("boardId"));
             Optional<String> actualConfiguredBoardId = optionalString(status.get("configuredBoardId"));
+            Optional<Long> workerPid = optionalPid(status.get("pid"));
             if (actualWorkflowPath
                             .filter(path -> PathsEqual.samePath(Path.of(path), expectedWorkflowPath))
                             .isPresent()
                     && boardIdMatches(actualBoardId, actualConfiguredBoardId, expectedBoardId, expectedBoardKey)) {
-                return new BoardHealth(BoardHealthKind.SAME_WORKFLOW, port, actualWorkflowPath, actualBoardId);
+                return new BoardHealth(
+                        BoardHealthKind.SAME_WORKFLOW, port, actualWorkflowPath, actualBoardId, workerPid);
             }
-            return new BoardHealth(BoardHealthKind.WRONG_WORKFLOW, port, actualWorkflowPath, actualBoardId);
+            return new BoardHealth(BoardHealthKind.WRONG_WORKFLOW, port, actualWorkflowPath, actualBoardId, workerPid);
         } catch (IOException | InterruptedException | IllegalArgumentException e) {
             if (e instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
@@ -211,6 +213,14 @@ final class LocalHealthChecker {
                     "Managed local setup needs a stable HTTP port. Remove SYMPHONY_HTTP_PORT/QUARKUS_HTTP_PORT=0 or set a positive workflow server.port.");
         }
         return port;
+    }
+
+    private static Optional<Long> optionalPid(Object value) {
+        if (value instanceof Number number) {
+            long pid = number.longValue();
+            return pid > 0 ? Optional.of(pid) : Optional.empty();
+        }
+        return Optional.empty();
     }
 
     private static Optional<String> optionalString(Object value) {
