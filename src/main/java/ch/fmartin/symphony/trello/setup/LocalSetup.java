@@ -201,7 +201,9 @@ public final class LocalSetup {
             options = configureCodexAccess(options, terminal);
             applyCodexAccess(options, result.workflowPath());
             ConnectedBoard connectedBoard = ConnectedBoard.from(result, options, githubIntegration);
-            stopReplacedBoards(options, manifest.boardsReplacedBy(connectedBoard));
+            List<ConnectedBoard> replacedBoards = manifest.boardsReplacedBy(connectedBoard);
+            stopReplacedBoards(options, replacedBoards);
+            workerManager.rotateLogsForReplacedBoards(localWorkerPaths(options), connectedBoard, replacedBoards);
             manifest = manifest.withBoard(connectedBoard);
             boards.save(manifest);
 

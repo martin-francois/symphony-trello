@@ -1265,12 +1265,10 @@ final class SetupDiagnosticReporter {
             List<String> args,
             WorkflowPathResolution workflowPathResolution) {
         WorkflowConfigEditor editor = new WorkflowConfigEditor();
-        SequencedSet<Integer> ports = new LinkedHashSet<>();
-        manifest.boards().stream().map(ConnectedBoard::serverPort).forEach(ports::add);
-        reportWorkflowPaths(manifest, paths, args, workflowPathResolution, !hasBoardOption(args)).stream()
-                .map(editor::serverPort)
-                .flatMap(Optional::stream)
-                .forEach(ports::add);
+        SequencedSet<Integer> ports = probePorts(
+                editor,
+                manifest,
+                reportWorkflowPaths(manifest, paths, args, workflowPathResolution, !hasBoardOption(args)));
         if (ports.isEmpty()) {
             body.append("No configured local ports found.\n");
             return;
@@ -1284,9 +1282,7 @@ final class SetupDiagnosticReporter {
     private void appendHealthProbes(
             StringBuilder body, ConnectedBoardManifest manifest, SequencedSet<Path> workflowPaths) {
         WorkflowConfigEditor editor = new WorkflowConfigEditor();
-        SequencedSet<Integer> ports = new LinkedHashSet<>();
-        manifest.boards().stream().map(ConnectedBoard::serverPort).forEach(ports::add);
-        workflowPaths.stream().map(editor::serverPort).flatMap(Optional::stream).forEach(ports::add);
+        SequencedSet<Integer> ports = probePorts(editor, manifest, workflowPaths);
         if (ports.isEmpty()) {
             body.append("No configured local ports found.\n");
             return;
@@ -1365,6 +1361,31 @@ final class SetupDiagnosticReporter {
             case CONFIG_DIR -> resolveUserDataPath(path, configDir);
             case CALLER_DIRECTORY -> path.toAbsolutePath().normalize();
         };
+    }
+
+    /**
+     * One effective port per board: the workflow file's server.port is current, and the manifest
+     * port is only the fallback when the workflow does not declare a readable port. Unioning both
+     * would probe stale historical ports after a workflow path was reused or repaired.
+     */
+    private static SequencedSet<Integer> probePorts(
+            WorkflowConfigEditor editor, ConnectedBoardManifest manifest, SequencedSet<Path> workflowPaths) {
+        SequencedSet<Integer> ports = new LinkedHashSet<>();
+        for (ConnectedBoard board : manifest.boards()) {
+            Optional<Integer> workflowPort =
+                    board.workflowPath() == null ? Optional.empty() : editor.serverPort(board.workflowPath());
+            ports.add(workflowPort.orElse(board.serverPort()));
+        }
+        for (Path workflow : workflowPaths) {
+            boolean connected = manifest.boards().stream()
+                    .anyMatch(board ->
+                            board.workflowPath() != null && PathsEqual.samePath(board.workflowPath(), workflow));
+            if (connected) {
+                continue;
+            }
+            editor.serverPort(workflow).ifPresent(ports::add);
+        }
+        return ports;
     }
 
     private void appendProbe(StringBuilder body, int port, String path) {

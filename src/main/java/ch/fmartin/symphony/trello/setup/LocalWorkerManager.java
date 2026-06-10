@@ -667,6 +667,17 @@ final class LocalWorkerManager {
         stop(paths, new ManagedProcessStore(paths.stateHome()), board, out);
     }
 
+    void rotateLogsForReplacedBoards(LocalWorkerPaths paths, ConnectedBoard board, List<ConnectedBoard> replacedBoards)
+            throws IOException {
+        ManagedProcessStore store = new ManagedProcessStore(paths.stateHome());
+        for (ConnectedBoard replaced : replacedBoards) {
+            if (PathsEqual.samePath(replaced.workflowPath(), board.workflowPath())
+                    && !replaced.boardId().equals(board.boardId())) {
+                store.rotateLogsForNewBoardIdentity(replaced.workflowPath());
+            }
+        }
+    }
+
     boolean canStopManagedWorker(LocalWorkerPaths paths, ConnectedBoard board) throws IOException {
         ManagedProcessStore store = new ManagedProcessStore(paths.stateHome());
         ManagedProcessStore.ManagedProcessFiles files = store.files(board.workflowPath());

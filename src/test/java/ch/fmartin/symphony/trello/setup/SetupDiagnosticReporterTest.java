@@ -157,6 +157,49 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
+    void selectedDiagnosticsProbesOnlyCurrentWorkflowPortAfterPortChange() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("reused-port-config");
+        Path stateHome = tempDir.resolve("state");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Path workflow = configDir.resolve("WORKFLOW.reused.md");
+        Files.writeString(workflow, workflowWithPort(20991), StandardCharsets.UTF_8);
+        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
+                        "000000000000000000000001",
+                        "SYNTH001",
+                        "Reused Board",
+                        "https://trello.com/b/SYNTH001/reused-board",
+                        workflow,
+                        configDir.resolve(".env"),
+                        tempDir.resolve("workspaces"),
+                        20990,
+                        false,
+                        List.of(),
+                        false))));
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.of("Reused Board"),
+                Optional.empty(),
+                false,
+                false,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.empty(),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.empty()));
+
+        // then
+        assertThat(report)
+                .contains("http://127.0.0.1:20991/api/v1/local-status")
+                .doesNotContain("http://127.0.0.1:20990/");
+    }
+
+    @Test
     void displayPathShowsResolvedPathForFilesUnderUserHome() {
         // given
         Path underHome = Path.of(System.getProperty("user.home"), ".local", "share", "symphony-trello", ".env");
