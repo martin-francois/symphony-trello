@@ -1727,6 +1727,10 @@ Optional client-side tool extension:
 - A Trello workpad tool, when implemented, SHOULD maintain one current-card comment whose text starts
   with `## Codex Workpad`, update that comment instead of creating duplicate progress comments, and
   fail visibly if the existing workpad cannot be updated.
+- When a workpad upsert finds more than one workpad comment, the implementation SHOULD update one
+  authoritative workpad first and report the duplicate cleanup outcome in the tool result. Deleting
+  the duplicate comments needs `trello_tools.allow_destructive_operations`; without that opt-in the
+  updated workpad text SHOULD make the required manual cleanup visible on the card.
 - If writes are exposed through generic `trello_rest`, the implementation MUST classify each write
   request before execution and enforce the same policy as the corresponding high-level operation. If
   a write request cannot be safely classified, it MUST fail with a structured policy error.
