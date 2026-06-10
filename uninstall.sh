@@ -604,8 +604,10 @@ stop_managed_processes() {
     local pid
     pid="$(cat "$pid_file")"
     if kill -0 "$pid" >/dev/null 2>&1 && is_managed_pid "$pid"; then
-      echo "  STOP  $(basename "$pid_file" .pid) pid=$pid"
-      if [[ "$DRY_RUN" == false ]]; then
+      if [[ "$DRY_RUN" == true ]]; then
+        echo "  WOULD STOP  $(basename "$pid_file" .pid) pid=$pid"
+      else
+        echo "  STOP  $(basename "$pid_file" .pid) pid=$pid"
         kill "$pid" >/dev/null 2>&1 || true
         wait_for_exit "$pid"
         rm -f "$pid_file"
@@ -663,11 +665,27 @@ echo "Will remove if present:"
 echo "  APP FILES       $APP_DIR"
 echo "  CLI EXECUTABLE  $BIN_DIR/symphony-trello"
 print_managed_codex_removal_plan
+echo "  WORKERS         Managed Symphony workers are stopped before removal"
+if [[ "$REMOVE_CONFIG" == true ]]; then
+  echo "  CONFIG          $CONFIG_DIR"
+fi
+if [[ "$REMOVE_WORKSPACES" == true ]]; then
+  echo "  WORKSPACES      $WORKSPACE_ROOT"
+fi
+if [[ "$REMOVE_STATE" == true ]]; then
+  echo "  STATE/LOGS      $STATE_HOME"
+fi
 echo
-echo "Will preserve by default:"
-echo "  CONFIG          $CONFIG_DIR"
-echo "  WORKSPACES      $WORKSPACE_ROOT"
-echo "  STATE/LOGS      $STATE_HOME"
+echo "Will preserve:"
+if [[ "$REMOVE_CONFIG" == false ]]; then
+  echo "  CONFIG          $CONFIG_DIR"
+fi
+if [[ "$REMOVE_WORKSPACES" == false ]]; then
+  echo "  WORKSPACES      $WORKSPACE_ROOT"
+fi
+if [[ "$REMOVE_STATE" == false ]]; then
+  echo "  STATE/LOGS      $STATE_HOME"
+fi
 echo "  AUTH            Codex login/auth files and GitHub auth"
 echo "  TRELLO          Trello boards are not deleted or archived"
 echo

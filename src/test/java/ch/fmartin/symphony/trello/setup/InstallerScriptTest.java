@@ -122,6 +122,51 @@ final class InstallerScriptTest {
     }
 
     @Test
+    void posixUninstallDryRunPrintsPlannedWorkerStopsWithoutStopping() throws Exception {
+        // given
+        Assumptions.assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("would-stop-home");
+        Path symphonyHome = temporaryDirectory.resolve("would-stop-symphony-home");
+        Path app = symphonyHome.resolve("app");
+        Path stateHome = symphonyHome.resolve("state");
+        Files.createDirectories(home);
+        Files.createDirectories(stateHome);
+        Files.createDirectories(app.resolve("target").resolve("quarkus-app"));
+        Files.writeString(app.resolve(".symphony-trello-install"), "marker", StandardCharsets.UTF_8);
+        String markerArgument =
+                "-Dsymphony.trello.managed.app_home=" + app.toAbsolutePath().normalize();
+        String jarArgument = app.toAbsolutePath()
+                .normalize()
+                .resolve("target")
+                .resolve("quarkus-app")
+                .resolve("quarkus-run.jar")
+                .toString();
+        Process worker = new ProcessBuilder(
+                        "bash", "-c", "while :; do sleep 1; done", "--", markerArgument, jarArgument)
+                .start();
+        try {
+            Files.writeString(
+                    stateHome.resolve("WORKFLOW.would-stop.md.abcdef123456.pid"),
+                    Long.toString(worker.pid()),
+                    StandardCharsets.UTF_8);
+            Map<String, String> environment = Map.of("HOME", home.toString(), "SYMPHONY_HOME", symphonyHome.toString());
+
+            // when
+            ProcessResult result =
+                    runUnchecked(environment, "bash", "uninstall.sh", "--dry-run", "--yes", "--prefix", app.toString());
+
+            // then
+            assertThat(result.exitCode()).as(result.output()).isZero();
+            assertThat(result.output())
+                    .contains("WOULD STOP  WORKFLOW.would-stop.md.abcdef123456 pid=" + worker.pid())
+                    .doesNotContain("\n  STOP  ");
+            assertThat(worker.isAlive()).as("dry run must not stop the worker").isTrue();
+        } finally {
+            worker.destroyForcibly();
+        }
+    }
+
+    @Test
     void posixUninstallerRejectsUnsafeCommandDirectoriesBeforeDryRunPlan() throws Exception {
         // given
         Assumptions.assumeTrue(commandExists("bash"));
@@ -1118,6 +1163,74 @@ final class InstallerScriptTest {
                         home.resolve(".bashrc").toString());
         assertThat(home.resolve(".bashrc")).doesNotExist();
         assertThat(home.resolve(".profile")).doesNotExist();
+    }
+
+    @Test
+    void posixUninstallDryRunPlanSeparatesRemovalsFromPreservedData() throws Exception {
+        // given
+        Assumptions.assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("uninstall-plan-home");
+        Path symphonyHome = temporaryDirectory.resolve("uninstall-plan-symphony-home");
+        Path binDirectory = temporaryDirectory.resolve("uninstall-plan-bin");
+        Files.createDirectories(home);
+        Files.createDirectories(symphonyHome.resolve("state"));
+        Map<String, String> environment = Map.of(
+                "PATH", System.getenv("PATH"),
+                "HOME", home.toString(),
+                "SYMPHONY_HOME", symphonyHome.toString());
+
+        // when
+        ProcessResult result = run(
+                environment,
+                "bash",
+                "uninstall.sh",
+                "--dry-run",
+                "--yes",
+                "--remove-all-local-data",
+                "--bin-dir",
+                binDirectory.toString());
+
+        // then
+        result.assertSuccess();
+        String output = result.output();
+        int removeSection = output.indexOf("Will remove if present:");
+        int preserveSection = output.indexOf("Will preserve:");
+        assertThat(removeSection).as(output).isNotNegative();
+        assertThat(preserveSection).as(output).isGreaterThan(removeSection);
+        String removePlan = output.substring(removeSection, preserveSection);
+        String preservePlan = output.substring(preserveSection);
+        assertThat(removePlan)
+                .contains("CONFIG", "WORKSPACES", "STATE/LOGS", "WORKERS         Managed Symphony workers");
+        assertThat(preservePlan)
+                .contains("AUTH", "TRELLO")
+                .doesNotContain("CONFIG          ", "WORKSPACES      ", "STATE/LOGS      ");
+    }
+
+    @Test
+    void posixUninstallDryRunPreservesLocalDataByDefault() throws Exception {
+        // given
+        Assumptions.assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("uninstall-default-home");
+        Path symphonyHome = temporaryDirectory.resolve("uninstall-default-symphony-home");
+        Path binDirectory = temporaryDirectory.resolve("uninstall-default-bin");
+        Files.createDirectories(home);
+        Files.createDirectories(symphonyHome.resolve("state"));
+        Map<String, String> environment = Map.of(
+                "PATH", System.getenv("PATH"),
+                "HOME", home.toString(),
+                "SYMPHONY_HOME", symphonyHome.toString());
+
+        // when
+        ProcessResult result =
+                run(environment, "bash", "uninstall.sh", "--dry-run", "--yes", "--bin-dir", binDirectory.toString());
+
+        // then
+        result.assertSuccess();
+        String output = result.output();
+        int preserveSection = output.indexOf("Will preserve:");
+        assertThat(preserveSection).as(output).isNotNegative();
+        assertThat(output.substring(preserveSection)).contains("CONFIG", "WORKSPACES", "STATE/LOGS", "AUTH", "TRELLO");
+        assertThat(output.substring(0, preserveSection)).doesNotContain("CONFIG          ");
     }
 
     @Test
@@ -3306,6 +3419,7 @@ final class InstallerScriptTest {
         assertThat(posixUninstaller)
                 .contains(
                         "/dev/tty",
+                        "WOULD STOP",
                         "STOP",
                         "kill",
                         "wait_for_exit",
@@ -3320,6 +3434,7 @@ final class InstallerScriptTest {
         assertThat(posixUninstaller).doesNotContain(",,}");
         assertThat(powershellUninstaller)
                 .contains(
+                        "WOULD STOP",
                         "[Alias(\"-dry-run\", \"dry-run\", \"--dry-run\")]",
                         "[Alias(\"-yes\", \"--yes\")]",
                         "[Alias(\"-yes-local-data\", \"yes-local-data\", \"--yes-local-data\")]",

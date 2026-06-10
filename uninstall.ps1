@@ -622,8 +622,10 @@ function Stop-ManagedProcesses {
     }
     $process = Get-Process -Id $managedPid -ErrorAction SilentlyContinue
     if ($process -and (Test-ManagedPid $managedPid)) {
-      Write-Host "  STOP  $($pidFile.BaseName) pid=$managedPid"
-      if (-not $DryRun) {
+      if ($DryRun) {
+        Write-Host "  WOULD STOP  $($pidFile.BaseName) pid=$managedPid"
+      } else {
+        Write-Host "  STOP  $($pidFile.BaseName) pid=$managedPid"
         Stop-AndWaitManagedProcess $managedPid
         Remove-Item -LiteralPath $pidFile.FullName -Force
       }
@@ -648,11 +650,15 @@ Write-Host "Will remove if present:"
 Write-Host "  APP FILES       $Prefix"
 Write-Host "  CLI EXECUTABLE  $(Join-Path $BinDir "symphony-trello.ps1")"
 Write-ManagedCodexRemovalPlan
+Write-Host "  WORKERS         Managed Symphony workers are stopped before removal"
+if ($RemoveConfig) { Write-Host "  CONFIG          $ConfigDir" }
+if ($RemoveWorkspaces) { Write-Host "  WORKSPACES      $WorkspaceRoot" }
+if ($RemoveState) { Write-Host "  STATE/LOGS      $StateHome" }
 Write-Host
-Write-Host "Will preserve by default:"
-Write-Host "  CONFIG          $ConfigDir"
-Write-Host "  WORKSPACES      $WorkspaceRoot"
-Write-Host "  STATE/LOGS      $StateHome"
+Write-Host "Will preserve:"
+if (-not $RemoveConfig) { Write-Host "  CONFIG          $ConfigDir" }
+if (-not $RemoveWorkspaces) { Write-Host "  WORKSPACES      $WorkspaceRoot" }
+if (-not $RemoveState) { Write-Host "  STATE/LOGS      $StateHome" }
 Write-Host "  AUTH            Codex login/auth files and GitHub auth"
 Write-Host "  TRELLO          Trello boards are not deleted or archived"
 Write-Host
