@@ -59,7 +59,7 @@ public class TrelloClient implements TrackerClient {
         Map<String, Object> board = getMap(
                 config, "boards/" + encodeSegment(config.tracker().boardId()), Map.of("fields", "id,name,closed"));
         if (bool(board.get("closed"))) {
-            throw new TrelloException("trello_board_closed", "Configured Trello board is closed");
+            throw new TrelloException("trello_board_closed", "Configured Trello board is archived");
         }
         return requiredString(board, "id", "trello_unknown_payload");
     }
