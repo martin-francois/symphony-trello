@@ -1023,8 +1023,11 @@ For field meanings, token totals, logging conventions, and troubleshooting expec
 For issue reports, run `symphony-trello diagnostics`,
 `symphony-trello diagnostics --board "My Board Name"`, or
 `symphony-trello diagnostics --workflow WORKFLOW.md`. Use `--board` or `--workflow` to keep the
-report smaller. `--board` and `--workflow` are mutually exclusive; if multiple connected Trello
-boards have the same name, use the Trello board id or short link. The command prints sanitized local
+report smaller. Without a selector, the report covers every connected Trello board and also lists
+workflow files in the config directory that are not connected to any board in a separate
+Unconnected Workflow Files section, without probing their ports. `--board` and `--workflow` are
+mutually exclusive; if multiple connected Trello boards have the same name, use the Trello board id
+or short link. The command prints sanitized local
 setup, workflow, health, and recent log context without Trello, GitHub, or Codex network calls by
 default. Add `--deep` when the default report does not include enough context; it runs deeper
 public-safe checks such as local Codex and GitHub auth-status commands. Review the output before

@@ -514,11 +514,28 @@ final class SetupDiagnosticReporter {
                 context.paths().defaultEnvPath());
         appendInvalidConnectedBoardWorkflows(
                 body, context.selectedManifest(), context.paths().defaultEnvPath());
+        SequencedSet<Path> allWorkflowPaths = new LinkedHashSet<>(context.selectedWorkflowPaths());
+        allWorkflowPaths.addAll(context.unconnectedWorkflowPaths());
         appendInvalidWorkflowFiles(
                 body,
                 context.selectedManifest(),
-                context.selectedWorkflowPaths(),
+                allWorkflowPaths,
                 context.paths().defaultEnvPath());
+
+        if (!context.unconnectedWorkflowPaths().isEmpty()) {
+            section(body, "Unconnected Workflow Files");
+            line(
+                    body,
+                    "unconnected_workflow_file_count",
+                    context.unconnectedWorkflowPaths().size());
+            body.append("These workflow files are not in the connected-board manifest. Their ports are not\n");
+            body.append("probed and they are not current local context for connected Trello boards.\n\n");
+            appendWorkflows(
+                    body,
+                    context.selectedManifest(),
+                    context.unconnectedWorkflowPaths(),
+                    context.paths().defaultEnvPath());
+        }
 
         section(body, "Local Health Probes");
         appendHealthProbes(
@@ -591,10 +608,33 @@ final class SetupDiagnosticReporter {
         tokenHasher = sharedTokenHasher.orElseGet(() -> diagnosticsTokenHasher(request, paths));
         ConnectedBoardManifest selectedManifest = new ConnectedBoardManifest(selection.boards());
         boolean selected = selection.kind() != DiagnosticsSelectorKind.NONE;
-        SequencedSet<Path> selectedWorkflowPaths =
-                reportWorkflowPaths(selectedManifest, selection.workflow(), paths.configDir(), !selected);
+        // A request without a --board/--workflow selector is a "broad" run: it reports every
+        // connected board and also workflow files that are merely present in the config directory.
+        // With at least one connected board, those unconnected files render in their own
+        // Unconnected Workflow Files section and skip port probes, so stale or disconnected files
+        // do not look like current local context. With no connected boards at all, the discovered
+        // files stay the primary context because they are everything this setup has.
+        boolean separateUnconnectedWorkflows =
+                !selected && !selectedManifest.boards().isEmpty();
+        boolean unconnectedFilesArePrimaryContext = !selected && !separateUnconnectedWorkflows;
+        SequencedSet<Path> selectedWorkflowPaths = reportWorkflowPaths(
+                selectedManifest, selection.workflow(), paths.configDir(), unconnectedFilesArePrimaryContext);
+        SequencedSet<Path> unconnectedWorkflowPaths = new LinkedHashSet<>();
+        if (separateUnconnectedWorkflows) {
+            reportWorkflowPaths(selectedManifest, selection.workflow(), paths.configDir(), true).stream()
+                    .filter(workflow -> selectedWorkflowPaths.stream()
+                            .noneMatch(connected -> PathsEqual.samePath(connected, workflow)))
+                    .forEach(unconnectedWorkflowPaths::add);
+        }
         return new DiagnosticsContext(
-                paths, manifestPath, manifestSnapshot, manifest, selection, selectedManifest, selectedWorkflowPaths);
+                paths,
+                manifestPath,
+                manifestSnapshot,
+                manifest,
+                selection,
+                selectedManifest,
+                selectedWorkflowPaths,
+                unconnectedWorkflowPaths);
     }
 
     private void appendSelectionMetadata(StringBuilder body, DiagnosticsContext context) {
@@ -2407,7 +2447,8 @@ final class SetupDiagnosticReporter {
             ConnectedBoardManifest manifest,
             DiagnosticsSelection selection,
             ConnectedBoardManifest selectedManifest,
-            SequencedSet<Path> selectedWorkflowPaths) {
+            SequencedSet<Path> selectedWorkflowPaths,
+            SequencedSet<Path> unconnectedWorkflowPaths) {
         private boolean selected() {
             return selection.kind() != DiagnosticsSelectorKind.NONE;
         }
