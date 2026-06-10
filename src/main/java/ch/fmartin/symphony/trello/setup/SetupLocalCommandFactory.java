@@ -314,21 +314,16 @@ final class SetupLocalCommandFactory {
         @Option(names = "--manifest", description = "Connected-board manifest path.")
         Optional<Path> manifestPath = Optional.empty();
 
-        @Option(names = "--server-port", description = "Local HTTP status port.")
+        @Option(names = "--server-port", description = SetupOptionHelp.SERVER_PORT)
         Optional<Integer> serverPort = Optional.empty();
 
-        @Option(
-                names = "--max-agents",
-                description =
-                        "Maximum cards from this board that may run at once (1-32). Each concurrent card runs its own Codex agent plus builds and tests; keep 1 until cards are safe to run in parallel.")
+        @Option(names = "--max-agents", description = SetupOptionHelp.MAX_AGENTS)
         Optional<Integer> maxAgents = Optional.empty();
 
-        @Option(names = "--codex-model", description = "Codex model to write into generated workflows.")
+        @Option(names = "--codex-model", description = SetupOptionHelp.CODEX_MODEL)
         Optional<String> codexModel = Optional.empty();
 
-        @Option(
-                names = "--codex-reasoning-effort",
-                description = "Codex reasoning effort to write into generated workflows.")
+        @Option(names = "--codex-reasoning-effort", description = SetupOptionHelp.CODEX_REASONING_EFFORT)
         Optional<String> codexReasoningEffort = Optional.empty();
 
         @Option(names = "--env", description = "Dotenv file for Trello credentials.")
