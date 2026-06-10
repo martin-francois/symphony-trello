@@ -1647,7 +1647,7 @@ final class LocalWorkerManagerTest {
         // then
         result.assertSuccess()
                 .stdoutContains("Symphony for Trello is already stopped for \"Queue\"")
-                .stdoutDoesNotContain("Stopped WORKFLOW.");
+                .stdoutDoesNotContain("Stopped Symphony for Trello for \"Queue\"");
         verify(fixture.platform, never()).stop(anyLong(), any(Duration.class), any(Duration.class));
     }
 
@@ -1664,7 +1664,7 @@ final class LocalWorkerManagerTest {
         // then
         result.assertSuccess()
                 .stdoutContains("Symphony for Trello is already stopped for \"Queue\"")
-                .stdoutDoesNotContain("Stopped WORKFLOW.");
+                .stdoutDoesNotContain("Stopped Symphony for Trello for \"Queue\"");
         verify(fixture.platform, never()).stop(anyLong(), any(Duration.class), any(Duration.class));
     }
 
@@ -1698,7 +1698,7 @@ final class LocalWorkerManagerTest {
         WorkerRunResult result = fixture.stop(fixture.stopWorkflowRequest(board.workflowPath()));
 
         // then
-        result.assertSuccess().stdoutContains("Stopped WORKFLOW.queue.md");
+        result.assertSuccess().stdoutContains("Stopped Symphony for Trello for \"Queue\"");
     }
 
     @Test
@@ -1781,10 +1781,10 @@ final class LocalWorkerManagerTest {
         // then
         assertThat(firstError).hasValue(null);
         assertThat(secondError).hasValue(null);
-        assertThat(firstResult.get().stdout()).contains("Stopped WORKFLOW.");
+        assertThat(firstResult.get().stdout()).contains("Stopped Symphony for Trello for \"Queue\"");
         assertThat(secondResult.get().stdout())
                 .contains("Symphony for Trello is already stopped for \"Queue\"")
-                .doesNotContain("Stopped WORKFLOW.");
+                .doesNotContain("Stopped Symphony for Trello for \"Queue\"");
         verify(fixture.platform).stop(42, Duration.ofSeconds(15), Duration.ofSeconds(5));
     }
 
@@ -1812,7 +1812,9 @@ final class LocalWorkerManagerTest {
         WorkerRunResult result = fixture.stop(fixture.stopAllRequest());
 
         // then
-        result.assertSuccess().stdoutContains("Stopped WORKFLOW.first.md", "Stopped WORKFLOW.second.md");
+        result.assertSuccess()
+                .stdoutContains(
+                        "Stopped Symphony for Trello for \"First\"", "Stopped Symphony for Trello for \"Second\"");
         assertThat(pidFiles(fixture.paths.stateHome())).isEmpty();
     }
 
@@ -1944,7 +1946,7 @@ final class LocalWorkerManagerTest {
                     .hasMessage(
                             "Multiple connected boards match --board. Re-run with a board id, short link, or --workflow.");
         });
-        workflowResult.assertSuccess().stdoutContains("Stopped WORKFLOW.duplicate-two.md");
+        workflowResult.assertSuccess().stdoutContains("Stopped Symphony for Trello for \"Duplicate\"");
     }
 
     @Test
@@ -2416,7 +2418,7 @@ final class LocalWorkerManagerTest {
         WorkerRunResult result = fixture.stop(fixture.stopWorkflowRequest(workflow));
 
         // then
-        result.assertSuccess().stdoutContains("Stopped WORKFLOW.direct-stop-env");
+        result.assertSuccess().stdoutContains("Stopped Symphony for Trello for \"WORKFLOW.direct-stop-env");
     }
 
     @Test
@@ -2456,7 +2458,11 @@ final class LocalWorkerManagerTest {
         WorkerRunResult secondStop = fixture.stop(fixture.stopRequest("Queue"));
 
         // then
-        firstStop.assertSuccess().stdoutContains("Skipped unmanaged stale pid", "Removed the stale managed pid file.");
+        firstStop
+                .assertSuccess()
+                .stdoutContains(
+                        "Skipped unmanaged stale pid for \"Queue\" pid=42", "Removed the stale managed pid file.")
+                .stdoutDoesNotContain("Skipped unmanaged stale pid WORKFLOW");
         secondStop.assertSuccess().stdoutDoesNotContain("Skipped unmanaged stale pid");
         ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
         assertThat(store.readPid(store.files(board.workflowPath()).pidFile())).isNull();
@@ -2493,12 +2499,60 @@ final class LocalWorkerManagerTest {
         // then
         result.assertSuccess()
                 .stdoutContains(
-                        "Skipped unmanaged stale pid",
+                        "Skipped unmanaged stale pid for \"Queue\" pid=42",
                         "Could not remove the stale managed pid file:",
                         "Remove it manually, then rerun stop. The unrelated process was not stopped.")
                 .stdoutDoesNotContain("Removed the stale managed pid file.");
         verify(fixture.platform, never()).stop(anyLong(), any(Duration.class), any(Duration.class));
         assertThat(pidFile).exists();
+    }
+
+    @Test
+    void stopAllReportsHashFreeLabelsAndSharesStaleCleanupSemantics() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
+        Path managedWorkflow = fixture.paths.configDir().resolve("WORKFLOW.managed.md");
+        Path staleWorkflow = fixture.paths.configDir().resolve("WORKFLOW.stale.md");
+        store.writePid(store.files(managedWorkflow).pidFile(), 41);
+        store.writePid(store.files(staleWorkflow).pidFile(), 42);
+        when(fixture.platform.isAlive(41L)).thenReturn(true);
+        when(fixture.platform.isAlive(42L)).thenReturn(true);
+        when(fixture.platform.isManaged(41L, fixture.paths.appHome())).thenReturn(true);
+        when(fixture.platform.isManaged(42L, fixture.paths.appHome())).thenReturn(false);
+        when(fixture.platform.stop(eq(41L), any(Duration.class), any(Duration.class)))
+                .thenReturn(true);
+
+        // when
+        WorkerRunResult result = fixture.stop(fixture.stopAllRequest());
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "Stopped WORKFLOW.managed.md",
+                        "Skipped unmanaged stale pid WORKFLOW.stale.md pid=42",
+                        "Removed the stale managed pid file.")
+                .stdoutDoesNotContain("WORKFLOW.managed.md.", "WORKFLOW.stale.md.");
+        verify(fixture.platform, never()).stop(eq(42L), any(Duration.class), any(Duration.class));
+    }
+
+    @Test
+    void statusFallbackReportsHashFreeLabels() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
+        Path workflow = fixture.paths.configDir().resolve("WORKFLOW.fallback.md");
+        store.writePid(store.files(workflow).pidFile(), 41);
+        when(fixture.platform.isAlive(41L)).thenReturn(true);
+        when(fixture.platform.isManaged(41L, fixture.paths.appHome())).thenReturn(true);
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusAllRequest());
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("running WORKFLOW.fallback.md pid=41")
+                .stdoutDoesNotContain("running WORKFLOW.fallback.md.");
     }
 
     @Test
@@ -2521,7 +2575,7 @@ final class LocalWorkerManagerTest {
         // then
         result.assertSuccess()
                 .stdoutContains(
-                        "Skipped unmanaged stale pid WORKFLOW.vanishing.md",
+                        "Skipped unmanaged stale pid WORKFLOW.vanishing.md pid=42",
                         "The stale managed pid file was already removed.")
                 .stdoutDoesNotContain("Could not remove the stale managed pid file");
         verify(fixture.platform, never()).stop(anyLong(), any(Duration.class), any(Duration.class));

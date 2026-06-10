@@ -578,6 +578,18 @@ command_line_has_arg() {
     " $command_line " == *" '$expected' "* ]]
 }
 
+# Lifecycle output shows the workflow file name; the trailing 12-hex segment of a pid file name
+# is internal state naming, not user-facing context.
+worker_label() {
+  local name
+  name="$(basename "$1" .pid)"
+  if [[ "$name" =~ \.[0-9a-f]{12}$ ]]; then
+    printf '%s\n' "${name%.*}"
+  else
+    printf '%s\n' "$name"
+  fi
+}
+
 wait_for_exit() {
   local pid="$1"
   local deadline=$((SECONDS + 15))
@@ -605,15 +617,15 @@ stop_managed_processes() {
     pid="$(cat "$pid_file")"
     if kill -0 "$pid" >/dev/null 2>&1 && is_managed_pid "$pid"; then
       if [[ "$DRY_RUN" == true ]]; then
-        echo "  WOULD STOP  $(basename "$pid_file" .pid) pid=$pid"
+        echo "  WOULD STOP  $(worker_label "$pid_file") pid=$pid"
       else
-        echo "  STOP  $(basename "$pid_file" .pid) pid=$pid"
+        echo "  STOP  $(worker_label "$pid_file") pid=$pid"
         kill "$pid" >/dev/null 2>&1 || true
         wait_for_exit "$pid"
         rm -f "$pid_file"
       fi
     elif kill -0 "$pid" >/dev/null 2>&1; then
-      echo "  SKIP  stale pid does not belong to this install: $(basename "$pid_file" .pid) pid=$pid"
+      echo "  SKIP  stale pid does not belong to this install: $(worker_label "$pid_file") pid=$pid"
     elif [[ "$DRY_RUN" == false ]]; then
       rm -f "$pid_file"
     fi
