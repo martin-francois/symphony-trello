@@ -2296,7 +2296,13 @@ final class SetupDiagnosticReporterTest {
                         .formatted(invalidPortValue),
                 StandardCharsets.UTF_8);
         Files.writeString(validWorkflow, workflowWithPort(20999), StandardCharsets.UTF_8);
-        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+        // The fixed clock keeps the rendered time_utc line free of every invalidPortValue substring;
+        // the system clock makes "-1" match dates such as 2026-06-10.
+        var reporter = new SetupDiagnosticReporter(
+                Map.of(),
+                new FakeCommandRunner(),
+                Files::list,
+                Clock.fixed(Instant.parse("2026-05-02T03:04:05Z"), ZoneOffset.UTC));
 
         // when
         String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
