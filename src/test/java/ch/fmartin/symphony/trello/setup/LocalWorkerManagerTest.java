@@ -710,6 +710,44 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
+    void statusDisambiguatesDuplicateConnectedBoardNames() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard first = fixture.connectedBoard("board-1", "Queue", "queue-one");
+        ConnectedBoard second = fixture.connectedBoard("board-2", "Queue", "queue-two");
+        fixture.save(first, second);
+
+        // when
+        WorkerRunResult result = fixture.status(new WorkerStatusRequest(
+                Optional.empty(),
+                Optional.empty(),
+                Optional.of(fixture.paths.appHome()),
+                Optional.of(fixture.paths.configDir()),
+                Optional.of(fixture.paths.workspaceRoot()),
+                Optional.of(fixture.paths.stateHome())));
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "stopped \"Queue\" [board-1 WORKFLOW.queue-one.md]",
+                        "stopped \"Queue\" [board-2 WORKFLOW.queue-two.md]");
+    }
+
+    @Test
+    void statusKeepsConciseLabelForUniqueBoardNames() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
+
+        // then
+        result.assertSuccess().stdoutContains("stopped \"Queue\"").stdoutDoesNotContain("[board-1");
+    }
+
+    @Test
     void rotateLogsForReplacedBoardsMovesLogsWhenWorkflowPathIsReusedForDifferentBoard() throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);

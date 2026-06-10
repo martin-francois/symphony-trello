@@ -712,12 +712,14 @@ final class LocalWorkerManager {
             return 0;
         }
         ManagedProcessStore store = new ManagedProcessStore(paths.stateHome());
+        Set<String> duplicateBoardNames = duplicateBoardNames(boards);
         for (ConnectedBoard board : boards) {
+            String boardLabel = statusBoardLabel(board, duplicateBoardNames);
             WorkflowValidation workflowDiagnostics = workflowConfig.diagnosticsValidation(
                     board.workflowPath(), WorkflowEnvironmentResolver.resolver(environment, board.envPath()));
             if (!workflowDiagnostics.ok()) {
-                out.println("invalid \"" + board.boardName() + "\" " + workflowDiagnostics.message() + ": "
-                        + board.workflowPath());
+                out.println(
+                        "invalid " + boardLabel + " " + workflowDiagnostics.message() + ": " + board.workflowPath());
                 continue;
             }
             ManagedProcessStore.ManagedProcessFiles files = store.files(board.workflowPath());
@@ -727,26 +729,47 @@ final class LocalWorkerManager {
                     && platform.isAlive(pid)
                     && platform.isManaged(pid, paths.appHome(), board.workflowPath())
                     && health.kind() == BoardHealthKind.SAME_WORKFLOW) {
-                out.println("running \"" + board.boardName() + "\" pid=" + pid + " "
+                out.println("running " + boardLabel + " pid=" + pid + " "
                         + LocalHealthChecker.localServerUrl(health.port()));
             } else if (pid != null
                     && platform.isAlive(pid)
                     && platform.isManaged(pid, paths.appHome(), board.workflowPath())) {
-                out.println("unhealthy \"" + board.boardName() + "\" pid=" + pid + " "
+                out.println("unhealthy " + boardLabel + " pid=" + pid + " "
                         + LocalHealthChecker.localServerUrl(health.port()) + " (" + health.kind() + ")");
             } else if (pid != null && platform.isAlive(pid)) {
-                out.println("stale \"" + board.boardName() + "\" pid=" + pid + " does not belong to this install");
+                out.println("stale " + boardLabel + " pid=" + pid + " does not belong to this install");
             } else {
                 store.deletePid(files.pidFile());
                 if (health.kind() == BoardHealthKind.SAME_WORKFLOW) {
-                    out.println("running \"" + board.boardName() + "\" "
-                            + LocalHealthChecker.localServerUrl(health.port()) + " (untracked, no managed pid)");
+                    out.println("running " + boardLabel + " " + LocalHealthChecker.localServerUrl(health.port())
+                            + " (untracked, no managed pid)");
                 } else {
-                    out.println("stopped \"" + board.boardName() + "\"");
+                    out.println("stopped " + boardLabel);
                 }
             }
         }
         return 0;
+    }
+
+    private static Set<String> duplicateBoardNames(List<ConnectedBoard> boards) {
+        Set<String> seen = new HashSet<>();
+        Set<String> duplicates = new HashSet<>();
+        for (ConnectedBoard board : boards) {
+            if (!seen.add(board.boardName())) {
+                duplicates.add(board.boardName());
+            }
+        }
+        return duplicates;
+    }
+
+    private static String statusBoardLabel(ConnectedBoard board, Set<String> duplicateBoardNames) {
+        String label = "\"" + board.boardName() + "\"";
+        if (!duplicateBoardNames.contains(board.boardName())) {
+            return label;
+        }
+        // Duplicate connected board names need a safe disambiguator so the user can pick the right
+        // --board or --workflow selector.
+        return label + " [" + board.boardKey() + " " + PathNames.fileName(board.workflowPath()) + "]";
     }
 
     int logs(WorkerLogsRequest request, PrintStream out) throws IOException {
