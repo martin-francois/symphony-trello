@@ -341,6 +341,33 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void checkEscapesControlCharacterBoardNamesInManifestWarnings() throws Exception {
+        // given
+        // Legacy persisted manifests may hold board names containing quotes and control
+        // characters; a warning that embeds such a name must stay one logical line with
+        // escaped, unambiguous quoting instead of splitting the warning across lines.
+        Path configDir = fixture.configDir();
+        Path workflow = configDir.resolve("WORKFLOW.dirty-name-warning.md");
+        Files.createDirectories(fixture.workspaceRoot());
+        writeWorkflow(workflow, "synthetic-board", 20455);
+        fixture.givenManifest(
+                """
+                {"boards":[{"boardId":"synthetic-board","boardKey":"synthetic","boardName":"Sneaky \\"Q\\"\\nBoard","boardUrl":"https://trello.example/synthetic","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":20455,"githubEnabled":"false","dangerFullAccess":false,"additionalWritableRoots":[]}]}
+                """
+                        .formatted(json(workflow), json(configDir.resolve(".env")), json(fixture.workspaceRoot())));
+
+        // when
+        SetupRunResult result = runSetup("check", "--endpoint", endpoint());
+
+        // then
+        result.assertFailure(2)
+                .stderrEmpty()
+                .stdoutContains(
+                        "Connected-board manifest entry \"Sneaky \\\"Q\\\"\\nBoard\" field githubEnabled must be true or false.")
+                .stdoutDoesNotContain("Sneaky \"Q\"\nBoard", "\"Q\"\nBoard");
+    }
+
+    @Test
     void checkReportsInvalidConnectedBoardManifestValueShapes() throws Exception {
         // given
         Path configDir = fixture.configDir();

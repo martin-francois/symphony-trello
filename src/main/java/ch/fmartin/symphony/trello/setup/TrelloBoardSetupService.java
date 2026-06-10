@@ -177,8 +177,8 @@ final class TrelloBoardSetupService {
     }
 
     private void restartUpdatedBoardWorker(ConnectedBoard board, Path manifestPath, PrintStream out) {
-        out.println("This update stopped the running worker for \"" + board.boardName()
-                + "\". Restarting it with the updated workflow.");
+        out.println("This update stopped the running worker for " + DisplayNames.quotedName(board.boardName())
+                + ". Restarting it with the updated workflow.");
         LocalWorkerPaths paths = localWorkerPaths(manifestPath, board.workspaceRoot());
         Path envPath = (board.envPath() == null ? paths.defaultEnvPath() : board.envPath())
                 .toAbsolutePath()
@@ -186,7 +186,8 @@ final class TrelloBoardSetupService {
         try {
             workerManager.start(paths, board, envPath, out);
         } catch (IOException | TrelloBoardSetupException exception) {
-            out.println("Could not restart the worker for \"" + board.boardName() + "\": " + exception.getMessage());
+            out.println("Could not restart the worker for " + DisplayNames.quotedName(board.boardName()) + ": "
+                    + exception.getMessage());
             out.println("Start it again with the start command shown under Next.");
         }
     }
@@ -207,7 +208,8 @@ final class TrelloBoardSetupService {
             } catch (IOException exception) {
                 throw new TrelloBoardSetupException(
                         "setup_stop_failed",
-                        "Could not stop Symphony for \"" + board.boardName() + "\": " + exception.getMessage(),
+                        "Could not stop Symphony for " + DisplayNames.quotedName(board.boardName()) + ": "
+                                + exception.getMessage(),
                         exception);
             }
             stoppedWorkflowPaths.add(board.workflowPath());
