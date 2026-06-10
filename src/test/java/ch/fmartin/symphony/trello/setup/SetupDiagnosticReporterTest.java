@@ -200,6 +200,69 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
+    void writesDistinctReportsForFailuresInTheSameSecond() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("collision-config");
+        Path workspaceRoot = tempDir.resolve("collision-workspaces");
+        Path manifest = configDir.resolve("connected-boards.json");
+        Path workflow = configDir.resolve("WORKFLOW.collision.md");
+        Path env = configDir.resolve(".env");
+        Files.createDirectories(configDir);
+        Instant now = Instant.parse("2026-05-02T03:04:05Z");
+        var reporter = new SetupDiagnosticReporter(
+                Map.of(), new FakeCommandRunner(), Files::list, Clock.fixed(now, ZoneOffset.UTC));
+        var terminal = new RecordingTerminal();
+        var failure = new TrelloBoardSetupException("trello_api_request", "Trello request failed");
+
+        // when
+        Optional<Path> first =
+                reporter.reportFailure(failure, request(configDir, workspaceRoot, manifest, workflow, env), terminal);
+        Optional<Path> second =
+                reporter.reportFailure(failure, request(configDir, workspaceRoot, manifest, workflow, env), terminal);
+
+        // then
+        assertThat(first).isPresent();
+        assertThat(second).isPresent();
+        assertThat(second.get()).isNotEqualTo(first.get());
+        assertThat(first.get()).exists();
+        assertThat(second.get()).exists();
+    }
+
+    @Test
+    void givesUpOnReportNamesAfterBoundedSameSecondCollisions() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("exhausted-collision-config");
+        Path workspaceRoot = tempDir.resolve("exhausted-collision-workspaces");
+        Path manifest = configDir.resolve("connected-boards.json");
+        Path workflow = configDir.resolve("WORKFLOW.exhausted.md");
+        Path env = configDir.resolve(".env");
+        Files.createDirectories(configDir);
+        Instant now = Instant.parse("2026-05-02T03:04:05Z");
+        Path reportDir = configDir.resolveSibling("state").resolve("troubleshooting");
+        Files.createDirectories(reportDir);
+        Files.writeString(reportDir.resolve("setup-failure-20260502-030405.md"), "taken", StandardCharsets.UTF_8);
+        for (int suffix = 2; suffix <= 100; suffix++) {
+            Files.writeString(
+                    reportDir.resolve("setup-failure-20260502-030405-" + suffix + ".md"),
+                    "taken",
+                    StandardCharsets.UTF_8);
+        }
+        var reporter = new SetupDiagnosticReporter(
+                Map.of(), new FakeCommandRunner(), Files::list, Clock.fixed(now, ZoneOffset.UTC));
+        var terminal = new RecordingTerminal();
+        var failure = new TrelloBoardSetupException("trello_api_request", "Trello request failed");
+
+        // when
+        Optional<Path> report =
+                reporter.reportFailure(failure, request(configDir, workspaceRoot, manifest, workflow, env), terminal);
+
+        // then
+        assertThat(report)
+                .as("exhausted same-second names degrade to no report instead of looping")
+                .isEmpty();
+    }
+
+    @Test
     void diagnosticsRejectsMissingWorkflowSelectorAsExpectedInput() throws Exception {
         // given
         Path configDir = tempDir.resolve("missing-workflow-config");
