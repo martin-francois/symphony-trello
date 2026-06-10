@@ -205,8 +205,11 @@ public class ConfigResolver {
 
     private String environmentString(Map<String, Object> root, String key, String defaultValue) {
         String configured = string(root, key, defaultValue);
-        if (configured != null && configured.startsWith("$") && configured.length() > 1) {
-            return environmentValueOrDefault(configured.substring(1), defaultValue);
+        Optional<String> reference = EnvironmentReferences.referenceName(configured);
+        // Plain branching because an unresolved reference must yield the nullable default, which
+        // Optional.map would silently turn back into the raw reference text.
+        if (reference.isPresent()) {
+            return environmentValueOrDefault(reference.get(), defaultValue);
         }
         return configured;
     }
@@ -214,8 +217,9 @@ public class ConfigResolver {
     private String secret(
             Path workflowDirectory, Map<String, Object> root, String key, String displayName, String defaultEnv) {
         String configured = string(root, key, "$" + defaultEnv);
-        if (configured != null && configured.startsWith("$") && configured.length() > 1) {
-            return environmentValueOrDefault(configured.substring(1), null);
+        Optional<String> reference = EnvironmentReferences.referenceName(configured);
+        if (reference.isPresent()) {
+            return environmentValueOrDefault(reference.get(), null);
         }
         if (configured != null && configured.startsWith(FILE_SECRET_PREFIX)) {
             return fileSecret(workflowDirectory, displayName, configured.substring(FILE_SECRET_PREFIX.length()));

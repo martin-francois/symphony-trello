@@ -362,4 +362,59 @@ final class ConfigResolverTest {
         // then
         assertThat(config.tracker().endpoint()).isEqualTo("HTTPS://api.trello.com/1");
     }
+
+    @Test
+    void resolvesBraceStyleEnvironmentReferencesForCredentials() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: "${SYMPHONY_TEST_KEY}"
+                  api_token: "${SYMPHONY_TEST_TOKEN}"
+                  board_id: board-1
+                ---
+                Prompt
+                """);
+        ConfigResolver resolver = new ConfigResolver(name -> switch (name) {
+            case "SYMPHONY_TEST_KEY" -> Optional.of("resolved-key");
+            case "SYMPHONY_TEST_TOKEN" -> Optional.of("resolved-token");
+            default -> Optional.empty();
+        });
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.tracker().apiKey()).isEqualTo("resolved-key");
+        assertThat(config.tracker().apiToken()).isEqualTo("resolved-token");
+    }
+
+    @Test
+    void keepsShellDefaultExpansionSyntaxAsLiteralText() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: "${SYMPHONY_TEST_KEY:-fallback}"
+                  api_token: literal-token
+                  board_id: board-1
+                ---
+                Prompt
+                """);
+        ConfigResolver resolver = new ConfigResolver(name -> Optional.of("should-not-resolve"));
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.tracker().apiKey()).isEqualTo("${SYMPHONY_TEST_KEY:-fallback}");
+    }
 }

@@ -34,6 +34,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 final class LocalWorkerManagerTest {
@@ -577,6 +578,57 @@ final class LocalWorkerManagerTest {
                 .extracting(TrelloBoardSetupException::code)
                 .isEqualTo("setup_worker_missing_api_token");
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    @CsvSource({"$REAL_KEY", "${REAL_KEY}", "${REAL_KEY:-fallback}"})
+    @ParameterizedTest
+    void startRejectsReferenceLookingDotenvCredentialsBeforeTrelloPreflightAndLaunch(String dotenvValue)
+            throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        Files.writeString(
+                board.envPath(),
+                "TRELLO_API_KEY=" + dotenvValue + "\nTRELLO_API_TOKEN=real-token\n",
+                StandardCharsets.UTF_8);
+        fixture.save(board);
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code())
+                    .as("the expected local error must fire instead of a misleading Trello auth failure")
+                    .isEqualTo("setup_credentials_environment_reference");
+            assertThat(failure).hasMessageContaining("credential file values are used literally");
+            assertThat(failure.dotenvPath()).contains(board.envPath());
+        });
+        verify(fixture.credentialPreflight, never()).verify(any(), any(), any());
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void startPrefersShellEnvironmentCredentialsOverReferenceLookingDotenvValues() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(
+                tempDir, Map.of("TRELLO_API_KEY", "env-key", "TRELLO_API_TOKEN", "env-token"));
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        Files.writeString(
+                board.envPath(),
+                "TRELLO_API_KEY=${REAL_KEY}\nTRELLO_API_TOKEN=${REAL_TOKEN}\n",
+                StandardCharsets.UTF_8);
+        fixture.save(board);
+        fixture.stubHealthyStartedWorker(board, 42);
+
+        // when
+        WorkerRunResult result = fixture.start(fixture.startRequest("Queue"));
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("Started Symphony for Trello")
+                .stdoutDoesNotContain("setup_credentials_environment_reference");
+        verify(fixture.platform).start(any(), eq(fixture.paths.appHome()), any(), any(), any());
     }
 
     @Test

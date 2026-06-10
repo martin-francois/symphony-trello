@@ -3517,6 +3517,35 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "Troubleshooting report written");
     }
 
+    @Test
+    void guidedSetupRejectsReferenceLookingCredentialFileValuesBeforeTrello() throws Exception {
+        // given
+        Path env = tempDir.resolve(".env.reference");
+        Files.writeString(env, "TRELLO_API_KEY=${REAL_KEY}\nTRELLO_API_TOKEN=real-token\n", StandardCharsets.UTF_8);
+        Path workflow = tempDir.resolve("WORKFLOW.reference-creds.md");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                "http://127.0.0.1:1/",
+                "--board-name",
+                "Reference Credentials Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_credentials_environment_reference",
+                        "credential file values are used literally",
+                        "export TRELLO_API_KEY in the shell environment")
+                .stderrDoesNotContain("trello_auth_failed", "trello_api_request", "Troubleshooting report written");
+    }
+
     @MethodSource("invalidManifestShapes")
     @ParameterizedTest
     void guidedSetupClassifiesInvalidManifestShapesAsExpectedConfigErrors(String name, String manifestContent)

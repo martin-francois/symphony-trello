@@ -1014,9 +1014,9 @@ implemented.
 - `tracker.kind`: string, REQUIRED, currently `trello`
 - `tracker.endpoint`: string, must be an absolute `http(s)` URL with a host, default
   `https://api.trello.com/1` when `tracker.kind=trello`
-- `tracker.api_key`: string, `$VAR`, or implementation-defined file reference, default environment
-  variable `TRELLO_API_KEY` when `tracker.kind=trello`
-- `tracker.api_token`: string, `$VAR`, or implementation-defined file reference, default
+- `tracker.api_key`: string, `$VAR` or `${VAR}`, or implementation-defined file reference, default
+  environment variable `TRELLO_API_KEY` when `tracker.kind=trello`
+- `tracker.api_token`: string, `$VAR` or `${VAR}`, or implementation-defined file reference, default
   environment variable `TRELLO_API_TOKEN` when `tracker.kind=trello`
 - `tracker.board_id`: string, REQUIRED when `tracker.kind=trello`
 - `tracker.active_states`: list of Trello list/state names, default

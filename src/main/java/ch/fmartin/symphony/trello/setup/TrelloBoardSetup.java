@@ -4,6 +4,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 
 import ch.fmartin.symphony.trello.codex.CodexSkillCatalog;
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
+import ch.fmartin.symphony.trello.config.EnvironmentReferences;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import ch.fmartin.symphony.trello.config.StateNames;
 import ch.fmartin.symphony.trello.config.TrelloListRoleValidator;
@@ -772,8 +773,7 @@ public final class TrelloBoardSetup {
         if (!(value instanceof String text)) {
             return Optional.empty();
         }
-        String trimmed = text.trim();
-        return trimmed.startsWith("$") && trimmed.length() > 1 ? Optional.of(trimmed.substring(1)) : Optional.empty();
+        return EnvironmentReferences.referenceName(text);
     }
 
     private Optional<Integer> replaceableWorkflowServerPortReservation(Path workflowPath, Path envPath) {
