@@ -29,7 +29,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.Objects;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -510,7 +509,11 @@ final class SetupDiagnosticReporter {
                 context.paths().defaultEnvPath());
 
         section(body, "Local Health Probes");
-        appendHealthProbes(body, context.selectedManifest(), context.selectedWorkflowPaths());
+        appendHealthProbes(
+                body,
+                context.selectedManifest(),
+                context.selectedWorkflowPaths(),
+                context.paths().defaultEnvPath());
 
         section(body, "Recent Logs");
         appendRecentLogs(
@@ -1107,7 +1110,10 @@ final class SetupDiagnosticReporter {
 
     private static void rejectUnusableSelectedWorkflow(
             Path workflow, Function<String, Optional<String>> environmentResolver) {
-        WorkflowValidation validation = new WorkflowConfigEditor().diagnosticsValidation(workflow, environmentResolver);
+        // Out-of-range server ports stay selectable: diagnostics is the inspection tool for such
+        // workflows and reports the invalid port safely instead of refusing the selector.
+        WorkflowValidation validation =
+                new WorkflowConfigEditor().diagnosticsValidation(workflow, environmentResolver, false);
         if (!validation.ok()) {
             throw new TrelloBoardSetupException(
                     "setup_invalid_arguments",
@@ -1322,26 +1328,42 @@ final class SetupDiagnosticReporter {
         SequencedSet<Integer> ports = probePorts(
                 editor,
                 manifest,
-                reportWorkflowPaths(manifest, paths, args, workflowPathResolution, !hasBoardOption(args)));
+                reportWorkflowPaths(manifest, paths, args, workflowPathResolution, !hasBoardOption(args)),
+                paths.defaultEnvPath());
         if (ports.isEmpty()) {
             body.append("No configured local ports found.\n");
             return;
         }
         for (int port : ports) {
+            if (!LocalPort.isValid(port)) {
+                body.append("Configured port ")
+                        .append(port)
+                        .append(" is outside the valid TCP port range; health probes skipped.\n");
+                continue;
+            }
             appendProbe(body, port, "/api/v1/local-status");
             appendProbe(body, port, "/api/v1/state");
         }
     }
 
     private void appendHealthProbes(
-            StringBuilder body, ConnectedBoardManifest manifest, SequencedSet<Path> workflowPaths) {
+            StringBuilder body,
+            ConnectedBoardManifest manifest,
+            SequencedSet<Path> workflowPaths,
+            Path defaultEnvPath) {
         WorkflowConfigEditor editor = new WorkflowConfigEditor();
-        SequencedSet<Integer> ports = probePorts(editor, manifest, workflowPaths);
+        SequencedSet<Integer> ports = probePorts(editor, manifest, workflowPaths, defaultEnvPath);
         if (ports.isEmpty()) {
             body.append("No configured local ports found.\n");
             return;
         }
         for (int port : ports) {
+            if (!LocalPort.isValid(port)) {
+                body.append("Configured port ")
+                        .append(port)
+                        .append(" is outside the valid TCP port range; health probes skipped.\n");
+                continue;
+            }
             appendProbe(body, port, "/api/v1/local-status");
             appendProbe(body, port, "/api/v1/state");
         }
@@ -1438,13 +1460,14 @@ final class SetupDiagnosticReporter {
      * port is only the fallback when the workflow does not declare a readable port. Unioning both
      * would probe stale historical ports after a workflow path was reused or repaired.
      */
-    private static SequencedSet<Integer> probePorts(
-            WorkflowConfigEditor editor, ConnectedBoardManifest manifest, SequencedSet<Path> workflowPaths) {
+    private SequencedSet<Integer> probePorts(
+            WorkflowConfigEditor editor,
+            ConnectedBoardManifest manifest,
+            SequencedSet<Path> workflowPaths,
+            Path defaultEnvPath) {
         SequencedSet<Integer> ports = new LinkedHashSet<>();
         for (ConnectedBoard board : manifest.boards()) {
-            Optional<Integer> workflowPort =
-                    board.workflowPath() == null ? Optional.empty() : editor.serverPort(board.workflowPath());
-            ports.add(workflowPort.orElse(board.serverPort()));
+            boardProbePort(editor, board, defaultEnvPath).ifPresent(ports::add);
         }
         for (Path workflow : workflowPaths) {
             boolean connected = manifest.boards().stream()
@@ -1453,9 +1476,32 @@ final class SetupDiagnosticReporter {
             if (connected) {
                 continue;
             }
-            editor.serverPort(workflow).ifPresent(ports::add);
+            editor.classifyServerPortForDiagnostics(
+                            workflow, workflowEnvironmentResolver(manifest, workflow, defaultEnvPath))
+                    .probeOrSkipPort()
+                    .ifPresent(ports::add);
         }
         return ports;
+    }
+
+    /**
+     * The effective workflow declaration wins over the manifest: a declared or env-resolved
+     * out-of-range port renders the safe skip line and a non-numeric port is reported by the
+     * workflow summary, in both cases without probing the stale manifest port. The manifest port
+     * only covers workflows that omit server.port, cannot be read, or reference an environment
+     * value the board environment does not define.
+     */
+    private Optional<Integer> boardProbePort(WorkflowConfigEditor editor, ConnectedBoard board, Path defaultEnvPath) {
+        if (board.workflowPath() == null) {
+            return Optional.of(board.serverPort());
+        }
+        WorkflowConfigEditor.WorkflowServerPortClassification classification = editor.classifyServerPortForDiagnostics(
+                board.workflowPath(), workflowEnvironmentResolver(board.envPath(), defaultEnvPath));
+        return switch (classification.kind()) {
+            case VALID, OUT_OF_RANGE -> classification.port();
+            case OMITTED, UNREADABLE -> Optional.of(board.serverPort());
+            case INVALID_VALUE -> Optional.empty();
+        };
     }
 
     private void appendProbe(StringBuilder body, int port, String path) {
