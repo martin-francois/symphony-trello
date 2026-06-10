@@ -44,6 +44,10 @@ public class HookRunner {
                     .directory(cwd.toFile())
                     .redirectErrorStream(true);
             ProcessEnvironment.removeDefaultSecrets(processBuilder);
+            Path workspaceParent = cwd.toAbsolutePath().normalize().getParent();
+            if (workspaceParent != null) {
+                ProcessEnvironment.limitGitDiscovery(processBuilder, workspaceParent);
+            }
             process = processBuilder.start();
         } catch (IOException e) {
             return HookResult.failure("start_failed: " + e.getMessage());

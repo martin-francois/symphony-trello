@@ -78,6 +78,8 @@ public class CodexAppServerClient {
                     .directory(workspace.toFile())
                     .redirectError(ProcessBuilder.Redirect.PIPE);
             ProcessEnvironment.removeDefaultSecrets(processBuilder);
+            ProcessEnvironment.limitGitDiscovery(
+                    processBuilder, config.workspace().root());
             process = processBuilder.start();
         } catch (IOException e) {
             return AgentRunResult.fail("codex_not_found: " + e.getMessage());
