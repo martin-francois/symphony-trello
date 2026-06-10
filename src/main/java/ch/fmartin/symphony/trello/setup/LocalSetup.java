@@ -467,6 +467,14 @@ public final class LocalSetup {
                 && !serverPortReservedByOtherBoard(manifest, reconciledBoard)) {
             return repairManifestPort(options, out, boards, manifest, board, reconciledBoard);
         }
+        if (reconciledBoard.serverPort() == board.serverPort()
+                && !serverPortReservedByOtherBoard(manifest, reconciledBoard)
+                && (health.kind() == BoardHealthKind.SAME_WORKFLOW || health.kind() == BoardHealthKind.STOPPED)) {
+            out.println("  OK      No port repair needed. \"" + reconciledBoard.boardName()
+                    + "\" is already configured for an available port: http://127.0.0.1:"
+                    + reconciledBoard.serverPort());
+            return 0;
+        }
         boolean wasRunning = health.kind() == BoardHealthKind.SAME_WORKFLOW;
         int port = nextAvailablePort(manifest, reconciledBoard);
         if (options.dryRun()) {
