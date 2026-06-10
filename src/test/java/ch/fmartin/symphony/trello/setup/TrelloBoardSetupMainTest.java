@@ -6,7 +6,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -42,6 +45,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
 
 final class TrelloBoardSetupMainTest {
     private static final String CONFIG_DIR_PROPERTY = "symphony.trello.config.dir";
@@ -2111,7 +2115,7 @@ final class TrelloBoardSetupMainTest {
         new ConnectedBoardRepository(tempDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(oldBoard)));
         LocalWorkerManager workerManager = mock();
-        when(workerManager.canStopManagedWorker(any(LocalWorkerPaths.class), eq(oldBoard)))
+        when(workerManager.canStopRunningWorker(any(LocalWorkerPaths.class), eq(oldBoard)))
                 .thenReturn(true);
         TrelloBoardSetup boardSetup = new TrelloBoardSetup(
                 new ObjectMapper(),
@@ -2159,7 +2163,7 @@ final class TrelloBoardSetupMainTest {
         assertThat(stdout.toString(StandardCharsets.UTF_8))
                 .contains("Imported Trello board: Existing Board", "HTTP status port: " + listeningPort);
         assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
-        verify(workerManager).canStopManagedWorker(any(LocalWorkerPaths.class), eq(oldBoard));
+        verify(workerManager, times(2)).canStopRunningWorker(any(LocalWorkerPaths.class), eq(oldBoard));
         verify(workerManager).stop(any(LocalWorkerPaths.class), eq(oldBoard), any(PrintStream.class));
     }
 
@@ -2335,12 +2339,155 @@ final class TrelloBoardSetupMainTest {
         // then
         assertThat(exitCode).isZero();
         verify(workerManager).stop(any(LocalWorkerPaths.class), eq(oldBoard), any(PrintStream.class));
+        verify(workerManager, never())
+                .start(any(LocalWorkerPaths.class), any(ConnectedBoard.class), any(Path.class), any(PrintStream.class));
         ConnectedBoardManifest manifest = new ConnectedBoardRepository(tempDir.resolve("connected-boards.json")).load();
         assertThat(manifest.boards()).singleElement().satisfies(board -> {
             assertThat(board.boardId()).isEqualTo("board-1");
             assertThat(board.workflowPath())
                     .isEqualTo(newWorkflow.toAbsolutePath().normalize());
         });
+    }
+
+    @Test
+    void importBoardRestartsPreviouslyRunningReplacedWorker() throws Exception {
+        // given
+        Path oldWorkflow = tempDir.resolve("restart-old.WORKFLOW.md");
+        Path newWorkflow = tempDir.resolve("restart-new.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.restart");
+        Files.writeString(oldWorkflow, "old workflow", StandardCharsets.UTF_8);
+        ConnectedBoard oldBoard = new ConnectedBoard(
+                "board-1",
+                "SYNTH001",
+                "Existing Board",
+                "https://trello.com/b/SYNTH001/board",
+                oldWorkflow.toAbsolutePath().normalize(),
+                env.toAbsolutePath().normalize(),
+                TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT.toAbsolutePath().normalize(),
+                18080,
+                true,
+                List.of(),
+                false);
+        new ConnectedBoardRepository(tempDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(oldBoard)));
+        LocalWorkerManager workerManager = mock();
+        when(workerManager.canStopRunningWorker(any(LocalWorkerPaths.class), eq(oldBoard)))
+                .thenReturn(true);
+        TrelloBoardSetup boardSetup = new TrelloBoardSetup(
+                new ObjectMapper(),
+                () -> CodexModelSelectionDefaults.of(TrelloBoardSetup.CodexModelDefaults.fallback()));
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+
+        // when
+        int exitCode = TrelloBoardSetupMain.run(
+                new String[] {
+                    "import-board",
+                    "--endpoint",
+                    endpoint(),
+                    "--key",
+                    "key",
+                    "--token",
+                    "token",
+                    "--board",
+                    "https://trello.com/b/input/existing-board",
+                    "--active",
+                    "Queue for Codex",
+                    "--terminal",
+                    "Released",
+                    "--workflow",
+                    newWorkflow.toString(),
+                    "--env",
+                    env.toString(),
+                    "--force"
+                },
+                new TrelloBoardSetupService(boardSetup, workerManager, Map.of()),
+                new LocalSetup(boardSetup, new ProcessCommandRunner()),
+                workerManager,
+                new PrintStream(stdout, true, StandardCharsets.UTF_8),
+                new PrintStream(stderr, true, StandardCharsets.UTF_8));
+
+        // then
+        assertThat(exitCode).isZero();
+        assertThat(stdout.toString(StandardCharsets.UTF_8))
+                .contains(
+                        "This update stopped the running worker for \"Existing Board\". Restarting it with the updated workflow.");
+        verify(workerManager).stop(any(LocalWorkerPaths.class), eq(oldBoard), any(PrintStream.class));
+        ArgumentCaptor<ConnectedBoard> restartedBoard = ArgumentCaptor.forClass(ConnectedBoard.class);
+        verify(workerManager)
+                .start(any(LocalWorkerPaths.class), restartedBoard.capture(), any(Path.class), any(PrintStream.class));
+        assertThat(restartedBoard.getValue().boardId()).isEqualTo("board-1");
+        assertThat(restartedBoard.getValue().workflowPath())
+                .isEqualTo(newWorkflow.toAbsolutePath().normalize());
+    }
+
+    @Test
+    void importBoardPrintsRecoveryStepWhenReplacedWorkerRestartFails() throws Exception {
+        // given
+        Path oldWorkflow = tempDir.resolve("restart-fail-old.WORKFLOW.md");
+        Path newWorkflow = tempDir.resolve("restart-fail-new.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.restart-fail");
+        Files.writeString(oldWorkflow, "old workflow", StandardCharsets.UTF_8);
+        ConnectedBoard oldBoard = new ConnectedBoard(
+                "board-1",
+                "SYNTH001",
+                "Existing Board",
+                "https://trello.com/b/SYNTH001/board",
+                oldWorkflow.toAbsolutePath().normalize(),
+                env.toAbsolutePath().normalize(),
+                TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT.toAbsolutePath().normalize(),
+                18080,
+                true,
+                List.of(),
+                false);
+        new ConnectedBoardRepository(tempDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(oldBoard)));
+        LocalWorkerManager workerManager = mock();
+        when(workerManager.canStopRunningWorker(any(LocalWorkerPaths.class), eq(oldBoard)))
+                .thenReturn(true);
+        doThrow(new TrelloBoardSetupException("setup_start_unhealthy", "worker did not become healthy"))
+                .when(workerManager)
+                .start(any(LocalWorkerPaths.class), any(ConnectedBoard.class), any(Path.class), any(PrintStream.class));
+        TrelloBoardSetup boardSetup = new TrelloBoardSetup(
+                new ObjectMapper(),
+                () -> CodexModelSelectionDefaults.of(TrelloBoardSetup.CodexModelDefaults.fallback()));
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+
+        // when
+        int exitCode = TrelloBoardSetupMain.run(
+                new String[] {
+                    "import-board",
+                    "--endpoint",
+                    endpoint(),
+                    "--key",
+                    "key",
+                    "--token",
+                    "token",
+                    "--board",
+                    "https://trello.com/b/input/existing-board",
+                    "--active",
+                    "Queue for Codex",
+                    "--terminal",
+                    "Released",
+                    "--workflow",
+                    newWorkflow.toString(),
+                    "--env",
+                    env.toString(),
+                    "--force"
+                },
+                new TrelloBoardSetupService(boardSetup, workerManager, Map.of()),
+                new LocalSetup(boardSetup, new ProcessCommandRunner()),
+                workerManager,
+                new PrintStream(stdout, true, StandardCharsets.UTF_8),
+                new PrintStream(stderr, true, StandardCharsets.UTF_8));
+
+        // then
+        assertThat(exitCode).isZero();
+        assertThat(stdout.toString(StandardCharsets.UTF_8))
+                .contains(
+                        "Could not restart the worker for \"Existing Board\": worker did not become healthy",
+                        "Start it again with the start command shown under Next.");
     }
 
     @Test
