@@ -1,7 +1,5 @@
 package ch.fmartin.symphony.trello.setup;
 
-import static com.google.common.base.Preconditions.checkArgument;
-
 import java.io.IOException;
 import java.util.Locale;
 
@@ -24,17 +22,35 @@ final class PromptSupport {
         if (answer == null || answer.isBlank()) {
             return defaultChoice;
         }
-        int parsed = Integer.parseInt(answer.strip());
-        checkArgument(parsed >= 1 && parsed <= maxChoice, "Choice must be between 1 and %s", maxChoice);
-        return parsed;
+        return parseBoundedChoice(answer, maxChoice);
     }
 
     static int requiredChoice(String answer, int maxChoice, String errorCode, String errorMessage) {
         if (answer == null || answer.isBlank()) {
             throw new TrelloBoardSetupException(errorCode, errorMessage);
         }
-        int parsed = Integer.parseInt(answer.strip());
-        checkArgument(parsed >= 1 && parsed <= maxChoice, "Choice must be between 1 and %s", maxChoice);
+        return parseBoundedChoice(answer, maxChoice);
+    }
+
+    /**
+     * Parses a finite prompt choice as an expected input error, so a typo never produces a raw
+     * Java parse message or an unexpected troubleshooting report.
+     */
+    static int parseBoundedChoice(String answer, int maxChoice) {
+        int parsed;
+        try {
+            parsed = Integer.parseInt(answer.strip());
+        } catch (NumberFormatException e) {
+            throw invalidChoice(maxChoice, e);
+        }
+        if (parsed < 1 || parsed > maxChoice) {
+            throw invalidChoice(maxChoice, null);
+        }
         return parsed;
+    }
+
+    private static TrelloBoardSetupException invalidChoice(int maxChoice, Throwable cause) {
+        return new TrelloBoardSetupException(
+                "setup_invalid_choice", "Choice must be a number between 1 and " + maxChoice + ".", cause);
     }
 }
