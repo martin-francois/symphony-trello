@@ -393,20 +393,9 @@ final class SetupDiagnosticReporter {
     }
 
     static String displayPath(Path path) {
-        Path resolved = path.toAbsolutePath().normalize();
-        String home = System.getProperty("user.home");
-        if (home == null || home.isBlank()) {
-            return resolved.toString();
-        }
-        Path homePath = Path.of(home).toAbsolutePath().normalize();
-        if (!resolved.startsWith(homePath)) {
-            return resolved.toString();
-        }
-        Path relative = homePath.relativize(resolved);
-        if (relative.toString().isBlank()) {
-            return "$HOME";
-        }
-        return "$HOME/" + relative.toString().replace('\\', '/');
+        // Hints are local CLI guidance, so show the concrete resolved path instead of a $HOME
+        // shorthand the user would have to expand. Diagnostics reports sanitize paths separately.
+        return path.toAbsolutePath().normalize().toString();
     }
 
     Optional<Path> reportFailure(Exception exception, LocalSetupRequest request, Terminal terminal) {
