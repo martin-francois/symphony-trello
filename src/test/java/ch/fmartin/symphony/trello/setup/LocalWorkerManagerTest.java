@@ -1812,6 +1812,53 @@ final class LocalWorkerManagerTest {
         });
     }
 
+    @Test
+    void canStopRunningWorkerCoversHealthyUntrackedManagedWorker() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = stubHealthyUntrackedWorker(fixture, 7331L, true);
+
+        // when
+        boolean canStop = fixture.manager.canStopRunningWorker(fixture.paths, board);
+
+        // then
+        assertThat(canStop)
+                .as("healthy untracked worker with verified managed pid")
+                .isTrue();
+    }
+
+    @Test
+    void canStopRunningWorkerRejectsUnverifiableUntrackedWorker() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = stubHealthyUntrackedWorker(fixture, 7331L, false);
+
+        // when
+        boolean canStop = fixture.manager.canStopRunningWorker(fixture.paths, board);
+
+        // then
+        assertThat(canStop)
+                .as("unverifiable untracked pid keeps manual recovery behavior")
+                .isFalse();
+    }
+
+    private static ConnectedBoard stubHealthyUntrackedWorker(
+            LocalWorkerManagerTestFixture fixture, long workerPid, boolean managed) throws Exception {
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        when(fixture.healthChecker.boardHealth(board))
+                .thenReturn(new BoardHealth(
+                        BoardHealthKind.SAME_WORKFLOW,
+                        board.serverPort(),
+                        Optional.of(board.workflowPath().toString()),
+                        Optional.of(board.boardId()),
+                        Optional.of(workerPid)));
+        when(fixture.platform.isAlive(workerPid)).thenReturn(true);
+        when(fixture.platform.isManaged(workerPid, fixture.paths.appHome(), board.workflowPath()))
+                .thenReturn(managed);
+        return board;
+    }
+
     private static void writeManagedLog(LocalWorkerManagerTestFixture fixture, Path workflow) throws Exception {
         Files.createDirectories(fixture.paths.stateHome());
         ManagedProcessStore.ManagedProcessFiles files =

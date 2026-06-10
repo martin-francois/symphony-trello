@@ -103,7 +103,7 @@ final class TrelloBoardSetupService {
     private boolean canReuseLivePortForForcedWorkflowUpdate(
             Path manifestPath, Optional<ConnectedBoard> replaceableBoard) {
         return replaceableBoard
-                .map(board -> canStopManagedWorker(manifestPath, board))
+                .map(board -> canStopRunningWorker(manifestPath, board))
                 .orElse(false);
     }
 
@@ -113,9 +113,9 @@ final class TrelloBoardSetupService {
                 .orElse(false);
     }
 
-    private boolean canStopManagedWorker(Path manifestPath, ConnectedBoard board) {
+    private boolean canStopRunningWorker(Path manifestPath, ConnectedBoard board) {
         try {
-            return workerManager.canStopManagedWorker(localWorkerPaths(manifestPath, board.workspaceRoot()), board);
+            return workerManager.canStopRunningWorker(localWorkerPaths(manifestPath, board.workspaceRoot()), board);
         } catch (IOException exception) {
             return false;
         }
@@ -126,9 +126,11 @@ final class TrelloBoardSetupService {
             Path envPath,
             Path workspaceRoot,
             GitHubIntegration githubIntegration,
-            Path manifestPath)
+            Path manifestPath,
+            PrintStream out)
             throws IOException {
-        persistConnectedBoard(ConnectedBoard.from(result, envPath, workspaceRoot, githubIntegration), manifestPath);
+        persistConnectedBoard(
+                ConnectedBoard.from(result, envPath, workspaceRoot, githubIntegration), manifestPath, out);
     }
 
     void persistConnectedBoard(
@@ -136,26 +138,50 @@ final class TrelloBoardSetupService {
             Path envPath,
             Path workspaceRoot,
             GitHubIntegration githubIntegration,
-            Path manifestPath)
+            Path manifestPath,
+            PrintStream out)
             throws IOException {
-        persistConnectedBoard(ConnectedBoard.from(result, envPath, workspaceRoot, githubIntegration), manifestPath);
+        persistConnectedBoard(
+                ConnectedBoard.from(result, envPath, workspaceRoot, githubIntegration), manifestPath, out);
     }
 
     void listWorkspaces(WorkspaceListRequest request, PrintStream out) {
         printWorkspaces(out, setup.listWorkspaces(request));
     }
 
-    private void persistConnectedBoard(ConnectedBoard board, Path manifestPath) throws IOException {
+    private void persistConnectedBoard(ConnectedBoard board, Path manifestPath, PrintStream out) throws IOException {
+        boolean restartReplacedWorker;
         ConnectedBoardRepository boards = new ConnectedBoardRepository(manifestPath);
         try {
             ConnectedBoardManifest manifest = boards.loadValidated();
-            stopReplacedBoards(manifestPath, board.workspaceRoot(), manifest.boardsReplacedBy(board));
+            List<ConnectedBoard> replacedBoards = manifest.boardsReplacedBy(board);
+            restartReplacedWorker = replacedBoards.stream()
+                    .anyMatch(replacedBoard -> canStopRunningWorker(manifestPath, replacedBoard));
+            stopReplacedBoards(manifestPath, board.workspaceRoot(), replacedBoards);
             boards.save(manifest.withBoard(board));
         } catch (IOException exception) {
             throw new TrelloBoardSetupException(
                     "setup_manifest_write_failed",
                     "Could not update the connected-board manifest. Check the config directory permissions.",
                     exception);
+        }
+        if (restartReplacedWorker) {
+            restartUpdatedBoardWorker(board, manifestPath, out);
+        }
+    }
+
+    private void restartUpdatedBoardWorker(ConnectedBoard board, Path manifestPath, PrintStream out) {
+        out.println("This update stopped the running worker for \"" + board.boardName()
+                + "\". Restarting it with the updated workflow.");
+        LocalWorkerPaths paths = localWorkerPaths(manifestPath, board.workspaceRoot());
+        Path envPath = (board.envPath() == null ? paths.defaultEnvPath() : board.envPath())
+                .toAbsolutePath()
+                .normalize();
+        try {
+            workerManager.start(paths, board, envPath, out);
+        } catch (IOException | TrelloBoardSetupException exception) {
+            out.println("Could not restart the worker for \"" + board.boardName() + "\": " + exception.getMessage());
+            out.println("Start it again with the start command shown under Next.");
         }
     }
 

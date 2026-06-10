@@ -233,7 +233,8 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                         options.runtimeEnvPath(),
                         options.workspaceRoot,
                         options.gitHubIntegration(),
-                        options.manifestPath());
+                        options.manifestPath(),
+                        parent.out);
                 printNewBoardResult(parent.out, result, options.runtimeEnvPath());
                 return 0;
             } catch (TrelloBoardSetupException exception) {
@@ -319,7 +320,8 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                         options.runtimeEnvPath(),
                         options.workspaceRoot,
                         options.gitHubIntegration(),
-                        options.manifestPath());
+                        options.manifestPath(),
+                        parent.out);
                 printImportBoardResult(parent.out, result, options.runtimeEnvPath());
                 return 0;
             } catch (TrelloBoardSetupException exception) {

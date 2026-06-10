@@ -500,6 +500,21 @@ final class LocalWorkerManager {
         return pid != null && platform.isAlive(pid) && platform.isManaged(pid, paths.appHome(), board.workflowPath());
     }
 
+    /**
+     * True when stop would actually stop a running worker for this board: either a managed pid
+     * file exists, or the board is healthy without a pid file and reports a worker pid that
+     * verifies as managed for this install. Setup flows use this to decide whether a replaced
+     * board needs a restart after its worker was stopped.
+     */
+    boolean canStopRunningWorker(LocalWorkerPaths paths, ConnectedBoard board) throws IOException {
+        if (canStopManagedWorker(paths, board)) {
+            return true;
+        }
+        BoardHealth health = healthChecker.boardHealth(board);
+        return health.kind() == BoardHealthKind.SAME_WORKFLOW
+                && verifiedManagedWorkerPid(paths, board, health).isPresent();
+    }
+
     int status(WorkerStatusRequest request, PrintStream out) throws IOException {
         LocalWorkerPaths paths = LocalWorkerPaths.from(
                 request.appHome(), request.configDir(), request.workspaceRoot(), request.stateHome(), environment);
