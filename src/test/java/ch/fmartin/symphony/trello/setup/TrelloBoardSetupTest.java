@@ -424,7 +424,7 @@ final class TrelloBoardSetupTest {
         EffectiveConfig config = resolve(workflow);
         assertThat(config.tracker().activeStates()).containsExactly("Ready for Codex", "In Progress");
         assertThat(config.trelloTools().allowedMoveListNames())
-                .containsExactly("in progress", "human review", "blocked");
+                .containsExactly("in progress", "human review", "blocked", "done");
     }
 
     @Test
@@ -863,7 +863,7 @@ final class TrelloBoardSetupTest {
         assertThat(config.tracker().terminalStates())
                 .contains("released", "parked", "archived", "archivedlist", "archivedboard", "deleted");
         assertThat(config.trelloTools().enabled()).isTrue();
-        assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("review", "needs help");
+        assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("review", "needs help", "released");
         assertThat(config.agent().maxConcurrentAgents()).isEqualTo(2);
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
@@ -1066,7 +1066,7 @@ final class TrelloBoardSetupTest {
 
         // then
         EffectiveConfig config = resolve(workflow);
-        assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("human review", "blocked");
+        assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("human review", "blocked", "done");
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("list_name \"Human Review\"")
@@ -1074,7 +1074,7 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
-    void importDisablesTrelloWritesWhenNoReviewListExists() {
+    void importEnablesDoneHandoffMovesWhenNoReviewListExists() {
         // given
         boardListsResponse.set(
                 """
@@ -1100,21 +1100,14 @@ final class TrelloBoardSetupTest {
 
         // then
         EffectiveConfig config = resolve(workflow);
-        assertThat(config.trelloTools().enabled()).isFalse();
-        assertThat(config.trelloTools().allowWrites()).isFalse();
-        assertThat(config.trelloTools().allowedMoveListNames()).isEmpty();
+        assertThat(config.trelloTools().enabled()).isTrue();
+        assertThat(config.trelloTools().allowWrites()).isTrue();
+        assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("done");
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
-                .doesNotContain("## Codex Workpad")
-                .doesNotContain("trello_upsert_workpad")
-                .doesNotContain("Add the PR URL to the workpad")
-                .doesNotContain("Update the workpad")
-                .contains("## Acceptance Criteria And Validation")
-                .contains("the final Codex response or handoff comment")
-                .contains("Record the plan, acceptance criteria, validation plan")
-                .contains("Add the PR\nURL to the final response")
-                .contains("record a short rework plan for the final response")
-                .contains("finish the final-response plan");
+                .contains("allowed_move_list_names:")
+                .contains("- \"Done\"")
+                .contains("## Acceptance Criteria And Validation");
     }
 
     @Test
@@ -1159,7 +1152,7 @@ final class TrelloBoardSetupTest {
                 .contains("per-card workspace")
                 .contains("shown by `pwd`");
         EffectiveConfig config = resolve(workflow);
-        assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("review");
+        assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("review", "done");
     }
 
     @Test

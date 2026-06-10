@@ -838,8 +838,7 @@ public final class TrelloBoardSetup {
             boolean githubEnabled,
             CodexModelDefaults codexModelDefaults) {
         String doneState = landingDoneState(terminalStates);
-        List<String> handoffStates =
-                allowedMoveStates(inProgressState, reviewState, blockedState, mergingState, doneState);
+        List<String> handoffStates = allowedMoveStates(inProgressState, reviewState, blockedState, doneState);
         return """
                 ---
                 tracker:
@@ -1734,7 +1733,7 @@ public final class TrelloBoardSetup {
     }
 
     private static List<String> allowedMoveStates(
-            String inProgressState, String reviewState, String blockedState, String mergingState, String doneState) {
+            String inProgressState, String reviewState, String blockedState, String doneState) {
         List<String> states = new ArrayList<>();
         if (!blank(inProgressState)) {
             states.add(inProgressState);
@@ -1747,9 +1746,9 @@ public final class TrelloBoardSetup {
                 && states.stream().noneMatch(existing -> existing.equalsIgnoreCase(blockedDestination))) {
             states.add(blockedDestination);
         }
-        if (!blank(mergingState)
-                && !blank(doneState)
-                && states.stream().noneMatch(existing -> existing.equalsIgnoreCase(doneState))) {
+        // The done handoff list must stay movable even without a GitHub merging flow, so explicit
+        // card instructions to finish in the terminal list do not hit the move allowlist.
+        if (!blank(doneState) && states.stream().noneMatch(existing -> existing.equalsIgnoreCase(doneState))) {
             states.add(doneState);
         }
         return List.copyOf(states);
