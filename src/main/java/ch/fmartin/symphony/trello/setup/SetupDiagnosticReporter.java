@@ -27,7 +27,9 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.Objects;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -1346,12 +1348,28 @@ final class SetupDiagnosticReporter {
     private static SequencedSet<Path> reportWorkflowPaths(
             ConnectedBoardManifest manifest, Optional<Path> selectedWorkflow, Path configDir, boolean scanConfigDir) {
         SequencedSet<Path> workflowPaths = new LinkedHashSet<>();
-        manifest.boards().stream().map(ConnectedBoard::workflowPath).forEach(workflowPaths::add);
-        selectedWorkflow.ifPresent(workflowPaths::add);
+        Set<Path> canonicalIdentities = new HashSet<>();
+        manifest.boards().stream()
+                .map(ConnectedBoard::workflowPath)
+                .filter(Objects::nonNull)
+                .forEach(workflow -> addUniqueWorkflow(workflowPaths, canonicalIdentities, workflow));
+        selectedWorkflow.ifPresent(workflow -> addUniqueWorkflow(workflowPaths, canonicalIdentities, workflow));
         if (scanConfigDir) {
-            workflowPaths.addAll(workflowFilesIfReadable(configDir));
+            workflowFilesIfReadable(configDir)
+                    .forEach(workflow -> addUniqueWorkflow(workflowPaths, canonicalIdentities, workflow));
         }
         return workflowPaths;
+    }
+
+    /**
+     * A symlinked selector and its manifest target are the same workflow, so uniqueness is keyed
+     * on the canonical path: one symlinked workflow must not appear as two selected rows.
+     */
+    private static void addUniqueWorkflow(
+            SequencedSet<Path> workflowPaths, Set<Path> canonicalIdentities, Path workflow) {
+        if (canonicalIdentities.add(PathsEqual.canonical(workflow))) {
+            workflowPaths.add(workflow);
+        }
     }
 
     private static boolean hasBoardOption(List<String> args) {
