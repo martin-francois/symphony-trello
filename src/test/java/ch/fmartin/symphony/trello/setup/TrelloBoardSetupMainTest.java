@@ -4806,10 +4806,16 @@ final class TrelloBoardSetupMainTest {
                         badEnv),
                 new InvalidPathOptionCase("--workflow", "stopped", "status", "--workflow", badWorkflow));
 
-        // when / then
-        for (InvalidPathOptionCase invalidCase : cases) {
-            CliRunResult result = runCli(invalidCase.commandArray());
-            result.assertFailure(2)
+        // when
+        List<CliRunResult> results = cases.stream()
+                .map(invalidCase -> runCli(invalidCase.commandArray()))
+                .toList();
+
+        // then
+        for (int index = 0; index < cases.size(); index++) {
+            InvalidPathOptionCase invalidCase = cases.get(index);
+            results.get(index)
+                    .assertFailure(2)
                     .stderrContains(
                             "setup_failed code=setup_invalid_arguments",
                             invalidCase.optionName() + " must not contain control characters")
@@ -4930,11 +4936,18 @@ final class TrelloBoardSetupMainTest {
                                 "--workspace-root",
                                 workspaceFile.toString())));
 
-        // when / then
-        for (InvalidWorkspaceRootScenario scenario : scenarios) {
-            CliRunResult result = runCli(scenario.commandArray());
-            result.assertFailure(2)
-                    .stderrContains("setup_failed code=setup_invalid_arguments", scenario.expectedMessage())
+        // when
+        List<CliRunResult> results = scenarios.stream()
+                .map(scenario -> runCli(scenario.commandArray()))
+                .toList();
+
+        // then
+        for (int index = 0; index < scenarios.size(); index++) {
+            results.get(index)
+                    .assertFailure(2)
+                    .stderrContains(
+                            "setup_failed code=setup_invalid_arguments",
+                            scenarios.get(index).expectedMessage())
                     .stderrDoesNotContain("Troubleshooting report written", workspaceFile.toString(), "not a directory")
                     .stdoutDoesNotContain("Created Trello board", "Imported Trello board");
         }
