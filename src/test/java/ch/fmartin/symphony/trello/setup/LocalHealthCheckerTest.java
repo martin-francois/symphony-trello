@@ -7,9 +7,12 @@ import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
@@ -154,6 +157,104 @@ final class LocalHealthCheckerTest {
 
         // then
         assertThat(port).isEqualTo(19091);
+    }
+
+    @Test
+    void waitForSameWorkflowReturnsImmediatelyWhenTheProcessAlreadyDied() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md").toAbsolutePath().normalize();
+        LocalHealthChecker checker = new LocalHealthChecker(Map.of(), new WorkflowConfigEditor());
+        int unboundPort = unboundLoopbackPort();
+        long started = System.nanoTime();
+
+        // when
+        BoardHealth health = checker.waitForSameWorkflow(
+                board(workflow, unboundPort), unboundPort, () -> false, Duration.ofSeconds(30));
+
+        // then
+        assertThat(health.kind()).isEqualTo(BoardHealthKind.STOPPED);
+        assertThat(Duration.ofNanos(System.nanoTime() - started))
+                .as("a dead worker process can never become healthy, so the wait budget must not be burned")
+                .isLessThan(Duration.ofSeconds(10));
+    }
+
+    @Test
+    void waitForSameWorkflowStopsPollingWhenTheProcessDiesMidWait() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md").toAbsolutePath().normalize();
+        LocalHealthChecker checker = new LocalHealthChecker(Map.of(), new WorkflowConfigEditor());
+        int unboundPort = unboundLoopbackPort();
+        AtomicInteger aliveProbes = new AtomicInteger();
+        long started = System.nanoTime();
+
+        // when
+        BoardHealth health = checker.waitForSameWorkflow(
+                board(workflow, unboundPort),
+                unboundPort,
+                () -> aliveProbes.incrementAndGet() <= 2,
+                Duration.ofSeconds(30));
+
+        // then
+        assertThat(health.kind()).isEqualTo(BoardHealthKind.STOPPED);
+        assertThat(Duration.ofNanos(System.nanoTime() - started)).isLessThan(Duration.ofSeconds(10));
+    }
+
+    @Test
+    void waitForSameWorkflowOutlastsSlowStartupWhileTheProcessIsAlive() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md").toAbsolutePath().normalize();
+        AtomicInteger requests = new AtomicInteger();
+        String healthyJson =
+                """
+                {"workflowPath":"%s","boardId":"board-1"}
+                """.formatted(workflow);
+        server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        server.createContext("/api/v1/local-status", exchange -> {
+            // The port is bound from the start, but the worker only becomes healthy after a few
+            // probes, like a JVM that is still starting up.
+            if (requests.incrementAndGet() <= 3) {
+                exchange.sendResponseHeaders(503, -1);
+                exchange.close();
+                return;
+            }
+            byte[] body = healthyJson.getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        server.start();
+        int port = server.getAddress().getPort();
+        LocalHealthChecker checker = new LocalHealthChecker(Map.of(), new WorkflowConfigEditor());
+
+        // when
+        BoardHealth health =
+                checker.waitForSameWorkflow(board(workflow, port), port, () -> true, Duration.ofSeconds(30));
+
+        // then
+        assertThat(health.kind()).isEqualTo(BoardHealthKind.SAME_WORKFLOW);
+        assertThat(requests.get()).isGreaterThan(3);
+    }
+
+    private static ConnectedBoard board(Path workflow, int port) {
+        return new ConnectedBoard(
+                "board-1",
+                "board-1",
+                "Queue",
+                "https://trello.com/b/SYNTH001/synthetic-board",
+                workflow,
+                null,
+                workflow.getParent(),
+                port,
+                false,
+                List.of(),
+                false);
+    }
+
+    /** A port that was just bound and released, so nothing accepts connections on it. */
+    private static int unboundLoopbackPort() throws IOException {
+        try (ServerSocket socket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+            return socket.getLocalPort();
+        }
     }
 
     private void startLocalStatusServer(String responseJson) throws IOException {
