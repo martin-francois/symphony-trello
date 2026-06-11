@@ -18,6 +18,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.BooleanSupplier;
 
 final class LocalHealthChecker {
     static final List<String> HTTP_PORT_ENVIRONMENT_NAMES = List.of("SYMPHONY_HTTP_PORT", "QUARKUS_HTTP_PORT");
@@ -27,6 +28,9 @@ final class LocalHealthChecker {
     private static final Duration LOCAL_STATUS_TIMEOUT = Duration.ofMillis(500);
     private static final Duration PORT_USED_RETRY_DELAY = Duration.ofMillis(150);
     private static final Duration SAME_WORKFLOW_POLL_DELAY = Duration.ofMillis(200);
+    // Covers cold JVM startup on slow shared-CPU hosts; a healthy container worker was observed
+    // binding after 9.4 seconds, just past the previous fixed 10-second window.
+    private static final Duration STARTUP_ALIVE_WAIT = Duration.ofSeconds(60);
     private static final InetAddress LOOPBACK_IPV4 = loopbackIpv4();
 
     private final Map<String, String> environment;
@@ -51,16 +55,27 @@ final class LocalHealthChecker {
         return workflowHealth(board.workflowPath(), board.boardId(), board.boardKey(), port);
     }
 
-    BoardHealth waitForSameWorkflow(ConnectedBoard board, int port) {
-        long deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos();
-        BoardHealth last = new BoardHealth(BoardHealthKind.STOPPED, port, Optional.empty(), Optional.empty());
-        while (System.nanoTime() < deadline) {
-            last = workflowHealth(board.workflowPath(), board.boardId(), board.boardKey(), port);
-            if (last.kind() == BoardHealthKind.SAME_WORKFLOW || !sleptWithoutInterrupt(SAME_WORKFLOW_POLL_DELAY)) {
+    BoardHealth waitForSameWorkflow(ConnectedBoard board, int port, BooleanSupplier processAlive) {
+        return waitForSameWorkflow(board, port, processAlive, STARTUP_ALIVE_WAIT);
+    }
+
+    /**
+     * Waits for the freshly started worker to report the expected workflow. A cold JVM on a slow
+     * host can need well over ten seconds to bind its HTTP port, so the budget is generous while
+     * the process is still alive; a worker whose process has died can never become healthy, so
+     * that case returns immediately instead of burning the remaining budget.
+     */
+    BoardHealth waitForSameWorkflow(ConnectedBoard board, int port, BooleanSupplier processAlive, Duration aliveWait) {
+        long deadline = System.nanoTime() + aliveWait.toNanos();
+        while (true) {
+            BoardHealth last = workflowHealth(board.workflowPath(), board.boardId(), board.boardKey(), port);
+            if (last.kind() == BoardHealthKind.SAME_WORKFLOW
+                    || !processAlive.getAsBoolean()
+                    || System.nanoTime() >= deadline
+                    || !sleptWithoutInterrupt(SAME_WORKFLOW_POLL_DELAY)) {
                 return last;
             }
         }
-        return last;
     }
 
     BoardHealth workflowHealth(Path expectedWorkflowPath, String expectedBoardId, String expectedBoardKey, int port) {
