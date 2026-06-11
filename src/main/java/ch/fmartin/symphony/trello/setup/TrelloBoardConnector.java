@@ -344,7 +344,7 @@ final class TrelloBoardConnector {
         return parent == null ? Path.of(".") : parent;
     }
 
-    static int localSetupServerPort(
+    int localSetupServerPort(
             LocalSetup.Options options,
             ConnectedBoardManifest manifest,
             Path workflowPath,
@@ -356,22 +356,22 @@ final class TrelloBoardConnector {
                 .orElseGet(() -> firstAvailableServerPort(reservedPorts));
     }
 
-    private static int firstAvailableServerPort(Set<Integer> reservedPorts) {
+    private int firstAvailableServerPort(Set<Integer> reservedPorts) {
         for (int port = TrelloBoardSetup.DEFAULT_SERVER_PORT; port <= 65535; port++) {
-            if (!reservedPorts.contains(port) && !LocalHealthChecker.portAcceptsConnections(port)) {
+            if (!reservedPorts.contains(port) && !boardSetup.portInUse(port)) {
                 return port;
             }
         }
         throw new TrelloBoardSetupException("setup_server_port_unavailable", "No free local server port was found.");
     }
 
-    private static int validatedRequestedServerPort(int port, Set<Integer> reservedPorts) {
+    private int validatedRequestedServerPort(int port, Set<Integer> reservedPorts) {
         if (reservedPorts.contains(port)) {
             throw new TrelloBoardSetupException(
                     "setup_server_port_conflict",
                     "--server-port %d is already reserved by another connected workflow.".formatted(port));
         }
-        if (LocalHealthChecker.portAcceptsConnections(port)) {
+        if (boardSetup.portInUse(port)) {
             throw new TrelloBoardSetupException(
                     "setup_server_port_conflict", "--server-port %d is already in use on 127.0.0.1.".formatted(port));
         }
@@ -428,7 +428,7 @@ final class TrelloBoardConnector {
             return Optional.empty();
         }
         int port = existingPort.orElseThrow();
-        if (!LocalHealthChecker.portAcceptsConnections(port)) {
+        if (!boardSetup.portInUse(port)) {
             return Optional.of(port);
         }
         if (canStopManagedWorkflow(options, manifest, workflowPath, port)) {
@@ -449,8 +449,7 @@ final class TrelloBoardConnector {
                     "setup_server_port_conflict",
                     "--server-port %d is already reserved by another connected workflow.".formatted(port));
         }
-        if (LocalHealthChecker.portAcceptsConnections(port)
-                && !canStopManagedWorkflow(options, manifest, workflowPath, port)) {
+        if (boardSetup.portInUse(port) && !canStopManagedWorkflow(options, manifest, workflowPath, port)) {
             throw new TrelloBoardSetupException(
                     "setup_server_port_conflict", "--server-port %d is already in use on 127.0.0.1.".formatted(port));
         }

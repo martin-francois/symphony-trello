@@ -582,7 +582,7 @@ public final class LocalSetup {
         // board cannot collide with a stale or disconnected workflow that may be started later.
         reserved.addAll(localWorkflowFilePortReservations(options, ignoredBoard));
         for (int port = TrelloBoardSetup.DEFAULT_SERVER_PORT; port <= 65535; port++) {
-            if (!reserved.contains(port) && !LocalHealthChecker.portAcceptsConnections(port)) {
+            if (!reserved.contains(port) && !boardSetup.portInUse(port)) {
                 return port;
             }
         }

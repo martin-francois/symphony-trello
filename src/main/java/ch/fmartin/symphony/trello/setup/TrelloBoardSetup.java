@@ -35,6 +35,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.IntPredicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -97,6 +98,7 @@ public final class TrelloBoardSetup {
     private final Supplier<CodexModelSelectionDefaults> codexModelSelectionDefaults;
     private final Optional<String> codexModelOverride;
     private final Optional<String> codexReasoningEffortOverride;
+    private final IntPredicate portInUse;
 
     public TrelloBoardSetup(ObjectMapper json) {
         this(json, CodexModelDefaults.fallback());
@@ -111,14 +113,20 @@ public final class TrelloBoardSetup {
     }
 
     TrelloBoardSetup(ObjectMapper json, Supplier<CodexModelSelectionDefaults> codexModelSelectionDefaults) {
-        this(json, codexModelSelectionDefaults, Optional.empty(), Optional.empty());
+        this(
+                json,
+                codexModelSelectionDefaults,
+                Optional.empty(),
+                Optional.empty(),
+                LocalHealthChecker::portAcceptsConnections);
     }
 
     private TrelloBoardSetup(
             ObjectMapper json,
             Supplier<CodexModelSelectionDefaults> codexModelSelectionDefaults,
             Optional<String> codexModelOverride,
-            Optional<String> codexReasoningEffortOverride) {
+            Optional<String> codexReasoningEffortOverride,
+            IntPredicate portInUse) {
         this.json = json;
         this.yaml = new ObjectMapper(new YAMLFactory());
         this.httpClient =
@@ -128,10 +136,31 @@ public final class TrelloBoardSetup {
         this.codexModelOverride = Objects.requireNonNull(codexModelOverride, "codexModelOverride");
         this.codexReasoningEffortOverride =
                 Objects.requireNonNull(codexReasoningEffortOverride, "codexReasoningEffortOverride");
+        this.portInUse = Objects.requireNonNull(portInUse, "portInUse");
+    }
+
+    /**
+     * Returns a copy whose port-availability checks use the given probe. Port-selection behavior
+     * depends on which loopback ports already accept connections, so tests inject a deterministic
+     * probe instead of inheriting the host's real port occupancy.
+     */
+    TrelloBoardSetup withPortProbe(IntPredicate probe) {
+        return new TrelloBoardSetup(
+                json, codexModelSelectionDefaults, codexModelOverride, codexReasoningEffortOverride, probe);
+    }
+
+    /** Whether something on the loopback interface already accepts connections on the port. */
+    boolean portInUse(int port) {
+        return portInUse.test(port);
     }
 
     TrelloBoardSetup withCodexModelDefaults(CodexModelDefaults codexModelDefaults) {
-        return new TrelloBoardSetup(json, CodexModelSelectionDefaults.of(codexModelDefaults));
+        return new TrelloBoardSetup(
+                json,
+                codexModelSelectionDefaultsSupplier(CodexModelSelectionDefaults.of(codexModelDefaults)),
+                codexModelOverride,
+                codexReasoningEffortOverride,
+                portInUse);
     }
 
     TrelloBoardSetup withCodexModelOverrides(
@@ -150,7 +179,8 @@ public final class TrelloBoardSetup {
                 json,
                 codexModelSelectionDefaultsSupplier(codexModelSelectionDefaults),
                 codexModelOverride,
-                codexReasoningEffortOverride);
+                codexReasoningEffortOverride,
+                portInUse);
     }
 
     public NewBoardResult createRecommendedBoard(NewBoardRequest request) {
@@ -657,7 +687,7 @@ public final class TrelloBoardSetup {
             return replaceableWorkflowServerPortReservation(absolute, envPath)
                     .filter(existingPort -> workflowServerPortConflict(absolute, existingPort, envPath)
                             .isEmpty())
-                    .filter(existingPort -> !LocalHealthChecker.portAcceptsConnections(existingPort))
+                    .filter(existingPort -> !portInUse(existingPort))
                     .orElseGet(() -> nextAvailableWorkflowServerPort(absolute, envPath));
         }
         return nextAvailableWorkflowServerPort(absolute, envPath);
@@ -680,8 +710,7 @@ public final class TrelloBoardSetup {
                     "setup_server_port_conflict",
                     "--server-port %d is already used by %s".formatted(requestedPort, conflictingWorkflow));
         });
-        if (LocalHealthChecker.portAcceptsConnections(requestedPort)
-                && !canReuseReplaceableWorkflowServerPort(target, requestedPort, force, envPath)) {
+        if (portInUse(requestedPort) && !canReuseReplaceableWorkflowServerPort(target, requestedPort, force, envPath)) {
             throw new TrelloBoardSetupException(
                     "setup_server_port_conflict",
                     "--server-port %d is already in use on 127.0.0.1.".formatted(requestedPort));
@@ -714,7 +743,7 @@ public final class TrelloBoardSetup {
         }
 
         for (int port = DEFAULT_SERVER_PORT; port <= 65535; port++) {
-            if (!reservedPorts.contains(port) && !LocalHealthChecker.portAcceptsConnections(port)) {
+            if (!reservedPorts.contains(port) && !portInUse(port)) {
                 return port;
             }
         }
