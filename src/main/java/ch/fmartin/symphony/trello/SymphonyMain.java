@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello;
 
 import ch.fmartin.symphony.trello.config.EnvironmentReferences;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
+import ch.fmartin.symphony.trello.config.WholeNumbers;
 import ch.fmartin.symphony.trello.orchestrator.SymphonyOrchestrator;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -134,16 +135,32 @@ public class SymphonyMain {
             if (yaml != null && yaml.get("server") instanceof Map<?, ?> server) {
                 Object port = server.get("port");
                 if (port instanceof Number number) {
-                    return Optional.of(number.toString());
+                    return Optional.of(normalizedPort(number.toString()));
                 }
                 if (port instanceof String text && !text.isBlank()) {
-                    return environmentValue(text, environmentResolver);
+                    return environmentValue(text, environmentResolver).map(SymphonyMain::normalizedPort);
                 }
             }
         } catch (IOException ignored) {
             return Optional.empty();
         }
         return Optional.empty();
+    }
+
+    /**
+     * Quarkus needs an integer for quarkus.http.port, so whole-valued numbers such as 18080.0
+     * normalize to 18080 before boot instead of crashing config conversion, and fractional or
+     * non-numeric values fail here with the actual problem named.
+     */
+    private static String normalizedPort(String value) {
+        WholeNumbers.Classified classified = WholeNumbers.classify(value);
+        return switch (classified.kind()) {
+            case WHOLE -> String.valueOf(classified.value());
+            case OUT_OF_INT_RANGE ->
+                throw new IllegalArgumentException("Workflow server.port is out of integer range: " + value.trim());
+            case FRACTIONAL, NOT_A_NUMBER ->
+                throw new IllegalArgumentException("Workflow server.port must be a whole number: " + value.trim());
+        };
     }
 
     private static Optional<String> environmentValue(String value, Function<String, Optional<String>> resolver) {

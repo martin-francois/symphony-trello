@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -55,6 +56,79 @@ final class SymphonyMainTest {
 
         // then
         assertThat(port).contains("9090");
+    }
+
+    @Test
+    void normalizesWholeValuedFloatServerPortBeforeQuarkusStarts() {
+        // given
+        String literalFloat = """
+                server:
+                  port: 18080.0
+                """;
+        String envBackedFloat =
+                """
+                server:
+                  port: $SYMPHONY_FLOAT_PORT
+                """;
+
+        // when
+        var literal = SymphonyMain.configuredServerPort(literalFloat, ignored -> Optional.empty());
+        var envBacked = SymphonyMain.configuredServerPort(
+                envBackedFloat, name -> "SYMPHONY_FLOAT_PORT".equals(name) ? Optional.of("18080.0") : Optional.empty());
+
+        // then
+        assertThat(literal)
+                .as("Quarkus cannot parse 18080.0 as an integer port, so whole floats normalize")
+                .contains("18080");
+        assertThat(envBacked).contains("18080");
+    }
+
+    @Test
+    void rejectsFractionalServerPortBeforeQuarkusStarts() {
+        // given
+        String literalFraction = """
+                server:
+                  port: 18080.5
+                """;
+        String envBackedFraction =
+                """
+                server:
+                  port: $SYMPHONY_FRACTION_PORT
+                """;
+
+        // when
+        Throwable literal =
+                catchThrowable(() -> SymphonyMain.configuredServerPort(literalFraction, ignored -> Optional.empty()));
+        Throwable envBacked = catchThrowable(() -> SymphonyMain.configuredServerPort(
+                envBackedFraction,
+                name -> "SYMPHONY_FRACTION_PORT".equals(name) ? Optional.of("18080.5") : Optional.empty()));
+
+        // then
+        assertThat(literal)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("server.port must be a whole number: 18080.5");
+        assertThat(envBacked)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("server.port must be a whole number: 18080.5");
+    }
+
+    @Test
+    void rejectsWholeButTooLargeServerPortBeforeQuarkusStarts() {
+        // given
+        String tooLarge =
+                """
+                server:
+                  port: 99999999999999999999999
+                """;
+
+        // when
+        Throwable thrown =
+                catchThrowable(() -> SymphonyMain.configuredServerPort(tooLarge, ignored -> Optional.empty()));
+
+        // then
+        assertThat(thrown)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("server.port is out of integer range");
     }
 
     @Test

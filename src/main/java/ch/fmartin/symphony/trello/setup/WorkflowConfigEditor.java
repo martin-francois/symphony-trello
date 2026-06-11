@@ -6,6 +6,7 @@ import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.config.EnvironmentReferences;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import ch.fmartin.symphony.trello.config.TrelloListRoleValidator;
+import ch.fmartin.symphony.trello.config.WholeNumbers;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import ch.fmartin.symphony.trello.workflow.WorkflowException;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
@@ -14,8 +15,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
 import java.io.IOException;
-import java.math.BigDecimal;
-import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -23,6 +22,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.SequencedMap;
 import java.util.function.Function;
 import java.util.regex.Pattern;
@@ -551,11 +551,9 @@ final class WorkflowConfigEditor {
     }
 
     private static Optional<Integer> parseInteger(String value) {
-        try {
-            return Optional.of(Integer.parseInt(value));
-        } catch (NumberFormatException ignored) {
-            return Optional.empty();
-        }
+        // Environment-backed text follows the same whole-number classification as literal YAML
+        // numbers, so "18080.0" normalizes identically in both spellings.
+        return WholeNumbers.wholeInt(value).stream().boxed().findAny();
     }
 
     private static WorkflowIntegerSetting positiveIntegerSetting(Object value) {
@@ -577,48 +575,8 @@ final class WorkflowConfigEditor {
     }
 
     private static Optional<Integer> integralInteger(Number number) {
-        return switch (number) {
-            case Byte value -> Optional.of(value.intValue());
-            case Short value -> Optional.of(value.intValue());
-            case Integer value -> Optional.of(value);
-            case Long value -> exactInt(BigInteger.valueOf(value));
-            case BigInteger value -> exactInt(value);
-            case BigDecimal value -> exactIntegralInt(value);
-            case Float value -> finiteIntegralInt(value.doubleValue());
-            case Double value -> finiteIntegralInt(value);
-            default -> exactNumberTextInt(number.toString());
-        };
-    }
-
-    private static Optional<Integer> finiteIntegralInt(double value) {
-        if (!Double.isFinite(value)) {
-            return Optional.empty();
-        }
-        return exactIntegralInt(BigDecimal.valueOf(value));
-    }
-
-    private static Optional<Integer> exactNumberTextInt(String value) {
-        try {
-            return exactIntegralInt(new BigDecimal(value));
-        } catch (NumberFormatException e) {
-            return Optional.empty();
-        }
-    }
-
-    private static Optional<Integer> exactIntegralInt(BigDecimal value) {
-        try {
-            return exactInt(value.toBigIntegerExact());
-        } catch (ArithmeticException e) {
-            return Optional.empty();
-        }
-    }
-
-    private static Optional<Integer> exactInt(BigInteger value) {
-        try {
-            return Optional.of(value.intValueExact());
-        } catch (ArithmeticException e) {
-            return Optional.empty();
-        }
+        OptionalInt whole = WholeNumbers.wholeInt(number.toString());
+        return whole.stream().boxed().findAny();
     }
 
     private static Optional<String> blockedStateFromWorkflowBody(String body) {

@@ -109,7 +109,23 @@ final class WorkflowConfigEditorTest {
                 Arguments.of(
                         "unresolved environment reference",
                         "server:\n  port: $MISSING_PORT_VARIABLE",
-                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.OMITTED));
+                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.OMITTED),
+                Arguments.of(
+                        "whole-valued float normalizes",
+                        "server:\n  port: 18080.0",
+                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.VALID),
+                Arguments.of(
+                        "fractional port is invalid, not truncated",
+                        "server:\n  port: 18080.5",
+                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.INVALID_VALUE),
+                Arguments.of(
+                        "whole but huge port is invalid",
+                        "server:\n  port: 99999999999999999999999",
+                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.INVALID_VALUE),
+                Arguments.of(
+                        "zero stays in range for ephemeral runs",
+                        "server:\n  port: 0",
+                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.VALID));
     }
 
     @MethodSource("environmentResolvedServerPortClassifications")
@@ -157,6 +173,14 @@ final class WorkflowConfigEditorTest {
                 Arguments.of(
                         "resolved non-numeric port",
                         "not-a-port",
+                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.INVALID_VALUE),
+                Arguments.of(
+                        "resolved whole-valued float normalizes",
+                        "18080.0",
+                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.VALID),
+                Arguments.of(
+                        "resolved fractional port is invalid, not truncated",
+                        "18080.5",
                         WorkflowConfigEditor.WorkflowServerPortClassification.Kind.INVALID_VALUE),
                 Arguments.of(
                         "unresolved reference",

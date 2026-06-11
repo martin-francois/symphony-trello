@@ -132,7 +132,7 @@ public class ConfigResolver {
                         bool(trelloTools, "allow_url_attachments", writes),
                         bool(trelloTools, "allow_destructive_operations", false),
                         bool(trelloTools, "assume_write_scope", false)),
-                new EffectiveConfig.ServerConfig(optionalEnvironmentInt(server, "port")));
+                new EffectiveConfig.ServerConfig(optionalEnvironmentInt(server, "port", "server.port")));
     }
 
     public void validateForDispatch(EffectiveConfig config) {
@@ -304,22 +304,36 @@ public class ConfigResolver {
         if (value == null) {
             return defaultValue;
         }
-        if (value instanceof Number number) {
-            return number.intValue();
-        }
-        return Integer.parseInt(value.toString());
+        return integralInt(key, value.toString());
     }
 
-    private OptionalInt optionalEnvironmentInt(Map<String, Object> root, String key) {
+    private OptionalInt optionalEnvironmentInt(Map<String, Object> root, String key, String displayKey) {
         Object value = root.get(key);
         if (value == null) {
             return OptionalInt.empty();
         }
         if (value instanceof Number number) {
-            return OptionalInt.of(number.intValue());
+            return OptionalInt.of(integralInt(displayKey, number.toString()));
         }
         String text = environmentString(root, key, null);
-        return blank(text) ? OptionalInt.empty() : OptionalInt.of(Integer.parseInt(text));
+        return blank(text) ? OptionalInt.empty() : OptionalInt.of(integralInt(displayKey, text));
+    }
+
+    /**
+     * YAML numbers arrive as arbitrary {@link Number} implementations (Integer, Long, BigInteger,
+     * Double) and {@code intValue()} silently truncates fractional values such as {@code 18080.5}.
+     * Going through BigDecimal keeps huge integers and huge doubles exact, so a fractional value
+     * and a whole-but-too-large value each get their own accurate error. Environment-backed text
+     * values take the same path so both spellings of one mistake read the same.
+     */
+    private static int integralInt(String key, String text) {
+        WholeNumbers.Classified classified = WholeNumbers.classify(text);
+        return switch (classified.kind()) {
+            case WHOLE -> classified.value();
+            case OUT_OF_INT_RANGE -> throw new ConfigException("config_value_error", key + " is out of integer range");
+            case FRACTIONAL, NOT_A_NUMBER ->
+                throw new ConfigException("config_value_error", key + " must be a whole number");
+        };
     }
 
     private static boolean bool(Map<String, Object> root, String key, boolean defaultValue) {
@@ -374,12 +388,10 @@ public class ConfigResolver {
     }
 
     private static OptionalInt positiveInteger(Object value) {
-        try {
-            int parsed = value instanceof Number number ? number.intValue() : Integer.parseInt(value.toString());
-            return parsed > 0 ? OptionalInt.of(parsed) : OptionalInt.empty();
-        } catch (NumberFormatException e) {
-            return OptionalInt.empty();
-        }
+        // A fractional, empty, or otherwise unusable map value is invalid input and falls back
+        // to the defaults instead of being silently truncated; SPEC.md documents the quiet skip.
+        OptionalInt whole = WholeNumbers.wholeInt(String.valueOf(value));
+        return whole.orElse(0) > 0 ? whole : OptionalInt.empty();
     }
 
     private static Path path(Path workflowDirectory, String value) {
