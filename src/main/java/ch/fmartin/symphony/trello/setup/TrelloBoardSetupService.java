@@ -92,7 +92,7 @@ final class TrelloBoardSetupService {
                     "setup_server_port_conflict",
                     "--server-port %d is already reserved by another connected workflow.".formatted(requestedPort));
         }
-        if (LocalHealthChecker.portAcceptsConnections(requestedPort)
+        if (setup.portInUse(requestedPort)
                 && !canReuseLivePortForForcedWorkflowUpdate(manifestPath, replaceableBoard)) {
             throw new TrelloBoardSetupException(
                     "setup_server_port_conflict",
