@@ -92,7 +92,8 @@ final class LocalWorkerManagerTestFixture {
     void stubHealthyStartedWorker(ConnectedBoard board, long pid) throws Exception {
         when(platform.start(any(), eq(paths.appHome()), any(), any(), any())).thenReturn(new ManagedProcessHandle(pid));
         stubManagedPort(board);
-        when(healthChecker.waitForSameWorkflow(board, board.serverPort())).thenReturn(sameWorkflow(board));
+        when(healthChecker.waitForSameWorkflow(eq(board), eq(board.serverPort()), any()))
+                .thenReturn(sameWorkflow(board));
         when(platform.isAlive(pid)).thenReturn(true);
         when(platform.isManaged(pid, paths.appHome(), board.workflowPath())).thenReturn(true);
     }
@@ -111,14 +112,16 @@ final class LocalWorkerManagerTestFixture {
     void stubStoppedStartedWorker(ConnectedBoard board, long pid) throws Exception {
         when(platform.start(any(), eq(paths.appHome()), any(), any(), any())).thenReturn(new ManagedProcessHandle(pid));
         stubManagedPort(board);
-        when(healthChecker.waitForSameWorkflow(board, board.serverPort())).thenReturn(stopped(board));
+        when(healthChecker.waitForSameWorkflow(eq(board), eq(board.serverPort()), any()))
+                .thenReturn(stopped(board));
         when(platform.stop(pid, Duration.ofSeconds(15), Duration.ofSeconds(5))).thenReturn(true);
     }
 
     void stubStartedWorkerHealth(ConnectedBoard board, long pid, BoardHealth health) throws Exception {
         when(platform.start(any(), eq(paths.appHome()), any(), any(), any())).thenReturn(new ManagedProcessHandle(pid));
         stubManagedPort(board);
-        when(healthChecker.waitForSameWorkflow(board, board.serverPort())).thenReturn(health);
+        when(healthChecker.waitForSameWorkflow(eq(board), eq(board.serverPort()), any()))
+                .thenReturn(health);
         when(platform.stop(pid, Duration.ofSeconds(15), Duration.ofSeconds(5))).thenReturn(true);
     }
 
@@ -126,7 +129,8 @@ final class LocalWorkerManagerTestFixture {
             throws Exception {
         when(platform.start(any(), eq(paths.appHome()), any(), any(), any())).thenReturn(new ManagedProcessHandle(pid));
         stubManagedPort(board);
-        when(healthChecker.waitForSameWorkflow(board, board.serverPort())).thenReturn(sameWorkflow(board));
+        when(healthChecker.waitForSameWorkflow(eq(board), eq(board.serverPort()), any()))
+                .thenReturn(sameWorkflow(board));
         when(platform.isAlive(pid)).thenReturn(alive);
         if (alive) {
             when(platform.isManaged(pid, paths.appHome(), board.workflowPath())).thenReturn(managed);

@@ -347,7 +347,7 @@ final class LocalWorkerManager {
         ManagedProcessHandle handle =
                 platform.start(command, paths.appHome(), processEnvironment, files.stdoutLog(), files.stderrLog());
         store.writePid(files.pidFile(), handle.pid());
-        BoardHealth health = healthChecker.waitForSameWorkflow(board, healthPort);
+        BoardHealth health = healthChecker.waitForSameWorkflow(board, healthPort, () -> platform.isAlive(handle.pid()));
         if (health.kind() != BoardHealthKind.SAME_WORKFLOW) {
             stopPid(store, files, handle.pid());
             throwKnownStartupFailure(files, logOffsets, platform.appendsToExistingLogs(), credentialUsage);

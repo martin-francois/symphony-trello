@@ -99,7 +99,7 @@ final class LocalWorkerManagerTest {
                 .thenReturn(new ManagedProcessHandle(42));
         when(fixture.healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), expectedEnv))
                 .thenReturn(board.serverPort());
-        when(fixture.healthChecker.waitForSameWorkflow(board, board.serverPort()))
+        when(fixture.healthChecker.waitForSameWorkflow(eq(board), eq(board.serverPort()), any()))
                 .thenReturn(fixture.sameWorkflow(board));
         when(fixture.platform.isAlive(42)).thenReturn(true);
         when(fixture.platform.isManaged(42, fixture.paths.appHome(), board.workflowPath()))
@@ -460,7 +460,7 @@ final class LocalWorkerManagerTest {
                     assertThat(releaseFirstStart.await(5, TimeUnit.SECONDS)).isTrue();
                     return new ManagedProcessHandle(42);
                 });
-        when(fixture.healthChecker.waitForSameWorkflow(board, board.serverPort()))
+        when(fixture.healthChecker.waitForSameWorkflow(eq(board), eq(board.serverPort()), any()))
                 .thenReturn(fixture.sameWorkflow(board));
         when(fixture.platform.isAlive(42)).thenReturn(true);
         when(fixture.platform.isManaged(42, fixture.paths.appHome(), board.workflowPath()))
@@ -1133,7 +1133,7 @@ final class LocalWorkerManagerTest {
                 .thenReturn(new ManagedProcessHandle(99L));
         when(fixture.platform.stop(eq(99L), any(Duration.class), any(Duration.class)))
                 .thenReturn(true);
-        when(fixture.healthChecker.waitForSameWorkflow(any(), anyInt())).thenReturn(fixture.stopped(18081));
+        when(fixture.healthChecker.waitForSameWorkflow(any(), anyInt(), any())).thenReturn(fixture.stopped(18081));
 
         // when
         Throwable thrown = catchThrowable(() -> fixture.start(fixture.startWorkflowRequest(staleWorkflow)));
@@ -2196,7 +2196,7 @@ final class LocalWorkerManagerTest {
                 .thenReturn(new ManagedProcessHandle(42));
         when(fixture.healthChecker.managedHealthPort(any(), anyInt(), nullable(Path.class)))
                 .thenReturn(19090);
-        when(fixture.healthChecker.waitForSameWorkflow(any(), eq(19090)))
+        when(fixture.healthChecker.waitForSameWorkflow(any(), eq(19090), any()))
                 .thenReturn(new BoardHealth(
                         BoardHealthKind.SAME_WORKFLOW,
                         19090,
@@ -2215,7 +2215,8 @@ final class LocalWorkerManagerTest {
         verify(fixture.healthChecker)
                 .waitForSameWorkflow(
                         argThat(board -> "direct-board".equals(board.boardId()) && board.serverPort() == 19090),
-                        eq(19090));
+                        eq(19090),
+                        any());
     }
 
     @Test
@@ -2250,7 +2251,7 @@ final class LocalWorkerManagerTest {
                 .thenReturn(new ManagedProcessHandle(42));
         when(fixture.healthChecker.managedHealthPort(any(), anyInt(), nullable(Path.class)))
                 .thenReturn(19092);
-        when(fixture.healthChecker.waitForSameWorkflow(any(), eq(19092)))
+        when(fixture.healthChecker.waitForSameWorkflow(any(), eq(19092), any()))
                 .thenReturn(new BoardHealth(
                         BoardHealthKind.SAME_WORKFLOW,
                         19092,
@@ -2270,7 +2271,8 @@ final class LocalWorkerManagerTest {
                 .waitForSameWorkflow(
                         argThat(board ->
                                 "resolved-direct-board".equals(board.boardId()) && board.serverPort() == 19092),
-                        eq(19092));
+                        eq(19092),
+                        any());
     }
 
     @Test
@@ -2305,7 +2307,7 @@ final class LocalWorkerManagerTest {
                 .thenReturn(new ManagedProcessHandle(42));
         when(fixture.healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), overrideEnv))
                 .thenReturn(19093);
-        when(fixture.healthChecker.waitForSameWorkflow(board, 19093))
+        when(fixture.healthChecker.waitForSameWorkflow(eq(board), eq(19093), any()))
                 .thenReturn(new BoardHealth(
                         BoardHealthKind.SAME_WORKFLOW,
                         19093,
@@ -2775,7 +2777,7 @@ final class LocalWorkerManagerTest {
         fixture.save(first, second);
         when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
                 .thenReturn(new ManagedProcessHandle(42), new ManagedProcessHandle(43));
-        when(fixture.healthChecker.waitForSameWorkflow(any(), anyInt()))
+        when(fixture.healthChecker.waitForSameWorkflow(any(), anyInt(), any()))
                 .thenReturn(new BoardHealth(BoardHealthKind.SAME_WORKFLOW, 18080, Optional.empty(), Optional.empty()));
         when(fixture.platform.isAlive(anyLong())).thenReturn(true);
         when(fixture.platform.isManaged(anyLong(), eq(fixture.paths.appHome()), any()))
@@ -2815,7 +2817,7 @@ final class LocalWorkerManagerTest {
                 .thenReturn(19094);
         when(fixture.healthChecker.externalHttpPortOverrideSource(board.envPath()))
                 .thenReturn(Optional.of("SYMPHONY_HTTP_PORT in " + board.envPath()));
-        when(fixture.healthChecker.waitForSameWorkflow(board, 19094))
+        when(fixture.healthChecker.waitForSameWorkflow(eq(board), eq(19094), any()))
                 .thenReturn(new BoardHealth(
                         BoardHealthKind.SAME_WORKFLOW,
                         19094,
