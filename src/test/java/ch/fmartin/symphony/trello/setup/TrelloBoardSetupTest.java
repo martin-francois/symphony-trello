@@ -1553,6 +1553,84 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
+    void newBoardReservesNormalizedWholeFloatSiblingWorkflowPort() throws IOException {
+        // given
+        // A stale sibling workflow with port 18080.0 reserves exactly 18080; it must never
+        // reserve a truncated or shifted value.
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Path siblingWorkflow = tempDir.resolve("WORKFLOW.whole-float.md");
+        Files.writeString(
+                siblingWorkflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: existing-board
+                server:
+                  port: 18080.0
+                ---
+                # Existing workflow
+                """,
+                StandardCharsets.UTF_8);
+
+        // when
+        var result = setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "My Project",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                1,
+                false,
+                true));
+
+        // then
+        assertThat(result.serverPort()).isEqualTo(firstAvailableManagedPort(18080));
+    }
+
+    @Test
+    void newBoardRejectsFractionalSiblingWorkflowPortInsteadOfTruncatingIt() throws IOException {
+        // given
+        // The sibling scan already fails strictly for non-numeric ports, so a fractional port is
+        // rejected the same way instead of silently reserving the truncated value.
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Path siblingWorkflow = tempDir.resolve("WORKFLOW.fractional.md");
+        Files.writeString(
+                siblingWorkflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: existing-board
+                server:
+                  port: 18080.5
+                ---
+                # Existing workflow
+                """,
+                StandardCharsets.UTF_8);
+
+        // when
+        Throwable thrown = catchThrowable(() -> setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "My Project",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                1,
+                false,
+                true)));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_invalid_server_port");
+            assertThat(failure.getMessage()).contains("WORKFLOW.fractional.md");
+        });
+        assertThat(workflow).doesNotExist();
+    }
+
+    @Test
     void newBoardSkipsUnresolvedEnvironmentBackedSiblingWorkflowPort() throws IOException {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
