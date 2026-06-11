@@ -69,15 +69,25 @@ final class TestConventionTest {
     }
 
     private static void collectTestSectionViolations(Path file, List<String> violations) throws IOException {
-        List<String> lines = Files.readAllLines(file);
+        violations.addAll(testSectionViolations(file));
+    }
+
+    static List<String> testSectionViolations(Path file) throws IOException {
+        List<String> violations = new ArrayList<>();
+        String source = Files.readString(file);
+        List<String> lines = source.lines().toList();
+        // Braces inside string literals, text blocks, char literals, and comments are data, not
+        // code structure: a fixture like "{not valid json" must not move method boundaries, so
+        // brace scanning runs on a code-only view while markers and annotations use raw lines.
+        List<String> codeLines = TestSourceLexer.stripNonCode(source).lines().toList();
         int index = 0;
         while (index < lines.size()) {
             if (!TEST_ANNOTATION.matcher(lines.get(index)).find()) {
                 index++;
                 continue;
             }
-            int methodStart = findMethodStart(lines, index + 1);
-            int methodEnd = findMethodEnd(lines, methodStart);
+            int methodStart = findMethodStart(lines, codeLines, index + 1);
+            int methodEnd = findMethodEnd(codeLines, methodStart);
             if (methodStart < 0 || methodEnd < 0) {
                 violations.add("%s:%d: could not parse test method".formatted(file, index + 1));
                 index++;
@@ -88,28 +98,28 @@ final class TestConventionTest {
             index = methodEnd;
             index++;
         }
+        return violations;
     }
 
-    private static int findMethodStart(List<String> lines, int start) {
+    private static int findMethodStart(List<String> lines, List<String> codeLines, int start) {
         for (int index = start; index < lines.size(); index++) {
-            String line = lines.get(index);
-            if (line.stripLeading().startsWith("@")) {
+            if (lines.get(index).stripLeading().startsWith("@")) {
                 continue;
             }
-            if (line.contains("{")) {
+            if (codeLines.get(index).contains("{")) {
                 return index;
             }
         }
         return -1;
     }
 
-    private static int findMethodEnd(List<String> lines, int methodStart) {
+    private static int findMethodEnd(List<String> codeLines, int methodStart) {
         if (methodStart < 0) {
             return -1;
         }
         int depth = 0;
-        for (int index = methodStart; index < lines.size(); index++) {
-            String line = lines.get(index);
+        for (int index = methodStart; index < codeLines.size(); index++) {
+            String line = codeLines.get(index);
             depth += count(line, '{');
             depth -= count(line, '}');
             if (depth == 0) {
