@@ -8,6 +8,7 @@ import ch.fmartin.symphony.trello.config.EnvironmentReferences;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import ch.fmartin.symphony.trello.config.StateNames;
 import ch.fmartin.symphony.trello.config.TrelloListRoleValidator;
+import ch.fmartin.symphony.trello.config.WholeNumbers;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -827,21 +828,20 @@ public final class TrelloBoardSetup {
     }
 
     private static int parseServerPort(Object value, Path workflowPath) {
-        int port;
-        try {
-            port = switch (value) {
-                case Number number -> number.intValue();
-                case String text -> Integer.parseInt(text.trim());
-                default ->
-                    throw new TrelloBoardSetupException(
-                            "setup_invalid_server_port", "Workflow file has an invalid server.port: " + workflowPath);
-            };
-        } catch (NumberFormatException e) {
+        // Whole-valued floats such as 18080.0 normalize to their integer value; fractional,
+        // non-numeric, and out-of-int-range values are invalid instead of silently truncating,
+        // so a sibling workflow scan can never reserve a truncated port.
+        if (!(value instanceof Number) && !(value instanceof String)) {
             throw new TrelloBoardSetupException(
-                    "setup_invalid_server_port", "Workflow file has an invalid server.port: " + workflowPath, e);
+                    "setup_invalid_server_port", "Workflow file has an invalid server.port: " + workflowPath);
         }
-        validateServerPort(port, "server.port in " + workflowPath);
-        return port;
+        WholeNumbers.Classified classified = WholeNumbers.classify(value.toString());
+        if (classified.kind() != WholeNumbers.Kind.WHOLE) {
+            throw new TrelloBoardSetupException(
+                    "setup_invalid_server_port", "Workflow file has an invalid server.port: " + workflowPath);
+        }
+        validateServerPort(classified.value(), "server.port in " + workflowPath);
+        return classified.value();
     }
 
     private static void validateOptionalSetupServerPort(Integer port) {

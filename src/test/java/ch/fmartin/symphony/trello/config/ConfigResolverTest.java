@@ -1,14 +1,19 @@
 package ch.fmartin.symphony.trello.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 final class ConfigResolverTest {
     @TempDir
@@ -47,6 +52,288 @@ final class ConfigResolverTest {
         assertThat(config.tracker().boardId()).isEqualTo("board-shortlink");
         assertThat(config.tracker().resolvedBoardId()).isEqualTo("resolved-board-id");
         assertThat(config.server().port()).hasValue(19093);
+    }
+
+    @MethodSource("fractionalNumericValues")
+    @ParameterizedTest
+    void rejectsFractionalNumericValuesInsteadOfTruncatingThem(String name, String section, String expectedMessage)
+            throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW." + name + ".md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: literal-key
+                  api_token: literal-token
+                  board_id: board-1
+                %s
+                ---
+                Prompt
+                """
+                        .formatted(section));
+        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        ConfigException error = catchThrowableOfType(
+                ConfigException.class, () -> resolver.resolve(new WorkflowLoader().load(workflow)));
+
+        // then
+        assertThat(error.code()).isEqualTo("config_value_error");
+        assertThat(error).hasMessage(expectedMessage);
+    }
+
+    private static Stream<Arguments> fractionalNumericValues() {
+        return Stream.of(
+                Arguments.of("fractional-port", "server:\n  port: 18080.5", "server.port must be a whole number"),
+                Arguments.of(
+                        "fractional-agents",
+                        "agent:\n  max_concurrent_agents: 1.5",
+                        "max_concurrent_agents must be a whole number"),
+                Arguments.of(
+                        "non-numeric-retries",
+                        "tracker:\n  max_api_retries: not-a-number",
+                        "max_api_retries must be a whole number"),
+                Arguments.of("overflowing-float-port", "server:\n  port: 1e400", "server.port must be a whole number"));
+    }
+
+    @Test
+    void emptyPriorityLabelValuesFallBackToDefaultsInsteadOfCrashing() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.empty-priority.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: literal-key
+                  api_token: literal-token
+                  board_id: board-1
+                  priority_labels:
+                    rush:
+                ---
+                Prompt
+                """);
+        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.tracker().priorityLabels()).doesNotContainKey("rush");
+    }
+
+    @Test
+    void rejectsFractionalEnvironmentBackedServerPortInsteadOfCrashingRaw() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.fractional-env-port.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: literal-key
+                  api_token: literal-token
+                  board_id: board-1
+                server:
+                  port: $SYMPHONY_FRACTIONAL_PORT
+                ---
+                Prompt
+                """);
+        ConfigResolver resolver = new ConfigResolver(
+                name -> "SYMPHONY_FRACTIONAL_PORT".equals(name) ? Optional.of("18080.5") : Optional.empty());
+
+        // when
+        ConfigException error = catchThrowableOfType(
+                ConfigException.class, () -> resolver.resolve(new WorkflowLoader().load(workflow)));
+
+        // then
+        assertThat(error.code()).isEqualTo("config_value_error");
+        assertThat(error).hasMessage("server.port must be a whole number");
+    }
+
+    @Test
+    void reportsWholeButTooLargeServerPortAsOutOfRangeNotAsFractional() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.huge-port.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: literal-key
+                  api_token: literal-token
+                  board_id: board-1
+                server:
+                  port: 99999999999999999999999
+                ---
+                Prompt
+                """);
+        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        ConfigException error = catchThrowableOfType(
+                ConfigException.class, () -> resolver.resolve(new WorkflowLoader().load(workflow)));
+
+        // then
+        assertThat(error.code()).isEqualTo("config_value_error");
+        assertThat(error).hasMessage("server.port is out of integer range");
+    }
+
+    @Test
+    void reportsWholeButTooLargeEnvironmentBackedServerPortAsOutOfRange() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.huge-env-port.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: literal-key
+                  api_token: literal-token
+                  board_id: board-1
+                server:
+                  port: $SYMPHONY_HUGE_PORT
+                ---
+                Prompt
+                """);
+        ConfigResolver resolver = new ConfigResolver(
+                name -> "SYMPHONY_HUGE_PORT".equals(name) ? Optional.of("9999999999") : Optional.empty());
+
+        // when
+        ConfigException error = catchThrowableOfType(
+                ConfigException.class, () -> resolver.resolve(new WorkflowLoader().load(workflow)));
+
+        // then
+        assertThat(error.code()).isEqualTo("config_value_error");
+        assertThat(error).hasMessage("server.port is out of integer range");
+    }
+
+    @Test
+    void acceptsWholeValuedFloatingPointServerPort() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.whole-float-port.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: literal-key
+                  api_token: literal-token
+                  board_id: board-1
+                server:
+                  port: 18080.0
+                ---
+                Prompt
+                """);
+        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.server().port()).hasValue(18080);
+    }
+
+    @Test
+    void keepsOutOfRangePortsResolvableBecauseRangePolicyLivesAtTheLaunchLayer() throws Exception {
+        // given
+        // The resolved server.port has no runtime consumer (the worker reads its HTTP port from
+        // the raw workflow or the SYMPHONY_HTTP_PORT/QUARKUS_HTTP_PORT overrides), so rejecting
+        // ranges here would only break deployed workers whose unused workflow port is stale.
+        // Range validation stays at the launch layer (WorkflowConfigEditor/LocalPort).
+        Path workflow = tempDir.resolve("WORKFLOW.out-of-range-port.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: literal-key
+                  api_token: literal-token
+                  board_id: board-1
+                codex:
+                  command: fake
+                server:
+                  port: 70000
+                ---
+                Prompt
+                """);
+        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+        Throwable dispatchFailure = catchThrowable(() -> resolver.validateForDispatch(config));
+
+        // then
+        assertThat(config.server().port()).hasValue(70000);
+        assertThat(dispatchFailure).isNull();
+    }
+
+    @Test
+    void keepsEphemeralServerPortZeroDispatchable() throws Exception {
+        // given
+        // SPEC.md allows server.port 0 for temporary local runs on an ephemeral port.
+        Path workflow = tempDir.resolve("WORKFLOW.ephemeral-port.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: literal-key
+                  api_token: literal-token
+                  board_id: board-1
+                codex:
+                  command: fake
+                server:
+                  port: 0
+                ---
+                Prompt
+                """);
+        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+        Throwable dispatchFailure = catchThrowable(() -> resolver.validateForDispatch(config));
+
+        // then
+        assertThat(config.server().port()).hasValue(0);
+        assertThat(dispatchFailure).isNull();
+    }
+
+    @Test
+    void fractionalPriorityLabelValuesFallBackToDefaultsInsteadOfTruncating() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.fractional-priority.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: literal-key
+                  api_token: literal-token
+                  board_id: board-1
+                  priority_labels:
+                    rush: 2.5
+                ---
+                Prompt
+                """);
+        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.tracker().priorityLabels()).doesNotContainKey("rush");
     }
 
     @Test
