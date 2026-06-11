@@ -46,7 +46,9 @@ final class TrelloBoardSetupTest {
     @BeforeEach
     void startServer() throws Exception {
         server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
-        setup = new TrelloBoardSetup(new ObjectMapper());
+        // Port-selection must not depend on the host's real port occupancy (live workers can
+        // hold 18080+), so the fixture fakes every loopback port as free.
+        setup = new TrelloBoardSetup(new ObjectMapper()).withPortProbe(port -> false);
         workspaceResponse.set(
                 """
                 [
@@ -1474,6 +1476,8 @@ final class TrelloBoardSetupTest {
     @Test
     void newBoardRejectsRequestedServerPortAlreadyListeningBeforeTrelloRequest() throws IOException {
         // given
+        // This test binds its own listener, so it uses the real port probe on a port it owns.
+        TrelloBoardSetup probingSetup = new TrelloBoardSetup(new ObjectMapper());
         Path workflow = tempDir.resolve("WORKFLOW.md");
         HttpServer listeningServer = startLoopbackServer();
         int listeningPort = listeningServer.getAddress().getPort();
@@ -1492,7 +1496,7 @@ final class TrelloBoardSetupTest {
         // when
         Throwable thrown;
         try {
-            thrown = catchThrowable(() -> setup.createRecommendedBoard(request));
+            thrown = catchThrowable(() -> probingSetup.createRecommendedBoard(request));
         } finally {
             listeningServer.stop(0);
         }
@@ -1512,6 +1516,8 @@ final class TrelloBoardSetupTest {
     @Test
     void importBoardRejectsRequestedServerPortAlreadyListeningBeforeTrelloRequest() throws IOException {
         // given
+        // This test binds its own listener, so it uses the real port probe on a port it owns.
+        TrelloBoardSetup probingSetup = new TrelloBoardSetup(new ObjectMapper());
         Path workflow = tempDir.resolve("WORKFLOW.md");
         HttpServer listeningServer = startLoopbackServer();
         int listeningPort = listeningServer.getAddress().getPort();
@@ -1535,7 +1541,7 @@ final class TrelloBoardSetupTest {
         // when
         Throwable thrown;
         try {
-            thrown = catchThrowable(() -> setup.importExistingBoard(request));
+            thrown = catchThrowable(() -> probingSetup.importExistingBoard(request));
         } finally {
             listeningServer.stop(0);
         }
@@ -1586,7 +1592,7 @@ final class TrelloBoardSetupTest {
                 true));
 
         // then
-        assertThat(result.serverPort()).isEqualTo(firstAvailableManagedPort(18080));
+        assertThat(result.serverPort()).isEqualTo(18081);
     }
 
     @Test
@@ -1666,6 +1672,32 @@ final class TrelloBoardSetupTest {
         // then
         assertThat(result.serverPort()).isEqualTo(expectedPort);
         assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: " + expectedPort);
+    }
+
+    @Test
+    void newBoardSkipsPortsTheAvailabilityProbeReportsBusy() throws IOException {
+        // given
+        // Deterministically simulates live workers occupying the first ports of the managed
+        // range, which previously made these tests depend on real host port occupancy.
+        TrelloBoardSetup probedSetup =
+                new TrelloBoardSetup(new ObjectMapper()).withPortProbe(port -> port >= 18080 && port <= 18082);
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+
+        // when
+        var result = probedSetup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "My Project",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                1,
+                false,
+                true));
+
+        // then
+        assertThat(result.serverPort()).isEqualTo(18083);
+        assertThat(workflow).content(StandardCharsets.UTF_8).contains("port: 18083");
     }
 
     @Test
@@ -2115,6 +2147,8 @@ final class TrelloBoardSetupTest {
     @Test
     void forceNewBoardDoesNotPreserveExistingServerPortWhenItIsAlreadyListening() throws IOException {
         // given
+        // This test binds its own listener, so it uses the real port probe on a port it owns.
+        TrelloBoardSetup probingSetup = new TrelloBoardSetup(new ObjectMapper());
         Path workflow = tempDir.resolve("WORKFLOW.md");
         HttpServer listeningServer = startLoopbackServer();
         int listeningPort = listeningServer.getAddress().getPort();
@@ -2136,7 +2170,7 @@ final class TrelloBoardSetupTest {
         // when
         TrelloBoardSetup.NewBoardResult result;
         try {
-            result = setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+            result = probingSetup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
                     endpoint(),
                     new TrelloBoardSetup.TrelloCredentials("key", "token"),
                     "My Project",
@@ -2344,9 +2378,10 @@ final class TrelloBoardSetupTest {
         return listeningServer;
     }
 
+    /** The class fixture fakes every port as free, so the next port is pure arithmetic. */
     private static int firstAvailableManagedPort(int... reservedPorts) {
         for (int port = ConfigDefaults.DEFAULT_SERVER_PORT; port <= LocalPort.MAX; port++) {
-            if (!contains(reservedPorts, port) && !LocalHealthChecker.portAcceptsConnections(port)) {
+            if (!contains(reservedPorts, port)) {
                 return port;
             }
         }
