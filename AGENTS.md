@@ -758,8 +758,10 @@ matters, and easy for another engineer to understand without asking the original
   well-scoped, low-risk, independent of unresolved decisions or external timing, and specific enough
   that the expected implementation is clear. Use
   `already-implemented` when the
-  issue appears to describe behavior that already exists, but do not close it unless the user asks
-  or the implementation is verified.
+  issue appears to describe behavior that already exists. Close it with a reference comment when
+  the implementation is verified against code or tests (triage sweeps do this check on every open
+  issue); when verification is inconclusive, keep it open with `needs-human-review` and
+  `not-ready` per the GitHub Issue Triage section.
 - When adding or changing behavior that extends beyond `SPEC.md` but does not conflict with it,
   append the extension contract to `SPEC.md` in the same change. Keep implementation-specific
   extensions clearly labeled as optional or Java implementation extensions so the core adapted
@@ -776,6 +778,14 @@ matters, and easy for another engineer to understand without asking the original
 - When asked for an issue triage sweep, review open issues in cycles. In each cycle, update stale
   descriptions, labels, milestones, dependency links, and missing context directly. Stop only after a
   full pass finds nothing else worth changing.
+- Every triage sweep also checks each open issue against the current code: does the issue describe
+  behavior that already exists? When the implementation is verified against the code, tests, or a
+  reproduction, close the issue with a comment that references where it was addressed - the
+  implementing commit, pull request, issue, or code location - and add `already implemented`. When
+  the behavior only appears to exist but verification is not conclusive, add `already implemented`,
+  `needs human review`, and `not ready` instead of closing, and comment what evidence exists and
+  what a maintainer must confirm. Never close on resemblance alone: the issue's actual acceptance
+  criteria must be met, not just its premise or a partial overlap.
 - Use `needs-human-review` only when the issue is missing a human decision, required context, or an
   external action that is not already represented by a dependency or clear issue step. Do not use it
   for issues that are merely blocked by another issue or waiting for a clearly described timing
