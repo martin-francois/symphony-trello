@@ -98,7 +98,8 @@ matters, and easy for another engineer to understand without asking the original
    styles, default to Conventional Commits.
    For feature-branch work in this repository, preserve a single review commit by amending the
    existing branch commit or squashing related local commits before pushing, unless the user
-   explicitly asks for multiple commits.
+   explicitly asks for multiple commits or the change includes a refactor, which belongs in its
+   own focused commit before the behavior-change commit.
    If the user explicitly wants a multi-commit pull request, keep each commit focused and
    Conventional Commit titled. Use one commit for the user-visible feature or fix and separate
    commits only for directly supporting cleanup or refactoring that belongs to the same cohesive
@@ -171,7 +172,22 @@ matters, and easy for another engineer to understand without asking the original
 ## Design Preferences
 
 - Keep complexity to the minimum that satisfies the spec and current use cases.
-- Prefer existing project patterns and standard Quarkus/JDK APIs over new abstractions.
+- Optimize changes for the quality, maintainability, and readability of the resulting code, not
+  for the least intrusive patch. Minimum complexity (KISS) means the complexity of the resulting
+  code, not the size of the diff. When a smaller patch and a larger change both address an issue
+  and the larger change is more correct - it fixes the owning boundary or mechanism instead of
+  patching each symptom site - prefer the larger change, even when it requires a large refactor.
+  Do not choose a temporary or partial fix only because it is smaller. A required refactor goes
+  in its own commit, separate from the behavior-change commit, on the same branch; the combined
+  work must still be one cohesive change per the scoping rule above. When an external constraint
+  such as review scope, release timing, or a dependency forces the smaller fix now, record the
+  preferred end state in a GitHub issue in the same change and link it from the PR or code, so
+  the temporary fix cannot silently become permanent.
+- Prefer existing project patterns, standard Quarkus/JDK APIs, and established maintained
+  libraries over new abstractions and hand-rolled reimplementations. Do not write code the
+  project then has to maintain when an established feature already provides the behavior;
+  choosing between a premade solution and a custom implementation stays ADR-worthy per the
+  specification section.
 - Centralize connected constants and configuration values. Do not duplicate magic values with the
   same meaning in multiple places. More generally, when separate code, docs, test data, generated
   templates, constants, literals, or other artifacts represent one concept and a maintainer would
