@@ -30,6 +30,7 @@ public record RuntimeSnapshot(
     public record RunningRow(
             String cardId,
             String cardIdentifier,
+            String cardUrl,
             String state,
             String sessionId,
             int turnCount,
@@ -43,7 +44,8 @@ public record RuntimeSnapshot(
         }
     }
 
-    public record RetryRow(String cardId, String cardIdentifier, int attempt, Instant dueAt, String error) {}
+    public record RetryRow(
+            String cardId, String cardIdentifier, String cardUrl, int attempt, Instant dueAt, String error) {}
 
     public record TokenTotals(long inputTokens, long outputTokens, long totalTokens, double secondsRunning) {}
 }

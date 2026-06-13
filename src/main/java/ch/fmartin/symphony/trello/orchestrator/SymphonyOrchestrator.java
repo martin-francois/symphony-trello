@@ -507,7 +507,8 @@ public class SymphonyOrchestrator {
         }
         if (!suppressRetry) {
             releaseCurrentFromDispatch(entry.card, reason);
-            scheduleRetry(cardId, nextAttempt(entry.retryAttempt), entry.identifier(), reason, false);
+            scheduleRetry(
+                    cardId, nextAttempt(entry.retryAttempt), entry.identifier(), entry.card.cardUrl(), reason, false);
         }
         LOG.infof("card_id=%s card_identifier=%s outcome=terminated reason=%s", cardId, entry.identifier(), reason);
     }
@@ -529,7 +530,7 @@ public class SymphonyOrchestrator {
                 claimed.remove(card.id());
             }
             releaseCurrentFromDispatch(card, "prepare for dispatch failed");
-            scheduleRetry(card.id(), nextAttempt(attempt), card.identifier(), e.getMessage(), false);
+            scheduleRetry(card.id(), nextAttempt(attempt), card.identifier(), card.cardUrl(), e.getMessage(), false);
             return;
         }
         String workerIdentity = UUID.randomUUID().toString();
@@ -545,7 +546,13 @@ public class SymphonyOrchestrator {
                 running.remove(dispatchCard.id());
             }
             releaseFromDispatch(dispatchCard, "prompt render failed");
-            scheduleRetry(dispatchCard.id(), nextAttempt(attempt), dispatchCard.identifier(), e.getMessage(), false);
+            scheduleRetry(
+                    dispatchCard.id(),
+                    nextAttempt(attempt),
+                    dispatchCard.identifier(),
+                    dispatchCard.cardUrl(),
+                    e.getMessage(),
+                    false);
             return;
         }
         entry.workerTask = workers.submit(() -> {
@@ -597,13 +604,19 @@ public class SymphonyOrchestrator {
                 completed.add(cardId);
             }
             if (state.retry()) {
-                scheduleRetry(cardId, 1, entry.identifier(), null, true);
+                scheduleRetry(cardId, 1, entry.identifier(), entry.card.cardUrl(), null, true);
             } else {
                 completeWorkerExit(cardId, entry, state);
             }
         } else if (state.retry()) {
             releaseAfterFailedWorkerExit(entry, state, result.reason());
-            scheduleRetry(cardId, nextAttempt(entry.retryAttempt), entry.identifier(), result.reason(), false);
+            scheduleRetry(
+                    cardId,
+                    nextAttempt(entry.retryAttempt),
+                    entry.identifier(),
+                    entry.card.cardUrl(),
+                    result.reason(),
+                    false);
         } else {
             completeWorkerExit(cardId, entry, state);
         }
@@ -735,14 +748,22 @@ public class SymphonyOrchestrator {
         entry.totalTokens = total;
     }
 
-    private void scheduleRetry(String cardId, int attempt, String identifier, String error, boolean continuation) {
+    private void scheduleRetry(
+            String cardId, int attempt, String identifier, String cardUrl, String error, boolean continuation) {
         Duration delay = continuation ? CONTINUATION_DELAY : backoff(attempt);
         ScheduledFuture<?> timer =
                 scheduler.schedule(() -> onRetryTimer(cardId), delay.toMillis(), TimeUnit.MILLISECONDS);
         synchronized (this) {
             retryAttempts.put(
                     cardId,
-                    new RetryEntry(cardId, identifier, attempt, clock.instant().plus(delay), timer, error));
+                    new RetryEntry(
+                            cardId,
+                            identifier,
+                            cardUrl,
+                            attempt,
+                            clock.instant().plus(delay),
+                            timer,
+                            error));
             claimed.add(cardId);
         }
         LOG.infof(
@@ -771,7 +792,13 @@ public class SymphonyOrchestrator {
         try {
             refreshed = tracker.fetchCardStatesByIds(config, List.of(cardId));
         } catch (RuntimeException e) {
-            scheduleRetry(cardId, retry.attempt() + 1, retry.identifier(), "retry card refresh failed", false);
+            scheduleRetry(
+                    cardId,
+                    retry.attempt() + 1,
+                    retry.identifier(),
+                    retry.cardUrl(),
+                    "retry card refresh failed",
+                    false);
             return;
         }
         CardLookupResult result = refreshed.get(cardId);
@@ -779,7 +806,13 @@ public class SymphonyOrchestrator {
             removeClaim(cardId);
             workspaces.removeForIdentifierIfPresent(retry.identifier(), config);
         } else if (result instanceof CardLookupResult.Failed) {
-            scheduleRetry(cardId, retry.attempt() + 1, retry.identifier(), "retry card refresh failed", false);
+            scheduleRetry(
+                    cardId,
+                    retry.attempt() + 1,
+                    retry.identifier(),
+                    retry.cardUrl(),
+                    "retry card refresh failed",
+                    false);
         } else if (result instanceof CardLookupResult.Found found) {
             Card card = found.card();
             if (isOutOfBoardScope(card)) {
@@ -795,17 +828,25 @@ public class SymphonyOrchestrator {
                         cardId,
                         retry.attempt() + 1,
                         card.identifier(),
+                        card.cardUrl(),
                         "card is active but not currently dispatch-eligible",
                         false);
             } else if (availableSlots() == 0) {
                 releaseFromDispatch(card, "no available orchestrator slots");
-                scheduleRetry(cardId, retry.attempt() + 1, card.identifier(), "no available orchestrator slots", false);
+                scheduleRetry(
+                        cardId,
+                        retry.attempt() + 1,
+                        card.identifier(),
+                        card.cardUrl(),
+                        "no available orchestrator slots",
+                        false);
             } else if (perStateSlots(card) == 0) {
                 releaseFromDispatch(card, "no available orchestrator slots for card state");
                 scheduleRetry(
                         cardId,
                         retry.attempt() + 1,
                         card.identifier(),
+                        card.cardUrl(),
                         "no available orchestrator slots for card state",
                         false);
             } else {
@@ -991,7 +1032,12 @@ public class SymphonyOrchestrator {
                 running.values().stream().map(this::runningRow).toList();
         List<RuntimeSnapshot.RetryRow> retryRows = retryAttempts.values().stream()
                 .map(retry -> new RuntimeSnapshot.RetryRow(
-                        retry.cardId(), retry.identifier(), retry.attempt(), retry.dueAt(), retry.error()))
+                        retry.cardId(),
+                        retry.identifier(),
+                        retry.cardUrl(),
+                        retry.attempt(),
+                        retry.dueAt(),
+                        retry.error()))
                 .toList();
         double activeSeconds = running.values().stream()
                         .mapToLong(
@@ -1057,6 +1103,7 @@ public class SymphonyOrchestrator {
         return new RuntimeSnapshot.RunningRow(
                 entry.cardId,
                 entry.identifier(),
+                entry.card.cardUrl(),
                 entry.card.state(),
                 entry.sessionId,
                 entry.turnCount,
