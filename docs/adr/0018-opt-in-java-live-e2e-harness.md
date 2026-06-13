@@ -121,3 +121,8 @@ Automate the runbook with shell, Python, Node, or another helper language.
 The harness intentionally does not replace strict real-Codex checks. Real-Codex coverage remains in
 `docs/live-e2e.md` until it can be made deterministic enough to automate without hiding important
 failure details.
+
+This ADR updates [ADR 0006](0006-live-e2e-verification-strategy.md) by automating the fake-Codex live
+checks. It does not supersede that decision; the manual runbook in `docs/live-e2e.md` — the procedure
+[ADR 0006](0006-live-e2e-verification-strategy.md) decided to keep — stays authoritative for strict
+real-Codex and deployment verification.

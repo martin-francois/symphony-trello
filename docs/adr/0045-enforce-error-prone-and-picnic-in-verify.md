@@ -146,5 +146,10 @@ This decision does not make every possible Error Prone, Picnic, or Refaster rule
 rule families must still be measured, fixed, tuned, suppressed, or rejected before they become
 blocking.
 
+This decision supersedes [ADR 0034](0034-optional-error-prone-profile.md) and
+[ADR 0041](0041-report-only-picnic-error-prone-profile.md). Those ADRs introduced the optional Error
+Prone and report-only Picnic profiles, which are removed here because the selected checks now run in
+normal verification.
+
 PMD candidate and jPinpoint remain tracked separately because their remaining rule sets are not yet
 accepted as blocking checks. Semgrep and CodeQL remain separate later work.
