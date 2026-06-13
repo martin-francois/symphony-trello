@@ -2129,9 +2129,9 @@ SHOULD return:
   URL and falling back to its full URL, so operators can click through to the card; omit or null it
   when neither URL is known
 - `routing`
-  - `activeLists` (configured active states/lists)
-  - `terminalLists` (configured terminal states/lists)
-  - `handoffLists` (the configured Trello move allowlist from Section 5.3.7)
+  - `active_lists` (configured active states/lists)
+  - `terminal_lists` (configured terminal states/lists)
+  - `handoff_lists` (the configured Trello move allowlist from Section 5.3.7)
 - `codex_totals`
   - `input_tokens`
   - `output_tokens`
@@ -2387,8 +2387,8 @@ API design notes:
 
 - The JSON shapes above are the RECOMMENDED baseline for interoperability and debugging ergonomics.
 - Implementations MAY add fields, but SHOULD avoid breaking existing fields within a version.
-- This Java implementation serializes HTTP API fields with Java record accessor names, for example
-  `generatedAt`, `codexTotals`, `cardIdentifier`, `turnCount`, and `routing.activeLists`.
+- This Java implementation serializes the `/api/v1/state` HTTP API fields with the snake_case keys
+  shown above.
 - Endpoints SHOULD be read-only except for operational triggers like `/refresh`.
 - Unsupported methods on defined routes SHOULD return `405 Method Not Allowed`.
 - API errors SHOULD use a JSON envelope such as `{"error":{"code":"...","message":"..."}}`.

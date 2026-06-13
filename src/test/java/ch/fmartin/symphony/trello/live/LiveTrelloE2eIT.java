@@ -667,7 +667,7 @@ final class LiveTrelloE2eIT {
 
     private static List<String> runningCardIds(JsonNode state) {
         List<String> cardIds = new ArrayList<>();
-        state.path("running").forEach(row -> cardIds.add(row.path("cardId").asText()));
+        state.path("running").forEach(row -> cardIds.add(row.path("card_id").asText()));
         return cardIds;
     }
 
