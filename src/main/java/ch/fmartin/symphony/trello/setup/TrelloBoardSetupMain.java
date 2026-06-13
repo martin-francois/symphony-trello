@@ -796,10 +796,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                 try {
                     TrelloCredentialStore.validateWritableEnvUpdate(credentials, runtimeEnvPath(), true);
                 } catch (IOException exception) {
-                    throw new TrelloBoardSetupException(
-                            "setup_env_write_failed",
-                            "Could not write Trello credentials to the selected .env file. Choose a writable .env or .env.NAME file.",
-                            exception);
+                    throw envWriteFailure(exception);
                 }
             }
         }
@@ -817,11 +814,22 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                 new TrelloCredentialStore(System.getenv())
                         .write(credentials, runtimeEnvPath(), new StreamTerminal(input, out, err), true);
             } catch (IOException exception) {
-                throw new TrelloBoardSetupException(
-                        "setup_env_write_failed",
-                        "Could not write Trello credentials to the selected .env file. Choose a writable .env or .env.NAME file.",
-                        exception);
+                throw envWriteFailure(exception);
             }
+        }
+
+        /**
+         * The appended cause summary keeps local CLI stderr diagnosable: without it the underlying
+         * filesystem exception is invisible and a transient write-probe failure cannot be
+         * root-caused (issue #388). The actionable first sentences stay unchanged so existing user
+         * guidance and the {@code setup_env_write_failed} hint mapping remain valid.
+         */
+        private static TrelloBoardSetupException envWriteFailure(IOException exception) {
+            return new TrelloBoardSetupException(
+                    "setup_env_write_failed",
+                    "Could not write Trello credentials to the selected .env file. Choose a writable .env or"
+                            + " .env.NAME file. (" + SetupDiagnosticReporter.pathFreeExceptionSummary(exception) + ")",
+                    exception);
         }
 
         private Path manifestPath(Map<String, String> environment) {
