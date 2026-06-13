@@ -3914,7 +3914,15 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path otherEnv = tempDir.resolve(".env.other-port-owner");
         Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
         int conflictingPort = availablePort();
-        int expectedPort = firstAvailableManagedPort(conflictingPort);
+        // The board's own worker stays healthy on conflictingPort (real health server), but that
+        // port is also reserved by Other Port Owner in the manifest, so repair must re-scan the
+        // production 18080+ range and pick a different port. That scan ran with real loopback
+        // probes, so a live worker binding or releasing a port between the scan and the restart
+        // raced its arithmetic expectation. The probe now reports every port as in use except the
+        // free port the restart will bind, so the re-selected port is deterministic while the
+        // restart still binds a real port outside the production range.
+        int expectedPort = availablePortOtherThan(conflictingPort);
+        LocalSetup probedSetup = setupWithPortProbe(port -> port != expectedPort);
         writeWorkflow(workflow, "board-1", conflictingPort);
         writeWorkflow(otherWorkflow, "board-2", conflictingPort);
         Files.writeString(env, "TRELLO_API_KEY=key%nTRELLO_API_TOKEN=token%n".formatted(), StandardCharsets.UTF_8);
@@ -3964,7 +3972,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         commands.startHealthServer(workflow);
 
         // when
-        SetupRunResult result = runSetup("repair-port", "--board", "Conflict Repair Queue");
+        SetupRunResult result = runSetup(probedSetup, "repair-port", "--board", "Conflict Repair Queue");
 
         // then
         result.assertSuccess()
@@ -5901,6 +5909,21 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
             }
         }
         throw new AssertionError("No free managed test port found.");
+    }
+
+    private static int availablePortOtherThan(int excludedPort) {
+        for (int attempt = 0; attempt < 100; attempt++) {
+            int port = availablePort();
+            // The selected port must sit inside the repair-port scan window - the scan runs from
+            // TrelloBoardSetup.DEFAULT_SERVER_PORT (18080) up to 65535 - yet above the live production
+            // worker range 18080-18090. A port below 18080 would never be reached by the scan (the
+            // probe would mark every scanned port in use), and a port in 18080-18090 could collide
+            // with a real worker, since repair-port binds the selected port.
+            if (port != excludedPort && port > 18090) {
+                return port;
+            }
+        }
+        throw new AssertionError("Could not allocate a free test port distinct from " + excludedPort);
     }
 
     private static int portFromSetupResult(SetupRunResult result) {
