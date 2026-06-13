@@ -117,7 +117,8 @@ Add first-class project checkout provisioning and run Codex only inside managed 
 * Good, because it could keep host access narrow while giving each card a prepared project.
 * Bad, because clone/update policy, credentials, branches, dirty worktrees, cleanup, and conflict
   handling need a separate design.
-* Bad, because it is larger than the issue 13 fix.
+* Bad, because it is larger than the
+  [GitHub issue #13](https://github.com/martin-francois/symphony-trello/issues/13) fix.
 
 ### Leave Deployment Access Handling To Documentation Only
 
@@ -129,6 +130,7 @@ Document that cards should use accessible paths, but do not add deployment suppo
 
 ## More Information
 
-Issue 13 tracks the deployed host path access problem. Manual configuration is documented in
+[GitHub issue #13](https://github.com/martin-francois/symphony-trello/issues/13) tracks the deployed
+host path access problem. Manual configuration is documented in
 [docs/deployment.md](../deployment.md). Ansible support was removed by
 [GitHub issue #115](https://github.com/martin-francois/symphony-trello/issues/115).

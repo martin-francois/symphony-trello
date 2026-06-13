@@ -19,7 +19,8 @@ informed: [Future maintainers, Contributors]
 ## Context and Problem Statement
 
 The project already uses a curated PMD ruleset in the default validation command and a separate
-candidate PMD profile for standard PMD rules. GitHub issue #79 asks whether
+candidate PMD profile for standard PMD rules.
+[GitHub issue #79](https://github.com/martin-francois/symphony-trello/issues/79) asks whether
 `jborgers/PMD-jPinpoint-rules` can add useful third-party PMD checks for performance, logging,
 concurrency, data-mixup, sustainability, and related source-level risks.
 
