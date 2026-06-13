@@ -1290,31 +1290,39 @@ final class InstallerScriptTest {
                 "--bin-dir",
                 binDirectory.toString());
         Path runtimeBin = createWrapperRuntimePathWithoutJava(temporaryDirectory);
-        Map<String, String> environmentWithoutJava = Map.of(
-                "PATH",
-                runtimeBin.toString(),
-                "HOME",
-                home.toString(),
-                "SHELL",
-                "/bin/bash",
-                "SYMPHONY_HOME",
-                symphonyHome.toString());
-        ProcessResult javaLookup =
-                run(environmentWithoutJava, runtimeBin.resolve("bash").toString(), "-c", "command -v java");
+        try {
+            Map<String, String> environmentWithoutJava = Map.of(
+                    "PATH",
+                    runtimeBin.toString(),
+                    "HOME",
+                    home.toString(),
+                    "SHELL",
+                    "/bin/bash",
+                    "SYMPHONY_HOME",
+                    symphonyHome.toString());
+            ProcessResult javaLookup =
+                    run(environmentWithoutJava, runtimeBin.resolve("bash").toString(), "-c", "command -v java");
 
-        // when
-        ProcessResult status = run(
-                environmentWithoutJava, binDirectory.resolve("symphony-trello").toString(), "status");
+            // when
+            ProcessResult status = run(
+                    environmentWithoutJava,
+                    binDirectory.resolve("symphony-trello").toString(),
+                    "status");
 
-        // then
-        install.assertSuccess();
-        assertThat(javaLookup.exitCode())
-                .as("the controlled runtime PATH must not resolve java, but found: %s", javaLookup.output())
-                .isNotZero();
-        assertThat(status.exitCode()).as(status.output()).isEqualTo(2);
-        assertThat(status.output())
-                .contains("Symphony for Trello needs Java 25+ on PATH", "rerun the installer")
-                .doesNotContain("exec: java: not found");
+            // then
+            install.assertSuccess();
+            assertThat(javaLookup.exitCode())
+                    .as("the controlled runtime PATH must not resolve java, but found: %s", javaLookup.output())
+                    .isNotZero();
+            assertThat(status.exitCode()).as(status.output()).isEqualTo(2);
+            assertThat(status.output())
+                    .contains("Symphony for Trello needs Java 25+ on PATH", "rerun the installer")
+                    .doesNotContain("exec: java: not found");
+        } finally {
+            // Remove the host-tool links before @TempDir cleanup: JUnit warns in the build log
+            // whenever it deletes a symlink that resolves to a location outside the temp dir.
+            deleteWrapperRuntimePathWithoutJava(runtimeBin);
+        }
     }
 
     @Test
@@ -1357,6 +1365,14 @@ final class InstallerScriptTest {
             Files.createSymbolicLink(runtimeBin.resolve(tool), hostTool(tool));
         }
         return runtimeBin;
+    }
+
+    private static void deleteWrapperRuntimePathWithoutJava(Path runtimeBin) throws IOException {
+        try (Stream<Path> links = Files.list(runtimeBin)) {
+            for (Path link : links.toList()) {
+                Files.delete(link);
+            }
+        }
     }
 
     private static Path hostTool(String tool) {

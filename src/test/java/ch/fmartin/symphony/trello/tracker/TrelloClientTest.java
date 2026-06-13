@@ -246,6 +246,9 @@ final class TrelloClientTest {
 
     @Test
     void fetchCardStatesByIdsKeepsPartialFailuresLocalToEachCard() {
+        // Expected WARN in the build log (issue #354): skipping the malformed Trello card is the
+        // production behavior under test; muting shared logger categories would be JVM-global
+        // state and is unsafe with parallel test execution.
         // given
         TrelloClient client = new TrelloClient(new ObjectMapper());
         var config = config("lookup-input", Map.of());
@@ -347,6 +350,9 @@ final class TrelloClientTest {
 
     @Test
     void fetchCardStatesForPromptByIdsKeepsReadableCardWhenOlderWorkpadLookupFails() {
+        // Expected WARN in the build log (issue #354): the simulated Trello rate limit makes the
+        // client log its operator guidance; muting shared logger categories would be JVM-global
+        // state and is unsafe with parallel test execution.
         // given
         TrelloClient client = new TrelloClient(new ObjectMapper());
         var config = config("lookup-input", Map.of("max_api_retries", 0));
@@ -371,6 +377,9 @@ final class TrelloClientTest {
 
     @Test
     void writeOperationsSendExpectedMethodsAndDoNotRetryFailedWrites() {
+        // Expected WARN in the build log (issue #354): the simulated Trello rate limit makes the
+        // client log its operator guidance; muting shared logger categories would be JVM-global
+        // state and is unsafe with parallel test execution.
         // given
         TrelloClient client = new TrelloClient(new ObjectMapper());
         var config = config("input", Map.of());

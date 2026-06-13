@@ -1534,7 +1534,7 @@ final class SetupDiagnosticReporterTest {
                         "Diagnostics tokens are stable only for this run because the local diagnostics key could not be read or written.",
                         workflow.toString())
                 .contains(workflowToken)
-                .contains("| " + workflowToken + " | " + workflow.toString() + " |")
+                .contains("| " + workflowToken + " | " + workflow + " |")
                 .doesNotContain("# Symphony for Trello Diagnostics");
     }
 
@@ -1774,12 +1774,14 @@ final class SetupDiagnosticReporterTest {
         Files.writeString(configDir.resolve("connected-boards.json"), "{\"boards\":[]}", StandardCharsets.UTF_8);
         Files.writeString(
                 stateHome.resolve("fake-control.log"),
-                "normal line\n"
-                        + "ansi \u001B[31mred\u001B[0m line\n"
-                        + "osc \u001B]8;;https://example.com\u0007Link\u001B]8;;\u0007 line\n"
-                        + "backspace abc\b\bxy\n"
-                        + "formfeed before\fafter\n"
-                        + "carriage before\rafter\n",
+                """
+                normal line
+                ansi \u001B[31mred\u001B[0m line
+                osc \u001B]8;;https://example.com\u0007Link\u001B]8;;\u0007 line
+                backspace abc\b\bxy
+                formfeed before\fafter
+                carriage before\rafter
+                """,
                 StandardCharsets.UTF_8);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 

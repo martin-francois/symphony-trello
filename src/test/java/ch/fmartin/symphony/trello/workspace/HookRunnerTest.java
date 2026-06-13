@@ -54,6 +54,9 @@ final class HookRunnerTest {
 
     @Test
     void bestEffortHookIgnoresBlankScriptMissingDirectoryAndFailures() {
+        // Expected WARN in the build log (issue #354): logging the failed best-effort hook is the
+        // production behavior under test; muting shared logger categories would be JVM-global
+        // state and is unsafe with parallel test execution.
         // given
         EffectiveConfig.HooksConfig config = hooksConfig();
 
