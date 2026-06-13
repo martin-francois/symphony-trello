@@ -676,7 +676,7 @@ final class WorkflowConfigEditor {
         }
 
         String diagnosticsCell() {
-            return value.map(String::valueOf).orElse(invalid ? "invalid" : "");
+            return value.map(String::valueOf).orElseGet(() -> invalid ? "invalid" : "");
         }
     }
 }
