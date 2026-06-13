@@ -587,8 +587,7 @@ final class LocalWorkerManager {
             throw new TrelloBoardSetupException(
                     "trello_permission_denied", "Trello permission denied while starting Symphony.");
         }
-        if (logs.contains("Configured Trello board is closed")
-                || logs.contains("Trello board is archived")) { // NOPMD - legacy wording kept for old worker logs
+        if (logs.contains("Trello board is archived")) {
             throw new TrelloBoardSetupException(
                     "trello_board_closed", "Configured Trello board is archived while starting Symphony.");
         }
