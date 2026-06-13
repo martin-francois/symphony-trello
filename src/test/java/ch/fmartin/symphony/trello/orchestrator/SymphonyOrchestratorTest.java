@@ -1017,6 +1017,57 @@ final class SymphonyOrchestratorTest {
     }
 
     @Test
+    void retryTimerReleasesAndRequeuesCardWhenItLosesRequiredLabel() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: key
+                  api_token: token
+                  board_id: board-1
+                  active_states: [Todo, In Progress]
+                  in_progress_state: In Progress
+                  required_labels: [Ready for Codex]
+                workspace:
+                  root: work
+                polling:
+                  interval_ms: 60000
+                codex:
+                  command: fake
+                ---
+                {{ card.title }}
+                """);
+        Card card = TestCards.cardWithLabels("card-1", "TRELLO-abc", "Todo", List.of("ready for codex"));
+        FakeTracker tracker = new FakeTracker(List.of(card));
+        tracker.preparedCard =
+                TestCards.cardWithLabels("card-1", "TRELLO-abc", "In Progress", List.of("ready for codex"));
+        AtomicInteger runs = new AtomicInteger();
+        AgentRunner runner = mock();
+        when(runner.run(any())).thenAnswer(invocation -> {
+            runs.incrementAndGet();
+            tracker.preparedCard = null;
+            tracker.setCardState(TestCards.cardWithLabels("card-1", "TRELLO-abc", "In Progress", List.of()));
+            return AgentRunResult.ok();
+        });
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
+
+        // when
+        orchestrator.start();
+        waitUntil(() -> tracker.releasedCards.size() == 1
+                && orchestrator.snapshot().counts().retrying() == 1);
+        RuntimeSnapshot snapshot = orchestrator.snapshot();
+        orchestrator.stop();
+
+        // then
+        assertThat(runs.get()).isEqualTo(1);
+        assertCardReleasedForRetry(snapshot, tracker);
+    }
+
+    @Test
     void runningCardIsCancelledWhenItLeavesTheActiveState() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
