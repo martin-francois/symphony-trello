@@ -6,6 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
@@ -158,7 +159,7 @@ final class CliInputValidation {
     private static void appendEscapedControlCodePoint(StringBuilder safe, int codePoint) {
         if (Character.isISOControl(codePoint)) {
             safe.append("\\u");
-            String hex = Integer.toHexString(codePoint).toUpperCase();
+            String hex = Integer.toHexString(codePoint).toUpperCase(Locale.ROOT);
             safe.repeat("0", Math.max(0, 4 - hex.length())).append(hex);
         } else {
             safe.appendCodePoint(codePoint);
