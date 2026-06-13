@@ -150,6 +150,12 @@ final class TrelloClientTest {
             }
             respond(exchange, cardWithActions("card-workpad-deep-failed", regularActions(20)));
         });
+        server.createContext("/1/cards/idshort-probe-", exchange -> {
+            readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
+            String path = exchange.getRequestURI().getPath();
+            String suffix = path.substring(path.lastIndexOf("idshort-probe-") + "idshort-probe-".length());
+            respond(exchange, cardWithIdShort("idshort-probe-" + suffix, idShortToken(suffix)));
+        });
         server.createContext("/1/cards/card-missing", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
             respond(exchange, 404, "{}");
@@ -279,6 +285,40 @@ final class TrelloClientTest {
                 .startsWith("GET /1/cards/card-found?")
                 .contains("actions_limit=20")
                 .contains("action_fields=data%2Cdate%2CmemberCreator"));
+    }
+
+    @MethodSource("idShortScenarios")
+    @ParameterizedTest(name = "idShort {0} -> {2}")
+    void idShortIsParsedAsWholeNumberOrRejectedAsMalformedPayload(
+            String scenario, Integer expectedIdShort, String description) {
+        // given
+        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var config = config("lookup-input", Map.of());
+        String cardId = "idshort-probe-" + scenario;
+
+        // when
+        var result = client.fetchCardStatesByIds(config, List.of(cardId)).get(cardId);
+
+        // then
+        if (expectedIdShort != null) {
+            assertThat(result).as(description).isInstanceOfSatisfying(CardLookupResult.Found.class, found -> assertThat(
+                            found.card().idShort())
+                    .isEqualTo(expectedIdShort));
+        } else {
+            assertThat(result)
+                    .as(description)
+                    .isInstanceOfSatisfying(CardLookupResult.Failed.class, failed -> assertThat(failed.code())
+                            .isEqualTo("trello_unknown_payload"));
+        }
+    }
+
+    private static Stream<Arguments> idShortScenarios() {
+        return Stream.of(
+                Arguments.of("whole", 7, "a whole integer idShort parses unchanged"),
+                Arguments.of("whole-float", 7, "a whole-valued float normalizes to its integer value"),
+                Arguments.of("fractional", null, "a fractional idShort is rejected instead of truncated"),
+                Arguments.of("out-of-range", null, "an idShort beyond int range is rejected"),
+                Arguments.of("non-numeric", null, "a non-numeric idShort is rejected"));
     }
 
     @Test
@@ -689,6 +729,26 @@ final class TrelloClientTest {
                 {"id":"%s","name":"Found","idList":"lookup-review","idBoard":"lookup-board","closed":false,"shortLink":"found","labels":[],"actions":%s}
                 """
                 .formatted(cardId, actionsJson);
+    }
+
+    private static String cardWithIdShort(String cardId, String idShortToken) {
+        return """
+                {"id":"%s","name":"Found","idList":"lookup-review","idBoard":"lookup-board","closed":false,"shortLink":"found","idShort":%s,"labels":[],"actions":[]}
+                """
+                .formatted(cardId, idShortToken);
+    }
+
+    private static String idShortToken(String scenario) {
+        // Raw JSON token for each idShort scenario. Strings are quoted so non-numeric input reaches the
+        // client as a JSON string, exactly as a malformed Trello payload would deliver it.
+        return switch (scenario) {
+            case "whole" -> "7";
+            case "whole-float" -> "7.0";
+            case "fractional" -> "7.5";
+            case "out-of-range" -> "9999999999";
+            case "non-numeric" -> "\"abc\"";
+            default -> throw new IllegalArgumentException("Unknown idShort scenario: " + scenario);
+        };
     }
 
     private static String oldWorkpadActions() {
