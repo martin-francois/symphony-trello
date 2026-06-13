@@ -3970,9 +3970,9 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     @Test
     void repairPortStopFailureEscapesControlCharacterBoardNames() throws Exception {
         // given
-        // Legacy persisted manifests may hold board names with quotes and control characters;
-        // the stop-failure message must stay one escaped line, and the failure must happen
-        // before the workflow or manifest port is updated.
+        // The manifest is hand-editable, so persisted board names may contain quotes and control
+        // characters; the stop-failure message must stay one escaped line, and the failure must
+        // happen before the workflow or manifest port is updated.
         Path workflow = tempDir.resolve("WORKFLOW.dirty-name-stop-failure.md");
         Path otherWorkflow = tempDir.resolve("WORKFLOW.dirty-name-port-owner.md");
         Path env = tempDir.resolve(".env.dirty-name-stop-failure");

@@ -467,9 +467,10 @@ matters, and easy for another engineer to understand without asking the original
   workspaces receive the namespaced shipped skills after workspace sync hooks and before Codex
   starts. Do not rely on the target repository containing Symphony-specific skill files, and do not
   dirty checkout-root Git status with shipped skill files.
-- Keep legacy workflows compatible: install workspace-local shipped skills only when the rendered
-  prompt references the namespaced Symphony skill paths, so older workflows that clone into an empty
-  workspace root stay empty until Codex runs.
+- Install workspace-local shipped skills only when the rendered prompt references the namespaced
+  Symphony skill paths, so workflows whose prompts do not use the shipped skills, such as
+  hand-authored workflows that clone into an empty workspace root, keep their expected workspace
+  shape.
 - For deployment filesystem access, describe the concept as "allowed host paths". The allowed
   entries can be multiple files or folders; do not imply they must be repository or project roots.
   Explain that undeclared host paths are blocked by default for security reasons so Trello cards

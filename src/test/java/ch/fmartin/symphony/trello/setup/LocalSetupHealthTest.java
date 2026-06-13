@@ -343,9 +343,9 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
     @Test
     void checkEscapesControlCharacterBoardNamesInManifestWarnings() throws Exception {
         // given
-        // Legacy persisted manifests may hold board names containing quotes and control
-        // characters; a warning that embeds such a name must stay one logical line with
-        // escaped, unambiguous quoting instead of splitting the warning across lines.
+        // The manifest is hand-editable, so persisted board names may contain quotes and
+        // control characters; a warning that embeds such a name must stay one logical line
+        // with escaped, unambiguous quoting instead of splitting the warning across lines.
         Path configDir = fixture.configDir();
         Path workflow = configDir.resolve("WORKFLOW.dirty-name-warning.md");
         Files.createDirectories(fixture.workspaceRoot());

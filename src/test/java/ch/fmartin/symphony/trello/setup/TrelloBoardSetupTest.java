@@ -1267,13 +1267,13 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
-    void importPrefersHumanReviewWhenLegacyReviewAlsoExists() {
+    void importPrefersHumanReviewWhenPlainReviewListAlsoExists() {
         // given
         boardListsResponse.set(
                 """
                 [
                   {"id":"list-ready","name":"Ready for Codex","closed":false,"pos":1},
-                  {"id":"list-legacy-review","name":"Review","closed":false,"pos":2},
+                  {"id":"list-plain-review","name":"Review","closed":false,"pos":2},
                   {"id":"list-human-review","name":"Human Review","closed":false,"pos":3},
                   {"id":"list-blocked","name":"Blocked","closed":false,"pos":4},
                   {"id":"list-done","name":"Done","closed":false,"pos":5}
