@@ -8,11 +8,22 @@ import java.util.List;
 public final class TestCards {
     private TestCards() {}
 
+    private static final String SYNTHETIC_SHORT_URL = "https://trello.com/c/SYNTH101";
+
     public static Card card(String id, String identifier, String state) {
         return cardWithComments(id, identifier, state, List.of());
     }
 
     public static Card cardWithComments(String id, String identifier, String state, List<Card.Comment> comments) {
+        return cardWithUrls(id, identifier, state, SYNTHETIC_SHORT_URL, SYNTHETIC_SHORT_URL, comments);
+    }
+
+    public static Card cardWithUrls(String id, String identifier, String state, String shortUrl, String url) {
+        return cardWithUrls(id, identifier, state, shortUrl, url, List.of());
+    }
+
+    public static Card cardWithUrls(
+            String id, String identifier, String state, String shortUrl, String url, List<Card.Comment> comments) {
         return new Card(
                 id,
                 identifier,
@@ -29,9 +40,9 @@ public final class TestCards {
                 false,
                 1,
                 "abc",
-                "https://trello.com/c/SYNTH101",
+                shortUrl,
                 null,
-                "https://trello.com/c/SYNTH101",
+                url,
                 List.of(),
                 List.of(),
                 List.of(),

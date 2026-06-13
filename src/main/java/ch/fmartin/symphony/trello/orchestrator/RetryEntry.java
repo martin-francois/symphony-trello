@@ -4,4 +4,10 @@ import java.time.Instant;
 import java.util.concurrent.ScheduledFuture;
 
 record RetryEntry(
-        String cardId, String identifier, int attempt, Instant dueAt, ScheduledFuture<?> timer, String error) {}
+        String cardId,
+        String identifier,
+        String cardUrl,
+        int attempt,
+        Instant dueAt,
+        ScheduledFuture<?> timer,
+        String error) {}

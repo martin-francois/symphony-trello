@@ -38,6 +38,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 final class SymphonyOrchestratorTest {
     private static final Instant COMMENT_TIME = Instant.parse("2026-01-01T00:00:00Z");
@@ -821,6 +823,69 @@ final class SymphonyOrchestratorTest {
                     .extracting(CardDebugDetails.EventInfo::event)
                     .contains("turn/started");
         });
+    }
+
+    @Test
+    void runningSnapshotRowIncludesCardUrl() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        writeWorkflow(workflow, "60000");
+        FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
+        AgentRunner runner = mock();
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch releaseWorker = new CountDownLatch(1);
+        doAnswer(invocation -> {
+                    started.countDown();
+                    releaseWorker.await(5, TimeUnit.SECONDS);
+                    return AgentRunResult.ok();
+                })
+                .when(runner)
+                .run(any());
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
+
+        // when
+        orchestrator.start();
+        assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
+        RuntimeSnapshot snapshot = orchestrator.snapshot();
+        releaseWorker.countDown();
+        orchestrator.stop();
+
+        // then
+        assertThat(snapshot.running()).singleElement().satisfies(row -> assertThat(row.cardUrl())
+                .isEqualTo("https://trello.com/c/SYNTH101"));
+    }
+
+    @CsvSource(
+            nullValues = "null",
+            value = {
+                // prefers the short URL when present
+                "https://trello.com/c/SYNTH001,https://trello.com/c/SYNTH001/full-title,https://trello.com/c/SYNTH001",
+                // falls back to the full URL when no short URL is known
+                "null,https://trello.com/c/SYNTH002/full-title,https://trello.com/c/SYNTH002/full-title",
+                // omits the URL when neither is known
+                "null,null,null"
+            })
+    @ParameterizedTest(name = "shortUrl={0} url={1} -> cardUrl={2}")
+    void retrySnapshotRowCarriesCardUrlPreferringShortUrl(String shortUrl, String url, String expectedCardUrl)
+            throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        writeWorkflow(workflow, "60000", "");
+        Card card = TestCards.cardWithUrls("card-1", "TRELLO-abc", "Todo", shortUrl, url);
+        FakeTracker tracker = new FakeTracker(List.of(card));
+        AgentRunner runner = mock();
+        when(runner.run(any())).thenReturn(AgentRunResult.fail("boom"));
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
+
+        // when
+        orchestrator.start();
+        waitUntil(() -> orchestrator.snapshot().counts().retrying() == 1);
+        RuntimeSnapshot snapshot = orchestrator.snapshot();
+        orchestrator.stop();
+
+        // then
+        assertThat(snapshot.retrying()).singleElement().satisfies(row -> assertThat(row.cardUrl())
+                .isEqualTo(expectedCardUrl));
     }
 
     @Test

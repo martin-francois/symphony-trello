@@ -81,6 +81,18 @@ public record Card(
         return notBlank(id) && notBlank(identifier) && notBlank(title) && notBlank(state);
     }
 
+    /**
+     * The Trello card URL preferred for operator click-through, using the stable short URL when
+     * present and falling back to the full canonical URL. Returns {@code null} when neither is known
+     * so snapshot rows can omit an unknown URL.
+     */
+    public String cardUrl() {
+        if (notBlank(shortUrl)) {
+            return shortUrl;
+        }
+        return notBlank(url) ? url : null;
+    }
+
     private static boolean notBlank(String value) {
         return value != null && !value.isBlank();
     }
