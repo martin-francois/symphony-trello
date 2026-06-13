@@ -7,6 +7,8 @@ import static org.mockito.Mockito.when;
 
 import ch.fmartin.symphony.trello.orchestrator.RuntimeSnapshot;
 import ch.fmartin.symphony.trello.orchestrator.SymphonyOrchestrator;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.quarkus.test.junit.QuarkusMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.common.mapper.TypeRef;
@@ -94,6 +96,12 @@ final class StateApiHttpContractTest {
         assertThat(codexTotals)
                 .containsKeys("input_tokens", "output_tokens", "total_tokens", "seconds_running")
                 .doesNotContainKeys("inputTokens", "outputTokens", "totalTokens", "secondsRunning");
+
+        Map<String, Object> rateLimits = map(payload.get("rate_limits"));
+        assertThat(rateLimits)
+                .containsEntry("limitType", "tokens")
+                .containsEntry("remainingRequests", 42)
+                .doesNotContainKeys("limit_type", "remaining_requests");
     }
 
     private static RuntimeSnapshot snapshotWithRunningAndRetryingCards() {
@@ -121,7 +129,14 @@ final class StateApiHttpContractTest {
                         Instant.parse("2026-02-24T20:16:00Z"),
                         "no available orchestrator slots")),
                 new RuntimeSnapshot.TokenTotals(5000, 2400, 7400, 1834.2),
-                null);
+                codexRateLimitsPayload());
+    }
+
+    private static ObjectNode codexRateLimitsPayload() {
+        ObjectNode payload = JsonNodeFactory.instance.objectNode();
+        payload.put("limitType", "tokens");
+        payload.put("remainingRequests", 42);
+        return payload;
     }
 
     @SuppressWarnings("unchecked")

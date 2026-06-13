@@ -20,33 +20,33 @@ single poll/reconcile cycle is enough to observe the latest Trello state.
 
 `GET /api/v1/state` returns these top-level fields:
 
-- `generatedAt`: when the snapshot was created.
+- `generated_at`: when the snapshot was created.
 - `counts.running`: number of cards with active Codex workers.
 - `counts.retrying`: number of cards waiting for a retry timer.
-- `routing.activeLists`: Trello lists this process dispatches from.
-- `routing.terminalLists`: Trello lists treated as complete.
-- `routing.handoffLists`: lists Codex may move cards to with the scoped Trello move tool.
+- `routing.active_lists`: Trello lists this process dispatches from.
+- `routing.terminal_lists`: Trello lists treated as complete.
+- `routing.handoff_lists`: lists Codex may move cards to with the scoped Trello move tool.
 - `running`: active worker rows.
 - `retrying`: retry timer rows.
-- `codexTotals`: token and runtime totals observed from Codex app-server events.
-- `rateLimits`: latest Codex rate-limit payload when Codex reports one.
+- `codex_totals`: token and runtime totals observed from Codex app-server events.
+- `rate_limits`: latest Codex rate-limit payload when Codex reports one.
 
 Each `running` row includes:
 
-- `cardId`: Trello's internal card id. Use this for debugging only.
-- `cardIdentifier`: the stable human-facing identifier, such as `TRELLO-abc123`.
+- `card_id`: Trello's internal card id. Use this for debugging only.
+- `card_identifier`: the stable human-facing identifier, such as `TRELLO-abc123`.
 - `state`: current Trello list name from the last dispatch refresh.
-- `sessionId`: combined Codex thread and turn id when both are known.
-- `turnCount`: number of started or continued Codex turns in this worker session.
-- `lastEvent` and `lastMessage`: latest Codex app-server event summary Symphony observed.
-- `startedAt` and `lastEventAt`: worker start time and latest event time.
+- `session_id`: combined Codex thread and turn id when both are known.
+- `turn_count`: number of started or continued Codex turns in this worker session.
+- `last_event` and `last_message`: latest Codex app-server event summary Symphony observed.
+- `started_at` and `last_event_at`: worker start time and latest event time.
 - `tokens`: latest per-thread cumulative token values observed for this worker.
 
 Each `retrying` row includes:
 
-- `cardId` and `cardIdentifier`: the card waiting for retry.
+- `card_id` and `card_identifier`: the card waiting for retry.
 - `attempt`: next retry attempt number.
-- `dueAt`: when Symphony will try again.
+- `due_at`: when Symphony will try again.
 - `error`: the reason the previous attempt did not complete normally.
 
 ## Card Details
@@ -149,8 +149,8 @@ Current behavior:
 - `turn/completed` is used as turn state, not as an unconditional extra token increment.
 - Multiple turns can happen on the same Codex thread when a card remains active.
 
-`codexTotals.inputTokens`, `codexTotals.outputTokens`, and `codexTotals.totalTokens` are process
-totals derived from the latest cumulative worker totals. `codexTotals.secondsRunning` is elapsed
+`codex_totals.input_tokens`, `codex_totals.output_tokens`, and `codex_totals.total_tokens` are process
+totals derived from the latest cumulative worker totals. `codex_totals.seconds_running` is elapsed
 worker time for completed and currently running workers; it is not billable usage.
 
 `running[].tokens` contains the latest cumulative token values for that worker's current Codex
@@ -158,7 +158,7 @@ thread. If Codex does not emit token usage events, the values remain zero.
 
 ## Rate Limits
 
-`rateLimits` mirrors the latest `account/rateLimits/updated` event from Codex when available.
+`rate_limits` mirrors the latest `account/rateLimits/updated` event from Codex when available.
 Symphony does not invent rate-limit state. If the field is absent or `null`, Codex has not reported
 rate-limit data to this process yet.
 

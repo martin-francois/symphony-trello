@@ -3171,11 +3171,11 @@ final class SetupDiagnosticReporterTest {
                         exchange,
                         """
                 {
-                  "generatedAt":"2026-05-11T00:00:00Z",
+                  "generated_at":"2026-05-11T00:00:00Z",
                   "counts":{"running":1,"retrying":1},
-                  "running":[{"cardId":"private-card-id","cardIdentifier":"TRELLO-private","lastMessage":"private runtime message"}],
-                  "retrying":[{"cardId":"private-card-id-2","cardIdentifier":"TRELLO-private-2","error":"private retry message"}],
-                  "routing":{"activeLists":["Ready for Codex"],"terminalLists":["Done"],"handoffLists":[]}
+                  "running":[{"card_id":"private-card-id","card_identifier":"TRELLO-private","last_message":"private runtime message"}],
+                  "retrying":[{"card_id":"private-card-id-2","card_identifier":"TRELLO-private-2","error":"private retry message"}],
+                  "routing":{"active_lists":["Ready for Codex"],"terminal_lists":["Done"],"handoff_lists":[]}
                 }
                 """));
         server.start();

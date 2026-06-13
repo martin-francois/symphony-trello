@@ -1,19 +1,21 @@
 package ch.fmartin.symphony.trello.api;
 
 import ch.fmartin.symphony.trello.orchestrator.RuntimeSnapshot;
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 record StateSnapshotResponse(
-        @JsonProperty("generated_at") Instant generatedAt,
+        Instant generatedAt,
         Counts counts,
         Routing routing,
         List<RunningRow> running,
         List<RetryRow> retrying,
-        @JsonProperty("codex_totals") TokenTotals codexTotals,
-        @JsonProperty("rate_limits") Object rateLimits) {
+        TokenTotals codexTotals,
+        Object rateLimits) {
     static StateSnapshotResponse from(RuntimeSnapshot snapshot) {
         return new StateSnapshotResponse(
                 snapshot.generatedAt(),
@@ -25,32 +27,32 @@ record StateSnapshotResponse(
                 snapshot.rateLimits());
     }
 
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     record Counts(int running, int retrying) {
         static Counts from(RuntimeSnapshot.Counts counts) {
             return new Counts(counts.running(), counts.retrying());
         }
     }
 
-    record Routing(
-            @JsonProperty("active_lists") List<String> activeLists,
-            @JsonProperty("terminal_lists") List<String> terminalLists,
-            @JsonProperty("handoff_lists") List<String> handoffLists) {
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    record Routing(List<String> activeLists, List<String> terminalLists, List<String> handoffLists) {
         static Routing from(RuntimeSnapshot.Routing routing) {
             return new Routing(routing.activeLists(), routing.terminalLists(), routing.handoffLists());
         }
     }
 
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     record RunningRow(
-            @JsonProperty("card_id") String cardId,
-            @JsonProperty("card_identifier") String cardIdentifier,
-            @JsonProperty("card_url") String cardUrl,
+            String cardId,
+            String cardIdentifier,
+            String cardUrl,
             String state,
-            @JsonProperty("session_id") String sessionId,
-            @JsonProperty("turn_count") int turnCount,
-            @JsonProperty("last_event") String lastEvent,
-            @JsonProperty("last_message") String lastMessage,
-            @JsonProperty("started_at") Instant startedAt,
-            @JsonProperty("last_event_at") Instant lastEventAt,
+            String sessionId,
+            int turnCount,
+            String lastEvent,
+            String lastMessage,
+            Instant startedAt,
+            Instant lastEventAt,
             Map<String, Long> tokens) {
         static RunningRow from(RuntimeSnapshot.RunningRow row) {
             return new RunningRow(
@@ -68,24 +70,16 @@ record StateSnapshotResponse(
         }
     }
 
-    record RetryRow(
-            @JsonProperty("card_id") String cardId,
-            @JsonProperty("card_identifier") String cardIdentifier,
-            @JsonProperty("card_url") String cardUrl,
-            int attempt,
-            @JsonProperty("due_at") Instant dueAt,
-            String error) {
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    record RetryRow(String cardId, String cardIdentifier, String cardUrl, int attempt, Instant dueAt, String error) {
         static RetryRow from(RuntimeSnapshot.RetryRow row) {
             return new RetryRow(
                     row.cardId(), row.cardIdentifier(), row.cardUrl(), row.attempt(), row.dueAt(), row.error());
         }
     }
 
-    record TokenTotals(
-            @JsonProperty("input_tokens") long inputTokens,
-            @JsonProperty("output_tokens") long outputTokens,
-            @JsonProperty("total_tokens") long totalTokens,
-            @JsonProperty("seconds_running") double secondsRunning) {
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    record TokenTotals(long inputTokens, long outputTokens, long totalTokens, double secondsRunning) {
         static TokenTotals from(RuntimeSnapshot.TokenTotals totals) {
             return new TokenTotals(
                     totals.inputTokens(), totals.outputTokens(), totals.totalTokens(), totals.secondsRunning());
