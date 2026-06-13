@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello;
 
+import ch.fmartin.symphony.trello.domain.BlockerRef;
 import ch.fmartin.symphony.trello.domain.Card;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -14,6 +15,15 @@ public final class TestCards {
         return cardWithComments(id, identifier, state, List.of());
     }
 
+    public static Card cardWithLabels(String id, String identifier, String state, List<String> labels) {
+        return cardWithUrls(id, identifier, state, SYNTHETIC_SHORT_URL, SYNTHETIC_SHORT_URL, List.of(), labels);
+    }
+
+    public static Card cardWithBlockers(String id, String identifier, String state, List<BlockerRef> blockers) {
+        return cardWithUrls(
+                id, identifier, state, SYNTHETIC_SHORT_URL, SYNTHETIC_SHORT_URL, List.of(), List.of(), blockers);
+    }
+
     public static Card cardWithComments(String id, String identifier, String state, List<Card.Comment> comments) {
         return cardWithUrls(id, identifier, state, SYNTHETIC_SHORT_URL, SYNTHETIC_SHORT_URL, comments);
     }
@@ -24,6 +34,29 @@ public final class TestCards {
 
     public static Card cardWithUrls(
             String id, String identifier, String state, String shortUrl, String url, List<Card.Comment> comments) {
+        return cardWithUrls(id, identifier, state, shortUrl, url, comments, List.of());
+    }
+
+    public static Card cardWithUrls(
+            String id,
+            String identifier,
+            String state,
+            String shortUrl,
+            String url,
+            List<Card.Comment> comments,
+            List<String> labels) {
+        return cardWithUrls(id, identifier, state, shortUrl, url, comments, labels, List.of());
+    }
+
+    public static Card cardWithUrls(
+            String id,
+            String identifier,
+            String state,
+            String shortUrl,
+            String url,
+            List<Card.Comment> comments,
+            List<String> labels,
+            List<BlockerRef> blockers) {
         return new Card(
                 id,
                 identifier,
@@ -43,10 +76,10 @@ public final class TestCards {
                 shortUrl,
                 null,
                 url,
+                labels,
                 List.of(),
                 List.of(),
-                List.of(),
-                List.of(),
+                blockers,
                 comments,
                 Instant.parse("2026-01-01T00:00:00Z"),
                 Instant.parse("2026-01-02T00:00:00Z"),

@@ -458,11 +458,15 @@ public class SymphonyOrchestrator {
                 } else if (TrelloClient.isTerminal(card, config)) {
                     terminateRunning(card.id(), true, true, "card terminal");
                 } else if (TrelloClient.isActive(card, config)) {
-                    RunningEntry entry = running.get(card.id());
-                    if (entry != null) {
-                        synchronized (this) {
-                            entry.card = card;
+                    if (hasRequiredLabels(card)) {
+                        RunningEntry entry = running.get(card.id());
+                        if (entry != null) {
+                            synchronized (this) {
+                                entry.card = card;
+                            }
                         }
+                    } else {
+                        terminateRunning(card.id(), false, false, "card is active but not currently dispatch-eligible");
                     }
                 } else {
                     terminateRunning(card.id(), false, true, "card no longer active");
@@ -865,13 +869,32 @@ public class SymphonyOrchestrator {
     }
 
     private boolean shouldDispatchIgnoringSlots(Card card, boolean ignoreClaim) {
+        return isCandidateEligibleIgnoringRuntimeState(card)
+                && (ignoreClaim || !claimed.contains(card.id()))
+                && !running.containsKey(card.id());
+    }
+
+    private boolean isCandidateEligibleIgnoringRuntimeState(Card card) {
         return card.hasRequiredDispatchFields()
                 && !isOutOfBoardScope(card)
                 && TrelloClient.isActive(card, config)
                 && !TrelloClient.isTerminal(card, config)
-                && (ignoreClaim || !claimed.contains(card.id()))
-                && !running.containsKey(card.id())
+                && hasRequiredLabels(card)
                 && blockersAllowDispatch(card);
+    }
+
+    private boolean hasRequiredLabels(Card card) {
+        List<String> requiredLabels = config.tracker().requiredLabels();
+        if (requiredLabels.isEmpty()) {
+            return true;
+        }
+        if (requiredLabels.stream().anyMatch(String::isBlank)) {
+            return false;
+        }
+        Set<String> cardLabels = card.labels().stream()
+                .map(StateNames::normalize)
+                .collect(java.util.stream.Collectors.toCollection(HashSet::new));
+        return cardLabels.containsAll(requiredLabels);
     }
 
     private Set<String> releaseIdleInProgressOverflow(List<Card> candidates) {

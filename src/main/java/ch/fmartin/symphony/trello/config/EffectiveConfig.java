@@ -29,6 +29,7 @@ public record EffectiveConfig(
                         resolvedBoardId,
                         tracker.activeStates(),
                         tracker.activeListIds(),
+                        tracker.requiredLabels(),
                         tracker.inProgressState(),
                         tracker.blockedState(),
                         tracker.blockerEnforcedStates(),
@@ -57,6 +58,7 @@ public record EffectiveConfig(
             String resolvedBoardId,
             List<String> activeStates,
             List<String> activeListIds,
+            List<String> requiredLabels,
             String inProgressState,
             String blockedState,
             List<String> blockerEnforcedStates,
@@ -70,6 +72,7 @@ public record EffectiveConfig(
         public TrackerConfig {
             activeStates = List.copyOf(activeStates);
             activeListIds = List.copyOf(activeListIds);
+            requiredLabels = List.copyOf(requiredLabels);
             blockerEnforcedStates = List.copyOf(blockerEnforcedStates);
             terminalStates = List.copyOf(terminalStates);
             terminalListIds = List.copyOf(terminalListIds);
