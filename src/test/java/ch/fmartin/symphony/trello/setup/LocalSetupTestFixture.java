@@ -119,17 +119,21 @@ final class LocalSetupTestFixture implements AutoCloseable {
     }
 
     SetupRunResult runSetupWithInput(String input, String... args) {
-        return runSetupWithEffectiveArgs(input, argsWithFixtureServerPort(args));
+        return runSetupWithEffectiveArgs(setup, input, argsWithFixtureServerPort(args));
     }
 
     SetupRunResult runSetupWithProductionDefaultPort(String... args) {
-        return runSetupWithEffectiveArgs("", args);
+        return runSetupWithEffectiveArgs(setup, "", args);
     }
 
-    private SetupRunResult runSetupWithEffectiveArgs(String input, String[] args) {
+    SetupRunResult runSetupWithProductionDefaultPort(LocalSetup localSetup, String... args) {
+        return runSetupWithEffectiveArgs(localSetup, "", args);
+    }
+
+    private SetupRunResult runSetupWithEffectiveArgs(LocalSetup localSetup, String input, String[] args) {
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
-        int exitCode = setup.run(
+        int exitCode = localSetup.run(
                 args,
                 new BufferedReader(new StringReader(input)),
                 new PrintStream(stdout, true, StandardCharsets.UTF_8),

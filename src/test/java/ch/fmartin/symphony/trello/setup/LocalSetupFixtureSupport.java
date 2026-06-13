@@ -14,6 +14,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.Map;
+import java.util.function.IntPredicate;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.io.TempDir;
@@ -58,6 +59,10 @@ abstract class LocalSetupFixtureSupport {
 
     protected SetupRunResult runSetupWithProductionDefaultPort(String... args) {
         return fixture.runSetupWithProductionDefaultPort(args);
+    }
+
+    protected SetupRunResult runSetupWithProductionDefaultPort(LocalSetup localSetup, String... args) {
+        return fixture.runSetupWithProductionDefaultPort(localSetup, args);
     }
 
     protected SetupRunResult connectLocalBoardWithoutGithub(Path workflow, Path env, String boardName) {
@@ -111,8 +116,20 @@ abstract class LocalSetupFixtureSupport {
     }
 
     protected LocalSetup setupWithCodexSelectionDefaults(CodexModelSelectionDefaults codexDefaults) {
+        return setupWithBoardSetup(new TrelloBoardSetup(new ObjectMapper(), codexDefaults));
+    }
+
+    /**
+     * Returns a setup whose port-availability checks use the given probe instead of real loopback
+     * sockets, so port-selection assertions stay independent of live host port occupancy.
+     */
+    protected LocalSetup setupWithPortProbe(IntPredicate portInUse) {
+        return setupWithBoardSetup(new TrelloBoardSetup(new ObjectMapper()).withPortProbe(portInUse));
+    }
+
+    private LocalSetup setupWithBoardSetup(TrelloBoardSetup boardSetup) {
         return new LocalSetup(
-                new TrelloBoardSetup(new ObjectMapper(), codexDefaults),
+                boardSetup,
                 commands,
                 Map.of(
                         "SYMPHONY_TRELLO_CONFIG_DIR",
