@@ -46,7 +46,9 @@
   <rule ref="category/java/errorprone.xml/UnusedNullCheckInEquals"/>
   <rule ref="category/java/errorprone.xml/UseEqualsToCompareStrings"/>
   <rule ref="category/java/errorprone.xml/UseLocaleWithCaseConversions"/>
-  <rule ref="category/java/errorprone.xml/UselessOperationOnImmutable"/>
+  <!-- UselessPureMethodCall is PMD's documented replacement for UselessOperationOnImmutable,
+       which is deprecated for removal in PMD 8. -->
+  <rule ref="category/java/errorprone.xml/UselessPureMethodCall"/>
   <rule ref="category/java/multithreading.xml/AvoidThreadGroup"/>
   <rule ref="category/java/multithreading.xml/DontCallThreadRun"/>
   <rule ref="category/java/multithreading.xml/UnsynchronizedStaticFormatter"/>
