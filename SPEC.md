@@ -510,6 +510,13 @@ Fields:
   - When `active_list_ids` is empty, this value MUST also appear in `active_states`.
   - The move is workflow-configured tracker behavior for Trello's visible board state; it does not
     change the coding agent's responsibility for later handoff comments and state transitions.
+- `blocked_state` (string)
+  - OPTIONAL Trello list name used as the blocked handoff list.
+  - The orchestrator does not move cards to this list itself. Blocked handoff stays an
+    agent/workflow responsibility through the scoped Trello tools from Section 5.3.7.
+  - Setup commands and generated workflows use this value for the blocked handoff list, the
+    Trello move allowlist, and generated prompt instructions.
+  - The value participates in the tracker list-role validation in Section 6.3.
 - `blocker_enforced_states` (list of strings)
   - Trello list names or normalized states where non-terminal blockers prevent dispatch.
   - Default: `Todo`, `Ready for Codex`
@@ -659,6 +666,11 @@ expose them.
 - `additional_writable_roots` (list of path strings, OPTIONAL Java implementation extension)
   - Additional files or folders to merge into a Codex `workspaceWrite` turn sandbox policy.
   - Relative paths resolve relative to the workflow file.
+  - When no `turn_sandbox_policy` is configured, the Java implementation builds a `workspaceWrite`
+    policy containing these roots. When a `workspaceWrite` policy is configured, the roots are
+    merged into its writable roots. When `dangerFullAccess` is configured or forced, the roots are
+    ignored. Any other configured policy type fails configuration with a sandbox policy conflict
+    error.
   - The Java implementation also supports the `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS`
     environment value for deployment-managed allowed host paths.
 - `turn_timeout_ms` (integer)
@@ -916,6 +928,15 @@ also exists, it appends a numeric suffix. Very long board-name slugs are shorten
 so generated workflow file names stay filesystem-safe. Passing `--force` intentionally overwrites the
 selected workflow file.
 
+Generated workflows configure Codex for unattended runs. They write
+`codex.approval_policy: never` and rely on the documented approval and user-input handling posture
+in Section 10.5 plus the configured Codex sandbox policy, which keeps Codex's workspace sandbox
+enabled unless the operator explicitly opts into `dangerFullAccess` during setup. Generated
+write-capable workflows enable `trello_tools` with `allow_writes` and `allow_comments`, restrict
+`allowed_move_list_names` to the configured handoff lists, such as the visible pickup, review,
+blocked, and done lists, and leave checklist and URL attachment writes disabled. When no handoff
+lists are configured, generated workflows disable `trello_tools` entirely.
+
 Generated workflows include `server.port` for the optional HTTP status server. Unless the operator
 passes an explicit setup port option, the Java setup commands choose the first unused workflow port
 starting at `18080` by inspecting other workflow files in the same folder. Existing Trello workflow
@@ -943,7 +964,10 @@ Environment variables do not globally override YAML values. They are used only w
 explicitly references them.
 
 This Java implementation also loads an ignored project-root `.env` file as a local development
-convenience. Real environment variables take precedence over `.env` entries. `.env` loading is not a
+convenience. Real environment variables take precedence over `.env` entries. The
+`SYMPHONY_TRELLO_DOTENV` environment variable selects a different ignored dotenv file instead of the
+project-root `.env`; managed local runs use it when credentials live in a non-default dotenv file,
+and real environment variables still take precedence. `.env` loading is not a
 portable core Symphony requirement, and production deployments SHOULD use the host secret mechanism
 documented for that deployment rather than relying on project-local files.
 
@@ -1003,6 +1027,13 @@ Validation checks:
 - `tracker.board_id` is present when REQUIRED by the selected tracker kind.
 - For Trello, `tracker.board_id` resolves to a Trello board ID and that board is not closed.
 - `codex.command` is present and non-empty.
+- Configured tracker list roles refer to distinct Trello lists. The blocked list MUST differ from
+  the active, terminal, and in-progress values, and the in-progress list MUST differ from the
+  terminal values. The in-progress pickup list is the only allowed overlap with the active lists,
+  and it MUST appear in `active_states` when `active_list_ids` is empty. When `active_list_ids` or
+  `terminal_list_ids` is non-empty, those ID lists are the authoritative values for this check;
+  list names are compared after `normalize_state_name`. Violations fail configuration validation
+  with an overlapping-list-roles error.
 
 ### 6.4 Config Fields Summary (Cheat Sheet)
 
@@ -1022,6 +1053,8 @@ implemented.
 - `tracker.active_states`: list of Trello list/state names, default
   `["Todo", "In Progress"]`
 - `tracker.active_list_ids`: list of Trello list IDs, default `[]`
+- `tracker.in_progress_state`: OPTIONAL Trello list name for the visible pickup list, default unset
+- `tracker.blocked_state`: OPTIONAL Trello list name for the blocked handoff list, default unset
 - `tracker.blocker_enforced_states`: list of Trello list/state names, default
   `["Todo", "Ready for Codex"]`
 - `tracker.terminal_states`: list of Trello list/state names, default
@@ -1055,6 +1088,8 @@ implemented.
   host-managed allowed roots to `codex.additional_writable_roots`
 - `SYMPHONY_CODEX_DANGER_FULL_ACCESS`: implementation environment extension that forces the Codex
   turn sandbox policy to `dangerFullAccess`
+- `SYMPHONY_TRELLO_DOTENV`: implementation environment extension that selects the ignored dotenv
+  file loaded for local runs instead of the project-root `.env`
 - `codex.turn_timeout_ms`: integer, default `3600000`
 - `codex.read_timeout_ms`: integer, default `5000`
 - `codex.stall_timeout_ms`: integer, default `300000`
@@ -1638,6 +1673,17 @@ Example high-trust behavior:
 - Auto-approve file-change approvals for the session.
 - Treat user-input-required turns as hard failure.
 
+This Java implementation's documented posture:
+
+- Command execution approval requests are auto-approved for the session.
+- File change approval requests are auto-approved for the session.
+- Permission escalation approval requests are cancelled; the configured sandbox policy stays in
+  effect.
+- Tool user-input requests and MCP elicitation requests are answered immediately with empty
+  answers so the turn continues without an operator instead of failing the run.
+- Other unsupported server-initiated requests receive a protocol method-not-found error and the
+  session continues.
+
 Unsupported dynamic tool calls:
 
 - Supported dynamic tool calls that are explicitly implemented and advertised by the runtime SHOULD
@@ -2075,9 +2121,9 @@ SHOULD return:
 - each running row SHOULD include `turn_count`
 - `retrying` (list of retry queue rows)
 - `routing`
-  - `activeLists`
-  - `terminalLists`
-  - `handoffLists`
+  - `activeLists` (configured active states/lists)
+  - `terminalLists` (configured terminal states/lists)
+  - `handoffLists` (the configured Trello move allowlist from Section 5.3.7)
 - `codex_totals`
   - `input_tokens`
   - `output_tokens`
@@ -2302,6 +2348,15 @@ Minimum endpoints:
     syntactically valid card identifier for this worker; any other unknown local API route SHOULD
     return `404` with one neutral route-miss code such as `not_found`, so a route typo never reads
     as a failed Trello card lookup.
+
+- `GET /api/v1/local-status` (Java implementation extension)
+  - Loopback-only worker identity probe used by the managed local lifecycle commands, for example
+    `setup-local check`, `start`, and `status`, to verify that the process answering on a port
+    manages the expected workflow file and Trello board.
+  - Returns the resolved Trello board ID, the configured board id/key, the selected workflow path,
+    and the worker process id.
+  - Requests from non-loopback clients receive `404` so the endpoint and the local paths it exposes
+    are not revealed off-host.
 
 - `POST /api/v1/refresh`
   - Queues an immediate Trello poll + reconciliation cycle, best-effort trigger; implementations
@@ -2948,6 +3003,8 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - `$VAR` resolution works for tracker API key, tracker API token, and path values
 - `~` path expansion works
 - `tracker.blocker_enforced_states` defaults and normalization work
+- Tracker list-role overlap validation rejects one Trello list used by two roles and allows the
+  in-progress pickup list inside the active lists
 - `codex.command` is preserved as a shell command string
 - Per-state concurrency override map normalizes state names and ignores invalid values
 - Priority label map normalizes label names and ignores invalid values
