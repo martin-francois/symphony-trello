@@ -68,6 +68,10 @@ final class StatusResourceTest {
 
         // then
         assertThat(state).isSameAs(snapshot);
+        assertThat(snapshot.running()).singleElement().satisfies(row -> assertThat(row.cardUrl())
+                .isEqualTo("https://trello.com/c/SYNTH001"));
+        assertThat(snapshot.retrying()).singleElement().satisfies(row -> assertThat(row.cardUrl())
+                .isEqualTo("https://trello.com/c/SYNTH002"));
     }
 
     @Test
@@ -180,11 +184,12 @@ final class StatusResourceTest {
     private static RuntimeSnapshot snapshotWithRunningCard() {
         return new RuntimeSnapshot(
                 Instant.parse("2026-05-05T00:00:00Z"),
-                new RuntimeSnapshot.Counts(1, 0),
+                new RuntimeSnapshot.Counts(1, 1),
                 new RuntimeSnapshot.Routing(List.of("Ready for Codex"), List.of("Done"), List.of("human review")),
                 List.of(new RuntimeSnapshot.RunningRow(
                         "card-1",
                         "TRELLO-<abc>",
+                        "https://trello.com/c/SYNTH001",
                         "Ready & Waiting",
                         "thread-turn",
                         2,
@@ -193,7 +198,13 @@ final class StatusResourceTest {
                         Instant.parse("2026-05-05T00:00:01Z"),
                         Instant.parse("2026-05-05T00:00:02Z"),
                         Map.of("total_tokens", 12L))),
-                List.of(),
+                List.of(new RuntimeSnapshot.RetryRow(
+                        "card-2",
+                        "TRELLO-retry",
+                        "https://trello.com/c/SYNTH002",
+                        3,
+                        Instant.parse("2026-05-05T00:01:00Z"),
+                        "no available orchestrator slots")),
                 new RuntimeSnapshot.TokenTotals(4, 8, 12, 1.25),
                 null);
     }

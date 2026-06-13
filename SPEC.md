@@ -2125,6 +2125,9 @@ SHOULD return:
 - `running` (list of running session rows)
 - each running row SHOULD include `turn_count`
 - `retrying` (list of retry queue rows)
+- running and retry rows SHOULD include the Trello card URL when known, preferring the card's short
+  URL and falling back to its full URL, so operators can click through to the card; omit or null it
+  when neither URL is known
 - `routing`
   - `activeLists` (configured active states/lists)
   - `terminalLists` (configured terminal states/lists)
@@ -2261,6 +2264,7 @@ Minimum endpoints:
         {
           "card_id": "000000000000000000000101",
           "card_identifier": "TRELLO-aBcDeFgH",
+          "card_url": "https://trello.com/c/SYNTH001",
           "state": "In Progress",
           "session_id": "thread-1-turn-1",
           "turn_count": 7,
@@ -2279,6 +2283,7 @@ Minimum endpoints:
         {
           "card_id": "000000000000000000000202",
           "card_identifier": "TRELLO-zYxWvUtS",
+          "card_url": "https://trello.com/c/SYNTH002",
           "attempt": 3,
           "due_at": "2026-02-24T20:16:00Z",
           "error": "no available orchestrator slots"
