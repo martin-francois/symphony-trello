@@ -590,6 +590,9 @@ worker_label() {
   fi
 }
 
+# A bounded kill -0 poll is the standard mechanism here: POSIX shell `wait` only covers child
+# processes, and managed workers are not children of this script. The PowerShell uninstaller can
+# use Wait-Process instead because it waits on process handles directly.
 wait_for_exit() {
   local pid="$1"
   local deadline=$((SECONDS + 15))
