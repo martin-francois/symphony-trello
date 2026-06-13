@@ -87,6 +87,11 @@ public class LocalAgentRunner implements AgentRunner {
         }
     }
 
+    /**
+     * Shipped skills are installed only when the rendered prompt references their namespaced
+     * paths, so workflows whose prompts do not use the shipped skills, such as hand-authored
+     * workflows that expect an empty workspace root, keep their workspace shape.
+     */
     private static boolean usesBundledCodexSkills(String prompt) {
         return prompt.contains(".codex/skills/" + CodexSkillCatalog.INSTALLED_SKILL_PREFIX);
     }
