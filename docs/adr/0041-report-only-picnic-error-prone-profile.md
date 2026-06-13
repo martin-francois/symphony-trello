@@ -119,7 +119,8 @@ Make `-Perror-prone` also run Picnic.
 Skip Refaster integration for now.
 
 * Good, because the first profile is smaller.
-* Bad, because #81 explicitly asks to evaluate Refaster separately from bug checkers.
+* Bad, because [GitHub issue #81](https://github.com/martin-francois/symphony-trello/issues/81)
+  explicitly asks to evaluate Refaster separately from bug checkers.
 
 ### Make Selected Picnic Checks Blocking Immediately
 

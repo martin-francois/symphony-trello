@@ -26,10 +26,12 @@ normalized seconds = wall-clock seconds * runner vCPU / 2
 A 4-vCPU runner must finish in less than half the 2-vCPU time to use fewer normalized Blacksmith
 minutes. An 8-vCPU runner must finish in less than one quarter of the 2-vCPU time.
 
-Issue #355 asked whether increasing the runner size, enabling Maven parallelism, enabling JUnit
-parallelism, or splitting CI jobs would make the pipeline faster without increasing normalized
-Blacksmith cost. Issue #357 and pull request #358 made local JUnit parallelism viable enough to
-measure it on hosted Blacksmith runners.
+[GitHub issue #355](https://github.com/martin-francois/symphony-trello/issues/355) asked whether
+increasing the runner size, enabling Maven parallelism, enabling JUnit parallelism, or splitting CI
+jobs would make the pipeline faster without increasing normalized Blacksmith cost.
+[GitHub issue #357](https://github.com/martin-francois/symphony-trello/issues/357) and
+[GitHub PR #358](https://github.com/martin-francois/symphony-trello/pull/358) made local JUnit
+parallelism viable enough to measure it on hosted Blacksmith runners.
 
 ## Decision Drivers
 
@@ -64,13 +66,16 @@ cost 292 normalized seconds. That is materially more expensive than the 2-vCPU J
 
 The earlier 2-vCPU JUnit-parallel runs were held back because one repeated hosted JUnit 2 cell
 failed with a setup server port conflict, JUnit 8 failed, and JUnit 6 hung long enough that the
-benchmark run was cancelled. After pull request #358 made the test suite parallel-safe locally, pull
-request #360 enabled the 2-vCPU JUnit 2 CI shape so the normal hosted PR test job validates the exact
-candidate before merge.
+benchmark run was cancelled. After
+[GitHub PR #358](https://github.com/martin-francois/symphony-trello/pull/358) made the test suite
+parallel-safe locally,
+[GitHub PR #360](https://github.com/martin-francois/symphony-trello/pull/360) enabled the 2-vCPU
+JUnit 2 CI shape so the normal hosted PR test job validates the exact candidate before merge.
 
-The Maven build is a single module. Earlier issue #355 measurement showed `-T 1C` had no meaningful
-hosted benefit for the full verification job because Maven module parallelism has no independent
-modules to schedule.
+The Maven build is a single module. Earlier
+[GitHub issue #355](https://github.com/martin-francois/symphony-trello/issues/355) measurement
+showed `-T 1C` had no meaningful hosted benefit for the full verification job because Maven module
+parallelism has no independent modules to schedule.
 
 Splitting the Java verification into additional Blacksmith jobs was not adopted. Local measurement
 showed static-analysis-only work is much smaller than the full lifecycle, but splitting it into a
@@ -78,12 +83,15 @@ separate hosted job would duplicate checkout, Java setup, Maven cache restore, a
 resolution. The existing `lint`, `renovate`, `test`, `windows-powershell`, and `Semgrep` jobs
 already separate non-Java checks where that separation makes failures clearer.
 
-The local Maven default remains JUnit parallelism 4 from pull request #358. CI intentionally lowers
-that default to 2 on the 2-vCPU hosted runner to preserve the best measured normalized-cost cell.
+The local Maven default remains JUnit parallelism 4 from
+[GitHub PR #358](https://github.com/martin-francois/symphony-trello/pull/358). CI intentionally
+lowers that default to 2 on the 2-vCPU hosted runner to preserve the best measured normalized-cost
+cell.
 
 ### Consequences
 
-* Good, because CI uses the lowest normalized-cost runner shape measured for issue #355.
+* Good, because CI uses the lowest normalized-cost runner shape measured for
+  [GitHub issue #355](https://github.com/martin-francois/symphony-trello/issues/355).
 * Good, because the fastest wall-clock runner shape is rejected when it costs more normalized
   Blacksmith minutes.
 * Good, because developers still get local parallel test execution by default.

@@ -108,7 +108,8 @@ Make normal Maven verification run the base Error Prone profile.
 ## More Information
 
 This decision does not reject making Error Prone blocking. It only keeps that promotion out of the
-#140 cleanup PR. The final static-analysis rollout remains tracked by
+[GitHub issue #140](https://github.com/martin-francois/symphony-trello/issues/140) cleanup PR. The
+final static-analysis rollout remains tracked by
 [GitHub issue #130](https://github.com/martin-francois/symphony-trello/issues/130).
 
 [ADR 0045](0045-enforce-error-prone-and-picnic-in-verify.md) later promotes the clean Error Prone

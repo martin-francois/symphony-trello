@@ -257,7 +257,8 @@ Use project-owned regular expressions and shell logic without a maintained scann
 
 ## More Information
 
-This ADR records the decision for the private-context guardrail introduced by PR #353. It does not
+This ADR records the decision for the private-context guardrail introduced by
+[GitHub PR #353](https://github.com/martin-francois/symphony-trello/pull/353). It does not
 make BetterLeaks the only security scanner for all future use cases, and it does not replace GitHub
 Secret Scanning for GitHub-hosted text. If the project later needs organization-wide scanning, live
 credential validation, provider permission mapping, automatic revocation workflows, or a formally
