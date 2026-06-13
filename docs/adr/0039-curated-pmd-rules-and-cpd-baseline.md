@@ -17,8 +17,10 @@ informed: [Future maintainers, Contributors]
 ## Context and Problem Statement
 
 The default validation command already runs PMD, but the blocking ruleset was intentionally tiny. It
-only checked inline fully qualified Java type names. Issue #78 asks for PMD to become a broader
-curated source-level analyzer and asks maintainers to evaluate CPD duplication checks.
+only checked inline fully qualified Java type names.
+[GitHub issue #78](https://github.com/martin-francois/symphony-trello/issues/78) asks for PMD to
+become a broader curated source-level analyzer and asks maintainers to evaluate CPD duplication
+checks.
 
 How should the project expand PMD without importing unclassified rule categories or making
 duplication reports fail the build before the baseline is understood?

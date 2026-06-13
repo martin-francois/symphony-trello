@@ -16,9 +16,10 @@ informed: [Future maintainers, Contributors]
 The first installer path cloned the Git repository and built Symphony for Trello locally. That made
 the simple install path depend on Git and Maven even though most users only need a released app.
 
-Issue #363 asked for an OpenClaw-style one-line install command and a smoother future move away from
-source-checkout installs. The project is still private before the open-source release, but the
-release path should already match the public path we expect users to run later.
+[GitHub issue #363](https://github.com/martin-francois/symphony-trello/issues/363) asked for an
+OpenClaw-style one-line install command and a smoother future move away from source-checkout
+installs. The project is still private before the open-source release, but the release path should
+already match the public path we expect users to run later.
 
 The installer still needs a source-checkout mode for development and release testing.
 
@@ -61,7 +62,9 @@ The public install URLs live under `https://symphony-trello.fmartin.ch/`. Cloudf
 stable paths to the latest GitHub Release download assets. That keeps README commands stable while
 the release asset implementation stays on GitHub Releases.
 
-Signing is not part of this decision. Issue #364 tracks future signing evaluation.
+Signing is not part of this decision.
+[GitHub issue #364](https://github.com/martin-francois/symphony-trello/issues/364) tracks future
+signing evaluation.
 
 ### Consequences
 

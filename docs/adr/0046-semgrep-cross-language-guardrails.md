@@ -137,8 +137,8 @@ rule selection.
 No `p/default` finding was accepted as a code change or suppression. The project does not use
 `p/default`; it uses the selected registry pack set below plus local custom Semgrep rules instead.
 
-Issue #151 evaluated remaining relevant Semgrep registry packs on 2026-06-02. The discovery method
-was:
+[GitHub issue #151](https://github.com/martin-francois/symphony-trello/issues/151) evaluated
+remaining relevant Semgrep registry packs on 2026-06-02. The discovery method was:
 
 * inspect the repository's tracked file types and existing tool coverage;
 * use Semgrep's Java documentation, which lists `p/default`, `p/java`, and `p/findsecbugs` as the

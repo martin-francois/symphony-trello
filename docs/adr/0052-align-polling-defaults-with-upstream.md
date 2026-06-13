@@ -122,8 +122,8 @@ Adopt the upstream schema default everywhere, including generated workflows.
 ## More Information
 
 The five-second generated-workflow value was first requested in
-[GitHub issue #54](https://github.com/martin-francois/symphony-trello/issues/54). The
-[fidelity audit in GitHub issue #97](https://github.com/martin-francois/symphony-trello/issues/97)
+[GitHub issue #54](https://github.com/martin-francois/symphony-trello/issues/54). The upstream
+fidelity audit in [GitHub issue #97](https://github.com/martin-francois/symphony-trello/issues/97)
 found that the runtime fallback had drifted to `5000` while upstream keeps it at `30000`, and this
 ADR records aligning the fallback back to upstream while keeping the generated-workflow value that
 already matched. [ADR 0028](0028-upstream-spec-and-reference-implementation-boundary.md) defines the
