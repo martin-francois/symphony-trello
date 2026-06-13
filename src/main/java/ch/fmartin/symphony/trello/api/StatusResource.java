@@ -101,7 +101,7 @@ public class StatusResource {
     @Path("/api/v1/state")
     @Produces(MediaType.APPLICATION_JSON)
     public Object state() {
-        return orchestrator.snapshot();
+        return StateSnapshotResponse.from(orchestrator.snapshot());
     }
 
     @GET
