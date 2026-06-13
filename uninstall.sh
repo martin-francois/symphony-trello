@@ -22,7 +22,6 @@ REMOVE_WORKSPACES=false
 REMOVE_STATE=false
 PATH_BLOCK_START="# >>> Symphony for Trello PATH >>>"
 PATH_BLOCK_END="# <<< Symphony for Trello PATH <<<"
-PATH_BLOCK_LEGACY_MARKER="# Symphony for Trello"
 
 usage() {
   cat <<'USAGE'
@@ -431,7 +430,7 @@ remove_path() {
 
 remove_path_setup_from_profile() {
   local profile="$1"
-  local line current tmp block changed=false in_block=false block_matches=false pending_legacy=false
+  local line current tmp block changed=false in_block=false block_matches=false
   [[ -f "$profile" ]] || return 0
   line="$(path_setup_line)"
   tmp="$(mktemp "${TMPDIR:-/tmp}/symphony-trello-profile.XXXXXX")"
@@ -458,23 +457,10 @@ remove_path_setup_from_profile() {
       fi
       continue
     fi
-    if [[ "$pending_legacy" == true ]]; then
-      if [[ "$current" == "$line" ]]; then
-        changed=true
-        pending_legacy=false
-        continue
-      fi
-      printf '%s\n' "$PATH_BLOCK_LEGACY_MARKER" >>"$tmp"
-      pending_legacy=false
-    fi
     if [[ "$current" == "$PATH_BLOCK_START" ]]; then
       in_block=true
       block_matches=false
       block="$current"$'\n'
-      continue
-    fi
-    if [[ "$current" == "$PATH_BLOCK_LEGACY_MARKER" ]]; then
-      pending_legacy=true
       continue
     fi
     printf '%s\n' "$current" >>"$tmp"
@@ -483,9 +469,6 @@ remove_path_setup_from_profile() {
   if [[ "$in_block" == true ]]; then
     printf '%s' "$block" >>"$tmp"
     echo "  SKIP  managed PATH setup in $profile is missing its end marker"
-  fi
-  if [[ "$pending_legacy" == true ]]; then
-    printf '%s\n' "$PATH_BLOCK_LEGACY_MARKER" >>"$tmp"
   fi
   if [[ "$changed" == false ]]; then
     rm -f "$tmp"
