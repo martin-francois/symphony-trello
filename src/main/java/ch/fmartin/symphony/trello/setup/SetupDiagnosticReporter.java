@@ -737,8 +737,8 @@ final class SetupDiagnosticReporter {
             try {
                 Files.writeString(report, content, StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
                 return report;
-            } catch (FileAlreadyExistsException retry) { // NOPMD - retry with the next numeric suffix
-                continue;
+            } catch (FileAlreadyExistsException ignored) {
+                // Another report from the same second owns this name; loop to the next suffix.
             }
         }
         throw new IOException("Could not choose a unique troubleshooting report name after " + MAX_REPORT_NAME_ATTEMPTS
