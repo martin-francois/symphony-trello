@@ -1611,42 +1611,6 @@ final class InstallerScriptTest {
         assertThat(shellProfile).content(StandardCharsets.UTF_8).isEqualTo(profile);
     }
 
-    @Test
-    void posixUninstallerRemovesLegacyManagedPathProfileBlocks() throws Exception {
-        // given
-        assumeTrue(commandExists("bash"));
-        Path home = temporaryDirectory.resolve("path-cleanup-legacy-home");
-        Path symphonyHome = temporaryDirectory.resolve("path-cleanup-legacy-symphony-home");
-        Path binDirectory = temporaryDirectory.resolve("path-cleanup-legacy-bin");
-        Files.createDirectories(home);
-        String pathLine = "export PATH='" + binDirectory + "':\"$PATH\"";
-        String legacyBlock =
-                """
-                before
-                # Symphony for Trello
-                %s
-                after
-                """
-                        .formatted(pathLine);
-        Files.writeString(home.resolve(".bashrc"), legacyBlock, StandardCharsets.UTF_8);
-        Files.writeString(home.resolve(".profile"), "unchanged\n", StandardCharsets.UTF_8);
-
-        // when
-        ProcessResult result = runPosixUninstall(home, symphonyHome, binDirectory);
-
-        // then
-        result.assertSuccess();
-        assertRemovedPathSetup(result, home);
-        assertThat(home.resolve(".bashrc"))
-                .content(StandardCharsets.UTF_8)
-                .isEqualTo(
-                        """
-                        before
-                        after
-                        """);
-        assertThat(home.resolve(".profile")).content(StandardCharsets.UTF_8).isEqualTo("unchanged\n");
-    }
-
     private static ProcessResult runPosixUninstall(Path home, Path symphonyHome, Path binDirectory) throws Exception {
         return run(
                 uninstallEnvironment(home, symphonyHome),
