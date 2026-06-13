@@ -36,6 +36,10 @@ parallel safety. Live end-to-end and deployed-verification rules live in
   If a test truly must coordinate access to a shared resource, keep the lock narrow and explain why
   the resource cannot be isolated; do not make broad test classes or whole finding families serial
   only to hide parallel-safety problems.
+- In tests, prefer waiting for an observable condition with a bounded helper such as `waitUntil` or
+  Awaitility instead of using a fixed `Thread.sleep`. Fixed sleeps are allowed only when sleeping is
+  the behavior under test or when modelling an intentionally blocking fake; in those cases, document
+  why a condition-based wait would not express the test better.
 
 ## Regression tests
 
