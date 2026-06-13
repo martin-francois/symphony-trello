@@ -1278,7 +1278,7 @@ final class LocalWorkerManagerTest {
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
-        fixture.stubStoppedStartedWorkerWithStartupLog(board, 42, "Configured Trello board is closed\n");
+        fixture.stubStoppedStartedWorkerWithStartupLog(board, 42, "Configured Trello board is archived\n");
 
         // when
         Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
