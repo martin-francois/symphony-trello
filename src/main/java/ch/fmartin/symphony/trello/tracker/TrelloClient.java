@@ -2,6 +2,9 @@ package ch.fmartin.symphony.trello.tracker;
 
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.config.StateNames;
+import ch.fmartin.symphony.trello.config.WholeNumbers;
+import ch.fmartin.symphony.trello.config.WholeNumbers.Classified;
+import ch.fmartin.symphony.trello.config.WholeNumbers.Kind;
 import ch.fmartin.symphony.trello.domain.BlockerRef;
 import ch.fmartin.symphony.trello.domain.Card;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -466,7 +469,7 @@ public class TrelloClient implements TrackerClient {
                 boardId,
                 context.boardClosed(),
                 cardClosed,
-                integer(payload.get("idShort")),
+                integer(payload.get("idShort"), "idShort"),
                 string(payload.get("shortLink")),
                 string(payload.get("shortUrl")),
                 null,
@@ -749,11 +752,19 @@ public class TrelloClient implements TrackerClient {
         return new BigDecimal(value.toString());
     }
 
-    private static Integer integer(Object value) {
+    private static Integer integer(Object value, String field) {
         if (value == null) {
             return null;
         }
-        return value instanceof Number number ? number.intValue() : Integer.parseInt(value.toString());
+        // Trello integer fields such as idShort are whole numbers in valid payloads. Classify through
+        // the shared WholeNumbers helper so a fractional or out-of-range value is rejected as a
+        // malformed payload instead of being silently truncated by Number.intValue().
+        Classified classified = WholeNumbers.classify(value.toString());
+        if (classified.kind() != Kind.WHOLE) {
+            throw new TrelloException(
+                    "trello_unknown_payload", "Trello payload field " + field + " is not a whole number: " + value);
+        }
+        return classified.value();
     }
 
     private static Boolean nullableBool(Object value) {
