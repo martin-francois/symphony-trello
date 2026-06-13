@@ -499,6 +499,11 @@ Fields:
   - OPTIONAL Trello list IDs considered dispatch-active.
   - When non-empty, implementations MUST use list ID matching for list-backed open cards instead of
     list-name matching. When empty, active list-name matching uses `active_states`.
+- `required_labels` (list of strings)
+  - OPTIONAL Trello label names required before a card can dispatch.
+  - Default: `[]`
+  - Matching ignores case and surrounding whitespace.
+  - A blank configured label matches no Trello card.
 - `in_progress_state` (string)
   - OPTIONAL Trello list name used as the visible pickup state.
   - When configured, implementations MAY move a dispatch-eligible card from an earlier active
@@ -1057,6 +1062,7 @@ implemented.
 - `tracker.active_states`: list of Trello list/state names, default
   `["Todo", "In Progress"]`
 - `tracker.active_list_ids`: list of Trello list IDs, default `[]`
+- `tracker.required_labels`: list of Trello label names required for dispatch, default `[]`
 - `tracker.in_progress_state`: OPTIONAL Trello list name for the visible pickup list, default unset
 - `tracker.blocked_state`: OPTIONAL Trello list name for the blocked handoff list, default unset
 - `tracker.blocker_enforced_states`: list of Trello list/state names, default
@@ -1274,6 +1280,10 @@ A card is dispatch-eligible only if all are true:
     `terminal_states`.
   - Non-list-backed special states such as `Archived`, `ArchivedList`, `ArchivedBoard`, and `Deleted`
     MUST NOT be in `terminal_states`.
+- It has every configured `tracker.required_labels` label.
+  - Label matching ignores case and surrounding whitespace.
+  - A blank configured required label matches no Trello card, so no card is dispatch-eligible while
+    that blank value remains configured.
 - It is not archived.
 - It is not in an archived list.
 - It is not in an archived board.
@@ -3018,6 +3028,8 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - `codex.command` is preserved as a shell command string
 - Per-state concurrency override map normalizes state names and ignores invalid values
 - Priority label map normalizes label names and ignores invalid values
+- `tracker.required_labels` defaults to empty and normalizes configured labels while preserving
+  blank values as non-matching dispatch requirements
 - Prompt template renders `card`, compatibility alias `issue`, and `attempt`
 - `card` and `issue` prompt variables contain identical normalized card data
 - Prompt rendering fails on unknown variables, strict mode
@@ -3073,6 +3085,9 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 
 - Dispatch sort order is later active-state/list first, priority, Trello position, creation time,
   identifier
+- Required-label dispatch matching ignores case and surrounding whitespace
+- A blank `tracker.required_labels` entry matches no card
+- Card missing any configured `tracker.required_labels` label is not eligible for dispatch
 - Card in `tracker.blocker_enforced_states` with non-terminal blockers is not eligible
 - Card in `tracker.blocker_enforced_states` with terminal blockers is eligible
 - Card is claimed before worker spawn begins
@@ -3084,6 +3099,8 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - Ignored worker identity tracking is bounded by size, TTL, or both
 - Worker spawn failure leaves a retry entry or explicitly releases the claim
 - Active-state card refresh updates running entry state
+- Active-state card refresh stops and releases a running card that no longer satisfies
+  `tracker.required_labels`
 - Non-active state stops running agent without workspace cleanup
 - Terminal state stops running agent and cleans workspace
 - Archived card stops running agent and cleans workspace when `Archived` is terminal
@@ -3093,6 +3110,7 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - Terminal, deleted, board-out-of-scope, and non-active reconciliation terminations suppress retry
 - Reconciliation-suppressed worker exits are ignored for retry purposes
 - Retry timer checks current card state before re-dispatch
+- Retry timer releases and requeues active cards that no longer satisfy `tracker.required_labels`
 - Retry timer cleans terminal/deleted workspaces when possible
 - Reconciliation with no running cards is a no-op
 - Normal worker exit schedules a short continuation retry, attempt 1

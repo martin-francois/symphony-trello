@@ -77,6 +77,7 @@ public class ConfigResolver {
                         resolvedBoardId,
                         list(tracker, "active_states", List.of("Todo", "In Progress")),
                         list(tracker, "active_list_ids", List.of()),
+                        normalizedList(tracker, "required_labels", List.of()),
                         string(tracker, "in_progress_state", null),
                         string(tracker, "blocked_state", null),
                         normalizedList(tracker, "blocker_enforced_states", List.of("Todo", "Ready for Codex")),

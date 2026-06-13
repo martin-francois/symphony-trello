@@ -337,6 +337,49 @@ final class ConfigResolverTest {
     }
 
     @Test
+    void requiredLabelsDefaultEmptyAndConfiguredLabelsAreNormalizedWithoutDroppingBlanks() throws Exception {
+        // given
+        Path configuredWorkflow = tempDir.resolve("WORKFLOW.required-labels.md");
+        Files.writeString(
+                configuredWorkflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: literal-key
+                  api_token: literal-token
+                  board_id: board-1
+                  required_labels:
+                    - " Ready For Codex "
+                    - ""
+                ---
+                Prompt
+                """);
+        Path defaultWorkflow = tempDir.resolve("WORKFLOW.default-required-labels.md");
+        Files.writeString(
+                defaultWorkflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: literal-key
+                  api_token: literal-token
+                  board_id: board-1
+                ---
+                Prompt
+                """);
+        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        EffectiveConfig configured = resolver.resolve(new WorkflowLoader().load(configuredWorkflow));
+        EffectiveConfig defaults = resolver.resolve(new WorkflowLoader().load(defaultWorkflow));
+
+        // then
+        assertThat(configured.tracker().requiredLabels()).containsExactly("ready for codex", "");
+        assertThat(defaults.tracker().requiredLabels()).isEmpty();
+    }
+
+    @Test
     void unresolvedWorkflowBoardIdEnvironmentReferenceFailsBeforeDispatch() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
