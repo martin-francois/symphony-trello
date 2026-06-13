@@ -8,8 +8,9 @@ informed: [Future maintainers]
 
 # Keep Live Trello and Codex E2E Verification as a Reproducible Manual Procedure
 
-Updated by [0018: Add an Opt-In Java Live E2E Harness](0018-opt-in-java-live-e2e-harness.md).
-The manual runbook remains for strict real-Codex and deployment checks.
+Updated by [ADR 0018](0018-opt-in-java-live-e2e-harness.md), which adds an opt-in Java live E2E
+harness for the fake-Codex checks. This ADR is not superseded: the manual runbook remains the source
+for strict real-Codex and deployment checks.
 
 ## Context and Problem Statement
 
