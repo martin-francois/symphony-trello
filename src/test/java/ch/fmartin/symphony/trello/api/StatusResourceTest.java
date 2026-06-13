@@ -67,10 +67,11 @@ final class StatusResourceTest {
         Object state = resource.state();
 
         // then
-        assertThat(state).isSameAs(snapshot);
-        assertThat(snapshot.running()).singleElement().satisfies(row -> assertThat(row.cardUrl())
+        assertThat(state).isInstanceOf(StateSnapshotResponse.class);
+        StateSnapshotResponse response = (StateSnapshotResponse) state;
+        assertThat(response.running()).singleElement().satisfies(row -> assertThat(row.cardUrl())
                 .isEqualTo("https://trello.com/c/SYNTH001"));
-        assertThat(snapshot.retrying()).singleElement().satisfies(row -> assertThat(row.cardUrl())
+        assertThat(response.retrying()).singleElement().satisfies(row -> assertThat(row.cardUrl())
                 .isEqualTo("https://trello.com/c/SYNTH002"));
     }
 
