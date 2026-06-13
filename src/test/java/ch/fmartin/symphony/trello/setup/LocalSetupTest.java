@@ -2380,9 +2380,14 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path env = tempDir.resolve(".env.import-manifest-reservation");
         writeConnectedBoardManifest(
                 manifest, "Reserved Default Port", reservedWorkflow, reservedEnv, ConfigDefaults.DEFAULT_SERVER_PORT);
+        // The scan runs in the production 18080+ range where live workers bind and release ports,
+        // so the probe fakes every port as free; skipping the default port must come from the
+        // manifest reservation alone.
+        LocalSetup probedSetup = setupWithPortProbe(port -> false);
 
         // when
         SetupRunResult result = runSetupWithProductionDefaultPort(
+                probedSetup,
                 "--non-interactive",
                 "--endpoint",
                 endpoint(),
@@ -2400,7 +2405,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--no-github");
 
         // then
-        int expectedPort = firstAvailableManagedPort(ConfigDefaults.DEFAULT_SERVER_PORT);
+        int expectedPort = ConfigDefaults.DEFAULT_SERVER_PORT + 1;
         result.assertSuccess().stdoutContains("Local server port selected for \"Imported Queue\": " + expectedPort);
         assertThatWorkflow(workflow).hasServerPort(expectedPort);
         assertThatManifest(manifest).hasBoardWithPort("Imported Queue", expectedPort);
@@ -2531,9 +2536,14 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 """
                         .formatted(ConfigDefaults.DEFAULT_SERVER_PORT),
                 StandardCharsets.UTF_8);
+        // The scan runs in the production 18080+ range where live workers bind and release ports,
+        // so the probe fakes every port as free; skipping the default port must come from the
+        // sibling workflow's environment-backed reservation alone.
+        LocalSetup probedSetup = setupWithPortProbe(port -> false);
 
         // when
         SetupRunResult result = runSetupWithProductionDefaultPort(
+                probedSetup,
                 "--non-interactive",
                 "--endpoint",
                 endpoint(),
@@ -2551,7 +2561,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--no-github");
 
         // then
-        int expectedPort = firstAvailableManagedPort(ConfigDefaults.DEFAULT_SERVER_PORT);
+        int expectedPort = ConfigDefaults.DEFAULT_SERVER_PORT + 1;
         result.assertSuccess().stdoutContains("Local server port selected for \"Imported Queue\": " + expectedPort);
         assertThatWorkflow(workflow).hasServerPort(expectedPort);
         assertThatManifest(config.resolve("connected-boards.json")).hasBoardWithPort("Imported Queue", expectedPort);
@@ -2563,11 +2573,15 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
         Path workflow = tempDir.resolve("WORKFLOW.import-ephemeral-port.md");
         Path env = tempDir.resolve(".env.import-ephemeral-port");
-        int expectedPort = firstAvailableManagedPort();
+        // The scan runs in the production 18080+ range where live workers bind and release ports,
+        // so the probe fakes every port as free and the re-selected port is pure arithmetic.
+        LocalSetup probedSetup = setupWithPortProbe(port -> false);
+        int expectedPort = ConfigDefaults.DEFAULT_SERVER_PORT;
         writeWorkflow(workflow, "board-1", 0);
 
         // when
         SetupRunResult result = runSetupWithProductionDefaultPort(
+                probedSetup,
                 "--non-interactive",
                 "--endpoint",
                 endpoint(),
