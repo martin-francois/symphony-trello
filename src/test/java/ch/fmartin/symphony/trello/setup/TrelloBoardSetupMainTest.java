@@ -3314,7 +3314,10 @@ final class TrelloBoardSetupMainTest {
         assertThat(workflow).doesNotExist();
         assertThat(result.stdout()).doesNotContain("Created Trello board", "Troubleshooting report written");
         assertThat(result.stderr())
-                .contains("setup_failed code=setup_env_write_failed", "Choose a writable .env or .env.NAME file")
+                .contains(
+                        "setup_failed code=setup_env_write_failed",
+                        "Choose a writable .env or .env.NAME file",
+                        "(IOException: Selected dotenv parent is not a directory.)")
                 .doesNotContain(env.toString(), notDirectory.toString(), tempDir.toString());
     }
 
@@ -3334,8 +3337,46 @@ final class TrelloBoardSetupMainTest {
         assertThat(workflow).doesNotExist();
         assertThat(result.stdout()).doesNotContain("Created Trello board", "Troubleshooting report written");
         assertThat(result.stderr())
-                .contains("setup_failed code=setup_env_write_failed", "Choose a writable .env or .env.NAME file")
+                .contains(
+                        "setup_failed code=setup_env_write_failed",
+                        "Choose a writable .env or .env.NAME file",
+                        "(IOException: Selected dotenv parent directory does not exist.)")
                 .doesNotContain(env.toString(), missingParent.toString(), tempDir.toString());
+    }
+
+    @Test
+    void newBoardReportsEnvWriteCauseWhenRuntimeEnvParentBecomesFileAfterValidation() throws Exception {
+        // given
+        Path envParent = Files.createDirectory(tempDir.resolve("runtime-env-holder"));
+        Path env = envParent.resolve(".env.runtime");
+        Path workflow = tempDir.resolve("parent-becomes-file-runtime-env.WORKFLOW.md");
+        server.removeContext("/1/boards/");
+        server.createContext("/1/boards/", exchange -> {
+            Map<String, String> query = query(exchange);
+            createdBoardName.set(query.get("name"));
+            Files.delete(envParent);
+            Files.writeString(envParent, "not a directory", StandardCharsets.UTF_8);
+            respond(
+                    exchange,
+                    """
+                    {"id":"board-1","name":"%s","shortLink":"abc123","url":"https://trello.com/b/abc123/board"}
+                    """
+                            .formatted(jsonEscaped(query.get("name"))));
+        });
+
+        // when
+        CliRunResult result = runNewBoardWithRuntimeEnv(workflow, env, true);
+
+        // then
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(env).doesNotExist();
+        assertThat(result.stdout()).doesNotContain("Created Trello board", "Troubleshooting report written");
+        assertThat(result.stderr())
+                .contains(
+                        "setup_failed code=setup_env_write_failed",
+                        "Choose a writable .env or .env.NAME file",
+                        "(FileAlreadyExistsException")
+                .doesNotContain("direct-key", "direct-token", envParent.toString(), tempDir.toString());
     }
 
     @Test
@@ -3459,7 +3500,10 @@ final class TrelloBoardSetupMainTest {
         assertThat(workflow).doesNotExist();
         assertThat(result.stdout()).doesNotContain("Created Trello board", "Troubleshooting report written");
         assertThat(result.stderr())
-                .contains("setup_failed code=setup_env_write_failed", "Choose a writable .env or .env.NAME file")
+                .contains(
+                        "setup_failed code=setup_env_write_failed",
+                        "Choose a writable .env or .env.NAME file",
+                        "(MalformedInputException: Input length = 1)")
                 .doesNotContain(env.toString(), tempDir.toString(), "direct-key", "direct-token");
     }
 
@@ -3649,7 +3693,10 @@ final class TrelloBoardSetupMainTest {
         assertThat(result.stdout())
                 .doesNotContain("Imported Trello board", "Troubleshooting report written", "Saving Trello credentials");
         assertThat(result.stderr())
-                .contains("setup_failed code=setup_env_write_failed", "Choose a writable .env or .env.NAME file")
+                .contains(
+                        "setup_failed code=setup_env_write_failed",
+                        "Choose a writable .env or .env.NAME file",
+                        "(IOException: Selected dotenv parent directory does not exist.)")
                 .doesNotContain(
                         env.toString(), missingParent.toString(), tempDir.toString(), "direct-key", "direct-token");
     }

@@ -16,6 +16,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -1566,12 +1567,29 @@ final class SetupDiagnosticReporter {
         }
     }
 
-    private static String exceptionSummary(Exception exception) {
+    static String exceptionSummary(Exception exception) {
         String message = exception.getMessage();
         if (message == null || message.isBlank()) {
             return exception.getClass().getSimpleName();
         }
         return exception.getClass().getSimpleName() + ": " + message;
+    }
+
+    /**
+     * Like {@link #exceptionSummary(Exception)}, but safe for user-facing setup stderr:
+     * {@link FileSystemException} messages embed the affected paths, so only the path-free
+     * reason is kept for them. Other IOException messages at the setup boundaries are
+     * hand-written without paths.
+     */
+    static String pathFreeExceptionSummary(Exception exception) {
+        if (!(exception instanceof FileSystemException fileSystemException)) {
+            return exceptionSummary(exception);
+        }
+        String reason = fileSystemException.getReason();
+        if (reason == null || reason.isBlank()) {
+            return exception.getClass().getSimpleName();
+        }
+        return exception.getClass().getSimpleName() + ": " + reason;
     }
 
     private void appendRecentLogs(StringBuilder body, Path stateHome) {
