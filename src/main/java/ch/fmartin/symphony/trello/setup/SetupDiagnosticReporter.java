@@ -2226,7 +2226,7 @@ final class SetupDiagnosticReporter {
         try {
             Map<?, ?> state = json.readValue(body, Map.class);
             Map<String, Object> summary = new LinkedHashMap<>();
-            summary.put("generatedAt", state.get("generatedAt"));
+            summary.put("generatedAt", state.get("generated_at"));
             if (state.get("counts") instanceof Map<?, ?> counts) {
                 summary.put("counts", counts);
             }
@@ -2236,9 +2236,9 @@ final class SetupDiagnosticReporter {
                 summary.put(
                         "routing",
                         Map.of(
-                                "activeLists", listSize(routing.get("activeLists")),
-                                "terminalLists", listSize(routing.get("terminalLists")),
-                                "handoffLists", listSize(routing.get("handoffLists"))));
+                                "activeLists", listSize(routing.get("active_lists")),
+                                "terminalLists", listSize(routing.get("terminal_lists")),
+                                "handoffLists", listSize(routing.get("handoff_lists"))));
             }
             return sanitize(truncate(json.writeValueAsString(summary), BODY_LIMIT));
         } catch (IOException | RuntimeException ignored) {

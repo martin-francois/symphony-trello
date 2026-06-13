@@ -299,10 +299,10 @@ CARD_A_2_ID="$(jq -r .id "$RUN_DIR/card-a-2.json")"
 CARD_B_3_ID="$(jq -r .id "$RUN_DIR/card-b-3.json")"
 
 curl -fsS http://127.0.0.1:18181/api/v1/state \
-  | jq '{counts, running: [.running[].cardId], retrying: [.retrying[].cardId]}'
+  | jq '{counts, running: [.running[].card_id], retrying: [.retrying[].card_id]}'
 
 curl -fsS http://127.0.0.1:18182/api/v1/state \
-  | jq '{counts, running: [.running[].cardId], retrying: [.retrying[].cardId]}'
+  | jq '{counts, running: [.running[].card_id], retrying: [.retrying[].card_id]}'
 
 curl -fsS "https://api.trello.com/1/cards/$CARD_A_1_ID?fields=idList&key=$TRELLO_API_KEY&token=$TRELLO_API_TOKEN" \
   > "$RUN_DIR/status-card-a-1-waiting.json"
@@ -486,8 +486,8 @@ for attempt in {1..60}; do
     '{
       card: {name: $card.name, url: $card.url, list: $list},
       counts: $state.counts,
-      runningLastEvent: ($state.running[0].lastEvent // null),
-      runningLastMessage: ($state.running[0].lastMessage // null),
+      runningLastEvent: ($state.running[0].last_event // null),
+      runningLastMessage: ($state.running[0].last_message // null),
       retrying: $state.retrying,
       newComments: $newComments
     }' | tee target/live-deployment-check.json
