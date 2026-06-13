@@ -75,21 +75,21 @@ final class LocalAgentRunnerTest {
     }
 
     @Test
-    void leavesLegacyWorkspaceEmptyWhenPromptDoesNotReferenceBundledSkills() throws Exception {
+    void leavesWorkspaceEmptyWhenPromptDoesNotReferenceBundledSkills() throws Exception {
         // given
         CodexAppServerClient codex = mock();
         when(codex.runSession(any(), any(), any(), any(), any(), any(), any())).thenReturn(AgentRunResult.ok());
         var runner = runner(codex, CardLookupResult.Found::new);
         EffectiveConfig config = config(Map.of());
-        Card card = TestCards.card("card-1", "TRELLO-legacy", "Ready for Codex");
+        Card card = TestCards.card("card-1", "TRELLO-plain", "Ready for Codex");
 
         // when
-        AgentRunResult result = runner.run(
-                new AgentRunner.AgentRunRequest(card, null, "legacy prompt", config, "worker-legacy", event -> {}));
+        AgentRunResult result = runner.run(new AgentRunner.AgentRunRequest(
+                card, null, "prompt without shipped skill paths", config, "worker-plain", event -> {}));
 
         // then
         assertThat(result).isEqualTo(AgentRunResult.ok());
-        assertThat(config.workspace().root().resolve("TRELLO-legacy").resolve(".codex"))
+        assertThat(config.workspace().root().resolve("TRELLO-plain").resolve(".codex"))
                 .doesNotExist();
     }
 

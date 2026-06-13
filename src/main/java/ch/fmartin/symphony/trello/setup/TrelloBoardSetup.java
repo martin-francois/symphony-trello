@@ -56,7 +56,10 @@ public final class TrelloBoardSetup {
     public static final String RECOMMENDED_BLOCKED_STATE = "Blocked";
     public static final String RECOMMENDED_REVIEW_STATE = "Human Review";
     public static final String RECOMMENDED_MERGING_STATE = "Merging";
-    public static final String LEGACY_REVIEW_STATE = "Review";
+    // "Review" is a common review-list name on existing user boards, and import-board has no
+    // option to pick the review list explicitly, so detection falls back to it when no
+    // "Human Review" list exists.
+    public static final String FALLBACK_REVIEW_STATE = "Review";
     public static final List<String> RECOMMENDED_LISTS = List.of(
             "Inbox",
             RECOMMENDED_ACTIVE_STATE,
@@ -1936,7 +1939,7 @@ public final class TrelloBoardSetup {
                 .filter(name -> name.equalsIgnoreCase(RECOMMENDED_REVIEW_STATE))
                 .findFirst()
                 .orElseGet(() -> openListNames.stream()
-                        .filter(name -> name.equalsIgnoreCase(LEGACY_REVIEW_STATE))
+                        .filter(name -> name.equalsIgnoreCase(FALLBACK_REVIEW_STATE))
                         .findFirst()
                         .orElse(null));
     }

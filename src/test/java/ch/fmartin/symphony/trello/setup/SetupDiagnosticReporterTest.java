@@ -344,7 +344,7 @@ final class SetupDiagnosticReporterTest {
     void diagnosticsProbeEnvironmentResolvedWorkflowPortInsteadOfManifestFallback() throws Exception {
         // given
         EnvironmentBackedPortScenario scenario =
-                environmentBackedPortScenario("env-resolved-port", 20990, "LEGACY_STATUS_PORT=20991");
+                environmentBackedPortScenario("env-resolved-port", 20990, "BOARD_STATUS_PORT=20991");
 
         // when
         String report = renderGlobalDiagnostics(scenario.reporter(), scenario.configDir(), scenario.stateHome());
@@ -359,7 +359,7 @@ final class SetupDiagnosticReporterTest {
     void diagnosticsSkipEnvironmentResolvedOutOfRangeWorkflowPortWithoutManifestFallback() throws Exception {
         // given
         EnvironmentBackedPortScenario scenario =
-                environmentBackedPortScenario("env-out-of-range-port", 20990, "LEGACY_STATUS_PORT=99999");
+                environmentBackedPortScenario("env-out-of-range-port", 20990, "BOARD_STATUS_PORT=99999");
 
         // when
         String report = renderGlobalDiagnostics(scenario.reporter(), scenario.configDir(), scenario.stateHome());
@@ -374,7 +374,7 @@ final class SetupDiagnosticReporterTest {
     void diagnosticsDoNotProbeManifestPortWhenEnvironmentResolvesNonNumericWorkflowPort() throws Exception {
         // given
         EnvironmentBackedPortScenario scenario =
-                environmentBackedPortScenario("env-non-numeric-port", 20990, "LEGACY_STATUS_PORT=not-a-port");
+                environmentBackedPortScenario("env-non-numeric-port", 20990, "BOARD_STATUS_PORT=not-a-port");
 
         // when
         String report = renderGlobalDiagnostics(scenario.reporter(), scenario.configDir(), scenario.stateHome());
@@ -400,7 +400,7 @@ final class SetupDiagnosticReporterTest {
         // then
         assertThat(report)
                 .contains("http://127.0.0.1:20727/api/v1/local-status")
-                .doesNotContain("$LEGACY_STATUS_PORT");
+                .doesNotContain("$BOARD_STATUS_PORT");
     }
 
     @Test
@@ -415,8 +415,8 @@ final class SetupDiagnosticReporterTest {
         Files.writeString(
                 configDir.resolve(".env"),
                 """
-                LEGACY_BOARD_ID=000000000000000000000001
-                LEGACY_STATUS_PORT=20728
+                BOARD_ID_REF=000000000000000000000001
+                BOARD_STATUS_PORT=20728
                 """,
                 StandardCharsets.UTF_8);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
@@ -427,13 +427,13 @@ final class SetupDiagnosticReporterTest {
         // then
         assertThat(report)
                 .contains("http://127.0.0.1:20728/api/v1/local-status")
-                .doesNotContain("$LEGACY_STATUS_PORT");
+                .doesNotContain("$BOARD_STATUS_PORT");
     }
 
     private record EnvironmentBackedPortScenario(SetupDiagnosticReporter reporter, Path configDir, Path stateHome) {}
 
     private EnvironmentBackedPortScenario environmentBackedPortScenario(
-            String prefix, int manifestPort, String legacyStatusPortLine) throws IOException {
+            String prefix, int manifestPort, String statusPortLine) throws IOException {
         Path configDir = tempDir.resolve(prefix + "-config");
         Path stateHome = tempDir.resolve(prefix + "-state");
         Files.createDirectories(configDir);
@@ -442,7 +442,7 @@ final class SetupDiagnosticReporterTest {
         Files.writeString(workflow, workflowWithEnvironmentBackedPort(), StandardCharsets.UTF_8);
         Files.writeString(
                 configDir.resolve(".env"),
-                "LEGACY_BOARD_ID=000000000000000000000001\n" + legacyStatusPortLine + "\n",
+                "BOARD_ID_REF=000000000000000000000001\n" + statusPortLine + "\n",
                 StandardCharsets.UTF_8);
         saveSyntheticBoard(configDir, workflow, manifestPort);
         return new EnvironmentBackedPortScenario(
@@ -2036,29 +2036,33 @@ final class SetupDiagnosticReporterTest {
                         tempDir.toString());
     }
 
+    /**
+     * The manifest is hand-editable, so a board row may miss envPath; diagnostics load leniently
+     * and resolve workflow environment references from the config-directory .env default.
+     */
     @Test
-    void diagnosticsResolvesLegacyManifestWorkflowEnvironmentFromConfigDirectoryDotenv() throws Exception {
+    void diagnosticsResolveWorkflowEnvironmentFromConfigDirectoryDotenvWhenManifestEnvPathIsMissing() throws Exception {
         // given
-        Path configDir = tempDir.resolve("legacy-env-config");
-        Path workspaceRoot = tempDir.resolve("legacy-env-workspaces");
-        Path stateHome = tempDir.resolve("legacy-env-state");
-        Path workflow = configDir.resolve("WORKFLOW.legacy-env.md");
+        Path configDir = tempDir.resolve("missing-env-path-config");
+        Path workspaceRoot = tempDir.resolve("missing-env-path-workspaces");
+        Path stateHome = tempDir.resolve("missing-env-path-state");
+        Path workflow = configDir.resolve("WORKFLOW.missing-env-path.md");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Files.writeString(workflow, workflowWithEnvironmentBackedPort(), StandardCharsets.UTF_8);
         Files.writeString(
                 configDir.resolve(".env"),
                 """
-                LEGACY_BOARD_ID=legacy-board-id
-                LEGACY_STATUS_PORT=19421
+                BOARD_ID_REF=000000000000000000000002
+                BOARD_STATUS_PORT=19421
                 """,
                 StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
-                        "legacy-board-id",
-                        "legacykey",
-                        "Legacy Board",
-                        "https://trello.com/b/legacykey/legacy-board",
+                        "000000000000000000000002",
+                        "SYNTH002",
+                        "Synthetic Env Board",
+                        "https://trello.com/b/SYNTH002/synthetic-env-board",
                         workflow,
                         null,
                         workspaceRoot,
@@ -2077,11 +2081,11 @@ final class SetupDiagnosticReporterTest {
                 .doesNotContain(
                         "## Invalid Workflow Files",
                         "## Invalid Connected Board Workflows",
-                        "$LEGACY_STATUS_PORT",
-                        "$LEGACY_BOARD_ID",
-                        "Legacy Board",
-                        "legacy-board-id",
-                        "legacykey",
+                        "$BOARD_STATUS_PORT",
+                        "$BOARD_ID_REF",
+                        "Synthetic Env Board",
+                        "000000000000000000000002",
+                        "SYNTH002",
                         "https://trello.com",
                         tempDir.toString());
     }
@@ -3217,9 +3221,9 @@ final class SetupDiagnosticReporterTest {
         return """
                 ---
                 tracker:
-                  board_id: "$LEGACY_BOARD_ID"
+                  board_id: "$BOARD_ID_REF"
                 server:
-                  port: $LEGACY_STATUS_PORT
+                  port: $BOARD_STATUS_PORT
                 ---
                 Body
                 """;

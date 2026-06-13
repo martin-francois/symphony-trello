@@ -261,8 +261,10 @@ final class InstallerScriptTest {
     }
 
     @Test
-    void posixUninstallerAllowsLegacySymlinkedCommandDirectory() throws Exception {
+    void posixUninstallerAllowsSymlinkedCommandDirectory() throws Exception {
         // given
+        // Install rejects a symlinked command directory, but a user may replace the directory
+        // with a symlink afterward; uninstall must still clean up instead of stranding files.
         assumeTrue(commandExists("bash"));
         Path home = temporaryDirectory.resolve("uninstall-symlink-bin-home");
         Path app = temporaryDirectory.resolve("uninstall-symlink-bin-app");
@@ -2966,8 +2968,10 @@ final class InstallerScriptTest {
     }
 
     @Test
-    void powershellUninstallerAllowsLegacySymlinkedCommandDirectoryWhenAvailable() throws Exception {
+    void powershellUninstallerAllowsSymlinkedCommandDirectoryWhenAvailable() throws Exception {
         // given
+        // Install rejects a symlinked command directory, but a user may replace the directory
+        // with a symlink afterward; uninstall must still clean up instead of stranding files.
         List<String> pwsh = powershellCommand();
         assumeFalse(pwsh.isEmpty());
         Path home = temporaryDirectory.resolve("ps-uninstall-symlink-bin-home");

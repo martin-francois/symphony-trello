@@ -138,8 +138,8 @@ public final class LocalEnvironment {
 
     /**
      * Parses a quoted value and tolerates a trailing {@code # comment} after the closing quote.
-     * Returns empty when the text after the closing quote is not a comment, so unusual legacy
-     * lines keep their previous whole-line interpretation.
+     * Returns empty when the text after the closing quote is not a comment, so ambiguous
+     * hand-written lines keep the whole-line interpretation instead of silently losing text.
      */
     private static Optional<String> parseQuoted(String raw, char quote, boolean unescape) {
         int closing = closingQuoteIndex(raw, quote, unescape);

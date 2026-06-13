@@ -924,8 +924,9 @@ workflow files MAY use `server.port: 0` for temporary local runs that should use
 
 When `import-board` reads an existing board, the Java implementation detects common list names:
 `Ready for Codex` for queued work, `In Progress` for visible pickup, `Blocked` for blocked handoff,
-`Human Review` or legacy `Review` for review handoff, `Merging` for landing approval when a terminal
-list exists, and `Done` for terminal work. Explicit command options override detected list names.
+`Human Review` for review handoff (falling back to the common list name `Review` when no
+`Human Review` list exists), `Merging` for landing approval when a terminal list exists, and `Done`
+for terminal work. Explicit command options override detected list names.
 
 ## 6. Configuration Specification
 
@@ -3260,7 +3261,8 @@ When this profile is used:
   before Codex starts so deployed workspaces do not depend on the target repository containing
   Symphony-specific skill files
 - prompts that do not reference the namespaced shipped skill paths SHOULD keep their existing
-  workspace shape, including legacy generated workflows that expect an empty workspace root
+  workspace shape, such as hand-authored workflows that expect an empty workspace root, so the
+  runtime never adds skill files a workflow's prompt does not use
 - when the per-card workspace is a Git checkout root, this Java implementation SHOULD keep shipped
   skill files out of normal `git status` output for the target repository
 - skills that cause Trello writes still rely on the scoped Trello tools from Section 10.5 and the
