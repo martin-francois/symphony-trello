@@ -2653,14 +2653,6 @@ final class LocalWorkerManagerTest {
         });
     }
 
-    private void assertLifecycleRejectsExplicitWorkflow(LocalWorkerManagerTestFixture fixture, Path workflow) {
-        assertLifecycleRejectsExplicitWorkflow(
-                fixture,
-                workflow,
-                "--workflow must reference a readable workflow file with usable workflow front matter.",
-                "Invalid workflow configuration:");
-    }
-
     private void assertLifecycleRejectsExplicitWorkflow(
             LocalWorkerManagerTestFixture fixture, Path workflow, String expectedMessage, String expectedStartCause) {
         Throwable status = catchThrowable(() -> fixture.status(fixture.statusWorkflowRequest(workflow)));
