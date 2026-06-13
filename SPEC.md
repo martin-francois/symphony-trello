@@ -560,7 +560,10 @@ Fields:
 Fields:
 
 - `interval_ms` (integer)
-  - Default: `5000`
+  - Default: `30000` when a workflow omits the field, matching the upstream Symphony config-schema
+    default.
+  - Generated workflows (`new-board`, `import-board`) write `5000`, matching the upstream reference
+    implementation's generated workflow, so default Trello card pickup stays responsive.
   - MUST be positive; configuration resolution rejects zero or negative values.
   - Changes SHOULD be re-applied at runtime and affect future tick scheduling without restart.
 
@@ -1067,7 +1070,8 @@ implemented.
 - `tracker.request_timeout_ms`: integer, default `30000`
 - `tracker.max_api_retries`: integer, default `3`
 - `tracker.api_retry_base_delay_ms`: integer, default `1000`
-- `polling.interval_ms`: integer, must be positive, default `5000`
+- `polling.interval_ms`: integer, must be positive, runtime fallback default `30000`; generated
+  workflows write `5000`
 - `workspace.root`: path resolved to absolute, default `<system-temp>/symphony_workspaces`
 - `hooks.after_create`: shell script or null
 - `hooks.before_run`: shell script or null

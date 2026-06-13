@@ -3,8 +3,15 @@ package ch.fmartin.symphony.trello.config;
 import java.time.Duration;
 
 public final class ConfigDefaults {
-    public static final Duration DEFAULT_POLLING_INTERVAL = Duration.ofSeconds(5);
+    // Runtime fallback when a workflow omits polling.interval_ms: matches the upstream Symphony
+    // config-schema default of 30 seconds. Generated workflows instead write
+    // GENERATED_WORKFLOW_POLLING_INTERVAL, matching the upstream reference implementation's own
+    // generated WORKFLOW.md, so freshly created boards stay responsive while a hand-written
+    // workflow that omits the field behaves exactly like upstream.
+    public static final Duration DEFAULT_POLLING_INTERVAL = Duration.ofSeconds(30);
     public static final long DEFAULT_POLLING_INTERVAL_MS = DEFAULT_POLLING_INTERVAL.toMillis();
+    public static final Duration GENERATED_WORKFLOW_POLLING_INTERVAL = Duration.ofSeconds(5);
+    public static final long GENERATED_WORKFLOW_POLLING_INTERVAL_MS = GENERATED_WORKFLOW_POLLING_INTERVAL.toMillis();
     public static final int DEFAULT_SERVER_PORT = 18080;
     public static final String DEFAULT_CARD_IDENTIFIER_PREFIX = "TRELLO";
 

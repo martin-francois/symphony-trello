@@ -544,7 +544,7 @@ final class TrelloBoardSetupTest {
                 .contains("model: \"gpt-5.5\"")
                 .contains("reasoning_effort: \"medium\"")
                 .contains("polling:")
-                .contains("interval_ms: " + ConfigDefaults.DEFAULT_POLLING_INTERVAL_MS)
+                .contains("interval_ms: " + ConfigDefaults.GENERATED_WORKFLOW_POLLING_INTERVAL_MS)
                 .contains("max_concurrent_agents: " + ConfigDefaults.DEFAULT_SETUP_MAX_CONCURRENT_AGENTS);
         assertThat(result.serverPort()).isEqualTo(expectedPort);
         EffectiveConfig config = resolve(workflow);
@@ -564,7 +564,7 @@ final class TrelloBoardSetupTest {
                 .containsExactly("in progress", "human review", "blocked", "done");
         assertThat(config.trelloTools().allowChecklists()).isFalse();
         assertThat(config.trelloTools().allowUrlAttachments()).isFalse();
-        assertThat(config.polling().interval()).isEqualTo(ConfigDefaults.DEFAULT_POLLING_INTERVAL);
+        assertThat(config.polling().interval()).isEqualTo(ConfigDefaults.GENERATED_WORKFLOW_POLLING_INTERVAL);
     }
 
     @Test
@@ -728,7 +728,7 @@ final class TrelloBoardSetupTest {
                 .contains("model: \"gpt-5.5\"")
                 .contains("reasoning_effort: \"medium\"")
                 .contains("polling:")
-                .contains("interval_ms: " + ConfigDefaults.DEFAULT_POLLING_INTERVAL_MS)
+                .contains("interval_ms: " + ConfigDefaults.GENERATED_WORKFLOW_POLLING_INTERVAL_MS)
                 .contains("allowed_move_list_names:")
                 .contains("- \"In Progress\"")
                 .contains("- \"Human Review\"")
@@ -789,7 +789,7 @@ final class TrelloBoardSetupTest {
         assertThat(config.codex().model()).isEqualTo("gpt-5.5");
         assertThat(config.codex().reasoningEffort()).isEqualTo("medium");
         assertThat(config.workspace().root()).isEqualTo(workflow.getParent().resolve("agent-workspaces"));
-        assertThat(config.polling().interval()).isEqualTo(ConfigDefaults.DEFAULT_POLLING_INTERVAL);
+        assertThat(config.polling().interval()).isEqualTo(ConfigDefaults.GENERATED_WORKFLOW_POLLING_INTERVAL);
     }
 
     @Test

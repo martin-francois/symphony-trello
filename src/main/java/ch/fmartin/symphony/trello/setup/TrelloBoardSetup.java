@@ -1054,7 +1054,7 @@ public final class TrelloBoardSetup {
                         yamlList(withSystemTerminalStates(terminalStates)),
                         yamlScalar(workspaceRoot.toString()),
                         serverPort,
-                        ConfigDefaults.DEFAULT_POLLING_INTERVAL_MS,
+                        ConfigDefaults.GENERATED_WORKFLOW_POLLING_INTERVAL_MS,
                         trelloToolsYaml(handoffStates),
                         maxAgents,
                         ConfigDefaults.DEFAULT_CODEX_COMMAND,
