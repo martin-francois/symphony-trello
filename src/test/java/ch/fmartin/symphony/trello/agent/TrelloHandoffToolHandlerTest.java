@@ -351,6 +351,9 @@ final class TrelloHandoffToolHandlerTest {
 
     @Test
     void keepsTheUpsertSuccessfulAndReportsDuplicatesWhoseDeleteFailed() {
+        // Expected WARN in the build log (issue #354): logging the failed duplicate-workpad
+        // delete is the production behavior under test; muting shared logger categories would be
+        // JVM-global state and is unsafe with parallel test execution.
         // given
         TrelloHandoffToolHandler handler = handler();
         cardResponse.set(cardJson(duplicateWorkpadActionsJson()));
@@ -395,6 +398,9 @@ final class TrelloHandoffToolHandlerTest {
 
     @Test
     void countsUnaddressableDuplicatesAsFailedCleanup() {
+        // Expected WARN in the build log (issue #354): logging the workpad duplicate without an
+        // action id is the production behavior under test; muting shared logger categories would
+        // be JVM-global state and is unsafe with parallel test execution.
         // given
         TrelloHandoffToolHandler handler = handler();
         cardResponse.set(

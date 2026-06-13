@@ -1352,12 +1352,18 @@ final class TrelloBoardSetupMainTest {
         Path linkedParent = workingDir.resolve("linked-device-directory");
         Path outputPath = linkedParent.resolve("fd").resolve("1");
         createSymbolicLinkOrSkip(linkedParent, devPath);
+        try {
 
-        // when
-        MainProcessResult result = runDiagnosticsOutput(workingDir, outputPath.toString());
+            // when
+            MainProcessResult result = runDiagnosticsOutput(workingDir, outputPath.toString());
 
-        // then
-        assertDiagnosticsStreamOutputRejected(result, outputPath.toString(), devPath.toString());
+            // then
+            assertDiagnosticsStreamOutputRejected(result, outputPath.toString(), devPath.toString());
+        } finally {
+            // Remove the /dev link before @TempDir cleanup: JUnit warns in the build log whenever
+            // it deletes a symlink that resolves to a location outside the temp dir.
+            Files.deleteIfExists(linkedParent);
+        }
     }
 
     @Test

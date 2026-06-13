@@ -18,7 +18,7 @@ final class TrelloBoardIdsTest {
         "'000000000000000000000001?utm=test', 000000000000000000000001",
         "https://trello.com/b/SYNTH001/, SYNTH001",
         "https://trello.com/b/SYNTH001/synthetic-board?utm=test, SYNTH001",
-        "'https://trello.com/b/SYNTH001/synthetic-board#section', SYNTH001",
+        "'https://trello.com/b/SYNTH001/synthetic-board#section', SYNTH001"
     })
     @ParameterizedTest
     void stripsHarmlessUrlDecorationsFromBoardSelectors(String selector, String expected) {
@@ -39,7 +39,7 @@ final class TrelloBoardIdsTest {
         "'R&D/', 'R&D/'",
         "'What? Board', 'What? Board'",
         "'R&D?x', 'R&D?x'",
-        "'Release #5', 'Release #5'",
+        "'Release #5', 'Release #5'"
     })
     @ParameterizedTest
     void keepsBoardNamesContainingSelectorPunctuationUntouched(String selector, String expected) {
