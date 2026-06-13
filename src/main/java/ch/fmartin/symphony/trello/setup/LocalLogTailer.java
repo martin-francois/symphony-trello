@@ -33,6 +33,13 @@ final class LocalLogTailer {
         }
     }
 
+    /**
+     * Follow mode polls each log file by path every 500 ms instead of using {@code WatchService}:
+     * re-opening by path follows rotated or recreated logs without watcher re-registration, it
+     * behaves the same on network filesystems where file events do not fire, and half a second of
+     * latency is fine for a human following logs. See
+     * docs/adr/0053-sleep-based-waits-kept-as-polling-boundaries.md.
+     */
     void follow(List<Path> logFiles, PrintStream out) throws IOException {
         printRecent(logFiles, 100, out);
         long[] positions = new long[logFiles.size()];
