@@ -125,7 +125,7 @@ final class LocalAgentRunnerTest {
         doAnswer(invocation -> {
                     entered.countDown();
                     try {
-                        Thread.sleep(TimeUnit.SECONDS.toMillis(30));
+                        blockUntilInterruptedOrTimedOut();
                         return AgentRunResult.ok();
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
@@ -274,6 +274,10 @@ final class LocalAgentRunnerTest {
                                 "hooks",
                                 hooks),
                         ""));
+    }
+
+    private static void blockUntilInterruptedOrTimedOut() throws InterruptedException {
+        new CountDownLatch(1).await(30, TimeUnit.SECONDS);
     }
 
     @FunctionalInterface

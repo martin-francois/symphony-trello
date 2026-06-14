@@ -44,6 +44,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 
 final class SymphonyOrchestratorTest {
     private static final Instant COMMENT_TIME = Instant.parse("2026-01-01T00:00:00Z");
+    private static final Duration POLL_INTERVAL = Duration.ofMillis(25);
 
     @TempDir
     Path tempDir;
@@ -109,7 +110,7 @@ final class SymphonyOrchestratorTest {
 
         // when
         orchestrator.start();
-        Thread.sleep(250);
+        waitUntil(() -> tracker.candidateFetches.get() >= 1);
         RuntimeSnapshot snapshot = orchestrator.snapshot();
         orchestrator.stop();
 
@@ -507,8 +508,7 @@ final class SymphonyOrchestratorTest {
         // when
         orchestrator.start();
         waitUntil(() -> tracker.candidateFetches.get() >= 1);
-        Thread.sleep(20);
-        writeWorkflow(workflow, "60000");
+        writeWorkflow(workflow, "60001");
         waitUntil(() -> tracker.candidateFetches.get() >= 2);
         orchestrator.stop();
 
@@ -653,7 +653,7 @@ final class SymphonyOrchestratorTest {
         doAnswer(invocation -> {
                     agentStarted.countDown();
                     try {
-                        Thread.sleep(Duration.ofSeconds(5));
+                        blockUntilInterruptedOrTimedOut(Duration.ofSeconds(5));
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                     }
@@ -729,7 +729,7 @@ final class SymphonyOrchestratorTest {
     private static void waitForBoundedQuietPeriod(CompletableFuture<Throwable> future) throws Exception {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
         while (System.nanoTime() < deadline && !future.isDone()) {
-            Thread.sleep(25);
+            pollDelayForBoundedConditionWait();
         }
     }
 
@@ -1204,7 +1204,7 @@ final class SymphonyOrchestratorTest {
         doAnswer(invocation -> {
                     started.countDown();
                     try {
-                        Thread.sleep(TimeUnit.SECONDS.toMillis(30));
+                        blockUntilInterruptedOrTimedOut(Duration.ofSeconds(30));
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                     }
@@ -1317,9 +1317,17 @@ final class SymphonyOrchestratorTest {
             if (condition.matches()) {
                 return;
             }
-            Thread.sleep(25);
+            pollDelayForBoundedConditionWait();
         }
         throw new AssertionError("Condition was not met before timeout");
+    }
+
+    private static void pollDelayForBoundedConditionWait() throws InterruptedException {
+        Thread.sleep(POLL_INTERVAL.toMillis());
+    }
+
+    private static void blockUntilInterruptedOrTimedOut(Duration timeout) throws InterruptedException {
+        new CountDownLatch(1).await(timeout.toMillis(), TimeUnit.MILLISECONDS);
     }
 
     @FunctionalInterface
