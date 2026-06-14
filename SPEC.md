@@ -3512,7 +3512,8 @@ When this profile is used:
 - the installer MUST detect the supported OS/architecture, a Java 25+ JDK including `javac`, Codex
   CLI, and Codex CLI authentication before delegating to product setup. Source-checkout mode MUST
   also detect Git. Supported local platforms are macOS arm64/amd64, Linux arm64/amd64, WSL2 through
-  the Linux path, Windows amd64, and best-effort Windows arm64
+  the Linux path, and best-effort native Windows PowerShell on amd64/arm64. WSL2 with the Linux
+  installer is the recommended Windows setup path
 - missing Java, Codex CLI, Codex npm-fallback Node/npm, or source-checkout Git prerequisites MUST
   produce concrete assisted installation. The installer MUST reuse an existing authenticated Codex
   CLI first and otherwise fall back to a user-local Codex npm install under `SYMPHONY_HOME`. Node/npm

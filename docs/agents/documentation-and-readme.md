@@ -143,6 +143,9 @@ prompts, and product terminology. Deployment steps and installer lifecycle testi
   action has a clear opt-out or safe fallback. Do not add prompts only to make a choice feel more
   explicit. If the choice follows another mature OSS installer precedent, document that precedent and
   the tradeoff in an ADR.
+- When documenting Windows setup, present WSL2 with the Linux installer as the recommended path.
+  Mention native Windows PowerShell only as a best-effort path. Keep this framing in README setup
+  docs, installer reference docs, SPEC updates, and user-facing Windows installer text.
 - In prerequisites, name only tools the reader must install or provide. Do not list the Maven wrapper
   as a prerequisite when it is already committed. For command-line tools such as Codex, state exactly
   how the service finds them, such as `PATH` lookup or a configurable command path.
