@@ -85,8 +85,8 @@ Logs use stable `key=value` fields where practical. Useful fields include:
 Typical troubleshooting flow:
 
 1. Check `/api/v1/state` to see whether the card is running, retrying, or absent.
-2. If it is running or retrying, open `/api/v1/{card_identifier}` and read `lastEvent`,
-   `lastMessage`, `recentEvents`, and `lastError`.
+2. If it is running or retrying, open `/api/v1/{card_identifier}` and read `last_event`,
+   `last_message`, `recent_events`, and `last_error`.
 3. Search logs by `card_identifier`.
 4. If the card is absent, check the Trello list. Symphony only dispatches configured active lists and
    ignores review, blocked, terminal, archived, and out-of-scope lists.

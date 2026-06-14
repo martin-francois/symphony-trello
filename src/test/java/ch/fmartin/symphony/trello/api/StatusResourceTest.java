@@ -143,7 +143,9 @@ final class StatusResourceTest {
         Object found = resource.card("TRELLO-abc");
 
         // then
-        assertThat(found).isSameAs(details);
+        assertThat(found)
+                .isInstanceOfSatisfying(CardDebugDetailsResponse.class, response -> assertThat(response.cardId())
+                        .isEqualTo(details.cardId()));
         assertThatThrownBy(() -> resource.card("TRELLO-missing"))
                 .isInstanceOf(CardNotFoundException.class)
                 .hasMessageContaining("Unknown card: TRELLO-missing");
