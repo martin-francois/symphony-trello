@@ -14,7 +14,6 @@ import java.io.PrintStream;
 import java.io.StringReader;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -22,9 +21,14 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 
 final class LocalSetupTestFixture implements AutoCloseable {
+    private static final int FIRST_FIXTURE_PORT = 20_000;
+    private static final int LAST_FIXTURE_PORT = 29_999;
+    private static final AtomicInteger NEXT_FIXTURE_PORT = new AtomicInteger(FIRST_FIXTURE_PORT);
+
     private final Path tempDir;
     private final FakeTrelloServer trello;
     private final FakeCommands commands;
@@ -337,11 +341,18 @@ final class LocalSetupTestFixture implements AutoCloseable {
     }
 
     private static int availablePort() {
-        try (ServerSocket socket = new ServerSocket(0)) {
-            return socket.getLocalPort();
-        } catch (IOException e) {
-            throw new AssertionError("Could not allocate test port", e);
+        for (int attempt = FIRST_FIXTURE_PORT; attempt <= LAST_FIXTURE_PORT; attempt++) {
+            int port = nextFixturePort();
+            if (!LocalHealthChecker.portAcceptsConnections(port)) {
+                return port;
+            }
         }
+        throw new AssertionError("Could not allocate test port");
+    }
+
+    private static int nextFixturePort() {
+        return NEXT_FIXTURE_PORT.getAndUpdate(
+                current -> current >= LAST_FIXTURE_PORT ? FIRST_FIXTURE_PORT : current + 1);
     }
 
     static final class FakeCommands implements CommandRunner {
