@@ -123,9 +123,13 @@ final class InstallerScriptFixture {
             if (!processIsRunning(pid)) {
                 return true;
             }
-            Thread.sleep(100);
+            pollDelayForBoundedProcessWait();
         }
         return !processIsRunning(pid);
+    }
+
+    private static void pollDelayForBoundedProcessWait() throws InterruptedException {
+        Thread.sleep(100);
     }
 
     static String shellQuote(String value) {

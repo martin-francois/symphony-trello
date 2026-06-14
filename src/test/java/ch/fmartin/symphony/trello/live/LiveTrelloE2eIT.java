@@ -45,6 +45,7 @@ final class LiveTrelloE2eIT {
     private static final Duration STARTUP_TIMEOUT = Duration.ofSeconds(90);
     private static final Duration RUNNING_TIMEOUT = Duration.ofSeconds(90);
     private static final Duration HANDOFF_TIMEOUT = Duration.ofMinutes(3);
+    private static final Duration LIVE_POLL_INTERVAL = Duration.ofMillis(500);
     private static final DateTimeFormatter RUN_ID_FORMAT =
             DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").withZone(ZoneOffset.UTC);
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
@@ -131,12 +132,13 @@ final class LiveTrelloE2eIT {
                     boardALists.get(TrelloBoardSetup.RECOMMENDED_ACTIVE_STATE),
                     runId + " sequential older",
                     "Disposable live E2E card that should wait after Trello reordering.");
-            Thread.sleep(1_100);
             CardRef boardALater = trello.createCard(
                     boardALists.get(TrelloBoardSetup.RECOMMENDED_ACTIVE_STATE),
                     runId + " sequential later moved first",
                     "Disposable live E2E card created later, then moved to the top of the active list.");
             trello.moveCardToTop(boardALater.id());
+            waitForCardAbove(
+                    trello, boardALists.get(TrelloBoardSetup.RECOMMENDED_ACTIVE_STATE), boardALater, boardAOlder);
 
             CardRef boardBFirst = trello.createCard(
                     boardBLists.get(TrelloBoardSetup.RECOMMENDED_ACTIVE_STATE),
@@ -614,6 +616,18 @@ final class LiveTrelloE2eIT {
                 "card reaches expected handoff list with one workpad and one handoff comment");
     }
 
+    private void waitForCardAbove(LiveTrelloClient trello, String listId, CardRef higherCard, CardRef lowerCard) {
+        waitUntil(
+                STARTUP_TIMEOUT,
+                () -> {
+                    List<String> cardIds = trello.cardIdsInList(listId);
+                    return cardIds.indexOf(higherCard.id()) >= 0
+                            && cardIds.indexOf(lowerCard.id()) >= 0
+                            && cardIds.indexOf(higherCard.id()) < cardIds.indexOf(lowerCard.id());
+                },
+                "moved Trello card reaches the expected list order");
+    }
+
     private void waitForSuccessfulFakeCodexTurns(Path completions, int expectedCount) {
         waitUntil(
                 HANDOFF_TIMEOUT,
@@ -684,7 +698,7 @@ final class LiveTrelloE2eIT {
             } catch (RuntimeException ignored) {
                 // Poll again; live Trello and the local status endpoint may be briefly unavailable.
             }
-            sleep(Duration.ofMillis(500));
+            pollDelayForBoundedLiveWait();
         }
         if (lastFailure != null) {
             throw lastFailure;
@@ -692,9 +706,9 @@ final class LiveTrelloE2eIT {
         throw new AssertionError("Timed out waiting for " + description);
     }
 
-    private static void sleep(Duration duration) {
+    private static void pollDelayForBoundedLiveWait() {
         try {
-            Thread.sleep(duration.toMillis());
+            Thread.sleep(LIVE_POLL_INTERVAL.toMillis());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new AssertionError("Interrupted while waiting for live E2E condition", e);
@@ -816,6 +830,12 @@ final class LiveTrelloE2eIT {
 
         void moveCardToTop(String cardId) {
             putMap("cards/" + encodeSegment(cardId), Map.of("pos", "top"));
+        }
+
+        List<String> cardIdsInList(String listId) {
+            return getList("lists/" + encodeSegment(listId) + "/cards", Map.of("fields", "id,pos")).stream()
+                    .map(card -> requiredText(card, "id"))
+                    .toList();
         }
 
         CardState cardState(String cardId) {

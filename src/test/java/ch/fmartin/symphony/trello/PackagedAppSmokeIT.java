@@ -32,6 +32,7 @@ final class PackagedAppSmokeIT {
     private static final Path QUARKUS_RUNNER = Path.of("target/quarkus-app/quarkus-run.jar");
     private static final String BOARD_ID = "smoke-board-id";
     private static final Duration STARTUP_TIMEOUT = Duration.ofSeconds(45);
+    private static final Duration STARTUP_POLL_INTERVAL = Duration.ofMillis(250);
 
     private final ObjectMapper json = new ObjectMapper();
     private final HttpClient http =
@@ -101,11 +102,15 @@ final class PackagedAppSmokeIT {
             } catch (IOException e) {
                 lastFailure = e;
             }
-            Thread.sleep(250);
+            pollDelayForBoundedStartupWait();
         }
         throw new AssertionError(
                 "Packaged app did not serve /api/v1/local-status. stdout=" + read(stdout) + "\nstderr=" + read(stderr),
                 lastFailure);
+    }
+
+    private static void pollDelayForBoundedStartupWait() throws InterruptedException {
+        Thread.sleep(STARTUP_POLL_INTERVAL.toMillis());
     }
 
     private static void assertDoesNotExitAfterHealthyStartup(Process process, Duration duration)

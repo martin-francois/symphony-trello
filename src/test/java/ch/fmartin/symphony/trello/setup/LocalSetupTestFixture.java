@@ -507,13 +507,13 @@ final class LocalSetupTestFixture implements AutoCloseable {
                     return HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 0);
                 } catch (IOException e) {
                     failure = e;
-                    sleepAfterPortStop();
+                    pollDelayBeforeRetryingHealthServerBind();
                 }
             }
             throw failure;
         }
 
-        private static void sleepAfterPortStop() {
+        private static void pollDelayBeforeRetryingHealthServerBind() {
             try {
                 Thread.sleep(25);
             } catch (InterruptedException e) {
