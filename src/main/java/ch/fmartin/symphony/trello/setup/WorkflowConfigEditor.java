@@ -6,7 +6,10 @@ import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.config.EnvironmentReferences;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import ch.fmartin.symphony.trello.config.TrelloListRoleValidator;
-import ch.fmartin.symphony.trello.config.WholeNumbers;
+import ch.fmartin.symphony.trello.config.TypedWorkflowConfig;
+import ch.fmartin.symphony.trello.config.WorkflowConfigIngestion;
+import ch.fmartin.symphony.trello.config.WorkflowIntegerSetting;
+import ch.fmartin.symphony.trello.config.WorkflowServerPortClassification;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import ch.fmartin.symphony.trello.workflow.WorkflowException;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
@@ -22,7 +25,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.OptionalInt;
 import java.util.SequencedMap;
 import java.util.function.Function;
 import java.util.regex.Pattern;
@@ -142,30 +144,7 @@ final class WorkflowConfigEditor {
             // summary; probing falls back to the manifest port like a missing setting.
             return WorkflowServerPortClassification.unreadable();
         }
-        Object serverValue = yaml.get("server");
-        if (!(serverValue instanceof Map<?, ?> server) || !server.containsKey("port")) {
-            return WorkflowServerPortClassification.omitted();
-        }
-        Object port = server.get("port");
-        return environmentReferenceName(port)
-                .map(name -> environmentResolver
-                        .apply(name)
-                        .map(String::trim)
-                        .filter(value -> !value.isBlank())
-                        .map(WorkflowConfigEditor::classifyServerPortValue)
-                        .orElseGet(WorkflowServerPortClassification::omitted))
-                .orElseGet(() -> classifyServerPortValue(port));
-    }
-
-    private static WorkflowServerPortClassification classifyServerPortValue(Object port) {
-        Optional<Integer> numeric =
-                switch (port) {
-                    case Number number -> integralInteger(number);
-                    case String text when !text.isBlank() -> parseInteger(text.trim());
-                    default -> Optional.empty();
-                };
-        return numeric.map(WorkflowServerPortClassification::numericPort)
-                .orElseGet(WorkflowServerPortClassification::invalidValue);
+        return typedConfig(yaml, environmentResolver).serverPortClassification();
     }
 
     Optional<String> boardId(Path workflowPath) {
@@ -252,7 +231,7 @@ final class WorkflowConfigEditor {
             if (!agent.containsKey("max_concurrent_agents")) {
                 return WorkflowIntegerSetting.omitted();
             }
-            return positiveIntegerSetting(agent.get("max_concurrent_agents"));
+            return typedConfig(yaml).agentMaxConcurrentAgents();
         } catch (IOException | RuntimeException ignored) {
             return WorkflowIntegerSetting.omitted();
         }
@@ -421,20 +400,7 @@ final class WorkflowConfigEditor {
 
     private static WorkflowIntegerSetting serverPortSetting(
             Map<String, Object> yaml, Function<String, Optional<String>> environmentResolver) {
-        Object serverValue = yaml.get("server");
-        if (!(serverValue instanceof Map<?, ?> server)) {
-            return WorkflowIntegerSetting.omitted();
-        }
-        if (!server.containsKey("port")) {
-            return WorkflowIntegerSetting.omitted();
-        }
-        Object port = server.get("port");
-        return environmentReferenceName(port)
-                .flatMap(environmentResolver)
-                .map(String::trim)
-                .filter(value -> !value.isBlank())
-                .map(WorkflowConfigEditor::workflowServerPortSetting)
-                .orElseGet(() -> workflowServerPortSetting(port));
+        return typedConfig(yaml, environmentResolver).localServerPortSetting();
     }
 
     private static Optional<String> boardId(
@@ -520,7 +486,9 @@ final class WorkflowConfigEditor {
     }
 
     private static void validateResolvedServerPort(String value, String environmentName) {
-        if (workflowServerPortSetting(value).invalid()) {
+        if (typedConfig(Map.of("server", Map.of("port", value)))
+                .localServerPortSetting()
+                .invalid()) {
             throw new TrelloBoardSetupException(
                     "setup_invalid_server_port",
                     "Workflow server.port environment variable " + environmentName
@@ -538,45 +506,13 @@ final class WorkflowConfigEditor {
                 "Workflow " + displayName + " references missing environment variable " + name + ".");
     }
 
-    private static WorkflowIntegerSetting workflowServerPortSetting(Object value) {
-        Optional<Integer> port =
-                switch (value) {
-                    case Number number -> integralInteger(number);
-                    case String text when !text.isBlank() -> parseInteger(text.trim());
-                    default -> Optional.empty();
-                };
-        return port.filter(valuePort -> valuePort >= 0 && valuePort <= LocalPort.MAX)
-                .map(WorkflowIntegerSetting::valid)
-                .orElseGet(WorkflowIntegerSetting::invalidSetting);
+    private static TypedWorkflowConfig typedConfig(Map<String, Object> yaml) {
+        return typedConfig(yaml, ignored -> Optional.empty());
     }
 
-    private static Optional<Integer> parseInteger(String value) {
-        // Environment-backed text follows the same whole-number classification as literal YAML
-        // numbers, so "18080.0" normalizes identically in both spellings.
-        return WholeNumbers.wholeInt(value).stream().boxed().findAny();
-    }
-
-    private static WorkflowIntegerSetting positiveIntegerSetting(Object value) {
-        if (value instanceof Number number) {
-            return integralInteger(number)
-                    .filter(integer -> integer > 0)
-                    .map(WorkflowIntegerSetting::valid)
-                    .orElseGet(WorkflowIntegerSetting::invalidSetting);
-        }
-        if (value instanceof String text && !text.isBlank()) {
-            try {
-                int integer = Integer.parseInt(text.trim());
-                return integer > 0 ? WorkflowIntegerSetting.valid(integer) : WorkflowIntegerSetting.invalidSetting();
-            } catch (NumberFormatException ignored) {
-                return WorkflowIntegerSetting.invalidSetting();
-            }
-        }
-        return WorkflowIntegerSetting.invalidSetting();
-    }
-
-    private static Optional<Integer> integralInteger(Number number) {
-        OptionalInt whole = WholeNumbers.wholeInt(number.toString());
-        return whole.stream().boxed().findAny();
+    private static TypedWorkflowConfig typedConfig(
+            Map<String, Object> yaml, Function<String, Optional<String>> environmentResolver) {
+        return WorkflowConfigIngestion.collect(yaml == null ? Map.of() : yaml, environmentResolver);
     }
 
     private static Optional<String> blockedStateFromWorkflowBody(String body) {
@@ -626,57 +562,4 @@ final class WorkflowConfigEditor {
     }
 
     record TrackerCredentialReferences(Optional<String> apiKey, Optional<String> apiToken) {}
-
-    record WorkflowServerPortClassification(Kind kind, Optional<Integer> port) {
-        enum Kind {
-            VALID,
-            OMITTED,
-            OUT_OF_RANGE,
-            INVALID_VALUE,
-            UNREADABLE
-        }
-
-        static WorkflowServerPortClassification numericPort(int port) {
-            Kind kind = port >= 0 && port <= LocalPort.MAX ? Kind.VALID : Kind.OUT_OF_RANGE;
-            return new WorkflowServerPortClassification(kind, Optional.of(port));
-        }
-
-        static WorkflowServerPortClassification omitted() {
-            return new WorkflowServerPortClassification(Kind.OMITTED, Optional.empty());
-        }
-
-        static WorkflowServerPortClassification invalidValue() {
-            return new WorkflowServerPortClassification(Kind.INVALID_VALUE, Optional.empty());
-        }
-
-        static WorkflowServerPortClassification unreadable() {
-            return new WorkflowServerPortClassification(Kind.UNREADABLE, Optional.empty());
-        }
-
-        /**
-         * Ports the diagnostics report should list: valid ports get probed, out-of-range ports
-         * render the safe skip line. Omitted, unreadable, and non-numeric settings list nothing.
-         */
-        Optional<Integer> probeOrSkipPort() {
-            return kind == Kind.VALID || kind == Kind.OUT_OF_RANGE ? port : Optional.empty();
-        }
-    }
-
-    record WorkflowIntegerSetting(Optional<Integer> value, boolean invalid) {
-        static WorkflowIntegerSetting valid(int value) {
-            return new WorkflowIntegerSetting(Optional.of(value), false);
-        }
-
-        static WorkflowIntegerSetting omitted() {
-            return new WorkflowIntegerSetting(Optional.empty(), false);
-        }
-
-        static WorkflowIntegerSetting invalidSetting() {
-            return new WorkflowIntegerSetting(Optional.empty(), true);
-        }
-
-        String diagnosticsCell() {
-            return value.map(String::valueOf).orElseGet(() -> invalid ? "invalid" : "");
-        }
-    }
 }

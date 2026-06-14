@@ -99,6 +99,43 @@ final class ConfigResolverTest {
                 Arguments.of("overflowing-float-port", "server:\n  port: 1e400", "server.port must be a whole number"));
     }
 
+    @MethodSource("malformedObjectSections")
+    @ParameterizedTest
+    void rejectsMalformedObjectSectionsInsteadOfIgnoringThem(String name, String section, String expectedMessage)
+            throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW." + name + ".md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: literal-key
+                  api_token: literal-token
+                  board_id: board-1
+                %s
+                ---
+                Prompt
+                """
+                        .formatted(section));
+        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        ConfigException error = catchThrowableOfType(
+                ConfigException.class, () -> resolver.resolve(new WorkflowLoader().load(workflow)));
+
+        // then
+        assertThat(error.code()).isEqualTo("config_type_error");
+        assertThat(error).hasMessage(expectedMessage);
+    }
+
+    private static Stream<Arguments> malformedObjectSections() {
+        return Stream.of(
+                Arguments.of("scalar-server", "server: 18080", "server must be an object"),
+                Arguments.of("scalar-polling", "polling: disabled", "polling must be an object"));
+    }
+
     @Test
     void emptyPriorityLabelValuesFallBackToDefaultsInsteadOfCrashing() throws Exception {
         // given

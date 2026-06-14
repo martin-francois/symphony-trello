@@ -1,12 +1,10 @@
 package ch.fmartin.symphony.trello;
 
-import ch.fmartin.symphony.trello.config.EnvironmentReferences;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
-import ch.fmartin.symphony.trello.config.WholeNumbers;
+import ch.fmartin.symphony.trello.config.WorkflowConfigFinding;
+import ch.fmartin.symphony.trello.config.WorkflowConfigIngestion;
+import ch.fmartin.symphony.trello.config.WorkflowIntegerSetting;
 import ch.fmartin.symphony.trello.orchestrator.SymphonyOrchestrator;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.quarkus.runtime.Quarkus;
 import io.quarkus.runtime.QuarkusApplication;
 import io.quarkus.runtime.annotations.QuarkusMain;
@@ -15,7 +13,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 import picocli.CommandLine;
@@ -24,9 +21,6 @@ import picocli.CommandLine.Parameters;
 
 @QuarkusMain
 public class SymphonyMain {
-    private static final TypeReference<Map<String, Object>> YAML_MAP_TYPE = new TypeReference<>() {};
-    private static final ObjectMapper YAML = new ObjectMapper(new YAMLFactory());
-
     public static void main(String... args) {
         CliOptions options = CliOptions.parse(args);
         String workflowPath = options.workflowPath().orElseGet(SymphonyMain::configuredWorkflowPath);
@@ -130,46 +124,26 @@ public class SymphonyMain {
 
     static Optional<String> configuredServerPort(
             String frontMatter, Function<String, Optional<String>> environmentResolver) {
-        try {
-            Map<String, Object> yaml = YAML.readValue(frontMatter, YAML_MAP_TYPE);
-            if (yaml != null && yaml.get("server") instanceof Map<?, ?> server) {
-                Object port = server.get("port");
-                if (port instanceof Number number) {
-                    return Optional.of(normalizedPort(number.toString()));
-                }
-                if (port instanceof String text && !text.isBlank()) {
-                    return environmentValue(text, environmentResolver).map(SymphonyMain::normalizedPort);
-                }
-            }
-        } catch (IOException ignored) {
-            return Optional.empty();
-        }
-        return Optional.empty();
+        return WorkflowConfigIngestion.collectFrontMatter(
+                        frontMatter,
+                        environmentResolver,
+                        WorkflowConfigIngestion.UnresolvedEnvironmentPolicy.THROW_SERVER_PORT)
+                .flatMap(typed -> configuredServerPort(typed.serverPort()));
     }
 
-    /**
-     * Quarkus needs an integer for quarkus.http.port, so whole-valued numbers such as 18080.0
-     * normalize to 18080 before boot instead of crashing config conversion, and fractional or
-     * non-numeric values fail here with the actual problem named.
-     */
-    private static String normalizedPort(String value) {
-        WholeNumbers.Classified classified = WholeNumbers.classify(value);
-        return switch (classified.kind()) {
-            case WHOLE -> String.valueOf(classified.value());
-            case OUT_OF_INT_RANGE ->
-                throw new IllegalArgumentException("Workflow server.port is out of integer range: " + value.trim());
-            case FRACTIONAL, NOT_A_NUMBER ->
-                throw new IllegalArgumentException("Workflow server.port must be a whole number: " + value.trim());
+    private static Optional<String> configuredServerPort(WorkflowIntegerSetting setting) {
+        setting.finding().ifPresent(finding -> {
+            throw new IllegalArgumentException(serverPortError(finding));
+        });
+        return setting.value().map(String::valueOf);
+    }
+
+    private static String serverPortError(WorkflowConfigFinding finding) {
+        return switch (finding.kind()) {
+            case OUT_OF_INT_RANGE -> "Workflow server.port is out of integer range: " + finding.input();
+            case FRACTIONAL, NOT_A_NUMBER -> "Workflow server.port must be a whole number: " + finding.input();
+            case NON_POSITIVE, NEGATIVE, IGNORED_MAP_VALUE -> "Workflow " + finding.message();
         };
-    }
-
-    private static Optional<String> environmentValue(String value, Function<String, Optional<String>> resolver) {
-        String trimmed = value.trim();
-        return EnvironmentReferences.referenceName(trimmed)
-                .map(name -> resolver.apply(name)
-                        .orElseThrow(() -> new IllegalArgumentException(
-                                "Workflow server.port references missing environment variable " + name + ".")))
-                .or(() -> Optional.of(trimmed));
     }
 
     private static Optional<String> frontMatter(List<String> lines) {

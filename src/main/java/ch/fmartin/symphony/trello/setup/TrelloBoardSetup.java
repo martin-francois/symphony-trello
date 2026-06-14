@@ -4,11 +4,11 @@ import static com.google.common.base.Preconditions.checkArgument;
 
 import ch.fmartin.symphony.trello.codex.CodexSkillCatalog;
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
-import ch.fmartin.symphony.trello.config.EnvironmentReferences;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import ch.fmartin.symphony.trello.config.StateNames;
 import ch.fmartin.symphony.trello.config.TrelloListRoleValidator;
-import ch.fmartin.symphony.trello.config.WholeNumbers;
+import ch.fmartin.symphony.trello.config.WorkflowConfigIngestion;
+import ch.fmartin.symphony.trello.config.WorkflowIntegerSetting;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -784,31 +784,21 @@ public final class TrelloBoardSetup {
             Map<String, Object> workflowConfig, Path workflowPath, Path envPath) {
         Object server = workflowConfig.get("server");
         if (server instanceof Map<?, ?> serverMap && serverMap.containsKey("port")) {
-            return parseServerPortReservation(serverMap.get("port"), workflowPath, envPath);
+            return parseServerPortReservation(workflowConfig, workflowPath, envPath);
         }
         return Optional.of(DEFAULT_SERVER_PORT);
     }
 
-    private Optional<Integer> parseServerPortReservation(Object value, Path workflowPath, Path envPath) {
-        Optional<String> environmentName = environmentReferenceName(value);
-        if (environmentName.isPresent()) {
-            return environmentName
-                    .flatMap(name -> envPath == null ? LocalEnvironment.get(name) : LocalEnvironment.get(name, envPath))
-                    .map(String::trim)
-                    .filter(resolved -> !resolved.isBlank())
-                    .map(resolved -> parseServerPort(resolved, workflowPath))
-                    .filter(port -> port != 0);
+    private Optional<Integer> parseServerPortReservation(
+            Map<String, Object> workflowConfig, Path workflowPath, Path envPath) {
+        WorkflowIntegerSetting portSetting = WorkflowConfigIngestion.collect(
+                        workflowConfig,
+                        name -> envPath == null ? LocalEnvironment.get(name) : LocalEnvironment.get(name, envPath))
+                .localServerPortSetting();
+        if (portSetting.invalid()) {
+            throw invalidServerPort(workflowPath);
         }
-
-        int port = parseServerPort(value, workflowPath);
-        return port == 0 ? Optional.empty() : Optional.of(port);
-    }
-
-    private static Optional<String> environmentReferenceName(Object value) {
-        if (!(value instanceof String text)) {
-            return Optional.empty();
-        }
-        return EnvironmentReferences.referenceName(text);
+        return portSetting.value().filter(port -> port != 0);
     }
 
     private Optional<Integer> replaceableWorkflowServerPortReservation(Path workflowPath, Path envPath) {
@@ -859,21 +849,9 @@ public final class TrelloBoardSetup {
                 && !"your-board-id-or-shortlink".equals(string(boardId));
     }
 
-    private static int parseServerPort(Object value, Path workflowPath) {
-        // Whole-valued floats such as 18080.0 normalize to their integer value; fractional,
-        // non-numeric, and out-of-int-range values are invalid instead of silently truncating,
-        // so a sibling workflow scan can never reserve a truncated port.
-        if (!(value instanceof Number) && !(value instanceof String)) {
-            throw new TrelloBoardSetupException(
-                    "setup_invalid_server_port", "Workflow file has an invalid server.port: " + workflowPath);
-        }
-        WholeNumbers.Classified classified = WholeNumbers.classify(value.toString());
-        if (classified.kind() != WholeNumbers.Kind.WHOLE) {
-            throw new TrelloBoardSetupException(
-                    "setup_invalid_server_port", "Workflow file has an invalid server.port: " + workflowPath);
-        }
-        validateServerPort(classified.value(), "server.port in " + workflowPath);
-        return classified.value();
+    private static TrelloBoardSetupException invalidServerPort(Path workflowPath) {
+        return new TrelloBoardSetupException(
+                "setup_invalid_server_port", "Workflow file has an invalid server.port: " + workflowPath);
     }
 
     private static void validateOptionalSetupServerPort(Integer port) {
