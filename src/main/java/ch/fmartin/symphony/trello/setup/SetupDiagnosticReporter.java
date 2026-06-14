@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
+import ch.fmartin.symphony.trello.config.WorkflowServerPortClassification;
 import ch.fmartin.symphony.trello.time.ApplicationClock;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Ascii;
@@ -1537,7 +1538,7 @@ final class SetupDiagnosticReporter {
         if (board.workflowPath() == null) {
             return Optional.of(board.serverPort());
         }
-        WorkflowConfigEditor.WorkflowServerPortClassification classification = editor.classifyServerPortForDiagnostics(
+        WorkflowServerPortClassification classification = editor.classifyServerPortForDiagnostics(
                 board.workflowPath(), workflowEnvironmentResolver(board.envPath(), defaultEnvPath));
         return switch (classification.kind()) {
             case VALID, OUT_OF_RANGE -> classification.port();

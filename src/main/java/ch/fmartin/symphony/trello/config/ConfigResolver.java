@@ -12,7 +12,6 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -25,16 +24,6 @@ import java.util.regex.Pattern;
 public class ConfigResolver {
     private static final String FILE_SECRET_PREFIX = "file:";
     private static final int MAX_SECRET_BYTES = 64 * 1024;
-
-    private static final Map<String, Integer> DEFAULT_PRIORITIES = Map.of(
-            "p1", 1,
-            "p2", 2,
-            "p3", 3,
-            "p4", 4,
-            "priority: critical", 1,
-            "priority: high", 2,
-            "priority: medium", 3,
-            "priority: low", 4);
 
     private final Function<String, Optional<String>> environmentResolver;
 
@@ -49,13 +38,16 @@ public class ConfigResolver {
     public EffectiveConfig resolve(WorkflowDefinition workflow) {
         Map<String, Object> root = workflow.config();
         Map<String, Object> tracker = object(root, "tracker");
-        Map<String, Object> polling = object(root, "polling");
         Map<String, Object> workspace = object(root, "workspace");
         Map<String, Object> hooks = object(root, "hooks");
         Map<String, Object> agent = object(root, "agent");
         Map<String, Object> codex = object(root, "codex");
+        object(root, "polling");
+        object(root, "server");
         Map<String, Object> trelloTools = object(root, "trello_tools");
-        Map<String, Object> server = object(root, "server");
+        object(tracker, "priority_labels");
+        object(agent, "max_concurrent_agents_by_state");
+        TypedWorkflowConfig typedWorkflow = WorkflowConfigIngestion.collect(workflow, environmentResolver);
 
         String trackerKind = string(tracker, "kind", null);
         String endpoint = string(tracker, "endpoint", "https://api.trello.com/1");
@@ -86,16 +78,19 @@ public class ConfigResolver {
                                 "terminal_states",
                                 List.of("Done", "Archived", "ArchivedList", "ArchivedBoard", "Deleted")),
                         list(tracker, "terminal_list_ids", List.of()),
-                        priorityLabels(object(tracker, "priority_labels")),
+                        typedWorkflow.priorityLabels(),
                         string(tracker, "card_identifier_prefix", ConfigDefaults.DEFAULT_CARD_IDENTIFIER_PREFIX),
-                        millis(tracker, "request_timeout_ms", ConfigDefaults.DEFAULT_TRACKER_REQUEST_TIMEOUT_MS),
-                        integer(tracker, "max_api_retries", ConfigDefaults.DEFAULT_TRACKER_MAX_API_RETRIES),
                         millis(
-                                tracker,
+                                typedWorkflow.trackerRequestTimeoutMs(),
+                                "request_timeout_ms",
+                                ConfigDefaults.DEFAULT_TRACKER_REQUEST_TIMEOUT_MS),
+                        integer(typedWorkflow.trackerMaxApiRetries(), ConfigDefaults.DEFAULT_TRACKER_MAX_API_RETRIES),
+                        millis(
+                                typedWorkflow.trackerApiRetryBaseDelayMs(),
                                 "api_retry_base_delay_ms",
                                 ConfigDefaults.DEFAULT_TRACKER_API_RETRY_BASE_DELAY_MS)),
-                new EffectiveConfig.PollingConfig(
-                        positiveMillis(polling, "interval_ms", ConfigDefaults.DEFAULT_POLLING_INTERVAL_MS)),
+                new EffectiveConfig.PollingConfig(positiveMillis(
+                        typedWorkflow.pollingIntervalMs(), "interval_ms", ConfigDefaults.DEFAULT_POLLING_INTERVAL_MS)),
                 new EffectiveConfig.WorkspaceConfig(
                         path(workflow.path().getParent(), string(workspace, "root", systemTempRoot()))),
                 new EffectiveConfig.HooksConfig(
@@ -103,12 +98,17 @@ public class ConfigResolver {
                         string(hooks, "before_run", null),
                         string(hooks, "after_run", null),
                         string(hooks, "before_remove", null),
-                        millis(hooks, "timeout_ms", 60_000)),
+                        millis(typedWorkflow.hooksTimeoutMs(), "timeout_ms", 60_000)),
                 new EffectiveConfig.AgentConfig(
-                        positive(agent, "max_concurrent_agents", ConfigDefaults.DEFAULT_RUNTIME_MAX_CONCURRENT_AGENTS),
-                        positive(agent, "max_turns", 20),
-                        millis(agent, "max_retry_backoff_ms", ConfigDefaults.DEFAULT_AGENT_MAX_RETRY_BACKOFF_MS),
-                        positiveStateMap(object(agent, "max_concurrent_agents_by_state"))),
+                        integer(
+                                typedWorkflow.agentMaxConcurrentAgents(),
+                                ConfigDefaults.DEFAULT_RUNTIME_MAX_CONCURRENT_AGENTS),
+                        integer(typedWorkflow.agentMaxTurns(), 20),
+                        millis(
+                                typedWorkflow.agentMaxRetryBackoffMs(),
+                                "max_retry_backoff_ms",
+                                ConfigDefaults.DEFAULT_AGENT_MAX_RETRY_BACKOFF_MS),
+                        typedWorkflow.maxConcurrentAgentsByState()),
                 new EffectiveConfig.CodexConfig(
                         string(codex, "command", ConfigDefaults.DEFAULT_CODEX_COMMAND),
                         optionalString(codex, "model"),
@@ -120,9 +120,18 @@ public class ConfigResolver {
                         LocalEnvironment.get("SYMPHONY_CODEX_DANGER_FULL_ACCESS")
                                 .map(Boolean::parseBoolean)
                                 .orElse(false),
-                        millis(codex, "turn_timeout_ms", ConfigDefaults.DEFAULT_CODEX_TURN_TIMEOUT_MS),
-                        millis(codex, "read_timeout_ms", ConfigDefaults.DEFAULT_CODEX_READ_TIMEOUT_MS),
-                        millis(codex, "stall_timeout_ms", ConfigDefaults.DEFAULT_CODEX_STALL_TIMEOUT_MS)),
+                        millis(
+                                typedWorkflow.codexTurnTimeoutMs(),
+                                "turn_timeout_ms",
+                                ConfigDefaults.DEFAULT_CODEX_TURN_TIMEOUT_MS),
+                        millis(
+                                typedWorkflow.codexReadTimeoutMs(),
+                                "read_timeout_ms",
+                                ConfigDefaults.DEFAULT_CODEX_READ_TIMEOUT_MS),
+                        millis(
+                                typedWorkflow.codexStallTimeoutMs(),
+                                "stall_timeout_ms",
+                                ConfigDefaults.DEFAULT_CODEX_STALL_TIMEOUT_MS)),
                 new EffectiveConfig.TrelloToolsConfig(
                         bool(trelloTools, "enabled", false),
                         writes,
@@ -133,7 +142,7 @@ public class ConfigResolver {
                         bool(trelloTools, "allow_url_attachments", writes),
                         bool(trelloTools, "allow_destructive_operations", false),
                         bool(trelloTools, "assume_write_scope", false)),
-                new EffectiveConfig.ServerConfig(optionalEnvironmentInt(server, "port", "server.port")));
+                new EffectiveConfig.ServerConfig(optionalInt(typedWorkflow.serverPort())));
     }
 
     public void validateForDispatch(EffectiveConfig config) {
@@ -276,65 +285,34 @@ public class ConfigResolver {
         }
     }
 
-    private static Duration positiveMillis(Map<String, Object> root, String key, long defaultValue) {
-        Duration value = millis(root, key, defaultValue);
+    private static Duration positiveMillis(WorkflowIntegerSetting setting, String key, long defaultValue) {
+        Duration value = millis(setting, key, defaultValue);
         if (value.isZero()) {
             throw new ConfigException("config_value_error", key + " must be positive");
         }
         return value;
     }
 
-    private static Duration millis(Map<String, Object> root, String key, long defaultValue) {
-        int value = integer(root, key, (int) defaultValue);
+    private static Duration millis(WorkflowIntegerSetting setting, String key, long defaultValue) {
+        int value = integer(setting, (int) defaultValue);
         if (value < 0) {
             throw new ConfigException("config_value_error", key + " must be non-negative");
         }
         return Duration.ofMillis(value);
     }
 
-    private static int positive(Map<String, Object> root, String key, int defaultValue) {
-        int value = integer(root, key, defaultValue);
-        if (value <= 0) {
-            throw new ConfigException("config_value_error", key + " must be positive");
-        }
-        return value;
+    private static int integer(WorkflowIntegerSetting setting, int defaultValue) {
+        setting.finding().filter(WorkflowConfigFinding::strict).ifPresent(finding -> {
+            throw new ConfigException("config_value_error", finding.message());
+        });
+        return setting.value().orElse(defaultValue);
     }
 
-    private static int integer(Map<String, Object> root, String key, int defaultValue) {
-        Object value = root.get(key);
-        if (value == null) {
-            return defaultValue;
-        }
-        return integralInt(key, value.toString());
-    }
-
-    private OptionalInt optionalEnvironmentInt(Map<String, Object> root, String key, String displayKey) {
-        Object value = root.get(key);
-        if (value == null) {
-            return OptionalInt.empty();
-        }
-        if (value instanceof Number number) {
-            return OptionalInt.of(integralInt(displayKey, number.toString()));
-        }
-        String text = environmentString(root, key, null);
-        return blank(text) ? OptionalInt.empty() : OptionalInt.of(integralInt(displayKey, text));
-    }
-
-    /**
-     * YAML numbers arrive as arbitrary {@link Number} implementations (Integer, Long, BigInteger,
-     * Double) and {@code intValue()} silently truncates fractional values such as {@code 18080.5}.
-     * Going through BigDecimal keeps huge integers and huge doubles exact, so a fractional value
-     * and a whole-but-too-large value each get their own accurate error. Environment-backed text
-     * values take the same path so both spellings of one mistake read the same.
-     */
-    private static int integralInt(String key, String text) {
-        WholeNumbers.Classified classified = WholeNumbers.classify(text);
-        return switch (classified.kind()) {
-            case WHOLE -> classified.value();
-            case OUT_OF_INT_RANGE -> throw new ConfigException("config_value_error", key + " is out of integer range");
-            case FRACTIONAL, NOT_A_NUMBER ->
-                throw new ConfigException("config_value_error", key + " must be a whole number");
-        };
+    private static OptionalInt optionalInt(WorkflowIntegerSetting setting) {
+        setting.finding().filter(WorkflowConfigFinding::strict).ifPresent(finding -> {
+            throw new ConfigException("config_value_error", finding.message());
+        });
+        return setting.value().map(OptionalInt::of).orElseGet(OptionalInt::empty);
     }
 
     private static boolean bool(Map<String, Object> root, String key, boolean defaultValue) {
@@ -370,29 +348,6 @@ public class ConfigResolver {
                 .map(value -> path(workflowDirectory, value))
                 .forEach(roots::add);
         return roots.stream().distinct().toList();
-    }
-
-    private static Map<String, Integer> priorityLabels(Map<String, Object> configured) {
-        return positiveNormalizedIntegerMap(configured, DEFAULT_PRIORITIES);
-    }
-
-    private static Map<String, Integer> positiveStateMap(Map<String, Object> configured) {
-        return positiveNormalizedIntegerMap(configured, Map.of());
-    }
-
-    private static Map<String, Integer> positiveNormalizedIntegerMap(
-            Map<String, Object> configured, Map<String, Integer> defaultValues) {
-        Map<String, Integer> values = new LinkedHashMap<>(defaultValues);
-        configured.forEach((key, value) ->
-                positiveInteger(value).ifPresent(parsed -> values.put(StateNames.normalize(key), parsed)));
-        return Map.copyOf(values);
-    }
-
-    private static OptionalInt positiveInteger(Object value) {
-        // A fractional, empty, or otherwise unusable map value is invalid input and falls back
-        // to the defaults instead of being silently truncated; SPEC.md documents the quiet skip.
-        OptionalInt whole = WholeNumbers.wholeInt(String.valueOf(value));
-        return whole.orElse(0) > 0 ? whole : OptionalInt.empty();
     }
 
     private static Path path(Path workflowDirectory, String value) {

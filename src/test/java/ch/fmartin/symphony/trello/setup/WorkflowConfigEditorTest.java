@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.setup;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import ch.fmartin.symphony.trello.config.WorkflowServerPortClassification;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -57,8 +58,7 @@ final class WorkflowConfigEditorTest {
     @MethodSource("serverPortClassifications")
     @ParameterizedTest
     void classifiesWorkflowServerPortForDiagnostics(
-            String name, String portLine, WorkflowConfigEditor.WorkflowServerPortClassification.Kind expected)
-            throws Exception {
+            String name, String portLine, WorkflowServerPortClassification.Kind expected) throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.classify.md");
         Files.writeString(
@@ -77,8 +77,7 @@ final class WorkflowConfigEditorTest {
         WorkflowConfigEditor editor = new WorkflowConfigEditor();
 
         // when
-        WorkflowConfigEditor.WorkflowServerPortClassification classification =
-                editor.classifyServerPortForDiagnostics(workflow);
+        WorkflowServerPortClassification classification = editor.classifyServerPortForDiagnostics(workflow);
 
         // then
         assertThat(classification.kind()).as(name).isEqualTo(expected);
@@ -86,53 +85,44 @@ final class WorkflowConfigEditorTest {
 
     private static Stream<Arguments> serverPortClassifications() {
         return Stream.of(
+                Arguments.of("valid port", "server:\n  port: 18080", WorkflowServerPortClassification.Kind.VALID),
+                Arguments.of("omitted port", "server: {}", WorkflowServerPortClassification.Kind.OMITTED),
                 Arguments.of(
-                        "valid port",
-                        "server:\n  port: 18080",
-                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.VALID),
-                Arguments.of(
-                        "omitted port",
-                        "server: {}",
-                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.OMITTED),
-                Arguments.of(
-                        "negative port",
-                        "server:\n  port: -1",
-                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.OUT_OF_RANGE),
+                        "negative port", "server:\n  port: -1", WorkflowServerPortClassification.Kind.OUT_OF_RANGE),
                 Arguments.of(
                         "port above range",
                         "server:\n  port: 99999",
-                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.OUT_OF_RANGE),
+                        WorkflowServerPortClassification.Kind.OUT_OF_RANGE),
                 Arguments.of(
                         "non-numeric port",
                         "server:\n  port: \"not-a-port\"",
-                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.INVALID_VALUE),
+                        WorkflowServerPortClassification.Kind.INVALID_VALUE),
                 Arguments.of(
                         "unresolved environment reference",
                         "server:\n  port: $MISSING_PORT_VARIABLE",
-                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.OMITTED),
+                        WorkflowServerPortClassification.Kind.OMITTED),
                 Arguments.of(
                         "whole-valued float normalizes",
                         "server:\n  port: 18080.0",
-                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.VALID),
+                        WorkflowServerPortClassification.Kind.VALID),
                 Arguments.of(
                         "fractional port is invalid, not truncated",
                         "server:\n  port: 18080.5",
-                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.INVALID_VALUE),
+                        WorkflowServerPortClassification.Kind.INVALID_VALUE),
                 Arguments.of(
                         "whole but huge port is invalid",
                         "server:\n  port: 99999999999999999999999",
-                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.INVALID_VALUE),
+                        WorkflowServerPortClassification.Kind.INVALID_VALUE),
                 Arguments.of(
                         "zero stays in range for ephemeral runs",
                         "server:\n  port: 0",
-                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.VALID));
+                        WorkflowServerPortClassification.Kind.VALID));
     }
 
     @MethodSource("environmentResolvedServerPortClassifications")
     @ParameterizedTest
     void classifiesEnvironmentResolvedServerPortForDiagnostics(
-            String caseName, String resolvedValue, WorkflowConfigEditor.WorkflowServerPortClassification.Kind expected)
-            throws Exception {
+            String caseName, String resolvedValue, WorkflowServerPortClassification.Kind expected) throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.env-classify.md");
         Files.writeString(
@@ -153,8 +143,7 @@ final class WorkflowConfigEditorTest {
                 variable -> "STATUS_PORT".equals(variable) ? Optional.ofNullable(resolvedValue) : Optional.empty();
 
         // when
-        WorkflowConfigEditor.WorkflowServerPortClassification classification =
-                editor.classifyServerPortForDiagnostics(workflow, resolver);
+        WorkflowServerPortClassification classification = editor.classifyServerPortForDiagnostics(workflow, resolver);
 
         // then
         assertThat(classification.kind()).as(caseName).isEqualTo(expected);
@@ -162,34 +151,20 @@ final class WorkflowConfigEditorTest {
 
     private static Stream<Arguments> environmentResolvedServerPortClassifications() {
         return Stream.of(
+                Arguments.of("resolved valid port", "20991", WorkflowServerPortClassification.Kind.VALID),
+                Arguments.of("resolved out-of-range port", "99999", WorkflowServerPortClassification.Kind.OUT_OF_RANGE),
                 Arguments.of(
-                        "resolved valid port",
-                        "20991",
-                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.VALID),
-                Arguments.of(
-                        "resolved out-of-range port",
-                        "99999",
-                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.OUT_OF_RANGE),
-                Arguments.of(
-                        "resolved non-numeric port",
-                        "not-a-port",
-                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.INVALID_VALUE),
+                        "resolved non-numeric port", "not-a-port", WorkflowServerPortClassification.Kind.INVALID_VALUE),
                 Arguments.of(
                         "resolved whole-valued float normalizes",
                         "18080.0",
-                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.VALID),
+                        WorkflowServerPortClassification.Kind.VALID),
                 Arguments.of(
                         "resolved fractional port is invalid, not truncated",
                         "18080.5",
-                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.INVALID_VALUE),
-                Arguments.of(
-                        "unresolved reference",
-                        null,
-                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.OMITTED),
-                Arguments.of(
-                        "blank resolved value",
-                        "   ",
-                        WorkflowConfigEditor.WorkflowServerPortClassification.Kind.OMITTED));
+                        WorkflowServerPortClassification.Kind.INVALID_VALUE),
+                Arguments.of("unresolved reference", null, WorkflowServerPortClassification.Kind.OMITTED),
+                Arguments.of("blank resolved value", "   ", WorkflowServerPortClassification.Kind.OMITTED));
     }
 
     @Test
@@ -199,12 +174,10 @@ final class WorkflowConfigEditorTest {
         WorkflowConfigEditor editor = new WorkflowConfigEditor();
 
         // when
-        WorkflowConfigEditor.WorkflowServerPortClassification classification =
-                editor.classifyServerPortForDiagnostics(workflow);
+        WorkflowServerPortClassification classification = editor.classifyServerPortForDiagnostics(workflow);
 
         // then
-        assertThat(classification.kind())
-                .isEqualTo(WorkflowConfigEditor.WorkflowServerPortClassification.Kind.UNREADABLE);
+        assertThat(classification.kind()).isEqualTo(WorkflowServerPortClassification.Kind.UNREADABLE);
         assertThat(classification.probeOrSkipPort()).isEmpty();
     }
 
