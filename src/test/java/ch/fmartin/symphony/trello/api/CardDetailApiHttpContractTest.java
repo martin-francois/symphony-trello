@@ -105,15 +105,62 @@ final class CardDetailApiHttpContractTest {
                 .containsKey("at");
     }
 
+    @Test
+    void cardDetailEndpointSerializesRunningCardWithNullRetry() {
+        // given
+        SymphonyOrchestrator orchestrator = mock();
+        when(orchestrator.cardIdentifierPrefix()).thenReturn("TRELLO");
+        when(orchestrator.cardDetails("TRELLO-running"))
+                .thenReturn(Optional.of(cardDetails("TRELLO-running", "running", runningRow(), null)));
+        QuarkusMock.installMockForType(orchestrator, SymphonyOrchestrator.class);
+
+        // when
+        Response response = given().get("/api/v1/TRELLO-running");
+
+        // then
+        assertThat(response.statusCode()).isEqualTo(200);
+        Map<String, Object> payload = response.as(new TypeRef<>() {});
+        assertThat(payload).containsEntry("status", "running").containsEntry("retry", null);
+        assertThat(map(payload.get("running")))
+                .containsKeys("card_id", "card_identifier", "last_event_at")
+                .doesNotContainKeys("cardId", "cardIdentifier", "lastEventAt");
+    }
+
+    @Test
+    void cardDetailEndpointSerializesRetryingCardWithNullRunning() {
+        // given
+        SymphonyOrchestrator orchestrator = mock();
+        when(orchestrator.cardIdentifierPrefix()).thenReturn("TRELLO");
+        when(orchestrator.cardDetails("TRELLO-retrying"))
+                .thenReturn(Optional.of(cardDetails("TRELLO-retrying", "retrying", null, retryRow())));
+        QuarkusMock.installMockForType(orchestrator, SymphonyOrchestrator.class);
+
+        // when
+        Response response = given().get("/api/v1/TRELLO-retrying");
+
+        // then
+        assertThat(response.statusCode()).isEqualTo(200);
+        Map<String, Object> payload = response.as(new TypeRef<>() {});
+        assertThat(payload).containsEntry("status", "retrying").containsEntry("running", null);
+        assertThat(map(payload.get("retry")))
+                .containsKeys("card_id", "card_identifier", "due_at")
+                .doesNotContainKeys("cardId", "cardIdentifier", "dueAt");
+    }
+
     private static CardDebugDetails cardDetails() {
+        return cardDetails("TRELLO-aBcDeFgH", "running", runningRow(), retryRow());
+    }
+
+    private static CardDebugDetails cardDetails(
+            String cardIdentifier, String status, RuntimeSnapshot.RunningRow running, RuntimeSnapshot.RetryRow retry) {
         return new CardDebugDetails(
-                "TRELLO-aBcDeFgH",
+                cardIdentifier,
                 "000000000000000000000101",
-                "running",
-                new CardDebugDetails.WorkspaceInfo(Path.of("workspaces/TRELLO-aBcDeFgH")),
+                status,
+                new CardDebugDetails.WorkspaceInfo(Path.of("workspaces").resolve(cardIdentifier)),
                 new CardDebugDetails.AttemptInfo(2, 3),
-                runningRow(),
-                retryRow(),
+                running,
+                retry,
                 new CardDebugDetails.LogInfo(List.of(Map.of("path", "session.log"))),
                 List.of(new CardDebugDetails.EventInfo(
                         Instant.parse("2026-02-24T20:14:59Z"), "turn_completed", "done")),
