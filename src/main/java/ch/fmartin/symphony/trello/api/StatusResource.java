@@ -134,6 +134,7 @@ public class StatusResource {
         }
         return orchestrator
                 .cardDetails(cardIdentifier)
+                .map(CardDebugDetailsResponse::from)
                 .orElseThrow(() -> new CardNotFoundException("Unknown card: " + cardIdentifier));
     }
 
