@@ -381,16 +381,17 @@ final class TrelloBoardSetupMainTest {
                         tempDir.toString());
     }
 
-    @Test
-    void statusRejectsNonTrelloBoardUrlSelectors() throws Exception {
+    @MethodSource("invalidStatusBoardSelectors")
+    @ParameterizedTest(name = "{0}")
+    void statusRejectsInvalidBoardSelectors(String name, String boardSelector, int serverPort) throws Exception {
         // given
-        Path configDir = tempDir.resolve("status-config");
-        Path workspaceRoot = tempDir.resolve("status-workspaces");
-        Path stateHome = tempDir.resolve("status-state");
+        Path configDir = tempDir.resolve(name + "-config");
+        Path workspaceRoot = tempDir.resolve(name + "-workspaces");
+        Path stateHome = tempDir.resolve(name + "-state");
         Path workflow = configDir.resolve("WORKFLOW.queue.md");
         Path env = configDir.resolve(".env");
         Files.createDirectories(configDir);
-        Files.writeString(workflow, workflowWithBoardAndPort("board-id", 19191), StandardCharsets.UTF_8);
+        Files.writeString(workflow, workflowWithBoardAndPort("board-id", serverPort), StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(ConnectedBoardBuilder.connectedBoard()
                         .withBoardId("board-id")
@@ -400,7 +401,7 @@ final class TrelloBoardSetupMainTest {
                         .withWorkflowPath(workflow)
                         .withEnvPath(env)
                         .withWorkspaceRoot(workspaceRoot)
-                        .withServerPort(19191)
+                        .withServerPort(serverPort)
                         .build())));
 
         // when
@@ -408,7 +409,7 @@ final class TrelloBoardSetupMainTest {
                 .configDir(configDir)
                 .workspaceRoot(workspaceRoot)
                 .stateHome(stateHome)
-                .board("https://not-trello.com/b/abc123/anything")
+                .board(boardSelector)
                 .toArgs());
 
         // then
@@ -420,43 +421,10 @@ final class TrelloBoardSetupMainTest {
                 .stdoutDoesNotContain("running", "stopped", "Queue", "abc123");
     }
 
-    @Test
-    void statusRejectsTrelloCardUrlSelectors() throws Exception {
-        // given
-        Path configDir = tempDir.resolve("status-card-url-config");
-        Path workspaceRoot = tempDir.resolve("status-card-url-workspaces");
-        Path stateHome = tempDir.resolve("status-card-url-state");
-        Path workflow = configDir.resolve("WORKFLOW.queue.md");
-        Path env = configDir.resolve(".env");
-        Files.createDirectories(configDir);
-        Files.writeString(workflow, workflowWithBoardAndPort("board-id", 19192), StandardCharsets.UTF_8);
-        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
-                .save(new ConnectedBoardManifest(List.of(ConnectedBoardBuilder.connectedBoard()
-                        .withBoardId("board-id")
-                        .withBoardKey("abc123")
-                        .withBoardName("Queue")
-                        .withBoardUrl("https://trello.com/b/abc123/queue")
-                        .withWorkflowPath(workflow)
-                        .withEnvPath(env)
-                        .withWorkspaceRoot(workspaceRoot)
-                        .withServerPort(19192)
-                        .build())));
-
-        // when
-        CliRunResult result = runCli(SetupCommandBuilder.status()
-                .configDir(configDir)
-                .workspaceRoot(workspaceRoot)
-                .stateHome(stateHome)
-                .board("https://trello.com/c/abc123/not-a-board")
-                .toArgs());
-
-        // then
-        result.assertFailure(2)
-                .stderrContains(
-                        "setup_failed code=setup_invalid_arguments",
-                        "Invalid --board value. Use a Trello board URL, short link, board id, or a connected board name.")
-                .stderrDoesNotContain("Queue", "abc123", "Troubleshooting report written")
-                .stdoutDoesNotContain("running", "stopped", "Queue", "abc123");
+    private static Stream<Arguments> invalidStatusBoardSelectors() {
+        return Stream.of(
+                Arguments.of("status-non-trello-url", "https://not-trello.com/b/abc123/anything", 19191),
+                Arguments.of("status-card-url", "https://trello.com/c/abc123/not-a-board", 19192));
     }
 
     @Test
@@ -2121,19 +2089,21 @@ final class TrelloBoardSetupMainTest {
         verify(workerManager).stop(any(LocalWorkerPaths.class), eq(oldBoard), any(PrintStream.class));
     }
 
-    @Test
-    void newBoardPreflightsConnectedBoardManifestBeforeCreatingTrelloBoard() throws Exception {
+    @MethodSource("preflightFailingNewBoardManifests")
+    @ParameterizedTest(name = "{0}")
+    void newBoardPreflightsConnectedBoardManifestBeforeCreatingTrelloBoard(
+            String name, String boardName, String manifestContent, String expectedMessage) throws Exception {
         // given
-        Path workflow = tempDir.resolve("manifest-preflight.WORKFLOW.md");
-        Path env = tempDir.resolve(".env.manifest-preflight");
-        Files.writeString(tempDir.resolve("connected-boards.json"), "{not-json", StandardCharsets.UTF_8);
+        Path workflow = tempDir.resolve(name + ".WORKFLOW.md");
+        Path env = tempDir.resolve(".env." + name);
+        Files.writeString(tempDir.resolve("connected-boards.json"), manifestContent, StandardCharsets.UTF_8);
 
         // when
         CliRunResult result = runCli(SetupCommandBuilder.newBoard()
                 .endpoint(endpoint())
                 .key("key")
                 .token("token")
-                .name("Manifest Preflight Queue")
+                .name(boardName)
                 .workflow(workflow)
                 .manifest(tempDir.resolve("connected-boards.json"))
                 .env(env)
@@ -2143,7 +2113,7 @@ final class TrelloBoardSetupMainTest {
         result.assertFailure(2)
                 .stderrContains(
                         "setup_failed code=setup_manifest_unavailable",
-                        "Connected-board manifest is not valid JSON",
+                        expectedMessage,
                         "Next step: Check that the workflow directory is writable and connected-boards.json is valid JSON.")
                 .stdoutDoesNotContain(
                         "Created Trello board", "Saving Trello credentials", "Troubleshooting report written");
@@ -2152,35 +2122,18 @@ final class TrelloBoardSetupMainTest {
         assertThat(env).doesNotExist();
     }
 
-    @Test
-    void newBoardPreflightsUnusableConnectedBoardManifestBeforeCreatingTrelloBoard() throws Exception {
-        // given
-        Path workflow = tempDir.resolve("unusable-manifest-preflight.WORKFLOW.md");
-        Path env = tempDir.resolve(".env.unusable-manifest-preflight");
-        Files.writeString(tempDir.resolve("connected-boards.json"), "{\"boards\":[{}]}", StandardCharsets.UTF_8);
-
-        // when
-        CliRunResult result = runCli(SetupCommandBuilder.newBoard()
-                .endpoint(endpoint())
-                .key("key")
-                .token("token")
-                .name("Unusable Manifest Queue")
-                .workflow(workflow)
-                .manifest(tempDir.resolve("connected-boards.json"))
-                .env(env)
-                .toArgs());
-
-        // then
-        result.assertFailure(2)
-                .stderrContains(
-                        "setup_failed code=setup_manifest_unavailable",
-                        "Connected-board manifest is not valid connected-board JSON",
-                        "Next step: Check that the workflow directory is writable and connected-boards.json is valid JSON.")
-                .stdoutDoesNotContain(
-                        "Created Trello board", "Saving Trello credentials", "Troubleshooting report written");
-        assertThat(createdBoardName.get()).isNull();
-        assertThat(workflow).doesNotExist();
-        assertThat(env).doesNotExist();
+    private static Stream<Arguments> preflightFailingNewBoardManifests() {
+        return Stream.of(
+                Arguments.of(
+                        "manifest-preflight",
+                        "Manifest Preflight Queue",
+                        "{not-json",
+                        "Connected-board manifest is not valid JSON"),
+                Arguments.of(
+                        "unusable-manifest-preflight",
+                        "Unusable Manifest Queue",
+                        "{\"boards\":[{}]}",
+                        "Connected-board manifest is not valid connected-board JSON"));
     }
 
     @ParameterizedTest
@@ -4591,50 +4544,34 @@ final class TrelloBoardSetupMainTest {
         }
     }
 
-    @Test
-    void rejectsControlCharactersInDirectNewBoardNameBeforeTrelloRequest() {
+    @MethodSource("controlCharacterDirectNewBoardScalarOptions")
+    @ParameterizedTest(name = "{0}")
+    void rejectsControlCharactersInDirectNewBoardScalarOptionsBeforeTrelloRequest(
+            String optionName, String badValue, String expectedMessage) {
         // given
-        String badBoardName = "Name\nWith newline";
+        SetupCommandBuilder builder =
+                SetupCommandBuilder.newBoard().endpoint(endpoint()).key("key").token("token");
+        if ("--name".equals(optionName)) {
+            builder.name(badValue);
+        } else {
+            builder.name("Queue").workspaceId(badValue);
+        }
 
         // when
-        CliRunResult result = runCli(SetupCommandBuilder.newBoard()
-                .endpoint(endpoint())
-                .key("key")
-                .token("token")
-                .name(badBoardName)
-                .toArgs());
+        CliRunResult result = runCli(builder.toArgs());
 
         // then
         result.assertFailure(2)
-                .stderrContains(
-                        "setup_failed code=setup_invalid_arguments", "--name must not contain control characters")
-                .stderrDoesNotContain(badBoardName, "Troubleshooting report written")
-                .stdoutDoesNotContain("Created Trello board", badBoardName);
+                .stderrContains("setup_failed code=setup_invalid_arguments", expectedMessage)
+                .stderrDoesNotContain(badValue, "Troubleshooting report written")
+                .stdoutDoesNotContain("Created Trello board", badValue);
         assertThat(createdBoardName).hasValue(null);
     }
 
-    @Test
-    void rejectsControlCharactersInDirectWorkspaceIdBeforeTrelloRequest() {
-        // given
-        String badWorkspaceId = "workspace\nId";
-
-        // when
-        CliRunResult result = runCli(SetupCommandBuilder.newBoard()
-                .endpoint(endpoint())
-                .key("key")
-                .token("token")
-                .name("Queue")
-                .workspaceId(badWorkspaceId)
-                .toArgs());
-
-        // then
-        result.assertFailure(2)
-                .stderrContains(
-                        "setup_failed code=setup_invalid_arguments",
-                        "--workspace-id must not contain control characters")
-                .stderrDoesNotContain(badWorkspaceId, "Troubleshooting report written")
-                .stdoutDoesNotContain("Created Trello board", badWorkspaceId);
-        assertThat(createdBoardName).hasValue(null);
+    private static Stream<Arguments> controlCharacterDirectNewBoardScalarOptions() {
+        return Stream.of(
+                Arguments.of("--name", "Name\nWith newline", "--name must not contain control characters"),
+                Arguments.of("--workspace-id", "workspace\nId", "--workspace-id must not contain control characters"));
     }
 
     @ParameterizedTest
