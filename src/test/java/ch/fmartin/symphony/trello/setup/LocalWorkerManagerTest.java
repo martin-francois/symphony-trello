@@ -292,26 +292,14 @@ final class LocalWorkerManagerTest {
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
     }
 
-    @Test
-    void startRejectsUnresolvedWorkflowServerPortBeforeLaunchingPackagedApp() throws Exception {
+    @MethodSource("unresolvedWorkflowEnvironmentReferences")
+    @ParameterizedTest
+    void startRejectsUnresolvedWorkflowEnvironmentReferenceBeforeLaunchingPackagedApp(
+            String workflowContent, String expectedMessage) throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
-        Files.writeString(
-                board.workflowPath(),
-                """
-                ---
-                tracker:
-                  kind: trello
-                  api_key: literal-key
-                  api_token: literal-token
-                  board_id: board-1
-                server:
-                  port: $SYMPHONY_TEST_PORT
-                ---
-                # Queue
-                """,
-                StandardCharsets.UTF_8);
+        Files.writeString(board.workflowPath(), workflowContent, StandardCharsets.UTF_8);
         fixture.save(board);
 
         // when
@@ -320,10 +308,41 @@ final class LocalWorkerManagerTest {
         // then
         assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
             assertThat(failure.code()).isEqualTo("setup_workflow_unresolved_environment");
-            assertThat(failure)
-                    .hasMessage("Workflow server.port references missing environment variable SYMPHONY_TEST_PORT.");
+            assertThat(failure).hasMessage(expectedMessage);
         });
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    static Stream<Arguments> unresolvedWorkflowEnvironmentReferences() {
+        return Stream.of(
+                Arguments.of(
+                        """
+                        ---
+                        tracker:
+                          kind: trello
+                          api_key: literal-key
+                          api_token: literal-token
+                          board_id: board-1
+                        server:
+                          port: $SYMPHONY_TEST_PORT
+                        ---
+                        # Queue
+                        """,
+                        "Workflow server.port references missing environment variable SYMPHONY_TEST_PORT."),
+                Arguments.of(
+                        """
+                        ---
+                        tracker:
+                          kind: trello
+                          api_key: literal-key
+                          api_token: literal-token
+                          board_id: $MISSING_BOARD_ID
+                        server:
+                          port: 18080
+                        ---
+                        # Queue
+                        """,
+                        "Workflow tracker.board_id references missing environment variable MISSING_BOARD_ID."));
     }
 
     @Test
@@ -350,40 +369,6 @@ final class LocalWorkerManagerTest {
 
         // then
         result.assertSuccess().stdoutContains("Started Symphony for Trello: \"Queue\"");
-    }
-
-    @Test
-    void startRejectsUnresolvedWorkflowBoardIdBeforeLaunchingPackagedApp() throws Exception {
-        // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
-        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
-        Files.writeString(
-                board.workflowPath(),
-                """
-                ---
-                tracker:
-                  kind: trello
-                  api_key: literal-key
-                  api_token: literal-token
-                  board_id: $MISSING_BOARD_ID
-                server:
-                  port: 18080
-                ---
-                # Queue
-                """,
-                StandardCharsets.UTF_8);
-        fixture.save(board);
-
-        // when
-        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
-
-        // then
-        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
-            assertThat(failure.code()).isEqualTo("setup_workflow_unresolved_environment");
-            assertThat(failure)
-                    .hasMessage("Workflow tracker.board_id references missing environment variable MISSING_BOARD_ID.");
-        });
-        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -1295,14 +1280,15 @@ final class LocalWorkerManagerTest {
                 .stdoutDoesNotContain("Stopped Queue", "Stopped WORKFLOW");
     }
 
-    @Test
-    void startClassifiesInvalidTrelloCredentialsBeforeLaunch() throws Exception {
+    @MethodSource("preflightCredentialRejections")
+    @ParameterizedTest
+    void startClassifiesCredentialRejectionAsAuthFailureBeforeLaunch(
+            String preflightCode, String preflightMessage, String expectedMessagePart) throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
-        doThrow(new TrelloBoardSetupException(
-                        "trello_auth_failed", "Trello authentication failed while starting Symphony."))
+        doThrow(new TrelloBoardSetupException(preflightCode, preflightMessage))
                 .when(fixture.credentialPreflight)
                 .verify(any(), any(), any());
 
@@ -1312,6 +1298,9 @@ final class LocalWorkerManagerTest {
         // then
         assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
             assertThat(failure.code()).isEqualTo("trello_auth_failed");
+            if (expectedMessagePart != null) {
+                assertThat(failure.getMessage()).contains(expectedMessagePart);
+            }
             assertThat(failure.dotenvPath()).contains(fixture.paths.defaultEnvPath());
             assertThat(failure.getMessage()).doesNotContain(".log", ".err");
         });
@@ -1319,29 +1308,13 @@ final class LocalWorkerManagerTest {
         assertThat(pidFiles(fixture.paths.stateHome())).isEmpty();
     }
 
-    @Test
-    void startClassifiesMalformedCredentialRejectionBeforeLaunch() throws Exception {
-        // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
-        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
-        fixture.save(board);
-        doThrow(new TrelloBoardSetupException(
-                        "trello_invalid_request", "Trello rejected the setup request: invalid key"))
-                .when(fixture.credentialPreflight)
-                .verify(any(), any(), any());
-
-        // when
-        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
-
-        // then
-        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
-            assertThat(failure.code()).isEqualTo("trello_auth_failed");
-            assertThat(failure.getMessage()).contains("Trello rejected the resolved API credentials");
-            assertThat(failure.dotenvPath()).contains(fixture.paths.defaultEnvPath());
-            assertThat(failure.getMessage()).doesNotContain(".log", ".err");
-        });
-        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
-        assertThat(pidFiles(fixture.paths.stateHome())).isEmpty();
+    static Stream<Arguments> preflightCredentialRejections() {
+        return Stream.of(
+                Arguments.of("trello_auth_failed", "Trello authentication failed while starting Symphony.", null),
+                Arguments.of(
+                        "trello_invalid_request",
+                        "Trello rejected the setup request: invalid key",
+                        "Trello rejected the resolved API credentials"));
     }
 
     @Test
@@ -1529,12 +1502,21 @@ final class LocalWorkerManagerTest {
                 .stdoutDoesNotContain("stopped \"Queue\"");
     }
 
-    @Test
-    void statusReportsInvalidConnectedBoardWorkflowInsteadOfStoppedForPlainFile() throws Exception {
+    @CsvSource({
+        "false,unreadable or invalid workflow configuration",
+        "true,missing workflow file",
+    })
+    @ParameterizedTest
+    void statusReportsInvalidConnectedBoardWorkflowInsteadOfStopped(boolean deleteWorkflow, String expectedCause)
+            throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
-        Files.writeString(board.workflowPath(), "plain body\n", StandardCharsets.UTF_8);
+        if (deleteWorkflow) {
+            Files.delete(board.workflowPath());
+        } else {
+            Files.writeString(board.workflowPath(), "plain body\n", StandardCharsets.UTF_8);
+        }
         fixture.save(board);
 
         // when
@@ -1543,30 +1525,7 @@ final class LocalWorkerManagerTest {
         // then
         result.assertSuccess()
                 .stdoutContains(
-                        "invalid \"Queue\"",
-                        "unreadable or invalid workflow configuration",
-                        board.workflowPath().toString())
-                .stdoutDoesNotContain("stopped \"Queue\"");
-        verify(fixture.healthChecker, never()).boardHealth(any());
-    }
-
-    @Test
-    void statusReportsInvalidConnectedBoardWorkflowInsteadOfStoppedForMissingFile() throws Exception {
-        // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
-        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
-        Files.delete(board.workflowPath());
-        fixture.save(board);
-
-        // when
-        WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
-
-        // then
-        result.assertSuccess()
-                .stdoutContains(
-                        "invalid \"Queue\"",
-                        "missing workflow file",
-                        board.workflowPath().toString())
+                        "invalid \"Queue\"", expectedCause, board.workflowPath().toString())
                 .stdoutDoesNotContain("stopped \"Queue\"");
         verify(fixture.healthChecker, never()).boardHealth(any());
     }
@@ -1683,32 +1642,18 @@ final class LocalWorkerManagerTest {
         verify(fixture.platform, never()).stop(anyLong(), any(Duration.class), any(Duration.class));
     }
 
-    @Test
-    void stopBoardSelectorReportsAlreadyStoppedWhenNoWorkerIsRunning() throws Exception {
+    @CsvSource({"false", "true"})
+    @ParameterizedTest
+    void stopSelectorReportsAlreadyStoppedWhenNoWorkerIsRunning(boolean useWorkflowSelector) throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
 
         // when
-        WorkerRunResult result = fixture.stop(fixture.stopRequest("Queue"));
-
-        // then
-        result.assertSuccess()
-                .stdoutContains("Symphony for Trello is already stopped for \"Queue\"")
-                .stdoutDoesNotContain("Stopped Symphony for Trello for \"Queue\"");
-        verify(fixture.platform, never()).stop(anyLong(), any(Duration.class), any(Duration.class));
-    }
-
-    @Test
-    void stopWorkflowSelectorReportsAlreadyStoppedWhenNoWorkerIsRunning() throws Exception {
-        // given
-        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
-        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
-        fixture.save(board);
-
-        // when
-        WorkerRunResult result = fixture.stop(fixture.stopWorkflowRequest(board.workflowPath()));
+        StopWorkerRequest request =
+                useWorkflowSelector ? fixture.stopWorkflowRequest(board.workflowPath()) : fixture.stopRequest("Queue");
+        WorkerRunResult result = fixture.stop(request);
 
         // then
         result.assertSuccess()
