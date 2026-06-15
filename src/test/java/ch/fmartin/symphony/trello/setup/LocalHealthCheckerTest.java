@@ -12,7 +12,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
@@ -236,18 +235,16 @@ final class LocalHealthCheckerTest {
     }
 
     private static ConnectedBoard board(Path workflow, int port) {
-        return new ConnectedBoard(
-                "board-1",
-                "board-1",
-                "Queue",
-                "https://trello.com/b/SYNTH001/synthetic-board",
-                workflow,
-                null,
-                workflow.getParent(),
-                port,
-                false,
-                List.of(),
-                false);
+        return ConnectedBoardBuilder.connectedBoard()
+                .withBoardId("board-1")
+                .withBoardKey("board-1")
+                .withBoardName("Queue")
+                .withBoardUrl("https://trello.com/b/SYNTH001/synthetic-board")
+                .withWorkflowPath(workflow)
+                .withEnvPath(null)
+                .withWorkspaceRoot(workflow.getParent())
+                .withServerPort(port)
+                .build();
     }
 
     /** A port that was just bound and released, so nothing accepts connections on it. */

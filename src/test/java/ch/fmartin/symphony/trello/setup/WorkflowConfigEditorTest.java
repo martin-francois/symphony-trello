@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Stream;
@@ -290,18 +289,16 @@ final class WorkflowConfigEditorTest {
                 Body
                 """,
                 StandardCharsets.UTF_8);
-        ConnectedBoard board = new ConnectedBoard(
-                "board-1",
-                "abc123",
-                "Overlap Queue",
-                "https://trello.example/abc123",
-                workflow,
-                tempDir.resolve(".env"),
-                tempDir.resolve("workspaces"),
-                18080,
-                false,
-                List.of(),
-                false);
+        ConnectedBoard board = ConnectedBoardBuilder.connectedBoard()
+                .withBoardId("board-1")
+                .withBoardKey("abc123")
+                .withBoardName("Overlap Queue")
+                .withBoardUrl("https://trello.example/abc123")
+                .withWorkflowPath(workflow)
+                .withEnvPath(tempDir.resolve(".env"))
+                .withWorkspaceRoot(tempDir.resolve("workspaces"))
+                .withServerPort(18080)
+                .build();
         WorkflowConfigEditor editor = new WorkflowConfigEditor();
 
         // when

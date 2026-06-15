@@ -359,18 +359,17 @@ final class TrelloBoardSetupMainTest {
                 """,
                 StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
-                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
-                        "private-board-id",
-                        "private-key",
-                        "Private Board",
-                        "https://trello.com/b/private-key/private-board",
-                        workflow,
-                        configDir.resolve(".env"),
-                        workspaceRoot,
-                        19183,
-                        false,
-                        List.of(tempDir.resolve("client checkout")),
-                        false))));
+                .save(new ConnectedBoardManifest(List.of(ConnectedBoardBuilder.connectedBoard()
+                        .withBoardId("private-board-id")
+                        .withBoardKey("private-key")
+                        .withBoardName("Private Board")
+                        .withBoardUrl("https://trello.com/b/private-key/private-board")
+                        .withWorkflowPath(workflow)
+                        .withEnvPath(configDir.resolve(".env"))
+                        .withWorkspaceRoot(workspaceRoot)
+                        .withServerPort(19183)
+                        .withAdditionalWritableRoots(List.of(tempDir.resolve("client checkout")))
+                        .build())));
         Files.writeString(
                 stateHome.resolve("WORKFLOW.private.err"),
                 "token=secret-token\npath=" + tempDir.resolve("client checkout") + "\n",
@@ -425,18 +424,16 @@ final class TrelloBoardSetupMainTest {
         Files.createDirectories(configDir);
         Files.writeString(workflow, workflowWithBoardAndPort("board-id", 19191), StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
-                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
-                        "board-id",
-                        "abc123",
-                        "Queue",
-                        "https://trello.com/b/abc123/queue",
-                        workflow,
-                        env,
-                        workspaceRoot,
-                        19191,
-                        false,
-                        List.of(),
-                        false))));
+                .save(new ConnectedBoardManifest(List.of(ConnectedBoardBuilder.connectedBoard()
+                        .withBoardId("board-id")
+                        .withBoardKey("abc123")
+                        .withBoardName("Queue")
+                        .withBoardUrl("https://trello.com/b/abc123/queue")
+                        .withWorkflowPath(workflow)
+                        .withEnvPath(env)
+                        .withWorkspaceRoot(workspaceRoot)
+                        .withServerPort(19191)
+                        .build())));
 
         // when
         CliRunResult result = runCli(
@@ -470,18 +467,16 @@ final class TrelloBoardSetupMainTest {
         Files.createDirectories(configDir);
         Files.writeString(workflow, workflowWithBoardAndPort("board-id", 19192), StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
-                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
-                        "board-id",
-                        "abc123",
-                        "Queue",
-                        "https://trello.com/b/abc123/queue",
-                        workflow,
-                        env,
-                        workspaceRoot,
-                        19192,
-                        false,
-                        List.of(),
-                        false))));
+                .save(new ConnectedBoardManifest(List.of(ConnectedBoardBuilder.connectedBoard()
+                        .withBoardId("board-id")
+                        .withBoardKey("abc123")
+                        .withBoardName("Queue")
+                        .withBoardUrl("https://trello.com/b/abc123/queue")
+                        .withWorkflowPath(workflow)
+                        .withEnvPath(env)
+                        .withWorkspaceRoot(workspaceRoot)
+                        .withServerPort(19192)
+                        .build())));
 
         // when
         CliRunResult result = runCli(
@@ -521,18 +516,17 @@ final class TrelloBoardSetupMainTest {
         Files.writeString(workflow, workflowWithBoardAndPort("private-board-id", 19184), StandardCharsets.UTF_8);
         Files.writeString(env, "TRELLO_API_TOKEN=secret-token\n", StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
-                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
-                        "private-board-id",
-                        "private-key",
-                        "Private Board",
-                        "https://trello.com/b/private-key/private-board",
-                        workflow,
-                        env,
-                        workspaceRoot,
-                        19184,
-                        false,
-                        List.of(tempDir.resolve("client checkout")),
-                        false))));
+                .save(new ConnectedBoardManifest(List.of(ConnectedBoardBuilder.connectedBoard()
+                        .withBoardId("private-board-id")
+                        .withBoardKey("private-key")
+                        .withBoardName("Private Board")
+                        .withBoardUrl("https://trello.com/b/private-key/private-board")
+                        .withWorkflowPath(workflow)
+                        .withEnvPath(env)
+                        .withWorkspaceRoot(workspaceRoot)
+                        .withServerPort(19184)
+                        .withAdditionalWritableRoots(List.of(tempDir.resolve("client checkout")))
+                        .build())));
         ManagedProcessStore.ManagedProcessFiles logs = new ManagedProcessStore(stateHome).files(workflow);
         Files.writeString(logs.stderrLog(), "secret log content\n", StandardCharsets.UTF_8);
 
@@ -590,30 +584,26 @@ final class TrelloBoardSetupMainTest {
         Files.writeString(workflowB, workflowWithBoardAndPort("board-b-id", 19189), StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(
-                        new ConnectedBoard(
-                                "board-a-id",
-                                "board-a-key",
-                                "Board A",
-                                "https://trello.com/b/board-a-key/board-a",
-                                workflowA,
-                                configDir.resolve(".env"),
-                                workspaceRoot,
-                                19188,
-                                false,
-                                List.of(),
-                                false),
-                        new ConnectedBoard(
-                                "board-b-id",
-                                "board-b-key",
-                                "Board B",
-                                "https://trello.com/b/board-b-key/board-b",
-                                workflowB,
-                                configDir.resolve(".env"),
-                                workspaceRoot,
-                                19189,
-                                false,
-                                List.of(),
-                                false))));
+                        ConnectedBoardBuilder.connectedBoard()
+                                .withBoardId("board-a-id")
+                                .withBoardKey("board-a-key")
+                                .withBoardName("Board A")
+                                .withBoardUrl("https://trello.com/b/board-a-key/board-a")
+                                .withWorkflowPath(workflowA)
+                                .withEnvPath(configDir.resolve(".env"))
+                                .withWorkspaceRoot(workspaceRoot)
+                                .withServerPort(19188)
+                                .build(),
+                        ConnectedBoardBuilder.connectedBoard()
+                                .withBoardId("board-b-id")
+                                .withBoardKey("board-b-key")
+                                .withBoardName("Board B")
+                                .withBoardUrl("https://trello.com/b/board-b-key/board-b")
+                                .withWorkflowPath(workflowB)
+                                .withEnvPath(configDir.resolve(".env"))
+                                .withWorkspaceRoot(workspaceRoot)
+                                .withServerPort(19189)
+                                .build())));
         ManagedProcessStore store = new ManagedProcessStore(stateHome);
         Files.writeString(store.files(workflowA).stdoutLog(), "board A log\n", StandardCharsets.UTF_8);
         Files.writeString(store.files(workflowB).stdoutLog(), "board B log\n", StandardCharsets.UTF_8);
@@ -817,30 +807,26 @@ final class TrelloBoardSetupMainTest {
         Files.writeString(workflowB, workflowWithBoardAndPort("private-board-b-id", 19191), StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(
-                        new ConnectedBoard(
-                                "private-board-a-id",
-                                "private-a-key",
-                                privateBoardName,
-                                "https://trello.com/b/private-a-key/private-a",
-                                workflowA,
-                                configDir.resolve(".env"),
-                                workspaceRoot,
-                                19190,
-                                false,
-                                List.of(),
-                                false),
-                        new ConnectedBoard(
-                                "private-board-b-id",
-                                "private-b-key",
-                                privateBoardName,
-                                "https://trello.com/b/private-b-key/private-b",
-                                workflowB,
-                                configDir.resolve(".env"),
-                                workspaceRoot,
-                                19191,
-                                false,
-                                List.of(),
-                                false))));
+                        ConnectedBoardBuilder.connectedBoard()
+                                .withBoardId("private-board-a-id")
+                                .withBoardKey("private-a-key")
+                                .withBoardName(privateBoardName)
+                                .withBoardUrl("https://trello.com/b/private-a-key/private-a")
+                                .withWorkflowPath(workflowA)
+                                .withEnvPath(configDir.resolve(".env"))
+                                .withWorkspaceRoot(workspaceRoot)
+                                .withServerPort(19190)
+                                .build(),
+                        ConnectedBoardBuilder.connectedBoard()
+                                .withBoardId("private-board-b-id")
+                                .withBoardKey("private-b-key")
+                                .withBoardName(privateBoardName)
+                                .withBoardUrl("https://trello.com/b/private-b-key/private-b")
+                                .withWorkflowPath(workflowB)
+                                .withEnvPath(configDir.resolve(".env"))
+                                .withWorkspaceRoot(workspaceRoot)
+                                .withServerPort(19191)
+                                .build())));
         ManagedProcessStore store = new ManagedProcessStore(stateHome);
         Files.writeString(store.files(workflowA).stdoutLog(), "private board A log\n", StandardCharsets.UTF_8);
         Files.writeString(store.files(workflowB).stdoutLog(), "private board B log\n", StandardCharsets.UTF_8);
@@ -898,18 +884,16 @@ final class TrelloBoardSetupMainTest {
         Files.writeString(workflow, workflowWithBoardAndPort("board-id", 19194), StandardCharsets.UTF_8);
         Files.writeString(privateHostFile, "PRIVATE_HOST_FILE_MARKER_SHOULD_NOT_APPEAR\n", StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
-                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
-                        "board-id",
-                        "board-key",
-                        "Board A",
-                        "https://trello.com/b/board-key/board-a",
-                        workflow,
-                        configDir.resolve(".env"),
-                        workspaceRoot,
-                        19194,
-                        false,
-                        List.of(),
-                        false))));
+                .save(new ConnectedBoardManifest(List.of(ConnectedBoardBuilder.connectedBoard()
+                        .withBoardId("board-id")
+                        .withBoardKey("board-key")
+                        .withBoardName("Board A")
+                        .withBoardUrl("https://trello.com/b/board-key/board-a")
+                        .withWorkflowPath(workflow)
+                        .withEnvPath(configDir.resolve(".env"))
+                        .withWorkspaceRoot(workspaceRoot)
+                        .withServerPort(19194)
+                        .build())));
         ManagedProcessStore.ManagedProcessFiles logs = new ManagedProcessStore(stateHome).files(workflow);
         createSymbolicLinkOrSkip(logs.stdoutLog(), privateHostFile);
         Files.writeString(logs.stderrLog(), "", StandardCharsets.UTF_8);
@@ -1518,18 +1502,16 @@ final class TrelloBoardSetupMainTest {
         Files.writeString(workflow, workflowWithBoardAndPort("board-start-id", 19192), StandardCharsets.UTF_8);
         Files.writeString(env, dotenvContent, StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
-                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
-                        "board-start-id",
-                        "board-start-key",
-                        "Queue",
-                        "https://trello.com/b/board-start-key/queue",
-                        workflow,
-                        env,
-                        workspaceRoot,
-                        19192,
-                        false,
-                        List.of(),
-                        false))));
+                .save(new ConnectedBoardManifest(List.of(ConnectedBoardBuilder.connectedBoard()
+                        .withBoardId("board-start-id")
+                        .withBoardKey("board-start-key")
+                        .withBoardName("Queue")
+                        .withBoardUrl("https://trello.com/b/board-start-key/queue")
+                        .withWorkflowPath(workflow)
+                        .withEnvPath(env)
+                        .withWorkspaceRoot(workspaceRoot)
+                        .withServerPort(19192)
+                        .build())));
 
         // when
         MainProcessResult result = runMainProcessWithoutTrelloCredentials(
@@ -1603,18 +1585,16 @@ final class TrelloBoardSetupMainTest {
                 StandardCharsets.UTF_8);
         createFifo(env, tempDir);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
-                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
-                        "board-start-id",
-                        "board-start-key",
-                        "Queue",
-                        "https://trello.com/b/board-start-key/queue",
-                        workflow,
-                        env,
-                        workspaceRoot,
-                        19193,
-                        false,
-                        List.of(),
-                        false))));
+                .save(new ConnectedBoardManifest(List.of(ConnectedBoardBuilder.connectedBoard()
+                        .withBoardId("board-start-id")
+                        .withBoardKey("board-start-key")
+                        .withBoardName("Queue")
+                        .withBoardUrl("https://trello.com/b/board-start-key/queue")
+                        .withWorkflowPath(workflow)
+                        .withEnvPath(env)
+                        .withWorkspaceRoot(workspaceRoot)
+                        .withServerPort(19193)
+                        .build())));
 
         // when
         MainProcessResult result =
@@ -1648,18 +1628,16 @@ final class TrelloBoardSetupMainTest {
         Files.createDirectories(envDirectory);
         Files.writeString(workflow, workflowWithBoardAndPort("board-start-id", 19194), StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
-                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
-                        "board-start-id",
-                        "board-start-key",
-                        "Queue",
-                        "https://trello.com/b/board-start-key/queue",
-                        workflow,
-                        envDirectory,
-                        workspaceRoot,
-                        19194,
-                        false,
-                        List.of(),
-                        false))));
+                .save(new ConnectedBoardManifest(List.of(ConnectedBoardBuilder.connectedBoard()
+                        .withBoardId("board-start-id")
+                        .withBoardKey("board-start-key")
+                        .withBoardName("Queue")
+                        .withBoardUrl("https://trello.com/b/board-start-key/queue")
+                        .withWorkflowPath(workflow)
+                        .withEnvPath(envDirectory)
+                        .withWorkspaceRoot(workspaceRoot)
+                        .withServerPort(19194)
+                        .build())));
 
         // when
         MainProcessResult result =
@@ -2204,18 +2182,18 @@ final class TrelloBoardSetupMainTest {
         HttpServer listeningServer = startLoopbackServer();
         int listeningPort = listeningServer.getAddress().getPort();
         Files.writeString(workflow, workflowWithBoardAndPort("board-1", listeningPort), StandardCharsets.UTF_8);
-        ConnectedBoard oldBoard = new ConnectedBoard(
-                "board-1",
-                "SYNTH002",
-                "Existing Board",
-                "https://trello.com/b/SYNTH002/board",
-                workflow.toAbsolutePath().normalize(),
-                env.toAbsolutePath().normalize(),
-                TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT.toAbsolutePath().normalize(),
-                listeningPort,
-                true,
-                List.of(),
-                false);
+        ConnectedBoard oldBoard = ConnectedBoardBuilder.connectedBoard()
+                .withBoardId("board-1")
+                .withBoardKey("SYNTH002")
+                .withBoardName("Existing Board")
+                .withBoardUrl("https://trello.com/b/SYNTH002/board")
+                .withWorkflowPath(workflow.toAbsolutePath().normalize())
+                .withEnvPath(env.toAbsolutePath().normalize())
+                .withWorkspaceRoot(
+                        TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT.toAbsolutePath().normalize())
+                .withServerPort(listeningPort)
+                .withGithubEnabled(true)
+                .build();
         new ConnectedBoardRepository(tempDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(oldBoard)));
         LocalWorkerManager workerManager = mock();
@@ -2841,18 +2819,18 @@ final class TrelloBoardSetupMainTest {
         Path oldEnv = tempDir.resolve(".env.old-existing");
         Path newEnv = tempDir.resolve(".env.new-existing");
         Files.writeString(oldWorkflow, "old workflow", StandardCharsets.UTF_8);
-        ConnectedBoard oldBoard = new ConnectedBoard(
-                "board-1",
-                "SYNTH001",
-                "Existing Board",
-                "https://trello.com/b/SYNTH001/board",
-                oldWorkflow.toAbsolutePath().normalize(),
-                oldEnv.toAbsolutePath().normalize(),
-                TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT.toAbsolutePath().normalize(),
-                18080,
-                true,
-                List.of(),
-                false);
+        ConnectedBoard oldBoard = ConnectedBoardBuilder.connectedBoard()
+                .withBoardId("board-1")
+                .withBoardKey("SYNTH001")
+                .withBoardName("Existing Board")
+                .withBoardUrl("https://trello.com/b/SYNTH001/board")
+                .withWorkflowPath(oldWorkflow.toAbsolutePath().normalize())
+                .withEnvPath(oldEnv.toAbsolutePath().normalize())
+                .withWorkspaceRoot(
+                        TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT.toAbsolutePath().normalize())
+                .withServerPort(18080)
+                .withGithubEnabled(true)
+                .build();
         new ConnectedBoardRepository(tempDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(oldBoard)));
         LocalWorkerManager workerManager = mock();
@@ -6102,18 +6080,17 @@ final class TrelloBoardSetupMainTest {
         Path normalizedWorkflow = workflowPath.toAbsolutePath().normalize();
         Path parent = normalizedWorkflow.getParent();
         Path base = parent == null ? Path.of(".").toAbsolutePath().normalize() : parent;
-        return new ConnectedBoard(
-                "board-conflict",
-                "SYNTH004",
-                "Conflicting Trello Board",
-                "https://trello.com/b/SYNTH004/board",
-                normalizedWorkflow,
-                base.resolve(".env.conflict"),
-                base.resolve("workspaces"),
-                serverPort,
-                true,
-                List.of(),
-                false);
+        return ConnectedBoardBuilder.connectedBoard()
+                .withBoardId("board-conflict")
+                .withBoardKey("SYNTH004")
+                .withBoardName("Conflicting Trello Board")
+                .withBoardUrl("https://trello.com/b/SYNTH004/board")
+                .withWorkflowPath(normalizedWorkflow)
+                .withEnvPath(base.resolve(".env.conflict"))
+                .withWorkspaceRoot(base.resolve("workspaces"))
+                .withServerPort(serverPort)
+                .withGithubEnabled(true)
+                .build();
     }
 
     private void assertConnectedBoardUsesWorkflowEnvAndPort(Path workflow, Path env, int serverPort)
@@ -6190,18 +6167,18 @@ final class TrelloBoardSetupMainTest {
         Path newWorkflow = tempDir.resolve(slug + "-new.WORKFLOW.md");
         Path env = tempDir.resolve(".env." + slug);
         Files.writeString(oldWorkflow, "old workflow", StandardCharsets.UTF_8);
-        ConnectedBoard oldBoard = new ConnectedBoard(
-                "board-1",
-                "SYNTH001",
-                "Existing Board",
-                "https://trello.com/b/SYNTH001/board",
-                oldWorkflow.toAbsolutePath().normalize(),
-                env.toAbsolutePath().normalize(),
-                TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT.toAbsolutePath().normalize(),
-                18080,
-                true,
-                List.of(),
-                false);
+        ConnectedBoard oldBoard = ConnectedBoardBuilder.connectedBoard()
+                .withBoardId("board-1")
+                .withBoardKey("SYNTH001")
+                .withBoardName("Existing Board")
+                .withBoardUrl("https://trello.com/b/SYNTH001/board")
+                .withWorkflowPath(oldWorkflow.toAbsolutePath().normalize())
+                .withEnvPath(env.toAbsolutePath().normalize())
+                .withWorkspaceRoot(
+                        TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT.toAbsolutePath().normalize())
+                .withServerPort(18080)
+                .withGithubEnabled(true)
+                .build();
         new ConnectedBoardRepository(tempDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(oldBoard)));
         LocalWorkerManager workerManager = mock();

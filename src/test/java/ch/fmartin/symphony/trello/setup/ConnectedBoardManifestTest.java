@@ -239,17 +239,15 @@ final class ConnectedBoardManifestTest {
 
     private static ConnectedBoard board(
             String boardId, String boardKey, String boardName, String boardUrl, Path workflowPath) {
-        return new ConnectedBoard(
-                boardId,
-                boardKey,
-                boardName,
-                boardUrl,
-                workflowPath,
-                Path.of(".env"),
-                Path.of("workspaces"),
-                ConfigDefaults.DEFAULT_SERVER_PORT,
-                false,
-                List.of(),
-                false);
+        return ConnectedBoardBuilder.connectedBoard()
+                .withBoardId(boardId)
+                .withBoardKey(boardKey)
+                .withBoardName(boardName)
+                .withBoardUrl(boardUrl)
+                .withWorkflowPath(workflowPath)
+                .withEnvPath(Path.of(".env"))
+                .withWorkspaceRoot(Path.of("workspaces"))
+                .withServerPort(ConfigDefaults.DEFAULT_SERVER_PORT)
+                .build();
     }
 }

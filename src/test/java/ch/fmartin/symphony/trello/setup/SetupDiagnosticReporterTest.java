@@ -188,18 +188,16 @@ final class SetupDiagnosticReporterTest {
         Path workflow = configDir.resolve("WORKFLOW.symlink-target.md");
         Files.writeString(workflow, workflowWithPort(20992), StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
-                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
-                        "000000000000000000000001",
-                        "SYNTH001",
-                        "Symlink Board",
-                        "https://trello.com/b/SYNTH001/symlink-board",
-                        workflow,
-                        configDir.resolve(".env"),
-                        tempDir.resolve("workspaces"),
-                        20992,
-                        false,
-                        List.of(),
-                        false))));
+                .save(new ConnectedBoardManifest(List.of(ConnectedBoardBuilder.connectedBoard()
+                        .withBoardId("000000000000000000000001")
+                        .withBoardKey("SYNTH001")
+                        .withBoardName("Symlink Board")
+                        .withBoardUrl("https://trello.com/b/SYNTH001/symlink-board")
+                        .withWorkflowPath(workflow)
+                        .withEnvPath(configDir.resolve(".env"))
+                        .withWorkspaceRoot(tempDir.resolve("workspaces"))
+                        .withServerPort(20992)
+                        .build())));
         Path link = tempDir.resolve("symlink-selector-link.md");
         Files.createSymbolicLink(link, workflow);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
@@ -235,18 +233,16 @@ final class SetupDiagnosticReporterTest {
                 """,
                 StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
-                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
-                        "000000000000000000000001",
-                        "SYNTH001",
-                        "Bad Port Board",
-                        "https://trello.com/b/SYNTH001/bad-port-board",
-                        workflow,
-                        configDir.resolve(".env"),
-                        tempDir.resolve("workspaces"),
-                        99999,
-                        false,
-                        List.of(),
-                        false))));
+                .save(new ConnectedBoardManifest(List.of(ConnectedBoardBuilder.connectedBoard()
+                        .withBoardId("000000000000000000000001")
+                        .withBoardKey("SYNTH001")
+                        .withBoardName("Bad Port Board")
+                        .withBoardUrl("https://trello.com/b/SYNTH001/bad-port-board")
+                        .withWorkflowPath(workflow)
+                        .withEnvPath(configDir.resolve(".env"))
+                        .withWorkspaceRoot(tempDir.resolve("workspaces"))
+                        .withServerPort(99999)
+                        .build())));
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -451,18 +447,16 @@ final class SetupDiagnosticReporterTest {
 
     private static void saveSyntheticBoard(Path configDir, Path workflow, int serverPort) throws IOException {
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
-                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
-                        "000000000000000000000001",
-                        "SYNTH001",
-                        "Synthetic Port Board",
-                        "https://trello.com/b/SYNTH001/synthetic-port-board",
-                        workflow,
-                        configDir.resolve(".env"),
-                        configDir.resolveSibling("workspaces"),
-                        serverPort,
-                        false,
-                        List.of(),
-                        false))));
+                .save(new ConnectedBoardManifest(List.of(ConnectedBoardBuilder.connectedBoard()
+                        .withBoardId("000000000000000000000001")
+                        .withBoardKey("SYNTH001")
+                        .withBoardName("Synthetic Port Board")
+                        .withBoardUrl("https://trello.com/b/SYNTH001/synthetic-port-board")
+                        .withWorkflowPath(workflow)
+                        .withEnvPath(configDir.resolve(".env"))
+                        .withWorkspaceRoot(configDir.resolveSibling("workspaces"))
+                        .withServerPort(serverPort)
+                        .build())));
     }
 
     @Test
@@ -758,18 +752,16 @@ final class SetupDiagnosticReporterTest {
         Path workflow = configDir.resolve("WORKFLOW.reused.md");
         Files.writeString(workflow, workflowWithPort(20991), StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
-                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
-                        "000000000000000000000001",
-                        "SYNTH001",
-                        "Reused Board",
-                        "https://trello.com/b/SYNTH001/reused-board",
-                        workflow,
-                        configDir.resolve(".env"),
-                        tempDir.resolve("workspaces"),
-                        20990,
-                        false,
-                        List.of(),
-                        false))));
+                .save(new ConnectedBoardManifest(List.of(ConnectedBoardBuilder.connectedBoard()
+                        .withBoardId("000000000000000000000001")
+                        .withBoardKey("SYNTH001")
+                        .withBoardName("Reused Board")
+                        .withBoardUrl("https://trello.com/b/SYNTH001/reused-board")
+                        .withWorkflowPath(workflow)
+                        .withEnvPath(configDir.resolve(".env"))
+                        .withWorkspaceRoot(tempDir.resolve("workspaces"))
+                        .withServerPort(20990)
+                        .build())));
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -809,18 +801,16 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
-                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
-                        "000000000000000000000001",
-                        "SYNTH001",
-                        "Synthetic Board",
-                        "https://trello.com/b/SYNTH001/synthetic-board",
-                        configDir.resolve("WORKFLOW.md"),
-                        configDir.resolve(".env"),
-                        tempDir.resolve("workspaces"),
-                        20992,
-                        false,
-                        List.of(),
-                        false))));
+                .save(new ConnectedBoardManifest(List.of(ConnectedBoardBuilder.connectedBoard()
+                        .withBoardId("000000000000000000000001")
+                        .withBoardKey("SYNTH001")
+                        .withBoardName("Synthetic Board")
+                        .withBoardUrl("https://trello.com/b/SYNTH001/synthetic-board")
+                        .withWorkflowPath(configDir.resolve("WORKFLOW.md"))
+                        .withEnvPath(configDir.resolve(".env"))
+                        .withWorkspaceRoot(tempDir.resolve("workspaces"))
+                        .withServerPort(20992)
+                        .build())));
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -841,18 +831,16 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(stateHome);
         Path missingWorkflow = configDir.resolve("WORKFLOW.deleted.md");
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
-                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
-                        "000000000000000000000001",
-                        "SYNTH001",
-                        "Deleted Workflow Board",
-                        "https://trello.com/b/SYNTH001/deleted-workflow-board",
-                        missingWorkflow,
-                        configDir.resolve(".env"),
-                        tempDir.resolve("workspaces"),
-                        20991,
-                        false,
-                        List.of(),
-                        false))));
+                .save(new ConnectedBoardManifest(List.of(ConnectedBoardBuilder.connectedBoard()
+                        .withBoardId("000000000000000000000001")
+                        .withBoardKey("SYNTH001")
+                        .withBoardName("Deleted Workflow Board")
+                        .withBoardUrl("https://trello.com/b/SYNTH001/deleted-workflow-board")
+                        .withWorkflowPath(missingWorkflow)
+                        .withEnvPath(configDir.resolve(".env"))
+                        .withWorkspaceRoot(tempDir.resolve("workspaces"))
+                        .withServerPort(20991)
+                        .build())));
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -1001,30 +989,29 @@ final class SetupDiagnosticReporterTest {
         Files.writeString(otherWorkflow, workflowWithPort(19182), StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(
-                        new ConnectedBoard(
-                                "private-board-id",
-                                "SYNTH901",
-                                "Sensitive Board Name",
-                                "https://trello.com/b/SYNTH901/sensitive-board",
-                                privateWorkflow,
-                                env,
-                                workspaceRoot,
-                                19181,
-                                true,
-                                List.of(tempDir.resolve("client repo")),
-                                true),
-                        new ConnectedBoard(
-                                "other-board-id",
-                                "other-key",
-                                "Other Board",
-                                "https://trello.com/b/other-key/other-board",
-                                otherWorkflow,
-                                env,
-                                workspaceRoot,
-                                19182,
-                                false,
-                                List.of(),
-                                false))));
+                        ConnectedBoardBuilder.connectedBoard()
+                                .withBoardId("private-board-id")
+                                .withBoardKey("SYNTH901")
+                                .withBoardName("Sensitive Board Name")
+                                .withBoardUrl("https://trello.com/b/SYNTH901/sensitive-board")
+                                .withWorkflowPath(privateWorkflow)
+                                .withEnvPath(env)
+                                .withWorkspaceRoot(workspaceRoot)
+                                .withServerPort(19181)
+                                .withGithubEnabled(true)
+                                .withAdditionalWritableRoots(List.of(tempDir.resolve("client repo")))
+                                .withDangerFullAccess(true)
+                                .build(),
+                        ConnectedBoardBuilder.connectedBoard()
+                                .withBoardId("other-board-id")
+                                .withBoardKey("other-key")
+                                .withBoardName("Other Board")
+                                .withBoardUrl("https://trello.com/b/other-key/other-board")
+                                .withWorkflowPath(otherWorkflow)
+                                .withEnvPath(env)
+                                .withWorkspaceRoot(workspaceRoot)
+                                .withServerPort(19182)
+                                .build())));
         ManagedProcessStore store = new ManagedProcessStore(stateHome);
         Files.writeString(
                 store.files(privateWorkflow).stderrLog(),
@@ -1109,30 +1096,26 @@ final class SetupDiagnosticReporterTest {
         Files.writeString(otherWorkflow, workflowWithPort(19192), StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(
-                        new ConnectedBoard(
-                                "000000000000000000000001",
-                                "000000000000000000000001",
-                                "Selected Private Board",
-                                "https://trello.com/b/SYNTH003/selected-private-board",
-                                selectedWorkflow,
-                                configDir.resolve(".env"),
-                                workspaceRoot,
-                                19191,
-                                false,
-                                List.of(),
-                                false),
-                        new ConnectedBoard(
-                                "other-board-id",
-                                "other-key",
-                                "Other Private Board",
-                                "https://trello.com/b/other-key/other-private-board",
-                                otherWorkflow,
-                                configDir.resolve(".env"),
-                                workspaceRoot,
-                                19192,
-                                false,
-                                List.of(),
-                                false))));
+                        ConnectedBoardBuilder.connectedBoard()
+                                .withBoardId("000000000000000000000001")
+                                .withBoardKey("000000000000000000000001")
+                                .withBoardName("Selected Private Board")
+                                .withBoardUrl("https://trello.com/b/SYNTH003/selected-private-board")
+                                .withWorkflowPath(selectedWorkflow)
+                                .withEnvPath(configDir.resolve(".env"))
+                                .withWorkspaceRoot(workspaceRoot)
+                                .withServerPort(19191)
+                                .build(),
+                        ConnectedBoardBuilder.connectedBoard()
+                                .withBoardId("other-board-id")
+                                .withBoardKey("other-key")
+                                .withBoardName("Other Private Board")
+                                .withBoardUrl("https://trello.com/b/other-key/other-private-board")
+                                .withWorkflowPath(otherWorkflow)
+                                .withEnvPath(configDir.resolve(".env"))
+                                .withWorkspaceRoot(workspaceRoot)
+                                .withServerPort(19192)
+                                .build())));
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -1192,18 +1175,16 @@ final class SetupDiagnosticReporterTest {
                 """,
                 StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
-                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
-                        "resolved-env-board-id",
-                        "env-key",
-                        "Private Env Board",
-                        "https://trello.com/b/env-key/private-env-board",
-                        workflow,
-                        env,
-                        workspaceRoot,
-                        19301,
-                        false,
-                        List.of(),
-                        false))));
+                .save(new ConnectedBoardManifest(List.of(ConnectedBoardBuilder.connectedBoard()
+                        .withBoardId("resolved-env-board-id")
+                        .withBoardKey("env-key")
+                        .withBoardName("Private Env Board")
+                        .withBoardUrl("https://trello.com/b/env-key/private-env-board")
+                        .withWorkflowPath(workflow)
+                        .withEnvPath(env)
+                        .withWorkspaceRoot(workspaceRoot)
+                        .withServerPort(19301)
+                        .build())));
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -1345,18 +1326,17 @@ final class SetupDiagnosticReporterTest {
         Files.writeString(workflow, workflowWithPort(19199), StandardCharsets.UTF_8);
         Files.writeString(env, "TRELLO_API_TOKEN=secret-token\n", StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
-                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
-                        "private-board-id",
-                        "private-key",
-                        "Private Board",
-                        "https://trello.com/b/private-key/private-board",
-                        workflow,
-                        env,
-                        workspaceRoot,
-                        19199,
-                        false,
-                        List.of(tempDir.resolve("private checkout")),
-                        false))));
+                .save(new ConnectedBoardManifest(List.of(ConnectedBoardBuilder.connectedBoard()
+                        .withBoardId("private-board-id")
+                        .withBoardKey("private-key")
+                        .withBoardName("Private Board")
+                        .withBoardUrl("https://trello.com/b/private-key/private-board")
+                        .withWorkflowPath(workflow)
+                        .withEnvPath(env)
+                        .withWorkspaceRoot(workspaceRoot)
+                        .withServerPort(19199)
+                        .withAdditionalWritableRoots(List.of(tempDir.resolve("private checkout")))
+                        .build())));
         ManagedProcessStore.ManagedProcessFiles logs = new ManagedProcessStore(stateHome).files(workflow);
         Files.writeString(logs.stdoutLog(), "secret log content\n", StandardCharsets.UTF_8);
         DiagnosticsTokenHasher.load(configDir);
@@ -1493,18 +1473,16 @@ final class SetupDiagnosticReporterTest {
                 configDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME), "invalid-local-key", StandardCharsets.UTF_8);
         Files.writeString(workflow, workflowWithPort(19198), StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
-                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
-                        "private-board-id",
-                        "private-key",
-                        "Private Board",
-                        "https://trello.com/b/private-key/private-board",
-                        workflow,
-                        configDir.resolve(".env"),
-                        workspaceRoot,
-                        19198,
-                        false,
-                        List.of(),
-                        false))));
+                .save(new ConnectedBoardManifest(List.of(ConnectedBoardBuilder.connectedBoard()
+                        .withBoardId("private-board-id")
+                        .withBoardKey("private-key")
+                        .withBoardName("Private Board")
+                        .withBoardUrl("https://trello.com/b/private-key/private-board")
+                        .withWorkflowPath(workflow)
+                        .withEnvPath(configDir.resolve(".env"))
+                        .withWorkspaceRoot(workspaceRoot)
+                        .withServerPort(19198)
+                        .build())));
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -1982,30 +1960,26 @@ final class SetupDiagnosticReporterTest {
         Files.writeString(otherWorkflow, workflowWithPort(19185), StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(
-                        new ConnectedBoard(
-                                "relative-board-id",
-                                "SYNTH101",
-                                "Relative Board",
-                                "https://trello.com/b/SYNTH101/relative-board",
-                                workflow,
-                                configDir.resolve(".env"),
-                                workspaceRoot,
-                                19184,
-                                false,
-                                List.of(),
-                                false),
-                        new ConnectedBoard(
-                                "other-board-id",
-                                "SYNTH102",
-                                "Other Relative Board",
-                                "https://trello.com/b/SYNTH102/other-relative-board",
-                                otherWorkflow,
-                                configDir.resolve(".env"),
-                                workspaceRoot,
-                                19185,
-                                false,
-                                List.of(),
-                                false))));
+                        ConnectedBoardBuilder.connectedBoard()
+                                .withBoardId("relative-board-id")
+                                .withBoardKey("SYNTH101")
+                                .withBoardName("Relative Board")
+                                .withBoardUrl("https://trello.com/b/SYNTH101/relative-board")
+                                .withWorkflowPath(workflow)
+                                .withEnvPath(configDir.resolve(".env"))
+                                .withWorkspaceRoot(workspaceRoot)
+                                .withServerPort(19184)
+                                .build(),
+                        ConnectedBoardBuilder.connectedBoard()
+                                .withBoardId("other-board-id")
+                                .withBoardKey("SYNTH102")
+                                .withBoardName("Other Relative Board")
+                                .withBoardUrl("https://trello.com/b/SYNTH102/other-relative-board")
+                                .withWorkflowPath(otherWorkflow)
+                                .withEnvPath(configDir.resolve(".env"))
+                                .withWorkspaceRoot(workspaceRoot)
+                                .withServerPort(19185)
+                                .build())));
         ManagedProcessStore store = new ManagedProcessStore(stateHome);
         Files.writeString(store.files(workflow).stdoutLog(), "selected workflow log\n", StandardCharsets.UTF_8);
         Files.writeString(store.files(otherWorkflow).stdoutLog(), "other workflow log\n", StandardCharsets.UTF_8);
@@ -2060,18 +2034,16 @@ final class SetupDiagnosticReporterTest {
                 """,
                 StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
-                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
-                        "000000000000000000000002",
-                        "SYNTH002",
-                        "Synthetic Env Board",
-                        "https://trello.com/b/SYNTH002/synthetic-env-board",
-                        workflow,
-                        null,
-                        workspaceRoot,
-                        19421,
-                        false,
-                        List.of(),
-                        false))));
+                .save(new ConnectedBoardManifest(List.of(ConnectedBoardBuilder.connectedBoard()
+                        .withBoardId("000000000000000000000002")
+                        .withBoardKey("SYNTH002")
+                        .withBoardName("Synthetic Env Board")
+                        .withBoardUrl("https://trello.com/b/SYNTH002/synthetic-env-board")
+                        .withWorkflowPath(workflow)
+                        .withEnvPath(null)
+                        .withWorkspaceRoot(workspaceRoot)
+                        .withServerPort(19421)
+                        .build())));
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -2106,18 +2078,16 @@ final class SetupDiagnosticReporterTest {
         Files.writeString(manifestWorkflow, workflowWithPort(19186), StandardCharsets.UTF_8);
         Files.writeString(requestedWorkflow, workflowWithPort(19187), StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
-                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
-                        "manifest-board-id",
-                        "SYNTH201",
-                        "Manifest Board",
-                        "https://trello.com/b/SYNTH201/manifest-board",
-                        manifestWorkflow,
-                        configDir.resolve(".env"),
-                        workspaceRoot,
-                        19186,
-                        false,
-                        List.of(),
-                        false))));
+                .save(new ConnectedBoardManifest(List.of(ConnectedBoardBuilder.connectedBoard()
+                        .withBoardId("manifest-board-id")
+                        .withBoardKey("SYNTH201")
+                        .withBoardName("Manifest Board")
+                        .withBoardUrl("https://trello.com/b/SYNTH201/manifest-board")
+                        .withWorkflowPath(manifestWorkflow)
+                        .withEnvPath(configDir.resolve(".env"))
+                        .withWorkspaceRoot(workspaceRoot)
+                        .withServerPort(19186)
+                        .build())));
         ManagedProcessStore store = new ManagedProcessStore(stateHome);
         Files.writeString(store.files(manifestWorkflow).stdoutLog(), "manifest workflow log\n", StandardCharsets.UTF_8);
         Files.writeString(
@@ -2161,30 +2131,26 @@ final class SetupDiagnosticReporterTest {
         Files.writeString(workflowB, workflowWithPort(19189), StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(
-                        new ConnectedBoard(
-                                "private-board-a-id",
-                                "SYNTH301",
-                                privateBoardName,
-                                "https://trello.com/b/SYNTH301/private-a",
-                                workflowA,
-                                configDir.resolve(".env"),
-                                workspaceRoot,
-                                19188,
-                                false,
-                                List.of(),
-                                false),
-                        new ConnectedBoard(
-                                "private-board-b-id",
-                                "SYNTH302",
-                                privateBoardName,
-                                "https://trello.com/b/SYNTH302/private-b",
-                                workflowB,
-                                configDir.resolve(".env"),
-                                workspaceRoot,
-                                19189,
-                                false,
-                                List.of(),
-                                false))));
+                        ConnectedBoardBuilder.connectedBoard()
+                                .withBoardId("private-board-a-id")
+                                .withBoardKey("SYNTH301")
+                                .withBoardName(privateBoardName)
+                                .withBoardUrl("https://trello.com/b/SYNTH301/private-a")
+                                .withWorkflowPath(workflowA)
+                                .withEnvPath(configDir.resolve(".env"))
+                                .withWorkspaceRoot(workspaceRoot)
+                                .withServerPort(19188)
+                                .build(),
+                        ConnectedBoardBuilder.connectedBoard()
+                                .withBoardId("private-board-b-id")
+                                .withBoardKey("SYNTH302")
+                                .withBoardName(privateBoardName)
+                                .withBoardUrl("https://trello.com/b/SYNTH302/private-b")
+                                .withWorkflowPath(workflowB)
+                                .withEnvPath(configDir.resolve(".env"))
+                                .withWorkspaceRoot(workspaceRoot)
+                                .withServerPort(19189)
+                                .build())));
         ManagedProcessStore store = new ManagedProcessStore(stateHome);
         Files.writeString(store.files(workflowA).stdoutLog(), "private board A log\n", StandardCharsets.UTF_8);
         Files.writeString(store.files(workflowB).stdoutLog(), "private board B log\n", StandardCharsets.UTF_8);
@@ -2231,30 +2197,26 @@ final class SetupDiagnosticReporterTest {
         Files.writeString(workflow, workflowWithPort(19193), StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(
-                        new ConnectedBoard(
-                                "private-workflow-board-a-id",
-                                "SYNTH401",
-                                "Private Workflow Board A",
-                                "https://trello.com/b/SYNTH401/private-workflow-a",
-                                workflow,
-                                configDir.resolve(".env"),
-                                workspaceRoot,
-                                19193,
-                                false,
-                                List.of(),
-                                false),
-                        new ConnectedBoard(
-                                "private-workflow-board-b-id",
-                                "SYNTH402",
-                                "Private Workflow Board B",
-                                "https://trello.com/b/SYNTH402/private-workflow-b",
-                                workflow,
-                                configDir.resolve(".env"),
-                                workspaceRoot,
-                                19194,
-                                false,
-                                List.of(),
-                                false))));
+                        ConnectedBoardBuilder.connectedBoard()
+                                .withBoardId("private-workflow-board-a-id")
+                                .withBoardKey("SYNTH401")
+                                .withBoardName("Private Workflow Board A")
+                                .withBoardUrl("https://trello.com/b/SYNTH401/private-workflow-a")
+                                .withWorkflowPath(workflow)
+                                .withEnvPath(configDir.resolve(".env"))
+                                .withWorkspaceRoot(workspaceRoot)
+                                .withServerPort(19193)
+                                .build(),
+                        ConnectedBoardBuilder.connectedBoard()
+                                .withBoardId("private-workflow-board-b-id")
+                                .withBoardKey("SYNTH402")
+                                .withBoardName("Private Workflow Board B")
+                                .withBoardUrl("https://trello.com/b/SYNTH402/private-workflow-b")
+                                .withWorkflowPath(workflow)
+                                .withEnvPath(configDir.resolve(".env"))
+                                .withWorkspaceRoot(workspaceRoot)
+                                .withServerPort(19194)
+                                .build())));
         ManagedProcessStore store = new ManagedProcessStore(stateHome);
         Files.writeString(store.files(workflow).stdoutLog(), "private workflow log\n", StandardCharsets.UTF_8);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
@@ -2485,18 +2447,18 @@ final class SetupDiagnosticReporterTest {
                         .formatted(port);
         Files.writeString(workflow, workflowContent, StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
-                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
-                        "private-board-id",
-                        "private-key",
-                        "Sensitive Board Name",
-                        "https://trello.com/b/private-key/sensitive-board",
-                        workflow,
-                        env,
-                        workspaceRoot,
-                        port,
-                        true,
-                        List.of(tempDir.resolve("private-project")),
-                        false))));
+                .save(new ConnectedBoardManifest(List.of(ConnectedBoardBuilder.connectedBoard()
+                        .withBoardId("private-board-id")
+                        .withBoardKey("private-key")
+                        .withBoardName("Sensitive Board Name")
+                        .withBoardUrl("https://trello.com/b/private-key/sensitive-board")
+                        .withWorkflowPath(workflow)
+                        .withEnvPath(env)
+                        .withWorkspaceRoot(workspaceRoot)
+                        .withServerPort(port)
+                        .withGithubEnabled(true)
+                        .withAdditionalWritableRoots(List.of(tempDir.resolve("private-project")))
+                        .build())));
         Files.writeString(
                 stateHome.resolve("WORKFLOW.private-board.md.abc.err"),
                 """
@@ -2714,18 +2676,16 @@ final class SetupDiagnosticReporterTest {
                 """,
                 StandardCharsets.UTF_8);
         new ConnectedBoardRepository(resolvedManifest)
-                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
-                        "request-board-id",
-                        "request-key",
-                        "Request Board",
-                        "https://trello.com/b/request-key/request-board",
-                        workflow,
-                        env,
-                        workspaceRoot,
-                        19090,
-                        false,
-                        List.of(),
-                        false))));
+                .save(new ConnectedBoardManifest(List.of(ConnectedBoardBuilder.connectedBoard()
+                        .withBoardId("request-board-id")
+                        .withBoardKey("request-key")
+                        .withBoardName("Request Board")
+                        .withBoardUrl("https://trello.com/b/request-key/request-board")
+                        .withWorkflowPath(workflow)
+                        .withEnvPath(env)
+                        .withWorkspaceRoot(workspaceRoot)
+                        .withServerPort(19090)
+                        .build())));
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
         var terminal = new RecordingTerminal();
 
@@ -3022,30 +2982,27 @@ final class SetupDiagnosticReporterTest {
         Files.writeString(plainWorkflow, "plain body with client notes\n", StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(
-                        new ConnectedBoard(
-                                "private-board-id",
-                                "private-key",
-                                "Sensitive Board Name",
-                                "https://trello.com/b/private-key/sensitive-board",
-                                plainWorkflow,
-                                env,
-                                workspaceRoot,
-                                19201,
-                                true,
-                                List.of(),
-                                false),
-                        new ConnectedBoard(
-                                "missing-board-id",
-                                "missing-key",
-                                "Missing Board Name",
-                                "https://trello.com/b/missing-key/missing-board",
-                                missingWorkflow,
-                                env,
-                                workspaceRoot,
-                                19202,
-                                false,
-                                List.of(),
-                                false))));
+                        ConnectedBoardBuilder.connectedBoard()
+                                .withBoardId("private-board-id")
+                                .withBoardKey("private-key")
+                                .withBoardName("Sensitive Board Name")
+                                .withBoardUrl("https://trello.com/b/private-key/sensitive-board")
+                                .withWorkflowPath(plainWorkflow)
+                                .withEnvPath(env)
+                                .withWorkspaceRoot(workspaceRoot)
+                                .withServerPort(19201)
+                                .withGithubEnabled(true)
+                                .build(),
+                        ConnectedBoardBuilder.connectedBoard()
+                                .withBoardId("missing-board-id")
+                                .withBoardKey("missing-key")
+                                .withBoardName("Missing Board Name")
+                                .withBoardUrl("https://trello.com/b/missing-key/missing-board")
+                                .withWorkflowPath(missingWorkflow)
+                                .withEnvPath(env)
+                                .withWorkspaceRoot(workspaceRoot)
+                                .withServerPort(19202)
+                                .build())));
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
