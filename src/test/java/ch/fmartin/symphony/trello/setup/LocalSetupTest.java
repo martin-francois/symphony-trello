@@ -2066,12 +2066,9 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path env = tempDir.resolve(".env.port-override");
         Files.writeString(
                 env,
-                """
-                TRELLO_API_KEY=key
-                TRELLO_API_TOKEN=token
-                SYMPHONY_HTTP_PORT=%d
-                """
-                        .formatted(overridePort),
+                TestEnv.credentials("key", "token")
+                        .var("SYMPHONY_HTTP_PORT", overridePort)
+                        .render(),
                 StandardCharsets.UTF_8);
 
         // when
@@ -2315,12 +2312,9 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 StandardCharsets.UTF_8);
         Files.writeString(
                 env,
-                """
-                TRELLO_API_KEY=key
-                TRELLO_API_TOKEN=token
-                SIBLING_WORKFLOW_PORT=%d
-                """
-                        .formatted(ConfigDefaults.DEFAULT_SERVER_PORT),
+                TestEnv.credentials("key", "token")
+                        .var("SIBLING_WORKFLOW_PORT", ConfigDefaults.DEFAULT_SERVER_PORT)
+                        .render(),
                 StandardCharsets.UTF_8);
         // The scan runs in the production 18080+ range where live workers bind and release ports,
         // so the probe fakes every port as free; skipping the default port must come from the
@@ -2808,12 +2802,9 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 StandardCharsets.UTF_8);
         Files.writeString(
                 env,
-                """
-                TRELLO_API_KEY=key
-                TRELLO_API_TOKEN=token
-                ENV_BACKED_IMPORT_PORT=%d
-                """
-                        .formatted(configuredPort),
+                TestEnv.credentials("key", "token")
+                        .var("ENV_BACKED_IMPORT_PORT", configuredPort)
+                        .render(),
                 StandardCharsets.UTF_8);
 
         // when
@@ -5481,8 +5472,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path firstEnv = tempDir.resolve("private-env").resolve(".env.duplicate-a");
         Path secondEnv = tempDir.resolve("private-env").resolve(".env.duplicate-b");
         Files.createDirectories(firstEnv.getParent());
-        Files.writeString(firstEnv, "TRELLO_API_KEY=key\nTRELLO_API_TOKEN=token\n", StandardCharsets.UTF_8);
-        Files.writeString(secondEnv, "TRELLO_API_KEY=key\nTRELLO_API_TOKEN=token\n", StandardCharsets.UTF_8);
+        Files.writeString(firstEnv, TestEnv.credentials("key", "token").render(), StandardCharsets.UTF_8);
+        Files.writeString(secondEnv, TestEnv.credentials("key", "token").render(), StandardCharsets.UTF_8);
         writeWorkflow(firstWorkflow, "private-board-id-one", 19101);
         writeWorkflow(secondWorkflow, "private-board-id-two", 19102);
         writeDuplicateConnectedBoardsManifest(firstWorkflow, firstEnv, secondWorkflow, secondEnv);

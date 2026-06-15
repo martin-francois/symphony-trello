@@ -1567,16 +1567,11 @@ final class TrelloBoardSetupTest {
         Path siblingWorkflow = tempDir.resolve("WORKFLOW.whole-float.md");
         Files.writeString(
                 siblingWorkflow,
-                """
-                ---
-                tracker:
-                  kind: trello
-                  board_id: existing-board
-                server:
-                  port: 18080.0
-                ---
-                # Existing workflow
-                """,
+                TestWorkflows.workflow()
+                        .boardId("existing-board")
+                        .port("18080.0")
+                        .body("# Existing workflow")
+                        .render(),
                 StandardCharsets.UTF_8);
 
         // when
@@ -1604,16 +1599,11 @@ final class TrelloBoardSetupTest {
         Path siblingWorkflow = tempDir.resolve("WORKFLOW.fractional.md");
         Files.writeString(
                 siblingWorkflow,
-                """
-                ---
-                tracker:
-                  kind: trello
-                  board_id: existing-board
-                server:
-                  port: 18080.5
-                ---
-                # Existing workflow
-                """,
+                TestWorkflows.workflow()
+                        .boardId("existing-board")
+                        .port("18080.5")
+                        .body("# Existing workflow")
+                        .render(),
                 StandardCharsets.UTF_8);
 
         // when
@@ -1643,16 +1633,11 @@ final class TrelloBoardSetupTest {
         Path siblingWorkflow = tempDir.resolve("WORKFLOW.env-port.md");
         Files.writeString(
                 siblingWorkflow,
-                """
-                ---
-                tracker:
-                  kind: trello
-                  board_id: existing-board
-                server:
-                  port: $SYNTHETIC_MISSING_WORKFLOW_PORT_FOR_TEST
-                ---
-                # Existing workflow
-                """,
+                TestWorkflows.workflow()
+                        .boardId("existing-board")
+                        .port("$SYNTHETIC_MISSING_WORKFLOW_PORT_FOR_TEST")
+                        .body("# Existing workflow")
+                        .render(),
                 StandardCharsets.UTF_8);
 
         // when

@@ -188,12 +188,9 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
         Path env = tempDir.resolve(".env.env-precedence");
         Files.writeString(
                 env,
-                """
-                TRELLO_API_KEY=key
-                TRELLO_API_TOKEN=token
-                SYMPHONY_HTTP_PORT=%d
-                """
-                        .formatted(dotenvPort),
+                TestEnv.credentials("key", "token")
+                        .var("SYMPHONY_HTTP_PORT", dotenvPort)
+                        .render(),
                 StandardCharsets.UTF_8);
 
         // when
@@ -456,7 +453,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
         Path env = configDir.resolve(".env.valid");
         Files.createDirectories(configDir);
         Files.createDirectories(fixture.workspaceRoot());
-        Files.writeString(env, "TRELLO_API_KEY=key\nTRELLO_API_TOKEN=token\n", StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.credentials("key", "token").render(), StandardCharsets.UTF_8);
         writeWorkflow(workflow, "valid-board-id", 20457);
         commands.startHealthServer(workflow, "other-board");
         fixture.givenManifest(
@@ -495,7 +492,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
         Path env = configDir.resolve(".env.valid");
         Files.createDirectories(configDir);
         Files.createDirectories(fixture.workspaceRoot());
-        Files.writeString(env, "TRELLO_API_KEY=key\nTRELLO_API_TOKEN=token\n", StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.credentials("key", "token").render(), StandardCharsets.UTF_8);
         writeWorkflow(workflow, "valid-board-id", 20457);
         fixture.givenManifest(
                 """
