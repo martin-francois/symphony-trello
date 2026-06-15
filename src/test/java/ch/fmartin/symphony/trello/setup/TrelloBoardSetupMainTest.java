@@ -138,26 +138,17 @@ final class TrelloBoardSetupMainTest {
         Path env = tempDir.resolve(".env.dirty-lists");
 
         // when
-        CliRunResult result = runCli(
-                "import-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "https://trello.com/b/input/existing-board",
-                "--active",
-                "Ready for Codex",
-                "--terminal",
-                "Released",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--env",
-                env.toString());
+        CliRunResult result = runCli(SetupCommandBuilder.importBoard()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board("https://trello.com/b/input/existing-board")
+                .active("Ready for Codex")
+                .terminal("Released")
+                .workflow(workflow)
+                .manifest(tempDir.resolve("connected-boards.json"))
+                .env(env)
+                .toArgs());
 
         // then
         result.assertSuccess();
@@ -178,26 +169,17 @@ final class TrelloBoardSetupMainTest {
         Path env = tempDir.resolve(".env.decorated-selector");
 
         // when
-        CliRunResult result = runCli(
-                "import-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                selector,
-                "--active",
-                "Queue for Codex",
-                "--terminal",
-                "Released",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--env",
-                env.toString());
+        CliRunResult result = runCli(SetupCommandBuilder.importBoard()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board(selector)
+                .active("Queue for Codex")
+                .terminal("Released")
+                .workflow(workflow)
+                .manifest(tempDir.resolve("connected-boards.json"))
+                .env(env)
+                .toArgs());
 
         // then
         result.assertSuccess().stdoutContains("Imported Trello board: \"Existing Board\"");
@@ -215,26 +197,17 @@ final class TrelloBoardSetupMainTest {
         Path env = tempDir.resolve(".env.name-like-selector");
 
         // when
-        CliRunResult result = runCli(
-                "import-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "What? Board",
-                "--active",
-                "Queue for Codex",
-                "--terminal",
-                "Released",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--env",
-                env.toString());
+        CliRunResult result = runCli(SetupCommandBuilder.importBoard()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board("What? Board")
+                .active("Queue for Codex")
+                .terminal("Released")
+                .workflow(workflow)
+                .manifest(tempDir.resolve("connected-boards.json"))
+                .env(env)
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -376,19 +349,14 @@ final class TrelloBoardSetupMainTest {
                 StandardCharsets.UTF_8);
 
         // when
-        CliRunResult result = runCli(
-                "diagnostics",
-                "--config-dir",
-                configDir.toString(),
-                "--workspace-root",
-                workspaceRoot.toString(),
-                "--state-home",
-                stateHome.toString(),
-                "--board",
-                "Private Board",
-                "--output",
-                output.toString(),
-                "--json");
+        CliRunResult result = runCli(SetupCommandBuilder.diagnostics()
+                .configDir(configDir)
+                .workspaceRoot(workspaceRoot)
+                .stateHome(stateHome)
+                .board("Private Board")
+                .output(output)
+                .json()
+                .toArgs());
 
         // then
         result.assertSuccess()
@@ -436,16 +404,12 @@ final class TrelloBoardSetupMainTest {
                         .build())));
 
         // when
-        CliRunResult result = runCli(
-                "status",
-                "--config-dir",
-                configDir.toString(),
-                "--workspace-root",
-                workspaceRoot.toString(),
-                "--state-home",
-                stateHome.toString(),
-                "--board",
-                "https://not-trello.com/b/abc123/anything");
+        CliRunResult result = runCli(SetupCommandBuilder.status()
+                .configDir(configDir)
+                .workspaceRoot(workspaceRoot)
+                .stateHome(stateHome)
+                .board("https://not-trello.com/b/abc123/anything")
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -479,16 +443,12 @@ final class TrelloBoardSetupMainTest {
                         .build())));
 
         // when
-        CliRunResult result = runCli(
-                "status",
-                "--config-dir",
-                configDir.toString(),
-                "--workspace-root",
-                workspaceRoot.toString(),
-                "--state-home",
-                stateHome.toString(),
-                "--board",
-                "https://trello.com/c/abc123/not-a-board");
+        CliRunResult result = runCli(SetupCommandBuilder.status()
+                .configDir(configDir)
+                .workspaceRoot(workspaceRoot)
+                .stateHome(stateHome)
+                .board("https://trello.com/c/abc123/not-a-board")
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -531,20 +491,15 @@ final class TrelloBoardSetupMainTest {
         Files.writeString(logs.stderrLog(), "secret log content\n", StandardCharsets.UTF_8);
 
         // when
-        CliRunResult result = runCli(
-                "diagnostics",
-                "--config-dir",
-                configDir.toString(),
-                "--workspace-root",
-                workspaceRoot.toString(),
-                "--state-home",
-                stateHome.toString(),
-                "--board",
-                "Private Board",
-                "--show-private-context",
-                "--output",
-                output.toString(),
-                "--json");
+        CliRunResult result = runCli(SetupCommandBuilder.diagnostics()
+                .configDir(configDir)
+                .workspaceRoot(workspaceRoot)
+                .stateHome(stateHome)
+                .board("Private Board")
+                .showPrivateContext()
+                .output(output)
+                .json()
+                .toArgs());
 
         // then
         result.assertSuccess()
@@ -609,20 +564,14 @@ final class TrelloBoardSetupMainTest {
         Files.writeString(store.files(workflowB).stdoutLog(), "board B log\n", StandardCharsets.UTF_8);
 
         // when
-        CliRunResult result = runCli(
-                "diagnostics",
-                "--config-dir",
-                configDir.toString(),
-                "--workspace-root",
-                workspaceRoot.toString(),
-                "--state-home",
-                stateHome.toString(),
-                "--board",
-                "Board A",
-                "--workflow",
-                workflowB.toString(),
-                "--output",
-                output.toString());
+        CliRunResult result = runCli(SetupCommandBuilder.diagnostics()
+                .configDir(configDir)
+                .workspaceRoot(workspaceRoot)
+                .stateHome(stateHome)
+                .board("Board A")
+                .workflow(workflowB)
+                .output(output)
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -644,8 +593,11 @@ final class TrelloBoardSetupMainTest {
         String secondBoard = "Internal Launch Board";
 
         // when
-        CliRunResult result =
-                runCli("diagnostics", "--board", firstBoard, "--board", secondBoard, "--output", output.toString());
+        CliRunResult result = runCli(SetupCommandBuilder.diagnostics()
+                .board(firstBoard)
+                .board(secondBoard)
+                .output(output)
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -672,14 +624,11 @@ final class TrelloBoardSetupMainTest {
         Path output = tempDir.resolve("repeated-workflow-selector-output.txt");
 
         // when
-        CliRunResult result = runCli(
-                "diagnostics",
-                "--workflow",
-                firstWorkflow.toString(),
-                "--workflow",
-                secondWorkflow.toString(),
-                "--output",
-                output.toString());
+        CliRunResult result = runCli(SetupCommandBuilder.diagnostics()
+                .workflow(firstWorkflow)
+                .workflow(secondWorkflow)
+                .output(output)
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -737,18 +686,13 @@ final class TrelloBoardSetupMainTest {
 
         // when
         List<CliRunResult> results = selectors.stream()
-                .map(selector -> runCli(
-                        "diagnostics",
-                        "--config-dir",
-                        configDir.toString(),
-                        "--workspace-root",
-                        workspaceRoot.toString(),
-                        "--state-home",
-                        stateHome.toString(),
-                        "--workflow",
-                        selector.workflow().toString(),
-                        "--output",
-                        tempDir.resolve(selector.name() + "-diagnostics.md").toString()))
+                .map(selector -> runCli(SetupCommandBuilder.diagnostics()
+                        .configDir(configDir)
+                        .workspaceRoot(workspaceRoot)
+                        .stateHome(stateHome)
+                        .workflow(selector.workflow())
+                        .output(tempDir.resolve(selector.name() + "-diagnostics.md"))
+                        .toArgs()))
                 .toList();
 
         // then
@@ -773,18 +717,13 @@ final class TrelloBoardSetupMainTest {
         for (UnusableWorkflowSelector selector : selectors) {
             assertThat(tempDir.resolve(selector.name() + "-diagnostics.md")).doesNotExist();
         }
-        CliRunResult invalidPortResult = runCli(
-                "diagnostics",
-                "--config-dir",
-                configDir.toString(),
-                "--workspace-root",
-                workspaceRoot.toString(),
-                "--state-home",
-                stateHome.toString(),
-                "--workflow",
-                invalidPort.toString(),
-                "--output",
-                tempDir.resolve("invalid-port-diagnostics.md").toString());
+        CliRunResult invalidPortResult = runCli(SetupCommandBuilder.diagnostics()
+                .configDir(configDir)
+                .workspaceRoot(workspaceRoot)
+                .stateHome(stateHome)
+                .workflow(invalidPort)
+                .output(tempDir.resolve("invalid-port-diagnostics.md"))
+                .toArgs());
         invalidPortResult.assertSuccess();
         assertThat(Files.readString(tempDir.resolve("invalid-port-diagnostics.md"), StandardCharsets.UTF_8))
                 .contains("invalid server.port")
@@ -832,18 +771,13 @@ final class TrelloBoardSetupMainTest {
         Files.writeString(store.files(workflowB).stdoutLog(), "private board B log\n", StandardCharsets.UTF_8);
 
         // when
-        CliRunResult result = runCli(
-                "diagnostics",
-                "--config-dir",
-                configDir.toString(),
-                "--workspace-root",
-                workspaceRoot.toString(),
-                "--state-home",
-                stateHome.toString(),
-                "--board",
-                privateBoardName,
-                "--output",
-                output.toString());
+        CliRunResult result = runCli(SetupCommandBuilder.diagnostics()
+                .configDir(configDir)
+                .workspaceRoot(workspaceRoot)
+                .stateHome(stateHome)
+                .board(privateBoardName)
+                .output(output)
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -899,16 +833,12 @@ final class TrelloBoardSetupMainTest {
         Files.writeString(logs.stderrLog(), "", StandardCharsets.UTF_8);
 
         // when
-        CliRunResult result = runCli(
-                "logs",
-                "--config-dir",
-                configDir.toString(),
-                "--workspace-root",
-                workspaceRoot.toString(),
-                "--state-home",
-                stateHome.toString(),
-                "--board",
-                "Board A");
+        CliRunResult result = runCli(SetupCommandBuilder.logs()
+                .configDir(configDir)
+                .workspaceRoot(workspaceRoot)
+                .stateHome(stateHome)
+                .board("Board A")
+                .toArgs());
 
         // then
         result.assertSuccess()
@@ -926,8 +856,10 @@ final class TrelloBoardSetupMainTest {
         Files.writeString(privatePathComponent, "not a directory", StandardCharsets.UTF_8);
 
         // when
-        CliRunResult result =
-                runCli("diagnostics", "--config-dir", configDir.toString(), "--output", output.toString());
+        CliRunResult result = runCli(SetupCommandBuilder.diagnostics()
+                .configDir(configDir)
+                .output(output)
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -1756,7 +1688,11 @@ final class TrelloBoardSetupMainTest {
         // given
 
         // when
-        CliRunResult result = runCli("list-workspaces", "--endpoint", endpoint(), "--key", "key", "--token", "token");
+        CliRunResult result = runCli(SetupCommandBuilder.listWorkspaces()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .toArgs());
 
         // then
         result.assertSuccess().stdoutContains("Trello workspaces:", "workspace-1", "Engineering");
@@ -1767,8 +1703,11 @@ final class TrelloBoardSetupMainTest {
         // given
 
         // when
-        CliRunResult result =
-                runCli("list-workspaces", "--endpoint", endpointRoot(), "--key", "key", "--token", "token");
+        CliRunResult result = runCli(SetupCommandBuilder.listWorkspaces()
+                .endpoint(endpointRoot())
+                .key("key")
+                .token("token")
+                .toArgs());
 
         // then
         result.assertSuccess().stdoutContains("Trello workspaces:", "workspace-1", "Engineering");
@@ -1826,7 +1765,11 @@ final class TrelloBoardSetupMainTest {
         // given
 
         // when
-        CliRunResult result = runCli("list-workspaces", "--endpoint", endpoint, "--key", "key", "--token", "token");
+        CliRunResult result = runCli(SetupCommandBuilder.listWorkspaces()
+                .endpoint(endpoint)
+                .key("key")
+                .token("token")
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -1846,24 +1789,16 @@ final class TrelloBoardSetupMainTest {
         int expectedPort = firstAvailableManagedPort();
 
         // when
-        CliRunResult result = runCli(
-                "new-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--name",
-                "Symphony Work Queue",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--env",
-                env.toString(),
-                "--server-port",
-                String.valueOf(expectedPort));
+        CliRunResult result = runCli(SetupCommandBuilder.newBoard()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .name("Symphony Work Queue")
+                .workflow(workflow)
+                .manifest(tempDir.resolve("connected-boards.json"))
+                .env(env)
+                .serverPort(expectedPort)
+                .toArgs());
 
         // then
         result.assertSuccess();
@@ -1912,24 +1847,16 @@ final class TrelloBoardSetupMainTest {
         Path env = tempDir.resolve(".env.reserved-port");
 
         // when
-        CliRunResult result = runCli(
-                "new-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "direct-key",
-                "--token",
-                "direct-token",
-                "--name",
-                "Reserved Port Queue",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--env",
-                env.toString(),
-                "--server-port",
-                "1");
+        CliRunResult result = runCli(SetupCommandBuilder.newBoard()
+                .endpoint(endpoint())
+                .key("direct-key")
+                .token("direct-token")
+                .name("Reserved Port Queue")
+                .workflow(workflow)
+                .manifest(tempDir.resolve("connected-boards.json"))
+                .env(env)
+                .serverPort("1")
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -1955,24 +1882,16 @@ final class TrelloBoardSetupMainTest {
                 .save(new ConnectedBoardManifest(List.of(connectedBoard(existingWorkflow, 18081))));
 
         // when
-        CliRunResult result = runCli(
-                "new-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "direct-key",
-                "--token",
-                "direct-token",
-                "--name",
-                "Manifest Port Queue",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--env",
-                env.toString(),
-                "--server-port",
-                "18081");
+        CliRunResult result = runCli(SetupCommandBuilder.newBoard()
+                .endpoint(endpoint())
+                .key("direct-key")
+                .token("direct-token")
+                .name("Manifest Port Queue")
+                .workflow(workflow)
+                .manifest(tempDir.resolve("connected-boards.json"))
+                .env(env)
+                .serverPort("18081")
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -1999,24 +1918,16 @@ final class TrelloBoardSetupMainTest {
         // when
         CliRunResult result;
         try {
-            result = runCli(
-                    "new-board",
-                    "--endpoint",
-                    endpoint(),
-                    "--key",
-                    "direct-key",
-                    "--token",
-                    "direct-token",
-                    "--name",
-                    "Live Port Queue",
-                    "--workflow",
-                    workflow.toString(),
-                    "--manifest",
-                    tempDir.resolve("connected-boards.json").toString(),
-                    "--env",
-                    env.toString(),
-                    "--server-port",
-                    String.valueOf(listeningPort));
+            result = runCli(SetupCommandBuilder.newBoard()
+                    .endpoint(endpoint())
+                    .key("direct-key")
+                    .token("direct-token")
+                    .name("Live Port Queue")
+                    .workflow(workflow)
+                    .manifest(tempDir.resolve("connected-boards.json"))
+                    .env(env)
+                    .serverPort(listeningPort)
+                    .toArgs());
         } finally {
             listeningServer.stop(0);
         }
@@ -2042,28 +1953,18 @@ final class TrelloBoardSetupMainTest {
         Path env = tempDir.resolve(".env.import-reserved-port");
 
         // when
-        CliRunResult result = runCli(
-                "import-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "direct-key",
-                "--token",
-                "direct-token",
-                "--board",
-                "https://trello.com/b/input/existing-board",
-                "--active",
-                "Queue for Codex",
-                "--terminal",
-                "Released",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--env",
-                env.toString(),
-                "--server-port",
-                "2");
+        CliRunResult result = runCli(SetupCommandBuilder.importBoard()
+                .endpoint(endpoint())
+                .key("direct-key")
+                .token("direct-token")
+                .board("https://trello.com/b/input/existing-board")
+                .active("Queue for Codex")
+                .terminal("Released")
+                .workflow(workflow)
+                .manifest(tempDir.resolve("connected-boards.json"))
+                .env(env)
+                .serverPort("2")
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -2088,28 +1989,18 @@ final class TrelloBoardSetupMainTest {
                 .save(new ConnectedBoardManifest(List.of(connectedBoard(existingWorkflow, 18082))));
 
         // when
-        CliRunResult result = runCli(
-                "import-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "direct-key",
-                "--token",
-                "direct-token",
-                "--board",
-                "https://trello.com/b/input/existing-board",
-                "--active",
-                "Queue for Codex",
-                "--terminal",
-                "Released",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--env",
-                env.toString(),
-                "--server-port",
-                "18082");
+        CliRunResult result = runCli(SetupCommandBuilder.importBoard()
+                .endpoint(endpoint())
+                .key("direct-key")
+                .token("direct-token")
+                .board("https://trello.com/b/input/existing-board")
+                .active("Queue for Codex")
+                .terminal("Released")
+                .workflow(workflow)
+                .manifest(tempDir.resolve("connected-boards.json"))
+                .env(env)
+                .serverPort("18082")
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -2135,28 +2026,18 @@ final class TrelloBoardSetupMainTest {
         // when
         CliRunResult result;
         try {
-            result = runCli(
-                    "import-board",
-                    "--endpoint",
-                    endpoint(),
-                    "--key",
-                    "direct-key",
-                    "--token",
-                    "direct-token",
-                    "--board",
-                    "https://trello.com/b/input/existing-board",
-                    "--active",
-                    "Queue for Codex",
-                    "--terminal",
-                    "Released",
-                    "--workflow",
-                    workflow.toString(),
-                    "--manifest",
-                    tempDir.resolve("connected-boards.json").toString(),
-                    "--env",
-                    env.toString(),
-                    "--server-port",
-                    String.valueOf(listeningPort));
+            result = runCli(SetupCommandBuilder.importBoard()
+                    .endpoint(endpoint())
+                    .key("direct-key")
+                    .token("direct-token")
+                    .board("https://trello.com/b/input/existing-board")
+                    .active("Queue for Codex")
+                    .terminal("Released")
+                    .workflow(workflow)
+                    .manifest(tempDir.resolve("connected-boards.json"))
+                    .env(env)
+                    .serverPort(listeningPort)
+                    .toArgs());
         } finally {
             listeningServer.stop(0);
         }
@@ -2209,30 +2090,19 @@ final class TrelloBoardSetupMainTest {
         int exitCode;
         try {
             exitCode = TrelloBoardSetupMain.run(
-                    new String[] {
-                        "import-board",
-                        "--endpoint",
-                        endpoint(),
-                        "--key",
-                        "key",
-                        "--token",
-                        "token",
-                        "--board",
-                        "https://trello.com/b/input/existing-board",
-                        "--active",
-                        "Queue for Codex",
-                        "--terminal",
-                        "Released",
-                        "--workflow",
-                        workflow.toString(),
-                        "--manifest",
-                        tempDir.resolve("connected-boards.json").toString(),
-                        "--env",
-                        env.toString(),
-                        "--server-port",
-                        String.valueOf(listeningPort),
-                        "--force"
-                    },
+                    SetupCommandBuilder.importBoard()
+                            .endpoint(endpoint())
+                            .key("key")
+                            .token("token")
+                            .board("https://trello.com/b/input/existing-board")
+                            .active("Queue for Codex")
+                            .terminal("Released")
+                            .workflow(workflow)
+                            .manifest(tempDir.resolve("connected-boards.json"))
+                            .env(env)
+                            .serverPort(listeningPort)
+                            .force()
+                            .toArgs(),
                     new TrelloBoardSetupService(boardSetup, workerManager, Map.of()),
                     new LocalSetup(boardSetup, new ProcessCommandRunner()),
                     workerManager,
@@ -2259,22 +2129,15 @@ final class TrelloBoardSetupMainTest {
         Files.writeString(tempDir.resolve("connected-boards.json"), "{not-json", StandardCharsets.UTF_8);
 
         // when
-        CliRunResult result = runCli(
-                "new-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--name",
-                "Manifest Preflight Queue",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--env",
-                env.toString());
+        CliRunResult result = runCli(SetupCommandBuilder.newBoard()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .name("Manifest Preflight Queue")
+                .workflow(workflow)
+                .manifest(tempDir.resolve("connected-boards.json"))
+                .env(env)
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -2297,22 +2160,15 @@ final class TrelloBoardSetupMainTest {
         Files.writeString(tempDir.resolve("connected-boards.json"), "{\"boards\":[{}]}", StandardCharsets.UTF_8);
 
         // when
-        CliRunResult result = runCli(
-                "new-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--name",
-                "Unusable Manifest Queue",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--env",
-                env.toString());
+        CliRunResult result = runCli(SetupCommandBuilder.newBoard()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .name("Unusable Manifest Queue")
+                .workflow(workflow)
+                .manifest(tempDir.resolve("connected-boards.json"))
+                .env(env)
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -2338,22 +2194,15 @@ final class TrelloBoardSetupMainTest {
         Files.writeString(manifest, manifestContent, StandardCharsets.UTF_8);
 
         // when
-        CliRunResult result = runCli(
-                "new-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--name",
-                "Null Boards Queue",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                manifest.toString(),
-                "--env",
-                env.toString());
+        CliRunResult result = runCli(SetupCommandBuilder.newBoard()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .name("Null Boards Queue")
+                .workflow(workflow)
+                .manifest(manifest)
+                .env(env)
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -2383,22 +2232,15 @@ final class TrelloBoardSetupMainTest {
         Files.createDirectories(relativeDirectory);
 
         // when
-        CliRunResult result = runCli(
-                "new-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--name",
-                "Relative Paths Queue",
-                "--workflow",
-                relativeWorkflow.toString(),
-                "--manifest",
-                relativeDirectory.resolve("connected-boards.json").toString(),
-                "--env",
-                relativeEnv.toString());
+        CliRunResult result = runCli(SetupCommandBuilder.newBoard()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .name("Relative Paths Queue")
+                .workflow(relativeWorkflow)
+                .manifest(relativeDirectory.resolve("connected-boards.json"))
+                .env(relativeEnv)
+                .toArgs());
 
         // then
         result.assertSuccess();
@@ -2428,23 +2270,16 @@ final class TrelloBoardSetupMainTest {
         // when
         CliRunResult result = runCliWithEnvironment(
                 Map.of("SYMPHONY_TRELLO_CONFIG_DIR", installedConfig.toString()),
-                "import-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "https://trello.com/b/input/existing-board",
-                "--active",
-                "Queue for Codex",
-                "--terminal",
-                "Released",
-                "--workflow",
-                externalWorkflow.toString(),
-                "--env",
-                env.toString());
+                SetupCommandBuilder.importBoard()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .board("https://trello.com/b/input/existing-board")
+                        .active("Queue for Codex")
+                        .terminal("Released")
+                        .workflow(externalWorkflow)
+                        .env(env)
+                        .toArgs());
 
         // then
         result.assertSuccess();
@@ -2470,20 +2305,15 @@ final class TrelloBoardSetupMainTest {
         // when
         CliRunResult result = runCliWithEnvironment(
                 Map.of("SYMPHONY_TRELLO_CONFIG_DIR", installedConfig.toString()),
-                "new-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--name",
-                "External Default Queue",
-                "--workflow",
-                externalWorkflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+                SetupCommandBuilder.newBoard()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .name("External Default Queue")
+                        .workflow(externalWorkflow)
+                        .env(env)
+                        .noGithub()
+                        .toArgs());
 
         // then
         result.assertSuccess();
@@ -2504,25 +2334,17 @@ final class TrelloBoardSetupMainTest {
         Path env = tempDir.resolve(".env.directory-workflow");
 
         // when
-        CliRunResult result = runCli(
-                "import-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "https://trello.com/b/input/existing-board",
-                "--active",
-                "Queue for Codex",
-                "--terminal",
-                "Released",
-                "--workflow",
-                workflowDirectory.toString(),
-                "--env",
-                env.toString(),
-                "--force");
+        CliRunResult result = runCli(SetupCommandBuilder.importBoard()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board("https://trello.com/b/input/existing-board")
+                .active("Queue for Codex")
+                .terminal("Released")
+                .workflow(workflowDirectory)
+                .env(env)
+                .force()
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -2539,25 +2361,17 @@ final class TrelloBoardSetupMainTest {
         Path env = tempDir.resolve(".env.file-parent-workflow");
 
         // when
-        CliRunResult result = runCli(
-                "import-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "https://trello.com/b/input/existing-board",
-                "--active",
-                "Queue for Codex",
-                "--terminal",
-                "Released",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--force");
+        CliRunResult result = runCli(SetupCommandBuilder.importBoard()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board("https://trello.com/b/input/existing-board")
+                .active("Queue for Codex")
+                .terminal("Released")
+                .workflow(workflow)
+                .env(env)
+                .force()
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -2597,7 +2411,10 @@ final class TrelloBoardSetupMainTest {
         Files.writeString(env, "TRELLO_API_KEY=env-key\nTRELLO_API_TOKEN=env-token\n", StandardCharsets.UTF_8);
 
         // when
-        CliRunResult result = runCli("list-workspaces", "--endpoint", endpoint(), "--env", env.toString());
+        CliRunResult result = runCli(SetupCommandBuilder.listWorkspaces()
+                .endpoint(endpoint())
+                .env(env)
+                .toArgs());
 
         // then
         result.assertSuccess().stdoutContains("Trello workspaces:", "workspace-1");
@@ -2612,7 +2429,10 @@ final class TrelloBoardSetupMainTest {
         Files.writeString(env, "\uFEFFTRELLO_API_KEY=bom-key\nTRELLO_API_TOKEN=bom-token\n", StandardCharsets.UTF_8);
 
         // when
-        CliRunResult result = runCli("list-workspaces", "--endpoint", endpoint(), "--env", env.toString());
+        CliRunResult result = runCli(SetupCommandBuilder.listWorkspaces()
+                .endpoint(endpoint())
+                .env(env)
+                .toArgs());
 
         // then
         result.assertSuccess().stdoutContains("Trello workspaces:");
@@ -2629,7 +2449,10 @@ final class TrelloBoardSetupMainTest {
                 env, "TRELLO_API_KEY=" + dotenvValue + "\nTRELLO_API_TOKEN=real-token\n", StandardCharsets.UTF_8);
 
         // when
-        CliRunResult result = runCli("list-workspaces", "--endpoint", endpoint(), "--env", env.toString());
+        CliRunResult result = runCli(SetupCommandBuilder.listWorkspaces()
+                .endpoint(endpoint())
+                .env(env)
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -2651,16 +2474,12 @@ final class TrelloBoardSetupMainTest {
         Files.writeString(env, "TRELLO_API_KEY=${REAL_KEY}\nTRELLO_API_TOKEN=${REAL_TOKEN}\n", StandardCharsets.UTF_8);
 
         // when
-        CliRunResult result = runCli(
-                "list-workspaces",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "direct-key",
-                "--token",
-                "direct-token",
-                "--env",
-                env.toString());
+        CliRunResult result = runCli(SetupCommandBuilder.listWorkspaces()
+                .endpoint(endpoint())
+                .key("direct-key")
+                .token("direct-token")
+                .env(env)
+                .toArgs());
 
         // then
         result.assertSuccess().stdoutContains("Trello workspaces:");
@@ -2679,7 +2498,10 @@ final class TrelloBoardSetupMainTest {
                 StandardCharsets.UTF_8);
 
         // when
-        CliRunResult result = runCli("list-workspaces", "--endpoint", endpoint(), "--config-dir", configDir.toString());
+        CliRunResult result = runCli(SetupCommandBuilder.listWorkspaces()
+                .endpoint(endpoint())
+                .configDir(configDir)
+                .toArgs());
 
         // then
         result.assertSuccess().stdoutContains("Trello workspaces:", "workspace-1");
@@ -2700,14 +2522,11 @@ final class TrelloBoardSetupMainTest {
         Files.writeString(env, "TRELLO_API_KEY=env-key\nTRELLO_API_TOKEN=env-token\n", StandardCharsets.UTF_8);
 
         // when
-        CliRunResult result = runCli(
-                "list-workspaces",
-                "--endpoint",
-                endpoint(),
-                "--env",
-                env.toString(),
-                "--config-dir",
-                configDir.toString());
+        CliRunResult result = runCli(SetupCommandBuilder.listWorkspaces()
+                .endpoint(endpoint())
+                .env(env)
+                .configDir(configDir)
+                .toArgs());
 
         // then
         result.assertSuccess().stdoutContains("Trello workspaces:");
@@ -2728,18 +2547,13 @@ final class TrelloBoardSetupMainTest {
         Files.writeString(env, "TRELLO_API_KEY=env-key\nTRELLO_API_TOKEN=env-token\n", StandardCharsets.UTF_8);
 
         // when
-        CliRunResult result = runCli(
-                "list-workspaces",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "direct-key",
-                "--token",
-                "direct-token",
-                "--env",
-                env.toString(),
-                "--config-dir",
-                configDir.toString());
+        CliRunResult result = runCli(SetupCommandBuilder.listWorkspaces()
+                .endpoint(endpoint())
+                .key("direct-key")
+                .token("direct-token")
+                .env(env)
+                .configDir(configDir)
+                .toArgs());
 
         // then
         result.assertSuccess().stdoutContains("Trello workspaces:");
@@ -2754,8 +2568,10 @@ final class TrelloBoardSetupMainTest {
         Files.writeString(notADirectory, "not a directory", StandardCharsets.UTF_8);
 
         // when
-        CliRunResult result =
-                runCli("list-workspaces", "--endpoint", endpoint(), "--config-dir", notADirectory.toString());
+        CliRunResult result = runCli(SetupCommandBuilder.listWorkspaces()
+                .endpoint(endpoint())
+                .configDir(notADirectory)
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -2777,26 +2593,17 @@ final class TrelloBoardSetupMainTest {
         Path env = tempDir.resolve(".env.external-import");
 
         // when
-        CliRunResult result = runCli(
-                "import-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "https://trello.com/b/input/existing-board",
-                "--active",
-                "Queue for Codex",
-                "--terminal",
-                "Released",
-                "--workflow",
-                externalWorkflow.toString(),
-                "--manifest",
-                installedManifest.toString(),
-                "--env",
-                env.toString());
+        CliRunResult result = runCli(SetupCommandBuilder.importBoard()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board("https://trello.com/b/input/existing-board")
+                .active("Queue for Codex")
+                .terminal("Released")
+                .workflow(externalWorkflow)
+                .manifest(installedManifest)
+                .env(env)
+                .toArgs());
 
         // then
         result.assertSuccess();
@@ -2842,28 +2649,18 @@ final class TrelloBoardSetupMainTest {
 
         // when
         int exitCode = TrelloBoardSetupMain.run(
-                new String[] {
-                    "import-board",
-                    "--endpoint",
-                    endpoint(),
-                    "--key",
-                    "key",
-                    "--token",
-                    "token",
-                    "--board",
-                    "https://trello.com/b/input/existing-board",
-                    "--active",
-                    "Queue for Codex",
-                    "--terminal",
-                    "Released",
-                    "--workflow",
-                    newWorkflow.toString(),
-                    "--manifest",
-                    tempDir.resolve("connected-boards.json").toString(),
-                    "--env",
-                    newEnv.toString(),
-                    "--force"
-                },
+                SetupCommandBuilder.importBoard()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .board("https://trello.com/b/input/existing-board")
+                        .active("Queue for Codex")
+                        .terminal("Released")
+                        .workflow(newWorkflow)
+                        .manifest(tempDir.resolve("connected-boards.json"))
+                        .env(newEnv)
+                        .force()
+                        .toArgs(),
                 new TrelloBoardSetupService(boardSetup, workerManager, Map.of()),
                 new LocalSetup(boardSetup, new ProcessCommandRunner()),
                 workerManager,
@@ -2983,22 +2780,15 @@ final class TrelloBoardSetupMainTest {
         Path env = tempDir.resolve(".env.runtime");
 
         // when
-        CliRunResult result = runCli(
-                "new-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "direct-key",
-                "--token",
-                "direct-token",
-                "--name",
-                "Runtime Env Queue",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--env",
-                env.toString());
+        CliRunResult result = runCli(SetupCommandBuilder.newBoard()
+                .endpoint(endpoint())
+                .key("direct-key")
+                .token("direct-token")
+                .name("Runtime Env Queue")
+                .workflow(workflow)
+                .manifest(tempDir.resolve("connected-boards.json"))
+                .env(env)
+                .toArgs());
 
         // then
         result.assertSuccess();
@@ -3068,18 +2858,13 @@ final class TrelloBoardSetupMainTest {
         Files.writeString(env, "TRELLO_API_KEY=dotenv-key\nTRELLO_API_TOKEN=dotenv-token\n", StandardCharsets.UTF_8);
 
         // when
-        CliRunResult result = runCli(
-                "new-board",
-                "--endpoint",
-                endpoint(),
-                "--name",
-                "Runtime Env Source Queue",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--env",
-                env.toString());
+        CliRunResult result = runCli(SetupCommandBuilder.newBoard()
+                .endpoint(endpoint())
+                .name("Runtime Env Source Queue")
+                .workflow(workflow)
+                .manifest(tempDir.resolve("connected-boards.json"))
+                .env(env)
+                .toArgs());
 
         // then
         result.assertSuccess();
@@ -3422,22 +3207,15 @@ final class TrelloBoardSetupMainTest {
         Path workflow = tempDir.resolve("multiline-runtime-env.WORKFLOW.md");
 
         // when
-        CliRunResult result = runCli(
-                "new-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "direct-key\ninvalid",
-                "--token",
-                "direct-token",
-                "--name",
-                "Runtime Env Queue",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--env",
-                env.toString());
+        CliRunResult result = runCli(SetupCommandBuilder.newBoard()
+                .endpoint(endpoint())
+                .key("direct-key\ninvalid")
+                .token("direct-token")
+                .name("Runtime Env Queue")
+                .workflow(workflow)
+                .manifest(tempDir.resolve("connected-boards.json"))
+                .env(env)
+                .toArgs());
 
         // then
         result.assertFailure(2);
@@ -3494,22 +3272,15 @@ final class TrelloBoardSetupMainTest {
         Path env = tempDir.resolve(".env.runtime");
 
         // when
-        CliRunResult result = runCli(
-                "new-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "direct-key",
-                "--token",
-                "direct-token",
-                "--name",
-                "Runtime Env Queue",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--env",
-                env.toString());
+        CliRunResult result = runCli(SetupCommandBuilder.newBoard()
+                .endpoint(endpoint())
+                .key("direct-key")
+                .token("direct-token")
+                .name("Runtime Env Queue")
+                .workflow(workflow)
+                .manifest(tempDir.resolve("connected-boards.json"))
+                .env(env)
+                .toArgs());
 
         // then
         result.assertFailure(2);
@@ -3532,26 +3303,17 @@ final class TrelloBoardSetupMainTest {
         Path env = tempDir.resolve(".env.import-runtime");
 
         // when
-        CliRunResult result = runCli(
-                "import-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "direct-key",
-                "--token",
-                "direct-token",
-                "--board",
-                "https://trello.com/b/input/existing-board",
-                "--active",
-                "Queue for Codex",
-                "--terminal",
-                "Released",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--env",
-                env.toString());
+        CliRunResult result = runCli(SetupCommandBuilder.importBoard()
+                .endpoint(endpoint())
+                .key("direct-key")
+                .token("direct-token")
+                .board("https://trello.com/b/input/existing-board")
+                .active("Queue for Codex")
+                .terminal("Released")
+                .workflow(workflow)
+                .manifest(tempDir.resolve("connected-boards.json"))
+                .env(env)
+                .toArgs());
 
         // then
         result.assertFailure(2);
@@ -3607,21 +3369,15 @@ final class TrelloBoardSetupMainTest {
         // when
         CliRunResult result = runCli(
                 () -> new TrelloBoardSetup.CodexModelDefaults("gpt-test-maintainer", "high"),
-                "new-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--name",
-                "Resolver Backed Queue",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--env",
-                env.toString());
+                SetupCommandBuilder.newBoard()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .name("Resolver Backed Queue")
+                        .workflow(workflow)
+                        .manifest(tempDir.resolve("connected-boards.json"))
+                        .env(env)
+                        .toArgs());
 
         // then
         result.assertSuccess();
@@ -3639,23 +3395,16 @@ final class TrelloBoardSetupMainTest {
         // when
         CliRunResult result = runCli(
                 () -> new TrelloBoardSetup.CodexModelDefaults("gpt-default", "medium"),
-                "new-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--name",
-                "Explicit New Board Model",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--codex-model",
-                "gpt-explicit",
-                "--codex-reasoning-effort",
-                "high");
+                SetupCommandBuilder.newBoard()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .name("Explicit New Board Model")
+                        .workflow(workflow)
+                        .manifest(tempDir.resolve("connected-boards.json"))
+                        .codexModel("gpt-explicit")
+                        .codexReasoningEffort("high")
+                        .toArgs());
 
         // then
         result.assertSuccess();
@@ -3673,21 +3422,15 @@ final class TrelloBoardSetupMainTest {
         // when
         CliRunResult result = runCli(
                 () -> TrelloBoardSetup.CodexModelDefaults.unsupportedFirstClassFields(),
-                "new-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--name",
-                "Unsupported Explicit New Board Model",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--codex-model",
-                "gpt-explicit");
+                SetupCommandBuilder.newBoard()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .name("Unsupported Explicit New Board Model")
+                        .workflow(workflow)
+                        .manifest(tempDir.resolve("connected-boards.json"))
+                        .codexModel("gpt-explicit")
+                        .toArgs());
 
         // then
         result.assertSuccess();
@@ -3704,26 +3447,17 @@ final class TrelloBoardSetupMainTest {
         Path env = tempDir.resolve("missing-env-parent").resolve(".env");
 
         // when
-        CliRunResult result = runCli(
-                "new-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--name",
-                "Blank Codex New Board",
-                "--workspace-id",
-                "workspace-1",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--env",
-                env.toString(),
-                optionName,
-                " ");
+        CliRunResult result = runCli(SetupCommandBuilder.newBoard()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .name("Blank Codex New Board")
+                .workspaceId("workspace-1")
+                .workflow(workflow)
+                .manifest(tempDir.resolve("connected-boards.json"))
+                .env(env)
+                .option(optionName, " ")
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -3804,28 +3538,18 @@ final class TrelloBoardSetupMainTest {
         Path env = tempDir.resolve("missing-import-env-parent").resolve(".env");
 
         // when
-        CliRunResult result = runCli(
-                "import-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "input",
-                "--active",
-                "Queue for Codex",
-                "--terminal",
-                "Released",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--env",
-                env.toString(),
-                optionName,
-                " ");
+        CliRunResult result = runCli(SetupCommandBuilder.importBoard()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board("input")
+                .active("Queue for Codex")
+                .terminal("Released")
+                .workflow(workflow)
+                .manifest(tempDir.resolve("connected-boards.json"))
+                .env(env)
+                .option(optionName, " ")
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -4087,23 +3811,16 @@ final class TrelloBoardSetupMainTest {
         Path env = tempDir.resolve(".env.non-github");
 
         // when
-        CliRunResult result = runCli(
-                "new-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--name",
-                "Local Work Queue",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+        CliRunResult result = runCli(SetupCommandBuilder.newBoard()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .name("Local Work Queue")
+                .workflow(workflow)
+                .manifest(tempDir.resolve("connected-boards.json"))
+                .env(env)
+                .noGithub()
+                .toArgs());
 
         // then
         result.assertSuccess();
@@ -4127,22 +3844,15 @@ final class TrelloBoardSetupMainTest {
         Path env = tempDir.resolve(".env.explicit-workflow");
 
         // when
-        CliRunResult result = runCli(
-                "new-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--name",
-                "Symmetry Queue",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--env",
-                env.toString());
+        CliRunResult result = runCli(SetupCommandBuilder.newBoard()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .name("Symmetry Queue")
+                .workflow(workflow)
+                .manifest(tempDir.resolve("connected-boards.json"))
+                .env(env)
+                .toArgs());
 
         // then
         result.assertFailure(2);
@@ -4159,28 +3869,18 @@ final class TrelloBoardSetupMainTest {
         Path env = tempDir.resolve(".env.imported");
 
         // when
-        CliRunResult result = runCli(
-                "import-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "https://trello.com/b/input/existing-board",
-                "--active",
-                "Queue for Codex,Doing",
-                "--in-progress",
-                "Doing",
-                "--terminal",
-                "Released",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--env",
-                env.toString());
+        CliRunResult result = runCli(SetupCommandBuilder.importBoard()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board("https://trello.com/b/input/existing-board")
+                .active("Queue for Codex,Doing")
+                .inProgress("Doing")
+                .terminal("Released")
+                .workflow(workflow)
+                .manifest(tempDir.resolve("connected-boards.json"))
+                .env(env)
+                .toArgs());
 
         // then
         result.assertSuccess();
@@ -4229,26 +3929,17 @@ final class TrelloBoardSetupMainTest {
         Path env = tempDir.resolve(".env.imported-space");
 
         // when
-        CliRunResult result = runCli(
-                "import-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "https://trello.com/b/input/existing-board",
-                "--active",
-                " Queue for Codex ,Released ",
-                "--terminal",
-                " Doing ",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--env",
-                env.toString());
+        CliRunResult result = runCli(SetupCommandBuilder.importBoard()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board("https://trello.com/b/input/existing-board")
+                .active(" Queue for Codex ,Released ")
+                .terminal(" Doing ")
+                .workflow(workflow)
+                .manifest(tempDir.resolve("connected-boards.json"))
+                .env(env)
+                .toArgs());
 
         // then
         result.assertSuccess();
@@ -4281,27 +3972,18 @@ final class TrelloBoardSetupMainTest {
         Files.writeString(env, "SYNTHETIC_IMPORT_STATUS_PORT=19091\n", StandardCharsets.UTF_8);
 
         // when
-        CliRunResult result = runCli(
-                "import-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "https://trello.com/b/input/existing-board",
-                "--active",
-                "Queue for Codex",
-                "--terminal",
-                "Released",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--env",
-                env.toString(),
-                "--force");
+        CliRunResult result = runCli(SetupCommandBuilder.importBoard()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board("https://trello.com/b/input/existing-board")
+                .active("Queue for Codex")
+                .terminal("Released")
+                .workflow(workflow)
+                .manifest(tempDir.resolve("connected-boards.json"))
+                .env(env)
+                .force()
+                .toArgs());
 
         // then
         result.assertSuccess();
@@ -4340,26 +4022,17 @@ final class TrelloBoardSetupMainTest {
         Files.writeString(env, "SYNTHETIC_IMPORT_STATUS_PORT=18080\n", StandardCharsets.UTF_8);
 
         // when
-        CliRunResult result = runCli(
-                "import-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "https://trello.com/b/input/existing-board",
-                "--active",
-                "Queue for Codex",
-                "--terminal",
-                "Released",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--env",
-                env.toString());
+        CliRunResult result = runCli(SetupCommandBuilder.importBoard()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board("https://trello.com/b/input/existing-board")
+                .active("Queue for Codex")
+                .terminal("Released")
+                .workflow(workflow)
+                .manifest(tempDir.resolve("connected-boards.json"))
+                .env(env)
+                .toArgs());
 
         // then
         assertSiblingWorkflowPortUsesEnvironmentVariable(result, workflow, env);
@@ -4387,24 +4060,16 @@ final class TrelloBoardSetupMainTest {
         Files.writeString(env, "SYNTHETIC_NEW_BOARD_STATUS_PORT=18080\n", StandardCharsets.UTF_8);
 
         // when
-        CliRunResult result = runCli(
-                "new-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--name",
-                "New Port Queue",
-                "--workspace-id",
-                "workspace-id",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--env",
-                env.toString());
+        CliRunResult result = runCli(SetupCommandBuilder.newBoard()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .name("New Port Queue")
+                .workspaceId("workspace-id")
+                .workflow(workflow)
+                .manifest(tempDir.resolve("connected-boards.json"))
+                .env(env)
+                .toArgs());
 
         // then
         assertSiblingWorkflowPortUsesEnvironmentVariable(result, workflow, env);
@@ -4429,27 +4094,18 @@ final class TrelloBoardSetupMainTest {
         Path workflow = tempDir.resolve("bad-in-progress.WORKFLOW.md");
 
         // when
-        CliRunResult result = runCli(
-                "import-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "https://trello.com/b/input/existing-board",
-                "--active",
-                "Queue for Codex",
-                "--terminal",
-                "Released",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--force",
-                "--in-progress",
-                "No Such List 123");
+        CliRunResult result = runCli(SetupCommandBuilder.importBoard()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board("https://trello.com/b/input/existing-board")
+                .active("Queue for Codex")
+                .terminal("Released")
+                .workflow(workflow)
+                .manifest(tempDir.resolve("connected-boards.json"))
+                .force()
+                .inProgress("No Such List 123")
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -4468,25 +4124,17 @@ final class TrelloBoardSetupMainTest {
         // when
         CliRunResult result = runCli(
                 () -> new TrelloBoardSetup.CodexModelDefaults("gpt-default", "medium"),
-                "import-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "https://trello.com/b/input/existing-board",
-                "--active",
-                "Queue for Codex",
-                "--terminal",
-                "Released",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--codex-reasoning-effort",
-                "high");
+                SetupCommandBuilder.importBoard()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .board("https://trello.com/b/input/existing-board")
+                        .active("Queue for Codex")
+                        .terminal("Released")
+                        .workflow(workflow)
+                        .manifest(tempDir.resolve("connected-boards.json"))
+                        .codexReasoningEffort("high")
+                        .toArgs());
 
         // then
         result.assertSuccess();
@@ -4514,26 +4162,18 @@ final class TrelloBoardSetupMainTest {
         // when
         CliRunResult result = runCli(
                 () -> TrelloBoardSetup.CodexModelDefaults.unsupportedFirstClassFields(),
-                "import-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "https://trello.com/b/input/existing-board",
-                "--active",
-                "Queue for Codex",
-                "--terminal",
-                "Released",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--force",
-                "--codex-model",
-                "gpt-explicit");
+                SetupCommandBuilder.importBoard()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .board("https://trello.com/b/input/existing-board")
+                        .active("Queue for Codex")
+                        .terminal("Released")
+                        .workflow(workflow)
+                        .manifest(tempDir.resolve("connected-boards.json"))
+                        .force()
+                        .codexModel("gpt-explicit")
+                        .toArgs());
 
         // then
         result.assertSuccess();
@@ -4564,26 +4204,18 @@ final class TrelloBoardSetupMainTest {
                 new CodexModelSelectionDefaults(
                         new TrelloBoardSetup.CodexModelDefaults("gpt-default", "medium"),
                         Map.of("gpt-default", "medium", "gpt-new", "high")),
-                "import-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "https://trello.com/b/input/existing-board",
-                "--active",
-                "Queue for Codex",
-                "--terminal",
-                "Released",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--force",
-                "--codex-model",
-                "gpt-new");
+                SetupCommandBuilder.importBoard()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .board("https://trello.com/b/input/existing-board")
+                        .active("Queue for Codex")
+                        .terminal("Released")
+                        .workflow(workflow)
+                        .manifest(tempDir.resolve("connected-boards.json"))
+                        .force()
+                        .codexModel("gpt-new")
+                        .toArgs());
 
         // then
         result.assertSuccess();
@@ -4614,26 +4246,18 @@ final class TrelloBoardSetupMainTest {
                 new CodexModelSelectionDefaults(
                         new TrelloBoardSetup.CodexModelDefaults("gpt-default", "medium"),
                         Map.of("gpt-default", "medium", "gpt-known", "high")),
-                "import-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "https://trello.com/b/input/existing-board",
-                "--active",
-                "Queue for Codex",
-                "--terminal",
-                "Released",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--force",
-                "--codex-model",
-                "gpt-custom");
+                SetupCommandBuilder.importBoard()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .board("https://trello.com/b/input/existing-board")
+                        .active("Queue for Codex")
+                        .terminal("Released")
+                        .workflow(workflow)
+                        .manifest(tempDir.resolve("connected-boards.json"))
+                        .force()
+                        .codexModel("gpt-custom")
+                        .toArgs());
 
         // then
         result.assertSuccess();
@@ -4868,27 +4492,18 @@ final class TrelloBoardSetupMainTest {
         Path workflow = tempDir.resolve("direct-root-workspace.WORKFLOW.md");
 
         // when
-        CliRunResult result = runCli(
-                "import-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "https://trello.com/b/input/existing-board",
-                "--active",
-                "Queue for Codex",
-                "--terminal",
-                "Released",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--force",
-                "--workspace-root",
-                "/");
+        CliRunResult result = runCli(SetupCommandBuilder.importBoard()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board("https://trello.com/b/input/existing-board")
+                .active("Queue for Codex")
+                .terminal("Released")
+                .workflow(workflow)
+                .manifest(tempDir.resolve("connected-boards.json"))
+                .force()
+                .workspaceRoot("/")
+                .toArgs());
 
         // then
         result.assertSuccess();
@@ -4982,8 +4597,12 @@ final class TrelloBoardSetupMainTest {
         String badBoardName = "Name\nWith newline";
 
         // when
-        CliRunResult result = runCli(
-                "new-board", "--endpoint", endpoint(), "--key", "key", "--token", "token", "--name", badBoardName);
+        CliRunResult result = runCli(SetupCommandBuilder.newBoard()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .name(badBoardName)
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -5000,18 +4619,13 @@ final class TrelloBoardSetupMainTest {
         String badWorkspaceId = "workspace\nId";
 
         // when
-        CliRunResult result = runCli(
-                "new-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--name",
-                "Queue",
-                "--workspace-id",
-                badWorkspaceId);
+        CliRunResult result = runCli(SetupCommandBuilder.newBoard()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .name("Queue")
+                .workspaceId(badWorkspaceId)
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -5029,18 +4643,13 @@ final class TrelloBoardSetupMainTest {
         // given
 
         // when
-        CliRunResult result = runCli(
-                "new-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--name",
-                "Queue",
-                "--workspace-id",
-                badWorkspaceId);
+        CliRunResult result = runCli(SetupCommandBuilder.newBoard()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .name("Queue")
+                .workspaceId(badWorkspaceId)
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -5060,25 +4669,17 @@ final class TrelloBoardSetupMainTest {
         Path workflow = tempDir.resolve("control-selector.WORKFLOW.md");
 
         // when
-        CliRunResult result = runCli(
-                "import-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                badBoardSelector,
-                "--active",
-                "Queue for Codex",
-                "--terminal",
-                "Released",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--force");
+        CliRunResult result = runCli(SetupCommandBuilder.importBoard()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board(badBoardSelector)
+                .active("Queue for Codex")
+                .terminal("Released")
+                .workflow(workflow)
+                .manifest(tempDir.resolve("connected-boards.json"))
+                .force()
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -5096,26 +4697,21 @@ final class TrelloBoardSetupMainTest {
         // given
         String badListSelector = "Bad\n# injected\u001B[31mred\u001B[0m";
         Path workflow = tempDir.resolve("control-list-selector.WORKFLOW.md");
-        List<String> args = new ArrayList<>(List.of(
-                "import-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "https://trello.com/b/input/existing-board"));
+        SetupCommandBuilder builder = SetupCommandBuilder.importBoard()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board("https://trello.com/b/input/existing-board");
         if (!"--active".equals(optionName)) {
-            args.addAll(List.of("--active", "Queue for Codex"));
+            builder.active("Queue for Codex");
         }
         if (!"--terminal".equals(optionName)) {
-            args.addAll(List.of("--terminal", "Released"));
+            builder.terminal("Released");
         }
-        args.addAll(List.of(optionName, badListSelector, "--workflow", workflow.toString(), "--force"));
+        builder.option(optionName, badListSelector).workflow(workflow).force();
 
         // when
-        CliRunResult result = runCli(args.toArray(String[]::new));
+        CliRunResult result = runCli(builder.toArgs());
 
         // then
         result.assertFailure(2)
@@ -5147,32 +4743,25 @@ final class TrelloBoardSetupMainTest {
                         .formatted(duplicatedName));
         Path workflow = tempDir.resolve(name + ".WORKFLOW.md");
         Path manifest = workflow.getParent().resolve("connected-boards.json");
-        List<String> args = new ArrayList<>(List.of(
-                "import-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "https://trello.com/b/input/existing-board",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--no-github",
-                "--force"));
+        SetupCommandBuilder builder = SetupCommandBuilder.importBoard()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board("https://trello.com/b/input/existing-board")
+                .workflow(workflow)
+                .manifest(tempDir.resolve("connected-boards.json"))
+                .noGithub()
+                .force();
         if (!"--active".equals(optionName)) {
-            args.addAll(List.of("--active", "Queue for Codex"));
+            builder.active("Queue for Codex");
         }
         if (!"--terminal".equals(optionName)) {
-            args.addAll(List.of("--terminal", "Released"));
+            builder.terminal("Released");
         }
-        args.addAll(List.of(optionName, duplicatedName));
+        builder.option(optionName, duplicatedName);
 
         // when
-        CliRunResult result = runCli(args.toArray(String[]::new));
+        CliRunResult result = runCli(builder.toArgs());
 
         // then
         result.assertFailure(2)
@@ -5229,24 +4818,17 @@ final class TrelloBoardSetupMainTest {
         Path manifest = workflow.getParent().resolve("connected-boards.json");
 
         // when
-        CliRunResult result = runCli(
-                "import-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "https://trello.com/b/input/existing-board",
-                "--terminal",
-                "Released",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--no-github",
-                "--force");
+        CliRunResult result = runCli(SetupCommandBuilder.importBoard()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board("https://trello.com/b/input/existing-board")
+                .terminal("Released")
+                .workflow(workflow)
+                .manifest(tempDir.resolve("connected-boards.json"))
+                .noGithub()
+                .force()
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -5280,28 +4862,21 @@ final class TrelloBoardSetupMainTest {
         }
         Path workflow = tempDir.resolve(name + ".WORKFLOW.md");
         Path manifest = workflow.getParent().resolve("connected-boards.json");
-        List<String> args = new ArrayList<>(List.of(
-                "import-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "https://trello.com/b/input/existing-board",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--force"));
+        SetupCommandBuilder builder = SetupCommandBuilder.importBoard()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board("https://trello.com/b/input/existing-board")
+                .workflow(workflow)
+                .manifest(tempDir.resolve("connected-boards.json"))
+                .force();
         if (!"overlapping-github-merging-terminal".equals(name)) {
-            args.add("--no-github");
+            builder.noGithub();
         }
-        args.addAll(roleArgs);
+        builder.args(roleArgs);
 
         // when
-        CliRunResult result = runCli(args.toArray(String[]::new));
+        CliRunResult result = runCli(builder.toArgs());
 
         // then
         result.assertFailure(2)
@@ -5350,25 +4925,17 @@ final class TrelloBoardSetupMainTest {
         Path workflow = tempDir.resolve(name + ".WORKFLOW.md");
 
         // when
-        CliRunResult result = runCli(
-                "import-board",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                badBoardSelector,
-                "--active",
-                "Queue for Codex",
-                "--terminal",
-                "Released",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                tempDir.resolve("connected-boards.json").toString(),
-                "--force");
+        CliRunResult result = runCli(SetupCommandBuilder.importBoard()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board(badBoardSelector)
+                .active("Queue for Codex")
+                .terminal("Released")
+                .workflow(workflow)
+                .manifest(tempDir.resolve("connected-boards.json"))
+                .force()
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -5450,16 +5017,12 @@ final class TrelloBoardSetupMainTest {
         Files.writeString(env, "TRELLO_API_KEY=key\nTRELLO_API_TOKEN=token\n", StandardCharsets.UTF_8);
 
         // when
-        CliRunResult result = runCli(
-                "start",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--config-dir",
-                configDir.toString(),
-                "--state-home",
-                stateHome.toString());
+        CliRunResult result = runCli(SetupCommandBuilder.start()
+                .workflow(workflow)
+                .env(env)
+                .configDir(configDir)
+                .stateHome(stateHome)
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -5482,16 +5045,12 @@ final class TrelloBoardSetupMainTest {
         Path workflow = configDir.resolve("missing.WORKFLOW.md");
 
         // when
-        CliRunResult result = runCli(
-                "start",
-                "--config-dir",
-                configDir.toString(),
-                "--state-home",
-                stateHome.toString(),
-                "--workspace-root",
-                workspaceRoot.toString(),
-                "--workflow",
-                workflow.toString());
+        CliRunResult result = runCli(SetupCommandBuilder.start()
+                .configDir(configDir)
+                .stateHome(stateHome)
+                .workspaceRoot(workspaceRoot)
+                .workflow(workflow)
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -5510,7 +5069,8 @@ final class TrelloBoardSetupMainTest {
         String badBoardSelector = "No such board\n# injected\u001B[31mred\u001B[0m";
 
         // when
-        CliRunResult result = runCli("diagnostics", "--board", badBoardSelector);
+        CliRunResult result =
+                runCli(SetupCommandBuilder.diagnostics().board(badBoardSelector).toArgs());
 
         // then
         result.assertFailure(2)
@@ -5562,23 +5122,42 @@ final class TrelloBoardSetupMainTest {
     private static Stream<Arguments> invalidCliArgumentScenarios() {
         return Stream.of(
                 Arguments.of(
-                        "unknown option", new String[] {"new-board", "--name", "Queue", "--unknown"}, 2, new String[] {
-                            "setup_failed code=setup_invalid_arguments", "Unknown option: '--unknown'"
+                        "unknown option",
+                        SetupCommandBuilder.newBoard()
+                                .name("Queue")
+                                .flag("--unknown")
+                                .toArgs(),
+                        2,
+                        new String[] {"setup_failed code=setup_invalid_arguments", "Unknown option: '--unknown'"}),
+                Arguments.of(
+                        "unknown command",
+                        SetupCommandBuilder.command("create-board").toArgs(),
+                        2,
+                        new String[] {"setup_failed code=setup_invalid_arguments", "Unmatched argument: 'create-board'"
                         }),
-                Arguments.of("unknown command", new String[] {"create-board"}, 2, new String[] {
-                    "setup_failed code=setup_invalid_arguments", "Unmatched argument: 'create-board'"
-                }),
-                Arguments.of("repair-port missing board", new String[] {"setup-local", "repair-port"}, 2, new String[] {
-                    "setup_failed code=setup_invalid_arguments", "Missing required option: '--board=<board>'"
-                }),
+                Arguments.of(
+                        "repair-port missing board",
+                        SetupCommandBuilder.setupLocalRepairPort().toArgs(),
+                        2,
+                        new String[] {
+                            "setup_failed code=setup_invalid_arguments", "Missing required option: '--board=<board>'"
+                        }),
                 Arguments.of(
                         "github mode conflict",
-                        new String[] {"new-board", "--name", "Queue", "--github", "--no-github"},
+                        SetupCommandBuilder.newBoard()
+                                .name("Queue")
+                                .github()
+                                .noGithub()
+                                .toArgs(),
                         2,
                         new String[] {"setup_failed code=setup_invalid_arguments", "--github", "--no-github"}),
                 Arguments.of(
                         "board selector conflict",
-                        new String[] {"setup-local", "--board", "input", "--board-name", "Queue", "--dry-run"},
+                        SetupCommandBuilder.setupLocal()
+                                .board("input")
+                                .boardName("Queue")
+                                .dryRun()
+                                .toArgs(),
                         2,
                         new String[] {
                             "setup_failed code=setup_invalid_arguments",
@@ -5586,7 +5165,10 @@ final class TrelloBoardSetupMainTest {
                         }),
                 Arguments.of(
                         "configure-github parent no-github conflict",
-                        new String[] {"setup-local", "--no-github", "configure-github"},
+                        SetupCommandBuilder.setupLocal()
+                                .noGithub()
+                                .flag("configure-github")
+                                .toArgs(),
                         2,
                         new String[] {
                             "setup_failed code=setup_invalid_arguments",
@@ -5594,7 +5176,9 @@ final class TrelloBoardSetupMainTest {
                         }),
                 Arguments.of(
                         "configure-github child no-github conflict",
-                        new String[] {"setup-local", "configure-github", "--no-github"},
+                        SetupCommandBuilder.setupLocalConfigureGithub()
+                                .noGithub()
+                                .toArgs(),
                         2,
                         new String[] {
                             "setup_failed code=setup_invalid_arguments",
@@ -5602,23 +5186,21 @@ final class TrelloBoardSetupMainTest {
                         }),
                 Arguments.of(
                         "setup-local check board workflow selector conflict",
-                        new String[] {"setup-local", "check", "--board", "Queue", "--workflow", "/tmp/queue.md"},
+                        SetupCommandBuilder.setupLocalCheck()
+                                .board("Queue")
+                                .workflow("/tmp/queue.md")
+                                .toArgs(),
                         2,
                         new String[] {
                             "setup_failed code=setup_invalid_arguments", "setup-local check does not support --workflow"
                         }),
                 Arguments.of(
                         "setup-local repair-port board workflow selector conflict",
-                        new String[] {
-                            "setup-local",
-                            "repair-port",
-                            "--board",
-                            "Queue",
-                            "--workflow",
-                            "/tmp/queue.md",
-                            "--server-port",
-                            "18132"
-                        },
+                        SetupCommandBuilder.setupLocalRepairPort()
+                                .board("Queue")
+                                .workflow("/tmp/queue.md")
+                                .serverPort("18132")
+                                .toArgs(),
                         2,
                         new String[] {
                             "setup_failed code=setup_invalid_arguments",
@@ -5626,9 +5208,10 @@ final class TrelloBoardSetupMainTest {
                         }),
                 Arguments.of(
                         "setup-local configure-github board workflow selector conflict",
-                        new String[] {
-                            "setup-local", "configure-github", "--board", "Queue", "--workflow", "/tmp/queue.md"
-                        },
+                        SetupCommandBuilder.setupLocalConfigureGithub()
+                                .board("Queue")
+                                .workflow("/tmp/queue.md")
+                                .toArgs(),
                         2,
                         new String[] {
                             "setup_failed code=setup_invalid_arguments",
@@ -5636,7 +5219,10 @@ final class TrelloBoardSetupMainTest {
                         }),
                 Arguments.of(
                         "invalid port",
-                        new String[] {"new-board", "--name", "Queue", "--server-port", "70000"},
+                        SetupCommandBuilder.newBoard()
+                                .name("Queue")
+                                .serverPort("70000")
+                                .toArgs(),
                         2,
                         new String[] {
                             "setup_failed code=setup_invalid_port",
@@ -5644,15 +5230,20 @@ final class TrelloBoardSetupMainTest {
                         }),
                 Arguments.of(
                         "allow all paths without root",
-                        new String[] {"setup-local", "--allow-all-paths", "--dry-run"},
+                        SetupCommandBuilder.setupLocal()
+                                .flag("--allow-all-paths")
+                                .dryRun()
+                                .toArgs(),
                         2,
                         new String[] {
                             "setup_failed code=setup_allow_all_paths_without_root",
                             "--allow-all-paths is only valid together with --add-path /"
                         }),
-                Arguments.of("missing option value", new String[] {"new-board", "--name"}, 2, new String[] {
-                    "setup_failed code=setup_invalid_arguments", "Missing required parameter"
-                }));
+                Arguments.of(
+                        "missing option value",
+                        SetupCommandBuilder.newBoard().flag("--name").toArgs(),
+                        2,
+                        new String[] {"setup_failed code=setup_invalid_arguments", "Missing required parameter"}));
     }
 
     private record InvalidPathOptionCase(String optionName, String forbiddenOutput, List<String> command) {
@@ -5687,86 +5278,75 @@ final class TrelloBoardSetupMainTest {
     }
 
     private CliRunResult runNewBoardWithRuntimeEnv(Path workflow, Path env, boolean includeCredentials) {
-        List<String> args = new ArrayList<>(List.of("new-board", "--endpoint", endpoint()));
+        SetupCommandBuilder command = SetupCommandBuilder.newBoard().endpoint(endpoint());
         if (includeCredentials) {
-            args.addAll(List.of("--key", "direct-key", "--token", "direct-token"));
+            command.key("direct-key").token("direct-token");
         }
-        args.addAll(List.of(
-                "--name",
-                "Runtime Env Queue",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                workflow.resolveSibling("connected-boards.json").toString(),
-                "--env",
-                env.toString()));
-        return runCli(args.toArray(String[]::new));
+        command.name("Runtime Env Queue")
+                .workflow(workflow)
+                .manifest(workflow.resolveSibling("connected-boards.json"))
+                .env(env);
+        return runCli(command.toArgs());
     }
 
     private CliRunResult runImportBoardWithRuntimeEnv(Path workflow, Path env, boolean includeCredentials) {
-        List<String> args = new ArrayList<>(List.of(
-                "import-board",
-                "--endpoint",
-                endpoint(),
-                "--board",
-                "https://trello.com/b/input/existing-board",
-                "--active",
-                "Queue for Codex",
-                "--terminal",
-                "Released",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                workflow.resolveSibling("connected-boards.json").toString(),
-                "--env",
-                env.toString()));
+        SetupCommandBuilder command = SetupCommandBuilder.importBoard();
         if (includeCredentials) {
-            args.addAll(1, List.of("--key", "direct-key", "--token", "direct-token"));
+            command.key("direct-key").token("direct-token");
         }
-        return runCli(args.toArray(new String[0]));
+        command.endpoint(endpoint())
+                .board("https://trello.com/b/input/existing-board")
+                .active("Queue for Codex")
+                .terminal("Released")
+                .workflow(workflow)
+                .manifest(workflow.resolveSibling("connected-boards.json"))
+                .env(env);
+        return runCli(command.toArgs());
     }
 
     private String[] setupCommandWithRuntimeEnv(String command, Path workflow, String envValue) {
-        List<String> args = new ArrayList<>(
-                List.of(command, "--endpoint", endpoint(), "--key", "direct-key", "--token", "direct-token"));
+        SetupCommandBuilder builder = SetupCommandBuilder.command(command)
+                .endpoint(endpoint())
+                .key("direct-key")
+                .token("direct-token");
         if ("new-board".equals(command)) {
-            args.addAll(List.of("--name", "Runtime Env Queue"));
+            builder.name("Runtime Env Queue");
         } else {
-            args.addAll(List.of(
-                    "--board",
-                    "https://trello.com/b/input/existing-board",
-                    "--active",
-                    "Queue for Codex",
-                    "--terminal",
-                    "Released"));
+            builder.board("https://trello.com/b/input/existing-board")
+                    .active("Queue for Codex")
+                    .terminal("Released");
         }
-        args.addAll(List.of("--workflow", workflow.toString(), "--env", envValue));
-        return args.toArray(String[]::new);
+        builder.workflow(workflow).env(envValue);
+        return builder.toArgs();
     }
 
     private String[] setupCommandWithWorkflow(String command, String workflowValue, Path env) {
-        List<String> args = new ArrayList<>(
-                List.of(command, "--endpoint", endpoint(), "--key", "direct-key", "--token", "direct-token"));
+        SetupCommandBuilder builder = SetupCommandBuilder.command(command)
+                .endpoint(endpoint())
+                .key("direct-key")
+                .token("direct-token");
         if ("new-board".equals(command)) {
-            args.addAll(List.of("--name", "Workflow Path Queue", "--workspace-id", "workspace-1"));
+            builder.name("Workflow Path Queue").workspaceId("workspace-1");
         } else {
-            args.addAll(List.of("--board", "input", "--active", "Queue for Codex", "--terminal", "Released"));
+            builder.board("input").active("Queue for Codex").terminal("Released");
         }
-        args.addAll(List.of("--workflow", workflowValue, "--env", env.toString()));
-        return args.toArray(String[]::new);
+        builder.workflow(workflowValue).env(env);
+        return builder.toArgs();
     }
 
     private String[] setupCommandWithCodexOverride(
             String command, Path workflow, Path env, String optionName, String optionValue) {
-        List<String> args =
-                new ArrayList<>(List.of(command, "--endpoint", endpoint(), "--key", "key", "--token", "token"));
+        SetupCommandBuilder builder = SetupCommandBuilder.command(command)
+                .endpoint(endpoint())
+                .key("key")
+                .token("token");
         if ("new-board".equals(command)) {
-            args.addAll(List.of("--name", "Codex Scalar Queue", "--workspace-id", "workspace-1"));
+            builder.name("Codex Scalar Queue").workspaceId("workspace-1");
         } else {
-            args.addAll(List.of("--board", "input", "--active", "Queue for Codex", "--terminal", "Released"));
+            builder.board("input").active("Queue for Codex").terminal("Released");
         }
-        args.addAll(List.of("--workflow", workflow.toString(), "--env", env.toString(), optionName, optionValue));
-        return args.toArray(String[]::new);
+        builder.workflow(workflow).env(env).option(optionName, optionValue);
+        return builder.toArgs();
     }
 
     private record InvalidRuntimeEnvPathScenario(
@@ -5894,46 +5474,75 @@ final class TrelloBoardSetupMainTest {
 
     private static Stream<Arguments> commandsThatDoNotWriteWorkflows() {
         return Stream.of(
-                Arguments.of("root help", new String[] {"--help"}),
-                Arguments.of("root version", new String[] {"--version"}),
-                Arguments.of("status help", new String[] {"status", "--help"}),
-                Arguments.of("diagnostics help", new String[] {"diagnostics", "--help"}),
-                Arguments.of("setup-local help", new String[] {"setup-local", "--help"}));
+                Arguments.of("root help", SetupCommandBuilder.command("--help").toArgs()),
+                Arguments.of(
+                        "root version", SetupCommandBuilder.command("--version").toArgs()),
+                Arguments.of(
+                        "status help",
+                        SetupCommandBuilder.status().flag("--help").toArgs()),
+                Arguments.of(
+                        "diagnostics help",
+                        SetupCommandBuilder.diagnostics().flag("--help").toArgs()),
+                Arguments.of(
+                        "setup-local help",
+                        SetupCommandBuilder.setupLocal().flag("--help").toArgs()));
     }
 
     private static Stream<Arguments> versionCommands() {
         return Stream.of(
-                Arguments.of((Object) new String[] {"--version"}),
-                Arguments.of((Object) new String[] {"setup-local", "--version"}),
-                Arguments.of((Object) new String[] {"setup-local", "check", "--version"}),
-                Arguments.of((Object) new String[] {"setup-local", "repair-port", "--version"}),
-                Arguments.of((Object) new String[] {"setup-local", "configure-github", "--version"}),
-                Arguments.of((Object) new String[] {"new-board", "--version"}),
-                Arguments.of((Object) new String[] {"import-board", "--version"}),
-                Arguments.of((Object) new String[] {"list-workspaces", "--version"}),
-                Arguments.of((Object) new String[] {"diagnostics", "--version"}));
+                Arguments.of((Object) SetupCommandBuilder.command("--version").toArgs()),
+                Arguments.of((Object)
+                        SetupCommandBuilder.setupLocal().flag("--version").toArgs()),
+                Arguments.of((Object)
+                        SetupCommandBuilder.setupLocalCheck().flag("--version").toArgs()),
+                Arguments.of((Object) SetupCommandBuilder.setupLocalRepairPort()
+                        .flag("--version")
+                        .toArgs()),
+                Arguments.of((Object) SetupCommandBuilder.setupLocalConfigureGithub()
+                        .flag("--version")
+                        .toArgs()),
+                Arguments.of((Object)
+                        SetupCommandBuilder.newBoard().flag("--version").toArgs()),
+                Arguments.of((Object)
+                        SetupCommandBuilder.importBoard().flag("--version").toArgs()),
+                Arguments.of((Object)
+                        SetupCommandBuilder.listWorkspaces().flag("--version").toArgs()),
+                Arguments.of((Object)
+                        SetupCommandBuilder.diagnostics().flag("--version").toArgs()));
     }
 
     private static Stream<Arguments> mainProcessExitCases() {
         return Stream.of(
-                Arguments.of(new MainProcessCase(new String[] {"--help"}, 0, "Usage: symphony-trello")),
                 Arguments.of(new MainProcessCase(
-                        new String[] {"definitely-not-a-command"}, 2, "setup_failed code=setup_invalid_arguments")),
+                        SetupCommandBuilder.command("--help").toArgs(), 0, "Usage: symphony-trello")),
                 Arguments.of(new MainProcessCase(
-                        new String[] {"setup-local", "repair-port"}, 2, "Missing required option: '--board=<board>'")),
+                        SetupCommandBuilder.command("definitely-not-a-command").toArgs(),
+                        2,
+                        "setup_failed code=setup_invalid_arguments")),
                 Arguments.of(new MainProcessCase(
-                        new String[] {"setup-local", "configure-github", "--no-github"},
+                        SetupCommandBuilder.setupLocalRepairPort().toArgs(),
+                        2,
+                        "Missing required option: '--board=<board>'")),
+                Arguments.of(new MainProcessCase(
+                        SetupCommandBuilder.setupLocalConfigureGithub()
+                                .noGithub()
+                                .toArgs(),
                         2,
                         "--no-github cannot be used with configure-github")),
                 Arguments.of(new MainProcessCase(
-                        new String[] {
-                            "import-board", "--board", "abc123", "--in-progress", "Working", "--no-in-progress"
-                        },
+                        SetupCommandBuilder.importBoard()
+                                .board("abc123")
+                                .inProgress("Working")
+                                .noInProgress()
+                                .toArgs(),
                         2,
                         "--in-progress cannot be used with --no-in-progress")),
                 Arguments.of(new MainProcessCase(
-                        new String[] {"setup-local", "--board", "abc123", "--in-progress", "Working", "--no-in-progress"
-                        },
+                        SetupCommandBuilder.setupLocal()
+                                .board("abc123")
+                                .inProgress("Working")
+                                .noInProgress()
+                                .toArgs(),
                         2,
                         "--in-progress cannot be used with --no-in-progress")));
     }
@@ -6194,28 +5803,18 @@ final class TrelloBoardSetupMainTest {
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
         int exitCode = TrelloBoardSetupMain.run(
-                new String[] {
-                    "import-board",
-                    "--endpoint",
-                    endpoint(),
-                    "--key",
-                    "key",
-                    "--token",
-                    "token",
-                    "--board",
-                    "https://trello.com/b/input/existing-board",
-                    "--active",
-                    "Queue for Codex",
-                    "--terminal",
-                    "Released",
-                    "--workflow",
-                    fixture.newWorkflow().toString(),
-                    "--manifest",
-                    tempDir.resolve("connected-boards.json").toString(),
-                    "--env",
-                    fixture.env().toString(),
-                    "--force"
-                },
+                SetupCommandBuilder.importBoard()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .board("https://trello.com/b/input/existing-board")
+                        .active("Queue for Codex")
+                        .terminal("Released")
+                        .workflow(fixture.newWorkflow())
+                        .manifest(tempDir.resolve("connected-boards.json"))
+                        .env(fixture.env())
+                        .force()
+                        .toArgs(),
                 new TrelloBoardSetupService(boardSetup, fixture.workerManager(), Map.of()),
                 new LocalSetup(boardSetup, new ProcessCommandRunner()),
                 fixture.workerManager(),
