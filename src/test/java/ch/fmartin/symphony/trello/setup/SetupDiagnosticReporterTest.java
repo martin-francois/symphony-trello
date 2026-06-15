@@ -24,12 +24,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 final class SetupDiagnosticReporterTest {
@@ -2253,19 +2256,20 @@ final class SetupDiagnosticReporterTest {
         assertThat(configDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME)).doesNotExist();
     }
 
-    @Test
-    void diagnosticsRejectsBothBoardAndWorkflowSelectorsAtReporterBoundary() throws Exception {
+    @MethodSource("invalidSelectorRejections")
+    @ParameterizedTest(name = "{0}")
+    void diagnosticsRejectsInvalidSelectorsAtReporterBoundary(
+            String name, Optional<String> board, String workflowSpec, String expectedMessage) throws Exception {
         // given
-        Path configDir = tempDir.resolve("conflicting-selector-config");
-        Path workflow = configDir.resolve("WORKFLOW.private.md");
+        Path configDir = tempDir.resolve(name + "-config");
         Files.createDirectories(configDir);
-        Files.writeString(workflow, workflowWithPort(19190), StandardCharsets.UTF_8);
+        Optional<Path> workflow = resolveSelectorWorkflow(configDir, workflowSpec);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
         Throwable thrown =
                 catchThrowable(() -> reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                        Optional.of("Private Board"),
+                        board,
                         Optional.empty(),
                         false,
                         false,
@@ -2274,79 +2278,45 @@ final class SetupDiagnosticReporterTest {
                         Optional.empty(),
                         Optional.empty(),
                         Optional.empty(),
-                        Optional.of(workflow))));
+                        workflow)));
 
         // then
-        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, exception -> assertThat(exception)
+        assertThat(thrown).as(name).isInstanceOfSatisfying(TrelloBoardSetupException.class, exception -> assertThat(
+                        exception)
                 .extracting(TrelloBoardSetupException::code, Throwable::getMessage)
-                .containsExactly("setup_invalid_arguments", "--board and --workflow cannot be used together."));
+                .containsExactly("setup_invalid_arguments", expectedMessage));
         assertThat(configDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME)).doesNotExist();
     }
 
-    @Test
-    void diagnosticsRejectsBlankBoardSelectorAtReporterBoundary() throws Exception {
-        // given
-        Path configDir = tempDir.resolve("blank-board-selector-config");
-        Files.createDirectories(configDir);
-        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+    private Optional<Path> resolveSelectorWorkflow(Path configDir, String workflowSpec) throws IOException {
+        if ("none".equals(workflowSpec)) {
+            return Optional.empty();
+        }
+        if ("empty".equals(workflowSpec)) {
+            return Optional.of(Path.of(""));
+        }
+        Path workflow = configDir.resolve(workflowSpec);
+        Files.writeString(workflow, workflowWithPort(19190), StandardCharsets.UTF_8);
+        return Optional.of(workflow);
+    }
 
-        // when
-        Throwable thrown =
-                catchThrowable(() -> reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+    private static Stream<Arguments> invalidSelectorRejections() {
+        return Stream.of(
+                Arguments.of(
+                        "conflicting-selector",
+                        Optional.of("Private Board"),
+                        "WORKFLOW.private.md",
+                        "--board and --workflow cannot be used together."),
+                Arguments.of(
+                        "blank-board-selector",
                         Optional.of(" "),
-                        Optional.empty(),
-                        false,
-                        false,
-                        Optional.empty(),
-                        Optional.of(configDir),
-                        Optional.empty(),
-                        Optional.empty(),
-                        Optional.empty(),
-                        Optional.empty())));
-
-        // then
-        assertThat(thrown)
-                .isInstanceOfSatisfying(
-                        TrelloBoardSetupException.class,
-                        exception -> assertThat(exception)
-                                .extracting(TrelloBoardSetupException::code, Throwable::getMessage)
-                                .containsExactly(
-                                        "setup_invalid_arguments",
-                                        "--board must not be empty. Provide a Trello board name, id, or short link, or omit --board to use the command's default scope."));
-        assertThat(configDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME)).doesNotExist();
-    }
-
-    @Test
-    void diagnosticsRejectsBlankWorkflowSelectorAtReporterBoundary() throws Exception {
-        // given
-        Path configDir = tempDir.resolve("blank-workflow-selector-config");
-        Files.createDirectories(configDir);
-        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
-
-        // when
-        Throwable thrown =
-                catchThrowable(() -> reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
-                        Optional.empty(),
-                        Optional.empty(),
-                        false,
-                        false,
-                        Optional.empty(),
-                        Optional.of(configDir),
-                        Optional.empty(),
-                        Optional.empty(),
-                        Optional.empty(),
-                        Optional.of(Path.of("")))));
-
-        // then
-        assertThat(thrown)
-                .isInstanceOfSatisfying(
-                        TrelloBoardSetupException.class,
-                        exception -> assertThat(exception)
-                                .extracting(TrelloBoardSetupException::code, Throwable::getMessage)
-                                .containsExactly(
-                                        "setup_invalid_arguments",
-                                        "--workflow must not be empty. Provide a workflow path, or omit --workflow to use the command's default scope."));
-        assertThat(configDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME)).doesNotExist();
+                        "none",
+                        "--board must not be empty. Provide a Trello board name, id, or short link, or omit --board to use the command's default scope."),
+                Arguments.of(
+                        "blank-workflow-selector",
+                        Optional.<String>empty(),
+                        "empty",
+                        "--workflow must not be empty. Provide a workflow path, or omit --workflow to use the command's default scope."));
     }
 
     @Test
