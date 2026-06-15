@@ -54,10 +54,9 @@ final class ConfigResolverTest {
         assertThat(config.server().port()).hasValue(19093);
     }
 
-    @MethodSource("fractionalNumericValues")
-    @ParameterizedTest
-    void rejectsFractionalNumericValuesInsteadOfTruncatingThem(String name, String section, String expectedMessage)
-            throws Exception {
+    @MethodSource("malformedNumericValues")
+    @ParameterizedTest(name = "{0}")
+    void rejectsMalformedNumericConfigValues(String name, String section, String expectedMessage) throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW." + name + ".md");
         Files.writeString(
@@ -85,7 +84,7 @@ final class ConfigResolverTest {
         assertThat(error).hasMessage(expectedMessage);
     }
 
-    private static Stream<Arguments> fractionalNumericValues() {
+    private static Stream<Arguments> malformedNumericValues() {
         return Stream.of(
                 Arguments.of("fractional-port", "server:\n  port: 18080.5", "server.port must be a whole number"),
                 Arguments.of(
@@ -96,7 +95,11 @@ final class ConfigResolverTest {
                         "non-numeric-retries",
                         "tracker:\n  max_api_retries: not-a-number",
                         "max_api_retries must be a whole number"),
-                Arguments.of("overflowing-float-port", "server:\n  port: 1e400", "server.port must be a whole number"));
+                Arguments.of("overflowing-float-port", "server:\n  port: 1e400", "server.port must be a whole number"),
+                Arguments.of(
+                        "out-of-range-whole-port",
+                        "server:\n  port: 99999999999999999999999",
+                        "server.port is out of integer range"));
     }
 
     @Test
@@ -126,10 +129,12 @@ final class ConfigResolverTest {
         assertThat(config.tracker().priorityLabels()).doesNotContainKey("rush");
     }
 
-    @Test
-    void rejectsFractionalEnvironmentBackedServerPortInsteadOfCrashingRaw() throws Exception {
+    @MethodSource("malformedEnvironmentBackedServerPorts")
+    @ParameterizedTest(name = "{0}")
+    void rejectsMalformedEnvironmentBackedServerPort(String name, String envValue, String expectedMessage)
+            throws Exception {
         // given
-        Path workflow = tempDir.resolve("WORKFLOW.fractional-env-port.md");
+        Path workflow = tempDir.resolve("WORKFLOW." + name + ".md");
         Files.writeString(
                 workflow,
                 """
@@ -140,12 +145,12 @@ final class ConfigResolverTest {
                   api_token: literal-token
                   board_id: board-1
                 server:
-                  port: $SYMPHONY_FRACTIONAL_PORT
+                  port: $SYMPHONY_TEST_PORT
                 ---
                 Prompt
                 """);
         ConfigResolver resolver = new ConfigResolver(
-                name -> "SYMPHONY_FRACTIONAL_PORT".equals(name) ? Optional.of("18080.5") : Optional.empty());
+                lookup -> "SYMPHONY_TEST_PORT".equals(lookup) ? Optional.of(envValue) : Optional.empty());
 
         // when
         ConfigException error = catchThrowableOfType(
@@ -153,66 +158,13 @@ final class ConfigResolverTest {
 
         // then
         assertThat(error.code()).isEqualTo("config_value_error");
-        assertThat(error).hasMessage("server.port must be a whole number");
+        assertThat(error).hasMessage(expectedMessage);
     }
 
-    @Test
-    void reportsWholeButTooLargeServerPortAsOutOfRangeNotAsFractional() throws Exception {
-        // given
-        Path workflow = tempDir.resolve("WORKFLOW.huge-port.md");
-        Files.writeString(
-                workflow,
-                """
-                ---
-                tracker:
-                  kind: trello
-                  api_key: literal-key
-                  api_token: literal-token
-                  board_id: board-1
-                server:
-                  port: 99999999999999999999999
-                ---
-                Prompt
-                """);
-        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
-
-        // when
-        ConfigException error = catchThrowableOfType(
-                ConfigException.class, () -> resolver.resolve(new WorkflowLoader().load(workflow)));
-
-        // then
-        assertThat(error.code()).isEqualTo("config_value_error");
-        assertThat(error).hasMessage("server.port is out of integer range");
-    }
-
-    @Test
-    void reportsWholeButTooLargeEnvironmentBackedServerPortAsOutOfRange() throws Exception {
-        // given
-        Path workflow = tempDir.resolve("WORKFLOW.huge-env-port.md");
-        Files.writeString(
-                workflow,
-                """
-                ---
-                tracker:
-                  kind: trello
-                  api_key: literal-key
-                  api_token: literal-token
-                  board_id: board-1
-                server:
-                  port: $SYMPHONY_HUGE_PORT
-                ---
-                Prompt
-                """);
-        ConfigResolver resolver = new ConfigResolver(
-                name -> "SYMPHONY_HUGE_PORT".equals(name) ? Optional.of("9999999999") : Optional.empty());
-
-        // when
-        ConfigException error = catchThrowableOfType(
-                ConfigException.class, () -> resolver.resolve(new WorkflowLoader().load(workflow)));
-
-        // then
-        assertThat(error.code()).isEqualTo("config_value_error");
-        assertThat(error).hasMessage("server.port is out of integer range");
+    private static Stream<Arguments> malformedEnvironmentBackedServerPorts() {
+        return Stream.of(
+                Arguments.of("fractional-env-port", "18080.5", "server.port must be a whole number"),
+                Arguments.of("huge-env-port", "9999999999", "server.port is out of integer range"));
     }
 
     @Test
@@ -366,10 +318,12 @@ final class ConfigResolverTest {
         assertThat(error).hasMessage("tracker.board_id is required");
     }
 
-    @Test
-    void overlappingWorkflowListRolesFailBeforeDispatch() throws Exception {
+    @MethodSource("overlappingListRoleScenarios")
+    @ParameterizedTest(name = "{0}")
+    void overlappingWorkflowListRolesFailBeforeDispatch(String name, String listRoleSection, String expectedMessage)
+            throws Exception {
         // given
-        Path workflow = tempDir.resolve("WORKFLOW.overlap.md");
+        Path workflow = tempDir.resolve("WORKFLOW." + name + ".md");
         Files.writeString(
                 workflow,
                 """
@@ -379,15 +333,13 @@ final class ConfigResolverTest {
                   api_key: literal-key
                   api_token: literal-token
                   board_id: board-id
-                  active_states:
-                    - "Ready for Codex"
-                  terminal_states:
-                    - "Ready  for Codex"
+                %s
                 codex:
                   command: fake
                 ---
                 Prompt
-                """);
+                """
+                        .formatted(listRoleSection));
         ConfigResolver resolver = new ConfigResolver();
 
         // when
@@ -396,41 +348,37 @@ final class ConfigResolverTest {
 
         // then
         assertThat(error.code()).isEqualTo("overlapping_tracker_list_roles");
-        assertThat(error).hasMessageContaining("active and terminal both use Ready for Codex");
+        assertThat(error).hasMessageContaining(expectedMessage);
     }
 
-    @Test
-    void overlappingBlockedWorkflowListRoleFailsBeforeDispatch() throws Exception {
-        // given
-        Path workflow = tempDir.resolve("WORKFLOW.blocked-overlap.md");
-        Files.writeString(
-                workflow,
-                """
-                ---
-                tracker:
-                  kind: trello
-                  api_key: literal-key
-                  api_token: literal-token
-                  board_id: board-id
-                  active_states:
-                    - "Ready for Codex"
-                  terminal_states:
-                    - "Done"
-                  blocked_state: "Ready  for Codex"
-                codex:
-                  command: fake
-                ---
-                Prompt
-                """);
-        ConfigResolver resolver = new ConfigResolver();
-
-        // when
-        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
-        ConfigException error = catchThrowableOfType(ConfigException.class, () -> resolver.validateForDispatch(config));
-
-        // then
-        assertThat(error.code()).isEqualTo("overlapping_tracker_list_roles");
-        assertThat(error).hasMessageContaining("active and blocked both use Ready for Codex");
+    private static Stream<Arguments> overlappingListRoleScenarios() {
+        return Stream.of(
+                Arguments.of(
+                        "active-terminal-name-overlap",
+                        "  active_states:\n"
+                                + "    - \"Ready for Codex\"\n"
+                                + "  terminal_states:\n"
+                                + "    - \"Ready  for Codex\"",
+                        "active and terminal both use Ready for Codex"),
+                Arguments.of(
+                        "active-blocked-name-overlap",
+                        "  active_states:\n"
+                                + "    - \"Ready for Codex\"\n"
+                                + "  terminal_states:\n"
+                                + "    - \"Done\"\n"
+                                + "  blocked_state: \"Ready  for Codex\"",
+                        "active and blocked both use Ready for Codex"),
+                Arguments.of(
+                        "active-terminal-list-id-overlap",
+                        "  active_states:\n"
+                                + "    - \"Ready for Codex\"\n"
+                                + "  active_list_ids:\n"
+                                + "    - \"shared-list-id\"\n"
+                                + "  terminal_states:\n"
+                                + "    - \"Done\"\n"
+                                + "  terminal_list_ids:\n"
+                                + "    - \"shared-list-id\"",
+                        "active and terminal both use shared-list-id"));
     }
 
     @Test
@@ -468,43 +416,6 @@ final class ConfigResolverTest {
 
         // then
         assertThat(error).isNull();
-    }
-
-    @Test
-    void overlappingListIdsFailBeforeDispatch() throws Exception {
-        // given
-        Path workflow = tempDir.resolve("WORKFLOW.list-id-overlap.md");
-        Files.writeString(
-                workflow,
-                """
-                ---
-                tracker:
-                  kind: trello
-                  api_key: literal-key
-                  api_token: literal-token
-                  board_id: board-id
-                  active_states:
-                    - "Ready for Codex"
-                  active_list_ids:
-                    - "shared-list-id"
-                  terminal_states:
-                    - "Done"
-                  terminal_list_ids:
-                    - "shared-list-id"
-                codex:
-                  command: fake
-                ---
-                Prompt
-                """);
-        ConfigResolver resolver = new ConfigResolver();
-
-        // when
-        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
-        ConfigException error = catchThrowableOfType(ConfigException.class, () -> resolver.validateForDispatch(config));
-
-        // then
-        assertThat(error.code()).isEqualTo("overlapping_tracker_list_roles");
-        assertThat(error).hasMessageContaining("active and terminal both use shared-list-id");
     }
 
     @Test
