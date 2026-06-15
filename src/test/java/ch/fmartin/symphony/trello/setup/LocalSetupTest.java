@@ -5301,14 +5301,10 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     private static Stream<String> invalidEndpointValues() {
-        return Stream.of(
-                "https://api.trello.com/1/members/me",
-                "https://api.trello.com/2",
-                "http://api.trello.com/1",
-                "http://api.trello.com./1",
-                "https://api.trello.com/foo/1",
-                "https://api.trello.com/1?x=y",
-                "https://api.trello.com/1#frag");
+        // This test consumes only the endpoint string; re-delegate to the shared (name, endpoint)
+        // rows in SetupTestData so the rejected endpoints stay in lockstep across setup commands.
+        return SetupTestData.invalidEndpointValues()
+                .map(arguments -> (String) arguments.get()[1]);
     }
 
     private void writeOldBoardManifest(Path manifest, Path workflow) throws IOException {

@@ -1727,7 +1727,7 @@ final class TrelloBoardSetupMainTest {
                 Arguments.of("api token contains tab", "Trello API token", "key", "t\token"));
     }
 
-    @MethodSource("invalidEndpointValues")
+    @MethodSource("ch.fmartin.symphony.trello.setup.SetupTestData#invalidEndpointValues")
     @ParameterizedTest(name = "{0}")
     void listWorkspacesRejectsInvalidEndpointsBeforeTrelloRequest(String name, String endpoint) {
         // given
@@ -5496,17 +5496,6 @@ final class TrelloBoardSetupMainTest {
                 Arguments.of("embedded-trello-url", "https://evil.example/https://trello.com/b/abc123/name"),
                 Arguments.of("missing-host-url", "https:///b/abc123/name"),
                 Arguments.of("slash-containing-opaque-selector", "abc/def"));
-    }
-
-    private static Stream<Arguments> invalidEndpointValues() {
-        return Stream.of(
-                Arguments.of("duplicated-rest-path", "https://api.trello.com/1/members/me"),
-                Arguments.of("wrong-rest-version", "https://api.trello.com/2"),
-                Arguments.of("insecure-production-endpoint", "http://api.trello.com/1"),
-                Arguments.of("insecure-production-endpoint-trailing-dot", "http://api.trello.com./1"),
-                Arguments.of("official-host-prefix", "https://api.trello.com/foo/1"),
-                Arguments.of("query-string", "https://api.trello.com/1?x=y"),
-                Arguments.of("fragment", "https://api.trello.com/1#frag"));
     }
 
     /** Trello returns valid JSON for any board name, so the fake must JSON-escape echoes. */
