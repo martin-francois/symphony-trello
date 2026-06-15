@@ -182,6 +182,26 @@ final class SetupCommandBuilder {
         return option("--codex-reasoning-effort", value);
     }
 
+    SetupCommandBuilder nonInteractive() {
+        return flag("--non-interactive");
+    }
+
+    SetupCommandBuilder noStart() {
+        return flag("--no-start");
+    }
+
+    SetupCommandBuilder addPath(String value) {
+        return option("--add-path", value);
+    }
+
+    SetupCommandBuilder dangerFullAccess() {
+        return flag("--danger-full-access");
+    }
+
+    SetupCommandBuilder allowAllPaths() {
+        return flag("--allow-all-paths");
+    }
+
     SetupCommandBuilder force() {
         return flag("--force");
     }

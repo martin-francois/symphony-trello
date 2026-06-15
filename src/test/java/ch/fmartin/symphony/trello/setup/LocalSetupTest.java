@@ -19,7 +19,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -36,7 +35,10 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path workflow = tempDir.resolve("WORKFLOW.dry-run.md");
 
         // when
-        SetupRunResult result = runSetup("--dry-run", "--workflow", workflow.toString());
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .dryRun()
+                .workflow(workflow.toString())
+                .toArgs());
 
         // then
         result.assertSuccess()
@@ -290,8 +292,11 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path secondPath = tempDir.resolve("second allowed path");
 
         // when
-        SetupRunResult result =
-                runSetup("--dry-run", "--board-name", "Dry Add Absolute", "--add-path", firstPath + ", " + secondPath);
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .dryRun()
+                .boardName("Dry Add Absolute")
+                .addPath(firstPath + ", " + secondPath)
+                .toArgs());
 
         // then
         result.assertSuccess().stdoutContains("Dry run", "WOULD write workflows under:");
@@ -303,8 +308,11 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
 
         // when
-        SetupRunResult result =
-                runSetup("--dry-run", "--board-name", "Dry Add Home", "--add-path", "~,~/project,~/../project");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .dryRun()
+                .boardName("Dry Add Home")
+                .addPath("~,~/project,~/../project")
+                .toArgs());
 
         // then
         result.assertSuccess().stdoutContains("Dry run", "WOULD write workflows under:");
@@ -327,14 +335,12 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         List<SetupRunResult> results = scenarios.stream()
-                .map(scenario -> runSetup(
-                        "--dry-run",
-                        "--board-name",
-                        "Dry Workspace Root",
-                        "--workflow",
-                        workflow.toString(),
-                        "--workspace-root",
-                        scenario.workspaceRoot()))
+                .map(scenario -> runSetup(SetupCommandBuilder.command()
+                        .dryRun()
+                        .boardName("Dry Workspace Root")
+                        .workflow(workflow.toString())
+                        .workspaceRoot(scenario.workspaceRoot())
+                        .toArgs()))
                 .toList();
 
         // then
@@ -358,19 +364,15 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 "n\n",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Root Workspace Declined",
-                "--workflow",
-                workflow.toString(),
-                "--workspace-root",
-                "/",
-                "--no-github");
+                SetupCommandBuilder.command()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .boardName("Root Workspace Declined")
+                        .workflow(workflow.toString())
+                        .workspaceRoot("/")
+                        .noGithub()
+                        .toArgs());
 
         // then
         result.assertSuccess()
@@ -394,19 +396,15 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 "n\n",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Root Equivalent Workspace Declined",
-                "--workflow",
-                workflow.toString(),
-                "--workspace-root",
-                rootEquivalent.toString(),
-                "--no-github");
+                SetupCommandBuilder.command()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .boardName("Root Equivalent Workspace Declined")
+                        .workflow(workflow.toString())
+                        .workspaceRoot(rootEquivalent.toString())
+                        .noGithub()
+                        .toArgs());
 
         // then
         result.assertSuccess()
@@ -426,24 +424,18 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path env = tempDir.resolve(".env.root-workspace");
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Root Workspace Allowed",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--workspace-root",
-                "/",
-                "--no-github",
-                "--no-start");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("Root Workspace Allowed")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .workspaceRoot("/")
+                .noGithub()
+                .noStart()
+                .toArgs());
 
         // then
         result.assertSuccess();
@@ -456,13 +448,12 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
 
         // when
-        SetupRunResult result = runSetup(
-                "--dry-run",
-                "--non-interactive",
-                "--board",
-                "https://trello.com/b/input/queue",
-                "--workflow",
-                workflowPath);
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .dryRun()
+                .nonInteractive()
+                .board("https://trello.com/b/input/queue")
+                .workflow(workflowPath)
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -612,7 +603,11 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         String boardName = "Endpoint Dry Run";
 
         // when
-        SetupRunResult result = runSetup("--dry-run", "--endpoint", invalidEndpoint, "--board-name", boardName);
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .dryRun()
+                .endpoint(invalidEndpoint)
+                .boardName(boardName)
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -629,17 +624,14 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         String badBoardName = "Local\nQueue";
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                badBoardName,
-                "--no-github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName(badBoardName)
+                .noGithub()
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -657,17 +649,14 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         String badBoardSelector = "board\nselector";
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                badBoardSelector,
-                "--no-github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board(badBoardSelector)
+                .noGithub()
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -687,24 +676,18 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path env = tempDir.resolve(".env.unconnected-board");
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--config-dir",
-                isolatedConfig.toString(),
-                "--board",
-                "Unconnected Board",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github",
-                "--no-start");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .configDir(isolatedConfig.toString())
+                .board("Unconnected Board")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .noGithub()
+                .noStart()
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -725,19 +708,15 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         String badWorkspaceId = "workspace\nId";
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Local Queue",
-                "--workspace-id",
-                badWorkspaceId,
-                "--no-github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("Local Queue")
+                .workspaceId(badWorkspaceId)
+                .noGithub()
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -756,15 +735,14 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
 
         // when
-        SetupRunResult result = runSetup(
-                "--dry-run",
-                "--non-interactive",
-                "--no-start",
-                "--board-name",
-                "Local Queue",
-                "--workspace-id",
-                badWorkspaceId,
-                "--no-github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .dryRun()
+                .nonInteractive()
+                .noStart()
+                .boardName("Local Queue")
+                .workspaceId(badWorkspaceId)
+                .noGithub()
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -862,9 +840,10 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 "\n",
-                "--no-github",
-                "--add-path",
-                tempDir.resolve("selected-path").toString());
+                SetupCommandBuilder.command()
+                        .noGithub()
+                        .addPath(tempDir.resolve("selected-path").toString())
+                        .toArgs());
 
         // then
         result.assertFailure(2)
@@ -879,7 +858,12 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "\n", "configure-github", "--endpoint", endpoint(), "--key", "key", "--token", "token");
+                "\n",
+                SetupCommandBuilder.command("configure-github")
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .toArgs());
 
         // then
         result.assertFailure(2)
@@ -964,7 +948,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         commands.startHealthServer(workflow, "other-board");
 
         // when
-        SetupRunResult result = runSetup("check", "--board", "board-1");
+        SetupRunResult result =
+                runSetup(SetupCommandBuilder.command("check").board("board-1").toArgs());
 
         // then
         result.assertFailure(2)
@@ -1012,7 +997,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         commands.startHealthServer(workflow, "other-board");
 
         // when
-        SetupRunResult result = runSetup("check", "--board", "board-1");
+        SetupRunResult result =
+                runSetup(SetupCommandBuilder.command("check").board("board-1").toArgs());
 
         // then
         result.assertFailure(2)
@@ -1030,7 +1016,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         commands.startHealthServer(duplicates.firstWorkflow(), "other-board");
 
         // when
-        SetupRunResult result = runSetup("check", "--board", "private-key-one");
+        SetupRunResult result = runSetup(
+                SetupCommandBuilder.command("check").board("private-key-one").toArgs());
 
         // then
         result.assertFailure(2)
@@ -1089,21 +1076,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path env = tempDir.resolve(".env");
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Local Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("Local Queue")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
 
         // then
         result.assertSuccess()
@@ -1132,15 +1114,13 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path env = tempDir.resolve(".env.custom-credentials");
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--board-name",
-                "Local Queue",
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .boardName("Local Queue")
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -1163,17 +1143,14 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetupWithInput(
                 modelBackedSetup,
                 "\n\n\n\nn\nn\n",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+                SetupCommandBuilder.command()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .workflow(workflow.toString())
+                        .env(env.toString())
+                        .noGithub()
+                        .toArgs());
 
         // then
         result.assertSuccess()
@@ -1200,17 +1177,14 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetupWithInput(
                 catalogBackedSetup,
                 "\n\ngpt-6\n\nn\nn\n",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+                SetupCommandBuilder.command()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .workflow(workflow.toString())
+                        .env(env.toString())
+                        .noGithub()
+                        .toArgs());
 
         // then
         result.assertSuccess().stdoutContains("Model [gpt-5.5]: ", "Reasoning effort [high]: ");
@@ -1229,17 +1203,14 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 "\n\ngpt-selected\nlow\nn\nn\n",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+                SetupCommandBuilder.command()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .workflow(workflow.toString())
+                        .env(env.toString())
+                        .noGithub()
+                        .toArgs());
 
         // then
         result.assertSuccess();
@@ -1269,20 +1240,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 "gpt-selected\nlow\nn\nn\n",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Selected Replace Model Queue",
-                "--workflow",
-                workflow.toString(),
-                "--force",
-                "--env",
-                env.toString(),
-                "--no-github");
+                SetupCommandBuilder.command()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .boardName("Selected Replace Model Queue")
+                        .workflow(workflow.toString())
+                        .force()
+                        .env(env.toString())
+                        .noGithub()
+                        .toArgs());
 
         // then
         result.assertSuccess();
@@ -1317,20 +1284,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetupWithInput(
                 modelBackedSetup,
                 "\n\nn\nn\n",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Existing Model Prompt Queue",
-                "--workflow",
-                workflow.toString(),
-                "--force",
-                "--env",
-                env.toString(),
-                "--no-github");
+                SetupCommandBuilder.command()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .boardName("Existing Model Prompt Queue")
+                        .workflow(workflow.toString())
+                        .force()
+                        .env(env.toString())
+                        .noGithub()
+                        .toArgs());
 
         // then
         result.assertSuccess()
@@ -1367,20 +1330,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetupWithInput(
                 catalogBackedSetup,
                 "gpt-6\n\nn\nn\n",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Existing Reasoning Model Change Queue",
-                "--workflow",
-                workflow.toString(),
-                "--force",
-                "--env",
-                env.toString(),
-                "--no-github");
+                SetupCommandBuilder.command()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .boardName("Existing Reasoning Model Change Queue")
+                        .workflow(workflow.toString())
+                        .force()
+                        .env(env.toString())
+                        .noGithub()
+                        .toArgs());
 
         // then
         result.assertSuccess()
@@ -1416,23 +1375,18 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetup(
                 catalogBackedSetup,
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Existing Model Reasoning Omitted Queue",
-                "--workflow",
-                workflow.toString(),
-                "--force",
-                "--server-port",
-                Integer.toString(selectedPort),
-                "--env",
-                env.toString(),
-                "--no-github");
+                SetupCommandBuilder.command()
+                        .nonInteractive()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .boardName("Existing Model Reasoning Omitted Queue")
+                        .workflow(workflow.toString())
+                        .force()
+                        .serverPort(Integer.toString(selectedPort))
+                        .env(env.toString())
+                        .noGithub()
+                        .toArgs());
 
         // then
         result.assertSuccess();
@@ -1465,20 +1419,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetupWithInput(
                 catalogBackedSetup,
                 "gpt-6\n\nn\nn\n",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Existing Model Without Reasoning Queue",
-                "--workflow",
-                workflow.toString(),
-                "--force",
-                "--env",
-                env.toString(),
-                "--no-github");
+                SetupCommandBuilder.command()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .boardName("Existing Model Without Reasoning Queue")
+                        .workflow(workflow.toString())
+                        .force()
+                        .env(env.toString())
+                        .noGithub()
+                        .toArgs());
 
         // then
         result.assertSuccess().stdoutContains("Model [keep workflow default]: ", "Reasoning effort [high]: ");
@@ -1492,23 +1442,17 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path env = tempDir.resolve(".env.explicit-model");
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Explicit Model Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--codex-model",
-                "gpt-explicit",
-                "--no-github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("Explicit Model Queue")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .codexModel("gpt-explicit")
+                .noGithub()
+                .toArgs());
 
         // then
         result.assertSuccess();
@@ -1536,26 +1480,19 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 StandardCharsets.UTF_8);
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Replace Model Queue",
-                "--workflow",
-                workflow.toString(),
-                "--force",
-                "--env",
-                env.toString(),
-                "--codex-model",
-                "gpt-new",
-                "--codex-reasoning-effort",
-                "high",
-                "--no-github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("Replace Model Queue")
+                .workflow(workflow.toString())
+                .force()
+                .env(env.toString())
+                .codexModel("gpt-new")
+                .codexReasoningEffort("high")
+                .noGithub()
+                .toArgs());
 
         // then
         result.assertSuccess();
@@ -1589,23 +1526,18 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetup(
                 catalogBackedSetup,
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Partial Replace Model Queue",
-                "--workflow",
-                workflow.toString(),
-                "--force",
-                "--env",
-                env.toString(),
-                "--codex-model",
-                "gpt-new",
-                "--no-github");
+                SetupCommandBuilder.command()
+                        .nonInteractive()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .boardName("Partial Replace Model Queue")
+                        .workflow(workflow.toString())
+                        .force()
+                        .env(env.toString())
+                        .codexModel("gpt-new")
+                        .noGithub()
+                        .toArgs());
 
         // then
         result.assertSuccess();
@@ -1627,22 +1559,17 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetup(
                 unsupportedModelSetup,
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Unsupported Explicit Model Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--codex-model",
-                "gpt-explicit",
-                "--no-github");
+                SetupCommandBuilder.command()
+                        .nonInteractive()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .boardName("Unsupported Explicit Model Queue")
+                        .workflow(workflow.toString())
+                        .env(env.toString())
+                        .codexModel("gpt-explicit")
+                        .noGithub()
+                        .toArgs());
 
         // then
         result.assertSuccess();
@@ -1672,23 +1599,18 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetup(
                 unsupportedModelSetup,
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Unsupported Explicit Existing Queue",
-                "--workflow",
-                workflow.toString(),
-                "--force",
-                "--env",
-                env.toString(),
-                "--codex-model",
-                "gpt-explicit",
-                "--no-github");
+                SetupCommandBuilder.command()
+                        .nonInteractive()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .boardName("Unsupported Explicit Existing Queue")
+                        .workflow(workflow.toString())
+                        .force()
+                        .env(env.toString())
+                        .codexModel("gpt-explicit")
+                        .noGithub()
+                        .toArgs());
 
         // then
         result.assertSuccess();
@@ -1709,17 +1631,14 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetupWithInput(
                 unsupportedModelSetup,
                 "\n\nn\nn\n",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+                SetupCommandBuilder.command()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .workflow(workflow.toString())
+                        .env(env.toString())
+                        .noGithub()
+                        .toArgs());
 
         // then
         result.assertSuccess().stdoutDoesNotContain("Codex model", "Reasoning effort");
@@ -1748,20 +1667,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetupWithInput(
                 unsupportedModelSetup,
                 "\n\nn\nn\n",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Unsupported Existing Omitted Queue",
-                "--workflow",
-                workflow.toString(),
-                "--force",
-                "--env",
-                env.toString(),
-                "--no-github");
+                SetupCommandBuilder.command()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .boardName("Unsupported Existing Omitted Queue")
+                        .workflow(workflow.toString())
+                        .force()
+                        .env(env.toString())
+                        .noGithub()
+                        .toArgs());
 
         // then
         result.assertSuccess().stdoutDoesNotContain("Codex model", "Model [", "Reasoning effort");
@@ -1789,21 +1704,17 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetup(
                 unsupportedModelSetup,
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Unsupported Existing Omitted Noninteractive Queue",
-                "--workflow",
-                workflow.toString(),
-                "--force",
-                "--env",
-                env.toString(),
-                "--no-github");
+                SetupCommandBuilder.command()
+                        .nonInteractive()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .boardName("Unsupported Existing Omitted Noninteractive Queue")
+                        .workflow(workflow.toString())
+                        .force()
+                        .env(env.toString())
+                        .noGithub()
+                        .toArgs());
 
         // then
         result.assertSuccess();
@@ -1833,21 +1744,17 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetup(
                 unsupportedModelSetup,
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Unsupported Existing Configured Queue",
-                "--workflow",
-                workflow.toString(),
-                "--force",
-                "--env",
-                env.toString(),
-                "--no-github");
+                SetupCommandBuilder.command()
+                        .nonInteractive()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .boardName("Unsupported Existing Configured Queue")
+                        .workflow(workflow.toString())
+                        .force()
+                        .env(env.toString())
+                        .noGithub()
+                        .toArgs());
 
         // then
         result.assertSuccess();
@@ -1864,17 +1771,14 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Files.writeString(env, "TRELLO_API_KEY=key%nTRELLO_API_TOKEN=token%n".formatted(), StandardCharsets.UTF_8);
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--board-name",
-                "Env Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .boardName("Env Queue")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
 
         // then
         result.assertSuccess();
@@ -1903,16 +1807,14 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetup(
                 environmentBackedSetup,
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--board-name",
-                "Real Env Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+                SetupCommandBuilder.command()
+                        .nonInteractive()
+                        .endpoint(endpoint())
+                        .boardName("Real Env Queue")
+                        .workflow(workflow.toString())
+                        .env(env.toString())
+                        .noGithub()
+                        .toArgs());
 
         // then
         result.assertSuccess()
@@ -1938,20 +1840,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetup(
                 environmentBackedSetup,
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Workspace Env Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+                SetupCommandBuilder.command()
+                        .nonInteractive()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .boardName("Workspace Env Queue")
+                        .workflow(workflow.toString())
+                        .env(env.toString())
+                        .noGithub()
+                        .toArgs());
 
         // then
         result.assertSuccess();
@@ -1978,15 +1876,13 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetupWithInput(
                 environmentBackedSetup,
                 "prompt-token\n\nn\nn\n",
-                "--endpoint",
-                endpoint(),
-                "--board-name",
-                "Partial Real Env Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+                SetupCommandBuilder.command()
+                        .endpoint(endpoint())
+                        .boardName("Partial Real Env Queue")
+                        .workflow(workflow.toString())
+                        .env(env.toString())
+                        .noGithub()
+                        .toArgs());
 
         // then
         result.assertSuccess();
@@ -2005,21 +1901,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path env = tempDir.resolve(".env");
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                scenario.apiKey(),
-                "--token",
-                scenario.apiToken(),
-                "--board-name",
-                "Escaped Env Queue " + scenario.fileSuffix(),
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key(scenario.apiKey())
+                .token(scenario.apiToken())
+                .boardName("Escaped Env Queue " + scenario.fileSuffix())
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
 
         // then
         result.assertSuccess();
@@ -2073,19 +1964,15 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 "\n\nn\nn\n",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Prompt Order Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+                SetupCommandBuilder.command()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .boardName("Prompt Order Queue")
+                        .workflow(workflow.toString())
+                        .env(env.toString())
+                        .noGithub()
+                        .toArgs());
 
         // then
         result.assertSuccess()
@@ -2112,22 +1999,17 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path env = tempDir.resolve(".env.danger");
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Danger Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--danger-full-access",
-                "--no-github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("Danger Queue")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .dangerFullAccess()
+                .noGithub()
+                .toArgs());
 
         // then
         result.assertSuccess()
@@ -2151,21 +2033,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
             }
 
             // when
-            SetupRunResult result = runSetupWithProductionDefaultPort(
-                    "--non-interactive",
-                    "--endpoint",
-                    endpoint(),
-                    "--key",
-                    "key",
-                    "--token",
-                    "token",
-                    "--board-name",
-                    "Bound Port Queue",
-                    "--workflow",
-                    workflow.toString(),
-                    "--env",
-                    env.toString(),
-                    "--no-github");
+            SetupRunResult result = runSetupWithProductionDefaultPort(SetupCommandBuilder.command()
+                    .nonInteractive()
+                    .endpoint(endpoint())
+                    .key("key")
+                    .token("token")
+                    .boardName("Bound Port Queue")
+                    .workflow(workflow.toString())
+                    .env(env.toString())
+                    .noGithub()
+                    .toArgs());
 
             // then
             result.assertSuccess();
@@ -2195,23 +2072,20 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         SetupRunResult setupResult = runSetupWithInput(
                 setupWithOverride,
                 "\n\nn\nn\n",
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Port Override Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--server-port",
-                "19080",
-                "--no-github");
-        SetupRunResult checkResult = runSetup(setupWithOverride, "check", "--endpoint", endpoint());
+                SetupCommandBuilder.command()
+                        .nonInteractive()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .boardName("Port Override Queue")
+                        .workflow(workflow.toString())
+                        .env(env.toString())
+                        .serverPort("19080")
+                        .noGithub()
+                        .toArgs());
+        SetupRunResult checkResult = runSetup(
+                setupWithOverride,
+                SetupCommandBuilder.command("check").endpoint(endpoint()).toArgs());
 
         // then
         setupResult.assertSuccess().stdoutContains("OK  Symphony is connected to");
@@ -2240,20 +2114,17 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 StandardCharsets.UTF_8);
 
         // when
-        SetupRunResult setupResult = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--board-name",
-                "Dotenv Port Override Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--server-port",
-                "19080",
-                "--no-github");
-        SetupRunResult checkResult = runSetup("check", "--endpoint", endpoint());
+        SetupRunResult setupResult = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .boardName("Dotenv Port Override Queue")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .serverPort("19080")
+                .noGithub()
+                .toArgs());
+        SetupRunResult checkResult = runSetup(
+                SetupCommandBuilder.command("check").endpoint(endpoint()).toArgs());
 
         // then
         setupResult.assertSuccess().stdoutContains("OK  Symphony is connected to");
@@ -2273,25 +2144,18 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path manifest = config.resolve("boards.json");
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Relative Paths",
-                "--config-dir",
-                config.toString(),
-                "--workflow",
-                "WORKFLOW.relative.md",
-                "--manifest",
-                "boards.json",
-                "--env",
-                ".env.relative",
-                "--no-github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("Relative Paths")
+                .configDir(config.toString())
+                .workflow("WORKFLOW.relative.md")
+                .manifest("boards.json")
+                .env(".env.relative")
+                .noGithub()
+                .toArgs());
 
         // then
         result.assertSuccess();
@@ -2313,19 +2177,15 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path env = tempDir.resolve(".env");
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "board-1",
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board("board-1")
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
 
         // then
         Path workflow = tempDir.resolve("config").resolve("WORKFLOW.imported-queue.md");
@@ -2350,19 +2210,15 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path env = tempDir.resolve(".env.reconnected-name");
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "Connected Import",
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board("Connected Import")
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
 
         // then
         result.assertSuccess().stdoutContains("Board connected: \"Imported Queue\"");
@@ -2386,29 +2242,10 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         LocalSetup probedSetup = setupWithPortProbe(port -> false);
 
         // when
-        SetupRunResult result = runSetupWithProductionDefaultPort(
-                probedSetup,
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "board-1",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-start",
-                "--no-github");
+        SetupRunResult result = runProductionDefaultPortBoardSetup(probedSetup, workflow, env);
 
         // then
-        int expectedPort = ConfigDefaults.DEFAULT_SERVER_PORT + 1;
-        result.assertSuccess().stdoutContains("Local server port selected for \"Imported Queue\": " + expectedPort);
-        assertThatWorkflow(workflow).hasServerPort(expectedPort);
-        assertThatManifest(manifest).hasBoardWithPort("Imported Queue", expectedPort);
+        assertReservationSkippedToNextDefaultPort(result, workflow, manifest);
     }
 
     @Test
@@ -2424,24 +2261,18 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         String originalManifest = Files.readString(manifest, StandardCharsets.UTF_8);
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Requested Conflict Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--server-port",
-                String.valueOf(reservedPort),
-                "--no-start",
-                "--no-github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("Requested Conflict Queue")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .serverPort(String.valueOf(reservedPort))
+                .noStart()
+                .noGithub()
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -2472,24 +2303,18 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         try (ServerSocket occupiedPort = new ServerSocket()) {
             occupiedPort.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
             int port = occupiedPort.getLocalPort();
-            result = runSetup(
-                    "--non-interactive",
-                    "--endpoint",
-                    endpoint(),
-                    "--key",
-                    "key",
-                    "--token",
-                    "token",
-                    "--board",
-                    "board-1",
-                    "--workflow",
-                    workflow.toString(),
-                    "--env",
-                    env.toString(),
-                    "--server-port",
-                    String.valueOf(port),
-                    "--no-start",
-                    "--no-github");
+            result = runSetup(SetupCommandBuilder.command()
+                    .nonInteractive()
+                    .endpoint(endpoint())
+                    .key("key")
+                    .token("token")
+                    .board("board-1")
+                    .workflow(workflow.toString())
+                    .env(env.toString())
+                    .serverPort(String.valueOf(port))
+                    .noStart()
+                    .noGithub()
+                    .toArgs());
 
             result.assertFailure(2)
                     .stderrContains(
@@ -2542,29 +2367,10 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         LocalSetup probedSetup = setupWithPortProbe(port -> false);
 
         // when
-        SetupRunResult result = runSetupWithProductionDefaultPort(
-                probedSetup,
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "board-1",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-start",
-                "--no-github");
+        SetupRunResult result = runProductionDefaultPortBoardSetup(probedSetup, workflow, env);
 
         // then
-        int expectedPort = ConfigDefaults.DEFAULT_SERVER_PORT + 1;
-        result.assertSuccess().stdoutContains("Local server port selected for \"Imported Queue\": " + expectedPort);
-        assertThatWorkflow(workflow).hasServerPort(expectedPort);
-        assertThatManifest(config.resolve("connected-boards.json")).hasBoardWithPort("Imported Queue", expectedPort);
+        assertReservationSkippedToNextDefaultPort(result, workflow, config.resolve("connected-boards.json"));
     }
 
     @Test
@@ -2582,22 +2388,18 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithProductionDefaultPort(
                 probedSetup,
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "board-1",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--force",
-                "--no-start",
-                "--no-github");
+                SetupCommandBuilder.command()
+                        .nonInteractive()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .board("board-1")
+                        .workflow(workflow.toString())
+                        .env(env.toString())
+                        .force()
+                        .noStart()
+                        .noGithub()
+                        .toArgs());
 
         // then
         result.assertSuccess()
@@ -2618,19 +2420,15 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path env = tempDir.resolve(".env");
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "board-1",
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board("board-1")
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
 
         // then
         result.assertSuccess();
@@ -2658,27 +2456,19 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path env = tempDir.resolve(".env");
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "board-1",
-                "--active",
-                "Build Next, Doing",
-                "--in-progress",
-                "Doing",
-                "--terminal",
-                "Shipped",
-                "--blocked",
-                "Needs Help",
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board("board-1")
+                .active("Build Next, Doing")
+                .inProgress("Doing")
+                .terminal("Shipped")
+                .blocked("Needs Help")
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
 
         // then
         Path workflow = tempDir.resolve("config").resolve("WORKFLOW.imported-queue.md");
@@ -2700,27 +2490,19 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path workflow = tempDir.resolve("config").resolve("WORKFLOW.bad-in-progress.md");
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "board-1",
-                "--active",
-                "Ready for Codex",
-                "--terminal",
-                "Done",
-                "--in-progress",
-                "No Such List 123",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board("board-1")
+                .active("Ready for Codex")
+                .terminal("Done")
+                .inProgress("No Such List 123")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -2750,19 +2532,15 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path env = tempDir.resolve(".env");
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "board-1",
-                "--env",
-                env.toString(),
-                "--github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board("board-1")
+                .env(env.toString())
+                .github()
+                .toArgs());
 
         // then
         Path workflow = tempDir.resolve("config").resolve("WORKFLOW.imported-queue.md");
@@ -2778,21 +2556,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path env = tempDir.resolve(".env");
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "board-1",
-                "--active",
-                "Buildd",
-                "--env",
-                env.toString(),
-                "--github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board("board-1")
+                .active("Buildd")
+                .env(env.toString())
+                .github()
+                .toArgs());
 
         // then
         result.assertFailure(2).stderrContains("setup_unknown_active_state");
@@ -2818,23 +2591,17 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 "n\n",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "board-1",
-                "--active",
-                "Ready for Codex",
-                "--terminal",
-                "Done",
-                "--in-progress",
-                "In Progress",
-                "--blocked",
-                "Blocked",
-                "--github");
+                SetupCommandBuilder.command()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .board("board-1")
+                        .active("Ready for Codex")
+                        .terminal("Done")
+                        .inProgress("In Progress")
+                        .blocked("Blocked")
+                        .github()
+                        .toArgs());
 
         // then
         result.assertFailure(2)
@@ -2861,13 +2628,12 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 "2\nboard-1\nQueue\nFinished\nWorking\nBlocked\n\n\nn\nn\n",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--no-github");
+                SetupCommandBuilder.command()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .noGithub()
+                        .toArgs());
 
         // then
         Path workflow = tempDir.resolve("config").resolve("WORKFLOW.imported-queue.md");
@@ -2902,13 +2668,12 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 "2\nboard-1\nQueue\nFinished\nWorking\n-\n\n\nn\nn\n",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--no-github");
+                SetupCommandBuilder.command()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .noGithub()
+                        .toArgs());
 
         // then
         Path workflow = tempDir.resolve("config").resolve("WORKFLOW.imported-queue.md");
@@ -2936,13 +2701,12 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 "2\nboard-1\n-\n-\n\n\nn\nn\n",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--no-github");
+                SetupCommandBuilder.command()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .noGithub()
+                        .toArgs());
 
         // then
         Path workflow = tempDir.resolve("config").resolve("WORKFLOW.imported-queue.md");
@@ -2967,19 +2731,15 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path env = tempDir.resolve(".env");
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Repeat Queue",
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("Repeat Queue")
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
 
         // then
         result.assertSuccess();
@@ -2999,20 +2759,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path env = tempDir.resolve(".env");
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                boardName,
-                "--env",
-                env.toString(),
-                "--no-github",
-                "--no-start");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName(boardName)
+                .env(env.toString())
+                .noGithub()
+                .noStart()
+                .toArgs());
 
         // then
         result.assertSuccess().stdoutContains("Board connected: \"" + boardName + "\"");
@@ -3050,24 +2806,18 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         int updatedPort = availablePort();
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "board-1",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--server-port",
-                String.valueOf(updatedPort),
-                "--force",
-                "--no-github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board("board-1")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .serverPort(String.valueOf(updatedPort))
+                .force()
+                .noGithub()
+                .toArgs());
 
         // then
         result.assertSuccess();
@@ -3106,23 +2856,18 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 StandardCharsets.UTF_8);
 
         // when
-        SetupRunResult result = runSetupWithProductionDefaultPort(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "board-1",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--force",
-                "--no-start",
-                "--no-github");
+        SetupRunResult result = runSetupWithProductionDefaultPort(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board("board-1")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .force()
+                .noStart()
+                .noGithub()
+                .toArgs());
 
         // then
         result.assertSuccess().stdoutContains("Board connected: \"Imported Queue\"");
@@ -3146,23 +2891,18 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         commands.startHealthServer(workflow);
 
         // when
-        SetupRunResult result = runSetupWithProductionDefaultPort(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "board-1",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--force",
-                "--no-start",
-                "--no-github");
+        SetupRunResult result = runSetupWithProductionDefaultPort(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board("board-1")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .force()
+                .noStart()
+                .noGithub()
+                .toArgs());
 
         // then
         result.assertSuccess()
@@ -3187,25 +2927,19 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         commands.startHealthServer(workflow);
 
         // when
-        SetupRunResult result = runSetupWithProductionDefaultPort(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "board-1",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--server-port",
-                String.valueOf(configuredPort),
-                "--force",
-                "--no-start",
-                "--no-github");
+        SetupRunResult result = runSetupWithProductionDefaultPort(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board("board-1")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .serverPort(String.valueOf(configuredPort))
+                .force()
+                .noStart()
+                .noGithub()
+                .toArgs());
 
         // then
         result.assertSuccess().stdoutContains("Board connected: \"Imported Queue\"");
@@ -3229,23 +2963,18 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         doReturn(false).when(workerManager).canStopManagedWorker(any(), any());
 
         // when
-        SetupRunResult result = runSetupWithProductionDefaultPort(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "board-1",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--force",
-                "--no-start",
-                "--no-github");
+        SetupRunResult result = runSetupWithProductionDefaultPort(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board("board-1")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .force()
+                .noStart()
+                .noGithub()
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -3272,23 +3001,18 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path env = tempDir.resolve(".env");
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "board-1",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--force",
-                "--no-start",
-                "--no-github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board("board-1")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .force()
+                .noStart()
+                .noGithub()
+                .toArgs());
 
         // then
         result.assertSuccess();
@@ -3311,21 +3035,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path env = tempDir.resolve(".env");
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "No Command Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("No Command Queue")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
 
         // then
         result.assertFailure(2).stderrContains("setup_worker_start_failed", "Unable to start managed worker.");
@@ -3344,21 +3063,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 .start(any(), any(), any(), any());
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Running Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("Running Queue")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -3370,21 +3084,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.running-queue.md");
         Path env = tempDir.resolve(".env.running-queue");
-        SetupRunResult firstResult = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Running Name Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult firstResult = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("Running Name Queue")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
         commands.startedWorkflows.clear();
         commands.startedEnvFiles.clear();
         commands.stoppedWorkflows.clear();
@@ -3393,7 +3102,9 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         commands.statusByWorkflow.put(workflow.toString(), "stopped WORKFLOW.running-queue.md");
 
         // when
-        SetupRunResult result = runSetup("repair-port", "--board", "Running Name Queue");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command("repair-port")
+                .board("Running Name Queue")
+                .toArgs());
 
         // then
         firstResult.assertSuccess();
@@ -3410,24 +3121,20 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.invalid-choice.md");
         Path env = tempDir.resolve(".env.invalid-choice");
-        SetupRunResult firstResult = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Choice Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult firstResult = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("Choice Queue")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
 
         // when
-        SetupRunResult result = runSetupWithInput("x\n", "--endpoint", endpoint());
+        SetupRunResult result = runSetupWithInput(
+                "x\n", SetupCommandBuilder.command().endpoint(endpoint()).toArgs());
 
         // then
         firstResult.assertSuccess();
@@ -3442,19 +3149,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         String boardName = "No Start Plan Queue";
 
         // when
-        SetupRunResult result = runSetup(
-                "--dry-run",
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                boardName,
-                "--no-start",
-                "--no-github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .dryRun()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName(boardName)
+                .noStart()
+                .noGithub()
+                .toArgs());
 
         // then
         result.assertSuccess()
@@ -3469,8 +3173,11 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Files.writeString(emptyManifest, "{\"boards\":[]}", StandardCharsets.UTF_8);
 
         // when
-        SetupRunResult result = runSetup(
-                "repair-port", "--board", "anything", "--non-interactive", "--manifest", emptyManifest.toString());
+        SetupRunResult result = runSetup(SetupCommandBuilder.command("repair-port")
+                .board("anything")
+                .nonInteractive()
+                .manifest(emptyManifest.toString())
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -3484,24 +3191,18 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path workflow = tempDir.resolve("WORKFLOW.repair-avoid.md");
         Path env = tempDir.resolve(".env.repair-avoid");
         int boardPort = availablePort();
-        SetupRunResult firstResult = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Avoid Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--server-port",
-                String.valueOf(boardPort),
-                "--no-start",
-                "--no-github");
+        SetupRunResult firstResult = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("Avoid Queue")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .serverPort(String.valueOf(boardPort))
+                .noStart()
+                .noGithub()
+                .toArgs());
         firstResult.assertSuccess();
         // Force a repair by occupying the configured port with a foreign listener.
         try (ServerSocket portBlocker = new ServerSocket(boardPort, 1, InetAddress.getLoopbackAddress())) {
@@ -3526,7 +3227,9 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
             commands.stoppedWorkflows.clear();
 
             // when
-            SetupRunResult result = runSetup("repair-port", "--board", "Avoid Queue");
+            SetupRunResult result = runSetup(SetupCommandBuilder.command("repair-port")
+                    .board("Avoid Queue")
+                    .toArgs());
 
             // then
             result.assertSuccess();
@@ -3540,23 +3243,17 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path workflow = tempDir.resolve("WORKFLOW.repair-dry-run.md");
         Path env = tempDir.resolve(".env.repair-dry-run");
         Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
-        SetupRunResult firstResult = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Dry Run Repair Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--server-port",
-                String.valueOf(availablePort()),
-                "--no-github");
+        SetupRunResult firstResult = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("Dry Run Repair Queue")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .serverPort(String.valueOf(availablePort()))
+                .noGithub()
+                .toArgs());
         firstResult.assertSuccess();
         String originalWorkflow = Files.readString(workflow, StandardCharsets.UTF_8);
         String originalManifest = Files.readString(manifest, StandardCharsets.UTF_8);
@@ -3566,8 +3263,13 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         commands.commandEvents.clear();
 
         // when
-        SetupRunResult dryRunResult = runSetup("repair-port", "--dry-run", "--board", "Dry Run Repair Queue");
-        SetupRunResult repairResult = runSetup("repair-port", "--board", "Dry Run Repair Queue");
+        SetupRunResult dryRunResult = runSetup(SetupCommandBuilder.command("repair-port")
+                .dryRun()
+                .board("Dry Run Repair Queue")
+                .toArgs());
+        SetupRunResult repairResult = runSetup(SetupCommandBuilder.command("repair-port")
+                .board("Dry Run Repair Queue")
+                .toArgs());
 
         // then
         dryRunResult
@@ -3595,7 +3297,10 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         commands.startHealthServer(workflow);
 
         // when
-        SetupRunResult result = runSetup("check", "--endpoint", endpoint(), "--board", "Stale Check Queue");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command("check")
+                .endpoint(endpoint())
+                .board("Stale Check Queue")
+                .toArgs());
 
         // then
         result.assertSuccess()
@@ -3616,8 +3321,12 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Files.createDirectories(workflowDirectory);
 
         // when
-        SetupRunResult result =
-                runSetup("--dry-run", "--non-interactive", "--workflow", workflowDirectory.toString(), "--force");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .dryRun()
+                .nonInteractive()
+                .workflow(workflowDirectory.toString())
+                .force()
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -3634,8 +3343,12 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path workflow = plainFile.resolve("child.WORKFLOW.md");
 
         // when
-        SetupRunResult result =
-                runSetup("--dry-run", "--non-interactive", "--workflow", workflow.toString(), "--force");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .dryRun()
+                .nonInteractive()
+                .workflow(workflow.toString())
+                .force()
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -3651,20 +3364,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Files.createDirectories(workflowDirectory);
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                "http://127.0.0.1:1/",
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Preflight Queue",
-                "--workflow",
-                workflowDirectory.toString(),
-                "--force",
-                "--no-github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint("http://127.0.0.1:1/")
+                .key("key")
+                .token("token")
+                .boardName("Preflight Queue")
+                .workflow(workflowDirectory.toString())
+                .force()
+                .noGithub()
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -3680,8 +3389,11 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Files.writeString(manifest, manifestContent, StandardCharsets.UTF_8);
 
         // when
-        SetupRunResult result = runSetup(
-                "repair-port", "--dry-run", "--manifest", manifest.toString(), "--board", "Broken Manifest Queue");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command("repair-port")
+                .dryRun()
+                .manifest(manifest.toString())
+                .board("Broken Manifest Queue")
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -3706,17 +3418,14 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path workflow = tempDir.resolve("WORKFLOW.reference-creds.md");
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                "http://127.0.0.1:1/",
-                "--board-name",
-                "Reference Credentials Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint("http://127.0.0.1:1/")
+                .boardName("Reference Credentials Queue")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -3737,19 +3446,15 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path workflow = tempDir.resolve("WORKFLOW.invalid-manifest.md");
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                "http://127.0.0.1:1/",
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Corrupt Manifest Queue",
-                "--workflow",
-                workflow.toString(),
-                "--no-github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint("http://127.0.0.1:1/")
+                .key("key")
+                .token("token")
+                .boardName("Corrupt Manifest Queue")
+                .workflow(workflow.toString())
+                .noGithub()
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -3783,7 +3488,10 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Files.writeString(manifest, "not-valid-json", StandardCharsets.UTF_8);
 
         // when
-        SetupRunResult result = runSetup("check", "--non-interactive", "--manifest", manifest.toString());
+        SetupRunResult result = runSetup(SetupCommandBuilder.command("check")
+                .nonInteractive()
+                .manifest(manifest.toString())
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -3798,7 +3506,10 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Files.writeString(manifest, "{\"boards\":[{}]}", StandardCharsets.UTF_8);
 
         // when
-        SetupRunResult result = runSetup("check", "--non-interactive", "--manifest", manifest.toString());
+        SetupRunResult result = runSetup(SetupCommandBuilder.command("check")
+                .nonInteractive()
+                .manifest(manifest.toString())
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -3837,7 +3548,10 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         writeConnectedBoardManifest(manifest, "Overlap Check Queue", workflow, env, port);
 
         // when
-        SetupRunResult result = runSetup("check", "--endpoint", endpoint(), "--board", "Overlap Check Queue");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command("check")
+                .endpoint(endpoint())
+                .board("Overlap Check Queue")
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -3860,7 +3574,10 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         commands.startHealthServer(workflow);
 
         // when
-        SetupRunResult result = runSetup("repair-port", "--dry-run", "--board", "Stale Repair Queue");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command("repair-port")
+                .dryRun()
+                .board("Stale Repair Queue")
+                .toArgs());
 
         // then
         result.assertSuccess()
@@ -3892,7 +3609,9 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         commands.startHealthServer(workflow);
 
         // when
-        SetupRunResult result = runSetup("repair-port", "--board", "Stale Actual Repair Queue");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command("repair-port")
+                .board("Stale Actual Repair Queue")
+                .toArgs());
 
         // then
         result.assertSuccess()
@@ -3972,7 +3691,11 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         commands.startHealthServer(workflow);
 
         // when
-        SetupRunResult result = runSetup(probedSetup, "repair-port", "--board", "Conflict Repair Queue");
+        SetupRunResult result = runSetup(
+                probedSetup,
+                SetupCommandBuilder.command("repair-port")
+                        .board("Conflict Repair Queue")
+                        .toArgs());
 
         // then
         result.assertSuccess()
@@ -4051,7 +3774,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         doThrow(new IOException("simulated stop failure")).when(workerManager).stop(any(), any(), any());
 
         // when
-        SetupRunResult result = runSetup("repair-port", "--board", "board-1");
+        SetupRunResult result = runSetup(
+                SetupCommandBuilder.command("repair-port").board("board-1").toArgs());
 
         // then
         result.assertFailure(2)
@@ -4070,30 +3794,25 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.repair-selector.md");
         Path env = tempDir.resolve(".env.repair-selector");
-        SetupRunResult firstResult = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Repair Selector Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--server-port",
-                String.valueOf(availablePort()),
-                "--no-github");
+        SetupRunResult firstResult = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("Repair Selector Queue")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .serverPort(String.valueOf(availablePort()))
+                .noGithub()
+                .toArgs());
         commands.startedWorkflows.clear();
         commands.startedEnvFiles.clear();
         commands.stoppedWorkflows.clear();
         commands.commandEvents.clear();
 
         // when
-        SetupRunResult result = runSetup("repair-port", "--board", selector);
+        SetupRunResult result = runSetup(
+                SetupCommandBuilder.command("repair-port").board(selector).toArgs());
 
         // then
         firstResult.assertSuccess();
@@ -4106,21 +3825,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path workflow = tempDir.resolve("WORKFLOW.dotenv-repair-override.md");
         Path env = tempDir.resolve(".env.dotenv-repair-override");
         Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
-        SetupRunResult firstResult = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Dotenv Repair Override Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult firstResult = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("Dotenv Repair Override Queue")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
         String originalWorkflow = Files.readString(workflow, StandardCharsets.UTF_8);
         String originalManifest = Files.readString(manifest, StandardCharsets.UTF_8);
         Files.writeString(env, "SYMPHONY_HTTP_PORT=%d%n".formatted(availablePort()), StandardOpenOption.APPEND);
@@ -4130,7 +3844,9 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         commands.commandEvents.clear();
 
         // when
-        SetupRunResult result = runSetup("repair-port", "--board", "Dotenv Repair Override Queue");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command("repair-port")
+                .board("Dotenv Repair Override Queue")
+                .toArgs());
 
         // then
         firstResult.assertSuccess();
@@ -4153,21 +3869,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path workflow = tempDir.resolve("WORKFLOW.environment-repair-override.md");
         Path env = tempDir.resolve(".env.environment-repair-override");
         Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
-        SetupRunResult firstResult = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Environment Repair Override Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult firstResult = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("Environment Repair Override Queue")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
         String originalWorkflow = Files.readString(workflow, StandardCharsets.UTF_8);
         String originalManifest = Files.readString(manifest, StandardCharsets.UTF_8);
         LocalSetup setupWithOverride = setupWithEnvironment(Map.of(
@@ -4183,8 +3894,11 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         commands.commandEvents.clear();
 
         // when
-        SetupRunResult result =
-                runSetup(setupWithOverride, "repair-port", "--board", "Environment Repair Override Queue");
+        SetupRunResult result = runSetup(
+                setupWithOverride,
+                SetupCommandBuilder.command("repair-port")
+                        .board("Environment Repair Override Queue")
+                        .toArgs());
 
         // then
         firstResult.assertSuccess();
@@ -4206,34 +3920,27 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.saved-env.md");
         Path env = tempDir.resolve(".env.saved");
-        SetupRunResult firstResult = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Saved Env Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult firstResult = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("Saved Env Queue")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
         commands.startedWorkflows.clear();
         commands.startedEnvFiles.clear();
 
         // when
-        SetupRunResult secondResult = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "new-key",
-                "--token",
-                "new-token",
-                "--no-github");
+        SetupRunResult secondResult = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("new-key")
+                .token("new-token")
+                .noGithub()
+                .toArgs());
 
         // then
         firstResult.assertSuccess();
@@ -4254,21 +3961,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // instead of letting a list name split or garble the tutorial text.
         Path workflow = tempDir.resolve("WORKFLOW.dirty-tutorial.md");
         Path env = tempDir.resolve(".env.dirty-tutorial");
-        SetupRunResult firstResult = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Dirty Tutorial Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult firstResult = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("Dirty Tutorial Queue")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
         String content = Files.readString(workflow, StandardCharsets.UTF_8);
         content = content.replace("- \"Ready for Codex\"", "- \"Ready\\nCodex\"")
                 .replace("in_progress_state: \"In Progress\"", "in_progress_state: \"Doing\\tNow\"")
@@ -4277,7 +3979,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Files.writeString(workflow, content, StandardCharsets.UTF_8);
 
         // when
-        SetupRunResult secondResult = runSetup("--non-interactive", "--no-github");
+        SetupRunResult secondResult = runSetup(
+                SetupCommandBuilder.command().nonInteractive().noGithub().toArgs());
 
         // then
         firstResult.assertSuccess();
@@ -4296,28 +3999,24 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.saved-only.md");
         Path env = tempDir.resolve(".env.saved-only");
-        SetupRunResult firstResult = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Saved Only Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult firstResult = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("Saved Only Queue")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
         commands.startedWorkflows.clear();
         commands.startedEnvFiles.clear();
         trello.memberLookups().clear();
         trello.workspaceLookups().clear();
 
         // when
-        SetupRunResult secondResult = runSetup("--non-interactive", "--no-github");
+        SetupRunResult secondResult = runSetup(
+                SetupCommandBuilder.command().nonInteractive().noGithub().toArgs());
 
         // then
         firstResult.assertSuccess();
@@ -4339,19 +4038,15 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path env = tempDir.resolve(".env");
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "board-1",
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board("board-1")
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
 
         // then
         Path workflow = tempDir.resolve("config").resolve("WORKFLOW.imported-queue.md");
@@ -4375,21 +4070,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path env = tempDir.resolve(".env");
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Ambiguous Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("Ambiguous Queue")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
 
         // then
         result.assertFailure(2).stderrContains("setup_workspace_id_required", "--workspace-id");
@@ -4413,19 +4103,15 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 "\n",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Interactive Workspace Selection",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+                SetupCommandBuilder.command()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .boardName("Interactive Workspace Selection")
+                        .workflow(workflow.toString())
+                        .env(env.toString())
+                        .noGithub()
+                        .toArgs());
 
         // then
         result.assertFailure(2)
@@ -4444,19 +4130,15 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         prepareNextSetupRunWithGithubAuth();
 
         // when
-        SetupRunResult secondResult = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "GitHub Explicit",
-                "--env",
-                env.toString(),
-                "--github");
+        SetupRunResult secondResult = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("GitHub Explicit")
+                .env(env.toString())
+                .github()
+                .toArgs());
 
         // then
         Path secondWorkflow = tempDir.resolve("config").resolve("WORKFLOW.github-explicit.md");
@@ -4476,25 +4158,18 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.github-upgrade-model.md");
         Path env = tempDir.resolve(".env");
-        SetupRunResult firstResult = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "GitHub Upgrade Model",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--codex-model",
-                "gpt-old",
-                "--codex-reasoning-effort",
-                "low",
-                "--no-github");
+        SetupRunResult firstResult = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("GitHub Upgrade Model")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .codexModel("gpt-old")
+                .codexReasoningEffort("low")
+                .noGithub()
+                .toArgs());
         commands.githubAuthenticated = true;
         commands.startedWorkflows.clear();
         commands.startedEnvFiles.clear();
@@ -4502,19 +4177,14 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         trello.createdLists().clear();
 
         // when
-        SetupRunResult secondResult = runSetup(
-                "configure-github",
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--codex-model",
-                "gpt-new",
-                "--codex-reasoning-effort",
-                "high");
+        SetupRunResult secondResult = runSetup(SetupCommandBuilder.command("configure-github")
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .codexModel("gpt-new")
+                .codexReasoningEffort("high")
+                .toArgs());
 
         // then
         firstResult.assertSuccess();
@@ -4534,21 +4204,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.github-upgrade-max-agents.md");
         Path env = tempDir.resolve(".env");
-        SetupRunResult firstResult = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "GitHub Upgrade Max Agents",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult firstResult = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("GitHub Upgrade Max Agents")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
         commands.githubAuthenticated = true;
         commands.startedWorkflows.clear();
         commands.startedEnvFiles.clear();
@@ -4556,17 +4221,13 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         trello.createdLists().clear();
 
         // when
-        SetupRunResult secondResult = runSetup(
-                "configure-github",
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--max-agents",
-                "3");
+        SetupRunResult secondResult = runSetup(SetupCommandBuilder.command("configure-github")
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .maxAgents("3")
+                .toArgs());
 
         // then
         firstResult.assertSuccess();
@@ -4583,23 +4244,17 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path workflow = tempDir.resolve("WORKFLOW.github-upgrade-env-port.md");
         Path env = tempDir.resolve(".env");
         int configuredPort = firstAvailableManagedPort();
-        SetupRunResult firstResult = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "GitHub Upgrade Env Port",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--server-port",
-                String.valueOf(configuredPort),
-                "--no-github");
+        SetupRunResult firstResult = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("GitHub Upgrade Env Port")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .serverPort(String.valueOf(configuredPort))
+                .noGithub()
+                .toArgs());
         firstResult.assertSuccess();
         Files.writeString(
                 workflow,
@@ -4614,8 +4269,12 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         trello.createdLists().clear();
 
         // when
-        SetupRunResult secondResult = runSetup(
-                "configure-github", "--non-interactive", "--endpoint", endpoint(), "--key", "key", "--token", "token");
+        SetupRunResult secondResult = runSetup(SetupCommandBuilder.command("configure-github")
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .toArgs());
 
         // then
         firstResult.assertSuccess();
@@ -4631,39 +4290,29 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.github-upgrade-ignored-option.md");
         Path env = tempDir.resolve(".env");
-        SetupRunResult firstResult = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "GitHub Upgrade Ignored Option",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult firstResult = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("GitHub Upgrade Ignored Option")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
         commands.githubAuthenticated = true;
         commands.startedWorkflows.clear();
         commands.stoppedWorkflows.clear();
 
         // when
-        SetupRunResult secondResult = runSetup(
-                "configure-github",
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--server-port",
-                "19000",
-                "--codex-model",
-                "gpt-new");
+        SetupRunResult secondResult = runSetup(SetupCommandBuilder.command("configure-github")
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .serverPort("19000")
+                .codexModel("gpt-new")
+                .toArgs());
 
         // then
         firstResult.assertSuccess();
@@ -4678,38 +4327,29 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.github-upgrade-before-auth.md");
         Path env = tempDir.resolve(".env");
-        SetupRunResult firstResult = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "GitHub Upgrade Before Auth",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult firstResult = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("GitHub Upgrade Before Auth")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
         commands.codexAuthenticated = false;
         commands.githubAuthenticated = true;
         commands.startedWorkflows.clear();
         commands.stoppedWorkflows.clear();
 
         // when
-        SetupRunResult secondResult = runSetup(
-                "configure-github",
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--server-port",
-                "19000");
+        SetupRunResult secondResult = runSetup(SetupCommandBuilder.command("configure-github")
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .serverPort("19000")
+                .toArgs());
 
         // then
         firstResult.assertSuccess();
@@ -4727,37 +4367,28 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.github-upgrade-unknown-selector.md");
         Path env = tempDir.resolve(".env");
-        SetupRunResult firstResult = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "GitHub Upgrade Unknown Selector",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult firstResult = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("GitHub Upgrade Unknown Selector")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
         commands.startedWorkflows.clear();
         commands.stoppedWorkflows.clear();
 
         // when
-        SetupRunResult secondResult = runSetup(
-                "configure-github",
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "definitely-not-a-board",
-                "--no-start");
+        SetupRunResult secondResult = runSetup(SetupCommandBuilder.command("configure-github")
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .board("definitely-not-a-board")
+                .noStart()
+                .toArgs());
 
         // then
         firstResult.assertSuccess();
@@ -4777,37 +4408,28 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.github-upgrade-workflow-selector.md");
         Path env = tempDir.resolve(".env");
-        SetupRunResult firstResult = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "GitHub Upgrade Workflow Selector",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult firstResult = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("GitHub Upgrade Workflow Selector")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
         commands.startedWorkflows.clear();
         commands.stoppedWorkflows.clear();
 
         // when
-        SetupRunResult secondResult = runSetup(
-                "configure-github",
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--workflow",
-                tempDir.resolve("definitely-not-a-workflow.md").toString(),
-                "--no-start");
+        SetupRunResult secondResult = runSetup(SetupCommandBuilder.command("configure-github")
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .workflow(tempDir.resolve("definitely-not-a-workflow.md").toString())
+                .noStart()
+                .toArgs());
 
         // then
         firstResult.assertSuccess();
@@ -4826,36 +4448,27 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path workflow = tempDir.resolve("WORKFLOW.github-already-enabled-model.md");
         Path env = tempDir.resolve(".env");
         commands.githubAuthenticated = true;
-        SetupRunResult firstResult = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "GitHub Already Enabled Model",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--github");
+        SetupRunResult firstResult = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("GitHub Already Enabled Model")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .github()
+                .toArgs());
         commands.startedWorkflows.clear();
         commands.stoppedWorkflows.clear();
 
         // when
-        SetupRunResult secondResult = runSetup(
-                "configure-github",
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--codex-model",
-                "gpt-new");
+        SetupRunResult secondResult = runSetup(SetupCommandBuilder.command("configure-github")
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .codexModel("gpt-new")
+                .toArgs());
 
         // then
         firstResult.assertSuccess();
@@ -4873,36 +4486,27 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path workflow = tempDir.resolve("WORKFLOW.github-already-enabled-server-port.md");
         Path env = tempDir.resolve(".env");
         commands.githubAuthenticated = true;
-        SetupRunResult firstResult = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "GitHub Already Enabled Server Port",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--github");
+        SetupRunResult firstResult = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("GitHub Already Enabled Server Port")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .github()
+                .toArgs());
         commands.startedWorkflows.clear();
         commands.stoppedWorkflows.clear();
 
         // when
-        SetupRunResult secondResult = runSetup(
-                "configure-github",
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--server-port",
-                "19000");
+        SetupRunResult secondResult = runSetup(SetupCommandBuilder.command("configure-github")
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .serverPort("19000")
+                .toArgs());
 
         // then
         firstResult.assertSuccess();
@@ -4917,39 +4521,30 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path firstWorkflow = tempDir.resolve("WORKFLOW.first.md");
         Path env = tempDir.resolve(".env");
-        SetupRunResult firstResult = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "First Queue",
-                "--workflow",
-                firstWorkflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult firstResult = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("First Queue")
+                .workflow(firstWorkflow.toString())
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
         commands.startedWorkflows.clear();
         commands.startedEnvFiles.clear();
         trello.createdLists().clear();
 
         // when
-        SetupRunResult secondResult = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Second Queue",
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult secondResult = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("Second Queue")
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
 
         // then
         Path secondWorkflow = tempDir.resolve("config").resolve("WORKFLOW.second-queue.md");
@@ -4966,39 +4561,35 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.disconnect.md");
         Path env = tempDir.resolve(".env");
-        SetupRunResult firstResult = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Disconnect Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult firstResult = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("Disconnect Queue")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
         commands.startedWorkflows.clear();
         commands.startedEnvFiles.clear();
 
         // when
         SetupRunResult secondResult = runSetupWithInput(
                 "3\n\n",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--env",
-                env.toString(),
-                "--no-github");
+                SetupCommandBuilder.command()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .env(env.toString())
+                        .noGithub()
+                        .toArgs());
 
         // then
-        SetupRunResult checkResult = runSetup("check", "--endpoint", endpoint(), "--no-github");
+        SetupRunResult checkResult = runSetup(SetupCommandBuilder.command("check")
+                .endpoint(endpoint())
+                .noGithub()
+                .toArgs());
         firstResult.assertSuccess();
         secondResult.assertSuccess().stdoutContains("Disconnect cancelled.");
         checkResult.assertSuccess().stdoutContains("local server: http://127.0.0.1:", "(already running)");
@@ -5009,38 +4600,34 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.disconnect-stop.md");
         Path env = tempDir.resolve(".env");
-        SetupRunResult firstResult = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Disconnect Stop Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult firstResult = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("Disconnect Stop Queue")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
         commands.stoppedWorkflows.clear();
 
         // when
         SetupRunResult secondResult = runSetupWithInput(
                 "3\n1\n",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--env",
-                env.toString(),
-                "--no-github");
+                SetupCommandBuilder.command()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .env(env.toString())
+                        .noGithub()
+                        .toArgs());
 
         // then
-        SetupRunResult checkResult = runSetup("check", "--endpoint", endpoint(), "--no-github");
+        SetupRunResult checkResult = runSetup(SetupCommandBuilder.command("check")
+                .endpoint(endpoint())
+                .noGithub()
+                .toArgs());
         firstResult.assertSuccess();
         secondResult.assertSuccess().stdoutContains("Symphony will stop managing \"Disconnect Stop Queue\"");
         checkResult.assertSuccess().stdoutContains("No Trello boards connected to Symphony");
@@ -5052,21 +4639,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.disconnect-without-codex.md");
         Path env = tempDir.resolve(".env");
-        SetupRunResult firstResult = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Disconnect Without Codex Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult firstResult = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("Disconnect Without Codex Queue")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
         commands.codexAuthenticated = false;
         commands.codexLoginCommands.clear();
         commands.stoppedWorkflows.clear();
@@ -5074,15 +4656,13 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 "3\n1\n",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--env",
-                env.toString(),
-                "--no-github");
+                SetupCommandBuilder.command()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .env(env.toString())
+                        .noGithub()
+                        .toArgs());
 
         // then
         firstResult.assertSuccess();
@@ -5101,23 +4681,17 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path allowedPath = tempDir.resolve("absolute-allowed-path");
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Codex Access Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--add-path",
-                allowedPath.toString(),
-                "--no-github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("Codex Access Queue")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .addPath(allowedPath.toString())
+                .noGithub()
+                .toArgs());
 
         // then
         var loadedWorkflow = new WorkflowLoader().load(workflow);
@@ -5135,38 +4709,30 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path firstWorkflow = tempDir.resolve("WORKFLOW.first-name.md");
         Path env = tempDir.resolve(".env.name-rerun");
-        SetupRunResult firstResult = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "First Name Queue",
-                "--workflow",
-                firstWorkflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult firstResult = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("First Name Queue")
+                .workflow(firstWorkflow.toString())
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
         commands.startedWorkflows.clear();
         trello.createdLists().clear();
 
         // when
         SetupRunResult result = runSetupWithInput(
                 "n\nn\n",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Docs Queue",
-                "--env",
-                env.toString(),
-                "--no-github");
+                SetupCommandBuilder.command()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .boardName("Docs Queue")
+                        .env(env.toString())
+                        .noGithub()
+                        .toArgs());
 
         // then
         Path secondWorkflow = tempDir.resolve("config").resolve("WORKFLOW.docs-queue.md");
@@ -5185,37 +4751,29 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path firstWorkflow = tempDir.resolve("WORKFLOW.first-board.md");
         Path env = tempDir.resolve(".env.board-rerun");
-        SetupRunResult firstResult = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "First Board Queue",
-                "--workflow",
-                firstWorkflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult firstResult = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("First Board Queue")
+                .workflow(firstWorkflow.toString())
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
         commands.startedWorkflows.clear();
 
         // when
         SetupRunResult result = runSetupWithInput(
                 "\n\n\n\nn\nn\n",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board",
-                "https://trello.com/b/abc123/imported",
-                "--env",
-                env.toString(),
-                "--no-github");
+                SetupCommandBuilder.command()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .board("https://trello.com/b/abc123/imported")
+                        .env(env.toString())
+                        .noGithub()
+                        .toArgs());
 
         // then
         firstResult.assertSuccess();
@@ -5414,30 +4972,22 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     private String[] broadWorkspacePathArgs(Path workflow, Path env, BroadWorkspacePathScenario scenario) {
-        List<String> args = new ArrayList<>();
+        SetupCommandBuilder builder = SetupCommandBuilder.command();
         if (scenario.nonInteractive()) {
-            args.add("--non-interactive");
+            builder.nonInteractive();
         }
-        args.addAll(List.of(
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Broad Path Queue " + scenario.fileSuffix(),
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--add-path",
-                "/"));
+        builder.endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("Broad Path Queue " + scenario.fileSuffix())
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .addPath("/");
         if (scenario.allowAllPaths()) {
-            args.add("--allow-all-paths");
+            builder.allowAllPaths();
         }
-        args.add("--no-github");
-        return args.toArray(String[]::new);
+        builder.noGithub();
+        return builder.toArgs();
     }
 
     private record BroadWorkspacePathScenario(
@@ -5467,21 +5017,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 StandardCharsets.UTF_8);
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "new-key",
-                "--token",
-                "new-token",
-                "--board-name",
-                "Replaced Env Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("new-key")
+                .token("new-token")
+                .boardName("Replaced Env Queue")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
 
         // then
         result.assertSuccess();
@@ -5499,21 +5044,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path env = tempDir.resolve(scenario.envFileName());
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Unsafe Env " + scenario.fileSuffix(),
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("Unsafe Env " + scenario.fileSuffix())
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
 
         // then
         result.assertFailure(2).stderrContains(scenario.expectedErrorFragments());
@@ -5552,21 +5092,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path env = tempDir.resolve(".env");
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Explicit Workflow",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("Explicit Workflow")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .noGithub()
+                .toArgs());
 
         // then
         result.assertFailure(2).stderrContains("setup_workflow_exists");
@@ -5586,20 +5121,15 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         commands.githubAuthenticated = true;
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "GitHub Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString());
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("GitHub Queue")
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .toArgs());
 
         // then
         result.assertSuccess()
@@ -5627,19 +5157,15 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 "",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "GitHub Login Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--github");
+                SetupCommandBuilder.command()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .boardName("GitHub Login Queue")
+                        .workflow(workflow.toString())
+                        .env(env.toString())
+                        .github()
+                        .toArgs());
 
         // then
         result.assertSuccess().stdoutContains("Starting GitHub login:", "OK  GitHub CLI authenticated as alex-example");
@@ -5656,19 +5182,15 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 "n\n",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "GitHub CLI Declined Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--github");
+                SetupCommandBuilder.command()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .boardName("GitHub CLI Declined Queue")
+                        .workflow(workflow.toString())
+                        .env(env.toString())
+                        .github()
+                        .toArgs());
 
         // then
         result.assertFailure(2)
@@ -5687,19 +5209,15 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 "y\n\nn\nn\n",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "GitHub CLI Install Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--github");
+                SetupCommandBuilder.command()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .boardName("GitHub CLI Install Queue")
+                        .workflow(workflow.toString())
+                        .env(env.toString())
+                        .github()
+                        .toArgs());
 
         // then
         result.assertSuccess()
@@ -5721,19 +5239,15 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetupWithInput(
                 windowsSetup,
                 "y\n\nn\nn\n",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "GitHub CLI Winget Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--github");
+                SetupCommandBuilder.command()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .boardName("GitHub CLI Winget Queue")
+                        .workflow(workflow.toString())
+                        .env(env.toString())
+                        .github()
+                        .toArgs());
 
         // then
         result.assertSuccess()
@@ -5748,7 +5262,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         commands.javacAvailable = false;
 
         // when
-        SetupRunResult result = runSetup("check", "--no-github");
+        SetupRunResult result =
+                runSetup(SetupCommandBuilder.command("check").noGithub().toArgs());
 
         // then
         result.assertFailure(2).stderrEmpty().stdoutContains("NEEDED  Java 25+ JDK");
@@ -5764,19 +5279,15 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 "n\n\nn\nn\n",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "Codex Login Queue",
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--no-github");
+                SetupCommandBuilder.command()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .boardName("Codex Login Queue")
+                        .workflow(workflow.toString())
+                        .env(env.toString())
+                        .noGithub()
+                        .toArgs());
 
         // then
         result.assertSuccess()
@@ -5794,21 +5305,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path env = tempDir.resolve(".env");
 
         // when
-        SetupRunResult result = runSetup(
-                "--non-interactive",
-                "--endpoint",
-                endpoint(),
-                "--key",
-                "key",
-                "--token",
-                "token",
-                "--board-name",
-                "GitHub Failure " + scenario.fileSuffix(),
-                "--workflow",
-                workflow.toString(),
-                "--env",
-                env.toString(),
-                "--github");
+        SetupRunResult result = runSetup(SetupCommandBuilder.command()
+                .nonInteractive()
+                .endpoint(endpoint())
+                .key("key")
+                .token("token")
+                .boardName("GitHub Failure " + scenario.fileSuffix())
+                .workflow(workflow.toString())
+                .env(env.toString())
+                .github()
+                .toArgs());
 
         // then
         result.assertFailure(2)
@@ -5900,6 +5406,29 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 """
                         .formatted(boardName, workflow, env, tempDir.resolve("workspaces"), serverPort),
                 StandardCharsets.UTF_8);
+    }
+
+    private SetupRunResult runProductionDefaultPortBoardSetup(LocalSetup probedSetup, Path workflow, Path env) {
+        return runSetupWithProductionDefaultPort(
+                probedSetup,
+                SetupCommandBuilder.command()
+                        .nonInteractive()
+                        .endpoint(endpoint())
+                        .key("key")
+                        .token("token")
+                        .board("board-1")
+                        .workflow(workflow.toString())
+                        .env(env.toString())
+                        .noStart()
+                        .noGithub()
+                        .toArgs());
+    }
+
+    private void assertReservationSkippedToNextDefaultPort(SetupRunResult result, Path workflow, Path manifest) {
+        int expectedPort = ConfigDefaults.DEFAULT_SERVER_PORT + 1;
+        result.assertSuccess().stdoutContains("Local server port selected for \"Imported Queue\": " + expectedPort);
+        assertThatWorkflow(workflow).hasServerPort(expectedPort);
+        assertThatManifest(manifest).hasBoardWithPort("Imported Queue", expectedPort);
     }
 
     private static int firstAvailableManagedPort(int... reservedPorts) {
