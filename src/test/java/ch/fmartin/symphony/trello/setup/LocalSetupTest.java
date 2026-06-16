@@ -1400,7 +1400,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 Map.of("gpt-existing", "high", "gpt-5.5", "medium")));
         Path workflow = tempDir.resolve("WORKFLOW.existing-model-reasoning-omitted.md");
         Path env = tempDir.resolve(".env.existing-model-reasoning-omitted");
-        int selectedPort = firstAvailableManagedPort(18080);
+        int selectedPort = availablePortOtherThan(ConfigDefaults.DEFAULT_SERVER_PORT);
         Files.writeString(
                 workflow,
                 """
