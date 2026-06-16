@@ -1,7 +1,14 @@
 package ch.fmartin.symphony.trello.setup;
 
 import static ch.fmartin.symphony.trello.TestHttpExchange.query;
+import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.boardJson;
+import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.createdListJson;
+import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.listsJson;
+import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.memberJson;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.respond;
+import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.trelloList;
+import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.workspaceJson;
+import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.workspacesJson;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
@@ -49,25 +56,17 @@ final class TrelloBoardSetupTest {
         // Port-selection must not depend on the host's real port occupancy (live workers can
         // hold 18080+), so the fixture fakes every loopback port as free.
         setup = new TrelloBoardSetup(new ObjectMapper()).withPortProbe(port -> false);
-        workspaceResponse.set(
-                """
-                [
-                  {"id":"workspace-1","name":"symphony-automation","displayName":"Symphony Automation","url":"https://trello.com/w/symphony-automation"}
-                ]
-                """);
-        boardListsResponse.set(
-                """
-                [
-                  {"id":"list-inbox","name":"Inbox","closed":false,"pos":1},
-                  {"id":"list-ready","name":"Ready for Codex","closed":false,"pos":2},
-                  {"id":"list-in-progress","name":"In Progress","closed":false,"pos":3},
-                  {"id":"list-blocked","name":"Blocked","closed":false,"pos":4},
-                  {"id":"list-review","name":"Human Review","closed":false,"pos":5},
-                  {"id":"list-merging","name":"Merging","closed":false,"pos":6},
-                  {"id":"list-done","name":"Done","closed":false,"pos":7},
-                  {"id":"list-archive","name":"Archived old work","closed":true,"pos":8}
-                ]
-                """);
+        workspaceResponse.set(workspacesJson(
+                workspaceJson("workspace-1", "symphony-automation", "Symphony Automation", "symphony-automation")));
+        boardListsResponse.set(listsJson(
+                trelloList("list-inbox", "Inbox", 1),
+                trelloList("list-ready", "Ready for Codex", 2),
+                trelloList("list-in-progress", "In Progress", 3),
+                trelloList("list-blocked", "Blocked", 4),
+                trelloList("list-review", "Human Review", 5),
+                trelloList("list-merging", "Merging", 6),
+                trelloList("list-done", "Done", 7),
+                trelloList("list-archive", "Archived old work", true, 8)));
 
         trello.on("/1/boards/", exchange -> {
             assertThat(exchange.getRequestMethod()).isEqualTo("POST");
@@ -80,26 +79,27 @@ final class TrelloBoardSetupTest {
                     .containsEntry("idOrganization", "workspace-1");
             respond(
                     exchange,
-                    """
-                    {"id":"board-1","name":"%s","shortLink":"abc123","url":"https://trello.com/b/abc123/symphony-work-queue"}
-                    """
-                            .formatted(query.get("name")));
+                    boardJson(
+                            "board-1", query.get("name"), "abc123", "https://trello.com/b/abc123/symphony-work-queue"));
         });
         trello.on("/1/lists", exchange -> {
             assertThat(exchange.getRequestMethod()).isEqualTo("POST");
             Map<String, String> query = query(exchange);
             assertThat(query).containsEntry("idBoard", "board-1").containsEntry("pos", "bottom");
             createdLists.add(query.get("name"));
-            respond(exchange, "{\"id\":\"list-" + createdLists.size() + "\",\"name\":\"" + query.get("name") + "\"}");
+            respond(exchange, createdListJson("list-" + createdLists.size()));
         });
         trello.on("/1/boards/input", exchange -> {
             assertThat(exchange.getRequestMethod()).isEqualTo("GET");
             boardInfoLookups.incrementAndGet();
             respond(
                     exchange,
-                    """
-                    {"id":"board-1","name":"Existing Board","shortLink":"SYNTH001","url":"https://trello.com/b/SYNTH001/existing-board","closed":false}
-                    """);
+                    boardJson(
+                            "board-1",
+                            "Existing Board",
+                            "SYNTH001",
+                            "https://trello.com/b/SYNTH001/existing-board",
+                            false));
         });
         trello.on("/1/boards/board-1/lists", exchange -> respond(exchange, boardListsResponse.get()));
         trello.on("/1/members/me/organizations", exchange -> respond(exchange, workspaceResponse.get()));
@@ -128,7 +128,7 @@ final class TrelloBoardSetupTest {
         trello.on("/1/lists", exchange -> {
             Map<String, String> query = query(exchange);
             createdLists.add(query.get("name"));
-            respond(exchange, "{\"id\":\"list-" + createdLists.size() + "\",\"name\":\"" + query.get("name") + "\"}");
+            respond(exchange, createdListJson("list-" + createdLists.size()));
         });
         Path workflow = tempDir.resolve("no-short-link-workflow.md");
 
@@ -222,13 +222,7 @@ final class TrelloBoardSetupTest {
             exchange.getResponseBody().write("unauthorized org access".getBytes(StandardCharsets.UTF_8));
             exchange.close();
         });
-        trello.on(
-                "/1/members/me",
-                exchange -> respond(
-                        exchange,
-                        """
-                {"id":"member-1","username":"alex","fullName":"Alex Example"}
-                """));
+        trello.on("/1/members/me", exchange -> respond(exchange, memberJson("member-1", "alex", "Alex Example")));
         Path workflow = tempDir.resolve("invalid-workspace-workflow.md");
 
         // when
@@ -660,13 +654,9 @@ final class TrelloBoardSetupTest {
     @Test
     void requiresWorkspaceIdWhenTokenCanAccessMultipleWorkspaces() {
         // given
-        workspaceResponse.set(
-                """
-                [
-                  {"id":"workspace-1","name":"first","displayName":"First Workspace"},
-                  {"id":"workspace-2","name":"second","displayName":"Second Workspace"}
-                ]
-                """);
+        workspaceResponse.set(workspacesJson(
+                workspaceJson("workspace-1", "first", "First Workspace", "first"),
+                workspaceJson("workspace-2", "second", "Second Workspace", "second")));
         Path workflow = tempDir.resolve("generated-workflow.md");
 
         var request = new TrelloBoardSetup.NewBoardRequest(
