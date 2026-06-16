@@ -3,7 +3,7 @@ package ch.fmartin.symphony.trello.setup;
 import java.io.IOException;
 import java.io.PrintStream;
 
-interface Terminal {
+public interface Terminal {
     String readLine(String prompt) throws IOException;
 
     char[] readSecret(String prompt) throws IOException;

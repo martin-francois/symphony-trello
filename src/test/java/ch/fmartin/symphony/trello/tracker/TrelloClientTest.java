@@ -1,6 +1,6 @@
 package ch.fmartin.symphony.trello.tracker;
 
-import static ch.fmartin.symphony.trello.TestHttpExchange.respond;
+import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.respond;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
@@ -8,12 +8,10 @@ import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.domain.Card;
+import ch.fmartin.symphony.trello.testsupport.FakeTrelloServer;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.sun.net.httpserver.HttpServer;
 import java.math.BigDecimal;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -33,7 +31,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 final class TrelloClientTest {
-    private HttpServer server;
+    private FakeTrelloServer trello;
     private final AtomicReference<String> authorization = new AtomicReference<>();
     private final List<String> readRequests = new ArrayList<>();
     private final List<String> writeRequests = new ArrayList<>();
@@ -43,11 +41,11 @@ final class TrelloClientTest {
 
     @BeforeEach
     void startServer() throws Exception {
-        server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
-        server.createContext(
+        trello = new FakeTrelloServer();
+        trello.on(
                 "/1/boards/input",
                 exchange -> respond(exchange, "{\"id\":\"board-1\",\"name\":\"Board\",\"closed\":false}"));
-        server.createContext(
+        trello.on(
                 "/1/boards/board-1/lists",
                 exchange -> respond(
                         exchange,
@@ -59,7 +57,7 @@ final class TrelloClientTest {
                           {"id":"list-archived","name":"Later","closed":true,"pos":4}
                         ]
                         """));
-        server.createContext("/1/boards/board-1/cards/open", exchange -> {
+        trello.on("/1/boards/board-1/cards/open", exchange -> {
             authorization.set(exchange.getRequestHeaders().getFirst("Authorization"));
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
             respond(
@@ -71,7 +69,7 @@ final class TrelloClientTest {
                     ]
                     """);
         });
-        server.createContext("/1/cards/000000000000000000000101", exchange -> {
+        trello.on("/1/cards/000000000000000000000101", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
             respond(
                     exchange,
@@ -79,10 +77,10 @@ final class TrelloClientTest {
                     {"id":"000000000000000000000101","name":"A","desc":"","idList":"list-todo","idBoard":"board-1","closed":false,"idShort":7,"shortLink":"abc","shortUrl":"u","url":"u","labels":[{"id":"l1","name":"P1"}],"actions":[{"id":"comment-1","date":"2026-02-24T20:11:12.000Z","data":{"text":"Please rework the edge case."},"memberCreator":{"fullName":"Reviewer"}}],"dateLastActivity":"2026-02-24T20:10:12.000Z","pos":2}
                     """);
         });
-        server.createContext(
+        trello.on(
                 "/1/boards/terminal-input",
                 exchange -> respond(exchange, "{\"id\":\"terminal-board\",\"name\":\"Board\",\"closed\":false}"));
-        server.createContext(
+        trello.on(
                 "/1/boards/terminal-board/lists",
                 exchange -> respond(
                         exchange,
@@ -93,7 +91,7 @@ final class TrelloClientTest {
                           {"id":"terminal-archived","name":"Later","closed":true,"pos":3}
                         ]
                         """));
-        server.createContext(
+        trello.on(
                 "/1/boards/terminal-board/cards/all",
                 exchange -> respond(
                         exchange,
@@ -104,7 +102,7 @@ final class TrelloClientTest {
                           {"id":"000000000000000000000105","name":"Archived list duplicate","idList":"terminal-archived","idBoard":"terminal-board","closed":false,"shortLink":"dup","labels":[],"pos":3}
                         ]
                         """));
-        server.createContext(
+        trello.on(
                 "/1/lists/terminal-archived/cards",
                 exchange -> respond(
                         exchange,
@@ -114,10 +112,10 @@ final class TrelloClientTest {
                           {"id":"000000000000000000000106","name":"Archived list only","idList":"terminal-archived","idBoard":"terminal-board","closed":false,"shortLink":"list-only","labels":[],"pos":4}
                         ]
                         """));
-        server.createContext(
+        trello.on(
                 "/1/boards/lookup-input",
                 exchange -> respond(exchange, "{\"id\":\"lookup-board\",\"name\":\"Board\",\"closed\":false}"));
-        server.createContext(
+        trello.on(
                 "/1/boards/lookup-board/lists",
                 exchange -> respond(
                         exchange,
@@ -127,13 +125,13 @@ final class TrelloClientTest {
                           {"id":"lookup-review","name":"Review","closed":false,"pos":2}
                         ]
                         """));
-        server.createContext("/1/cards/card-found", exchange -> {
+        trello.on("/1/cards/card-found", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
             respond(
                     exchange,
                     "{\"id\":\"card-found\",\"name\":\"Found\",\"idList\":\"lookup-review\",\"idBoard\":\"lookup-board\",\"closed\":false,\"shortLink\":\"found\",\"labels\":[],\"actions\":[{\"id\":\"comment-2\",\"date\":\"2026-02-25T20:11:12.000Z\",\"data\":{\"text\":\"Follow-up review note.\"},\"memberCreator\":{\"username\":\"reviewer\"}}]}");
         });
-        server.createContext("/1/cards/card-workpad-old", exchange -> {
+        trello.on("/1/cards/card-workpad-old", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
             String rawQuery = exchange.getRequestURI().getRawQuery();
             boolean deepLookup = rawQuery != null && rawQuery.contains("actions_limit=1000");
@@ -141,7 +139,7 @@ final class TrelloClientTest {
                     exchange,
                     cardWithActions("card-workpad-old", deepLookup ? oldWorkpadActions() : regularActions(20)));
         });
-        server.createContext("/1/cards/card-workpad-deep-failed", exchange -> {
+        trello.on("/1/cards/card-workpad-deep-failed", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
             String rawQuery = exchange.getRequestURI().getRawQuery();
             if (rawQuery != null && rawQuery.contains("actions_limit=1000")) {
@@ -150,31 +148,31 @@ final class TrelloClientTest {
             }
             respond(exchange, cardWithActions("card-workpad-deep-failed", regularActions(20)));
         });
-        server.createContext("/1/cards/idshort-probe-", exchange -> {
+        trello.on("/1/cards/idshort-probe-", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
             String path = exchange.getRequestURI().getPath();
             String suffix = path.substring(path.lastIndexOf("idshort-probe-") + "idshort-probe-".length());
             respond(exchange, cardWithIdShort("idshort-probe-" + suffix, idShortToken(suffix)));
         });
-        server.createContext("/1/cards/card-missing", exchange -> {
+        trello.on("/1/cards/card-missing", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
             respond(exchange, 404, "{}");
         });
-        server.createContext("/1/cards/card-failed", exchange -> {
+        trello.on("/1/cards/card-failed", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
             respond(exchange, 500, "{}");
         });
-        server.createContext("/1/cards/card-malformed", exchange -> {
+        trello.on("/1/cards/card-malformed", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
             respond(
                     exchange,
                     "{\"id\":\"card-malformed\",\"idList\":\"lookup-review\",\"idBoard\":\"lookup-board\",\"closed\":false,\"labels\":[]}");
         });
-        server.createContext("/1/cards/000000000000000000000107/idList", exchange -> {
+        trello.on("/1/cards/000000000000000000000107/idList", exchange -> {
             writeRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
             respond(exchange, "{\"id\":\"000000000000000000000107\"}");
         });
-        server.createContext("/1/cards/000000000000000000000107", exchange -> {
+        trello.on("/1/cards/000000000000000000000107", exchange -> {
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
             respond(
                     exchange,
@@ -182,31 +180,31 @@ final class TrelloClientTest {
                     {"id":"000000000000000000000107","name":"Picked up","desc":"","idList":"list-progress","idBoard":"board-1","closed":false,"idShort":8,"shortLink":"pickup","shortUrl":"u","url":"u","labels":[],"actions":[],"dateLastActivity":"2026-02-24T20:10:12.000Z","pos":1}
                     """);
         });
-        server.createContext(
+        trello.on(
                 "/1/boards/closed-input",
                 exchange -> respond(exchange, "{\"id\":\"closed-board\",\"name\":\"Board\",\"closed\":true}"));
-        server.createContext("/1/cards/write-card/actions/comments", exchange -> {
+        trello.on("/1/cards/write-card/actions/comments", exchange -> {
             writeRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
             respond(exchange, "{\"id\":\"comment-1\"}");
         });
-        server.createContext("/1/cards/write-card/idList", exchange -> {
+        trello.on("/1/cards/write-card/idList", exchange -> {
             writeRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
             respond(exchange, "{\"id\":\"write-card\"}");
         });
-        server.createContext("/1/actions/comment-1/text", exchange -> {
+        trello.on("/1/actions/comment-1/text", exchange -> {
             writeRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
             respond(exchange, "{\"id\":\"comment-1\"}");
         });
-        server.createContext("/1/cards/rate-limited-card/actions/comments", exchange -> {
+        trello.on("/1/cards/rate-limited-card/actions/comments", exchange -> {
             writeRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
             respond(exchange, 429, "{}");
         });
-        server.start();
+        trello.startEmpty();
     }
 
     @AfterEach
     void stopServer() {
-        server.stop(0);
+        trello.close();
     }
 
     @Test
@@ -594,7 +592,7 @@ final class TrelloClientTest {
     private EffectiveConfig config(String boardId, Map<String, Object> trackerOverrides) {
         Map<String, Object> tracker = new LinkedHashMap<>();
         tracker.put("kind", "trello");
-        tracker.put("endpoint", "http://127.0.0.1:" + server.getAddress().getPort() + "/1");
+        tracker.put("endpoint", trello.endpoint());
         tracker.put("api_key", "key");
         tracker.put("api_token", "token");
         tracker.put("board_id", boardId);

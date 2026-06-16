@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.GitHubIntegration;
+import ch.fmartin.symphony.trello.testsupport.RecordingTerminal;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;

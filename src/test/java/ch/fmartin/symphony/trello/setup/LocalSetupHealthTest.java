@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.setup;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import ch.fmartin.symphony.trello.testsupport.SetupRunResult;
 import com.sun.net.httpserver.HttpServer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;

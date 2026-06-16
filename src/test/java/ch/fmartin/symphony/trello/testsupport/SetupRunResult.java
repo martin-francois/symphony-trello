@@ -1,51 +1,51 @@
-package ch.fmartin.symphony.trello.setup;
+package ch.fmartin.symphony.trello.testsupport;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
 
-record CliRunResult(int exitCode, String stdout, String stderr) {
-    CliRunResult assertSuccess() {
+public record SetupRunResult(int exitCode, String stdout, String stderr) {
+    public SetupRunResult assertSuccess() {
         assertThat(exitCode).as("stdout:%n%s%nstderr:%n%s", stdout, stderr).isZero();
         assertThat(stderr).isEmpty();
         return this;
     }
 
-    CliRunResult assertFailure(int expectedExit) {
+    public SetupRunResult assertFailure(int expectedExit) {
         assertThat(exitCode).as("stdout:%n%s%nstderr:%n%s", stdout, stderr).isEqualTo(expectedExit);
         return this;
     }
 
-    CliRunResult stdoutContains(String... expected) {
+    public SetupRunResult stdoutContains(String... expected) {
         assertThat(stdout).contains(expected);
         return this;
     }
 
-    CliRunResult stdoutDoesNotContain(String... forbidden) {
+    public SetupRunResult stdoutDoesNotContain(String... forbidden) {
         assertThat(stdout).doesNotContain(forbidden);
         return this;
     }
 
-    CliRunResult stderrContains(String... expected) {
+    public SetupRunResult stderrContains(String... expected) {
         assertThat(stderr).contains(expected);
         return this;
     }
 
-    CliRunResult stderrDoesNotContain(String... forbidden) {
+    public SetupRunResult stderrDoesNotContain(String... forbidden) {
         assertThat(stderr).doesNotContain(forbidden);
         return this;
     }
 
-    CliRunResult stderrEmpty() {
+    public SetupRunResult stderrEmpty() {
         assertThat(stderr).isEmpty();
         return this;
     }
 
-    List<String> stdoutLines() {
+    public List<String> stdoutLines() {
         return stdout.lines().toList();
     }
 
-    CliRunResult stdoutContainsSubsequence(String... expectedLinesOrFragments) {
+    public SetupRunResult stdoutContainsSubsequence(String... expectedLinesOrFragments) {
         int cursor = 0;
         for (String expected : expectedLinesOrFragments) {
             int next = stdout.indexOf(expected, cursor);

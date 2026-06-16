@@ -1,8 +1,8 @@
 package ch.fmartin.symphony.trello.setup;
 
-import static ch.fmartin.symphony.trello.setup.ManifestAssertions.assertThatManifest;
-import static ch.fmartin.symphony.trello.setup.TerminalTranscriptAssertions.assertThatTranscript;
-import static ch.fmartin.symphony.trello.setup.WorkflowAssertions.assertThatWorkflow;
+import static ch.fmartin.symphony.trello.testsupport.ManifestAssertions.assertThatManifest;
+import static ch.fmartin.symphony.trello.testsupport.TerminalTranscriptAssertions.assertThatTranscript;
+import static ch.fmartin.symphony.trello.testsupport.WorkflowAssertions.assertThatWorkflow;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.abort;
 import static org.mockito.ArgumentMatchers.any;
@@ -10,6 +10,7 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
+import ch.fmartin.symphony.trello.testsupport.SetupRunResult;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import java.io.IOException;
 import java.net.InetAddress;
