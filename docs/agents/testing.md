@@ -55,6 +55,14 @@ parallel safety. Live end-to-end and deployed-verification rules live in
 - When two or more tests repeat the same given-scaffolding or differ only in input data, extract a
   shared fixture helper or use a parameterized test instead of copying the block. Keep each test's
   distinctive inputs and assertions visible at the call site; share only the genuinely common setup.
+- Before adding a new fake server, CLI command array, workflow/env text block, manifest assertion,
+  workflow assertion, or terminal transcript assertion, check
+  `src/test/java/ch/fmartin/symphony/trello/testsupport` and existing package-local fixtures for a
+  suitable helper.
+- Use [ADR 0055](../adr/0055-test-deduplication-layer-boundaries.md) when deciding whether a
+  top-level command test duplicates a lower-layer setup test. Keep process-boundary and main-wrapper
+  coverage; remove only higher-layer validation rows that the owning lower-layer test covers with
+  the same option, input, error code, and message.
 
 ## What to test and what not to test
 
