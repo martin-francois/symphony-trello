@@ -3,7 +3,6 @@ package ch.fmartin.symphony.trello.setup;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
-import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -239,17 +238,13 @@ final class ConnectedBoardManifestTest {
 
     private static ConnectedBoard board(
             String boardId, String boardKey, String boardName, String boardUrl, Path workflowPath) {
-        return new ConnectedBoard(
-                boardId,
-                boardKey,
-                boardName,
-                boardUrl,
-                workflowPath,
-                Path.of(".env"),
-                Path.of("workspaces"),
-                ConfigDefaults.DEFAULT_SERVER_PORT,
-                false,
-                List.of(),
-                false);
+        return ConnectedBoardBuilder.connectedBoard(workflowPath)
+                .withBoardId(boardId)
+                .withBoardKey(boardKey)
+                .withBoardName(boardName)
+                .withBoardUrl(boardUrl)
+                .withEnvPath(Path.of(".env"))
+                .withWorkspaceRoot(Path.of("workspaces"))
+                .build();
     }
 }
