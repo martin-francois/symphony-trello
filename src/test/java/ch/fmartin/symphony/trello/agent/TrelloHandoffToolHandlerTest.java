@@ -1,7 +1,10 @@
 package ch.fmartin.symphony.trello.agent;
 
 import static ch.fmartin.symphony.trello.TestHttpExchange.query;
+import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.boardJson;
+import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.listsJson;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.respond;
+import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.trelloList;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.fmartin.symphony.trello.TestCards;
@@ -45,20 +48,15 @@ final class TrelloHandoffToolHandlerTest {
     @BeforeEach
     void startServer() throws Exception {
         trello = new FakeTrelloServer();
-        trello.on(
-                "/1/boards/board-1",
-                exchange -> respond(exchange, "{\"id\":\"board-1\",\"name\":\"Test Board\",\"closed\":false}"));
+        trello.on("/1/boards/board-1", exchange -> respond(exchange, boardJson("board-1", "Test Board", false)));
         trello.on(
                 "/1/boards/board-1/lists",
                 exchange -> respond(
                         exchange,
-                        """
-                        [
-                          {"id":"list-ready","name":"Ready for Codex","closed":false,"pos":1},
-                          {"id":"list-review","name":"Review","closed":false,"pos":2},
-                          {"id":"list-closed","name":"Closed Review","closed":true,"pos":3}
-                        ]
-                        """));
+                        listsJson(
+                                trelloList("list-ready", "Ready for Codex", 1),
+                                trelloList("list-review", "Review", 2),
+                                trelloList("list-closed", "Closed Review", true, 3))));
         trello.on(
                 "/1/cards/card-1",
                 exchange -> respond(exchange, cardStatus.get(), cardResponseForRequestedFields(exchange)));

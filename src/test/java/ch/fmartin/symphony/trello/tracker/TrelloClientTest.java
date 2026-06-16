@@ -1,6 +1,9 @@
 package ch.fmartin.symphony.trello.tracker;
 
+import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.boardJson;
+import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.listsJson;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.respond;
+import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.trelloList;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
@@ -42,21 +45,16 @@ final class TrelloClientTest {
     @BeforeEach
     void startServer() throws Exception {
         trello = new FakeTrelloServer();
-        trello.on(
-                "/1/boards/input",
-                exchange -> respond(exchange, "{\"id\":\"board-1\",\"name\":\"Board\",\"closed\":false}"));
+        trello.on("/1/boards/input", exchange -> respond(exchange, boardJson("board-1", "Board", false)));
         trello.on(
                 "/1/boards/board-1/lists",
                 exchange -> respond(
                         exchange,
-                        """
-                        [
-                          {"id":"list-todo","name":"Todo","closed":false,"pos":1},
-                          {"id":"list-progress","name":"In Progress","closed":false,"pos":2},
-                          {"id":"list-done","name":"Done","closed":false,"pos":3},
-                          {"id":"list-archived","name":"Later","closed":true,"pos":4}
-                        ]
-                        """));
+                        listsJson(
+                                trelloList("list-todo", "Todo", 1),
+                                trelloList("list-progress", "In Progress", 2),
+                                trelloList("list-done", "Done", 3),
+                                trelloList("list-archived", "Later", true, 4))));
         trello.on("/1/boards/board-1/cards/open", exchange -> {
             authorization.set(exchange.getRequestHeaders().getFirst("Authorization"));
             readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
@@ -78,19 +76,15 @@ final class TrelloClientTest {
                     """);
         });
         trello.on(
-                "/1/boards/terminal-input",
-                exchange -> respond(exchange, "{\"id\":\"terminal-board\",\"name\":\"Board\",\"closed\":false}"));
+                "/1/boards/terminal-input", exchange -> respond(exchange, boardJson("terminal-board", "Board", false)));
         trello.on(
                 "/1/boards/terminal-board/lists",
                 exchange -> respond(
                         exchange,
-                        """
-                        [
-                          {"id":"terminal-todo","name":"Todo","closed":false,"pos":1},
-                          {"id":"terminal-done","name":"Done","closed":false,"pos":2},
-                          {"id":"terminal-archived","name":"Later","closed":true,"pos":3}
-                        ]
-                        """));
+                        listsJson(
+                                trelloList("terminal-todo", "Todo", 1),
+                                trelloList("terminal-done", "Done", 2),
+                                trelloList("terminal-archived", "Later", true, 3))));
         trello.on(
                 "/1/boards/terminal-board/cards/all",
                 exchange -> respond(

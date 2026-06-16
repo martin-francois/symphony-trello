@@ -1,7 +1,13 @@
 package ch.fmartin.symphony.trello.setup;
 
 import static ch.fmartin.symphony.trello.TestHttpExchange.query;
+import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.boardJson;
+import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.createdListJson;
+import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.listsJson;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.respond;
+import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.trelloList;
+import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.workspaceJson;
+import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.workspacesJson;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -58,16 +64,12 @@ final class TrelloBoardSetupMainTest {
     private FakeTrelloServer trello;
     private final List<String> createdLists = new ArrayList<>();
     private final AtomicReference<String> createdBoardName = new AtomicReference<>();
-    private final AtomicReference<String> boardListsResponse = new AtomicReference<>(
-            """
-            [
-              {"id":"list-ready","name":"Queue for Codex","closed":false,"pos":1},
-              {"id":"list-doing","name":"Doing","closed":false,"pos":2},
-              {"id":"list-review","name":"Review","closed":false,"pos":3},
-              {"id":"list-blocked","name":"Blocked","closed":false,"pos":4},
-              {"id":"list-done","name":"Released","closed":false,"pos":5}
-            ]
-            """);
+    private final AtomicReference<String> boardListsResponse = new AtomicReference<>(listsJson(
+            trelloList("list-ready", "Queue for Codex", 1),
+            trelloList("list-doing", "Doing", 2),
+            trelloList("list-review", "Review", 3),
+            trelloList("list-blocked", "Blocked", 4),
+            trelloList("list-done", "Released", 5)));
     private final AtomicInteger boardInfoLookups = new AtomicInteger();
     private final AtomicInteger workspaceLookups = new AtomicInteger();
 
@@ -84,34 +86,23 @@ final class TrelloBoardSetupMainTest {
             workspaceAuthorization.set(exchange.getRequestHeaders().getFirst("Authorization"));
             respond(
                     exchange,
-                    """
-                [
-                  {"id":"workspace-1","name":"engineering","displayName":"Engineering","url":"https://trello.com/w/engineering"}
-                ]
-                """);
+                    workspacesJson(workspaceJson("workspace-1", "engineering", "Engineering", "engineering")));
         });
         trello.on("/1/boards/", exchange -> {
             Map<String, String> query = query(exchange);
             createdBoardName.set(query.get("name"));
-            respond(
-                    exchange,
-                    """
-                    {"id":"board-1","name":"%s","shortLink":"abc123","url":"https://trello.com/b/abc123/board"}
-                    """
-                            .formatted(jsonEscaped(query.get("name"))));
+            respond(exchange, boardJson("board-1", query.get("name"), "abc123", "https://trello.com/b/abc123/board"));
         });
         trello.on("/1/lists", exchange -> {
             Map<String, String> query = query(exchange);
             createdLists.add(query.get("name"));
-            respond(exchange, "{\"id\":\"list-" + createdLists.size() + "\",\"name\":\"" + query.get("name") + "\"}");
+            respond(exchange, createdListJson("list-" + createdLists.size()));
         });
         trello.on("/1/boards/input", exchange -> {
             boardInfoLookups.incrementAndGet();
             respond(
                     exchange,
-                    """
-                {"id":"board-1","name":"Existing Board","shortLink":"SYNTH001","url":"https://trello.com/b/SYNTH001/board","closed":false}
-                """);
+                    boardJson("board-1", "Existing Board", "SYNTH001", "https://trello.com/b/SYNTH001/board", false));
         });
         trello.on("/1/boards/board-1/lists", exchange -> respond(exchange, boardListsResponse.get()));
         trello.startEmpty();
@@ -3364,12 +3355,7 @@ final class TrelloBoardSetupMainTest {
             createdBoardName.set(query.get("name"));
             Files.delete(envParent);
             Files.writeString(envParent, "not a directory", StandardCharsets.UTF_8);
-            respond(
-                    exchange,
-                    """
-                    {"id":"board-1","name":"%s","shortLink":"abc123","url":"https://trello.com/b/abc123/board"}
-                    """
-                            .formatted(jsonEscaped(query.get("name"))));
+            respond(exchange, boardJson("board-1", query.get("name"), "abc123", "https://trello.com/b/abc123/board"));
         });
 
         // when
@@ -6099,15 +6085,6 @@ final class TrelloBoardSetupMainTest {
                 Arguments.of("official-host-prefix", "https://api.trello.com/foo/1"),
                 Arguments.of("query-string", "https://api.trello.com/1?x=y"),
                 Arguments.of("fragment", "https://api.trello.com/1#frag"));
-    }
-
-    /** Trello returns valid JSON for any board name, so the fake must JSON-escape echoes. */
-    private static String jsonEscaped(String value) {
-        return value.replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t");
     }
 
     private static String shellQuote(String value) {
