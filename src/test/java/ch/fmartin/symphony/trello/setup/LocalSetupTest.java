@@ -1,7 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
 import static ch.fmartin.symphony.trello.setup.ManifestAssertions.assertThatManifest;
-import static ch.fmartin.symphony.trello.setup.TerminalTranscriptAssertions.assertThatTranscript;
 import static ch.fmartin.symphony.trello.setup.WorkflowAssertions.assertThatWorkflow;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.abort;
@@ -1851,7 +1850,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 .content(StandardCharsets.UTF_8)
                 .contains("TRELLO_API_TOKEN=prompt-token")
                 .doesNotContain("TRELLO_API_KEY", "real-key");
-        assertThatTranscript(result.stdout()).doesNotLeak("real-key").doesNotLeak("prompt-token");
+        result.stdoutDoesNotContain("real-key", "prompt-token");
     }
 
     @MethodSource("dotenvCredentialEscapingScenarios")
@@ -1949,8 +1948,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "Use absolute paths, ~, or paths relative to the current directory.",
                 "Local setup relies on Codex sandbox behavior and normal OS permissions, not OS-level filesystem isolation.",
                 "Additional paths, comma-separated:");
-        assertThatTranscript(result.stdout())
-                .containsSectionsInOrder("Trello board", "Workspace access", "Codex execution");
+        result.stdoutContainsSubsequence("Trello board", "Workspace access", "Codex execution");
     }
 
     @Test
