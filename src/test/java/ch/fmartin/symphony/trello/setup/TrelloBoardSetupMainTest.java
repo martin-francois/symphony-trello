@@ -16,6 +16,7 @@ import static org.mockito.Mockito.when;
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import ch.fmartin.symphony.trello.testsupport.CliRunResult;
+import ch.fmartin.symphony.trello.testsupport.SetupCommandBuilder;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
 import java.io.ByteArrayOutputStream;
@@ -5834,86 +5835,76 @@ final class TrelloBoardSetupMainTest {
     }
 
     private CliRunResult runNewBoardWithRuntimeEnv(Path workflow, Path env, boolean includeCredentials) {
-        List<String> args = new ArrayList<>(List.of("new-board", "--endpoint", endpoint()));
+        SetupCommandBuilder command = SetupCommandBuilder.newBoard(endpoint());
         if (includeCredentials) {
-            args.addAll(List.of("--key", "direct-key", "--token", "direct-token"));
+            command.credentials("direct-key", "direct-token");
         }
-        args.addAll(List.of(
-                "--name",
-                "Runtime Env Queue",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                workflow.resolveSibling("connected-boards.json").toString(),
-                "--env",
-                env.toString()));
-        return runCli(args.toArray(String[]::new));
+        return runCli(command.name("Runtime Env Queue")
+                .workflow(workflow)
+                .manifest(workflow.resolveSibling("connected-boards.json"))
+                .env(env)
+                .build());
     }
 
     private CliRunResult runImportBoardWithRuntimeEnv(Path workflow, Path env, boolean includeCredentials) {
-        List<String> args = new ArrayList<>(List.of(
-                "import-board",
-                "--endpoint",
-                endpoint(),
-                "--board",
-                "https://trello.com/b/input/existing-board",
-                "--active",
-                "Queue for Codex",
-                "--terminal",
-                "Released",
-                "--workflow",
-                workflow.toString(),
-                "--manifest",
-                workflow.resolveSibling("connected-boards.json").toString(),
-                "--env",
-                env.toString()));
+        SetupCommandBuilder command = SetupCommandBuilder.command("import-board");
         if (includeCredentials) {
-            args.addAll(1, List.of("--key", "direct-key", "--token", "direct-token"));
+            command.credentials("direct-key", "direct-token");
         }
-        return runCli(args.toArray(new String[0]));
+        return runCli(command.endpoint(endpoint())
+                .board("https://trello.com/b/input/existing-board")
+                .active("Queue for Codex")
+                .terminal("Released")
+                .workflow(workflow)
+                .manifest(workflow.resolveSibling("connected-boards.json"))
+                .env(env)
+                .build());
     }
 
     private String[] setupCommandWithRuntimeEnv(String command, Path workflow, String envValue) {
-        List<String> args = new ArrayList<>(
-                List.of(command, "--endpoint", endpoint(), "--key", "direct-key", "--token", "direct-token"));
+        SetupCommandBuilder builder = directSetupCommand(command).credentials("direct-key", "direct-token");
         if ("new-board".equals(command)) {
-            args.addAll(List.of("--name", "Runtime Env Queue"));
+            builder.name("Runtime Env Queue");
         } else {
-            args.addAll(List.of(
-                    "--board",
-                    "https://trello.com/b/input/existing-board",
-                    "--active",
-                    "Queue for Codex",
-                    "--terminal",
-                    "Released"));
+            builder.board("https://trello.com/b/input/existing-board")
+                    .active("Queue for Codex")
+                    .terminal("Released");
         }
-        args.addAll(List.of("--workflow", workflow.toString(), "--env", envValue));
-        return args.toArray(String[]::new);
+        return builder.workflow(workflow).env(envValue).build();
     }
 
     private String[] setupCommandWithWorkflow(String command, String workflowValue, Path env) {
-        List<String> args = new ArrayList<>(
-                List.of(command, "--endpoint", endpoint(), "--key", "direct-key", "--token", "direct-token"));
+        SetupCommandBuilder builder = directSetupCommand(command).credentials("direct-key", "direct-token");
         if ("new-board".equals(command)) {
-            args.addAll(List.of("--name", "Workflow Path Queue", "--workspace-id", "workspace-1"));
+            builder.name("Workflow Path Queue").workspaceId("workspace-1");
         } else {
-            args.addAll(List.of("--board", "input", "--active", "Queue for Codex", "--terminal", "Released"));
+            builder.board("input").active("Queue for Codex").terminal("Released");
         }
-        args.addAll(List.of("--workflow", workflowValue, "--env", env.toString()));
-        return args.toArray(String[]::new);
+        return builder.workflow(workflowValue).env(env).build();
     }
 
     private String[] setupCommandWithCodexOverride(
             String command, Path workflow, Path env, String optionName, String optionValue) {
-        List<String> args =
-                new ArrayList<>(List.of(command, "--endpoint", endpoint(), "--key", "key", "--token", "token"));
+        SetupCommandBuilder builder = directSetupCommand(command).credentials("key", "token");
         if ("new-board".equals(command)) {
-            args.addAll(List.of("--name", "Codex Scalar Queue", "--workspace-id", "workspace-1"));
+            builder.name("Codex Scalar Queue").workspaceId("workspace-1");
         } else {
-            args.addAll(List.of("--board", "input", "--active", "Queue for Codex", "--terminal", "Released"));
+            builder.board("input").active("Queue for Codex").terminal("Released");
         }
-        args.addAll(List.of("--workflow", workflow.toString(), "--env", env.toString(), optionName, optionValue));
-        return args.toArray(String[]::new);
+        return builder.workflow(workflow)
+                .env(env)
+                .option(optionName, optionValue)
+                .build();
+    }
+
+    private SetupCommandBuilder directSetupCommand(String command) {
+        if ("new-board".equals(command)) {
+            return SetupCommandBuilder.newBoard(endpoint());
+        }
+        if ("import-board".equals(command)) {
+            return SetupCommandBuilder.importBoard(endpoint());
+        }
+        throw new IllegalArgumentException("Unsupported direct setup command: " + command);
     }
 
     private record InvalidRuntimeEnvPathScenario(
