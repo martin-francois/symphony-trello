@@ -26,12 +26,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 final class SetupDiagnosticReporterTest {
@@ -163,16 +165,13 @@ final class SetupDiagnosticReporterTest {
     @ParameterizedTest
     void selectedWorkflowDiagnosticsSkipsOutOfRangeFrontMatterPorts(int port) throws Exception {
         // given
-        Path configDir = tempDir.resolve("front-matter-port-config-" + (port < 0 ? "negative" : port));
-        Path stateHome = tempDir.resolve("state");
-        Files.createDirectories(configDir);
-        Files.createDirectories(stateHome);
-        Path workflow = configDir.resolve("WORKFLOW.front-matter-port.md");
-        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(port), StandardCharsets.UTF_8);
-        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+        DiagnosticsFixture fixture =
+                DiagnosticsFixture.create(tempDir, "front-matter-port-" + (port < 0 ? "negative" : port));
+        Path workflow =
+                fixture.workflow("WORKFLOW.front-matter-port.md", TestWorkflows.diagnosticsWorkflowWithPort(port));
 
         // when
-        String report = renderWorkflowDiagnostics(reporter, configDir, stateHome, workflow);
+        String report = fixture.renderWorkflow(workflow);
 
         // then
         assertThat(report)
@@ -220,13 +219,9 @@ final class SetupDiagnosticReporterTest {
     @Test
     void diagnosticsSkipsHealthProbesForOutOfRangePorts() throws Exception {
         // given
-        Path configDir = tempDir.resolve("bad-port-config");
-        Path stateHome = tempDir.resolve("state");
-        Files.createDirectories(configDir);
-        Files.createDirectories(stateHome);
-        Path workflow = configDir.resolve("WORKFLOW.badport.md");
-        Files.writeString(
-                workflow,
+        DiagnosticsFixture fixture = DiagnosticsFixture.create(tempDir, "bad-port");
+        Path workflow = fixture.workflow(
+                "WORKFLOW.badport.md",
                 """
                 ---
                 tracker:
@@ -234,25 +229,11 @@ final class SetupDiagnosticReporterTest {
                   board_id: "synthetic-board"
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
-        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
-                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
-                        "000000000000000000000001",
-                        "SYNTH001",
-                        "Bad Port Board",
-                        "https://trello.com/b/SYNTH001/bad-port-board",
-                        workflow,
-                        configDir.resolve(".env"),
-                        tempDir.resolve("workspaces"),
-                        99999,
-                        false,
-                        List.of(),
-                        false))));
-        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+                """);
+        fixture.saveSyntheticBoard(workflow, 99999);
 
         // when
-        String report = renderGlobalDiagnostics(reporter, configDir, stateHome);
+        String report = fixture.renderGlobal();
 
         // then
         assertThat(report)
@@ -264,17 +245,14 @@ final class SetupDiagnosticReporterTest {
     @ParameterizedTest
     void diagnosticsSkipDeclaredOutOfRangeWorkflowPortWithoutManifestFallback(int port) throws Exception {
         // given
-        Path configDir = tempDir.resolve("declared-bad-port-config-" + (port < 0 ? "negative" : port));
-        Path stateHome = tempDir.resolve("state");
-        Files.createDirectories(configDir);
-        Files.createDirectories(stateHome);
-        Path workflow = configDir.resolve("WORKFLOW.declared-bad-port.md");
-        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(port), StandardCharsets.UTF_8);
-        saveSyntheticBoard(configDir, workflow, 20990);
-        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+        DiagnosticsFixture fixture =
+                DiagnosticsFixture.create(tempDir, "declared-bad-port-" + (port < 0 ? "negative" : port));
+        Path workflow =
+                fixture.workflow("WORKFLOW.declared-bad-port.md", TestWorkflows.diagnosticsWorkflowWithPort(port));
+        fixture.saveSyntheticBoard(workflow, 20990);
 
         // when
-        String report = renderGlobalDiagnostics(reporter, configDir, stateHome);
+        String report = fixture.renderGlobal();
 
         // then
         assertThat(report)
@@ -285,13 +263,9 @@ final class SetupDiagnosticReporterTest {
     @Test
     void diagnosticsDoNotProbeManifestPortWhenWorkflowDeclaresNonNumericPort() throws Exception {
         // given
-        Path configDir = tempDir.resolve("non-numeric-port-config");
-        Path stateHome = tempDir.resolve("state");
-        Files.createDirectories(configDir);
-        Files.createDirectories(stateHome);
-        Path workflow = configDir.resolve("WORKFLOW.non-numeric-port.md");
-        Files.writeString(
-                workflow,
+        DiagnosticsFixture fixture = DiagnosticsFixture.create(tempDir, "non-numeric-port");
+        Path workflow = fixture.workflow(
+                "WORKFLOW.non-numeric-port.md",
                 """
                 ---
                 tracker:
@@ -301,13 +275,11 @@ final class SetupDiagnosticReporterTest {
                   port: "not-a-port"
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
-        saveSyntheticBoard(configDir, workflow, 20990);
-        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+                """);
+        fixture.saveSyntheticBoard(workflow, 20990);
 
         // when
-        String report = renderGlobalDiagnostics(reporter, configDir, stateHome);
+        String report = fixture.renderGlobal();
 
         // then
         assertThat(report).contains("invalid").doesNotContain("http://127.0.0.1:20990/", "IllegalArgumentException");
@@ -316,13 +288,9 @@ final class SetupDiagnosticReporterTest {
     @Test
     void diagnosticsProbeManifestPortWhenWorkflowOmitsServerPort() throws Exception {
         // given
-        Path configDir = tempDir.resolve("omitted-port-config");
-        Path stateHome = tempDir.resolve("state");
-        Files.createDirectories(configDir);
-        Files.createDirectories(stateHome);
-        Path workflow = configDir.resolve("WORKFLOW.omitted-port.md");
-        Files.writeString(
-                workflow,
+        DiagnosticsFixture fixture = DiagnosticsFixture.create(tempDir, "omitted-port");
+        Path workflow = fixture.workflow(
+                "WORKFLOW.omitted-port.md",
                 """
                 ---
                 tracker:
@@ -330,79 +298,30 @@ final class SetupDiagnosticReporterTest {
                   board_id: "synthetic-board"
                 ---
                 Body
-                """,
-                StandardCharsets.UTF_8);
-        saveSyntheticBoard(configDir, workflow, 20726);
-        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+                """);
+        fixture.saveSyntheticBoard(workflow, 20726);
 
         // when
-        String report = renderGlobalDiagnostics(reporter, configDir, stateHome);
+        String report = fixture.renderGlobal();
 
         // then
         assertThat(report).contains("http://127.0.0.1:20726/api/v1/local-status");
     }
 
-    @Test
-    void diagnosticsProbeEnvironmentResolvedWorkflowPortInsteadOfManifestFallback() throws Exception {
+    @MethodSource("environmentBackedPortCases")
+    @ParameterizedTest(name = "{0}")
+    void diagnosticsHandlesEnvironmentBackedWorkflowPorts(EnvironmentBackedPortCase testCase) throws Exception {
         // given
         EnvironmentBackedPortScenario scenario =
-                environmentBackedPortScenario("env-resolved-port", 20990, "BOARD_STATUS_PORT=20991");
+                environmentBackedPortScenario(testCase.name(), testCase.manifestPort(), testCase.statusPortLine());
 
         // when
         String report = renderGlobalDiagnostics(scenario.reporter(), scenario.configDir(), scenario.stateHome());
 
         // then
         assertThat(report)
-                .contains("http://127.0.0.1:20991/api/v1/local-status")
-                .doesNotContain("http://127.0.0.1:20990/");
-    }
-
-    @Test
-    void diagnosticsSkipEnvironmentResolvedOutOfRangeWorkflowPortWithoutManifestFallback() throws Exception {
-        // given
-        EnvironmentBackedPortScenario scenario =
-                environmentBackedPortScenario("env-out-of-range-port", 20990, "BOARD_STATUS_PORT=99999");
-
-        // when
-        String report = renderGlobalDiagnostics(scenario.reporter(), scenario.configDir(), scenario.stateHome());
-
-        // then
-        assertThat(report)
-                .contains("Configured port 99999 is outside the valid TCP port range; health probes skipped.")
-                .doesNotContain("http://127.0.0.1:20990/");
-    }
-
-    @Test
-    void diagnosticsDoNotProbeManifestPortWhenEnvironmentResolvesNonNumericWorkflowPort() throws Exception {
-        // given
-        EnvironmentBackedPortScenario scenario =
-                environmentBackedPortScenario("env-non-numeric-port", 20990, "BOARD_STATUS_PORT=not-a-port");
-
-        // when
-        String report = renderGlobalDiagnostics(scenario.reporter(), scenario.configDir(), scenario.stateHome());
-
-        // then
-        assertThat(report)
-                .contains("invalid")
-                .doesNotContain("http://127.0.0.1:20990/", "not-a-port", "IllegalArgumentException");
-    }
-
-    /**
-     * Compatibility contract: a server.port environment reference the board environment does not
-     * define keeps the manifest fallback, because diagnostics cannot know the effective port.
-     */
-    @Test
-    void diagnosticsProbeManifestPortWhenWorkflowPortReferenceIsUnresolved() throws Exception {
-        // given
-        EnvironmentBackedPortScenario scenario = environmentBackedPortScenario("env-unresolved-port", 20727, "");
-
-        // when
-        String report = renderGlobalDiagnostics(scenario.reporter(), scenario.configDir(), scenario.stateHome());
-
-        // then
-        assertThat(report)
-                .contains("http://127.0.0.1:20727/api/v1/local-status")
-                .doesNotContain("$BOARD_STATUS_PORT");
+                .contains(testCase.expectedFragments().toArray(String[]::new))
+                .doesNotContain(testCase.forbiddenFragments().toArray(String[]::new));
     }
 
     @Test
@@ -434,6 +353,48 @@ final class SetupDiagnosticReporterTest {
     }
 
     private record EnvironmentBackedPortScenario(SetupDiagnosticReporter reporter, Path configDir, Path stateHome) {}
+
+    private record EnvironmentBackedPortCase(
+            String name,
+            int manifestPort,
+            String statusPortLine,
+            List<String> expectedFragments,
+            List<String> forbiddenFragments) {
+        @Override
+        public String toString() {
+            return name;
+        }
+    }
+
+    private static Stream<EnvironmentBackedPortCase> environmentBackedPortCases() {
+        return Stream.of(
+                new EnvironmentBackedPortCase(
+                        "resolved environment port",
+                        20990,
+                        "BOARD_STATUS_PORT=20991",
+                        List.of("http://127.0.0.1:20991/api/v1/local-status"),
+                        List.of("http://127.0.0.1:20990/")),
+                new EnvironmentBackedPortCase(
+                        "out-of-range environment port",
+                        20990,
+                        "BOARD_STATUS_PORT=99999",
+                        List.of("Configured port 99999 is outside the valid TCP port range; health probes skipped."),
+                        List.of("http://127.0.0.1:20990/")),
+                new EnvironmentBackedPortCase(
+                        "non-numeric environment port",
+                        20990,
+                        "BOARD_STATUS_PORT=not-a-port",
+                        List.of("invalid"),
+                        List.of("http://127.0.0.1:20990/", "not-a-port", "IllegalArgumentException")),
+                // Compatibility contract: if the board environment does not define the reference,
+                // diagnostics cannot know the effective port, so it keeps the manifest fallback.
+                new EnvironmentBackedPortCase(
+                        "unresolved environment port reference",
+                        20727,
+                        "",
+                        List.of("http://127.0.0.1:20727/api/v1/local-status"),
+                        List.of("$BOARD_STATUS_PORT")));
+    }
 
     private EnvironmentBackedPortScenario environmentBackedPortScenario(
             String prefix, int manifestPort, String statusPortLine) throws IOException {
@@ -3161,6 +3122,35 @@ final class SetupDiagnosticReporterTest {
                 Optional.of(stateHome),
                 Optional.empty(),
                 workflow));
+    }
+
+    private record DiagnosticsFixture(Path configDir, Path stateHome, SetupDiagnosticReporter reporter) {
+        private static DiagnosticsFixture create(Path tempDir, String prefix) throws IOException {
+            Path configDir = tempDir.resolve(prefix + "-config");
+            Path stateHome = tempDir.resolve(prefix + "-state");
+            Files.createDirectories(configDir);
+            Files.createDirectories(stateHome);
+            return new DiagnosticsFixture(
+                    configDir, stateHome, new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner()));
+        }
+
+        private Path workflow(String fileName, String content) throws IOException {
+            Path workflow = configDir.resolve(fileName);
+            Files.writeString(workflow, content, StandardCharsets.UTF_8);
+            return workflow;
+        }
+
+        private void saveSyntheticBoard(Path workflow, int serverPort) throws IOException {
+            SetupDiagnosticReporterTest.saveSyntheticBoard(configDir, workflow, serverPort);
+        }
+
+        private String renderGlobal() throws IOException {
+            return renderGlobalDiagnostics(reporter, configDir, stateHome);
+        }
+
+        private String renderWorkflow(Path workflow) throws IOException {
+            return renderWorkflowDiagnostics(reporter, configDir, stateHome, workflow);
+        }
     }
 
     private static HttpServer fakeLocalServer(int port) throws IOException {
