@@ -16,10 +16,18 @@ docker_environment=(
   -e HOME=/tmp
   -e PATH
   -e POWERSHELL_TELEMETRY_OPTOUT=1
-  -e SYMPHONY_TRELLO_ALLOW_NON_WINDOWS_PWSH_FOR_TEST=1
 )
+allow_non_windows_test_runtime="${SYMPHONY_TRELLO_PWSH_ALLOW_NON_WINDOWS_TEST_RUNTIME:-1}"
+if [[ "$allow_non_windows_test_runtime" == "1" ]]; then
+  docker_environment+=(-e SYMPHONY_TRELLO_ALLOW_NON_WINDOWS_PWSH_FOR_TEST=1)
+fi
 while IFS='=' read -r name _; do
   case "$name" in
+  SYMPHONY_TRELLO_ALLOW_NON_WINDOWS_PWSH_FOR_TEST)
+    if [[ "$allow_non_windows_test_runtime" == "1" ]]; then
+      docker_environment+=(-e "$name")
+    fi
+    ;;
   SYMPHONY_*) docker_environment+=(-e "$name") ;;
   esac
 done < <(env)

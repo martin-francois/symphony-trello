@@ -60,6 +60,11 @@ label mechanics live in [GitHub issue triage](github-issue-triage.md).
   ADR-worthy when more than one plausible maintained option exists. This especially applies when a
   user rejects an in-house or hand-rolled implementation in favor of a premade solution. Record the
   chosen tool, the rejected tools or custom approach, and the operational tradeoffs in the same PR.
+- Treat CI runner and execution-runtime choices as ADR-worthy when more than one practical option
+  exists. Examples include choosing native Windows runners instead of Linux Docker for PowerShell,
+  moving checks between jobs, deciding whether local fallbacks remain supported, or deciding that a
+  best-effort platform should warn instead of block. Record the options, the chosen runtime, the
+  local verification fallback, and the reason rejected runtimes were not chosen.
 - When an implementation approach, refactor, dependency, tool, API shape, user-flow behavior, or
   testing strategy is attempted or seriously considered and then rejected for non-obvious reasons,
   create or update an ADR that records the rejected approach and why. The goal is to prevent future

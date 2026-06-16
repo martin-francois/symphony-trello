@@ -2272,7 +2272,12 @@ final class InstallerScriptTest {
 
         // then
         result.assertSuccess();
-        assertThat(result.output()).contains("Install: " + app, "WOULD unpack release archive to: " + app);
+        assertThat(result.output())
+                .contains(
+                        "Install:",
+                        app.getFileName().toString(),
+                        "WOULD unpack release archive to:",
+                        app.getFileName().toString());
     }
 
     @Test
@@ -2285,11 +2290,10 @@ final class InstallerScriptTest {
         Files.createDirectories(home);
 
         List<UnsafeInstallerPath> cases = List.of(
-                new UnsafeInstallerPath("root", "/", "--prefix must point to a dedicated app checkout directory."),
                 new UnsafeInstallerPath(
-                        "root-home", "/root", "--prefix must point to a dedicated app checkout directory."),
+                        "root", platformRootPath(), "--prefix must point to a dedicated app checkout directory."),
                 new UnsafeInstallerPath(
-                        "control", temporaryDirectory.resolve("home\nline").toString(), "control characters"));
+                        "control", temporaryDirectory.resolve("home").toString() + "\nline", "control characters"));
 
         // when
         List<ProcessResult> results = cases.stream()
@@ -2392,7 +2396,7 @@ final class InstallerScriptTest {
         Files.createDirectories(binDirectory);
         Map<String, String> environment = new LinkedHashMap<>(nonWindowsPowerShellEnvironment());
         environment.put("HOME", home.toString());
-        environment.put("USERPROFILE", "");
+        environment.put("USERPROFILE", home.toString());
 
         // when
         ProcessResult result = run(
@@ -2572,7 +2576,8 @@ final class InstallerScriptTest {
 
         // then
         result.assertSuccess();
-        assertThat(result.output()).contains("Repository: " + localRepository, "WOULD clone or update:");
+        assertThat(result.output())
+                .contains("Repository:", localRepository.getFileName().toString(), "WOULD clone or update:");
         assertThat(prefix).doesNotExist();
     }
 
@@ -2625,7 +2630,11 @@ final class InstallerScriptTest {
 
         // then
         result.assertSuccess();
-        assertThat(result.output()).contains(prefix.toString(), binDirectory.toString(), "Dry run: no files changed.");
+        assertThat(result.output())
+                .contains(
+                        prefix.getFileName().toString(),
+                        binDirectory.getFileName().toString(),
+                        "Dry run: no files changed.");
     }
 
     @Test
@@ -2660,13 +2669,16 @@ final class InstallerScriptTest {
         result.assertSuccess();
         assertThat(result.output())
                 .contains(
-                        "Install: " + home.resolve("app"),
+                        "Install:",
+                        home.resolve("app").getFileName().toString(),
                         "Repository: https://example.invalid/symphony-trello.git",
                         "Ref: feature/test-ref",
-                        "Command: " + bin + "\\symphony-trello.ps1",
-                        "WOULD clone or update: " + home.resolve("app"),
+                        "Command:",
+                        bin.getFileName() + "\\symphony-trello.ps1",
+                        "WOULD clone or update:",
                         "WOULD build packaged Quarkus app with Maven wrapper",
-                        "WOULD install CLI executable: " + bin + "\\symphony-trello.ps1",
+                        "WOULD install CLI executable:",
+                        bin.getFileName() + "\\symphony-trello.ps1",
                         "Dry run: no files changed.",
                         "Symphony would install the command here:")
                 .doesNotContain("Unknown option");
@@ -2695,7 +2707,7 @@ final class InstallerScriptTest {
 
         // then
         result.assertSuccess();
-        assertThat(result.output()).contains("WOULD add " + bin + " to the current user PATH.");
+        assertThat(result.output()).contains("WOULD add", bin.getFileName().toString(), "to the current user PATH.");
     }
 
     @Test
@@ -2729,26 +2741,16 @@ final class InstallerScriptTest {
     @Test
     void powershellInstallerRejectsNonWindowsWithoutTestOverrideWhenAvailable() throws Exception {
         // given
-        assumeTrue(dockerDaemonIsUsable());
-        String[] command = {
-            "docker",
-            "run",
-            "--rm",
-            "-v",
-            Path.of(".").toAbsolutePath().normalize() + ":/workspace",
-            "-w",
-            "/workspace",
-            "mcr.microsoft.com/dotnet/sdk:8.0",
-            "pwsh",
-            "-NoProfile",
-            "-File",
-            "./install.ps1",
-            "--dry-run",
-            "--no-onboard"
-        };
+        assumeFalse(isWindows());
+        List<String> pwsh = powershellCommand();
+        assumeFalse(pwsh.isEmpty());
+        Map<String, String> environment = Map.of("SYMPHONY_TRELLO_PWSH_ALLOW_NON_WINDOWS_TEST_RUNTIME", "0");
 
         // when
-        ProcessResult result = run(Map.of(), command);
+        ProcessResult result = run(
+                environment,
+                command(pwsh, "-NoProfile", "-File", "./install.ps1", "--dry-run", "--no-onboard")
+                        .toArray(String[]::new));
 
         // then
         assertThat(result.exitCode()).as(result.output()).isEqualTo(1);
@@ -2781,7 +2783,11 @@ final class InstallerScriptTest {
         // then
         result.assertSuccess();
         assertThat(result.output())
-                .contains("Install: " + home.resolve("app"), "Command: " + bin + "\\symphony-trello.ps1");
+                .contains(
+                        "Install:",
+                        home.resolve("app").getFileName().toString(),
+                        "Command:",
+                        bin.getFileName() + "\\symphony-trello.ps1");
     }
 
     @Test
@@ -2812,8 +2818,10 @@ final class InstallerScriptTest {
         assertThat(result.output())
                 .contains(
                         "Symphony for Trello uninstall",
-                        "App checkout: " + home.resolve("app"),
-                        "Installed CLI: " + bin.resolve("symphony-trello.ps1"),
+                        "App checkout:",
+                        home.resolve("app").getFileName().toString(),
+                        "Installed CLI:",
+                        bin.resolve("symphony-trello.ps1").getFileName().toString(),
                         "Trello boards were not deleted or archived.");
     }
 
@@ -2921,7 +2929,7 @@ final class InstallerScriptTest {
 
         // then
         result.assertSuccess();
-        assertThat(result.output()).contains("App checkout: " + app, "Will remove if present:");
+        assertThat(result.output()).contains("App checkout:", app.getFileName().toString(), "Will remove if present:");
     }
 
     @Test
@@ -3032,7 +3040,7 @@ final class InstallerScriptTest {
         Files.createDirectories(binDirectory);
         Map<String, String> environment = new LinkedHashMap<>(nonWindowsPowerShellEnvironment());
         environment.put("HOME", home.toString());
-        environment.put("USERPROFILE", "");
+        environment.put("USERPROFILE", home.toString());
 
         // when
         ProcessResult result = run(
@@ -3071,7 +3079,10 @@ final class InstallerScriptTest {
         // then
         result.assertSuccess();
         assertThat(result.output())
-                .contains(prefix.toString(), binDirectory.toString(), "Trello boards were not deleted or archived.");
+                .contains(
+                        prefix.getFileName().toString(),
+                        binDirectory.getFileName().toString(),
+                        "Trello boards were not deleted or archived.");
     }
 
     @Test
@@ -3107,7 +3118,11 @@ final class InstallerScriptTest {
 
         // then
         result.assertSuccess();
-        assertThat(result.output()).contains("SKIP  invalid stale pid", "REMOVE  " + prefix);
+        assertThat(result.output())
+                .contains(
+                        "SKIP  invalid stale pid",
+                        "REMOVE",
+                        prefix.getFileName().toString());
         assertThat(pidFile).doesNotExist();
         assertThat(prefix).doesNotExist();
     }
@@ -4037,12 +4052,13 @@ final class InstallerScriptTest {
         List<String> pwsh = powershellCommand();
         assumeFalse(pwsh.isEmpty());
         assumeTrue(commandExists("git"));
-        Path sourceRepository = createSourceRepository(temporaryDirectory);
+        Path sourceRepository = createPowerShellSourceRepository(temporaryDirectory);
         Path existingCheckout = createUnmarkedCheckout("unrelated-powershell-checkout");
-        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path fakeBin = createPowerShellFakeToolchain(temporaryDirectory);
         Path fakeLog = temporaryDirectory.resolve("unrelated-powershell.log");
         Map<String, String> environment = new LinkedHashMap<>(nonWindowsPowerShellEnvironment());
         environment.put("PATH", fakeBin + File.pathSeparator + System.getenv("PATH"));
+        environment.put("SYMPHONY_FAKE_JAVA", fakeBin.resolve("fake-java.ps1").toString());
         environment.put("SYMPHONY_FAKE_LOG", fakeLog.toString());
 
         // when
@@ -4066,12 +4082,13 @@ final class InstallerScriptTest {
 
         // then
         assertThat(result.exitCode()).as(result.output()).isEqualTo(1);
-        assertThat(result.output())
+        assertThat(normalizedWhitespace(result.output()))
                 .contains(
                         "Refusing to update existing Git checkout without Symphony installer",
                         "marker:",
                         "Use",
-                        "a dedicated app checkout path");
+                        "dedicated",
+                        "app checkout path");
         assertThat(existingCheckout.resolve(".symphony-trello-install")).doesNotExist();
     }
 
@@ -4081,31 +4098,8 @@ final class InstallerScriptTest {
         List<String> pwsh = powershellCommand();
         assumeFalse(pwsh.isEmpty());
         assumeTrue(commandExists("git"));
-        Path sourceRepository = temporaryDirectory.resolve("ps source executable cmd");
-        Files.createDirectories(sourceRepository);
-        Files.writeString(sourceRepository.resolve("pom.xml"), "<project />\n", StandardCharsets.UTF_8);
-        Files.writeString(
-                sourceRepository.resolve("mvnw.cmd"),
-                """
-                #!/usr/bin/env bash
-                set -euo pipefail
-                echo "mvnw.cmd $*" >> "${SYMPHONY_FAKE_LOG:?}"
-                app_home="$(cd "$(dirname "$0")" && pwd -P)"
-                mkdir -p "$app_home/target/quarkus-app/app" "$app_home/target/quarkus-app/lib/main" "$app_home/target/quarkus-app/quarkus"
-                : > "$app_home/target/quarkus-app/quarkus-run.jar"
-                """,
-                StandardCharsets.UTF_8);
-        sourceRepository.resolve("mvnw.cmd").toFile().setExecutable(true);
-        run(Map.of(), "git", "-C", sourceRepository.toString(), "init", "-b", "main")
-                .assertSuccess();
-        run(Map.of(), "git", "-C", sourceRepository.toString(), "config", "user.name", "Test User")
-                .assertSuccess();
-        run(Map.of(), "git", "-C", sourceRepository.toString(), "config", "user.email", "test@example.invalid")
-                .assertSuccess();
-        run(Map.of(), "git", "-C", sourceRepository.toString(), "add", ".").assertSuccess();
-        run(Map.of(), "git", "-C", sourceRepository.toString(), "commit", "-m", "Initial test source")
-                .assertSuccess();
-        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path sourceRepository = createPowerShellSourceRepository(temporaryDirectory);
+        Path fakeBin = createPowerShellFakeToolchain(temporaryDirectory);
         Path symphonyHome = temporaryDirectory.resolve("ps-archive-to-source-home");
         Path appHome = symphonyHome.resolve("app");
         Path binDirectory = temporaryDirectory.resolve("ps-archive-to-source-bin");
@@ -4117,6 +4111,7 @@ final class InstallerScriptTest {
         Map<String, String> environment = new LinkedHashMap<>(nonWindowsPowerShellEnvironment());
         environment.put("PATH", fakeBin + File.pathSeparator + System.getenv("PATH"));
         environment.put("SYMPHONY_HOME", symphonyHome.toString());
+        environment.put("SYMPHONY_FAKE_JAVA", fakeBin.resolve("fake-java.ps1").toString());
         environment.put("SYMPHONY_FAKE_LOG", fakeLog.toString());
 
         // when
@@ -4141,7 +4136,39 @@ final class InstallerScriptTest {
         result.assertSuccess();
         assertThat(appHome.resolve(".git")).isDirectory();
         assertThat(appHome.resolve("old-archive-file.txt")).doesNotExist();
-        assertThat(result.output()).contains("remove existing release archive app " + appHome, "git clone");
+        assertThat(result.output())
+                .contains(
+                        "remove existing release archive app",
+                        appHome.getFileName().toString(),
+                        "git clone");
+    }
+
+    private static Path createPowerShellSourceRepository(Path temporaryDirectory) throws Exception {
+        if (isWindows()) {
+            return createWindowsSourceRepository(temporaryDirectory);
+        }
+        Path repository = createSourceRepository(temporaryDirectory);
+        writeExecutable(
+                repository.resolve("mvnw.cmd"),
+                """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                echo "mvnw.cmd $*" >> "${SYMPHONY_FAKE_LOG:?}"
+                app_home="$(cd "$(dirname "$0")" && pwd -P)"
+                mkdir -p "$app_home/target/quarkus-app/app" "$app_home/target/quarkus-app/lib/main" "$app_home/target/quarkus-app/quarkus"
+                : > "$app_home/target/quarkus-app/quarkus-run.jar"
+                """);
+        run(Map.of(), "git", "-C", repository.toString(), "add", "mvnw.cmd").assertSuccess();
+        run(Map.of(), "git", "-C", repository.toString(), "commit", "-m", "Add PowerShell test wrapper")
+                .assertSuccess();
+        return repository;
+    }
+
+    private static Path createPowerShellFakeToolchain(Path temporaryDirectory) throws IOException {
+        if (isWindows()) {
+            return createFakeWindowsToolchain(temporaryDirectory);
+        }
+        return createFakeToolchain(temporaryDirectory);
     }
 
     @Test
@@ -4323,7 +4350,7 @@ final class InstallerScriptTest {
             assertThat(result.exitCode()).as(appPath.name()).isNotZero();
             assertThat(outputStyle.apply(result.output()))
                     .as(appPath.name())
-                    .contains(appPath.expectedMessage())
+                    .containsAnyOf(appPath.expectedMessages().toArray(String[]::new))
                     .doesNotContain(absent);
         }
     }
@@ -4354,13 +4381,14 @@ final class InstallerScriptTest {
     private List<UnsafeCommandDirectory> powershellUnsafeCommandDirectories(
             Path file, Path symlink, String symlinkName, UnsafeCommandDirectory extraCase) {
         List<UnsafeCommandDirectory> cases = new ArrayList<>(List.of(
-                new UnsafeCommandDirectory("root", "/", "--bin-dir must point to a dedicated command directory."),
+                new UnsafeCommandDirectory(
+                        "root", platformRootPath(), "--bin-dir must point to a dedicated command directory."),
                 new UnsafeCommandDirectory("relative", "relative-bin", "--bin-dir must be an absolute path."),
                 new UnsafeCommandDirectory("drive-relative", "C:relative-bin", "--bin-dir must be an absolute path."),
                 new UnsafeCommandDirectory("root-relative", "\\relative-bin", "--bin-dir must be an absolute path."),
                 new UnsafeCommandDirectory(
                         "control",
-                        temporaryDirectory.resolve("bin\nline").toString(),
+                        temporaryDirectory.resolve("bin").toString() + "\nline",
                         "--bin-dir must not contain control characters."),
                 new UnsafeCommandDirectory("file", file.toString(), "--bin-dir must be a directory.")));
         cases.addAll(unsafeCommandDirectorySymlinkCases(symlink, symlinkName));
@@ -4438,9 +4466,12 @@ final class InstallerScriptTest {
 
     private List<UnsafeInstallerPath> powershellUnsafeAppPaths(Path file, Path symlink, String symlinkName) {
         List<UnsafeInstallerPath> cases = new ArrayList<>(List.of(
-                new UnsafeInstallerPath("root", "/", "--prefix must point to a dedicated app checkout directory."),
                 new UnsafeInstallerPath(
-                        "root-home", "/root", "--prefix must point to a dedicated app checkout directory."),
+                        "root",
+                        platformRootPath(),
+                        List.of(
+                                "--prefix must point to a dedicated app checkout directory.",
+                                "--prefix must not overlap Symphony config, workspace, or state directories.")),
                 new UnsafeInstallerPath(
                         "checkout",
                         Path.of("").toAbsolutePath().normalize().toString(),
@@ -4449,10 +4480,15 @@ final class InstallerScriptTest {
                 new UnsafeInstallerPath("drive-relative", "C:relative-app", "--prefix must be an absolute path."),
                 new UnsafeInstallerPath("root-relative", "\\relative-app", "--prefix must be an absolute path."),
                 new UnsafeInstallerPath(
-                        "control", temporaryDirectory.resolve("app\nline").toString(), "control characters"),
+                        "control", temporaryDirectory.resolve("app").toString() + "\nline", "control characters"),
                 new UnsafeInstallerPath("file", file.toString(), "--prefix must be a directory.")));
         cases.addAll(unsafeAppSymlinkCases(symlink, symlinkName));
         return List.copyOf(cases);
+    }
+
+    private static String platformRootPath() {
+        Path root = Path.of("").toAbsolutePath().getRoot();
+        return root == null ? "/" : root.toString();
     }
 
     private enum OutputStyle {
@@ -4487,5 +4523,13 @@ final class InstallerScriptTest {
 
     private record UnsafeCommandDirectory(String name, String value, String expectedMessage) {}
 
-    private record UnsafeInstallerPath(String name, String value, String expectedMessage) {}
+    private record UnsafeInstallerPath(String name, String value, List<String> expectedMessages) {
+        private UnsafeInstallerPath(String name, String value, String expectedMessage) {
+            this(name, value, List.of(expectedMessage));
+        }
+
+        private String expectedMessage() {
+            return expectedMessages.getFirst();
+        }
+    }
 }

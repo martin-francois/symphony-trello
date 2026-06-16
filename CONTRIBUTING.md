@@ -194,8 +194,10 @@ rather than suppressing the finding. See
 [Private Context Scanning](docs/security/private-context-scanning.md) for the local commands and
 the GitHub Secret Scanning responsibility split.
 
-PowerShell installer tests use native `pwsh` when it is installed. CI also runs them through
-Microsoft's .NET SDK container:
+PowerShell installer tests use native `pwsh` automatically on Windows. CI runs the PowerShell
+installer checks on a native Windows runner. On Linux, set `SYMPHONY_TRELLO_TEST_PWSH` when you
+need to exercise the PowerShell path; the local wrapper runs `pwsh` through Microsoft's .NET SDK
+container:
 
 ```bash
 ./scripts/pwsh-docker.sh -NoProfile -File ./install.ps1 --dry-run --no-onboard

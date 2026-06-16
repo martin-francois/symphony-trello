@@ -37,34 +37,6 @@ jobs:
             scripts/betterleaks-docker.sh \
             scripts/package-release-assets.sh \
             scripts/check-private-context
-      - name: PowerShell script smoke and analysis
-        run: |
-          ./scripts/pwsh-docker.sh -NoProfile -File ./install.ps1 --dry-run --no-onboard
-          ./scripts/pwsh-docker.sh -NoProfile -File ./uninstall.ps1 --dry-run --yes
-          ./scripts/pwsh-docker.sh -NoProfile -Command '
-            $ErrorActionPreference = "Stop"
-            if (-not (Get-Module -ListAvailable -Name PSScriptAnalyzer)) {
-              Install-Module PSScriptAnalyzer -Scope CurrentUser -Force -Repository PSGallery
-            }
-            $ignoredRules = @(
-              "PSAvoidUsingInvokeExpression",
-              "PSAvoidUsingWriteHost",
-              "PSReviewUnusedParameter",
-              "PSUseApprovedVerbs",
-              "PSUseShouldProcessForStateChangingFunctions",
-              "PSUseSingularNouns"
-            )
-            $results = @(
-              foreach ($script in @("install.ps1", "uninstall.ps1")) {
-                Invoke-ScriptAnalyzer -Path $script -Severity Warning,Error
-              }
-            )
-            $results = @($results | Where-Object { $ignoredRules -notcontains $_.RuleName })
-            if ($results.Count -gt 0) {
-              $results | Format-Table -AutoSize | Out-String | Write-Host
-              exit 1
-            }
-          '
 
   renovate:
     runs-on: blacksmith-2vcpu-ubuntu-2404
@@ -91,13 +63,9 @@ jobs:
           distribution: temurin
           java-version: "25"
           cache: maven
-      - name: Pull PowerShell test image
-        run: docker pull mcr.microsoft.com/dotnet/sdk:8.0
       - name: Formatting
         run: ./mvnw spotless:check
       - name: Test and coverage, including installer lifecycle
-        env:
-          SYMPHONY_TRELLO_TEST_PWSH: ./scripts/pwsh-docker.sh
         run: ./mvnw -Djunit.parallel.enabled=true -Djunit.parallel.config.fixed.parallelism=2 verify
 
   windows-powershell:
@@ -109,5 +77,35 @@ jobs:
           distribution: temurin
           java-version: "25"
           cache: maven
+      - name: PowerShell installer dry runs
+        run: |
+          .\install.ps1 --dry-run --no-onboard
+          .\uninstall.ps1 --dry-run --yes
+      - name: PowerShell static analysis
+        run: |
+          $ErrorActionPreference = "Stop"
+          if (-not (Get-Module -ListAvailable -Name PSScriptAnalyzer)) {
+            Install-Module PSScriptAnalyzer -Scope CurrentUser -Force -Repository PSGallery
+          }
+          $ignoredRules = @(
+            "PSAvoidUsingInvokeExpression",
+            "PSAvoidUsingWriteHost",
+            "PSReviewUnusedParameter",
+            "PSUseApprovedVerbs",
+            "PSUseShouldProcessForStateChangingFunctions",
+            "PSUseSingularNouns"
+          )
+          $results = @(
+            foreach ($script in @("install.ps1", "uninstall.ps1")) {
+              Invoke-ScriptAnalyzer -Path $script -Severity Warning,Error
+            }
+          )
+          $results = @($results | Where-Object { $ignoredRules -notcontains $_.RuleName })
+          if ($results.Count -gt 0) {
+            $results | Format-Table -AutoSize | Out-String | Write-Host
+            exit 1
+          }
+      - name: PowerShell installer option tests
+        run: .\mvnw.cmd -q '-Djunit.parallel.enabled=false' '-Dtest=InstallerScriptTest#*powershell*+*powerShell*' test
       - name: PowerShell generated-wrapper lifecycle
         run: .\mvnw.cmd -q '-Djunit.parallel.enabled=false' -Dtest=InstallerScriptLifecycleTest#powershellInstallerLifecycleInstallsStartsStopsAndUninstallsWithFakeJavaOnWindows test
