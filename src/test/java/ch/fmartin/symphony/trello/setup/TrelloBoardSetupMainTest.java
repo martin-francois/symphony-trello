@@ -2216,18 +2216,18 @@ final class TrelloBoardSetupMainTest {
         int listeningPort = listeningServer.getAddress().getPort();
         Files.writeString(
                 workflow, TestWorkflows.workflowWithBoardAndPort("board-1", listeningPort), StandardCharsets.UTF_8);
-        ConnectedBoard oldBoard = new ConnectedBoard(
-                "board-1",
-                "SYNTH002",
-                "Existing Board",
-                "https://trello.com/b/SYNTH002/board",
-                workflow.toAbsolutePath().normalize(),
-                env.toAbsolutePath().normalize(),
-                TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT.toAbsolutePath().normalize(),
-                listeningPort,
-                true,
-                List.of(),
-                false);
+        ConnectedBoard oldBoard = ConnectedBoardBuilder.connectedBoard(
+                        workflow.toAbsolutePath().normalize())
+                .withBoardId("board-1")
+                .withBoardKey("SYNTH002")
+                .withBoardName("Existing Board")
+                .withBoardUrl("https://trello.com/b/SYNTH002/board")
+                .withEnvPath(env.toAbsolutePath().normalize())
+                .withWorkspaceRoot(
+                        TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT.toAbsolutePath().normalize())
+                .withServerPort(listeningPort)
+                .withGithubEnabled(true)
+                .build();
         new ConnectedBoardRepository(tempDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(oldBoard)));
         LocalWorkerManager workerManager = mock();
@@ -2844,18 +2844,16 @@ final class TrelloBoardSetupMainTest {
         Path oldEnv = tempDir.resolve(".env.old-existing");
         Path newEnv = tempDir.resolve(".env.new-existing");
         Files.writeString(oldWorkflow, "old workflow", StandardCharsets.UTF_8);
-        ConnectedBoard oldBoard = new ConnectedBoard(
-                "board-1",
-                "SYNTH001",
-                "Existing Board",
-                "https://trello.com/b/SYNTH001/board",
-                oldWorkflow.toAbsolutePath().normalize(),
-                oldEnv.toAbsolutePath().normalize(),
-                TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT.toAbsolutePath().normalize(),
-                18080,
-                true,
-                List.of(),
-                false);
+        ConnectedBoard oldBoard = ConnectedBoardBuilder.connectedBoard(
+                        oldWorkflow.toAbsolutePath().normalize())
+                .withBoardId("board-1")
+                .withBoardName("Existing Board")
+                .withBoardUrl("https://trello.com/b/SYNTH001/board")
+                .withEnvPath(oldEnv.toAbsolutePath().normalize())
+                .withWorkspaceRoot(
+                        TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT.toAbsolutePath().normalize())
+                .withGithubEnabled(true)
+                .build();
         new ConnectedBoardRepository(tempDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(oldBoard)));
         LocalWorkerManager workerManager = mock();
@@ -6035,18 +6033,16 @@ final class TrelloBoardSetupMainTest {
         Path normalizedWorkflow = workflowPath.toAbsolutePath().normalize();
         Path parent = normalizedWorkflow.getParent();
         Path base = parent == null ? Path.of(".").toAbsolutePath().normalize() : parent;
-        return new ConnectedBoard(
-                "board-conflict",
-                "SYNTH004",
-                "Conflicting Trello Board",
-                "https://trello.com/b/SYNTH004/board",
-                normalizedWorkflow,
-                base.resolve(".env.conflict"),
-                base.resolve("workspaces"),
-                serverPort,
-                true,
-                List.of(),
-                false);
+        return ConnectedBoardBuilder.connectedBoard(normalizedWorkflow)
+                .withBoardId("board-conflict")
+                .withBoardKey("SYNTH004")
+                .withBoardName("Conflicting Trello Board")
+                .withBoardUrl("https://trello.com/b/SYNTH004/board")
+                .withEnvPath(base.resolve(".env.conflict"))
+                .withWorkspaceRoot(base.resolve("workspaces"))
+                .withServerPort(serverPort)
+                .withGithubEnabled(true)
+                .build();
     }
 
     private void assertConnectedBoardUsesWorkflowEnvAndPort(Path workflow, Path env, int serverPort)
@@ -6121,18 +6117,16 @@ final class TrelloBoardSetupMainTest {
         Path newWorkflow = tempDir.resolve(slug + "-new.WORKFLOW.md");
         Path env = tempDir.resolve(".env." + slug);
         Files.writeString(oldWorkflow, "old workflow", StandardCharsets.UTF_8);
-        ConnectedBoard oldBoard = new ConnectedBoard(
-                "board-1",
-                "SYNTH001",
-                "Existing Board",
-                "https://trello.com/b/SYNTH001/board",
-                oldWorkflow.toAbsolutePath().normalize(),
-                env.toAbsolutePath().normalize(),
-                TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT.toAbsolutePath().normalize(),
-                18080,
-                true,
-                List.of(),
-                false);
+        ConnectedBoard oldBoard = ConnectedBoardBuilder.connectedBoard(
+                        oldWorkflow.toAbsolutePath().normalize())
+                .withBoardId("board-1")
+                .withBoardName("Existing Board")
+                .withBoardUrl("https://trello.com/b/SYNTH001/board")
+                .withEnvPath(env.toAbsolutePath().normalize())
+                .withWorkspaceRoot(
+                        TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT.toAbsolutePath().normalize())
+                .withGithubEnabled(true)
+                .build();
         new ConnectedBoardRepository(tempDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(oldBoard)));
         LocalWorkerManager workerManager = mock();

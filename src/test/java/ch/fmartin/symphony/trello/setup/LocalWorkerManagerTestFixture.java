@@ -344,18 +344,14 @@ final class LocalWorkerManagerTestFixture {
                         .formatted(boardId, ConfigDefaults.DEFAULT_SERVER_PORT, boardName),
                 StandardCharsets.UTF_8);
         writeEnv(paths.defaultEnvPath());
-        return new ConnectedBoard(
-                boardId,
-                boardId,
-                boardName,
-                "https://trello.com/b/" + boardId,
-                workflow.toAbsolutePath().normalize(),
-                paths.defaultEnvPath(),
-                paths.workspaceRoot(),
-                ConfigDefaults.DEFAULT_SERVER_PORT,
-                false,
-                List.of(),
-                false);
+        return ConnectedBoardBuilder.connectedBoard(workflow.toAbsolutePath().normalize())
+                .withBoardId(boardId)
+                .withBoardKey(boardId)
+                .withBoardName(boardName)
+                .withBoardUrl("https://trello.com/b/" + boardId)
+                .withEnvPath(paths.defaultEnvPath())
+                .withWorkspaceRoot(paths.workspaceRoot())
+                .build();
     }
 
     void writeEnv(Path envPath) throws Exception {
