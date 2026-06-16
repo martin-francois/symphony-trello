@@ -1,7 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
 import static ch.fmartin.symphony.trello.TestHttpExchange.query;
-import static ch.fmartin.symphony.trello.TestHttpExchange.respond;
+import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.respond;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -16,6 +16,7 @@ import static org.mockito.Mockito.when;
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import ch.fmartin.symphony.trello.testsupport.CliRunResult;
+import ch.fmartin.symphony.trello.testsupport.FakeTrelloServer;
 import ch.fmartin.symphony.trello.testsupport.SetupCommandBuilder;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
@@ -23,7 +24,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintStream;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -55,7 +55,7 @@ final class TrelloBoardSetupMainTest {
     private static final String SHELL_PROPERTY = "symphony.trello.shell";
     private static final String CLI_COMMAND_PROPERTY = "symphony.trello.command";
 
-    private HttpServer server;
+    private FakeTrelloServer trello;
     private final List<String> createdLists = new ArrayList<>();
     private final AtomicReference<String> createdBoardName = new AtomicReference<>();
     private final AtomicReference<String> boardListsResponse = new AtomicReference<>(
@@ -78,8 +78,8 @@ final class TrelloBoardSetupMainTest {
 
     @BeforeEach
     void startServer() throws Exception {
-        server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
-        server.createContext("/1/members/me/organizations", exchange -> {
+        trello = new FakeTrelloServer();
+        trello.on("/1/members/me/organizations", exchange -> {
             workspaceLookups.incrementAndGet();
             workspaceAuthorization.set(exchange.getRequestHeaders().getFirst("Authorization"));
             respond(
@@ -90,7 +90,7 @@ final class TrelloBoardSetupMainTest {
                 ]
                 """);
         });
-        server.createContext("/1/boards/", exchange -> {
+        trello.on("/1/boards/", exchange -> {
             Map<String, String> query = query(exchange);
             createdBoardName.set(query.get("name"));
             respond(
@@ -100,12 +100,12 @@ final class TrelloBoardSetupMainTest {
                     """
                             .formatted(jsonEscaped(query.get("name"))));
         });
-        server.createContext("/1/lists", exchange -> {
+        trello.on("/1/lists", exchange -> {
             Map<String, String> query = query(exchange);
             createdLists.add(query.get("name"));
             respond(exchange, "{\"id\":\"list-" + createdLists.size() + "\",\"name\":\"" + query.get("name") + "\"}");
         });
-        server.createContext("/1/boards/input", exchange -> {
+        trello.on("/1/boards/input", exchange -> {
             boardInfoLookups.incrementAndGet();
             respond(
                     exchange,
@@ -113,13 +113,13 @@ final class TrelloBoardSetupMainTest {
                 {"id":"board-1","name":"Existing Board","shortLink":"SYNTH001","url":"https://trello.com/b/SYNTH001/board","closed":false}
                 """);
         });
-        server.createContext("/1/boards/board-1/lists", exchange -> respond(exchange, boardListsResponse.get()));
-        server.start();
+        trello.on("/1/boards/board-1/lists", exchange -> respond(exchange, boardListsResponse.get()));
+        trello.startEmpty();
     }
 
     @AfterEach
     void stopServer() {
-        server.stop(0);
+        trello.stop();
     }
 
     @Test
@@ -3358,8 +3358,8 @@ final class TrelloBoardSetupMainTest {
         Path envParent = Files.createDirectory(tempDir.resolve("runtime-env-holder"));
         Path env = envParent.resolve(".env.runtime");
         Path workflow = tempDir.resolve("parent-becomes-file-runtime-env.WORKFLOW.md");
-        server.removeContext("/1/boards/");
-        server.createContext("/1/boards/", exchange -> {
+        trello.remove("/1/boards/");
+        trello.on("/1/boards/", exchange -> {
             Map<String, String> query = query(exchange);
             createdBoardName.set(query.get("name"));
             Files.delete(envParent);
@@ -6289,11 +6289,11 @@ final class TrelloBoardSetupMainTest {
     }
 
     private String endpoint() {
-        return "http://127.0.0.1:" + server.getAddress().getPort() + "/1";
+        return "http://127.0.0.1:" + trello.endpointUri().getPort() + "/1";
     }
 
     private String endpointRoot() {
-        return "http://127.0.0.1:" + server.getAddress().getPort();
+        return "http://127.0.0.1:" + trello.endpointUri().getPort();
     }
 
     private record ReplacedRunningWorkerFixture(
