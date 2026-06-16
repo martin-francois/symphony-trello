@@ -254,8 +254,8 @@ final class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
         result.assertSuccess()
                 .stdoutContains("Updated workflow: " + githubWorkflow)
                 .stdoutDoesNotContain("GitHub workflow enabled for \"Local Queue\"");
-        assertThat(githubWorkflow).content(StandardCharsets.UTF_8).contains(allowedPath.toString());
-        assertThat(localWorkflow).content(StandardCharsets.UTF_8).doesNotContain(allowedPath.toString());
+        assertThatWorkflow(githubWorkflow).contains(allowedPath.toString());
+        assertThatWorkflow(localWorkflow).doesNotContain(allowedPath.toString());
         assertThat(trello.createdLists()).isEmpty();
     }
 
@@ -289,8 +289,8 @@ final class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
 
         // then
         result.assertSuccess().stdoutContains("Updated workflow: " + githubWorkflow);
-        assertThat(githubWorkflow).content(StandardCharsets.UTF_8).contains(allowedPath.toString());
-        assertThat(localWorkflow).content(StandardCharsets.UTF_8).doesNotContain(allowedPath.toString());
+        assertThatWorkflow(githubWorkflow).contains(allowedPath.toString());
+        assertThatWorkflow(localWorkflow).doesNotContain(allowedPath.toString());
         assertThat(trello.boardLookups()).isEmpty();
         assertThat(trello.createdLists()).isEmpty();
     }
