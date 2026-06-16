@@ -94,6 +94,10 @@ Before submitting changes:
   requires at least 80% line coverage.
 - Add or update tests for scheduler, Trello normalization, workspace safety, prompt rendering, or
   Codex protocol behavior when those areas change.
+- Reuse shared test support before adding new fixtures. Look under
+  `src/test/java/ch/fmartin/symphony/trello/testsupport` and nearby package fixtures for fake Trello
+  servers, setup command builders, workflow/env content builders, manifest/workflow assertions, and
+  terminal transcript helpers.
 - Use imports instead of inline fully qualified Java type names in code. PMD enforces this so helpers
   like `java.util.Arrays.stream(...)` should be written as `Arrays.stream(...)` with an import.
 - Document non-obvious design choices in `docs/adr/`.
