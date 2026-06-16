@@ -1,20 +1,23 @@
-package ch.fmartin.symphony.trello.setup;
+package ch.fmartin.symphony.trello.testsupport;
 
 import static ch.fmartin.symphony.trello.TestHttpExchange.query;
 
 import ch.fmartin.symphony.trello.TestHttpExchange;
 import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
-final class FakeTrelloServer implements AutoCloseable {
+public final class FakeTrelloServer implements AutoCloseable {
     private final List<String> createdLists = new ArrayList<>();
     private final List<String> boardLookups = new ArrayList<>();
     private final List<String> memberLookups = new ArrayList<>();
@@ -44,10 +47,28 @@ final class FakeTrelloServer implements AutoCloseable {
               {"id":"list-6","name":"Done","closed":false,"pos":6}
             ]
             """);
+    private final Map<String, HttpHandler> customRoutes = new LinkedHashMap<>();
     private HttpServer server;
 
-    FakeTrelloServer start() throws IOException {
+    public FakeTrelloServer start() throws IOException {
+        return start(true);
+    }
+
+    public FakeTrelloServer startEmpty() throws IOException {
+        return start(false);
+    }
+
+    private FakeTrelloServer start(boolean includeDefaultRoutes) throws IOException {
         server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        if (includeDefaultRoutes) {
+            registerDefaultRoutes();
+        }
+        customRoutes.forEach(server::createContext);
+        server.start();
+        return this;
+    }
+
+    private void registerDefaultRoutes() {
         server.createContext("/1/members/me", exchange -> {
             memberLookups.add(exchange.getRequestURI().getPath());
             respond(exchange, memberResponse.get());
@@ -65,11 +86,18 @@ final class FakeTrelloServer implements AutoCloseable {
             createdLists.add(query(exchange).get("name"));
             respond(exchange, "{\"id\":\"list-" + createdLists.size() + "\"}");
         });
-        server.start();
+    }
+
+    public FakeTrelloServer on(String path, HttpHandler handler) {
+        if (server == null) {
+            customRoutes.put(path, handler);
+        } else {
+            server.createContext(path, handler);
+        }
         return this;
     }
 
-    void stop() {
+    public void stop() {
         if (server != null) {
             server.stop(0);
         }
@@ -80,15 +108,15 @@ final class FakeTrelloServer implements AutoCloseable {
         stop();
     }
 
-    String endpoint() {
+    public String endpoint() {
         return endpointUri().toString();
     }
 
-    URI endpointUri() {
+    public URI endpointUri() {
         return URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/1");
     }
 
-    FakeTrelloServer givenMember(String id, String username, String fullName) {
+    public FakeTrelloServer givenMember(String id, String username, String fullName) {
         memberResponse.set("""
                 {"id":"%s","username":"%s","fullName":"%s"}
                 """
@@ -96,7 +124,7 @@ final class FakeTrelloServer implements AutoCloseable {
         return this;
     }
 
-    FakeTrelloServer givenSingleWorkspace(String id, String displayName) {
+    public FakeTrelloServer givenSingleWorkspace(String id, String displayName) {
         return givenWorkspaces(
                 """
                 [
@@ -110,12 +138,12 @@ final class FakeTrelloServer implements AutoCloseable {
                                 id));
     }
 
-    FakeTrelloServer givenWorkspaces(String json) {
+    public FakeTrelloServer givenWorkspaces(String json) {
         workspaceResponse.set(json);
         return this;
     }
 
-    FakeTrelloServer givenBoard(String id, String shortLink, String name, String url) {
+    public FakeTrelloServer givenBoard(String id, String shortLink, String name, String url) {
         boardResponse.set("""
                 {"id":"%s","name":"%s","shortLink":"%s","url":"%s"}
                 """
@@ -123,7 +151,7 @@ final class FakeTrelloServer implements AutoCloseable {
         return this;
     }
 
-    FakeTrelloServer givenBoardLists(String... listNames) {
+    public FakeTrelloServer givenBoardLists(String... listNames) {
         List<String> jsonLists = new ArrayList<>();
         for (int i = 0; i < listNames.length; i++) {
             jsonLists.add(
@@ -136,28 +164,32 @@ final class FakeTrelloServer implements AutoCloseable {
         return this;
     }
 
-    FakeTrelloServer givenRawBoardListsJson(String json) {
+    public FakeTrelloServer givenRawBoardListsJson(String json) {
         boardListsResponse.set(json);
         return this;
     }
 
-    List<String> createdLists() {
+    public List<String> createdLists() {
         return createdLists;
     }
 
-    List<String> boardLookups() {
+    public List<String> boardLookups() {
         return boardLookups;
     }
 
-    List<String> memberLookups() {
+    public List<String> memberLookups() {
         return memberLookups;
     }
 
-    List<String> workspaceLookups() {
+    public List<String> workspaceLookups() {
         return workspaceLookups;
     }
 
-    static void respond(HttpExchange exchange, String body) throws IOException {
+    public static void respond(HttpExchange exchange, String body) throws IOException {
         TestHttpExchange.respond(exchange, body);
+    }
+
+    public static void respond(HttpExchange exchange, int statusCode, String body) throws IOException {
+        TestHttpExchange.respond(exchange, statusCode, body);
     }
 }

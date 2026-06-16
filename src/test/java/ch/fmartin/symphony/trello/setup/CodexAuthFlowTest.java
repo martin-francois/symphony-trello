@@ -3,6 +3,7 @@ package ch.fmartin.symphony.trello.setup;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
+import ch.fmartin.symphony.trello.testsupport.RecordingTerminal;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;

@@ -1,5 +1,6 @@
-package ch.fmartin.symphony.trello.setup;
+package ch.fmartin.symphony.trello.testsupport;
 
+import ch.fmartin.symphony.trello.setup.Terminal;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -7,14 +8,14 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.Queue;
 
-final class RecordingTerminal implements Terminal {
+public final class RecordingTerminal implements Terminal {
     private final Queue<String> input = new ArrayDeque<>();
     private final ByteArrayOutputStream stdout = new ByteArrayOutputStream();
     private final ByteArrayOutputStream stderr = new ByteArrayOutputStream();
     private final PrintStream out = new PrintStream(stdout, true, StandardCharsets.UTF_8);
     private final PrintStream err = new PrintStream(stderr, true, StandardCharsets.UTF_8);
 
-    RecordingTerminal(String... input) {
+    public RecordingTerminal(String... input) {
         for (String line : input) {
             this.input.add(line);
         }
@@ -57,11 +58,11 @@ final class RecordingTerminal implements Terminal {
         return err;
     }
 
-    String stdout() {
+    public String stdout() {
         return stdout.toString(StandardCharsets.UTF_8);
     }
 
-    String stderr() {
+    public String stderr() {
         return stderr.toString(StandardCharsets.UTF_8);
     }
 }

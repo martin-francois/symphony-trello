@@ -1,19 +1,19 @@
-package ch.fmartin.symphony.trello.setup;
+package ch.fmartin.symphony.trello.testsupport;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-final class TerminalTranscriptAssertions {
+public final class TerminalTranscriptAssertions {
     private final String transcript;
 
     private TerminalTranscriptAssertions(String transcript) {
         this.transcript = transcript;
     }
 
-    static TerminalTranscriptAssertions assertThatTranscript(String transcript) {
+    public static TerminalTranscriptAssertions assertThatTranscript(String transcript) {
         return new TerminalTranscriptAssertions(transcript);
     }
 
-    TerminalTranscriptAssertions containsSectionsInOrder(String... sections) {
+    public TerminalTranscriptAssertions containsSectionsInOrder(String... sections) {
         int cursor = 0;
         for (String section : sections) {
             int next = transcript.indexOf(section, cursor);
@@ -25,12 +25,12 @@ final class TerminalTranscriptAssertions {
         return this;
     }
 
-    TerminalTranscriptAssertions doesNotLeak(String secret) {
+    public TerminalTranscriptAssertions doesNotLeak(String secret) {
         assertThat(transcript).doesNotContain(secret);
         return this;
     }
 
-    TerminalTranscriptAssertions containsPrompt(String prompt) {
+    public TerminalTranscriptAssertions containsPrompt(String prompt) {
         assertThat(transcript).contains(prompt);
         return this;
     }

@@ -1,11 +1,12 @@
 package ch.fmartin.symphony.trello.setup;
 
-import static ch.fmartin.symphony.trello.setup.ManifestAssertions.assertThatManifest;
-import static ch.fmartin.symphony.trello.setup.WorkflowAssertions.assertThatWorkflow;
+import static ch.fmartin.symphony.trello.testsupport.ManifestAssertions.assertThatManifest;
+import static ch.fmartin.symphony.trello.testsupport.WorkflowAssertions.assertThatWorkflow;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
+import ch.fmartin.symphony.trello.testsupport.SetupRunResult;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
