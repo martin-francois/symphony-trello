@@ -9,6 +9,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
+import ch.fmartin.symphony.trello.testsupport.TestEnv;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
@@ -362,7 +363,7 @@ final class LocalWorkerManagerTestFixture {
         if (parent != null) {
             Files.createDirectories(parent);
         }
-        Files.writeString(envPath, "TRELLO_API_KEY=test-key\nTRELLO_API_TOKEN=test-token\n", StandardCharsets.UTF_8);
+        Files.writeString(envPath, TestEnv.trelloCredentials("test-key", "test-token"), StandardCharsets.UTF_8);
     }
 
     void save(ConnectedBoard... boards) throws Exception {
