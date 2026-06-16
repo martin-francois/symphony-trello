@@ -485,41 +485,34 @@ final class InstallerScriptTest {
         assertThat(result.output()).contains("App checkout: " + app, "Will remove if present:");
     }
 
-    @Test
-    void posixInstallerAllowsDefaultCommandDirectoryWhenRunFromThatDirectory() throws Exception {
+    @MethodSource("posixDefaultCommandDirectoryScenarios")
+    @ParameterizedTest(name = "{0}")
+    void posixScriptsAllowDefaultCommandDirectoryWhenRunFromThatDirectory(
+            String script, String homePrefix, String onboardFlag, String expectedOutput) throws Exception {
         // given
         assumeTrue(commandExists("bash"));
-        Path installScript = Path.of("install.sh").toAbsolutePath();
-        Path home = temporaryDirectory.resolve("install-run-from-bin-home");
+        Path scriptPath = Path.of(script).toAbsolutePath();
+        Path home = temporaryDirectory.resolve(homePrefix);
         Path binDirectory = home.resolve(".local/bin");
         Files.createDirectories(binDirectory);
         Map<String, String> environment = Map.of("HOME", home.toString());
 
         // when
-        ProcessResult result =
-                run(environment, binDirectory, "bash", installScript.toString(), "--dry-run", "--no-onboard");
+        ProcessResult result = run(environment, binDirectory, "bash", scriptPath.toString(), "--dry-run", onboardFlag);
 
         // then
         result.assertSuccess();
-        assertThat(result.output()).contains("Dry run: no files changed.");
+        assertThat(result.output()).contains(expectedOutput);
     }
 
-    @Test
-    void posixUninstallerAllowsDefaultCommandDirectoryWhenRunFromThatDirectory() throws Exception {
-        // given
-        assumeTrue(commandExists("bash"));
-        Path uninstallScript = Path.of("uninstall.sh").toAbsolutePath();
-        Path home = temporaryDirectory.resolve("uninstall-run-from-bin-home");
-        Path binDirectory = home.resolve(".local/bin");
-        Files.createDirectories(binDirectory);
-        Map<String, String> environment = Map.of("HOME", home.toString());
-
-        // when
-        ProcessResult result = run(environment, binDirectory, "bash", uninstallScript.toString(), "--dry-run", "--yes");
-
-        // then
-        result.assertSuccess();
-        assertThat(result.output()).contains("Trello boards were not deleted or archived.");
+    private static Stream<Arguments> posixDefaultCommandDirectoryScenarios() {
+        return Stream.of(
+                Arguments.of("install.sh", "install-run-from-bin-home", "--no-onboard", "Dry run: no files changed."),
+                Arguments.of(
+                        "uninstall.sh",
+                        "uninstall-run-from-bin-home",
+                        "--yes",
+                        "Trello boards were not deleted or archived."));
     }
 
     @Test
@@ -550,98 +543,46 @@ final class InstallerScriptTest {
                 .doesNotContain("Will remove if present:", "Trello boards were not deleted or archived.");
     }
 
-    @Test
-    void posixInstallerRejectsMissingHomeBeforeResolvingDefaultPaths() throws Exception {
+    @MethodSource("posixUnusableHomeScenarios")
+    @ParameterizedTest(name = "{0}")
+    void posixScriptsRejectUnusableHomeBeforeResolvingDefaultPaths(
+            String name, String script, String onboardFlag, boolean missingHome, String role, String[] forbidden)
+            throws Exception {
         // given
         assumeTrue(commandExists("bash"));
+        String[] command = {
+            "bash",
+            script,
+            "--dry-run",
+            onboardFlag,
+            "--prefix",
+            temporaryDirectory.resolve("app").toString(),
+            "--bin-dir",
+            temporaryDirectory.resolve("bin").toString()
+        };
 
         // when
-        ProcessResult result = runWithoutHome(
-                "bash",
-                "install.sh",
-                "--dry-run",
-                "--no-onboard",
-                "--prefix",
-                temporaryDirectory.resolve("app").toString(),
-                "--bin-dir",
-                temporaryDirectory.resolve("bin").toString());
+        ProcessResult result = missingHome ? runWithoutHome(command) : run(Map.of("HOME", ""), command);
 
         // then
         assertThat(result.exitCode()).isEqualTo(2);
         assertThat(result.output())
-                .contains("HOME must be set to a user home directory before running the installer.")
-                .doesNotContain("unbound variable", "/.local/share/symphony-trello");
+                .contains("HOME must be set to a user home directory before running the " + role + ".")
+                .doesNotContain(forbidden);
     }
 
-    @Test
-    void posixInstallerRejectsEmptyHomeBeforeResolvingDefaultPaths() throws Exception {
-        // given
-        assumeTrue(commandExists("bash"));
-
-        // when
-        ProcessResult result = run(
-                Map.of("HOME", ""),
-                "bash",
-                "install.sh",
-                "--dry-run",
-                "--no-onboard",
-                "--prefix",
-                temporaryDirectory.resolve("app").toString(),
-                "--bin-dir",
-                temporaryDirectory.resolve("bin").toString());
-
-        // then
-        assertThat(result.exitCode()).isEqualTo(2);
-        assertThat(result.output())
-                .contains("HOME must be set to a user home directory before running the installer.")
-                .doesNotContain("/.local/share/symphony-trello");
-    }
-
-    @Test
-    void posixUninstallerRejectsMissingHomeBeforeResolvingDefaultPaths() throws Exception {
-        // given
-        assumeTrue(commandExists("bash"));
-
-        // when
-        ProcessResult result = runWithoutHome(
-                "bash",
-                "uninstall.sh",
-                "--dry-run",
-                "--yes",
-                "--prefix",
-                temporaryDirectory.resolve("app").toString(),
-                "--bin-dir",
-                temporaryDirectory.resolve("bin").toString());
-
-        // then
-        assertThat(result.exitCode()).isEqualTo(2);
-        assertThat(result.output())
-                .contains("HOME must be set to a user home directory before running the uninstaller.")
-                .doesNotContain("unbound variable", "/.local/share/symphony-trello");
-    }
-
-    @Test
-    void posixUninstallerRejectsEmptyHomeBeforeResolvingDefaultPaths() throws Exception {
-        // given
-        assumeTrue(commandExists("bash"));
-
-        // when
-        ProcessResult result = run(
-                Map.of("HOME", ""),
-                "bash",
-                "uninstall.sh",
-                "--dry-run",
-                "--yes",
-                "--prefix",
-                temporaryDirectory.resolve("app").toString(),
-                "--bin-dir",
-                temporaryDirectory.resolve("bin").toString());
-
-        // then
-        assertThat(result.exitCode()).isEqualTo(2);
-        assertThat(result.output())
-                .contains("HOME must be set to a user home directory before running the uninstaller.")
-                .doesNotContain("/.local/share/symphony-trello");
+    private static Stream<Arguments> posixUnusableHomeScenarios() {
+        String[] missingHomeForbidden = {"unbound variable", "/.local/share/symphony-trello"};
+        String[] emptyHomeForbidden = {"/.local/share/symphony-trello"};
+        return Stream.of(
+                Arguments.of(
+                        "install missing HOME", "install.sh", "--no-onboard", true, "installer", missingHomeForbidden),
+                Arguments.of(
+                        "install empty HOME", "install.sh", "--no-onboard", false, "installer", emptyHomeForbidden),
+                Arguments.of(
+                        "uninstall missing HOME", "uninstall.sh", "--yes", true, "uninstaller", missingHomeForbidden),
+                Arguments.of(
+                        "uninstall empty HOME", "uninstall.sh", "--yes", false, "uninstaller", emptyHomeForbidden));
     }
 
     @MethodSource("invalidPosixInstallerSourceInputs")
