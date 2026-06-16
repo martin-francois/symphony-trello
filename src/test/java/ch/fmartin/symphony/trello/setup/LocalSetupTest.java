@@ -178,111 +178,91 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 Arguments.of("configure-github blank board", new String[] {"configure-github", "--board", ""}));
     }
 
-    @Test
-    void setupLocalRejectsControlCharactersInPathOptions() {
+    @MethodSource("controlCharacterPathOptionScenarios")
+    @ParameterizedTest(name = "{0}")
+    void setupLocalRejectsControlCharactersInPathOptions(InvalidPathOptionCase invalidCase) {
         // given
-        String badWorkflow = "bad\nworkflow.WORKFLOW.md";
-        String badWorkspaceRoot = "bad\nworkspace-root";
-        String badConfigDir = "bad\nconfig";
-        String badManifest = "bad\nmanifest.json";
-        String badEnv = "bad\nenv";
-        String badAddPath = "bad\nadd-path";
-
-        List<InvalidPathOptionCase> cases = List.of(
-                new InvalidPathOptionCase("--workflow", "--dry-run", "--workflow", badWorkflow),
-                new InvalidPathOptionCase("--workspace-root", "--dry-run", "--workspace-root", badWorkspaceRoot),
-                new InvalidPathOptionCase("--config-dir", "--dry-run", "--config-dir", badConfigDir),
-                new InvalidPathOptionCase("--manifest", "--dry-run", "--manifest", badManifest),
-                new InvalidPathOptionCase("--env", "--dry-run", "--env", badEnv),
-                new InvalidPathOptionCase("--add-path", "--dry-run", "--add-path", badAddPath));
 
         // when
-        List<SetupRunResult> results = cases.stream()
-                .map(invalidCase -> runSetup(invalidCase.commandArray()))
-                .toList();
+        SetupRunResult result = runSetup(invalidCase.commandArray());
 
         // then
-        for (int index = 0; index < cases.size(); index++) {
-            InvalidPathOptionCase invalidCase = cases.get(index);
-            SetupRunResult result = results.get(index);
-            result.assertFailure(2)
-                    .stderrContains(
-                            "setup_failed code=setup_invalid_arguments",
-                            invalidCase.optionName() + " must not contain control characters")
-                    .stdoutDoesNotContain("WOULD write workflows", badWorkflow, badWorkspaceRoot, badConfigDir)
-                    .stderrDoesNotContain(
-                            badWorkflow,
-                            badWorkspaceRoot,
-                            badConfigDir,
-                            badManifest,
-                            badEnv,
-                            badAddPath,
-                            "Troubleshooting report written");
-        }
+        String[] otherRawValues = controlCharacterPathOptionScenarios()
+                .map(InvalidPathOptionCase::rawValue)
+                .filter(value -> !value.equals(invalidCase.rawValue()))
+                .toArray(String[]::new);
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments",
+                        invalidCase.optionName() + " must not contain control characters")
+                .stdoutDoesNotContain("WOULD write workflows", invalidCase.rawValue())
+                .stdoutDoesNotContain(otherRawValues)
+                .stderrDoesNotContain(invalidCase.rawValue(), "Troubleshooting report written")
+                .stderrDoesNotContain(otherRawValues);
     }
 
-    @Test
-    void setupLocalRejectsInvalidAddPathValuesBeforePlannedOutput() {
+    private static Stream<InvalidPathOptionCase> controlCharacterPathOptionScenarios() {
+        return Stream.of(
+                invalidPathOptionCase("workflow", "--workflow", "bad\nworkflow.WORKFLOW.md"),
+                invalidPathOptionCase("workspace root", "--workspace-root", "bad\nworkspace-root"),
+                invalidPathOptionCase("config dir", "--config-dir", "bad\nconfig"),
+                invalidPathOptionCase("manifest", "--manifest", "bad\nmanifest.json"),
+                invalidPathOptionCase("env", "--env", "bad\nenv"),
+                invalidPathOptionCase("add path", "--add-path", "bad\nadd-path"));
+    }
+
+    private static InvalidPathOptionCase invalidPathOptionCase(String name, String optionName, String rawValue) {
+        return new InvalidPathOptionCase(name, optionName, rawValue, "--dry-run", optionName, rawValue);
+    }
+
+    @MethodSource("invalidAddPathScenarios")
+    @ParameterizedTest(name = "{0}")
+    void setupLocalRejectsInvalidAddPathValuesBeforePlannedOutput(InvalidAddPathScenario scenario) {
         // given
-        Path rootEquivalentPath = tempDir.getRoot().resolve("symphony").resolve("..");
-        record InvalidAddPathScenario(String name, String expectedCode, String expectedMessage, List<String> command) {
-            String[] commandArray() {
-                return command.toArray(String[]::new);
-            }
-        }
-        List<InvalidAddPathScenario> scenarios = List.of(
+
+        // when
+        SetupRunResult result = runSetup(scenario.commandArray(tempDir));
+
+        // then
+        result.assertFailure(2)
+                .stderrContains("setup_failed code=" + scenario.expectedCode(), scenario.expectedMessage())
+                .stderrDoesNotContain("Troubleshooting report written")
+                .stdoutDoesNotContain("Dry run", "WOULD write workflows");
+        assertThat(trello.createdLists()).isEmpty();
+    }
+
+    private static Stream<InvalidAddPathScenario> invalidAddPathScenarios() {
+        return Stream.of(
                 new InvalidAddPathScenario(
-                        "blank add path",
-                        "setup_invalid_arguments",
-                        "--add-path must not be empty.",
-                        List.of("--dry-run", "--non-interactive", "--board-name", "Dry Add Blank", "--add-path", "")),
+                        "blank add path", "setup_invalid_arguments", "--add-path must not be empty.", "", false, true),
                 new InvalidAddPathScenario(
                         "relative add path",
                         "setup_invalid_arguments",
                         "--add-path must be an absolute path.",
-                        List.of(
-                                "--dry-run",
-                                "--non-interactive",
-                                "--board-name",
-                                "Dry Add Relative",
-                                "--add-path",
-                                "relative/path")),
+                        "relative/path",
+                        false,
+                        true),
                 new InvalidAddPathScenario(
                         "dot add path",
                         "setup_invalid_arguments",
                         "--add-path must be an absolute path.",
-                        List.of("--dry-run", "--non-interactive", "--board-name", "Dry Add Dot", "--add-path", ".")),
+                        ".",
+                        false,
+                        true),
                 new InvalidAddPathScenario(
                         "broad dry run add path",
                         "setup_broad_path_requires_confirmation",
                         "Refusing to allow the whole filesystem. Re-run with --allow-all-paths if that is intentional.",
-                        List.of("--dry-run", "--board-name", "Dry Add Slash", "--add-path", "/")),
+                        "/",
+                        false,
+                        false),
                 new InvalidAddPathScenario(
                         "root-equivalent dry run add path",
                         "setup_broad_path_requires_confirmation",
                         "Refusing to allow the whole filesystem. Re-run with --allow-all-paths if that is intentional.",
-                        List.of(
-                                "--dry-run",
-                                "--board-name",
-                                "Dry Add Root Equivalent",
-                                "--add-path",
-                                rootEquivalentPath.toString())));
-
-        // when
-        List<SetupRunResult> results = scenarios.stream()
-                .map(scenario -> runSetup(scenario.commandArray()))
-                .toList();
-
-        // then
-        for (int index = 0; index < scenarios.size(); index++) {
-            InvalidAddPathScenario scenario = scenarios.get(index);
-            SetupRunResult result = results.get(index);
-            result.assertFailure(2)
-                    .stderrContains("setup_failed code=" + scenario.expectedCode(), scenario.expectedMessage())
-                    .stderrDoesNotContain("Troubleshooting report written")
-                    .stdoutDoesNotContain("Dry run", "WOULD write workflows");
-        }
-        assertThat(trello.createdLists()).isEmpty();
+                        "",
+                        true,
+                        false));
     }
 
     @Test
@@ -313,43 +293,42 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         assertThat(trello.createdLists()).isEmpty();
     }
 
-    @Test
-    void setupLocalRejectsInvalidWorkspaceRootValuesBeforePlannedOutput() throws Exception {
+    @MethodSource("invalidWorkspaceRootScenarios")
+    @ParameterizedTest(name = "{0}")
+    void setupLocalRejectsInvalidWorkspaceRootValuesBeforePlannedOutput(InvalidWorkspaceRootScenario scenario)
+            throws Exception {
         // given
         Path workspaceFile = tempDir.resolve("workspace-root-file");
         Files.writeString(workspaceFile, "not a directory", StandardCharsets.UTF_8);
         Path workflow = tempDir.resolve("WORKFLOW.invalid-workspace-root.md");
-        record InvalidWorkspaceRootScenario(String expectedMessage, String workspaceRoot) {}
-        List<InvalidWorkspaceRootScenario> scenarios = List.of(
-                new InvalidWorkspaceRootScenario("--workspace-root must not be empty.", ""),
-                new InvalidWorkspaceRootScenario("--workspace-root must not be empty.", "   "),
-                new InvalidWorkspaceRootScenario("--workspace-root must be an absolute path.", "."),
-                new InvalidWorkspaceRootScenario("--workspace-root must be an absolute path.", " ./relative "),
-                new InvalidWorkspaceRootScenario("--workspace-root must be a directory.", workspaceFile.toString()));
 
         // when
-        List<SetupRunResult> results = scenarios.stream()
-                .map(scenario -> runSetup(
-                        "--dry-run",
-                        "--board-name",
-                        "Dry Workspace Root",
-                        "--workflow",
-                        workflow.toString(),
-                        "--workspace-root",
-                        scenario.workspaceRoot()))
-                .toList();
+        SetupRunResult result = runSetup(
+                "--dry-run",
+                "--board-name",
+                "Dry Workspace Root",
+                "--workflow",
+                workflow.toString(),
+                "--workspace-root",
+                scenario.workspaceRoot(workspaceFile));
 
         // then
-        for (int index = 0; index < scenarios.size(); index++) {
-            InvalidWorkspaceRootScenario scenario = scenarios.get(index);
-            SetupRunResult result = results.get(index);
-            result.assertFailure(2)
-                    .stderrContains("setup_failed code=setup_invalid_arguments", scenario.expectedMessage())
-                    .stderrDoesNotContain("Troubleshooting report written", workspaceFile.toString(), "not a directory")
-                    .stdoutDoesNotContain("Dry run", "WOULD write workflows");
-        }
+        result.assertFailure(2)
+                .stderrContains("setup_failed code=setup_invalid_arguments", scenario.expectedMessage())
+                .stderrDoesNotContain("Troubleshooting report written", workspaceFile.toString(), "not a directory")
+                .stdoutDoesNotContain("Dry run", "WOULD write workflows");
         assertThat(workflow).doesNotExist();
         assertThat(trello.createdLists()).isEmpty();
+    }
+
+    private static Stream<InvalidWorkspaceRootScenario> invalidWorkspaceRootScenarios() {
+        return Stream.of(
+                new InvalidWorkspaceRootScenario("blank", "--workspace-root must not be empty.", "", false),
+                new InvalidWorkspaceRootScenario("whitespace", "--workspace-root must not be empty.", "   ", false),
+                new InvalidWorkspaceRootScenario("dot", "--workspace-root must be an absolute path.", ".", false),
+                new InvalidWorkspaceRootScenario(
+                        "relative", "--workspace-root must be an absolute path.", " ./relative ", false),
+                new InvalidWorkspaceRootScenario("file", "--workspace-root must be a directory.", "", true));
     }
 
     @Test
@@ -491,8 +470,10 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         assertThat(trello.createdLists()).isEmpty();
     }
 
-    @Test
-    void setupLocalRejectsUnusableConfigAndManifestPathsBeforePlannedOutput() throws Exception {
+    @MethodSource("unusableSetupLocalPathOptionScenarios")
+    @ParameterizedTest(name = "{0}")
+    void setupLocalRejectsUnusableConfigAndManifestPathsBeforePlannedOutput(InvalidSetupPathOptionScenario scenario)
+            throws Exception {
         // given
         Path configFile = tempDir.resolve("config-file");
         Path manifestDirectory = tempDir.resolve("manifest-directory");
@@ -503,7 +484,35 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Files.createDirectories(manifestDirectory);
         Files.writeString(invalidManifestFile, "file", StandardCharsets.UTF_8);
         Files.writeString(manifestParentFile, "file", StandardCharsets.UTF_8);
-        List<InvalidSetupPathOptionScenario> scenarios = List.of(
+        Map<String, String> pathReplacements = Map.of(
+                "<configFile>",
+                configFile.toString(),
+                "<manifestDirectory>",
+                manifestDirectory.toString(),
+                "<invalidManifestFile>",
+                invalidManifestFile.toString(),
+                "<manifestWithFileParent>",
+                manifestWithFileParent.toString());
+
+        // when
+        SetupRunResult result = runSetup(scenario.commandArray(pathReplacements));
+
+        // then
+        result.assertFailure(2)
+                .stderrContains("setup_failed code=setup_invalid_arguments", scenario.expectedMessage())
+                .stderrDoesNotContain(
+                        "Troubleshooting report written",
+                        configFile.toString(),
+                        manifestDirectory.toString(),
+                        invalidManifestFile.toString(),
+                        manifestParentFile.toString(),
+                        manifestWithFileParent.toString())
+                .stdoutDoesNotContain("Dry run", "WOULD write workflows", "Symphony setup check");
+        assertThat(trello.createdLists()).isEmpty();
+    }
+
+    private static Stream<InvalidSetupPathOptionScenario> unusableSetupLocalPathOptionScenarios() {
+        return Stream.of(
                 setupLocalPathScenario(
                         "setup config file",
                         "--config-dir must be a directory.",
@@ -512,7 +521,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "--board",
                         "https://trello.com/b/input/queue",
                         "--config-dir",
-                        configFile.toString()),
+                        "<configFile>"),
                 setupLocalPathScenario(
                         "check config file",
                         "--config-dir must be a directory.",
@@ -521,7 +530,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "--board",
                         "Test Board 4",
                         "--config-dir",
-                        configFile.toString()),
+                        "<configFile>"),
                 setupLocalPathScenario(
                         "configure github config file",
                         "--config-dir must be a directory.",
@@ -530,7 +539,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "--board",
                         "Test Board 4",
                         "--config-dir",
-                        configFile.toString()),
+                        "<configFile>"),
                 setupLocalPathScenario(
                         "setup manifest directory",
                         "--manifest must be a file path.",
@@ -539,7 +548,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "--board",
                         "https://trello.com/b/input/queue",
                         "--manifest",
-                        manifestDirectory.toString()),
+                        "<manifestDirectory>"),
                 setupLocalPathScenario(
                         "configure github manifest directory",
                         "--manifest must be a file path.",
@@ -547,7 +556,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "--board",
                         "Test Board 4",
                         "--manifest",
-                        manifestDirectory.toString()),
+                        "<manifestDirectory>"),
                 setupLocalPathScenario(
                         "setup invalid manifest file",
                         "--manifest must be a readable connected-board manifest JSON file.",
@@ -556,7 +565,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "--board",
                         "https://trello.com/b/input/queue",
                         "--manifest",
-                        invalidManifestFile.toString()),
+                        "<invalidManifestFile>"),
                 setupLocalPathScenario(
                         "setup manifest parent file",
                         "--manifest must be a readable connected-board manifest JSON file.",
@@ -565,7 +574,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "--board",
                         "https://trello.com/b/input/queue",
                         "--manifest",
-                        manifestWithFileParent.toString()),
+                        "<manifestWithFileParent>"),
                 setupLocalPathScenario(
                         "configure github invalid manifest file",
                         "--manifest must be a readable connected-board manifest JSON file.",
@@ -573,7 +582,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "--board",
                         "Test Board 4",
                         "--manifest",
-                        invalidManifestFile.toString()),
+                        "<invalidManifestFile>"),
                 setupLocalPathScenario(
                         "configure github manifest parent file",
                         "--manifest must be a readable connected-board manifest JSON file.",
@@ -581,29 +590,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "--board",
                         "Test Board 4",
                         "--manifest",
-                        manifestWithFileParent.toString()));
-
-        // when
-        List<SetupRunResult> results = scenarios.stream()
-                .map(scenario -> runSetup(scenario.commandArray()))
-                .toList();
-
-        // then
-        for (int index = 0; index < scenarios.size(); index++) {
-            InvalidSetupPathOptionScenario scenario = scenarios.get(index);
-            SetupRunResult result = results.get(index);
-            result.assertFailure(2)
-                    .stderrContains("setup_failed code=setup_invalid_arguments", scenario.expectedMessage())
-                    .stderrDoesNotContain(
-                            "Troubleshooting report written",
-                            configFile.toString(),
-                            manifestDirectory.toString(),
-                            invalidManifestFile.toString(),
-                            manifestParentFile.toString(),
-                            manifestWithFileParent.toString())
-                    .stdoutDoesNotContain("Dry run", "WOULD write workflows", "Symphony setup check");
-        }
-        assertThat(trello.createdLists()).isEmpty();
+                        "<manifestWithFileParent>"));
     }
 
     @MethodSource("ch.fmartin.symphony.trello.testsupport.TestEndpointValues#invalidTrelloApiBaseEndpointValues")
@@ -1053,19 +1040,68 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
     private record DuplicateConnectedBoardsFixture(Path firstWorkflow, Path secondWorkflow) {}
 
-    private record InvalidPathOptionCase(String optionName, List<String> command) {
-        private InvalidPathOptionCase(String optionName, String... command) {
-            this(optionName, List.of(command));
+    private record InvalidPathOptionCase(String name, String optionName, String rawValue, List<String> command) {
+        private InvalidPathOptionCase(String name, String optionName, String rawValue, String... command) {
+            this(name, optionName, rawValue, List.of(command));
         }
 
         private String[] commandArray() {
             return command.toArray(String[]::new);
+        }
+
+        @Override
+        public String toString() {
+            return name;
+        }
+    }
+
+    private record InvalidAddPathScenario(
+            String name,
+            String expectedCode,
+            String expectedMessage,
+            String addPath,
+            boolean rootEquivalent,
+            boolean nonInteractive) {
+        private String[] commandArray(Path tempDir) {
+            String resolvedAddPath = rootEquivalent
+                    ? tempDir.getRoot().resolve("symphony").resolve("..").toString()
+                    : addPath;
+            List<String> args = new ArrayList<>();
+            args.add("--dry-run");
+            if (nonInteractive) {
+                args.add("--non-interactive");
+            }
+            args.addAll(List.of("--board-name", "Dry Add " + name, "--add-path", resolvedAddPath));
+            return args.toArray(String[]::new);
+        }
+
+        @Override
+        public String toString() {
+            return name;
+        }
+    }
+
+    private record InvalidWorkspaceRootScenario(
+            String name, String expectedMessage, String workspaceRoot, boolean workspaceFile) {
+        private String workspaceRoot(Path existingWorkspaceFile) {
+            return workspaceFile ? existingWorkspaceFile.toString() : workspaceRoot;
+        }
+
+        @Override
+        public String toString() {
+            return name;
         }
     }
 
     private record InvalidSetupPathOptionScenario(String name, String expectedMessage, List<String> command) {
         private String[] commandArray() {
-            return command.toArray(String[]::new);
+            return commandArray(Map.of());
+        }
+
+        private String[] commandArray(Map<String, String> replacements) {
+            return command.stream()
+                    .map(value -> replacements.getOrDefault(value, value))
+                    .toArray(String[]::new);
         }
 
         @Override

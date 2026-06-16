@@ -957,73 +957,74 @@ final class TrelloBoardSetupMainTest {
                         output.toString(), privatePathComponent.toString(), tempDir.toString(), "Jane Doe");
     }
 
-    @Test
-    void diagnosticsRejectsControlCharactersInPathOptionsWithoutRenderingReport() {
+    @MethodSource("diagnosticsControlCharacterPathOptions")
+    @ParameterizedTest(name = "{0}")
+    void diagnosticsRejectsControlCharactersInPathOptionsWithoutRenderingReport(InvalidPathOptionCase invalidCase) {
         // given
-        String badOutput = "bad\noutput.md";
-        String badManifest = "bad\nmanifest.json";
-        String badWorkflow = "bad\nworkflow.md";
-        String badConfigDir = "bad\nconfig";
-        String badWorkspaceRoot = "bad\nworkspace-root";
-        String badStateHome = "bad\nstate";
-
-        List<InvalidPathOptionCase> cases = List.of(
-                new InvalidPathOptionCase(
-                        "--output", "# Symphony for Trello Diagnostics", "diagnostics", "--output", badOutput),
-                new InvalidPathOptionCase(
-                        "--manifest", "# Symphony for Trello Diagnostics", "diagnostics", "--manifest", badManifest),
-                new InvalidPathOptionCase(
-                        "--workflow", "# Symphony for Trello Diagnostics", "diagnostics", "--workflow", badWorkflow),
-                new InvalidPathOptionCase(
-                        "--config-dir",
-                        "# Symphony for Trello Diagnostics",
-                        "diagnostics",
-                        "--config-dir",
-                        badConfigDir),
-                new InvalidPathOptionCase(
-                        "--workspace-root",
-                        "# Symphony for Trello Diagnostics",
-                        "diagnostics",
-                        "--workspace-root",
-                        badWorkspaceRoot),
-                new InvalidPathOptionCase(
-                        "--state-home",
-                        "# Symphony for Trello Diagnostics",
-                        "diagnostics",
-                        "--state-home",
-                        badStateHome));
 
         // when
-        List<CliRunResult> results = cases.stream()
-                .map(invalidCase -> runCli(invalidCase.commandArray()))
-                .toList();
+        CliRunResult result = runCli(invalidCase.commandArray());
 
         // then
-        for (int index = 0; index < cases.size(); index++) {
-            InvalidPathOptionCase invalidCase = cases.get(index);
-            CliRunResult result = results.get(index);
-            result.assertFailure(2)
-                    .stderrContains(
-                            "setup_failed code=setup_invalid_arguments",
-                            invalidCase.optionName() + " must not contain control characters")
-                    .stdoutDoesNotContain(
-                            invalidCase.forbiddenOutput(),
-                            badOutput,
-                            badManifest,
-                            badWorkflow,
-                            badConfigDir,
-                            badWorkspaceRoot,
-                            badStateHome)
-                    .stderrDoesNotContain(
-                            badOutput,
-                            badManifest,
-                            badWorkflow,
-                            badConfigDir,
-                            badWorkspaceRoot,
-                            badStateHome,
-                            "Troubleshooting report written");
-        }
-        assertThat(tempDir.resolve(badOutput)).doesNotExist();
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments",
+                        invalidCase.optionName() + " must not contain control characters")
+                .stdoutDoesNotContain(invalidCase.forbiddenOutput(), invalidCase.rawValue())
+                .stderrDoesNotContain(invalidCase.rawValue(), "Troubleshooting report written");
+        assertThat(tempDir.resolve(invalidCase.rawValue())).doesNotExist();
+    }
+
+    private static Stream<InvalidPathOptionCase> diagnosticsControlCharacterPathOptions() {
+        return Stream.of(
+                invalidPathOptionCase(
+                        "diagnostics output",
+                        "--output",
+                        "bad\noutput.md",
+                        "# Symphony for Trello Diagnostics",
+                        "diagnostics",
+                        "--output",
+                        "bad\noutput.md"),
+                invalidPathOptionCase(
+                        "diagnostics manifest",
+                        "--manifest",
+                        "bad\nmanifest.json",
+                        "# Symphony for Trello Diagnostics",
+                        "diagnostics",
+                        "--manifest",
+                        "bad\nmanifest.json"),
+                invalidPathOptionCase(
+                        "diagnostics workflow",
+                        "--workflow",
+                        "bad\nworkflow.md",
+                        "# Symphony for Trello Diagnostics",
+                        "diagnostics",
+                        "--workflow",
+                        "bad\nworkflow.md"),
+                invalidPathOptionCase(
+                        "diagnostics config dir",
+                        "--config-dir",
+                        "bad\nconfig",
+                        "# Symphony for Trello Diagnostics",
+                        "diagnostics",
+                        "--config-dir",
+                        "bad\nconfig"),
+                invalidPathOptionCase(
+                        "diagnostics workspace root",
+                        "--workspace-root",
+                        "bad\nworkspace-root",
+                        "# Symphony for Trello Diagnostics",
+                        "diagnostics",
+                        "--workspace-root",
+                        "bad\nworkspace-root"),
+                invalidPathOptionCase(
+                        "diagnostics state home",
+                        "--state-home",
+                        "bad\nstate",
+                        "# Symphony for Trello Diagnostics",
+                        "diagnostics",
+                        "--state-home",
+                        "bad\nstate"));
     }
 
     @Test
@@ -4647,20 +4648,35 @@ final class TrelloBoardSetupMainTest {
         assertThat(result.stdout()).isEmpty();
     }
 
-    @Test
-    void rejectsControlCharactersInDirectSetupAndLifecyclePathOptions() {
+    @MethodSource("directSetupAndLifecycleControlCharacterPathOptions")
+    @ParameterizedTest(name = "{0}")
+    void rejectsControlCharactersInDirectSetupAndLifecyclePathOptions(InvalidPathOptionCase invalidCase) {
         // given
-        String badWorkflow = "bad\nworkflow.WORKFLOW.md";
-        String badWorkspaceRoot = "bad\nworkspace-root";
-        String badEnv = "bad\nenv";
 
-        List<InvalidPathOptionCase> cases = List.of(
-                new InvalidPathOptionCase(
+        // when
+        CliRunResult result = runCli(invalidCase.commandArray(Map.of("<endpoint>", endpoint())));
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments",
+                        invalidCase.optionName() + " must not contain control characters")
+                .stdoutDoesNotContain(invalidCase.forbiddenOutput(), invalidCase.rawValue())
+                .stderrDoesNotContain(invalidCase.rawValue(), "Troubleshooting report written");
+        assertThat(createdBoardName).hasValue(null);
+        assertThat(tempDir.resolve(invalidCase.rawValue())).doesNotExist();
+    }
+
+    private static Stream<InvalidPathOptionCase> directSetupAndLifecycleControlCharacterPathOptions() {
+        return Stream.of(
+                invalidPathOptionCase(
+                        "new-board workflow",
                         "--workflow",
+                        "bad\nworkflow.WORKFLOW.md",
                         "Created Trello board",
                         "new-board",
                         "--endpoint",
-                        endpoint(),
+                        "<endpoint>",
                         "--key",
                         "key",
                         "--token",
@@ -4668,13 +4684,15 @@ final class TrelloBoardSetupMainTest {
                         "--name",
                         "Queue",
                         "--workflow",
-                        badWorkflow),
-                new InvalidPathOptionCase(
+                        "bad\nworkflow.WORKFLOW.md"),
+                invalidPathOptionCase(
+                        "import-board workspace root",
                         "--workspace-root",
+                        "bad\nworkspace-root",
                         "Imported Trello board",
                         "import-board",
                         "--endpoint",
-                        endpoint(),
+                        "<endpoint>",
                         "--key",
                         "key",
                         "--token",
@@ -4686,14 +4704,16 @@ final class TrelloBoardSetupMainTest {
                         "--terminal",
                         "Released",
                         "--workspace-root",
-                        badWorkspaceRoot,
+                        "bad\nworkspace-root",
                         "--force"),
-                new InvalidPathOptionCase(
+                invalidPathOptionCase(
+                        "new-board env",
                         "--env",
+                        "bad\nenv",
                         "Created Trello board",
                         "new-board",
                         "--endpoint",
-                        endpoint(),
+                        "<endpoint>",
                         "--key",
                         "key",
                         "--token",
@@ -4701,156 +4721,151 @@ final class TrelloBoardSetupMainTest {
                         "--name",
                         "Queue",
                         "--env",
-                        badEnv),
-                new InvalidPathOptionCase("--workflow", "stopped", "status", "--workflow", badWorkflow));
-
-        // when
-        List<CliRunResult> results = cases.stream()
-                .map(invalidCase -> runCli(invalidCase.commandArray()))
-                .toList();
-
-        // then
-        for (int index = 0; index < cases.size(); index++) {
-            InvalidPathOptionCase invalidCase = cases.get(index);
-            results.get(index)
-                    .assertFailure(2)
-                    .stderrContains(
-                            "setup_failed code=setup_invalid_arguments",
-                            invalidCase.optionName() + " must not contain control characters")
-                    .stdoutDoesNotContain(invalidCase.forbiddenOutput(), badWorkflow, badWorkspaceRoot, badEnv)
-                    .stderrDoesNotContain(badWorkflow, badWorkspaceRoot, badEnv, "Troubleshooting report written");
-        }
-        assertThat(createdBoardName).hasValue(null);
-        assertThat(tempDir.resolve(badWorkflow)).doesNotExist();
+                        "bad\nenv"),
+                invalidPathOptionCase(
+                        "status workflow",
+                        "--workflow",
+                        "bad\nworkflow.WORKFLOW.md",
+                        "stopped",
+                        "status",
+                        "--workflow",
+                        "bad\nworkflow.WORKFLOW.md"));
     }
 
-    @Test
-    void directSetupRejectsInvalidWorkspaceRootBeforeTrelloWork() throws Exception {
+    @MethodSource("invalidDirectWorkspaceRootScenarios")
+    @ParameterizedTest(name = "{0}")
+    void directSetupRejectsInvalidWorkspaceRootBeforeTrelloWork(InvalidDirectWorkspaceRootScenario scenario)
+            throws Exception {
         // given
         Path workspaceFile = tempDir.resolve("direct-workspace-root-file");
         Files.writeString(workspaceFile, "not a directory", StandardCharsets.UTF_8);
         Path importWorkflow = tempDir.resolve("direct-invalid-workspace-root.WORKFLOW.md");
-        record InvalidWorkspaceRootScenario(String expectedMessage, List<String> command) {
-            String[] commandArray() {
-                return command.toArray(String[]::new);
-            }
-        }
-        List<InvalidWorkspaceRootScenario> scenarios = List.of(
-                new InvalidWorkspaceRootScenario(
-                        "--workspace-root must not be empty.",
-                        List.of(
-                                "new-board",
-                                "--endpoint",
-                                endpoint(),
-                                "--key",
-                                "key",
-                                "--token",
-                                "token",
-                                "--name",
-                                "Invalid Workspace",
-                                "--workspace-id",
-                                "workspace-1",
-                                "--workspace-root",
-                                "")),
-                new InvalidWorkspaceRootScenario(
-                        "--workspace-root must not be empty.",
-                        List.of(
-                                "new-board",
-                                "--endpoint",
-                                endpoint(),
-                                "--key",
-                                "key",
-                                "--token",
-                                "token",
-                                "--name",
-                                "Invalid Workspace",
-                                "--workspace-id",
-                                "workspace-1",
-                                "--workspace-root",
-                                "   ")),
-                new InvalidWorkspaceRootScenario(
-                        "--workspace-root must be an absolute path.",
-                        List.of(
-                                "import-board",
-                                "--endpoint",
-                                endpoint(),
-                                "--key",
-                                "key",
-                                "--token",
-                                "token",
-                                "--board",
-                                "https://trello.com/b/input/existing-board",
-                                "--active",
-                                "Queue for Codex",
-                                "--terminal",
-                                "Released",
-                                "--workflow",
-                                importWorkflow.toString(),
-                                "--manifest",
-                                tempDir.resolve("connected-boards.json").toString(),
-                                "--force",
-                                "--workspace-root",
-                                ".")),
-                new InvalidWorkspaceRootScenario(
-                        "--workspace-root must be an absolute path.",
-                        List.of(
-                                "import-board",
-                                "--endpoint",
-                                endpoint(),
-                                "--key",
-                                "key",
-                                "--token",
-                                "token",
-                                "--board",
-                                "https://trello.com/b/input/existing-board",
-                                "--active",
-                                "Queue for Codex",
-                                "--terminal",
-                                "Released",
-                                "--workflow",
-                                importWorkflow.toString(),
-                                "--force",
-                                "--workspace-root",
-                                " ./relative ")),
-                new InvalidWorkspaceRootScenario(
-                        "--workspace-root must be a directory.",
-                        List.of(
-                                "import-board",
-                                "--endpoint",
-                                endpoint(),
-                                "--key",
-                                "key",
-                                "--token",
-                                "token",
-                                "--board",
-                                "https://trello.com/b/input/existing-board",
-                                "--active",
-                                "Queue for Codex",
-                                "--terminal",
-                                "Released",
-                                "--workflow",
-                                importWorkflow.toString(),
-                                "--force",
-                                "--workspace-root",
-                                workspaceFile.toString())));
+        Map<String, String> replacements = Map.of(
+                "<endpoint>",
+                endpoint(),
+                "<importWorkflow>",
+                importWorkflow.toString(),
+                "<manifest>",
+                tempDir.resolve("connected-boards.json").toString(),
+                "<workspaceFile>",
+                workspaceFile.toString());
 
         // when
-        List<CliRunResult> results = scenarios.stream()
-                .map(scenario -> runCli(scenario.commandArray()))
-                .toList();
+        CliRunResult result = runCli(scenario.commandArray(replacements));
 
         // then
-        for (int index = 0; index < scenarios.size(); index++) {
-            results.get(index)
-                    .assertFailure(2)
-                    .stderrContains(
-                            "setup_failed code=setup_invalid_arguments",
-                            scenarios.get(index).expectedMessage())
-                    .stderrDoesNotContain("Troubleshooting report written", workspaceFile.toString(), "not a directory")
-                    .stdoutDoesNotContain("Created Trello board", "Imported Trello board");
-        }
+        result.assertFailure(2)
+                .stderrContains("setup_failed code=setup_invalid_arguments", scenario.expectedMessage())
+                .stderrDoesNotContain("Troubleshooting report written", workspaceFile.toString(), "not a directory")
+                .stdoutDoesNotContain("Created Trello board", "Imported Trello board");
         assertThat(createdBoardName).hasValue(null);
         assertThat(importWorkflow).doesNotExist();
+    }
+
+    private static Stream<InvalidDirectWorkspaceRootScenario> invalidDirectWorkspaceRootScenarios() {
+        return Stream.of(
+                directWorkspaceRootScenario(
+                        "new-board blank",
+                        "--workspace-root must not be empty.",
+                        "new-board",
+                        "--endpoint",
+                        "<endpoint>",
+                        "--key",
+                        "key",
+                        "--token",
+                        "token",
+                        "--name",
+                        "Invalid Workspace",
+                        "--workspace-id",
+                        "workspace-1",
+                        "--workspace-root",
+                        ""),
+                directWorkspaceRootScenario(
+                        "new-board whitespace",
+                        "--workspace-root must not be empty.",
+                        "new-board",
+                        "--endpoint",
+                        "<endpoint>",
+                        "--key",
+                        "key",
+                        "--token",
+                        "token",
+                        "--name",
+                        "Invalid Workspace",
+                        "--workspace-id",
+                        "workspace-1",
+                        "--workspace-root",
+                        "   "),
+                directWorkspaceRootScenario(
+                        "import-board dot",
+                        "--workspace-root must be an absolute path.",
+                        "import-board",
+                        "--endpoint",
+                        "<endpoint>",
+                        "--key",
+                        "key",
+                        "--token",
+                        "token",
+                        "--board",
+                        "https://trello.com/b/input/existing-board",
+                        "--active",
+                        "Queue for Codex",
+                        "--terminal",
+                        "Released",
+                        "--workflow",
+                        "<importWorkflow>",
+                        "--manifest",
+                        "<manifest>",
+                        "--force",
+                        "--workspace-root",
+                        "."),
+                directWorkspaceRootScenario(
+                        "import-board relative",
+                        "--workspace-root must be an absolute path.",
+                        "import-board",
+                        "--endpoint",
+                        "<endpoint>",
+                        "--key",
+                        "key",
+                        "--token",
+                        "token",
+                        "--board",
+                        "https://trello.com/b/input/existing-board",
+                        "--active",
+                        "Queue for Codex",
+                        "--terminal",
+                        "Released",
+                        "--workflow",
+                        "<importWorkflow>",
+                        "--force",
+                        "--workspace-root",
+                        " ./relative "),
+                directWorkspaceRootScenario(
+                        "import-board file",
+                        "--workspace-root must be a directory.",
+                        "import-board",
+                        "--endpoint",
+                        "<endpoint>",
+                        "--key",
+                        "key",
+                        "--token",
+                        "token",
+                        "--board",
+                        "https://trello.com/b/input/existing-board",
+                        "--active",
+                        "Queue for Codex",
+                        "--terminal",
+                        "Released",
+                        "--workflow",
+                        "<importWorkflow>",
+                        "--force",
+                        "--workspace-root",
+                        "<workspaceFile>"));
+    }
+
+    private static InvalidDirectWorkspaceRootScenario directWorkspaceRootScenario(
+            String name, String expectedMessage, String... command) {
+        return new InvalidDirectWorkspaceRootScenario(name, expectedMessage, List.of(command));
     }
 
     @Test
@@ -4886,8 +4901,10 @@ final class TrelloBoardSetupMainTest {
         assertThat(workflow).content(StandardCharsets.UTF_8).contains("root: \"/\"");
     }
 
-    @Test
-    void lifecycleCommandsRejectBlankAndFileDirectoryOptionsBeforeWorkerHandling() throws Exception {
+    @MethodSource("invalidLifecycleDirectoryOptionScenarios")
+    @ParameterizedTest(name = "{0}")
+    void lifecycleCommandsRejectBlankAndFileDirectoryOptionsBeforeWorkerHandling(
+            InvalidLifecycleDirectoryOptionScenario scenario) throws Exception {
         // given
         Path configFile = tempDir.resolve("lifecycle-config-file");
         Path workspaceFile = tempDir.resolve("lifecycle-workspace-file");
@@ -4895,76 +4912,79 @@ final class TrelloBoardSetupMainTest {
         Files.writeString(configFile, "file", StandardCharsets.UTF_8);
         Files.writeString(workspaceFile, "file", StandardCharsets.UTF_8);
         Files.writeString(stateFile, "file", StandardCharsets.UTF_8);
-        List<InvalidLifecycleDirectoryOptionScenario> scenarios = new ArrayList<>();
-        for (String command : List.of("start", "stop", "status", "logs")) {
-            scenarios.add(lifecycleDirectoryScenario(
-                    command + " blank config dir",
-                    "--config-dir",
-                    "--config-dir must not be empty.",
-                    command,
-                    "--config-dir",
-                    ""));
-            scenarios.add(lifecycleDirectoryScenario(
-                    command + " blank workspace root",
-                    "--workspace-root",
-                    "--workspace-root must not be empty.",
-                    command,
-                    "--workspace-root",
-                    ""));
-            scenarios.add(lifecycleDirectoryScenario(
-                    command + " blank state home",
-                    "--state-home",
-                    "--state-home must not be empty.",
-                    command,
-                    "--state-home",
-                    ""));
-            scenarios.add(lifecycleDirectoryScenario(
-                    command + " config file",
-                    "--config-dir",
-                    "--config-dir must be a directory.",
-                    command,
-                    "--config-dir",
-                    configFile.toString()));
-            scenarios.add(lifecycleDirectoryScenario(
-                    command + " workspace file",
-                    "--workspace-root",
-                    "--workspace-root must be a directory.",
-                    command,
-                    "--workspace-root",
-                    workspaceFile.toString()));
-            scenarios.add(lifecycleDirectoryScenario(
-                    command + " state file",
-                    "--state-home",
-                    "--state-home must be a directory.",
-                    command,
-                    "--state-home",
-                    stateFile.toString()));
-        }
+        Map<String, String> replacements = Map.of(
+                "<configFile>",
+                configFile.toString(),
+                "<workspaceFile>",
+                workspaceFile.toString(),
+                "<stateFile>",
+                stateFile.toString());
 
         // when
-        List<CliRunResult> results = scenarios.stream()
-                .map(scenario -> runCli(scenario.commandArray()))
-                .toList();
+        CliRunResult result = runCli(scenario.commandArray(replacements));
 
         // then
-        for (int index = 0; index < scenarios.size(); index++) {
-            InvalidLifecycleDirectoryOptionScenario scenario = scenarios.get(index);
-            CliRunResult result = results.get(index);
-            result.assertFailure(2)
-                    .stderrContains("setup_failed code=setup_invalid_arguments", scenario.expectedMessage())
-                    .stderrDoesNotContain(
-                            "Troubleshooting report written",
-                            configFile.toString(),
-                            workspaceFile.toString(),
-                            stateFile.toString(),
-                            "Not a directory")
-                    .stdoutDoesNotContain(
-                            "running ",
-                            "stopped ",
-                            "Started Symphony",
-                            "Trello authentication failed",
-                            "untracked, no managed pid");
-        }
+        result.assertFailure(2)
+                .stderrContains("setup_failed code=setup_invalid_arguments", scenario.expectedMessage())
+                .stderrDoesNotContain(
+                        "Troubleshooting report written",
+                        configFile.toString(),
+                        workspaceFile.toString(),
+                        stateFile.toString(),
+                        "Not a directory")
+                .stdoutDoesNotContain(
+                        "running ",
+                        "stopped ",
+                        "Started Symphony",
+                        "Trello authentication failed",
+                        "untracked, no managed pid");
+    }
+
+    private static Stream<InvalidLifecycleDirectoryOptionScenario> invalidLifecycleDirectoryOptionScenarios() {
+        return Stream.of("start", "stop", "status", "logs")
+                .flatMap(command -> Stream.of(
+                        lifecycleDirectoryScenario(
+                                command + " blank config dir",
+                                "--config-dir",
+                                "--config-dir must not be empty.",
+                                command,
+                                "--config-dir",
+                                ""),
+                        lifecycleDirectoryScenario(
+                                command + " blank workspace root",
+                                "--workspace-root",
+                                "--workspace-root must not be empty.",
+                                command,
+                                "--workspace-root",
+                                ""),
+                        lifecycleDirectoryScenario(
+                                command + " blank state home",
+                                "--state-home",
+                                "--state-home must not be empty.",
+                                command,
+                                "--state-home",
+                                ""),
+                        lifecycleDirectoryScenario(
+                                command + " config file",
+                                "--config-dir",
+                                "--config-dir must be a directory.",
+                                command,
+                                "--config-dir",
+                                "<configFile>"),
+                        lifecycleDirectoryScenario(
+                                command + " workspace file",
+                                "--workspace-root",
+                                "--workspace-root must be a directory.",
+                                command,
+                                "--workspace-root",
+                                "<workspaceFile>"),
+                        lifecycleDirectoryScenario(
+                                command + " state file",
+                                "--state-home",
+                                "--state-home must be a directory.",
+                                command,
+                                "--state-home",
+                                "<stateFile>")));
     }
 
     @Test
@@ -5646,20 +5666,57 @@ final class TrelloBoardSetupMainTest {
                 }));
     }
 
-    private record InvalidPathOptionCase(String optionName, String forbiddenOutput, List<String> command) {
-        private InvalidPathOptionCase(String optionName, String forbiddenOutput, String... command) {
-            this(optionName, forbiddenOutput, List.of(command));
+    private record InvalidPathOptionCase(
+            String name, String optionName, String rawValue, String forbiddenOutput, List<String> command) {
+        private InvalidPathOptionCase(
+                String name, String optionName, String rawValue, String forbiddenOutput, String... command) {
+            this(name, optionName, rawValue, forbiddenOutput, List.of(command));
         }
 
         private String[] commandArray() {
-            return command.toArray(String[]::new);
+            return commandArray(Map.of());
+        }
+
+        private String[] commandArray(Map<String, String> replacements) {
+            return command.stream()
+                    .map(value -> replacements.getOrDefault(value, value))
+                    .toArray(String[]::new);
+        }
+
+        @Override
+        public String toString() {
+            return name;
+        }
+    }
+
+    private static InvalidPathOptionCase invalidPathOptionCase(
+            String name, String optionName, String rawValue, String forbiddenOutput, String... command) {
+        return new InvalidPathOptionCase(name, optionName, rawValue, forbiddenOutput, command);
+    }
+
+    private record InvalidDirectWorkspaceRootScenario(String name, String expectedMessage, List<String> command) {
+        private String[] commandArray(Map<String, String> replacements) {
+            return command.stream()
+                    .map(value -> replacements.getOrDefault(value, value))
+                    .toArray(String[]::new);
+        }
+
+        @Override
+        public String toString() {
+            return name;
         }
     }
 
     private record InvalidLifecycleDirectoryOptionScenario(
             String name, String optionName, String expectedMessage, List<String> command) {
         private String[] commandArray() {
-            return command.toArray(String[]::new);
+            return commandArray(Map.of());
+        }
+
+        private String[] commandArray(Map<String, String> replacements) {
+            return command.stream()
+                    .map(value -> replacements.getOrDefault(value, value))
+                    .toArray(String[]::new);
         }
 
         @Override
