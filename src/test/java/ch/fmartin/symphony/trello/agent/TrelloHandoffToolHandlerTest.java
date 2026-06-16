@@ -1,20 +1,18 @@
 package ch.fmartin.symphony.trello.agent;
 
 import static ch.fmartin.symphony.trello.TestHttpExchange.query;
-import static ch.fmartin.symphony.trello.TestHttpExchange.respond;
+import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.respond;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.fmartin.symphony.trello.TestCards;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
+import ch.fmartin.symphony.trello.testsupport.FakeTrelloServer;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpServer;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
@@ -39,18 +37,18 @@ final class TrelloHandoffToolHandlerTest {
     private final AtomicReference<Integer> cardStatus = new AtomicReference<>();
     private final AtomicReference<Integer> updateStatus = new AtomicReference<>(200);
     private final AtomicReference<Integer> deleteStatus = new AtomicReference<>(200);
-    private HttpServer server;
+    private FakeTrelloServer trello;
 
     @TempDir
     Path tempDir;
 
     @BeforeEach
     void startServer() throws Exception {
-        server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
-        server.createContext(
+        trello = new FakeTrelloServer();
+        trello.on(
                 "/1/boards/board-1",
                 exchange -> respond(exchange, "{\"id\":\"board-1\",\"name\":\"Test Board\",\"closed\":false}"));
-        server.createContext(
+        trello.on(
                 "/1/boards/board-1/lists",
                 exchange -> respond(
                         exchange,
@@ -61,15 +59,15 @@ final class TrelloHandoffToolHandlerTest {
                           {"id":"list-closed","name":"Closed Review","closed":true,"pos":3}
                         ]
                         """));
-        server.createContext(
+        trello.on(
                 "/1/cards/card-1",
                 exchange -> respond(exchange, cardStatus.get(), cardResponseForRequestedFields(exchange)));
-        server.createContext("/1/cards/card-1/actions/comments", exchange -> {
+        trello.on("/1/cards/card-1/actions/comments", exchange -> {
             assertThat(exchange.getRequestMethod()).isEqualTo("POST");
             commentText.set(query(exchange).get("text"));
             respond(exchange, "{\"id\":\"action-1\"}");
         });
-        server.createContext("/1/actions/action-workpad-older", exchange -> {
+        trello.on("/1/actions/action-workpad-older", exchange -> {
             assertThat(exchange.getRequestMethod()).isEqualTo("DELETE");
             workpadCallOrder.add("delete:action-workpad-older");
             if (deleteStatus.get() == 200) {
@@ -77,7 +75,7 @@ final class TrelloHandoffToolHandlerTest {
             }
             respond(exchange, deleteStatus.get(), "{}");
         });
-        server.createContext("/1/actions/action-workpad-oldest", exchange -> {
+        trello.on("/1/actions/action-workpad-oldest", exchange -> {
             assertThat(exchange.getRequestMethod()).isEqualTo("DELETE");
             workpadCallOrder.add("delete:action-workpad-oldest");
             if (deleteStatus.get() == 200) {
@@ -85,7 +83,7 @@ final class TrelloHandoffToolHandlerTest {
             }
             respond(exchange, deleteStatus.get(), "{}");
         });
-        server.createContext("/1/actions/action-workpad/text", exchange -> {
+        trello.on("/1/actions/action-workpad/text", exchange -> {
             assertThat(exchange.getRequestMethod()).isEqualTo("PUT");
             workpadCallOrder.add("update:action-workpad");
             if (updateStatus.get() == 200) {
@@ -93,19 +91,19 @@ final class TrelloHandoffToolHandlerTest {
             }
             respond(exchange, updateStatus.get(), "{\"id\":\"action-workpad\"}");
         });
-        server.createContext("/1/cards/card-1/idList", exchange -> {
+        trello.on("/1/cards/card-1/idList", exchange -> {
             assertThat(exchange.getRequestMethod()).isEqualTo("PUT");
             movedToListId.set(query(exchange).get("value"));
             respond(exchange, "{\"id\":\"card-1\"}");
         });
         cardResponse.set(cardJson("[]"));
         cardStatus.set(200);
-        server.start();
+        trello.startEmpty();
     }
 
     @AfterEach
     void stopServer() {
-        server.stop(0);
+        trello.close();
     }
 
     @Test
@@ -684,8 +682,7 @@ final class TrelloHandoffToolHandlerTest {
                                         "kind",
                                         "trello",
                                         "endpoint",
-                                        "http://127.0.0.1:"
-                                                + server.getAddress().getPort() + "/1",
+                                        trello.endpoint(),
                                         "api_key",
                                         "key",
                                         "api_token",

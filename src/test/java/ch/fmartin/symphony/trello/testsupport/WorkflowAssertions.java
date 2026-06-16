@@ -1,4 +1,4 @@
-package ch.fmartin.symphony.trello.setup;
+package ch.fmartin.symphony.trello.testsupport;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -8,7 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-final class WorkflowAssertions {
+public final class WorkflowAssertions {
     private final String content;
 
     private WorkflowAssertions(Path workflow) {
@@ -19,106 +19,106 @@ final class WorkflowAssertions {
         }
     }
 
-    static WorkflowAssertions assertThatWorkflow(Path workflow) {
+    public static WorkflowAssertions assertThatWorkflow(Path workflow) {
         return new WorkflowAssertions(workflow);
     }
 
-    WorkflowAssertions hasGithubFlow() {
+    public WorkflowAssertions hasGithubFlow() {
         assertThat(content).contains("## Pull Request Publication");
         return this;
     }
 
-    WorkflowAssertions hasNoGithubFlow() {
+    public WorkflowAssertions hasNoGithubFlow() {
         assertThat(content).doesNotContain("## Pull Request Publication", "linked PR comments");
         return this;
     }
 
-    WorkflowAssertions hasMerging() {
+    public WorkflowAssertions hasMerging() {
         assertThat(content).contains("Merging");
         return this;
     }
 
-    WorkflowAssertions doesNotHaveMerging() {
+    public WorkflowAssertions doesNotHaveMerging() {
         assertThat(content).doesNotContain("Merging");
         return this;
     }
 
-    WorkflowAssertions hasAdditionalWritableRoot(Path root) {
+    public WorkflowAssertions hasAdditionalWritableRoot(Path root) {
         assertThat(content).contains(root.toString());
         return this;
     }
 
-    WorkflowAssertions hasNoAdditionalWritableRoot(Path root) {
+    public WorkflowAssertions hasNoAdditionalWritableRoot(Path root) {
         assertThat(content).doesNotContain(root.toString());
         return this;
     }
 
-    WorkflowAssertions hasNoAdditionalWritableRoots() {
+    public WorkflowAssertions hasNoAdditionalWritableRoots() {
         assertThat(content).doesNotContain("additional_writable_roots");
         return this;
     }
 
-    WorkflowAssertions hasDangerFullAccess() {
+    public WorkflowAssertions hasDangerFullAccess() {
         assertThat(content).contains("turn_sandbox_policy:", "dangerFullAccess");
         return this;
     }
 
-    WorkflowAssertions hasNoDangerFullAccess() {
+    public WorkflowAssertions hasNoDangerFullAccess() {
         assertThat(content).doesNotContain("dangerFullAccess");
         return this;
     }
 
-    WorkflowAssertions hasServerPort(int port) {
+    public WorkflowAssertions hasServerPort(int port) {
         assertThat(content).contains("port: " + port);
         return this;
     }
 
-    WorkflowAssertions doesNotHaveServerPort(int port) {
+    public WorkflowAssertions doesNotHaveServerPort(int port) {
         assertThat(content).doesNotContain("port: " + port);
         return this;
     }
 
-    WorkflowAssertions hasBoardId(String idOrKey) {
+    public WorkflowAssertions hasBoardId(String idOrKey) {
         assertThat(content).contains("board_id: \"" + idOrKey + "\"");
         return this;
     }
 
-    WorkflowAssertions hasMaxAgents(int maxAgents) {
+    public WorkflowAssertions hasMaxAgents(int maxAgents) {
         assertThat(content).contains("max_concurrent_agents: " + maxAgents);
         return this;
     }
 
-    WorkflowAssertions hasActiveStates(String... states) {
+    public WorkflowAssertions hasActiveStates(String... states) {
         assertThat(content).contains(states);
         return this;
     }
 
-    WorkflowAssertions hasTerminalStates(String... states) {
+    public WorkflowAssertions hasTerminalStates(String... states) {
         assertThat(content).contains(states);
         return this;
     }
 
-    WorkflowAssertions hasInProgressState() {
+    public WorkflowAssertions hasInProgressState() {
         assertThat(content).contains("In Progress");
         return this;
     }
 
-    WorkflowAssertions hasNoInProgressState() {
+    public WorkflowAssertions hasNoInProgressState() {
         assertThat(content).doesNotContain("In Progress");
         return this;
     }
 
-    WorkflowAssertions hasBlockedState() {
+    public WorkflowAssertions hasBlockedState() {
         assertThat(content).contains("Blocked");
         return this;
     }
 
-    WorkflowAssertions hasNoBlockedState() {
+    public WorkflowAssertions hasNoBlockedState() {
         assertThat(content).doesNotContain("Blocked");
         return this;
     }
 
-    WorkflowAssertions hasNoPullRequestPublicationOrLandingRequirements() {
+    public WorkflowAssertions hasNoPullRequestPublicationOrLandingRequirements() {
         assertThat(content)
                 .doesNotContain("## Pull Request Publication", "## Landing From \"Merging\"", "linked PR comments");
         return this;
