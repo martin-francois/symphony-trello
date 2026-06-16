@@ -71,39 +71,43 @@ final class InstallerScriptTest {
                 }));
     }
 
-    @Test
-    void posixInstallerRejectsUnsafeCommandDirectoriesBeforeDryRunPlan() throws Exception {
+    @MethodSource("posixUnsafeCommandDirectoryScenarios")
+    @ParameterizedTest(name = "{0}")
+    void posixScriptsRejectUnsafeCommandDirectoriesBeforeDryRunPlan(PosixUnsafeCommandDirectoryScenario scenario)
+            throws Exception {
         // given
         assumeTrue(commandExists("bash"));
-        Path home = temporaryDirectory.resolve("install-bin-home");
-        Path symphonyHome = temporaryDirectory.resolve("install-bin-symphony-home");
-        Path app = temporaryDirectory.resolve("install-bin-app");
-        Path file = temporaryDirectory.resolve("install-bin-file");
-        Path symlink = temporaryDirectory.resolve("install-bin-config-link");
+        Path home = temporaryDirectory.resolve(scenario.slug() + "-home");
+        Path symphonyHome = temporaryDirectory.resolve(scenario.slug() + "-symphony-home");
+        Path app = temporaryDirectory.resolve(scenario.slug() + "-app");
+        Path file = temporaryDirectory.resolve(scenario.slug() + "-file");
+        Path symlink = temporaryDirectory.resolve(scenario.symlinkName());
         Files.createDirectories(home);
-        Files.createDirectories(symphonyHome.resolve("config"));
+        Files.createDirectories(symphonyHome.resolve(scenario.overlapDirectory()));
         Files.writeString(file, "not a directory", StandardCharsets.UTF_8);
-        Files.createSymbolicLink(symlink, symphonyHome.resolve("config"));
+        Files.createSymbolicLink(symlink, symphonyHome.resolve(scenario.overlapDirectory()));
         Map<String, String> environment = Map.of("HOME", home.toString(), "SYMPHONY_HOME", symphonyHome.toString());
 
         List<UnsafeCommandDirectory> cases = posixUnsafeCommandDirectories(
                 home,
                 file,
                 symlink,
-                "install-bin-config-link",
+                scenario.symlinkName(),
                 new UnsafeCommandDirectory(
-                        "config-overlap",
-                        symphonyHome.resolve("config").toString(),
+                        scenario.overlapCaseName(),
+                        symphonyHome.resolve(scenario.overlapDirectory()).toString(),
                         "--bin-dir must not overlap Symphony app, config, workspace, or state directories."));
+        List<UnsafeCommandDirectory> rejectedCases =
+                cases.stream().filter(scenario::rejectsCommandDirectory).toList();
 
         // when
-        List<ProcessResult> results = cases.stream()
+        List<ProcessResult> results = rejectedCases.stream()
                 .map(commandDirectory -> runUnchecked(
                         environment,
                         "bash",
-                        "install.sh",
-                        "--dry-run",
-                        "--no-onboard",
+                        scenario.script(),
+                        scenario.firstFlag(),
+                        scenario.secondFlag(),
                         "--prefix",
                         app.toString(),
                         "--bin-dir",
@@ -111,15 +115,41 @@ final class InstallerScriptTest {
                 .toList();
 
         // then
-        for (int index = 0; index < cases.size(); index++) {
-            UnsafeCommandDirectory commandDirectory = cases.get(index);
+        for (int index = 0; index < rejectedCases.size(); index++) {
+            UnsafeCommandDirectory commandDirectory = rejectedCases.get(index);
             ProcessResult result = results.get(index);
             assertThat(result.exitCode()).as(commandDirectory.name()).isEqualTo(2);
             assertThat(result.output())
                     .as(commandDirectory.name())
                     .contains(commandDirectory.expectedMessage())
-                    .doesNotContain("WOULD install command", "Command PATH setup");
+                    .doesNotContain(scenario.absentOutputArray());
         }
+    }
+
+    private static Stream<PosixUnsafeCommandDirectoryScenario> posixUnsafeCommandDirectoryScenarios() {
+        return Stream.of(
+                new PosixUnsafeCommandDirectoryScenario(
+                        "installer",
+                        "install-bin",
+                        "install.sh",
+                        "--dry-run",
+                        "--no-onboard",
+                        "config",
+                        "config-overlap",
+                        "install-bin-config-link",
+                        false,
+                        List.of("WOULD install command", "Command PATH setup")),
+                new PosixUnsafeCommandDirectoryScenario(
+                        "uninstaller",
+                        "uninstall-bin",
+                        "uninstall.sh",
+                        "--dry-run",
+                        "--yes",
+                        "state",
+                        "state-overlap",
+                        "uninstall-bin-state-link",
+                        true,
+                        List.of("Installed CLI:", "Will remove if present:")));
     }
 
     @Test
@@ -207,60 +237,6 @@ final class InstallerScriptTest {
     }
 
     @Test
-    void posixUninstallerRejectsUnsafeCommandDirectoriesBeforeDryRunPlan() throws Exception {
-        // given
-        assumeTrue(commandExists("bash"));
-        Path home = temporaryDirectory.resolve("uninstall-bin-home");
-        Path symphonyHome = temporaryDirectory.resolve("uninstall-bin-symphony-home");
-        Path app = temporaryDirectory.resolve("uninstall-bin-app");
-        Path file = temporaryDirectory.resolve("uninstall-bin-file");
-        Path symlink = temporaryDirectory.resolve("uninstall-bin-state-link");
-        Files.createDirectories(home);
-        Files.createDirectories(symphonyHome.resolve("state"));
-        Files.writeString(file, "not a directory", StandardCharsets.UTF_8);
-        Files.createSymbolicLink(symlink, symphonyHome.resolve("state"));
-        Map<String, String> environment = Map.of("HOME", home.toString(), "SYMPHONY_HOME", symphonyHome.toString());
-
-        List<UnsafeCommandDirectory> cases = posixUnsafeCommandDirectories(
-                home,
-                file,
-                symlink,
-                "uninstall-bin-state-link",
-                new UnsafeCommandDirectory(
-                        "state-overlap",
-                        symphonyHome.resolve("state").toString(),
-                        "--bin-dir must not overlap Symphony app, config, workspace, or state directories."));
-        List<UnsafeCommandDirectory> rejectedCases = cases.stream()
-                .filter(InstallerScriptTest::unsafeUninstallCommandDirectoryCase)
-                .toList();
-
-        // when
-        List<ProcessResult> results = rejectedCases.stream()
-                .map(commandDirectory -> runUnchecked(
-                        environment,
-                        "bash",
-                        "uninstall.sh",
-                        "--dry-run",
-                        "--yes",
-                        "--prefix",
-                        app.toString(),
-                        "--bin-dir",
-                        commandDirectory.value()))
-                .toList();
-
-        // then
-        for (int index = 0; index < rejectedCases.size(); index++) {
-            UnsafeCommandDirectory commandDirectory = rejectedCases.get(index);
-            ProcessResult result = results.get(index);
-            assertThat(result.exitCode()).as(commandDirectory.name()).isEqualTo(2);
-            assertThat(result.output())
-                    .as(commandDirectory.name())
-                    .contains(commandDirectory.expectedMessage())
-                    .doesNotContain("Installed CLI:", "Will remove if present:");
-        }
-    }
-
-    @Test
     void posixUninstallerAllowsSymlinkedCommandDirectory() throws Exception {
         // given
         // Install rejects a symlinked command directory, but a user may replace the directory
@@ -292,37 +268,59 @@ final class InstallerScriptTest {
         assertThat(result.output()).contains("Installed CLI:", "Will remove if present:");
     }
 
-    @Test
-    void posixInstallerRejectsUnsafeAppPathsBeforeDryRunPlan() throws Exception {
+    @MethodSource("posixUnsafeAppPathScenarios")
+    @ParameterizedTest(name = "{0}")
+    void posixScriptsRejectUnsafeAppPathsBeforeDryRunPlan(PosixUnsafeAppPathScenario scenario) throws Exception {
         // given
         assumeTrue(commandExists("bash"));
-        Path home = temporaryDirectory.resolve("install-app-home");
-        Path symphonyHome = temporaryDirectory.resolve("install-app-symphony-home");
-        Path file = temporaryDirectory.resolve("install-app-file");
-        Path symlink = temporaryDirectory.resolve("install-app-link");
-        Path safeBin = temporaryDirectory.resolve("install-app-bin");
+        Path home = temporaryDirectory.resolve(scenario.slug() + "-home");
+        Path symphonyHome = temporaryDirectory.resolve(scenario.slug() + "-symphony-home");
+        Path file = temporaryDirectory.resolve(scenario.slug() + "-file");
+        Path symlink = temporaryDirectory.resolve(scenario.symlinkName());
+        Path safeBin = temporaryDirectory.resolve(scenario.slug() + "-bin");
         Files.createDirectories(home);
         Files.writeString(file, "not a directory", StandardCharsets.UTF_8);
-        Files.createSymbolicLink(symlink, temporaryDirectory.resolve("install-app-target"));
+        Files.createSymbolicLink(symlink, temporaryDirectory.resolve(scenario.slug() + "-target"));
         Map<String, String> environment = Map.of("HOME", home.toString(), "SYMPHONY_HOME", symphonyHome.toString());
 
-        List<UnsafeInstallerPath> cases = posixUnsafeAppPaths(
-                home,
-                file,
-                symlink,
-                "install-app-link",
-                new UnsafeInstallerPath(
-                        "local-data-overlap",
-                        symphonyHome.toString(),
-                        "--prefix must not overlap Symphony config, workspace, or state directories."));
+        List<UnsafeInstallerPath> cases = scenario.usesLocalDataOverlap()
+                ? posixUnsafeAppPaths(
+                        home,
+                        file,
+                        symlink,
+                        scenario.symlinkName(),
+                        new UnsafeInstallerPath(
+                                "local-data-overlap",
+                                symphonyHome.toString(),
+                                "--prefix must not overlap Symphony config, workspace, or state directories."))
+                : posixUnsafeAppPaths(home, file, symlink, scenario.symlinkName());
 
         // when
         List<ProcessResult> results =
-                runPosixAppPathCases(environment, "install.sh", List.of("--dry-run", "--no-onboard"), cases, safeBin);
+                runPosixAppPathCases(environment, scenario.script(), scenario.fixedArgs(), cases, safeBin);
 
         // then
-        assertUnsafeAppPathFailures(
-                cases, results, OutputStyle.RAW, "Install:", "WOULD clone or update:", "Command PATH setup");
+        assertUnsafeAppPathFailures(cases, results, OutputStyle.RAW, scenario.absentOutputArray());
+    }
+
+    private static Stream<PosixUnsafeAppPathScenario> posixUnsafeAppPathScenarios() {
+        return Stream.of(
+                new PosixUnsafeAppPathScenario(
+                        "installer",
+                        "install-app",
+                        "install.sh",
+                        List.of("--dry-run", "--no-onboard"),
+                        "install-app-link",
+                        true,
+                        List.of("Install:", "WOULD clone or update:", "Command PATH setup")),
+                new PosixUnsafeAppPathScenario(
+                        "uninstaller",
+                        "uninstall-app",
+                        "uninstall.sh",
+                        List.of("--dry-run", "--yes"),
+                        "uninstall-app-link",
+                        false,
+                        List.of("App checkout:", "Will remove if present:", "Installed CLI:")));
     }
 
     @Test
@@ -359,34 +357,6 @@ final class InstallerScriptTest {
         // then
         result.assertSuccess();
         assertThat(result.output()).contains("Install: " + app, "WOULD unpack release archive into: " + app);
-    }
-
-    @Test
-    void posixInstallerRejectsAppPathInsideRootScopedConfigDirectory() throws Exception {
-        // given
-        assumeTrue(commandExists("bash"));
-        Path home = temporaryDirectory.resolve("install-root-config-home");
-        Path app = home.resolve(".local/share/symphony-trello/app");
-        Path safeBin = temporaryDirectory.resolve("install-root-config-bin");
-        Map<String, String> environment = Map.of("HOME", home.toString(), "SYMPHONY_TRELLO_CONFIG_DIR", "/");
-
-        // when
-        ProcessResult result = run(
-                environment,
-                "bash",
-                "install.sh",
-                "--dry-run",
-                "--no-onboard",
-                "--prefix",
-                app.toString(),
-                "--bin-dir",
-                safeBin.toString());
-
-        // then
-        assertThat(result.exitCode()).isEqualTo(2);
-        assertThat(result.output())
-                .contains("--prefix must not overlap Symphony config, workspace, or state directories.")
-                .doesNotContain("WOULD clone or update:", "Dry run: no files changed.");
     }
 
     @Test
@@ -434,31 +404,6 @@ final class InstallerScriptTest {
     }
 
     @Test
-    void posixUninstallerRejectsUnsafeAppPathsBeforeDryRunPlan() throws Exception {
-        // given
-        assumeTrue(commandExists("bash"));
-        Path home = temporaryDirectory.resolve("uninstall-app-home");
-        Path symphonyHome = temporaryDirectory.resolve("uninstall-app-symphony-home");
-        Path file = temporaryDirectory.resolve("uninstall-app-file");
-        Path symlink = temporaryDirectory.resolve("uninstall-app-link");
-        Path safeBin = temporaryDirectory.resolve("uninstall-app-bin");
-        Files.createDirectories(home);
-        Files.writeString(file, "not a directory", StandardCharsets.UTF_8);
-        Files.createSymbolicLink(symlink, temporaryDirectory.resolve("uninstall-app-target"));
-        Map<String, String> environment = Map.of("HOME", home.toString(), "SYMPHONY_HOME", symphonyHome.toString());
-
-        List<UnsafeInstallerPath> cases = posixUnsafeAppPaths(home, file, symlink, "uninstall-app-link");
-
-        // when
-        List<ProcessResult> results =
-                runPosixAppPathCases(environment, "uninstall.sh", List.of("--dry-run", "--yes"), cases, safeBin);
-
-        // then
-        assertUnsafeAppPathFailures(
-                cases, results, OutputStyle.RAW, "App checkout:", "Will remove if present:", "Installed CLI:");
-    }
-
-    @Test
     void posixUninstallerAcceptsDedicatedAppPathDirectlyUnderHome() throws Exception {
         // given
         assumeTrue(commandExists("bash"));
@@ -485,59 +430,61 @@ final class InstallerScriptTest {
         assertThat(result.output()).contains("App checkout: " + app, "Will remove if present:");
     }
 
-    @Test
-    void posixInstallerAllowsDefaultCommandDirectoryWhenRunFromThatDirectory() throws Exception {
+    @MethodSource("posixDefaultCommandDirectoryScenarios")
+    @ParameterizedTest(name = "{0}")
+    void posixScriptsAllowDefaultCommandDirectoryWhenRunFromThatDirectory(PosixDefaultCommandDirectoryScenario scenario)
+            throws Exception {
         // given
         assumeTrue(commandExists("bash"));
-        Path installScript = Path.of("install.sh").toAbsolutePath();
-        Path home = temporaryDirectory.resolve("install-run-from-bin-home");
+        Path script = Path.of(scenario.script()).toAbsolutePath();
+        Path home = temporaryDirectory.resolve(scenario.slug() + "-home");
         Path binDirectory = home.resolve(".local/bin");
         Files.createDirectories(binDirectory);
         Map<String, String> environment = Map.of("HOME", home.toString());
 
         // when
         ProcessResult result =
-                run(environment, binDirectory, "bash", installScript.toString(), "--dry-run", "--no-onboard");
+                run(environment, binDirectory, "bash", script.toString(), "--dry-run", scenario.secondFlag());
 
         // then
         result.assertSuccess();
-        assertThat(result.output()).contains("Dry run: no files changed.");
+        assertThat(result.output()).contains(scenario.expectedOutput());
     }
 
-    @Test
-    void posixUninstallerAllowsDefaultCommandDirectoryWhenRunFromThatDirectory() throws Exception {
-        // given
-        assumeTrue(commandExists("bash"));
-        Path uninstallScript = Path.of("uninstall.sh").toAbsolutePath();
-        Path home = temporaryDirectory.resolve("uninstall-run-from-bin-home");
-        Path binDirectory = home.resolve(".local/bin");
-        Files.createDirectories(binDirectory);
-        Map<String, String> environment = Map.of("HOME", home.toString());
-
-        // when
-        ProcessResult result = run(environment, binDirectory, "bash", uninstallScript.toString(), "--dry-run", "--yes");
-
-        // then
-        result.assertSuccess();
-        assertThat(result.output()).contains("Trello boards were not deleted or archived.");
+    private static Stream<PosixDefaultCommandDirectoryScenario> posixDefaultCommandDirectoryScenarios() {
+        return Stream.of(
+                new PosixDefaultCommandDirectoryScenario(
+                        "installer",
+                        "install-run-from-bin",
+                        "install.sh",
+                        "--no-onboard",
+                        "Dry run: no files changed."),
+                new PosixDefaultCommandDirectoryScenario(
+                        "uninstaller",
+                        "uninstall-run-from-bin",
+                        "uninstall.sh",
+                        "--yes",
+                        "Trello boards were not deleted or archived."));
     }
 
-    @Test
-    void posixUninstallerRejectsAppPathInsideRootScopedConfigDirectory() throws Exception {
+    @MethodSource("posixRootScopedConfigDirectoryScenarios")
+    @ParameterizedTest(name = "{0}")
+    void posixScriptsRejectAppPathInsideRootScopedConfigDirectory(PosixRootScopedConfigDirectoryScenario scenario)
+            throws Exception {
         // given
         assumeTrue(commandExists("bash"));
-        Path home = temporaryDirectory.resolve("uninstall-root-config-home");
+        Path home = temporaryDirectory.resolve(scenario.slug() + "-home");
         Path app = home.resolve(".local/share/symphony-trello/app");
-        Path safeBin = temporaryDirectory.resolve("uninstall-root-config-bin");
+        Path safeBin = temporaryDirectory.resolve(scenario.slug() + "-bin");
         Map<String, String> environment = Map.of("HOME", home.toString(), "SYMPHONY_TRELLO_CONFIG_DIR", "/");
 
         // when
         ProcessResult result = run(
                 environment,
                 "bash",
-                "uninstall.sh",
+                scenario.script(),
                 "--dry-run",
-                "--yes",
+                scenario.secondFlag(),
                 "--prefix",
                 app.toString(),
                 "--bin-dir",
@@ -545,103 +492,85 @@ final class InstallerScriptTest {
 
         // then
         assertThat(result.exitCode()).isEqualTo(2);
-        assertThat(result.output())
-                .contains("--bin-dir must not overlap Symphony app, config, workspace, or state directories.")
-                .doesNotContain("Will remove if present:", "Trello boards were not deleted or archived.");
+        assertThat(result.output()).contains(scenario.expectedMessage()).doesNotContain(scenario.absentOutputArray());
     }
 
-    @Test
-    void posixInstallerRejectsMissingHomeBeforeResolvingDefaultPaths() throws Exception {
+    private static Stream<PosixRootScopedConfigDirectoryScenario> posixRootScopedConfigDirectoryScenarios() {
+        return Stream.of(
+                new PosixRootScopedConfigDirectoryScenario(
+                        "installer",
+                        "install-root-config",
+                        "install.sh",
+                        "--no-onboard",
+                        "--prefix must not overlap Symphony config, workspace, or state directories.",
+                        List.of("WOULD clone or update:", "Dry run: no files changed.")),
+                new PosixRootScopedConfigDirectoryScenario(
+                        "uninstaller",
+                        "uninstall-root-config",
+                        "uninstall.sh",
+                        "--yes",
+                        "--bin-dir must not overlap Symphony app, config, workspace, or state directories.",
+                        List.of("Will remove if present:", "Trello boards were not deleted or archived.")));
+    }
+
+    @MethodSource("posixHomeValidationScenarios")
+    @ParameterizedTest(name = "{0}")
+    void posixScriptsRejectMissingOrEmptyHomeBeforeResolvingDefaultPaths(PosixHomeValidationScenario scenario)
+            throws Exception {
         // given
         assumeTrue(commandExists("bash"));
+        String[] command = {
+            "bash",
+            scenario.script(),
+            "--dry-run",
+            scenario.secondFlag(),
+            "--prefix",
+            temporaryDirectory.resolve("app").toString(),
+            "--bin-dir",
+            temporaryDirectory.resolve("bin").toString()
+        };
 
         // when
-        ProcessResult result = runWithoutHome(
-                "bash",
-                "install.sh",
-                "--dry-run",
-                "--no-onboard",
-                "--prefix",
-                temporaryDirectory.resolve("app").toString(),
-                "--bin-dir",
-                temporaryDirectory.resolve("bin").toString());
+        ProcessResult result = scenario.missingHome() ? runWithoutHome(command) : run(Map.of("HOME", ""), command);
 
         // then
         assertThat(result.exitCode()).isEqualTo(2);
         assertThat(result.output())
-                .contains("HOME must be set to a user home directory before running the installer.")
-                .doesNotContain("unbound variable", "/.local/share/symphony-trello");
+                .contains(
+                        "HOME must be set to a user home directory before running the " + scenario.commandName() + ".")
+                .doesNotContain(scenario.absentOutputArray());
     }
 
-    @Test
-    void posixInstallerRejectsEmptyHomeBeforeResolvingDefaultPaths() throws Exception {
-        // given
-        assumeTrue(commandExists("bash"));
-
-        // when
-        ProcessResult result = run(
-                Map.of("HOME", ""),
-                "bash",
-                "install.sh",
-                "--dry-run",
-                "--no-onboard",
-                "--prefix",
-                temporaryDirectory.resolve("app").toString(),
-                "--bin-dir",
-                temporaryDirectory.resolve("bin").toString());
-
-        // then
-        assertThat(result.exitCode()).isEqualTo(2);
-        assertThat(result.output())
-                .contains("HOME must be set to a user home directory before running the installer.")
-                .doesNotContain("/.local/share/symphony-trello");
-    }
-
-    @Test
-    void posixUninstallerRejectsMissingHomeBeforeResolvingDefaultPaths() throws Exception {
-        // given
-        assumeTrue(commandExists("bash"));
-
-        // when
-        ProcessResult result = runWithoutHome(
-                "bash",
-                "uninstall.sh",
-                "--dry-run",
-                "--yes",
-                "--prefix",
-                temporaryDirectory.resolve("app").toString(),
-                "--bin-dir",
-                temporaryDirectory.resolve("bin").toString());
-
-        // then
-        assertThat(result.exitCode()).isEqualTo(2);
-        assertThat(result.output())
-                .contains("HOME must be set to a user home directory before running the uninstaller.")
-                .doesNotContain("unbound variable", "/.local/share/symphony-trello");
-    }
-
-    @Test
-    void posixUninstallerRejectsEmptyHomeBeforeResolvingDefaultPaths() throws Exception {
-        // given
-        assumeTrue(commandExists("bash"));
-
-        // when
-        ProcessResult result = run(
-                Map.of("HOME", ""),
-                "bash",
-                "uninstall.sh",
-                "--dry-run",
-                "--yes",
-                "--prefix",
-                temporaryDirectory.resolve("app").toString(),
-                "--bin-dir",
-                temporaryDirectory.resolve("bin").toString());
-
-        // then
-        assertThat(result.exitCode()).isEqualTo(2);
-        assertThat(result.output())
-                .contains("HOME must be set to a user home directory before running the uninstaller.")
-                .doesNotContain("/.local/share/symphony-trello");
+    private static Stream<PosixHomeValidationScenario> posixHomeValidationScenarios() {
+        return Stream.of(
+                new PosixHomeValidationScenario(
+                        "installer missing HOME",
+                        "install.sh",
+                        "--no-onboard",
+                        "installer",
+                        true,
+                        List.of("unbound variable", "/.local/share/symphony-trello")),
+                new PosixHomeValidationScenario(
+                        "installer empty HOME",
+                        "install.sh",
+                        "--no-onboard",
+                        "installer",
+                        false,
+                        List.of("/.local/share/symphony-trello")),
+                new PosixHomeValidationScenario(
+                        "uninstaller missing HOME",
+                        "uninstall.sh",
+                        "--yes",
+                        "uninstaller",
+                        true,
+                        List.of("unbound variable", "/.local/share/symphony-trello")),
+                new PosixHomeValidationScenario(
+                        "uninstaller empty HOME",
+                        "uninstall.sh",
+                        "--yes",
+                        "uninstaller",
+                        false,
+                        List.of("/.local/share/symphony-trello")));
     }
 
     @MethodSource("invalidPosixInstallerSourceInputs")
@@ -4510,6 +4439,91 @@ final class InstallerScriptTest {
 
     private static boolean unsafeUninstallCommandDirectoryCase(UnsafeCommandDirectory commandDirectory) {
         return !commandDirectory.name().startsWith("symlink");
+    }
+
+    private record PosixUnsafeCommandDirectoryScenario(
+            String name,
+            String slug,
+            String script,
+            String firstFlag,
+            String secondFlag,
+            String overlapDirectory,
+            String overlapCaseName,
+            String symlinkName,
+            boolean allowsSymlinkedCommandDirectory,
+            List<String> absentOutput) {
+        private boolean rejectsCommandDirectory(UnsafeCommandDirectory commandDirectory) {
+            return !allowsSymlinkedCommandDirectory || unsafeUninstallCommandDirectoryCase(commandDirectory);
+        }
+
+        private String[] absentOutputArray() {
+            return absentOutput.toArray(String[]::new);
+        }
+
+        @Override
+        public String toString() {
+            return name;
+        }
+    }
+
+    private record PosixUnsafeAppPathScenario(
+            String name,
+            String slug,
+            String script,
+            List<String> fixedArgs,
+            String symlinkName,
+            boolean usesLocalDataOverlap,
+            List<String> absentOutput) {
+        private String[] absentOutputArray() {
+            return absentOutput.toArray(String[]::new);
+        }
+
+        @Override
+        public String toString() {
+            return name;
+        }
+    }
+
+    private record PosixDefaultCommandDirectoryScenario(
+            String name, String slug, String script, String secondFlag, String expectedOutput) {
+        @Override
+        public String toString() {
+            return name;
+        }
+    }
+
+    private record PosixRootScopedConfigDirectoryScenario(
+            String name,
+            String slug,
+            String script,
+            String secondFlag,
+            String expectedMessage,
+            List<String> absentOutput) {
+        private String[] absentOutputArray() {
+            return absentOutput.toArray(String[]::new);
+        }
+
+        @Override
+        public String toString() {
+            return name;
+        }
+    }
+
+    private record PosixHomeValidationScenario(
+            String name,
+            String script,
+            String secondFlag,
+            String commandName,
+            boolean missingHome,
+            List<String> absentOutput) {
+        private String[] absentOutputArray() {
+            return absentOutput.toArray(String[]::new);
+        }
+
+        @Override
+        public String toString() {
+            return name;
+        }
     }
 
     private static List<String> powershellCommandForDifferentWorkingDirectory() {
