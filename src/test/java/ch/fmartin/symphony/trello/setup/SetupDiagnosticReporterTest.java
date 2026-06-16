@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.junit.jupiter.api.Assumptions.abort;
 
 import ch.fmartin.symphony.trello.testsupport.RecordingTerminal;
+import ch.fmartin.symphony.trello.testsupport.TestWorkflows;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -167,7 +168,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Path workflow = configDir.resolve("WORKFLOW.front-matter-port.md");
-        Files.writeString(workflow, workflowWithPort(port), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(port), StandardCharsets.UTF_8);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -187,7 +188,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Path workflow = configDir.resolve("WORKFLOW.symlink-target.md");
-        Files.writeString(workflow, workflowWithPort(20992), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(20992), StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "000000000000000000000001",
@@ -268,7 +269,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Path workflow = configDir.resolve("WORKFLOW.declared-bad-port.md");
-        Files.writeString(workflow, workflowWithPort(port), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(port), StandardCharsets.UTF_8);
         saveSyntheticBoard(configDir, workflow, 20990);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
@@ -412,7 +413,8 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Path workflow = configDir.resolve("WORKFLOW.selected-env-port.md");
-        Files.writeString(workflow, workflowWithEnvironmentBackedPort(), StandardCharsets.UTF_8);
+        Files.writeString(
+                workflow, TestWorkflows.diagnosticsWorkflowWithEnvironmentBackedPort(), StandardCharsets.UTF_8);
         Files.writeString(
                 configDir.resolve(".env"),
                 """
@@ -440,7 +442,8 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Path workflow = configDir.resolve("WORKFLOW.env-port.md");
-        Files.writeString(workflow, workflowWithEnvironmentBackedPort(), StandardCharsets.UTF_8);
+        Files.writeString(
+                workflow, TestWorkflows.diagnosticsWorkflowWithEnvironmentBackedPort(), StandardCharsets.UTF_8);
         Files.writeString(
                 configDir.resolve(".env"),
                 "BOARD_ID_REF=000000000000000000000001\n" + statusPortLine + "\n",
@@ -474,7 +477,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Path workflow = configDir.resolve("WORKFLOW.minimal.md");
-        Files.writeString(workflow, workflowWithPort(20986), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(20986), StandardCharsets.UTF_8);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -502,9 +505,9 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Path connectedWorkflow = configDir.resolve("WORKFLOW.connected.md");
-        Files.writeString(connectedWorkflow, workflowWithPort(20987), StandardCharsets.UTF_8);
+        Files.writeString(connectedWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(20987), StandardCharsets.UTF_8);
         Path staleWorkflow = configDir.resolve("WORKFLOW.stale.md");
-        Files.writeString(staleWorkflow, workflowWithPort(20988), StandardCharsets.UTF_8);
+        Files.writeString(staleWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(20988), StandardCharsets.UTF_8);
         saveSyntheticBoard(configDir, connectedWorkflow, 20987);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
@@ -555,7 +558,7 @@ final class SetupDiagnosticReporterTest {
         Path workflow = configDir.resolve("WORKFLOW.empty-row.md");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(workflow, workflowWithPort(20723), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(20723), StandardCharsets.UTF_8);
         Files.writeString(
                 configDir.resolve("connected-boards.json"),
                 """
@@ -582,7 +585,7 @@ final class SetupDiagnosticReporterTest {
         Path workflow = configDir.resolve("WORKFLOW.partial-row.md");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(workflow, workflowWithPort(20724), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(20724), StandardCharsets.UTF_8);
         Files.writeString(
                 configDir.resolve("connected-boards.json"),
                 """
@@ -757,7 +760,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Path workflow = configDir.resolve("WORKFLOW.reused.md");
-        Files.writeString(workflow, workflowWithPort(20991), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(20991), StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "000000000000000000000001",
@@ -998,8 +1001,8 @@ final class SetupDiagnosticReporterTest {
         Path env = configDir.resolve(".env");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(privateWorkflow, workflowWithPort(19181), StandardCharsets.UTF_8);
-        Files.writeString(otherWorkflow, workflowWithPort(19182), StandardCharsets.UTF_8);
+        Files.writeString(privateWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19181), StandardCharsets.UTF_8);
+        Files.writeString(otherWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19182), StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(
                         new ConnectedBoard(
@@ -1106,8 +1109,8 @@ final class SetupDiagnosticReporterTest {
         Path otherWorkflow = configDir.resolve("WORKFLOW.other.md");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(selectedWorkflow, workflowWithPort(19191), StandardCharsets.UTF_8);
-        Files.writeString(otherWorkflow, workflowWithPort(19192), StandardCharsets.UTF_8);
+        Files.writeString(selectedWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19191), StandardCharsets.UTF_8);
+        Files.writeString(otherWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19192), StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(
                         new ConnectedBoard(
@@ -1343,7 +1346,7 @@ final class SetupDiagnosticReporterTest {
         Path env = configDir.resolve(".env");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(workflow, workflowWithPort(19199), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19199), StandardCharsets.UTF_8);
         Files.writeString(env, "TRELLO_API_TOKEN=secret-token\n", StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
@@ -1492,7 +1495,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(stateHome);
         Files.writeString(
                 configDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME), "invalid-local-key", StandardCharsets.UTF_8);
-        Files.writeString(workflow, workflowWithPort(19198), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19198), StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "private-board-id",
@@ -1812,8 +1815,8 @@ final class SetupDiagnosticReporterTest {
         Path secondWorkflow = configDir.resolve("WORKFLOW.second.md");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(firstWorkflow, workflowWithPort(19194), StandardCharsets.UTF_8);
-        Files.writeString(secondWorkflow, workflowWithPort(19195), StandardCharsets.UTF_8);
+        Files.writeString(firstWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19194), StandardCharsets.UTF_8);
+        Files.writeString(secondWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19195), StandardCharsets.UTF_8);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -1841,7 +1844,7 @@ final class SetupDiagnosticReporterTest {
         Path workflow = configDir.resolve("WORKFLOW.logs.md");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(workflow, workflowWithPort(19196), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19196), StandardCharsets.UTF_8);
         ManagedProcessStore.ManagedProcessFiles logs = new ManagedProcessStore(stateHome).files(workflow);
         Files.writeString(
                 logs.stdoutLog(),
@@ -1884,7 +1887,7 @@ final class SetupDiagnosticReporterTest {
         Path privateHostFile = tempDir.resolve("private-host-file.txt");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(workflow, workflowWithPort(19197), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19197), StandardCharsets.UTF_8);
         Files.writeString(privateHostFile, "PRIVATE_HOST_FILE_MARKER_SHOULD_NOT_APPEAR\n", StandardCharsets.UTF_8);
         ManagedProcessStore.ManagedProcessFiles logs = new ManagedProcessStore(stateHome).files(workflow);
         createSymbolicLinkOrSkip(logs.stdoutLog(), privateHostFile);
@@ -1913,7 +1916,7 @@ final class SetupDiagnosticReporterTest {
         Path workflow = configDir.resolve("WORKFLOW.pre-timestamp.md");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(workflow, workflowWithPort(19197), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19197), StandardCharsets.UTF_8);
         ManagedProcessStore.ManagedProcessFiles logs = new ManagedProcessStore(stateHome).files(workflow);
         Files.writeString(
                 logs.stdoutLog(),
@@ -1945,7 +1948,7 @@ final class SetupDiagnosticReporterTest {
         Path workflow = configDir.resolve("WORKFLOW.partial-banner.md");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(workflow, workflowWithPort(19198), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19198), StandardCharsets.UTF_8);
         ManagedProcessStore.ManagedProcessFiles logs = new ManagedProcessStore(stateHome).files(workflow);
         Files.writeString(
                 logs.stdoutLog(),
@@ -1979,8 +1982,8 @@ final class SetupDiagnosticReporterTest {
         Path otherWorkflow = configDir.resolve("WORKFLOW.other-relative.md");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(workflow, workflowWithPort(19184), StandardCharsets.UTF_8);
-        Files.writeString(otherWorkflow, workflowWithPort(19185), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19184), StandardCharsets.UTF_8);
+        Files.writeString(otherWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19185), StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(
                         new ConnectedBoard(
@@ -2052,7 +2055,8 @@ final class SetupDiagnosticReporterTest {
         Path workflow = configDir.resolve("WORKFLOW.missing-env-path.md");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(workflow, workflowWithEnvironmentBackedPort(), StandardCharsets.UTF_8);
+        Files.writeString(
+                workflow, TestWorkflows.diagnosticsWorkflowWithEnvironmentBackedPort(), StandardCharsets.UTF_8);
         Files.writeString(
                 configDir.resolve(".env"),
                 """
@@ -2104,8 +2108,8 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(requestedWorkflow.getParent());
         Files.createDirectories(stateHome);
-        Files.writeString(manifestWorkflow, workflowWithPort(19186), StandardCharsets.UTF_8);
-        Files.writeString(requestedWorkflow, workflowWithPort(19187), StandardCharsets.UTF_8);
+        Files.writeString(manifestWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19186), StandardCharsets.UTF_8);
+        Files.writeString(requestedWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19187), StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "manifest-board-id",
@@ -2158,8 +2162,8 @@ final class SetupDiagnosticReporterTest {
         String privateBoardName = "Private Duplicate Board";
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(workflowA, workflowWithPort(19188), StandardCharsets.UTF_8);
-        Files.writeString(workflowB, workflowWithPort(19189), StandardCharsets.UTF_8);
+        Files.writeString(workflowA, TestWorkflows.diagnosticsWorkflowWithPort(19188), StandardCharsets.UTF_8);
+        Files.writeString(workflowB, TestWorkflows.diagnosticsWorkflowWithPort(19189), StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(
                         new ConnectedBoard(
@@ -2229,7 +2233,7 @@ final class SetupDiagnosticReporterTest {
         Path workflow = configDir.resolve("WORKFLOW.private-shared.md");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(workflow, workflowWithPort(19193), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19193), StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(
                         new ConnectedBoard(
@@ -2298,7 +2302,7 @@ final class SetupDiagnosticReporterTest {
         Path configDir = tempDir.resolve("conflicting-selector-config");
         Path workflow = configDir.resolve("WORKFLOW.private.md");
         Files.createDirectories(configDir);
-        Files.writeString(workflow, workflowWithPort(19190), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19190), StandardCharsets.UTF_8);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -2850,7 +2854,7 @@ final class SetupDiagnosticReporterTest {
         Path configDir = tempDir.resolve("lifecycle-config");
         Path relativeWorkflow = Path.of("target", "diagnostic-workflow-" + System.nanoTime() + ".md");
         Files.createDirectories(relativeWorkflow.toAbsolutePath().normalize().getParent());
-        Files.writeString(relativeWorkflow, workflowWithPort(19192), StandardCharsets.UTF_8);
+        Files.writeString(relativeWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19192), StandardCharsets.UTF_8);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         try {
@@ -2876,7 +2880,7 @@ final class SetupDiagnosticReporterTest {
         Path configDir = tempDir.resolve("setup-config");
         Path workflow = configDir.resolve("custom.md");
         Files.createDirectories(configDir);
-        Files.writeString(workflow, workflowWithPort(19193), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19193), StandardCharsets.UTF_8);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -2935,7 +2939,8 @@ final class SetupDiagnosticReporterTest {
         Path workflow = configDir.resolve("WORKFLOW.invalid-max-agents.md");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(workflow, workflowWithMaxAgents(maxAgentsValue), StandardCharsets.UTF_8);
+        Files.writeString(
+                workflow, TestWorkflows.diagnosticsWorkflowWithMaxAgents(maxAgentsValue), StandardCharsets.UTF_8);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -2976,7 +2981,7 @@ final class SetupDiagnosticReporterTest {
                 """
                         .formatted(invalidPortValue),
                 StandardCharsets.UTF_8);
-        Files.writeString(validWorkflow, workflowWithPort(20999), StandardCharsets.UTF_8);
+        Files.writeString(validWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(20999), StandardCharsets.UTF_8);
         // The fixed clock keeps the rendered time_utc line free of every invalidPortValue substring;
         // the system clock makes "-1" match dates such as 2026-06-10.
         var reporter = new SetupDiagnosticReporter(
@@ -3083,7 +3088,8 @@ final class SetupDiagnosticReporterTest {
         Path workflow = configDir.resolve("WORKFLOW.invalid-routing.md");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(workflow, workflowWithRoutingLists(routingListValue), StandardCharsets.UTF_8);
+        Files.writeString(
+                workflow, TestWorkflows.diagnosticsWorkflowWithRoutingLists(routingListValue), StandardCharsets.UTF_8);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
         // when
@@ -3205,65 +3211,6 @@ final class SetupDiagnosticReporterTest {
             abort("Symbolic links are not available in this test environment: "
                     + e.getClass().getSimpleName());
         }
-    }
-
-    private static String workflowWithPort(int port) {
-        return """
-                ---
-                tracker:
-                  board_id: "custom-board-id"
-                server:
-                  port: %d
-                ---
-                Body
-                """
-                .formatted(port);
-    }
-
-    private static String workflowWithEnvironmentBackedPort() {
-        return """
-                ---
-                tracker:
-                  board_id: "$BOARD_ID_REF"
-                server:
-                  port: $BOARD_STATUS_PORT
-                ---
-                Body
-                """;
-    }
-
-    private static String workflowWithMaxAgents(String maxAgentsValue) {
-        return """
-                ---
-                tracker:
-                  board_id: "custom-board-id"
-                  active_states:
-                    - "Ready for Codex"
-                  terminal_states:
-                    - "Done"
-                agent:
-                  max_concurrent_agents: %s
-                server:
-                  port: 20731
-                ---
-                Body
-                """
-                .formatted(maxAgentsValue);
-    }
-
-    private static String workflowWithRoutingLists(String routingListValue) {
-        return """
-                ---
-                tracker:
-                  board_id: "custom-board-id"
-                  active_states: %s
-                  terminal_states: %s
-                server:
-                  port: 20722
-                ---
-                Body
-                """
-                .formatted(routingListValue, routingListValue);
     }
 
     private static String renderDefaultDiagnostics(
