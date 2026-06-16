@@ -3512,7 +3512,8 @@ When this profile is used:
 - the installer MUST detect the supported OS/architecture, a Java 25+ JDK including `javac`, Codex
   CLI, and Codex CLI authentication before delegating to product setup. Source-checkout mode MUST
   also detect Git. Supported local platforms are macOS arm64/amd64, Linux arm64/amd64, WSL2 through
-  the Linux path, Windows amd64, and best-effort Windows arm64
+  the Linux path, and best-effort native Windows PowerShell on amd64/arm64. WSL2 with the Linux
+  installer is the recommended Windows setup path
 - missing Java, Codex CLI, Codex npm-fallback Node/npm, or source-checkout Git prerequisites MUST
   produce concrete assisted installation. The installer MUST reuse an existing authenticated Codex
   CLI first and otherwise fall back to a user-local Codex npm install under `SYMPHONY_HOME`. Node/npm
@@ -3585,9 +3586,9 @@ When this profile is used:
   interactive prompts through a pseudo-terminal, using test doubles for external tools/services,
   verifying install, update, managed start/status, and uninstall cleanup behavior without real Trello,
   GitHub, or Codex side effects
-- deterministic CI SHOULD exercise PowerShell installer smoke paths through native `pwsh` or the
-  Microsoft .NET SDK container image that includes PowerShell, so Linux CI and local Linux machines
-  can run the same PowerShell checks without a host PowerShell installation
+- deterministic CI SHOULD exercise PowerShell installer smoke, option, and lifecycle paths on a
+  native Windows PowerShell runner; local Linux machines MAY use the Microsoft .NET SDK container
+  image through `scripts/pwsh-docker.sh` when a local PowerShell check is needed
 
 ### 19.6 Java Repository Quality Profile
 

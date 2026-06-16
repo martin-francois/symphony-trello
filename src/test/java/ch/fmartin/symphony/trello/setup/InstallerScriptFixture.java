@@ -179,6 +179,9 @@ final class InstallerScriptFixture {
                 return List.of(command.toString());
             }
         }
+        if (!isWindows()) {
+            return List.of();
+        }
         if (commandExists("pwsh")) {
             return List.of("pwsh");
         }
