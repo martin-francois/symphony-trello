@@ -6,7 +6,6 @@ import ch.fmartin.symphony.trello.config.WorkflowServerPortClassification;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Stream;
@@ -263,18 +262,14 @@ final class WorkflowConfigEditorTest {
                 Body
                 """,
                 StandardCharsets.UTF_8);
-        ConnectedBoard board = new ConnectedBoard(
-                "board-1",
-                "abc123",
-                "Overlap Queue",
-                "https://trello.example/abc123",
-                workflow,
-                tempDir.resolve(".env"),
-                tempDir.resolve("workspaces"),
-                18080,
-                false,
-                List.of(),
-                false);
+        ConnectedBoard board = ConnectedBoardBuilder.connectedBoard(workflow)
+                .withBoardId("board-1")
+                .withBoardKey("abc123")
+                .withBoardName("Overlap Queue")
+                .withBoardUrl("https://trello.example/abc123")
+                .withEnvPath(tempDir.resolve(".env"))
+                .withWorkspaceRoot(tempDir.resolve("workspaces"))
+                .build();
         WorkflowConfigEditor editor = new WorkflowConfigEditor();
 
         // when

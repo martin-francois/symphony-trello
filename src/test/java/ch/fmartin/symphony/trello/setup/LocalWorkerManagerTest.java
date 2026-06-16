@@ -1009,18 +1009,15 @@ final class LocalWorkerManagerTest {
                         .formatted(ConfigDefaults.DEFAULT_SERVER_PORT),
                 StandardCharsets.UTF_8);
         fixture.writeEnv(fixture.paths.defaultEnvPath());
-        ConnectedBoard row = new ConnectedBoard(
-                "000000000000000000000002",
-                "000000000000000000000002",
-                "Shortlink Queue",
-                "https://trello.com/b/SYNTH002/synthetic-board",
-                rowWorkflow.toAbsolutePath().normalize(),
-                fixture.paths.defaultEnvPath(),
-                fixture.paths.workspaceRoot(),
-                ConfigDefaults.DEFAULT_SERVER_PORT,
-                false,
-                List.of(),
-                false);
+        ConnectedBoard row = ConnectedBoardBuilder.connectedBoard(
+                        rowWorkflow.toAbsolutePath().normalize())
+                .withBoardId("000000000000000000000002")
+                .withBoardKey("000000000000000000000002")
+                .withBoardName("Shortlink Queue")
+                .withBoardUrl("https://trello.com/b/SYNTH002/synthetic-board")
+                .withEnvPath(fixture.paths.defaultEnvPath())
+                .withWorkspaceRoot(fixture.paths.workspaceRoot())
+                .build();
         fixture.save(row);
         fixture.stubManagedPid(row, 4242L);
         Path staleWorkflow = fixture.paths.configDir().resolve("WORKFLOW.shortlink-stale.md");
@@ -2005,18 +2002,15 @@ final class LocalWorkerManagerTest {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard first = fixture.connectedBoard("board-1", "Dup Workflow A", "shared-workflow");
-        ConnectedBoard second = new ConnectedBoard(
-                "board-2",
-                "short-2",
-                "Dup Workflow B",
-                "https://trello.com/b/short-2/dup-workflow-b",
-                first.workflowPath(),
-                first.envPath(),
-                fixture.paths.workspaceRoot(),
-                first.serverPort(),
-                false,
-                List.of(),
-                false);
+        ConnectedBoard second = ConnectedBoardBuilder.connectedBoard(first.workflowPath())
+                .withBoardId("board-2")
+                .withBoardKey("short-2")
+                .withBoardName("Dup Workflow B")
+                .withBoardUrl("https://trello.com/b/short-2/dup-workflow-b")
+                .withEnvPath(first.envPath())
+                .withWorkspaceRoot(fixture.paths.workspaceRoot())
+                .withServerPort(first.serverPort())
+                .build();
         fixture.save(first, second);
 
         // when
@@ -2334,18 +2328,8 @@ final class LocalWorkerManagerTest {
         fixture.writeEnv(customEnv);
         Files.deleteIfExists(fixture.paths.defaultEnvPath());
         Files.createDirectory(fixture.paths.defaultEnvPath());
-        ConnectedBoard boardWithCustomEnv = new ConnectedBoard(
-                board.boardId(),
-                board.boardKey(),
-                board.boardName(),
-                board.boardUrl(),
-                board.workflowPath(),
-                customEnv,
-                board.workspaceRoot(),
-                board.serverPort(),
-                board.githubEnabled(),
-                board.additionalWritableRoots(),
-                board.dangerFullAccess());
+        ConnectedBoard boardWithCustomEnv =
+                ConnectedBoardBuilder.from(board).withEnvPath(customEnv).build();
         fixture.save(boardWithCustomEnv);
         fixture.stubHealthyStartedWorker(boardWithCustomEnv, 42);
 
@@ -2447,18 +2431,16 @@ final class LocalWorkerManagerTest {
                 # Direct stop
                 """,
                 StandardCharsets.UTF_8);
-        ConnectedBoard expectedBoard = new ConnectedBoard(
-                "resolved-stop-board",
-                "resolved-stop-board",
-                "WORKFLOW.direct-stop-env.md",
-                "",
-                workflow.toAbsolutePath().normalize(),
-                null,
-                TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT,
-                19094,
-                false,
-                List.of(),
-                false);
+        ConnectedBoard expectedBoard = ConnectedBoardBuilder.connectedBoard(
+                        workflow.toAbsolutePath().normalize())
+                .withBoardId("resolved-stop-board")
+                .withBoardKey("resolved-stop-board")
+                .withBoardName("WORKFLOW.direct-stop-env.md")
+                .withBoardUrl("")
+                .withEnvPath(null)
+                .withWorkspaceRoot(TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT)
+                .withServerPort(19094)
+                .build();
         fixture.writeManagedPid(expectedBoard, 42);
         when(fixture.platform.isAlive(42)).thenReturn(true);
         when(fixture.platform.isManaged(
