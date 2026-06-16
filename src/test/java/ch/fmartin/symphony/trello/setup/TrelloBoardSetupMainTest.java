@@ -126,16 +126,12 @@ final class TrelloBoardSetupMainTest {
                   {"id":"list-2","name":"Sneaky\\nList\\t\\"Q\\"","closed":false,"pos":2},
                   {"id":"list-3","name":"Released","closed":false,"pos":3}
                 ]
-                """);
+        """);
         Path workflow = tempDir.resolve("dirty-lists.WORKFLOW.md");
         Path env = tempDir.resolve(".env.dirty-lists");
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode = run(
-                stdout,
-                stderr,
+        CliRunResult result = runCli(
                 "import-board",
                 "--endpoint",
                 endpoint(),
@@ -157,8 +153,8 @@ final class TrelloBoardSetupMainTest {
                 env.toString());
 
         // then
-        assertThat(exitCode).as(stderr.toString(StandardCharsets.UTF_8)).isZero();
-        String openListsLine = stdout.toString(StandardCharsets.UTF_8)
+        result.assertSuccess();
+        String openListsLine = result.stdout()
                 .lines()
                 .filter(line -> line.startsWith("Open lists: "))
                 .findAny()
@@ -247,18 +243,12 @@ final class TrelloBoardSetupMainTest {
     @Test
     void printsHelpWithoutRequiringCredentials() {
         // given
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode = run(stdout, stderr, "--help");
+        CliRunResult result = runCli("--help");
 
         // then
-        assertThat(exitCode).isZero();
-        assertThat(stdout.toString(StandardCharsets.UTF_8))
-                .contains("new-board")
-                .contains("import-board");
-        assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
+        result.assertSuccess().stdoutContains("new-board", "import-board").stderrEmpty();
     }
 
     @MethodSource("commandsThatDoNotWriteWorkflows")
@@ -297,58 +287,46 @@ final class TrelloBoardSetupMainTest {
     @Test
     void printsSetupLocalHelpWithoutRequiringCredentials() {
         // given
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode = run(stdout, stderr, "setup-local", "--help");
+        CliRunResult result = runCli("setup-local", "--help");
 
         // then
-        assertThat(exitCode).isZero();
-        assertThat(stdout.toString(StandardCharsets.UTF_8))
-                .contains("Usage: symphony-trello setup-local")
-                .contains("--env=<envPath>", "Dotenv file for Trello credentials.")
-                .contains("Commands:")
-                .contains("check")
-                .contains("--no-github")
-                .doesNotContain("Ignored dotenv file");
-        assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
+        result.assertSuccess()
+                .stdoutContains(
+                        "Usage: symphony-trello setup-local",
+                        "--env=<envPath>",
+                        "Dotenv file for Trello credentials.",
+                        "Commands:",
+                        "check",
+                        "--no-github")
+                .stdoutDoesNotContain("Ignored dotenv file")
+                .stderrEmpty();
     }
 
     @Test
     void printsNestedSetupLocalHelp() {
         // given
-        var checkStdout = new ByteArrayOutputStream();
-        var checkStderr = new ByteArrayOutputStream();
-        var repairStdout = new ByteArrayOutputStream();
-        var repairStderr = new ByteArrayOutputStream();
-        var configureStdout = new ByteArrayOutputStream();
-        var configureStderr = new ByteArrayOutputStream();
 
         // when
-        int checkExitCode = run(checkStdout, checkStderr, "setup-local", "check", "--help");
-        int repairExitCode = run(repairStdout, repairStderr, "setup-local", "repair-port", "--help");
-        int configureExitCode = run(configureStdout, configureStderr, "setup-local", "configure-github", "--help");
+        CliRunResult check = runCli("setup-local", "check", "--help");
+        CliRunResult repair = runCli("setup-local", "repair-port", "--help");
+        CliRunResult configure = runCli("setup-local", "configure-github", "--help");
 
         // then
-        assertThat(checkExitCode).isZero();
-        assertThat(repairExitCode).isZero();
-        assertThat(configureExitCode).isZero();
-        assertThat(checkStdout.toString(StandardCharsets.UTF_8))
-                .contains("Usage: symphony-trello setup-local check")
-                .doesNotContain("Ignored dotenv file")
-                .contains("--config-dir", "--manifest")
-                .doesNotContain("--server-port", "--active", "--codex-model");
-        assertThat(repairStdout.toString(StandardCharsets.UTF_8))
-                .contains("Usage: symphony-trello setup-local repair-port", "--board", "--dry-run")
-                .doesNotContain("Ignored dotenv file")
-                .doesNotContain("--workspace-root", "--server-port", "--active");
-        assertThat(configureStdout.toString(StandardCharsets.UTF_8))
-                .contains("Usage: symphony-trello setup-local configure-github", "--board", "--max-agents")
-                .doesNotContain("--workflow", "--server-port", "--active", "--dry-run", "--env");
-        assertThat(checkStderr.toString(StandardCharsets.UTF_8)).isEmpty();
-        assertThat(repairStderr.toString(StandardCharsets.UTF_8)).isEmpty();
-        assertThat(configureStderr.toString(StandardCharsets.UTF_8)).isEmpty();
+        check.assertSuccess()
+                .stdoutContains("Usage: symphony-trello setup-local check", "--config-dir", "--manifest")
+                .stdoutDoesNotContain("Ignored dotenv file", "--server-port", "--active", "--codex-model")
+                .stderrEmpty();
+        repair.assertSuccess()
+                .stdoutContains("Usage: symphony-trello setup-local repair-port", "--board", "--dry-run")
+                .stdoutDoesNotContain("Ignored dotenv file", "--workspace-root", "--server-port", "--active")
+                .stderrEmpty();
+        configure
+                .assertSuccess()
+                .stdoutContains("Usage: symphony-trello setup-local configure-github", "--board", "--max-agents")
+                .stdoutDoesNotContain("--workflow", "--server-port", "--active", "--dry-run", "--env")
+                .stderrEmpty();
     }
 
     @Test
@@ -393,13 +371,9 @@ final class TrelloBoardSetupMainTest {
                 stateHome.resolve("WORKFLOW.private.err"),
                 "token=secret-token\npath=" + tempDir.resolve("client checkout") + "\n",
                 StandardCharsets.UTF_8);
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode = run(
-                stdout,
-                stderr,
+        CliRunResult result = runCli(
                 "diagnostics",
                 "--config-dir",
                 configDir.toString(),
@@ -414,16 +388,15 @@ final class TrelloBoardSetupMainTest {
                 "--json");
 
         // then
-        assertThat(exitCode).isZero();
-        assertThat(stdout.toString(StandardCharsets.UTF_8))
-                .contains("Diagnostics written.", "Review it before sharing")
-                .doesNotContain(
+        result.assertSuccess()
+                .stdoutContains("Diagnostics written.", "Review it before sharing")
+                .stdoutDoesNotContain(
                         output.toString(),
                         output.toAbsolutePath().normalize().toString(),
                         tempDir.toString(),
                         "Jane Doe",
-                        "private checkout");
-        assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
+                        "private checkout")
+                .stderrEmpty();
         assertThat(output)
                 .content(StandardCharsets.UTF_8)
                 .contains("\"format\":\"markdown\"", "Symphony for Trello Diagnostics", "board_count:** 1", "19183")
@@ -1777,70 +1750,51 @@ final class TrelloBoardSetupMainTest {
     @ParameterizedTest(name = "{0} help")
     void printsDirectCommandHelp(String command, String expectedUsage) {
         // given
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode = run(stdout, stderr, command, "--help");
+        CliRunResult result = runCli(command, "--help");
 
         // then
-        assertThat(exitCode).isZero();
-        assertThat(stdout.toString(StandardCharsets.UTF_8)).contains(expectedUsage);
-        assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
+        result.assertSuccess().stdoutContains(expectedUsage).stderrEmpty();
     }
 
     @MethodSource("versionCommands")
     @ParameterizedTest(name = "{0} version")
     void printsVersionForCommands(String[] command) {
         // given
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode = run(stdout, stderr, command);
+        CliRunResult result = runCli(command);
 
         // then
-        assertThat(exitCode).isZero();
-        assertThat(stdout.toString(StandardCharsets.UTF_8)).contains("symphony-trello");
-        assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
+        result.assertSuccess().stdoutContains("symphony-trello").stderrEmpty();
     }
 
     @Test
     void listsWorkspacesFromCommandLineCredentials() {
         // given
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode =
-                run(stdout, stderr, "list-workspaces", "--endpoint", endpoint(), "--key", "key", "--token", "token");
+        CliRunResult result = runCli("list-workspaces", "--endpoint", endpoint(), "--key", "key", "--token", "token");
 
         // then
-        assertThat(exitCode).isZero();
-        assertThat(stdout.toString(StandardCharsets.UTF_8))
-                .contains("Trello workspaces:")
-                .contains("workspace-1")
-                .contains("Engineering");
-        assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
+        result.assertSuccess()
+                .stdoutContains("Trello workspaces:", "workspace-1", "Engineering")
+                .stderrEmpty();
     }
 
     @Test
     void listWorkspacesNormalizesRootEndpointToTrelloRestApiBase() {
         // given
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode = run(
-                stdout, stderr, "list-workspaces", "--endpoint", endpointRoot(), "--key", "key", "--token", "token");
+        CliRunResult result =
+                runCli("list-workspaces", "--endpoint", endpointRoot(), "--key", "key", "--token", "token");
 
         // then
-        assertThat(exitCode).isZero();
-        assertThat(stdout.toString(StandardCharsets.UTF_8))
-                .contains("Trello workspaces:")
-                .contains("workspace-1")
-                .contains("Engineering");
-        assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
+        result.assertSuccess()
+                .stdoutContains("Trello workspaces:", "workspace-1", "Engineering")
+                .stderrEmpty();
         assertThat(workspaceLookups).hasValue(1);
     }
 
@@ -1893,21 +1847,17 @@ final class TrelloBoardSetupMainTest {
     @ParameterizedTest(name = "{0}")
     void listWorkspacesRejectsInvalidEndpointsBeforeTrelloRequest(String name, String endpoint) {
         // given
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode =
-                run(stdout, stderr, "list-workspaces", "--endpoint", endpoint, "--key", "key", "--token", "token");
+        CliRunResult result = runCli("list-workspaces", "--endpoint", endpoint, "--key", "key", "--token", "token");
 
         // then
-        assertThat(exitCode).isEqualTo(2);
-        assertThat(stderr.toString(StandardCharsets.UTF_8))
-                .contains(
+        result.assertFailure(2)
+                .stderrContains(
                         "setup_failed code=setup_invalid_arguments",
                         "--endpoint must point to the Trello REST API base, for example https://api.trello.com/1")
-                .doesNotContain(endpoint, "Troubleshooting report written");
-        assertThat(stdout.toString(StandardCharsets.UTF_8)).doesNotContain("Trello workspaces:");
+                .stderrDoesNotContain(endpoint, "Troubleshooting report written")
+                .stdoutDoesNotContain("Trello workspaces:");
         assertThat(workspaceLookups).hasValue(0);
     }
 
@@ -1917,13 +1867,9 @@ final class TrelloBoardSetupMainTest {
         Path workflow = tempDir.resolve("generated workflow.WORKFLOW.md");
         Path env = tempDir.resolve(".env.next-steps");
         int expectedPort = firstAvailableManagedPort();
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode = run(
-                stdout,
-                stderr,
+        CliRunResult result = runCli(
                 "new-board",
                 "--endpoint",
                 endpoint(),
@@ -1943,7 +1889,7 @@ final class TrelloBoardSetupMainTest {
                 String.valueOf(expectedPort));
 
         // then
-        assertThat(exitCode).isZero();
+        result.assertSuccess();
         assertThat(createdBoardName).hasValue("Symphony Work Queue");
         assertThat(createdLists)
                 .containsExactly(
@@ -1966,12 +1912,12 @@ final class TrelloBoardSetupMainTest {
                             .normalize());
             assertThat(board.serverPort()).isEqualTo(expectedPort);
         });
-        assertThat(stdout.toString(StandardCharsets.UTF_8))
-                .contains("Created Trello board: \"Symphony Work Queue\"")
-                .contains("Board identifier for WORKFLOW.md: abc123")
-                .contains("Wrote workflow:")
-                .contains("HTTP status port: " + expectedPort)
+        assertThat(result.stdout())
                 .contains(
+                        "Created Trello board: \"Symphony Work Queue\"",
+                        "Board identifier for WORKFLOW.md: abc123",
+                        "Wrote workflow:",
+                        "HTTP status port: " + expectedPort,
                         "symphony-trello start --env "
                                 + shellQuote(env.toAbsolutePath().normalize().toString())
                                 + " --workflow "
@@ -1981,7 +1927,6 @@ final class TrelloBoardSetupMainTest {
                                 + shellQuote(
                                         workflow.toAbsolutePath().normalize().toString()))
                 .doesNotContain("./mvnw quarkus:dev");
-        assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
     }
 
     @Test
@@ -2281,51 +2226,42 @@ final class TrelloBoardSetupMainTest {
         TrelloBoardSetup boardSetup = new TrelloBoardSetup(
                 new ObjectMapper(),
                 () -> CodexModelSelectionDefaults.of(TrelloBoardSetup.CodexModelDefaults.fallback()));
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode;
+        CliRunResult result;
         try {
-            exitCode = TrelloBoardSetupMain.run(
-                    new String[] {
-                        "import-board",
-                        "--endpoint",
-                        endpoint(),
-                        "--key",
-                        "key",
-                        "--token",
-                        "token",
-                        "--board",
-                        "https://trello.com/b/input/existing-board",
-                        "--active",
-                        "Queue for Codex",
-                        "--terminal",
-                        "Released",
-                        "--workflow",
-                        workflow.toString(),
-                        "--manifest",
-                        tempDir.resolve("connected-boards.json").toString(),
-                        "--env",
-                        env.toString(),
-                        "--server-port",
-                        String.valueOf(listeningPort),
-                        "--force"
-                    },
-                    new TrelloBoardSetupService(boardSetup, workerManager, Map.of()),
-                    new LocalSetup(boardSetup, new ProcessCommandRunner()),
+            result = runCli(
+                    boardSetup,
                     workerManager,
-                    new PrintStream(stdout, true, StandardCharsets.UTF_8),
-                    new PrintStream(stderr, true, StandardCharsets.UTF_8));
+                    "import-board",
+                    "--endpoint",
+                    endpoint(),
+                    "--key",
+                    "key",
+                    "--token",
+                    "token",
+                    "--board",
+                    "https://trello.com/b/input/existing-board",
+                    "--active",
+                    "Queue for Codex",
+                    "--terminal",
+                    "Released",
+                    "--workflow",
+                    workflow.toString(),
+                    "--manifest",
+                    tempDir.resolve("connected-boards.json").toString(),
+                    "--env",
+                    env.toString(),
+                    "--server-port",
+                    String.valueOf(listeningPort),
+                    "--force");
         } finally {
             listeningServer.stop(0);
         }
 
         // then
-        assertThat(exitCode).isZero();
-        assertThat(stdout.toString(StandardCharsets.UTF_8))
-                .contains("Imported Trello board: \"Existing Board\"", "HTTP status port: " + listeningPort);
-        assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
+        result.assertSuccess()
+                .stdoutContains("Imported Trello board: \"Existing Board\"", "HTTP status port: " + listeningPort);
         verify(workerManager, times(2)).canStopRunningWorker(any(LocalWorkerPaths.class), eq(oldBoard));
         verify(workerManager).stop(any(LocalWorkerPaths.class), eq(oldBoard), any(PrintStream.class));
     }
@@ -2916,41 +2852,34 @@ final class TrelloBoardSetupMainTest {
         TrelloBoardSetup boardSetup = new TrelloBoardSetup(
                 new ObjectMapper(),
                 () -> CodexModelSelectionDefaults.of(TrelloBoardSetup.CodexModelDefaults.fallback()));
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode = TrelloBoardSetupMain.run(
-                new String[] {
-                    "import-board",
-                    "--endpoint",
-                    endpoint(),
-                    "--key",
-                    "key",
-                    "--token",
-                    "token",
-                    "--board",
-                    "https://trello.com/b/input/existing-board",
-                    "--active",
-                    "Queue for Codex",
-                    "--terminal",
-                    "Released",
-                    "--workflow",
-                    newWorkflow.toString(),
-                    "--manifest",
-                    tempDir.resolve("connected-boards.json").toString(),
-                    "--env",
-                    newEnv.toString(),
-                    "--force"
-                },
-                new TrelloBoardSetupService(boardSetup, workerManager, Map.of()),
-                new LocalSetup(boardSetup, new ProcessCommandRunner()),
+        CliRunResult result = runCli(
+                boardSetup,
                 workerManager,
-                new PrintStream(stdout, true, StandardCharsets.UTF_8),
-                new PrintStream(stderr, true, StandardCharsets.UTF_8));
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "https://trello.com/b/input/existing-board",
+                "--active",
+                "Queue for Codex",
+                "--terminal",
+                "Released",
+                "--workflow",
+                newWorkflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
+                "--env",
+                newEnv.toString(),
+                "--force");
 
         // then
-        assertThat(exitCode).isZero();
+        result.assertSuccess();
         verify(workerManager).stop(any(LocalWorkerPaths.class), eq(oldBoard), any(PrintStream.class));
         verify(workerManager)
                 .rotateLogsForReplacedBoards(
@@ -2971,7 +2900,7 @@ final class TrelloBoardSetupMainTest {
         ReplacedRunningWorkerFixture fixture = replacedRunningWorkerFixture("restart");
 
         // when
-        ForcedImportResult run = runForcedImportBoard(fixture);
+        CliRunResult run = runForcedImportBoard(fixture);
 
         // then
         assertThat(run.exitCode()).isZero();
@@ -2997,7 +2926,7 @@ final class TrelloBoardSetupMainTest {
                 .start(any(LocalWorkerPaths.class), any(ConnectedBoard.class), any(Path.class), any(PrintStream.class));
 
         // when
-        ForcedImportResult run = runForcedImportBoard(fixture);
+        CliRunResult run = runForcedImportBoard(fixture);
 
         // then
         assertThat(run.exitCode()).isZero();
@@ -3013,14 +2942,10 @@ final class TrelloBoardSetupMainTest {
         Path workflow = tempDir.resolve("wrapped-command.WORKFLOW.md");
         Path env = tempDir.resolve(".env.wrapped-command");
         Path command = tempDir.resolve("bin/symphony-trello");
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode = run(
+        CliRunResult result = runCli(
                 Map.of(CLI_COMMAND_PROPERTY, command.toString()),
-                stdout,
-                stderr,
                 "new-board",
                 "--endpoint",
                 endpoint(),
@@ -3038,8 +2963,8 @@ final class TrelloBoardSetupMainTest {
                 env.toString());
 
         // then
-        assertThat(exitCode).isZero();
-        assertThat(stdout.toString(StandardCharsets.UTF_8))
+        result.assertSuccess();
+        assertThat(result.stdout())
                 .contains(
                         shellQuote(command.toString())
                                 + " start --env "
@@ -3052,7 +2977,6 @@ final class TrelloBoardSetupMainTest {
                                 + shellQuote(
                                         workflow.toAbsolutePath().normalize().toString()))
                 .doesNotContain("\n  symphony-trello start", "\n  symphony-trello logs");
-        assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
     }
 
     @Test
@@ -3060,13 +2984,9 @@ final class TrelloBoardSetupMainTest {
         // given
         Path workflow = tempDir.resolve("runtime-env.WORKFLOW.md");
         Path env = tempDir.resolve(".env.runtime");
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode = run(
-                stdout,
-                stderr,
+        CliRunResult result = runCli(
                 "new-board",
                 "--endpoint",
                 endpoint(),
@@ -3084,11 +3004,11 @@ final class TrelloBoardSetupMainTest {
                 env.toString());
 
         // then
-        assertThat(exitCode).isZero();
+        result.assertSuccess();
         assertThat(env)
                 .content(StandardCharsets.UTF_8)
                 .contains("TRELLO_API_KEY=direct-key", "TRELLO_API_TOKEN=direct-token");
-        assertThat(stdout.toString(StandardCharsets.UTF_8))
+        assertThat(result.stdout())
                 .contains(
                         "Saving Trello credentials...",
                         "Credentials saved: " + env.toAbsolutePath().normalize(),
@@ -3098,7 +3018,6 @@ final class TrelloBoardSetupMainTest {
                                 + shellQuote(
                                         workflow.toAbsolutePath().normalize().toString()))
                 .doesNotContain("direct-token");
-        assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
     }
 
     @Test
@@ -3151,13 +3070,9 @@ final class TrelloBoardSetupMainTest {
         Path workflow = tempDir.resolve("runtime-env-source.WORKFLOW.md");
         Path env = tempDir.resolve(".env.runtime");
         Files.writeString(env, "TRELLO_API_KEY=dotenv-key\nTRELLO_API_TOKEN=dotenv-token\n", StandardCharsets.UTF_8);
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode = run(
-                stdout,
-                stderr,
+        CliRunResult result = runCli(
                 "new-board",
                 "--endpoint",
                 endpoint(),
@@ -3171,16 +3086,15 @@ final class TrelloBoardSetupMainTest {
                 env.toString());
 
         // then
-        assertThat(exitCode).isZero();
+        result.assertSuccess();
         assertThat(createdBoardName).hasValue("Runtime Env Source Queue");
         assertThat(env)
                 .content(StandardCharsets.UTF_8)
                 .isEqualTo("TRELLO_API_KEY=dotenv-key\nTRELLO_API_TOKEN=dotenv-token\n");
-        assertThat(stdout.toString(StandardCharsets.UTF_8))
+        assertThat(result.stdout())
                 .contains("symphony-trello start --env "
                         + shellQuote(env.toAbsolutePath().normalize().toString()))
                 .doesNotContain("Saving Trello credentials", "dotenv-key", "dotenv-token");
-        assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
     }
 
     @Test
@@ -3506,13 +3420,9 @@ final class TrelloBoardSetupMainTest {
         // given
         Path env = tempDir.resolve(".env.runtime");
         Path workflow = tempDir.resolve("multiline-runtime-env.WORKFLOW.md");
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode = run(
-                stdout,
-                stderr,
+        CliRunResult result = runCli(
                 "new-board",
                 "--endpoint",
                 endpoint(),
@@ -3530,15 +3440,13 @@ final class TrelloBoardSetupMainTest {
                 env.toString());
 
         // then
-        assertThat(exitCode).isEqualTo(2);
+        result.assertFailure(2);
         assertThat(createdBoardName.get()).isNull();
         assertThat(env).doesNotExist();
         assertThat(workflow).doesNotExist();
-        assertThat(stdout.toString(StandardCharsets.UTF_8))
-                .doesNotContain("Created Trello board", "Troubleshooting report written");
-        assertThat(stderr.toString(StandardCharsets.UTF_8))
-                .contains("setup_failed code=setup_env_value_multiline")
-                .doesNotContain("direct-key", "direct-token");
+        result.stdoutDoesNotContain("Created Trello board", "Troubleshooting report written")
+                .stderrContains("setup_failed code=setup_env_value_multiline")
+                .stderrDoesNotContain("direct-key", "direct-token");
     }
 
     @Test
@@ -3584,13 +3492,9 @@ final class TrelloBoardSetupMainTest {
         Path workflow = tempDir.resolve("existing-runtime-env.WORKFLOW.md");
         Files.writeString(workflow, "existing workflow", StandardCharsets.UTF_8);
         Path env = tempDir.resolve(".env.runtime");
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode = run(
-                stdout,
-                stderr,
+        CliRunResult result = runCli(
                 "new-board",
                 "--endpoint",
                 endpoint(),
@@ -3608,14 +3512,14 @@ final class TrelloBoardSetupMainTest {
                 env.toString());
 
         // then
-        assertThat(exitCode).isEqualTo(2);
+        result.assertFailure(2);
         assertThat(createdBoardName.get()).isNull();
         assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo("existing workflow");
         assertThat(env).doesNotExist();
-        assertThat(stdout.toString(StandardCharsets.UTF_8))
-                .doesNotContain("Created Trello board", "Saving Trello credentials", "Troubleshooting report written");
-        assertThat(stderr.toString(StandardCharsets.UTF_8))
-                .contains("setup_failed code=setup_workflow_exists")
+        result.stdoutDoesNotContain(
+                        "Created Trello board", "Saving Trello credentials", "Troubleshooting report written")
+                .stderrContains("setup_failed code=setup_workflow_exists");
+        assertThat(result.stderr())
                 .contains(workflow.toAbsolutePath().normalize() + "\nRe-run with --force")
                 .doesNotContain(workflow.toAbsolutePath().normalize() + ".")
                 .doesNotContain("direct-key", "direct-token");
@@ -3627,13 +3531,9 @@ final class TrelloBoardSetupMainTest {
         Path workflow = tempDir.resolve("existing-import-runtime-env.WORKFLOW.md");
         Files.writeString(workflow, "existing workflow", StandardCharsets.UTF_8);
         Path env = tempDir.resolve(".env.import-runtime");
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode = run(
-                stdout,
-                stderr,
+        CliRunResult result = runCli(
                 "import-board",
                 "--endpoint",
                 endpoint(),
@@ -3655,15 +3555,15 @@ final class TrelloBoardSetupMainTest {
                 env.toString());
 
         // then
-        assertThat(exitCode).isEqualTo(2);
+        result.assertFailure(2);
         assertThat(boardInfoLookups).hasValue(0);
         assertThat(createdLists).isEmpty();
         assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo("existing workflow");
         assertThat(env).doesNotExist();
-        assertThat(stdout.toString(StandardCharsets.UTF_8))
-                .doesNotContain("Imported Trello board", "Saving Trello credentials", "Troubleshooting report written");
-        assertThat(stderr.toString(StandardCharsets.UTF_8))
-                .contains("setup_failed code=setup_workflow_exists")
+        result.stdoutDoesNotContain(
+                        "Imported Trello board", "Saving Trello credentials", "Troubleshooting report written")
+                .stderrContains("setup_failed code=setup_workflow_exists");
+        assertThat(result.stderr())
                 .contains(workflow.toAbsolutePath().normalize() + "\nRe-run with --force")
                 .doesNotContain(workflow.toAbsolutePath().normalize() + ".")
                 .doesNotContain("direct-key", "direct-token", "trello_api_request", "trello_auth_failed");
@@ -4045,14 +3945,10 @@ final class TrelloBoardSetupMainTest {
         Path defaultWorkflow = configDirectory.resolve("WORKFLOW.md");
         Path env = configDirectory.resolve(".env.second-board");
         Files.writeString(defaultWorkflow, "existing", StandardCharsets.UTF_8);
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode = run(
+        CliRunResult result = runCli(
                 Map.of(CONFIG_DIR_PROPERTY, configDirectory.toString()),
-                stdout,
-                stderr,
                 "new-board",
                 "--endpoint",
                 endpoint(),
@@ -4066,7 +3962,7 @@ final class TrelloBoardSetupMainTest {
                 env.toString());
 
         // then
-        assertThat(exitCode).isZero();
+        result.assertSuccess();
         assertThat(defaultWorkflow).content(StandardCharsets.UTF_8).isEqualTo("existing");
         assertThat(configDirectory.resolve("WORKFLOW.second-board.md"))
                 .content(StandardCharsets.UTF_8)
@@ -4082,7 +3978,6 @@ final class TrelloBoardSetupMainTest {
                             .normalize());
             assertThat(board.envPath()).isEqualTo(env.toAbsolutePath().normalize());
         });
-        assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
     }
 
     @Test
@@ -4091,14 +3986,10 @@ final class TrelloBoardSetupMainTest {
         Path workflow = tempDir.resolve("generated O'Brien.WORKFLOW.md");
         Path env = tempDir.resolve(".env.powershell");
         Path command = tempDir.resolve("bin/Symphony O'Brien/symphony-trello.ps1");
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode = run(
+        CliRunResult result = runCli(
                 Map.of(SHELL_PROPERTY, "powershell", CLI_COMMAND_PROPERTY, command.toString()),
-                stdout,
-                stderr,
                 "new-board",
                 "--endpoint",
                 endpoint(),
@@ -4116,8 +4007,8 @@ final class TrelloBoardSetupMainTest {
                 env.toString());
 
         // then
-        assertThat(exitCode).isZero();
-        assertThat(stdout.toString(StandardCharsets.UTF_8))
+        result.assertSuccess();
+        assertThat(result.stdout())
                 .contains(
                         "& "
                                 + powerShellQuote(command.toString())
@@ -4132,7 +4023,6 @@ final class TrelloBoardSetupMainTest {
                                 + " logs --workflow "
                                 + powerShellQuote(
                                         workflow.toAbsolutePath().normalize().toString()));
-        assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
     }
 
     @Test
@@ -4140,14 +4030,10 @@ final class TrelloBoardSetupMainTest {
         // given
         Path workflow = tempDir.resolve("generated command prompt.WORKFLOW.md");
         Path env = tempDir.resolve(".env.cmd");
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode = run(
+        CliRunResult result = runCli(
                 Map.of(SHELL_PROPERTY, "cmd"),
-                stdout,
-                stderr,
                 "new-board",
                 "--endpoint",
                 endpoint(),
@@ -4165,8 +4051,8 @@ final class TrelloBoardSetupMainTest {
                 env.toString());
 
         // then
-        assertThat(exitCode).isZero();
-        assertThat(stdout.toString(StandardCharsets.UTF_8))
+        result.assertSuccess();
+        assertThat(result.stdout())
                 .contains(
                         "symphony-trello start --env "
                                 + cmdQuote(env.toAbsolutePath().normalize().toString())
@@ -4174,7 +4060,6 @@ final class TrelloBoardSetupMainTest {
                                 + cmdQuote(workflow.toAbsolutePath().normalize().toString()),
                         "symphony-trello logs --workflow "
                                 + cmdQuote(workflow.toAbsolutePath().normalize().toString()));
-        assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
     }
 
     @Test
@@ -4182,13 +4067,9 @@ final class TrelloBoardSetupMainTest {
         // given
         Path workflow = tempDir.resolve("non-github.WORKFLOW.md");
         Path env = tempDir.resolve(".env.non-github");
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode = run(
-                stdout,
-                stderr,
+        CliRunResult result = runCli(
                 "new-board",
                 "--endpoint",
                 endpoint(),
@@ -4207,7 +4088,7 @@ final class TrelloBoardSetupMainTest {
                 "--no-github");
 
         // then
-        assertThat(exitCode).isZero();
+        result.assertSuccess();
         assertThat(createdLists)
                 .containsExactly("Inbox", "Ready for Codex", "In Progress", "Blocked", "Human Review", "Done");
         assertThat(workflow)
@@ -4217,7 +4098,6 @@ final class TrelloBoardSetupMainTest {
                 .doesNotContain("## Landing From \"Merging\"")
                 .doesNotContain("## Pull Request Publication")
                 .doesNotContain("Merging");
-        assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
     }
 
     @Test
@@ -4227,13 +4107,9 @@ final class TrelloBoardSetupMainTest {
         Files.writeString(workflow, "existing workflow", StandardCharsets.UTF_8);
         Path fallback = tempDir.resolve("WORKFLOW.symmetry-queue.md");
         Path env = tempDir.resolve(".env.explicit-workflow");
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode = run(
-                stdout,
-                stderr,
+        CliRunResult result = runCli(
                 "new-board",
                 "--endpoint",
                 endpoint(),
@@ -4251,13 +4127,11 @@ final class TrelloBoardSetupMainTest {
                 env.toString());
 
         // then
-        assertThat(exitCode).isEqualTo(2);
+        result.assertFailure(2);
         assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo("existing workflow");
         assertThat(fallback).doesNotExist();
-        assertThat(stdout.toString(StandardCharsets.UTF_8)).isEmpty();
-        assertThat(stderr.toString(StandardCharsets.UTF_8))
-                .contains("setup_failed code=setup_workflow_exists")
-                .contains("--force");
+        assertThat(result.stdout()).isEmpty();
+        result.stderrContains("setup_failed code=setup_workflow_exists", "--force");
     }
 
     @Test
@@ -4265,13 +4139,9 @@ final class TrelloBoardSetupMainTest {
         // given
         Path workflow = tempDir.resolve("imported workflow.WORKFLOW.md");
         Path env = tempDir.resolve(".env.imported");
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode = run(
-                stdout,
-                stderr,
+        CliRunResult result = runCli(
                 "import-board",
                 "--endpoint",
                 endpoint(),
@@ -4295,7 +4165,7 @@ final class TrelloBoardSetupMainTest {
                 env.toString());
 
         // then
-        assertThat(exitCode).isZero();
+        result.assertSuccess();
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("- \"Queue for Codex\"")
@@ -4316,13 +4186,13 @@ final class TrelloBoardSetupMainTest {
                             .normalize());
             assertThat(board.serverPort()).isGreaterThanOrEqualTo(TrelloBoardSetup.DEFAULT_SERVER_PORT);
         });
-        assertThat(stdout.toString(StandardCharsets.UTF_8))
-                .contains("Imported Trello board: \"Existing Board\"")
-                .contains("Board identifier for WORKFLOW.md: SYNTH001")
-                .contains("Active lists: \"Queue for Codex\", \"Doing\"")
-                .contains("In-progress list: \"Doing\"")
-                .contains("Terminal lists: \"Released\"")
+        assertThat(result.stdout())
                 .contains(
+                        "Imported Trello board: \"Existing Board\"",
+                        "Board identifier for WORKFLOW.md: SYNTH001",
+                        "Active lists: \"Queue for Codex\", \"Doing\"",
+                        "In-progress list: \"Doing\"",
+                        "Terminal lists: \"Released\"",
                         "Blocked list: \"Blocked\"",
                         "symphony-trello start --env "
                                 + shellQuote(env.toAbsolutePath().normalize().toString())
@@ -4333,7 +4203,6 @@ final class TrelloBoardSetupMainTest {
                                 + shellQuote(
                                         workflow.toAbsolutePath().normalize().toString()))
                 .doesNotContain("./mvnw quarkus:dev");
-        assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
     }
 
     @Test
@@ -4341,13 +4210,9 @@ final class TrelloBoardSetupMainTest {
         // given
         Path workflow = tempDir.resolve("imported-space-lists.WORKFLOW.md");
         Path env = tempDir.resolve(".env.imported-space");
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode = run(
-                stdout,
-                stderr,
+        CliRunResult result = runCli(
                 "import-board",
                 "--endpoint",
                 endpoint(),
@@ -4369,14 +4234,13 @@ final class TrelloBoardSetupMainTest {
                 env.toString());
 
         // then
-        assertThat(exitCode).isZero();
+        result.assertSuccess();
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("- \" Queue for Codex \"")
                 .contains("- \"Released \"")
                 .contains("- \" Doing \"");
-        assertThat(stdout.toString(StandardCharsets.UTF_8)).contains("Imported Trello board: \"Existing Board\"");
-        assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
+        result.stdoutContains("Imported Trello board: \"Existing Board\"");
     }
 
     @Test
@@ -4398,13 +4262,9 @@ final class TrelloBoardSetupMainTest {
                 StandardCharsets.UTF_8);
         Path env = tempDir.resolve(".env.imported-port");
         Files.writeString(env, "SYNTHETIC_IMPORT_STATUS_PORT=19091\n", StandardCharsets.UTF_8);
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode = run(
-                stdout,
-                stderr,
+        CliRunResult result = runCli(
                 "import-board",
                 "--endpoint",
                 endpoint(),
@@ -4427,7 +4287,7 @@ final class TrelloBoardSetupMainTest {
                 "--force");
 
         // then
-        assertThat(exitCode).isZero();
+        result.assertSuccess();
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("port: 19091")
@@ -4438,8 +4298,7 @@ final class TrelloBoardSetupMainTest {
             assertThat(board.envPath()).isEqualTo(env.toAbsolutePath().normalize());
             assertThat(board.serverPort()).isEqualTo(19091);
         });
-        assertThat(stdout.toString(StandardCharsets.UTF_8)).contains("HTTP status port: 19091");
-        assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
+        result.stdoutContains("HTTP status port: 19091");
     }
 
     @Test
@@ -4462,13 +4321,9 @@ final class TrelloBoardSetupMainTest {
         Path workflow = tempDir.resolve("new-import.WORKFLOW.md");
         Path env = tempDir.resolve(".env.import-port-scan");
         Files.writeString(env, "SYNTHETIC_IMPORT_STATUS_PORT=18080\n", StandardCharsets.UTF_8);
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode = run(
-                stdout,
-                stderr,
+        CliRunResult result = runCli(
                 "import-board",
                 "--endpoint",
                 endpoint(),
@@ -4490,7 +4345,7 @@ final class TrelloBoardSetupMainTest {
                 env.toString());
 
         // then
-        assertSiblingWorkflowPortUsesEnvironmentVariable(exitCode, workflow, env, stdout, stderr);
+        assertSiblingWorkflowPortUsesEnvironmentVariable(result, workflow, env);
     }
 
     @Test
@@ -4513,13 +4368,9 @@ final class TrelloBoardSetupMainTest {
         Path workflow = tempDir.resolve("new-board-env-port.WORKFLOW.md");
         Path env = tempDir.resolve(".env.new-board-port-scan");
         Files.writeString(env, "SYNTHETIC_NEW_BOARD_STATUS_PORT=18080\n", StandardCharsets.UTF_8);
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
 
         // when
-        int exitCode = run(
-                stdout,
-                stderr,
+        CliRunResult result = runCli(
                 "new-board",
                 "--endpoint",
                 endpoint(),
@@ -4539,22 +4390,20 @@ final class TrelloBoardSetupMainTest {
                 env.toString());
 
         // then
-        assertSiblingWorkflowPortUsesEnvironmentVariable(exitCode, workflow, env, stdout, stderr);
+        assertSiblingWorkflowPortUsesEnvironmentVariable(result, workflow, env);
     }
 
-    private void assertSiblingWorkflowPortUsesEnvironmentVariable(
-            int exitCode, Path workflow, Path env, ByteArrayOutputStream stdout, ByteArrayOutputStream stderr)
+    private void assertSiblingWorkflowPortUsesEnvironmentVariable(CliRunResult result, Path workflow, Path env)
             throws Exception {
         int expectedPort = firstAvailableManagedPort(18080);
 
-        assertThat(exitCode).isZero();
+        result.assertSuccess();
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("port: " + expectedPort)
                 .doesNotContain("port: 18080");
         assertConnectedBoardUsesWorkflowEnvAndPort(workflow, env, expectedPort);
-        assertThat(stdout.toString(StandardCharsets.UTF_8)).contains("HTTP status port: " + expectedPort);
-        assertThat(stderr.toString(StandardCharsets.UTF_8)).isEmpty();
+        result.stdoutContains("HTTP status port: " + expectedPort);
     }
 
     @Test
@@ -5820,6 +5669,19 @@ final class TrelloBoardSetupMainTest {
         return runCli(() -> TrelloBoardSetup.CodexModelDefaults.fallback(), args);
     }
 
+    private CliRunResult runCli(Map<String, String> properties, String... args) {
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+        int exitCode = TrelloBoardSetupMain.run(
+                args,
+                new PrintStream(stdout, true, StandardCharsets.UTF_8),
+                new PrintStream(stderr, true, StandardCharsets.UTF_8),
+                TrelloBoardSetup.CodexModelDefaults.fallback(),
+                properties);
+        return new CliRunResult(
+                exitCode, stdout.toString(StandardCharsets.UTF_8), stderr.toString(StandardCharsets.UTF_8));
+    }
+
     private CliRunResult runNewBoardWithRuntimeEnv(Path workflow, Path env, boolean includeCredentials) {
         SetupCommandBuilder command = SetupCommandBuilder.newBoard(endpoint());
         if (includeCredentials) {
@@ -5959,6 +5821,20 @@ final class TrelloBoardSetupMainTest {
                 exitCode, stdout.toString(StandardCharsets.UTF_8), stderr.toString(StandardCharsets.UTF_8));
     }
 
+    private CliRunResult runCli(TrelloBoardSetup setup, LocalWorkerManager workerManager, String... args) {
+        var stdout = new ByteArrayOutputStream();
+        var stderr = new ByteArrayOutputStream();
+        int exitCode = TrelloBoardSetupMain.run(
+                args,
+                new TrelloBoardSetupService(setup, workerManager, Map.of()),
+                new LocalSetup(setup, new ProcessCommandRunner()),
+                workerManager,
+                new PrintStream(stdout, true, StandardCharsets.UTF_8),
+                new PrintStream(stderr, true, StandardCharsets.UTF_8));
+        return new CliRunResult(
+                exitCode, stdout.toString(StandardCharsets.UTF_8), stderr.toString(StandardCharsets.UTF_8));
+    }
+
     private CliRunResult runCli(Supplier<TrelloBoardSetup.CodexModelDefaults> codexModelDefaults, String... args) {
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
@@ -5985,27 +5861,6 @@ final class TrelloBoardSetupMainTest {
                 new PrintStream(stderr, true, StandardCharsets.UTF_8));
         return new CliRunResult(
                 exitCode, stdout.toString(StandardCharsets.UTF_8), stderr.toString(StandardCharsets.UTF_8));
-    }
-
-    private int run(ByteArrayOutputStream stdout, ByteArrayOutputStream stderr, String... args) {
-        return TrelloBoardSetupMain.run(
-                args,
-                new PrintStream(stdout, true, StandardCharsets.UTF_8),
-                new PrintStream(stderr, true, StandardCharsets.UTF_8),
-                TrelloBoardSetup.CodexModelDefaults.fallback());
-    }
-
-    private int run(
-            Map<String, String> properties,
-            ByteArrayOutputStream stdout,
-            ByteArrayOutputStream stderr,
-            String... args) {
-        return TrelloBoardSetupMain.run(
-                args,
-                new PrintStream(stdout, true, StandardCharsets.UTF_8),
-                new PrintStream(stderr, true, StandardCharsets.UTF_8),
-                TrelloBoardSetup.CodexModelDefaults.fallback(),
-                properties);
     }
 
     private static Stream<Arguments> directCommandHelp() {
@@ -6276,8 +6131,6 @@ final class TrelloBoardSetupMainTest {
     private record ReplacedRunningWorkerFixture(
             ConnectedBoard oldBoard, Path newWorkflow, Path env, LocalWorkerManager workerManager) {}
 
-    private record ForcedImportResult(int exitCode, String stdout, String stderr) {}
-
     private ReplacedRunningWorkerFixture replacedRunningWorkerFixture(String slug) throws Exception {
         Path oldWorkflow = tempDir.resolve(slug + "-old.WORKFLOW.md");
         Path newWorkflow = tempDir.resolve(slug + "-new.WORKFLOW.md");
@@ -6303,41 +6156,32 @@ final class TrelloBoardSetupMainTest {
         return new ReplacedRunningWorkerFixture(oldBoard, newWorkflow, env, workerManager);
     }
 
-    private ForcedImportResult runForcedImportBoard(ReplacedRunningWorkerFixture fixture) throws Exception {
+    private CliRunResult runForcedImportBoard(ReplacedRunningWorkerFixture fixture) throws Exception {
         TrelloBoardSetup boardSetup = new TrelloBoardSetup(
                 new ObjectMapper(),
                 () -> CodexModelSelectionDefaults.of(TrelloBoardSetup.CodexModelDefaults.fallback()));
-        var stdout = new ByteArrayOutputStream();
-        var stderr = new ByteArrayOutputStream();
-        int exitCode = TrelloBoardSetupMain.run(
-                new String[] {
-                    "import-board",
-                    "--endpoint",
-                    endpoint(),
-                    "--key",
-                    "key",
-                    "--token",
-                    "token",
-                    "--board",
-                    "https://trello.com/b/input/existing-board",
-                    "--active",
-                    "Queue for Codex",
-                    "--terminal",
-                    "Released",
-                    "--workflow",
-                    fixture.newWorkflow().toString(),
-                    "--manifest",
-                    tempDir.resolve("connected-boards.json").toString(),
-                    "--env",
-                    fixture.env().toString(),
-                    "--force"
-                },
-                new TrelloBoardSetupService(boardSetup, fixture.workerManager(), Map.of()),
-                new LocalSetup(boardSetup, new ProcessCommandRunner()),
+        return runCli(
+                boardSetup,
                 fixture.workerManager(),
-                new PrintStream(stdout, true, StandardCharsets.UTF_8),
-                new PrintStream(stderr, true, StandardCharsets.UTF_8));
-        return new ForcedImportResult(
-                exitCode, stdout.toString(StandardCharsets.UTF_8), stderr.toString(StandardCharsets.UTF_8));
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "https://trello.com/b/input/existing-board",
+                "--active",
+                "Queue for Codex",
+                "--terminal",
+                "Released",
+                "--workflow",
+                fixture.newWorkflow().toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
+                "--env",
+                fixture.env().toString(),
+                "--force");
     }
 }
