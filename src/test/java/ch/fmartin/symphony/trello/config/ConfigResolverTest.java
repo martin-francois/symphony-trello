@@ -22,21 +22,13 @@ final class ConfigResolverTest {
     @Test
     void resolvesWorkflowEnvironmentReferencesForBoardScopeAndServerPort() throws Exception {
         // given
-        Path workflow = tempDir.resolve("WORKFLOW.md");
-        Files.writeString(
-                workflow,
+        Path workflow = writeTrelloWorkflow(
+                "WORKFLOW.md",
+                "$SYMPHONY_BOARD_ID",
                 """
-                ---
-                tracker:
-                  kind: trello
-                  api_key: literal-key
-                  api_token: literal-token
-                  board_id: $SYMPHONY_BOARD_ID
                   resolved_board_id: $SYMPHONY_RESOLVED_BOARD_ID
                 server:
                   port: $SYMPHONY_TEST_PORT
-                ---
-                Prompt
                 """);
         ConfigResolver resolver = new ConfigResolver(name -> switch (name) {
             case "SYMPHONY_BOARD_ID" -> Optional.of("board-shortlink");
@@ -59,21 +51,7 @@ final class ConfigResolverTest {
     void rejectsFractionalNumericValuesInsteadOfTruncatingThem(String name, String section, String expectedMessage)
             throws Exception {
         // given
-        Path workflow = tempDir.resolve("WORKFLOW." + name + ".md");
-        Files.writeString(
-                workflow,
-                """
-                ---
-                tracker:
-                  kind: trello
-                  api_key: literal-key
-                  api_token: literal-token
-                  board_id: board-1
-                %s
-                ---
-                Prompt
-                """
-                        .formatted(section));
+        Path workflow = writeDefaultWorkflow("WORKFLOW." + name + ".md", section);
         ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
 
         // when
@@ -104,21 +82,7 @@ final class ConfigResolverTest {
     void rejectsMalformedObjectSectionsInsteadOfIgnoringThem(String name, String section, String expectedMessage)
             throws Exception {
         // given
-        Path workflow = tempDir.resolve("WORKFLOW." + name + ".md");
-        Files.writeString(
-                workflow,
-                """
-                ---
-                tracker:
-                  kind: trello
-                  api_key: literal-key
-                  api_token: literal-token
-                  board_id: board-1
-                %s
-                ---
-                Prompt
-                """
-                        .formatted(section));
+        Path workflow = writeDefaultWorkflow("WORKFLOW." + name + ".md", section);
         ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
 
         // when
@@ -139,20 +103,11 @@ final class ConfigResolverTest {
     @Test
     void emptyPriorityLabelValuesFallBackToDefaultsInsteadOfCrashing() throws Exception {
         // given
-        Path workflow = tempDir.resolve("WORKFLOW.empty-priority.md");
-        Files.writeString(
-                workflow,
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.empty-priority.md",
                 """
-                ---
-                tracker:
-                  kind: trello
-                  api_key: literal-key
-                  api_token: literal-token
-                  board_id: board-1
                   priority_labels:
                     rush:
-                ---
-                Prompt
                 """);
         ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
 
@@ -166,20 +121,11 @@ final class ConfigResolverTest {
     @Test
     void rejectsFractionalEnvironmentBackedServerPortInsteadOfCrashingRaw() throws Exception {
         // given
-        Path workflow = tempDir.resolve("WORKFLOW.fractional-env-port.md");
-        Files.writeString(
-                workflow,
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.fractional-env-port.md",
                 """
-                ---
-                tracker:
-                  kind: trello
-                  api_key: literal-key
-                  api_token: literal-token
-                  board_id: board-1
                 server:
                   port: $SYMPHONY_FRACTIONAL_PORT
-                ---
-                Prompt
                 """);
         ConfigResolver resolver = new ConfigResolver(
                 name -> "SYMPHONY_FRACTIONAL_PORT".equals(name) ? Optional.of("18080.5") : Optional.empty());
@@ -196,20 +142,11 @@ final class ConfigResolverTest {
     @Test
     void reportsWholeButTooLargeServerPortAsOutOfRangeNotAsFractional() throws Exception {
         // given
-        Path workflow = tempDir.resolve("WORKFLOW.huge-port.md");
-        Files.writeString(
-                workflow,
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.huge-port.md",
                 """
-                ---
-                tracker:
-                  kind: trello
-                  api_key: literal-key
-                  api_token: literal-token
-                  board_id: board-1
                 server:
                   port: 99999999999999999999999
-                ---
-                Prompt
                 """);
         ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
 
@@ -225,20 +162,11 @@ final class ConfigResolverTest {
     @Test
     void reportsWholeButTooLargeEnvironmentBackedServerPortAsOutOfRange() throws Exception {
         // given
-        Path workflow = tempDir.resolve("WORKFLOW.huge-env-port.md");
-        Files.writeString(
-                workflow,
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.huge-env-port.md",
                 """
-                ---
-                tracker:
-                  kind: trello
-                  api_key: literal-key
-                  api_token: literal-token
-                  board_id: board-1
                 server:
                   port: $SYMPHONY_HUGE_PORT
-                ---
-                Prompt
                 """);
         ConfigResolver resolver = new ConfigResolver(
                 name -> "SYMPHONY_HUGE_PORT".equals(name) ? Optional.of("9999999999") : Optional.empty());
@@ -255,20 +183,11 @@ final class ConfigResolverTest {
     @Test
     void acceptsWholeValuedFloatingPointServerPort() throws Exception {
         // given
-        Path workflow = tempDir.resolve("WORKFLOW.whole-float-port.md");
-        Files.writeString(
-                workflow,
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.whole-float-port.md",
                 """
-                ---
-                tracker:
-                  kind: trello
-                  api_key: literal-key
-                  api_token: literal-token
-                  board_id: board-1
                 server:
                   port: 18080.0
-                ---
-                Prompt
                 """);
         ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
 
@@ -286,22 +205,13 @@ final class ConfigResolverTest {
         // the raw workflow or the SYMPHONY_HTTP_PORT/QUARKUS_HTTP_PORT overrides), so rejecting
         // ranges here would only break deployed workers whose unused workflow port is stale.
         // Range validation stays at the launch layer (WorkflowConfigEditor/LocalPort).
-        Path workflow = tempDir.resolve("WORKFLOW.out-of-range-port.md");
-        Files.writeString(
-                workflow,
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.out-of-range-port.md",
                 """
-                ---
-                tracker:
-                  kind: trello
-                  api_key: literal-key
-                  api_token: literal-token
-                  board_id: board-1
                 codex:
                   command: fake
                 server:
                   port: 70000
-                ---
-                Prompt
                 """);
         ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
 
@@ -318,22 +228,13 @@ final class ConfigResolverTest {
     void keepsEphemeralServerPortZeroDispatchable() throws Exception {
         // given
         // SPEC.md allows server.port 0 for temporary local runs on an ephemeral port.
-        Path workflow = tempDir.resolve("WORKFLOW.ephemeral-port.md");
-        Files.writeString(
-                workflow,
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.ephemeral-port.md",
                 """
-                ---
-                tracker:
-                  kind: trello
-                  api_key: literal-key
-                  api_token: literal-token
-                  board_id: board-1
                 codex:
                   command: fake
                 server:
                   port: 0
-                ---
-                Prompt
                 """);
         ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
 
@@ -349,20 +250,11 @@ final class ConfigResolverTest {
     @Test
     void fractionalPriorityLabelValuesFallBackToDefaultsInsteadOfTruncating() throws Exception {
         // given
-        Path workflow = tempDir.resolve("WORKFLOW.fractional-priority.md");
-        Files.writeString(
-                workflow,
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.fractional-priority.md",
                 """
-                ---
-                tracker:
-                  kind: trello
-                  api_key: literal-key
-                  api_token: literal-token
-                  board_id: board-1
                   priority_labels:
                     rush: 2.5
-                ---
-                Prompt
                 """);
         ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
 
@@ -783,5 +675,37 @@ final class ConfigResolverTest {
 
         // then
         assertThat(config.tracker().apiKey()).isEqualTo("${SYMPHONY_TEST_KEY:-fallback}");
+    }
+
+    private Path writeDefaultWorkflow(String fileName, String extraFrontMatter) throws Exception {
+        return writeTrelloWorkflow(fileName, "board-1", extraFrontMatter);
+    }
+
+    private Path writeTrelloWorkflow(String fileName, String boardId, String extraFrontMatter) throws Exception {
+        return writeWorkflow(
+                fileName,
+                """
+                tracker:
+                  kind: trello
+                  api_key: literal-key
+                  api_token: literal-token
+                  board_id: %s
+                %s
+                """
+                        .formatted(boardId, extraFrontMatter));
+    }
+
+    private Path writeWorkflow(String fileName, String frontMatter) throws Exception {
+        Path workflow = tempDir.resolve(fileName);
+        Files.writeString(
+                workflow,
+                """
+                ---
+                %s
+                ---
+                Prompt
+                """
+                        .formatted(frontMatter));
+        return workflow;
     }
 }
