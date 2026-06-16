@@ -13,6 +13,9 @@ prompts, and product terminology. Deployment steps and installer lifecycle testi
 - Lead the README with who the project is for, why they should use it, and the practical benefits
   before implementation details. Move technical mechanics into supporting sections once the value is
   clear.
+- Order README sections by what most users need first. Assume many readers stop when the next section
+  looks irrelevant, so put the shortest successful path and common usage before reference material,
+  edge cases, advanced setup, and maintainer details.
 - Keep README content focused on users and operators who want to evaluate, install, configure, run,
   troubleshoot, or deploy Symphony for Trello. Move contributor-only content such as source-checkout
   development runs, build/test commands, CI details, coding standards, and PR process rules to
@@ -143,6 +146,9 @@ prompts, and product terminology. Deployment steps and installer lifecycle testi
   action has a clear opt-out or safe fallback. Do not add prompts only to make a choice feel more
   explicit. If the choice follows another mature OSS installer precedent, document that precedent and
   the tradeoff in an ADR.
+- When documenting Windows setup, present WSL2 with the Linux installer as the recommended path.
+  Mention native Windows PowerShell only as a best-effort path. Keep this framing in README setup
+  docs, installer reference docs, SPEC updates, and user-facing Windows installer text.
 - In prerequisites, name only tools the reader must install or provide. Do not list the Maven wrapper
   as a prerequisite when it is already committed. For command-line tools such as Codex, state exactly
   how the service finds them, such as `PATH` lookup or a configurable command path.
