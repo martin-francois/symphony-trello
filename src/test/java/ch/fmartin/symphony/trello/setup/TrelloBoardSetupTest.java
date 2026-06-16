@@ -1,7 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
 import static ch.fmartin.symphony.trello.TestHttpExchange.query;
-import static ch.fmartin.symphony.trello.TestHttpExchange.respond;
+import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.respond;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
@@ -9,11 +9,11 @@ import static org.assertj.core.api.Assertions.catchThrowable;
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
+import ch.fmartin.symphony.trello.testsupport.FakeTrelloServer;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -32,7 +32,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 final class TrelloBoardSetupTest {
-    private HttpServer server;
+    private FakeTrelloServer trello;
     private TrelloBoardSetup setup;
     private final List<String> createdLists = new ArrayList<>();
     private final AtomicReference<String> authorization = new AtomicReference<>();
@@ -45,7 +45,7 @@ final class TrelloBoardSetupTest {
 
     @BeforeEach
     void startServer() throws Exception {
-        server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        trello = new FakeTrelloServer();
         // Port-selection must not depend on the host's real port occupancy (live workers can
         // hold 18080+), so the fixture fakes every loopback port as free.
         setup = new TrelloBoardSetup(new ObjectMapper()).withPortProbe(port -> false);
@@ -69,7 +69,7 @@ final class TrelloBoardSetupTest {
                 ]
                 """);
 
-        server.createContext("/1/boards/", exchange -> {
+        trello.on("/1/boards/", exchange -> {
             assertThat(exchange.getRequestMethod()).isEqualTo("POST");
             authorization.set(exchange.getRequestHeaders().getFirst("Authorization"));
             Map<String, String> query = query(exchange);
@@ -85,14 +85,14 @@ final class TrelloBoardSetupTest {
                     """
                             .formatted(query.get("name")));
         });
-        server.createContext("/1/lists", exchange -> {
+        trello.on("/1/lists", exchange -> {
             assertThat(exchange.getRequestMethod()).isEqualTo("POST");
             Map<String, String> query = query(exchange);
             assertThat(query).containsEntry("idBoard", "board-1").containsEntry("pos", "bottom");
             createdLists.add(query.get("name"));
             respond(exchange, "{\"id\":\"list-" + createdLists.size() + "\",\"name\":\"" + query.get("name") + "\"}");
         });
-        server.createContext("/1/boards/input", exchange -> {
+        trello.on("/1/boards/input", exchange -> {
             assertThat(exchange.getRequestMethod()).isEqualTo("GET");
             boardInfoLookups.incrementAndGet();
             respond(
@@ -101,21 +101,21 @@ final class TrelloBoardSetupTest {
                     {"id":"board-1","name":"Existing Board","shortLink":"SYNTH001","url":"https://trello.com/b/SYNTH001/existing-board","closed":false}
                     """);
         });
-        server.createContext("/1/boards/board-1/lists", exchange -> respond(exchange, boardListsResponse.get()));
-        server.createContext("/1/members/me/organizations", exchange -> respond(exchange, workspaceResponse.get()));
-        server.start();
+        trello.on("/1/boards/board-1/lists", exchange -> respond(exchange, boardListsResponse.get()));
+        trello.on("/1/members/me/organizations", exchange -> respond(exchange, workspaceResponse.get()));
+        trello.startEmpty();
     }
 
     @AfterEach
     void stopServer() {
-        server.stop(0);
+        trello.stop();
     }
 
     @Test
     void newBoardDerivesBoardKeyFromUrlWhenCreateResponseOmitsShortLink() {
         // given
-        server.removeContext("/1/boards/");
-        server.createContext("/1/boards/", exchange -> {
+        trello.remove("/1/boards/");
+        trello.on("/1/boards/", exchange -> {
             Map<String, String> query = query(exchange);
             respond(
                     exchange,
@@ -124,8 +124,8 @@ final class TrelloBoardSetupTest {
                     """
                             .formatted(query.get("name")));
         });
-        server.removeContext("/1/lists");
-        server.createContext("/1/lists", exchange -> {
+        trello.remove("/1/lists");
+        trello.on("/1/lists", exchange -> {
             Map<String, String> query = query(exchange);
             createdLists.add(query.get("name"));
             respond(exchange, "{\"id\":\"list-" + createdLists.size() + "\",\"name\":\"" + query.get("name") + "\"}");
@@ -152,8 +152,8 @@ final class TrelloBoardSetupTest {
     @Test
     void newBoardClassifiesTrelloBoardLimitAsExpectedGuidance() {
         // given
-        server.removeContext("/1/boards/");
-        server.createContext("/1/boards/", exchange -> {
+        trello.remove("/1/boards/");
+        trello.on("/1/boards/", exchange -> {
             byte[] body = "{\"message\":\"Cannot create board as organization is at its board limit\"}"
                     .getBytes(StandardCharsets.UTF_8);
             exchange.sendResponseHeaders(400, body.length);
@@ -184,7 +184,7 @@ final class TrelloBoardSetupTest {
     @Test
     void importBoardReportsActionableErrorForUnresolvableBoardSelector() {
         // given
-        server.createContext("/1/boards/notreal", exchange -> {
+        trello.on("/1/boards/notreal", exchange -> {
             exchange.sendResponseHeaders(400, 0);
             exchange.getResponseBody().write("invalid id".getBytes(StandardCharsets.UTF_8));
             exchange.close();
@@ -216,13 +216,13 @@ final class TrelloBoardSetupTest {
     @Test
     void newBoardClassifiesUnauthorizedWorkspaceIdAsWorkspaceInputError() {
         // given
-        server.removeContext("/1/boards/");
-        server.createContext("/1/boards/", exchange -> {
+        trello.remove("/1/boards/");
+        trello.on("/1/boards/", exchange -> {
             exchange.sendResponseHeaders(401, 0);
             exchange.getResponseBody().write("unauthorized org access".getBytes(StandardCharsets.UTF_8));
             exchange.close();
         });
-        server.createContext(
+        trello.on(
                 "/1/members/me",
                 exchange -> respond(
                         exchange,
@@ -255,13 +255,13 @@ final class TrelloBoardSetupTest {
     @Test
     void newBoardKeepsAuthFailureWhenCredentialsCannotReadMemberProfile() {
         // given
-        server.removeContext("/1/boards/");
-        server.createContext("/1/boards/", exchange -> {
+        trello.remove("/1/boards/");
+        trello.on("/1/boards/", exchange -> {
             exchange.sendResponseHeaders(401, 0);
             exchange.getResponseBody().write("invalid token".getBytes(StandardCharsets.UTF_8));
             exchange.close();
         });
-        server.createContext("/1/members/me", exchange -> {
+        trello.on("/1/members/me", exchange -> {
             exchange.sendResponseHeaders(401, 0);
             exchange.close();
         });
@@ -2345,7 +2345,7 @@ final class TrelloBoardSetupTest {
     }
 
     private URI endpoint() {
-        return URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/1");
+        return URI.create("http://127.0.0.1:" + trello.endpointUri().getPort() + "/1");
     }
 
     private static EffectiveConfig resolve(Path workflow) {
