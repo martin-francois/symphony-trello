@@ -79,11 +79,10 @@ commit and open pull requests. Topic-specific rules live in the pages linked und
   ```
 
   Use `spotless:apply` before that when formatting changed.
-  When a change needs PowerShell verification and local `pwsh` is unavailable, use
-  `./scripts/pwsh-docker.sh` for the PowerShell install/uninstall checks and set
+  PowerShell installer tests use native `pwsh` automatically on Windows. On Linux, set
   `SYMPHONY_TRELLO_TEST_PWSH=./scripts/pwsh-docker.sh` for Java tests that support a configurable
-  PowerShell command. Do not report PowerShell as skipped only because `pwsh` is missing if Docker
-  is available.
+  PowerShell command, or run `./scripts/pwsh-docker.sh` directly for script checks. Do not report
+  PowerShell as skipped only because `pwsh` is missing if Docker is available.
 
 ## Committing and pull requests
 
