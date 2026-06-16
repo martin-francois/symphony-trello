@@ -18,35 +18,25 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 public final class FakeTrelloServer implements AutoCloseable {
+    private static final String CREATED_BOARD_NAME_PLACEHOLDER = "__CREATED_BOARD_NAME__";
+
     private final List<String> createdLists = new ArrayList<>();
     private final List<String> boardLookups = new ArrayList<>();
     private final List<String> memberLookups = new ArrayList<>();
     private final List<String> workspaceLookups = new ArrayList<>();
-    private final AtomicReference<String> memberResponse = new AtomicReference<>(
-            """
-            {"id":"member-1","username":"alex","fullName":"Alex Example"}
-            """);
+    private final AtomicReference<String> memberResponse =
+            new AtomicReference<>(memberJson("member-1", "alex", "Alex Example"));
     private final AtomicReference<String> workspaceResponse = new AtomicReference<>(
-            """
-            [
-              {"id":"workspace-1","name":"engineering","displayName":"Engineering","url":"https://trello.com/w/engineering"}
-            ]
-            """);
+            workspacesJson(workspaceJson("workspace-1", "engineering", "Engineering", "engineering")));
     private final AtomicReference<String> boardResponse = new AtomicReference<>(
-            """
-            {"id":"board-1","name":"%s","shortLink":"abc123","url":"https://trello.com/b/abc123/board"}
-            """);
-    private final AtomicReference<String> boardListsResponse = new AtomicReference<>(
-            """
-            [
-              {"id":"list-1","name":"Inbox","closed":false,"pos":1},
-              {"id":"list-2","name":"Ready for Codex","closed":false,"pos":2},
-              {"id":"list-3","name":"In Progress","closed":false,"pos":3},
-              {"id":"list-4","name":"Blocked","closed":false,"pos":4},
-              {"id":"list-5","name":"Human Review","closed":false,"pos":5},
-              {"id":"list-6","name":"Done","closed":false,"pos":6}
-            ]
-            """);
+            boardJson("board-1", CREATED_BOARD_NAME_PLACEHOLDER, "abc123", "https://trello.com/b/abc123/board"));
+    private final AtomicReference<String> boardListsResponse = new AtomicReference<>(listsJson(
+            trelloList("list-1", "Inbox", 1),
+            trelloList("list-2", "Ready for Codex", 2),
+            trelloList("list-3", "In Progress", 3),
+            trelloList("list-4", "Blocked", 4),
+            trelloList("list-5", "Human Review", 5),
+            trelloList("list-6", "Done", 6)));
     private final Map<String, HttpHandler> customRoutes = new LinkedHashMap<>();
     private HttpServer server;
 
@@ -79,12 +69,13 @@ public final class FakeTrelloServer implements AutoCloseable {
         });
         server.createContext("/1/boards/", exchange -> {
             boardLookups.add(exchange.getRequestURI().getPath());
-            respond(exchange, boardResponse.get().formatted(query(exchange).getOrDefault("name", "Imported Queue")));
+            String boardName = query(exchange).getOrDefault("name", "Imported Queue");
+            respond(exchange, boardResponse.get().replace(CREATED_BOARD_NAME_PLACEHOLDER, jsonEscaped(boardName)));
         });
         server.createContext("/1/boards/board-1/lists", exchange -> respond(exchange, boardListsResponse.get()));
         server.createContext("/1/lists", exchange -> {
             createdLists.add(query(exchange).get("name"));
-            respond(exchange, "{\"id\":\"list-" + createdLists.size() + "\"}");
+            respond(exchange, createdListJson("list-" + createdLists.size()));
         });
     }
 
@@ -125,25 +116,13 @@ public final class FakeTrelloServer implements AutoCloseable {
     }
 
     public FakeTrelloServer givenMember(String id, String username, String fullName) {
-        memberResponse.set("""
-                {"id":"%s","username":"%s","fullName":"%s"}
-                """
-                .formatted(id, username, fullName));
+        memberResponse.set(memberJson(id, username, fullName));
         return this;
     }
 
     public FakeTrelloServer givenSingleWorkspace(String id, String displayName) {
-        return givenWorkspaces(
-                """
-                [
-                        {"id":"%s","name":"%s","displayName":"%s","url":"https://trello.com/w/%s"}
-                ]
-                """
-                        .formatted(
-                                id,
-                                displayName.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-"),
-                                displayName,
-                                id));
+        return givenWorkspaces(workspacesJson(workspaceJson(
+                id, displayName.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-"), displayName, id)));
     }
 
     public FakeTrelloServer givenWorkspaces(String json) {
@@ -152,23 +131,16 @@ public final class FakeTrelloServer implements AutoCloseable {
     }
 
     public FakeTrelloServer givenBoard(String id, String shortLink, String name, String url) {
-        boardResponse.set("""
-                {"id":"%s","name":"%s","shortLink":"%s","url":"%s"}
-                """
-                .formatted(id, name, shortLink, url));
+        boardResponse.set(boardJson(id, name, shortLink, url));
         return this;
     }
 
     public FakeTrelloServer givenBoardLists(String... listNames) {
-        List<String> jsonLists = new ArrayList<>();
+        List<TrelloListJson> jsonLists = new ArrayList<>();
         for (int i = 0; i < listNames.length; i++) {
-            jsonLists.add(
-                    """
-                    {"id":"list-%d","name":"%s","closed":false,"pos":%d}
-                    """
-                            .formatted(i + 1, listNames[i], i + 1));
+            jsonLists.add(trelloList("list-" + (i + 1), listNames[i], i + 1));
         }
-        boardListsResponse.set("[\n" + String.join(",\n", jsonLists) + "\n]");
+        boardListsResponse.set(listsJson(jsonLists.toArray(TrelloListJson[]::new)));
         return this;
     }
 
@@ -199,5 +171,82 @@ public final class FakeTrelloServer implements AutoCloseable {
 
     public static void respond(HttpExchange exchange, int statusCode, String body) throws IOException {
         TestHttpExchange.respond(exchange, statusCode, body);
+    }
+
+    public static String memberJson(String id, String username, String fullName) {
+        return """
+                {"id":%s,"username":%s,"fullName":%s}
+                """
+                .formatted(jsonValue(id), jsonValue(username), jsonValue(fullName));
+    }
+
+    public static String workspaceJson(String id, String name, String displayName, String urlSlug) {
+        return """
+                {"id":%s,"name":%s,"displayName":%s,"url":"https://trello.com/w/%s"}
+                """
+                .formatted(jsonValue(id), jsonValue(name), jsonValue(displayName), jsonEscaped(urlSlug));
+    }
+
+    public static String workspacesJson(String... workspaces) {
+        return "[\n" + String.join(",\n", workspaces) + "\n]";
+    }
+
+    public static String boardJson(String id, String name, String shortLink, String url) {
+        return boardJson(id, name, shortLink, url, null);
+    }
+
+    public static String boardJson(String id, String name, boolean closed) {
+        return """
+                {"id":%s,"name":%s,"closed":%s}
+                """
+                .formatted(jsonValue(id), jsonValue(name), closed);
+    }
+
+    public static String boardJson(String id, String name, String shortLink, String url, Boolean closed) {
+        String closedField = closed == null ? "" : ",\"closed\":" + closed;
+        return """
+                {"id":%s,"name":%s,"shortLink":%s,"url":%s%s}
+                """
+                .formatted(jsonValue(id), jsonValue(name), jsonValue(shortLink), jsonValue(url), closedField);
+    }
+
+    public static String createdListJson(String id) {
+        return """
+                {"id":%s}
+                """.formatted(jsonValue(id));
+    }
+
+    public static TrelloListJson trelloList(String id, String name, int pos) {
+        return new TrelloListJson(id, name, false, pos);
+    }
+
+    public static TrelloListJson trelloList(String id, String name, boolean closed, int pos) {
+        return new TrelloListJson(id, name, closed, pos);
+    }
+
+    public static String listsJson(TrelloListJson... lists) {
+        List<String> jsonLists = new ArrayList<>();
+        for (TrelloListJson list : lists) {
+            jsonLists.add("""
+                    {"id":%s,"name":%s,"closed":%s,"pos":%d}
+                    """
+                    .formatted(jsonValue(list.id()), jsonValue(list.name()), list.closed(), list.pos()));
+        }
+        return "[\n" + String.join(",\n", jsonLists) + "\n]";
+    }
+
+    public record TrelloListJson(String id, String name, boolean closed, int pos) {}
+
+    private static String jsonValue(String value) {
+        return "\"" + jsonEscaped(value) + "\"";
+    }
+
+    /** Trello returns valid JSON for any reflected value, so canned responses escape echoes. */
+    public static String jsonEscaped(String value) {
+        return value.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t");
     }
 }
