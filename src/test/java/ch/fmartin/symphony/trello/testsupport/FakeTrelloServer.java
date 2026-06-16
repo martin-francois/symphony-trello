@@ -97,6 +97,14 @@ public final class FakeTrelloServer implements AutoCloseable {
         return this;
     }
 
+    public FakeTrelloServer remove(String path) {
+        customRoutes.remove(path);
+        if (server != null) {
+            server.removeContext(path);
+        }
+        return this;
+    }
+
     public void stop() {
         if (server != null) {
             server.stop(0);
