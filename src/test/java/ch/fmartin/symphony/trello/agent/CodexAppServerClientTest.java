@@ -30,10 +30,9 @@ final class CodexAppServerClientTest {
     @Test
     void launchesCodexWithGitDiscoveryLimitedToWorkspacesRoot() throws Exception {
         // given
-        Path appServer = tempDir.resolve("ceiling-app-server.sh");
         Path ceilingOutput = tempDir.resolve("ceiling.txt");
-        Files.writeString(
-                appServer,
+        Path appServer = writeExecutableScript(
+                "ceiling-app-server.sh",
                 """
                 #!/usr/bin/env bash
                 # Absolute output path: the codex launch uses a login shell, and hosted CI login
@@ -51,7 +50,6 @@ final class CodexAppServerClientTest {
                 done
                 """
                         .replace("__CEILING_OUTPUT__", ceilingOutput.toString()));
-        appServer.toFile().setExecutable(true);
         EffectiveConfig config = config(appServer);
         Path workspace = config.workspace().root().resolve("TRELLO-ceiling");
         Files.createDirectories(workspace);
@@ -78,9 +76,8 @@ final class CodexAppServerClientTest {
     @Test
     void handlesTurnCompletedArrivingBeforeAwaiterIsRegistered() throws Exception {
         // given
-        Path appServer = tempDir.resolve("fast-app-server.sh");
-        Files.writeString(
-                appServer,
+        Path appServer = writeExecutableScript(
+                "fast-app-server.sh",
                 """
                 #!/usr/bin/env bash
                 while IFS= read -r line; do
@@ -94,7 +91,6 @@ final class CodexAppServerClientTest {
                   esac
                 done
                 """);
-        appServer.toFile().setExecutable(true);
         EffectiveConfig config = config(appServer);
         Path workspace = config.workspace().root().resolve("TRELLO-fast");
         Files.createDirectories(workspace);
@@ -122,9 +118,8 @@ final class CodexAppServerClientTest {
     @Test
     void keepsQueuedTurnCompletionWhenAppServerExitsBeforeAwaiterIsRegistered() throws Exception {
         // given
-        Path appServer = tempDir.resolve("completed-then-exit-app-server.sh");
-        Files.writeString(
-                appServer,
+        Path appServer = writeExecutableScript(
+                "completed-then-exit-app-server.sh",
                 """
                 #!/usr/bin/env bash
                 while IFS= read -r line; do
@@ -140,7 +135,6 @@ final class CodexAppServerClientTest {
                   esac
                 done
                 """);
-        appServer.toFile().setExecutable(true);
         EffectiveConfig config =
                 config(Map.of("command", appServer.toString(), "read_timeout_ms", 1000, "turn_timeout_ms", 10000));
         Path workspace = config.workspace().root().resolve("TRELLO-completed-exit");
@@ -164,9 +158,8 @@ final class CodexAppServerClientTest {
     @Test
     void preservesAppServerErrorResponseMessage() throws Exception {
         // given
-        Path appServer = tempDir.resolve("error-response-app-server.sh");
-        Files.writeString(
-                appServer,
+        Path appServer = writeExecutableScript(
+                "error-response-app-server.sh",
                 """
                 #!/usr/bin/env bash
                 while IFS= read -r line; do
@@ -179,7 +172,6 @@ final class CodexAppServerClientTest {
                   esac
                 done
                 """);
-        appServer.toFile().setExecutable(true);
         EffectiveConfig config = config(appServer);
         Path workspace = config.workspace().root().resolve("TRELLO-error-response");
         Files.createDirectories(workspace);
@@ -205,9 +197,8 @@ final class CodexAppServerClientTest {
     void sendsAdditionalWritableRootsAsWorkspaceWriteSandboxPolicy() throws Exception {
         // given
         Path capture = tempDir.resolve("turn-start.jsonl");
-        Path appServer = tempDir.resolve("capturing-app-server.sh");
-        Files.writeString(
-                appServer,
+        Path appServer = writeExecutableScript(
+                "capturing-app-server.sh",
                 """
                 #!/usr/bin/env bash
                 capture="$1"
@@ -223,7 +214,6 @@ final class CodexAppServerClientTest {
                   esac
                 done
                 """);
-        appServer.toFile().setExecutable(true);
         Path extraRoot = tempDir.resolve("allowed-project");
         EffectiveConfig config = config(Map.of(
                 "command",
@@ -262,9 +252,8 @@ final class CodexAppServerClientTest {
     void sendsConfiguredModelAndReasoningEffortToCodexAppServer() throws Exception {
         // given
         Path capture = tempDir.resolve("model-requests.jsonl");
-        Path appServer = tempDir.resolve("model-capturing-app-server.sh");
-        Files.writeString(
-                appServer,
+        Path appServer = writeExecutableScript(
+                "model-capturing-app-server.sh",
                 """
                 #!/usr/bin/env bash
                 capture="$1"
@@ -284,7 +273,6 @@ final class CodexAppServerClientTest {
                   esac
                 done
                 """);
-        appServer.toFile().setExecutable(true);
         EffectiveConfig config = config(Map.of(
                 "command",
                 appServer + " " + capture,
@@ -325,9 +313,8 @@ final class CodexAppServerClientTest {
     void omitsModelAndReasoningEffortWhenWorkflowDoesNotConfigureThem() throws Exception {
         // given
         Path capture = tempDir.resolve("default-model-requests.jsonl");
-        Path appServer = tempDir.resolve("default-model-capturing-app-server.sh");
-        Files.writeString(
-                appServer,
+        Path appServer = writeExecutableScript(
+                "default-model-capturing-app-server.sh",
                 """
                 #!/usr/bin/env bash
                 capture="$1"
@@ -347,7 +334,6 @@ final class CodexAppServerClientTest {
                   esac
                 done
                 """);
-        appServer.toFile().setExecutable(true);
         EffectiveConfig config =
                 config(Map.of("command", appServer + " " + capture, "read_timeout_ms", 1000, "turn_timeout_ms", 1000));
         Path workspace = config.workspace().root().resolve("TRELLO-default-model");
@@ -379,9 +365,8 @@ final class CodexAppServerClientTest {
     void continuesMultipleTurnsOnOneThreadWhenControllerRequestsIt() throws Exception {
         // given
         Path capture = tempDir.resolve("turns.jsonl");
-        Path appServer = tempDir.resolve("multi-turn-app-server.sh");
-        Files.writeString(
-                appServer,
+        Path appServer = writeExecutableScript(
+                "multi-turn-app-server.sh",
                 """
                 #!/usr/bin/env bash
                 capture="$1"
@@ -400,7 +385,6 @@ final class CodexAppServerClientTest {
                   esac
                 done
                 """);
-        appServer.toFile().setExecutable(true);
         EffectiveConfig config =
                 config(Map.of("command", appServer + " " + capture, "read_timeout_ms", 1000, "turn_timeout_ms", 1000));
         Path workspace = config.workspace().root().resolve("TRELLO-multi-turn");
@@ -443,9 +427,8 @@ final class CodexAppServerClientTest {
     @Test
     void failsPromptlyWhenAppServerExitsBeforeTurnCompletion() throws Exception {
         // given
-        Path appServer = tempDir.resolve("exiting-app-server.sh");
-        Files.writeString(
-                appServer,
+        Path appServer = writeExecutableScript(
+                "exiting-app-server.sh",
                 """
                 #!/usr/bin/env bash
                 while IFS= read -r line; do
@@ -460,7 +443,6 @@ final class CodexAppServerClientTest {
                   esac
                 done
                 """);
-        appServer.toFile().setExecutable(true);
         EffectiveConfig config =
                 config(Map.of("command", appServer.toString(), "read_timeout_ms", 1000, "turn_timeout_ms", 10000));
         Path workspace = config.workspace().root().resolve("TRELLO-exit");
@@ -488,9 +470,8 @@ final class CodexAppServerClientTest {
     @Test
     void failsPromptlyWhenAppServerExitsBeforeRequestResponse() throws Exception {
         // given
-        Path appServer = tempDir.resolve("exiting-before-request-response-app-server.sh");
-        Files.writeString(
-                appServer,
+        Path appServer = writeExecutableScript(
+                "exiting-before-request-response-app-server.sh",
                 """
                 #!/usr/bin/env bash
                 while IFS= read -r line; do
@@ -501,7 +482,6 @@ final class CodexAppServerClientTest {
                   esac
                 done
                 """);
-        appServer.toFile().setExecutable(true);
         EffectiveConfig config =
                 config(Map.of("command", appServer.toString(), "read_timeout_ms", 1000, "turn_timeout_ms", 10000));
         Path workspace = config.workspace().root().resolve("TRELLO-exit-request");
@@ -529,9 +509,8 @@ final class CodexAppServerClientTest {
     @Test
     void failsTurnWhenAppServerEmitsTurnFailureNotification() throws Exception {
         // given
-        Path appServer = tempDir.resolve("failed-turn-app-server.sh");
-        Files.writeString(
-                appServer,
+        Path appServer = writeExecutableScript(
+                "failed-turn-app-server.sh",
                 """
                 #!/usr/bin/env bash
                 while IFS= read -r line; do
@@ -546,7 +525,6 @@ final class CodexAppServerClientTest {
                   esac
                 done
                 """);
-        appServer.toFile().setExecutable(true);
         EffectiveConfig config = config(appServer);
         Path workspace = config.workspace().root().resolve("TRELLO-failed");
         Files.createDirectories(workspace);
@@ -569,9 +547,8 @@ final class CodexAppServerClientTest {
     @Test
     void failsTurnWhenAppServerEmitsTerminalErrorNotification() throws Exception {
         // given
-        Path appServer = tempDir.resolve("terminal-error-app-server.sh");
-        Files.writeString(
-                appServer,
+        Path appServer = writeExecutableScript(
+                "terminal-error-app-server.sh",
                 """
                 #!/usr/bin/env bash
                 while IFS= read -r line; do
@@ -586,7 +563,6 @@ final class CodexAppServerClientTest {
                   esac
                 done
                 """);
-        appServer.toFile().setExecutable(true);
         EffectiveConfig config = config(appServer);
         Path workspace = config.workspace().root().resolve("TRELLO-error");
         Files.createDirectories(workspace);
@@ -609,9 +585,8 @@ final class CodexAppServerClientTest {
     @Test
     void failsTurnWhenAppServerEmitsTurnCancellationNotification() throws Exception {
         // given
-        Path appServer = tempDir.resolve("cancelled-turn-app-server.sh");
-        Files.writeString(
-                appServer,
+        Path appServer = writeExecutableScript(
+                "cancelled-turn-app-server.sh",
                 """
                 #!/usr/bin/env bash
                 while IFS= read -r line; do
@@ -626,7 +601,6 @@ final class CodexAppServerClientTest {
                   esac
                 done
                 """);
-        appServer.toFile().setExecutable(true);
         EffectiveConfig config = config(appServer);
         Path workspace = config.workspace().root().resolve("TRELLO-cancelled");
         Files.createDirectories(workspace);
@@ -649,9 +623,8 @@ final class CodexAppServerClientTest {
     @Test
     void failsTurnWhenAppServerCompletesTurnAsInterrupted() throws Exception {
         // given
-        Path appServer = tempDir.resolve("interrupted-turn-app-server.sh");
-        Files.writeString(
-                appServer,
+        Path appServer = writeExecutableScript(
+                "interrupted-turn-app-server.sh",
                 """
                 #!/usr/bin/env bash
                 while IFS= read -r line; do
@@ -666,7 +639,6 @@ final class CodexAppServerClientTest {
                   esac
                 done
                 """);
-        appServer.toFile().setExecutable(true);
         EffectiveConfig config = config(appServer);
         Path workspace = config.workspace().root().resolve("TRELLO-interrupted");
         Files.createDirectories(workspace);
@@ -688,6 +660,13 @@ final class CodexAppServerClientTest {
 
     private EffectiveConfig config(Path appServer) {
         return config(Map.of("command", appServer.toString(), "read_timeout_ms", 1000, "turn_timeout_ms", 1000));
+    }
+
+    private Path writeExecutableScript(String fileName, String content) throws Exception {
+        Path script = tempDir.resolve(fileName);
+        Files.writeString(script, content);
+        script.toFile().setExecutable(true);
+        return script;
     }
 
     private List<JsonNode> capturedRequests(Path capture) throws Exception {
