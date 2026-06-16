@@ -24,6 +24,8 @@ import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import ch.fmartin.symphony.trello.testsupport.CliRunResult;
 import ch.fmartin.symphony.trello.testsupport.FakeTrelloServer;
 import ch.fmartin.symphony.trello.testsupport.SetupCommandBuilder;
+import ch.fmartin.symphony.trello.testsupport.TestEnv;
+import ch.fmartin.symphony.trello.testsupport.TestWorkflows;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
 import java.io.ByteArrayOutputStream;
@@ -420,7 +422,7 @@ final class TrelloBoardSetupMainTest {
         Path workflow = configDir.resolve("WORKFLOW.queue.md");
         Path env = configDir.resolve(".env");
         Files.createDirectories(configDir);
-        Files.writeString(workflow, workflowWithBoardAndPort("board-id", 19191), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.workflowWithBoardAndPort("board-id", 19191), StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "board-id",
@@ -465,7 +467,7 @@ final class TrelloBoardSetupMainTest {
         Path workflow = configDir.resolve("WORKFLOW.queue.md");
         Path env = configDir.resolve(".env");
         Files.createDirectories(configDir);
-        Files.writeString(workflow, workflowWithBoardAndPort("board-id", 19192), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.workflowWithBoardAndPort("board-id", 19192), StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "board-id",
@@ -515,7 +517,8 @@ final class TrelloBoardSetupMainTest {
                 .resolve("private-context.json");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(workflow, workflowWithBoardAndPort("private-board-id", 19184), StandardCharsets.UTF_8);
+        Files.writeString(
+                workflow, TestWorkflows.workflowWithBoardAndPort("private-board-id", 19184), StandardCharsets.UTF_8);
         Files.writeString(env, "TRELLO_API_TOKEN=secret-token\n", StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
@@ -583,8 +586,10 @@ final class TrelloBoardSetupMainTest {
         Path output = tempDir.resolve("diagnostics-selector-output.txt");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(workflowA, workflowWithBoardAndPort("board-a-id", 19188), StandardCharsets.UTF_8);
-        Files.writeString(workflowB, workflowWithBoardAndPort("board-b-id", 19189), StandardCharsets.UTF_8);
+        Files.writeString(
+                workflowA, TestWorkflows.workflowWithBoardAndPort("board-a-id", 19188), StandardCharsets.UTF_8);
+        Files.writeString(
+                workflowB, TestWorkflows.workflowWithBoardAndPort("board-b-id", 19189), StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(
                         new ConnectedBoard(
@@ -810,8 +815,10 @@ final class TrelloBoardSetupMainTest {
         String privateBoardName = "Private Duplicate Board";
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(workflowA, workflowWithBoardAndPort("private-board-a-id", 19190), StandardCharsets.UTF_8);
-        Files.writeString(workflowB, workflowWithBoardAndPort("private-board-b-id", 19191), StandardCharsets.UTF_8);
+        Files.writeString(
+                workflowA, TestWorkflows.workflowWithBoardAndPort("private-board-a-id", 19190), StandardCharsets.UTF_8);
+        Files.writeString(
+                workflowB, TestWorkflows.workflowWithBoardAndPort("private-board-b-id", 19191), StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(
                         new ConnectedBoard(
@@ -892,7 +899,7 @@ final class TrelloBoardSetupMainTest {
         Path privateHostFile = tempDir.resolve("private-host-file.txt");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Files.writeString(workflow, workflowWithBoardAndPort("board-id", 19194), StandardCharsets.UTF_8);
+        Files.writeString(workflow, TestWorkflows.workflowWithBoardAndPort("board-id", 19194), StandardCharsets.UTF_8);
         Files.writeString(privateHostFile, "PRIVATE_HOST_FILE_MARKER_SHOULD_NOT_APPEAR\n", StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
@@ -1512,7 +1519,8 @@ final class TrelloBoardSetupMainTest {
         Path workflow = configDir.resolve("WORKFLOW.queue.md");
         Path env = configDir.resolve(".env");
         Files.createDirectories(configDir);
-        Files.writeString(workflow, workflowWithBoardAndPort("board-start-id", 19192), StandardCharsets.UTF_8);
+        Files.writeString(
+                workflow, TestWorkflows.workflowWithBoardAndPort("board-start-id", 19192), StandardCharsets.UTF_8);
         Files.writeString(env, dotenvContent, StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
@@ -1643,7 +1651,8 @@ final class TrelloBoardSetupMainTest {
         Files.createDirectories(configDir);
         Files.createDirectories(workspaceRoot);
         Files.createDirectories(envDirectory);
-        Files.writeString(workflow, workflowWithBoardAndPort("board-start-id", 19194), StandardCharsets.UTF_8);
+        Files.writeString(
+                workflow, TestWorkflows.workflowWithBoardAndPort("board-start-id", 19194), StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "board-start-id",
@@ -1685,7 +1694,7 @@ final class TrelloBoardSetupMainTest {
         Path env = configDir.resolve(".env");
         Files.createDirectories(configDir);
         Files.createDirectories(privateDir);
-        Files.writeString(env, "TRELLO_API_KEY=dummy\nTRELLO_API_TOKEN=dummy\n", StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials("dummy", "dummy"), StandardCharsets.UTF_8);
         createFifo(workflow, tempDir);
 
         // when
@@ -1843,7 +1852,7 @@ final class TrelloBoardSetupMainTest {
                 Arguments.of("api token contains tab", "Trello API token", "key", "t\token"));
     }
 
-    @MethodSource("invalidEndpointValues")
+    @MethodSource("ch.fmartin.symphony.trello.testsupport.TestEndpointValues#invalidTrelloApiBaseEndpoints")
     @ParameterizedTest(name = "{0}")
     void listWorkspacesRejectsInvalidEndpointsBeforeTrelloRequest(String name, String endpoint) {
         // given
@@ -2205,7 +2214,8 @@ final class TrelloBoardSetupMainTest {
         Path env = tempDir.resolve(".env.force-existing-live-port");
         HttpServer listeningServer = startLoopbackServer();
         int listeningPort = listeningServer.getAddress().getPort();
-        Files.writeString(workflow, workflowWithBoardAndPort("board-1", listeningPort), StandardCharsets.UTF_8);
+        Files.writeString(
+                workflow, TestWorkflows.workflowWithBoardAndPort("board-1", listeningPort), StandardCharsets.UTF_8);
         ConnectedBoard oldBoard = new ConnectedBoard(
                 "board-1",
                 "SYNTH002",
@@ -2609,7 +2619,7 @@ final class TrelloBoardSetupMainTest {
         // given
         Path env = tempDir.resolve("custom-env-dir").resolve(".env.custom");
         Files.createDirectories(env.getParent());
-        Files.writeString(env, "TRELLO_API_KEY=env-key\nTRELLO_API_TOKEN=env-token\n", StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials("env-key", "env-token"), StandardCharsets.UTF_8);
 
         // when
         CliRunResult result = runCli("list-workspaces", "--endpoint", endpoint(), "--env", env.toString());
@@ -2712,7 +2722,7 @@ final class TrelloBoardSetupMainTest {
                 "TRELLO_API_KEY=config-dir-key\nTRELLO_API_TOKEN=config-dir-token\n",
                 StandardCharsets.UTF_8);
         Path env = tempDir.resolve(".env.winning");
-        Files.writeString(env, "TRELLO_API_KEY=env-key\nTRELLO_API_TOKEN=env-token\n", StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials("env-key", "env-token"), StandardCharsets.UTF_8);
 
         // when
         CliRunResult result = runCli(
@@ -2740,7 +2750,7 @@ final class TrelloBoardSetupMainTest {
                 "TRELLO_API_KEY=config-dir-key\nTRELLO_API_TOKEN=config-dir-token\n",
                 StandardCharsets.UTF_8);
         Path env = tempDir.resolve(".env.overridden");
-        Files.writeString(env, "TRELLO_API_KEY=env-key\nTRELLO_API_TOKEN=env-token\n", StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials("env-key", "env-token"), StandardCharsets.UTF_8);
 
         // when
         CliRunResult result = runCli(
@@ -5430,7 +5440,7 @@ final class TrelloBoardSetupMainTest {
                 """,
                 StandardCharsets.UTF_8);
         Path env = configDir.resolve(".env");
-        Files.writeString(env, "TRELLO_API_KEY=key\nTRELLO_API_TOKEN=token\n", StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
 
         // when
         CliRunResult result = runCli(
@@ -5931,17 +5941,6 @@ final class TrelloBoardSetupMainTest {
                 Arguments.of("slash-containing-opaque-selector", "abc/def"));
     }
 
-    private static Stream<Arguments> invalidEndpointValues() {
-        return Stream.of(
-                Arguments.of("duplicated-rest-path", "https://api.trello.com/1/members/me"),
-                Arguments.of("wrong-rest-version", "https://api.trello.com/2"),
-                Arguments.of("insecure-production-endpoint", "http://api.trello.com/1"),
-                Arguments.of("insecure-production-endpoint-trailing-dot", "http://api.trello.com./1"),
-                Arguments.of("official-host-prefix", "https://api.trello.com/foo/1"),
-                Arguments.of("query-string", "https://api.trello.com/1?x=y"),
-                Arguments.of("fragment", "https://api.trello.com/1#frag"));
-    }
-
     private static String shellQuote(String value) {
         return "'" + value.replace("'", "'\\''") + "'";
     }
@@ -6030,20 +6029,6 @@ final class TrelloBoardSetupMainTest {
 
     private static String javaExecutable() {
         return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win") ? "java.exe" : "java";
-    }
-
-    private static String workflowWithBoardAndPort(String boardId, int port) {
-        return """
-                ---
-                tracker:
-                  kind: trello
-                  board_id: "%s"
-                server:
-                  port: %d
-                ---
-                Body
-                """
-                .formatted(boardId, port);
     }
 
     private static ConnectedBoard connectedBoard(Path workflowPath, int serverPort) {

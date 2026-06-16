@@ -11,6 +11,7 @@ import static org.mockito.Mockito.doThrow;
 
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.testsupport.SetupRunResult;
+import ch.fmartin.symphony.trello.testsupport.TestEnv;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import java.io.IOException;
 import java.net.InetAddress;
@@ -605,7 +606,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         assertThat(trello.createdLists()).isEmpty();
     }
 
-    @MethodSource("invalidEndpointValues")
+    @MethodSource("ch.fmartin.symphony.trello.testsupport.TestEndpointValues#invalidTrelloApiBaseEndpointValues")
     @ParameterizedTest
     @SuppressWarnings("JUnitValueSource")
     void dryRunRejectsInvalidEndpointBeforePlannedSetupOutput(String invalidEndpoint) {
@@ -939,7 +940,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path env = tempDir.resolve(".env.quoted-name-repair");
         int port = availablePort();
         writeWorkflow(workflow, "board-1", port);
-        Files.writeString(env, "TRELLO_API_KEY=key%nTRELLO_API_TOKEN=token%n".formatted(), StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
         writeManifest(
                 """
                 {
@@ -987,7 +988,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path env = tempDir.resolve(".env.expanding-name-repair");
         int port = availablePort();
         writeWorkflow(workflow, "board-1", port);
-        Files.writeString(env, "TRELLO_API_KEY=key%nTRELLO_API_TOKEN=token%n".formatted(), StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
         writeManifest(
                 """
                 {
@@ -1862,7 +1863,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.custom-env.md");
         Path env = tempDir.resolve(".env.custom");
-        Files.writeString(env, "TRELLO_API_KEY=key%nTRELLO_API_TOKEN=token%n".formatted(), StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
 
         // when
         SetupRunResult result = runSetup(
@@ -3143,7 +3144,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         int configuredPort = availablePort();
         fixture.givenConnectedBoard("Running Import", workflow, env, configuredPort, false);
         fixture.givenWorkflow(workflow, "board-1", configuredPort);
-        Files.writeString(env, "TRELLO_API_KEY=key%nTRELLO_API_TOKEN=token%n".formatted(), StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
         commands.startHealthServer(workflow);
 
         // when
@@ -3184,7 +3185,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         int configuredPort = availablePort();
         fixture.givenConnectedBoard("Running Explicit Import", workflow, env, configuredPort, false);
         fixture.givenWorkflow(workflow, "board-1", configuredPort);
-        Files.writeString(env, "TRELLO_API_KEY=key%nTRELLO_API_TOKEN=token%n".formatted(), StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
         commands.startHealthServer(workflow);
 
         // when
@@ -3225,7 +3226,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         fixture.givenConnectedBoard("Unmanaged Live Import", workflow, env, configuredPort, false);
         fixture.givenWorkflow(workflow, "board-1", configuredPort);
         String originalWorkflow = Files.readString(workflow, StandardCharsets.UTF_8);
-        Files.writeString(env, "TRELLO_API_KEY=key%nTRELLO_API_TOKEN=token%n".formatted(), StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
         commands.startHealthServer(workflow);
         doReturn(false).when(workerManager).canStopManagedWorker(any(), any());
 
@@ -3591,7 +3592,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
         int workflowPort = availablePort();
         writeWorkflow(workflow, "board-1", workflowPort);
-        Files.writeString(env, "TRELLO_API_KEY=key%nTRELLO_API_TOKEN=token%n".formatted(), StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
         writeConnectedBoardManifest(manifest, "Stale Check Queue", workflow, env, ConfigDefaults.DEFAULT_SERVER_PORT);
         commands.startHealthServer(workflow);
 
@@ -3834,7 +3835,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 """
                         .formatted(port),
                 StandardCharsets.UTF_8);
-        Files.writeString(env, "TRELLO_API_KEY=key%nTRELLO_API_TOKEN=token%n".formatted(), StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
         writeConnectedBoardManifest(manifest, "Overlap Check Queue", workflow, env, port);
 
         // when
@@ -3854,7 +3855,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
         int workflowPort = availablePort();
         writeWorkflow(workflow, "board-1", workflowPort);
-        Files.writeString(env, "TRELLO_API_KEY=key%nTRELLO_API_TOKEN=token%n".formatted(), StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
         writeConnectedBoardManifest(manifest, "Stale Repair Queue", workflow, env, ConfigDefaults.DEFAULT_SERVER_PORT);
         String originalWorkflow = Files.readString(workflow, StandardCharsets.UTF_8);
         String originalManifest = Files.readString(manifest, StandardCharsets.UTF_8);
@@ -3886,7 +3887,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
         int workflowPort = availablePort();
         writeWorkflow(workflow, "board-1", workflowPort);
-        Files.writeString(env, "TRELLO_API_KEY=key%nTRELLO_API_TOKEN=token%n".formatted(), StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
         writeConnectedBoardManifest(
                 manifest, "Stale Actual Repair Queue", workflow, env, ConfigDefaults.DEFAULT_SERVER_PORT);
         String originalWorkflow = Files.readString(workflow, StandardCharsets.UTF_8);
@@ -3926,8 +3927,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         LocalSetup probedSetup = setupWithPortProbe(port -> port != expectedPort);
         writeWorkflow(workflow, "board-1", conflictingPort);
         writeWorkflow(otherWorkflow, "board-2", conflictingPort);
-        Files.writeString(env, "TRELLO_API_KEY=key%nTRELLO_API_TOKEN=token%n".formatted(), StandardCharsets.UTF_8);
-        Files.writeString(otherEnv, "TRELLO_API_KEY=key%nTRELLO_API_TOKEN=token%n".formatted(), StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
+        Files.writeString(otherEnv, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
         writeManifest(
                 """
                 {
@@ -4004,8 +4005,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         int conflictingPort = availablePort();
         writeWorkflow(workflow, "board-1", conflictingPort);
         writeWorkflow(otherWorkflow, "board-2", conflictingPort);
-        Files.writeString(env, "TRELLO_API_KEY=key%nTRELLO_API_TOKEN=token%n".formatted(), StandardCharsets.UTF_8);
-        Files.writeString(otherEnv, "TRELLO_API_KEY=key%nTRELLO_API_TOKEN=token%n".formatted(), StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
+        Files.writeString(otherEnv, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
         writeManifest(
                 """
                 {
@@ -5834,17 +5835,6 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         new String[] {"setup_github_auth_required"}));
     }
 
-    private static Stream<String> invalidEndpointValues() {
-        return Stream.of(
-                "https://api.trello.com/1/members/me",
-                "https://api.trello.com/2",
-                "http://api.trello.com/1",
-                "http://api.trello.com./1",
-                "https://api.trello.com/foo/1",
-                "https://api.trello.com/1?x=y",
-                "https://api.trello.com/1#frag");
-    }
-
     private void writeOldBoardManifest(Path manifest, Path workflow) throws IOException {
         Files.writeString(
                 manifest,
@@ -5996,8 +5986,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path firstEnv = tempDir.resolve("private-env").resolve(".env.duplicate-a");
         Path secondEnv = tempDir.resolve("private-env").resolve(".env.duplicate-b");
         Files.createDirectories(firstEnv.getParent());
-        Files.writeString(firstEnv, "TRELLO_API_KEY=key\nTRELLO_API_TOKEN=token\n", StandardCharsets.UTF_8);
-        Files.writeString(secondEnv, "TRELLO_API_KEY=key\nTRELLO_API_TOKEN=token\n", StandardCharsets.UTF_8);
+        Files.writeString(firstEnv, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
+        Files.writeString(secondEnv, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
         writeWorkflow(firstWorkflow, "private-board-id-one", 19101);
         writeWorkflow(secondWorkflow, "private-board-id-two", 19102);
         writeDuplicateConnectedBoardsManifest(firstWorkflow, firstEnv, secondWorkflow, secondEnv);

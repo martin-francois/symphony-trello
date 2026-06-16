@@ -5,6 +5,7 @@ import static ch.fmartin.symphony.trello.testsupport.WorkflowAssertions.assertTh
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.fmartin.symphony.trello.testsupport.SetupRunResult;
+import ch.fmartin.symphony.trello.testsupport.TestEnv;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -303,7 +304,7 @@ final class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
         Path env = config.resolve(".env.custom");
         Path manifest = config.resolve("connected-boards.json");
         int port = availablePort();
-        Files.writeString(env, "TRELLO_API_KEY=key\nTRELLO_API_TOKEN=token\n", StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
         Files.writeString(
                 workflow,
                 """
@@ -396,7 +397,7 @@ final class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
         Path env = config.resolve(".env.no-progress");
         Path manifest = config.resolve("connected-boards.json");
         int port = availablePort();
-        Files.writeString(env, "TRELLO_API_KEY=key\nTRELLO_API_TOKEN=token\n", StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
         Files.writeString(
                 workflow,
                 """

@@ -3,6 +3,7 @@ package ch.fmartin.symphony.trello.setup;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.fmartin.symphony.trello.testsupport.SetupRunResult;
+import ch.fmartin.symphony.trello.testsupport.TestEnv;
 import com.sun.net.httpserver.HttpServer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -457,7 +458,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
         Path env = configDir.resolve(".env.valid");
         Files.createDirectories(configDir);
         Files.createDirectories(fixture.workspaceRoot());
-        Files.writeString(env, "TRELLO_API_KEY=key\nTRELLO_API_TOKEN=token\n", StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
         writeWorkflow(workflow, "valid-board-id", 20457);
         commands.startHealthServer(workflow, "other-board");
         fixture.givenManifest(
@@ -496,7 +497,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
         Path env = configDir.resolve(".env.valid");
         Files.createDirectories(configDir);
         Files.createDirectories(fixture.workspaceRoot());
-        Files.writeString(env, "TRELLO_API_KEY=key\nTRELLO_API_TOKEN=token\n", StandardCharsets.UTF_8);
+        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
         writeWorkflow(workflow, "valid-board-id", 20457);
         fixture.givenManifest(
                 """

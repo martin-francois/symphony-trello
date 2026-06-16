@@ -23,7 +23,7 @@ final class TrelloApiEndpointTest {
         assertThat(normalized).hasToString(expected);
     }
 
-    @MethodSource("invalidEndpointValues")
+    @MethodSource("ch.fmartin.symphony.trello.testsupport.TestEndpointValues#invalidTrelloApiBaseEndpoints")
     @ParameterizedTest(name = "{0}")
     void rejectsValuesThatAreNotTrelloApiBaseEndpoints(String name, String endpoint) {
         // given
@@ -48,16 +48,5 @@ final class TrelloApiEndpointTest {
                 Arguments.of("local-root", "http://127.0.0.1:1234", "http://127.0.0.1:1234/1"),
                 Arguments.of(
                         "reverse-proxy-prefix", "https://proxy.example/trello/1/", "https://proxy.example/trello/1"));
-    }
-
-    private static Stream<Arguments> invalidEndpointValues() {
-        return Stream.of(
-                Arguments.of("duplicated-rest-path", "https://api.trello.com/1/members/me"),
-                Arguments.of("wrong-rest-version", "https://api.trello.com/2"),
-                Arguments.of("insecure-production-endpoint", "http://api.trello.com/1"),
-                Arguments.of("insecure-production-endpoint-trailing-dot", "http://api.trello.com./1"),
-                Arguments.of("official-host-prefix", "https://api.trello.com/foo/1"),
-                Arguments.of("query-string", "https://api.trello.com/1?x=y"),
-                Arguments.of("fragment", "https://api.trello.com/1#frag"));
     }
 }
