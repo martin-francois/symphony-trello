@@ -78,6 +78,16 @@ public final class WorkflowAssertions {
         return this;
     }
 
+    public WorkflowAssertions contains(String... fragments) {
+        assertThat(content).contains(fragments);
+        return this;
+    }
+
+    public WorkflowAssertions doesNotContain(String... fragments) {
+        assertThat(content).doesNotContain(fragments);
+        return this;
+    }
+
     public WorkflowAssertions hasBoardId(String idOrKey) {
         assertThat(content).contains("board_id: \"" + idOrKey + "\"");
         return this;

@@ -7,7 +7,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import ch.fmartin.symphony.trello.testsupport.SetupRunResult;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
@@ -228,8 +227,8 @@ final class LocalSetupRerunAccessTest extends LocalSetupFixtureSupport {
 
         // then
         result.assertSuccess().stdoutContains("Choose the Trello board to update:");
-        assertThat(firstWorkflow).content(StandardCharsets.UTF_8).doesNotContain(allowedPath.toString());
-        assertThat(secondWorkflow).content(StandardCharsets.UTF_8).contains(allowedPath.toString());
+        assertThatWorkflow(firstWorkflow).doesNotContain(allowedPath.toString());
+        assertThatWorkflow(secondWorkflow).contains(allowedPath.toString());
     }
 
     @Test
@@ -336,8 +335,8 @@ final class LocalSetupRerunAccessTest extends LocalSetupFixtureSupport {
 
         // then
         result.assertFailure(2).stderrContains("setup_board_selection_required", "Re-run with --board NAME");
-        assertThat(firstWorkflow).content(StandardCharsets.UTF_8).doesNotContain(allowedPath.toString());
-        assertThat(secondWorkflow).content(StandardCharsets.UTF_8).doesNotContain(allowedPath.toString());
+        assertThatWorkflow(firstWorkflow).doesNotContain(allowedPath.toString());
+        assertThatWorkflow(secondWorkflow).doesNotContain(allowedPath.toString());
     }
 
     @Test
@@ -363,7 +362,7 @@ final class LocalSetupRerunAccessTest extends LocalSetupFixtureSupport {
 
         // then
         result.assertFailure(2).stderrContains("setup_mixed_codex_access_update", "--server-port");
-        assertThat(workflow).content(StandardCharsets.UTF_8).doesNotContain(allowedPath.toString(), "19000");
+        assertThatWorkflow(workflow).doesNotContain(allowedPath.toString(), "19000");
         assertThat(commands.startedWorkflows).isEmpty();
         assertThat(commands.stoppedWorkflows).isEmpty();
     }
@@ -426,7 +425,7 @@ final class LocalSetupRerunAccessTest extends LocalSetupFixtureSupport {
 
         // then
         result.assertFailure(2).stderrContains("setup_worker_untracked", "no managed pid");
-        assertThat(workflow).content(StandardCharsets.UTF_8).doesNotContain(allowedPath.toString());
+        assertThatWorkflow(workflow).doesNotContain(allowedPath.toString());
         assertThat(commands.startedWorkflows).isEmpty();
         assertThat(commands.stoppedWorkflows).isEmpty();
     }
@@ -477,6 +476,6 @@ final class LocalSetupRerunAccessTest extends LocalSetupFixtureSupport {
         firstResult.assertSuccess();
         result.assertSuccess().stdoutContains("Board connected: \"Imported Queue\"");
         assertThat(trello.boardLookups()).anySatisfy(path -> assertThat(path).contains("/1/boards/newabc"));
-        assertThat(importedWorkflow).content(StandardCharsets.UTF_8).contains(allowedPath.toString());
+        assertThatWorkflow(importedWorkflow).contains(allowedPath.toString());
     }
 }
