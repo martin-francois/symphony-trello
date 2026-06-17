@@ -12,7 +12,7 @@ final class ProcessCommandRunner implements CommandRunner {
             String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
             return new CommandResult(process.waitFor(), output);
         } catch (IOException e) {
-            return new CommandResult(127, e.getMessage());
+            return CommandResult.launchFailed(e.getMessage());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return new CommandResult(130, e.getMessage());
@@ -25,7 +25,7 @@ final class ProcessCommandRunner implements CommandRunner {
             Process process = new ProcessBuilder(command).inheritIO().start();
             return new CommandResult(process.waitFor(), "");
         } catch (IOException e) {
-            return new CommandResult(127, e.getMessage());
+            return CommandResult.launchFailed(e.getMessage());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return new CommandResult(130, e.getMessage());

@@ -107,5 +107,7 @@ jobs:
           }
       - name: PowerShell installer option tests
         run: .\mvnw.cmd -q '-Djunit.parallel.enabled=false' '-Dtest=InstallerScriptTest#*powershell*+*powerShell*' test
+      - name: Diagnostics tool probe tests
+        run: .\mvnw.cmd -q '-Djunit.parallel.enabled=false' '-Dtest=SetupDiagnosticReporterTest#diagnosticsToolProbeUsesWindowsPathextWithoutHelperShell+diagnosticsRunsNativeWindowsPathextExecutableDirectly+deepDiagnosticsUsesWindowsPathextCodexExecutableForLoginStatus+deepDiagnosticsKeepsWindowsPathextCodexAvailableWhenLoginStatusFails+deepDiagnosticsUsesWindowsPathextGithubExecutableForAuthStatus+deepDiagnosticsKeepsWindowsPathextGithubAvailableWhenAuthStatusFails+diagnosticsMarksFoundToolWithUnavailableVersionAsAvailable+diagnosticsMarksFoundButUnlaunchableToolSeparately' test
       - name: PowerShell generated-wrapper lifecycle
         run: .\mvnw.cmd -q '-Djunit.parallel.enabled=false' -Dtest=InstallerScriptLifecycleTest#powershellInstallerLifecycleInstallsStartsStopsAndUninstallsWithFakeJavaOnWindows test
