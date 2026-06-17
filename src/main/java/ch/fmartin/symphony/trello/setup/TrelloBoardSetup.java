@@ -10,6 +10,7 @@ import ch.fmartin.symphony.trello.config.TrelloListRoleValidator;
 import ch.fmartin.symphony.trello.config.WorkflowConfigIngestion;
 import ch.fmartin.symphony.trello.config.WorkflowIntegerSetting;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
@@ -207,7 +208,8 @@ public final class TrelloBoardSetup {
                     request.endpoint(),
                     "lists",
                     orderedMap("name", listName, "idBoard", boardId, "pos", "bottom"),
-                    request.credentials());
+                    request.credentials(),
+                    "id");
             createdLists.add(listName);
         }
 
@@ -238,7 +240,8 @@ public final class TrelloBoardSetup {
                     request.endpoint(),
                     "boards/",
                     createBoardQuery(request.boardName(), workspaceId),
-                    request.credentials());
+                    request.credentials(),
+                    "id");
         } catch (TrelloBoardSetupException e) {
             if (!blank(request.workspaceId()) && isAuthFailure(e) && credentialsUsable(request)) {
                 throw new TrelloBoardSetupException(
@@ -448,7 +451,8 @@ public final class TrelloBoardSetup {
                     request.endpoint(),
                     "lists",
                     orderedMap("name", RECOMMENDED_MERGING_STATE, "idBoard", resolvedBoardId, "pos", "bottom"),
-                    request.credentials());
+                    request.credentials(),
+                    "id");
             openListNames.add(RECOMMENDED_MERGING_STATE);
         }
 
@@ -486,7 +490,7 @@ public final class TrelloBoardSetup {
 
     private Map<String, Object> getMap(
             URI endpoint, String path, Map<String, String> query, TrelloCredentials credentials) {
-        return request("GET", endpoint, path, query, credentials, MAP_TYPE);
+        return request(TrelloRequestKind.READ, endpoint, path, query, credentials, MAP_TYPE);
     }
 
     private CodexModelSelectionDefaults codexModelSelectionDefaults() {
@@ -585,16 +589,31 @@ public final class TrelloBoardSetup {
 
     private List<Map<String, Object>> getList(
             URI endpoint, String path, Map<String, String> query, TrelloCredentials credentials) {
-        return request("GET", endpoint, path, query, credentials, LIST_MAP_TYPE);
+        return request(TrelloRequestKind.READ, endpoint, path, query, credentials, LIST_MAP_TYPE);
     }
 
     private Map<String, Object> postMap(
-            URI endpoint, String path, Map<String, String> query, TrelloCredentials credentials) {
-        return request("POST", endpoint, path, query, credentials, MAP_TYPE);
+            URI endpoint,
+            String path,
+            Map<String, String> query,
+            TrelloCredentials credentials,
+            String... requiredKeys) {
+        Map<String, Object> payload = request(TrelloRequestKind.WRITE, endpoint, path, query, credentials, MAP_TYPE);
+        if (payload == null) {
+            throw unknownTrelloWriteOutcome(
+                    new TrelloBoardSetupException("trello_unknown_payload", "Trello payload is empty"));
+        }
+        for (String requiredKey : requiredKeys) {
+            if (blank(string(payload.get(requiredKey)))) {
+                throw unknownTrelloWriteOutcome(new TrelloBoardSetupException(
+                        "trello_unknown_payload", "Trello payload is missing " + requiredKey));
+            }
+        }
+        return payload;
     }
 
     private <T> T request(
-            String method,
+            TrelloRequestKind requestKind,
             URI endpoint,
             String path,
             Map<String, String> query,
@@ -606,23 +625,51 @@ public final class TrelloBoardSetup {
                     .header("Accept", "application/json")
                     .header("Authorization", TrelloClient.authorization(credentials.apiKey(), credentials.apiToken()));
             HttpRequest request =
-                    switch (method) {
-                        case "GET" -> builder.GET().build();
-                        case "POST" ->
+                    switch (requestKind) {
+                        case READ -> builder.GET().build();
+                        case WRITE ->
                             builder.POST(HttpRequest.BodyPublishers.noBody()).build();
-                        default -> throw new IllegalArgumentException("Unsupported method: " + method);
                     };
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (isSuccessfulStatus(response.statusCode())) {
-                return json.readValue(response.body(), type);
+                try {
+                    return json.readValue(response.body(), type);
+                } catch (JsonProcessingException e) {
+                    throw trelloPayloadException(requestKind, e);
+                }
             }
-            throw statusException(response.statusCode(), response.body());
+            throw statusException(requestKind, response.statusCode(), response.body());
         } catch (IOException e) {
-            throw new TrelloBoardSetupException("trello_api_request", "Trello request failed", e);
+            throw trelloTransportException(requestKind, "Trello request failed", e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new TrelloBoardSetupException("trello_api_request", "Trello request interrupted", e);
+            throw trelloTransportException(requestKind, "Trello request interrupted", e);
         }
+    }
+
+    private static TrelloBoardSetupException trelloPayloadException(
+            TrelloRequestKind requestKind, JsonProcessingException cause) {
+        return switch (requestKind) {
+            case READ ->
+                new TrelloBoardSetupException(
+                        "trello_unknown_payload", "Trello response payload could not be parsed", cause);
+            case WRITE -> unknownTrelloWriteOutcome(cause);
+        };
+    }
+
+    private static TrelloBoardSetupException trelloTransportException(
+            TrelloRequestKind requestKind, String message, Exception cause) {
+        return switch (requestKind) {
+            case READ -> new TrelloBoardSetupException("trello_api_request", message, cause);
+            case WRITE -> unknownTrelloWriteOutcome(cause);
+        };
+    }
+
+    private static TrelloBoardSetupException unknownTrelloWriteOutcome(Exception cause) {
+        return new TrelloBoardSetupException(
+                "trello_write_outcome_unknown",
+                "Trello write outcome is unknown. Inspect Trello before retrying setup.",
+                cause);
     }
 
     private static URI uri(URI endpoint, String path, Map<String, String> query) {
@@ -635,6 +682,11 @@ public final class TrelloBoardSetup {
                 .collect(Collectors.joining("&"));
         String base = endpoint.toString().replaceAll("/+$", "");
         return URI.create(base + "/" + normalizedPath + (queryString.isBlank() ? "" : "?" + queryString));
+    }
+
+    private enum TrelloRequestKind {
+        READ,
+        WRITE
     }
 
     private static void writeWorkflow(Path workflowPath, boolean force, String workflow) {
@@ -2050,11 +2102,16 @@ public final class TrelloBoardSetup {
                 requiredString(payload, "id"), requiredString(payload, "name"), bool(payload.get("closed")));
     }
 
-    private static TrelloBoardSetupException statusException(int statusCode, String responseBody) {
+    private static TrelloBoardSetupException statusException(
+            TrelloRequestKind requestKind, int statusCode, String responseBody) {
         String detail = blank(responseBody)
                 ? ""
                 : ": " + responseBody.strip().lines().findFirst().orElse("");
         Status status = Status.fromStatusCode(statusCode);
+        if (requestKind == TrelloRequestKind.WRITE && Family.SERVER_ERROR == Family.familyOf(statusCode)) {
+            return unknownTrelloWriteOutcome(new TrelloBoardSetupException(
+                    "trello_api_status", "Trello returned HTTP " + statusCode + detail, statusCode));
+        }
         if (status == null) {
             return new TrelloBoardSetupException(
                     "trello_api_status", "Trello returned HTTP " + statusCode + detail, statusCode);

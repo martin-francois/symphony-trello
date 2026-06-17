@@ -173,10 +173,12 @@ final class SetupDiagnosticReporter {
             "setup_workflow_unresolved_environment",
             "setup_workflow_yaml_invalid",
             "trello_auth_failed",
+            "trello_api_request",
             "trello_board_closed",
             "trello_invalid_request",
             "trello_permission_denied",
-            "trello_resource_not_found");
+            "trello_resource_not_found",
+            "trello_write_outcome_unknown");
     private static final Set<String> REDACTED_COMMAND_VALUE_OPTIONS = Set.of(
             "--key",
             "--token",
@@ -339,6 +341,12 @@ final class SetupDiagnosticReporter {
                 Optional.of(trelloAuthFailureHint(
                         setupException,
                         setupException.dotenvPath().or(() -> dotenvPath).orElseGet(LocalEnvironment::defaultDotenv)));
+            case "trello_api_request" ->
+                Optional.of(
+                        "Check the Trello API endpoint URL and network connection, or remove the custom --endpoint value, then rerun the command.");
+            case "trello_write_outcome_unknown" ->
+                Optional.of(
+                        "Check Trello for any board or list that may already have been created before rerunning setup.");
             case "setup_trello_board_limit" ->
                 Optional.of(
                         "Archive or delete unused Trello boards, choose a different Trello Workspace with --workspace-id, or connect an existing board with import-board.");
