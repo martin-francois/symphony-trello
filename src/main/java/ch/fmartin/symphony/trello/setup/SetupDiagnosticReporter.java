@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Ascii;
 import com.google.common.base.CharMatcher;
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.net.URI;
@@ -19,6 +20,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.FileSystemException;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -222,6 +224,7 @@ final class SetupDiagnosticReporter {
     private final ObjectMapper json;
     private final RecentLogLister recentLogLister;
     private final Clock clock;
+    private final String osName;
     private List<String> sensitiveValues = List.of();
     private boolean deepDiagnostics;
     private DiagnosticsTokenHasher tokenHasher = DiagnosticsTokenHasher.ephemeral();
@@ -240,12 +243,22 @@ final class SetupDiagnosticReporter {
             CommandRunner commandRunner,
             RecentLogLister recentLogLister,
             Clock clock) {
+        this(environment, commandRunner, recentLogLister, clock, System.getProperty("os.name"));
+    }
+
+    SetupDiagnosticReporter(
+            Map<String, String> environment,
+            CommandRunner commandRunner,
+            RecentLogLister recentLogLister,
+            Clock clock,
+            String osName) {
         this.environment = Map.copyOf(environment);
         this.commandRunner = commandRunner;
         this.httpClient = HttpClient.newBuilder().connectTimeout(PROBE_TIMEOUT).build();
         this.json = ConnectedBoardRepository.jsonMapper();
         this.recentLogLister = recentLogLister;
         this.clock = clock;
+        this.osName = osName;
     }
 
     @FunctionalInterface
@@ -918,49 +931,172 @@ final class SetupDiagnosticReporter {
         MarkdownTable table = MarkdownTable.leftAligned(List.of("tool", "status", "detail"));
         for (String tool : tools) {
             ToolProbe probe = toolProbe(tool);
-            table.row(tool, probe.available() ? "available" : "missing", sanitize(probe.detail()));
+            table.row(tool, probe.status(), sanitize(probe.detail()));
         }
         table.appendTo(body);
     }
 
     private ToolProbe toolProbe(String tool) {
-        CommandResult location = commandRunner.run(commandLookup(tool));
-        if (!location.success()) {
-            return new ToolProbe(false, "");
+        ToolCommand command = toolCommand(tool);
+        if (!command.resolved()) {
+            return new ToolProbe("missing", "");
+        }
+        CommandResult version = commandRunner.run(toolVersionCommand(command));
+        if (version.launchFailed()) {
+            return new ToolProbe("unlaunchable", "could not launch");
+        }
+        if (!version.success()) {
+            if (command.resolved()) {
+                return new ToolProbe("available", "version unavailable");
+            }
+            return new ToolProbe("missing", "");
         }
         String detail =
-                switch (tool) {
-                    case "java" -> commandRunner.run("java", "-version").output();
-                    case "javac" -> commandRunner.run("javac", "-version").output();
-                    case "codex" -> codexStatus(deepDiagnostics);
-                    case "gh" -> githubStatus(deepDiagnostics);
-                    default -> commandRunner.run(tool, "--version").output();
+                switch (command.displayName()) {
+                    case "codex" -> codexStatus(command, version, deepDiagnostics);
+                    case "gh" -> githubStatus(command, version, deepDiagnostics);
+                    default -> version.output();
                 };
-        return new ToolProbe(true, firstLine(detail));
+        return new ToolProbe("available", firstLine(detail));
     }
 
-    private static String[] commandLookup(String tool) {
-        if (System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("win")) {
-            return new String[] {"cmd", "/c", "where", tool};
+    private ToolCommand toolCommand(String tool) {
+        if (isWindows()) {
+            return windowsExecutable(tool).orElseGet(() -> ToolCommand.missing(tool));
         }
-        return new String[] {"sh", "-c", "command -v -- \"$1\"", "sh", tool};
+        return posixExecutable(tool).orElseGet(() -> ToolCommand.missing(tool));
     }
 
-    private String codexStatus(boolean deepDiagnostics) {
-        CommandResult version = commandRunner.run("codex", "--version");
+    private static String[] toolVersionCommand(ToolCommand tool) {
+        return switch (tool.displayName()) {
+            case "java" -> tool.command("-version");
+            case "javac" -> tool.command("-version");
+            default -> tool.command("--version");
+        };
+    }
+
+    private Optional<ToolCommand> windowsExecutable(String tool) {
+        if (!isWindows()) {
+            return Optional.empty();
+        }
+        Path toolPath = Path.of(tool);
+        if (toolPath.getParent() != null) {
+            return Optional.empty();
+        }
+        return environmentValue("PATH").stream()
+                .flatMap(this::windowsPathEntries)
+                .flatMap(directory -> windowsExecutableCandidates(directory, tool))
+                .filter(Files::isRegularFile)
+                .map(path -> ToolCommand.windows(tool, path.toString(), windowsBatchShim(path)))
+                .findFirst();
+    }
+
+    private Optional<ToolCommand> posixExecutable(String tool) {
+        Path toolPath = Path.of(tool);
+        if (toolPath.getParent() != null) {
+            return Files.exists(toolPath) ? Optional.of(ToolCommand.direct(tool, tool, true)) : Optional.empty();
+        }
+        return environmentValue("PATH").stream()
+                .flatMap(this::posixPathEntries)
+                .map(directory -> directory.resolve(tool))
+                .filter(SetupDiagnosticReporter::isPosixPathExecutable)
+                .map(path -> ToolCommand.direct(tool, path.toString(), true))
+                .findFirst();
+    }
+
+    private static boolean isPosixPathExecutable(Path path) {
+        return Files.isRegularFile(path) && Files.isExecutable(path);
+    }
+
+    private Stream<Path> posixPathEntries(String path) {
+        return Stream.of(path.split(Pattern.quote(File.pathSeparator)))
+                .map(String::trim)
+                .filter(entry -> !entry.isBlank())
+                .flatMap(SetupDiagnosticReporter::pathIfValid);
+    }
+
+    private Stream<Path> windowsPathEntries(String path) {
+        return Stream.of(path.split(Pattern.quote(";")))
+                .map(String::trim)
+                .filter(entry -> !entry.isBlank())
+                .map(SetupDiagnosticReporter::unquote)
+                .flatMap(SetupDiagnosticReporter::pathIfValid);
+    }
+
+    private static Stream<Path> pathIfValid(String value) {
+        try {
+            return Stream.of(Path.of(value));
+        } catch (InvalidPathException e) {
+            return Stream.of();
+        }
+    }
+
+    private Stream<Path> windowsExecutableCandidates(Path directory, String tool) {
+        if (tool.contains(".")) {
+            return Stream.of(directory.resolve(tool));
+        }
+        return windowsPathExtensions().stream().map(extension -> directory.resolve(tool + extension));
+    }
+
+    private List<String> windowsPathExtensions() {
+        return environmentValue("PATHEXT")
+                .filter(value -> !value.isBlank())
+                .map(value -> Stream.of(value.split(Pattern.quote(";")))
+                        .map(String::trim)
+                        .filter(extension -> !extension.isBlank())
+                        .toList())
+                .orElse(List.of(".COM", ".EXE", ".BAT", ".CMD"));
+    }
+
+    private static boolean windowsBatchShim(Path path) {
+        Path fileNamePath = path.getFileName();
+        if (fileNamePath == null) {
+            return false;
+        }
+        String fileName = fileNamePath.toString().toLowerCase(Locale.ROOT);
+        return fileName.endsWith(".cmd") || fileName.endsWith(".bat");
+    }
+
+    private Optional<String> environmentValue(String name) {
+        return Optional.ofNullable(environment.get(name))
+                .or(() -> isWindows()
+                        ? environment.entrySet().stream()
+                                .filter(entry -> entry.getKey().equalsIgnoreCase(name))
+                                .map(Map.Entry::getValue)
+                                .findAny()
+                        : Optional.empty());
+    }
+
+    private boolean isWindows() {
+        return osName.toLowerCase(Locale.ROOT).contains("win");
+    }
+
+    private static String unquote(String value) {
+        String stripped = value.strip();
+        if (stripped.length() < 2) {
+            return stripped;
+        }
+        char first = stripped.charAt(0);
+        char last = stripped.charAt(stripped.length() - 1);
+        if ((first == '"' && last == '"') || (first == '\'' && last == '\'')) {
+            return stripped.substring(1, stripped.length() - 1);
+        }
+        return stripped;
+    }
+
+    private String codexStatus(ToolCommand command, CommandResult version, boolean deepDiagnostics) {
         if (!deepDiagnostics) {
             return firstLine(version.output()) + "; login=not-probed";
         }
-        CommandResult auth = commandRunner.run("codex", "login", "status");
+        CommandResult auth = commandRunner.run(command.command("login", "status"));
         return firstLine(version.output()) + "; login=" + (auth.success() ? "ok" : "not-ok");
     }
 
-    private String githubStatus(boolean deepDiagnostics) {
-        CommandResult version = commandRunner.run("gh", "--version");
+    private String githubStatus(ToolCommand command, CommandResult version, boolean deepDiagnostics) {
         if (!deepDiagnostics) {
             return firstLine(version.output()) + "; auth=not-probed";
         }
-        CommandResult auth = commandRunner.run("gh", "auth", "status");
+        CommandResult auth = commandRunner.run(command.command("auth", "status"));
         return firstLine(version.output()) + "; auth=" + (auth.success() ? "ok" : "not-ok");
     }
 
@@ -2470,7 +2606,48 @@ final class SetupDiagnosticReporter {
                 : "setup_local_failed";
     }
 
-    private record ToolProbe(boolean available, String detail) {}
+    private record ToolCommand(String displayName, String executable, InvocationKind invocationKind, boolean resolved) {
+        static ToolCommand missing(String displayName) {
+            return new ToolCommand(displayName, displayName, InvocationKind.DIRECT, false);
+        }
+
+        static ToolCommand direct(String displayName, String executable, boolean resolved) {
+            return new ToolCommand(displayName, executable, InvocationKind.DIRECT, resolved);
+        }
+
+        static ToolCommand windows(String displayName, String executable, boolean batchShim) {
+            return new ToolCommand(
+                    displayName, executable, batchShim ? InvocationKind.WINDOWS_BATCH : InvocationKind.DIRECT, true);
+        }
+
+        String[] command(String... arguments) {
+            if (invocationKind == InvocationKind.WINDOWS_BATCH) {
+                return new String[] {"cmd.exe", "/d", "/s", "/c", windowsBatchCommandLine(arguments)};
+            }
+            String[] result = new String[arguments.length + 1];
+            result[0] = executable;
+            System.arraycopy(arguments, 0, result, 1, arguments.length);
+            return result;
+        }
+
+        private String windowsBatchCommandLine(String... arguments) {
+            List<String> parts = new ArrayList<>();
+            parts.add(executable);
+            parts.addAll(List.of(arguments));
+            return "\"" + parts.stream().map(ToolCommand::quoteForCmd).collect(Collectors.joining(" ")) + "\"";
+        }
+
+        private static String quoteForCmd(String value) {
+            return "\"" + value.replace("%", "%%").replace("\"", "\\\"") + "\"";
+        }
+    }
+
+    private enum InvocationKind {
+        DIRECT,
+        WINDOWS_BATCH
+    }
+
+    private record ToolProbe(String status, String detail) {}
 
     private record ManifestSnapshot(ConnectedBoardManifest manifest, ManifestStatus status) {}
 
