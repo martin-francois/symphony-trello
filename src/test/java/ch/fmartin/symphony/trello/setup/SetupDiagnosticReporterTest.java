@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static java.util.stream.Collectors.joining;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.junit.jupiter.api.Assumptions.abort;
@@ -7,6 +8,7 @@ import static org.junit.jupiter.api.Assumptions.abort;
 import ch.fmartin.symphony.trello.testsupport.RecordingTerminal;
 import ch.fmartin.symphony.trello.testsupport.TestWorkflows;
 import com.sun.net.httpserver.HttpServer;
+import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetAddress;
@@ -21,6 +23,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
@@ -531,6 +534,357 @@ final class SetupDiagnosticReporterTest {
                         "Their ports are not",
                         "http://127.0.0.1:20987/api/v1/local-status")
                 .doesNotContain("http://127.0.0.1:20988/api/v1/local-status");
+    }
+
+    @Test
+    void diagnosticsToolProbeDoesNotNeedHelperShell() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("no-shell-tool-probe-config");
+        Path stateHome = tempDir.resolve("no-shell-tool-probe-state");
+        Path toolDirectory = tempDir.resolve("posix-tools");
+        Path java = toolDirectory.resolve("java");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.createDirectories(toolDirectory);
+        Files.writeString(java, "", StandardCharsets.UTF_8);
+        java.toFile().setExecutable(true);
+        CommandRunner commands = command -> {
+            if ("sh".equals(command[0]) || "cmd".equals(command[0])) {
+                throw new AssertionError("diagnostics tool probe must not call a helper shell");
+            }
+            if (List.of(command).equals(List.of(java.toString(), "-version"))) {
+                return new CommandResult(0, "openjdk version \"25\"\n");
+            }
+            return new CommandResult(127, "");
+        };
+        var reporter = new SetupDiagnosticReporter(Map.of("PATH", toolDirectory.toString()), commands);
+
+        // when
+        String report = renderGlobalDiagnostics(reporter, configDir, stateHome);
+
+        // then
+        assertThat(report)
+                .contains("## Tool Availability", "| java | available | openjdk version \"25\" |")
+                .doesNotContain("helper shell");
+    }
+
+    @Test
+    void diagnosticsMarksMissingPosixToolWithoutLaunchingIt() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("missing-posix-tool-config");
+        Path stateHome = tempDir.resolve("missing-posix-tool-state");
+        Path toolDirectory = tempDir.resolve("empty-posix-tools");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.createDirectories(toolDirectory);
+        CommandRunner commands = command -> {
+            throw new AssertionError("missing tools must not be launched: " + List.of(command));
+        };
+        var reporter = new SetupDiagnosticReporter(Map.of("PATH", toolDirectory.toString()), commands);
+
+        // when
+        String report = renderGlobalDiagnostics(reporter, configDir, stateHome);
+
+        // then
+        assertThat(report).contains("| codex | missing |  |", "| gh | missing |  |");
+    }
+
+    @Test
+    void diagnosticsMarksPosixFoundToolWithUnavailableVersionAsAvailable() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("posix-version-unavailable-config");
+        Path stateHome = tempDir.resolve("posix-version-unavailable-state");
+        Path toolDirectory = tempDir.resolve("posix-version-unavailable-tools");
+        Path codex = toolDirectory.resolve("codex");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.createDirectories(toolDirectory);
+        Files.writeString(codex, "", StandardCharsets.UTF_8);
+        codex.toFile().setExecutable(true);
+        FakeCommandRunner commands = new FakeCommandRunner().returns(2, "unsupported\n", codex.toString(), "--version");
+        var reporter = new SetupDiagnosticReporter(Map.of("PATH", toolDirectory.toString()), commands);
+
+        // when
+        String report = renderGlobalDiagnostics(reporter, configDir, stateHome);
+
+        // then
+        assertThat(report).contains("| codex | available | version unavailable |");
+    }
+
+    @Test
+    void diagnosticsSkipsNonExecutablePosixPathEntries() throws Exception {
+        // given
+        if (System.getProperty("os.name").startsWith("Windows")) {
+            abort("POSIX execute-bit behavior is not portable on Windows");
+        }
+        Path configDir = tempDir.resolve("posix-shadowed-tool-config");
+        Path stateHome = tempDir.resolve("posix-shadowed-tool-state");
+        Path shadowDirectory = tempDir.resolve("posix-shadowed-tools");
+        Path executableDirectory = tempDir.resolve("posix-real-tools");
+        Path shadowCodex = shadowDirectory.resolve("codex");
+        Path realCodex = executableDirectory.resolve("codex");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.createDirectories(shadowDirectory);
+        Files.createDirectories(executableDirectory);
+        Files.writeString(shadowCodex, "", StandardCharsets.UTF_8);
+        Files.writeString(realCodex, "", StandardCharsets.UTF_8);
+        shadowCodex.toFile().setExecutable(false);
+        if (Files.isExecutable(shadowCodex)) {
+            abort("test filesystem does not support non-executable tool fixtures");
+        }
+        if (!realCodex.toFile().setExecutable(true)) {
+            abort("test filesystem does not support executable tool fixtures");
+        }
+        FakeCommandRunner commands =
+                new FakeCommandRunner().returns(0, "codex-cli 9.9\n", realCodex.toString(), "--version");
+        var reporter = new SetupDiagnosticReporter(
+                Map.of("PATH", shadowDirectory + File.pathSeparator + executableDirectory),
+                commands,
+                Files::list,
+                Clock.fixed(Instant.EPOCH, ZoneOffset.UTC),
+                "Linux");
+
+        // when
+        String report = renderGlobalDiagnostics(reporter, configDir, stateHome);
+
+        // then
+        assertThat(report).contains("| codex | available | codex-cli 9.9; login=not-probed |");
+    }
+
+    @Test
+    void diagnosticsToolProbeUsesWindowsPathextWithoutHelperShell() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("windows-pathext-tool-probe-config");
+        Path stateHome = tempDir.resolve("windows-pathext-tool-probe-state");
+        Path toolDirectory = tempDir.resolve("windows-tools");
+        Path codexShim = toolDirectory.resolve("codex.CMD");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.createDirectories(toolDirectory);
+        Files.writeString(codexShim, "", StandardCharsets.UTF_8);
+        CommandRunner commands = command -> {
+            if ("sh".equals(command[0]) || "cmd".equals(command[0])) {
+                throw new AssertionError("diagnostics tool probe must not call a helper shell");
+            }
+            if (List.of(command).equals(List.of(windowsBatchCommand(codexShim, "--version")))) {
+                return new CommandResult(0, "codex-cli 9.9\n");
+            }
+            return new CommandResult(127, "");
+        };
+        var reporter = new SetupDiagnosticReporter(
+                Map.of("Path", '"' + toolDirectory.toString() + '"', "PATHEXT", ".CMD;.EXE"),
+                commands,
+                Files::list,
+                Clock.fixed(Instant.EPOCH, ZoneOffset.UTC),
+                "Windows 11");
+
+        // when
+        String report = renderGlobalDiagnostics(reporter, configDir, stateHome);
+
+        // then
+        assertThat(report)
+                .contains("## Tool Availability", "| codex | available | codex-cli 9.9; login=not-probed |")
+                .doesNotContain("helper shell");
+    }
+
+    @Test
+    void deepDiagnosticsUsesWindowsPathextCodexExecutableForLoginStatus() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("windows-pathext-codex-deep-config");
+        Path stateHome = tempDir.resolve("windows-pathext-codex-deep-state");
+        Path toolDirectory = tempDir.resolve("windows-deep-tools");
+        Path codexShim = toolDirectory.resolve("codex.CMD");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.createDirectories(toolDirectory);
+        Files.writeString(codexShim, "", StandardCharsets.UTF_8);
+        FakeCommandRunner commands = new FakeCommandRunner()
+                .returns(0, "codex-cli 9.9\n", windowsBatchCommand(codexShim, "--version"))
+                .returns(0, "Logged in\n", windowsBatchCommand(codexShim, "login", "status"));
+        var reporter = new SetupDiagnosticReporter(
+                Map.of("Path", '"' + toolDirectory.toString() + '"', "PATHEXT", ".CMD;.EXE"),
+                commands,
+                Files::list,
+                Clock.fixed(Instant.EPOCH, ZoneOffset.UTC),
+                "Windows 11");
+
+        // when
+        String report = renderDeepDiagnostics(reporter, configDir, stateHome);
+
+        // then
+        assertThat(report).contains("| codex | available | codex-cli 9.9; login=ok |");
+    }
+
+    @Test
+    void deepDiagnosticsKeepsWindowsPathextCodexAvailableWhenLoginStatusFails() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("windows-pathext-codex-deep-failure-config");
+        Path stateHome = tempDir.resolve("windows-pathext-codex-deep-failure-state");
+        Path toolDirectory = tempDir.resolve("windows-deep-failure-tools");
+        Path codexShim = toolDirectory.resolve("codex.CMD");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.createDirectories(toolDirectory);
+        Files.writeString(codexShim, "", StandardCharsets.UTF_8);
+        FakeCommandRunner commands = new FakeCommandRunner()
+                .returns(0, "codex-cli 9.9\n", windowsBatchCommand(codexShim, "--version"))
+                .returns(1, "not logged in\n", windowsBatchCommand(codexShim, "login", "status"));
+        var reporter = new SetupDiagnosticReporter(
+                Map.of("Path", '"' + toolDirectory.toString() + '"', "PATHEXT", ".CMD;.EXE"),
+                commands,
+                Files::list,
+                Clock.fixed(Instant.EPOCH, ZoneOffset.UTC),
+                "Windows 11");
+
+        // when
+        String report = renderDeepDiagnostics(reporter, configDir, stateHome);
+
+        // then
+        assertThat(report).contains("| codex | available | codex-cli 9.9; login=not-ok |");
+    }
+
+    @Test
+    void deepDiagnosticsUsesWindowsPathextGithubExecutableForAuthStatus() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("windows-pathext-gh-deep-config");
+        Path stateHome = tempDir.resolve("windows-pathext-gh-deep-state");
+        Path toolDirectory = tempDir.resolve("windows-gh-tools");
+        Path ghShim = toolDirectory.resolve("gh.CMD");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.createDirectories(toolDirectory);
+        Files.writeString(ghShim, "", StandardCharsets.UTF_8);
+        FakeCommandRunner commands = new FakeCommandRunner()
+                .returns(0, "gh version 2.70.0\n", windowsBatchCommand(ghShim, "--version"))
+                .returns(0, "github.com\n", windowsBatchCommand(ghShim, "auth", "status"));
+        var reporter = new SetupDiagnosticReporter(
+                Map.of("Path", '"' + toolDirectory.toString() + '"', "PATHEXT", ".CMD;.EXE"),
+                commands,
+                Files::list,
+                Clock.fixed(Instant.EPOCH, ZoneOffset.UTC),
+                "Windows 11");
+
+        // when
+        String report = renderDeepDiagnostics(reporter, configDir, stateHome);
+
+        // then
+        assertThat(report).contains("| gh | available | gh version 2.70.0; auth=ok |");
+    }
+
+    @Test
+    void deepDiagnosticsKeepsWindowsPathextGithubAvailableWhenAuthStatusFails() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("windows-pathext-gh-deep-failure-config");
+        Path stateHome = tempDir.resolve("windows-pathext-gh-deep-failure-state");
+        Path toolDirectory = tempDir.resolve("windows-gh-failure-tools");
+        Path ghShim = toolDirectory.resolve("gh.CMD");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.createDirectories(toolDirectory);
+        Files.writeString(ghShim, "", StandardCharsets.UTF_8);
+        FakeCommandRunner commands = new FakeCommandRunner()
+                .returns(0, "gh version 2.70.0\n", windowsBatchCommand(ghShim, "--version"))
+                .returns(1, "not authenticated\n", windowsBatchCommand(ghShim, "auth", "status"));
+        var reporter = new SetupDiagnosticReporter(
+                Map.of("Path", '"' + toolDirectory.toString() + '"', "PATHEXT", ".CMD;.EXE"),
+                commands,
+                Files::list,
+                Clock.fixed(Instant.EPOCH, ZoneOffset.UTC),
+                "Windows 11");
+
+        // when
+        String report = renderDeepDiagnostics(reporter, configDir, stateHome);
+
+        // then
+        assertThat(report).contains("| gh | available | gh version 2.70.0; auth=not-ok |");
+    }
+
+    @Test
+    void diagnosticsRunsNativeWindowsPathextExecutableDirectly() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("windows-native-tool-config");
+        Path stateHome = tempDir.resolve("windows-native-tool-state");
+        Path toolDirectory = tempDir.resolve("windows-native-tools");
+        Path codexExe = toolDirectory.resolve("codex.EXE");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.createDirectories(toolDirectory);
+        Files.writeString(codexExe, "", StandardCharsets.UTF_8);
+        FakeCommandRunner commands =
+                new FakeCommandRunner().returns(0, "codex-cli 9.9\n", codexExe.toString(), "--version");
+        var reporter = new SetupDiagnosticReporter(
+                Map.of("Path", toolDirectory.toString(), "PATHEXT", ".EXE;.CMD"),
+                commands,
+                Files::list,
+                Clock.fixed(Instant.EPOCH, ZoneOffset.UTC),
+                "Windows 11");
+
+        // when
+        String report = renderGlobalDiagnostics(reporter, configDir, stateHome);
+
+        // then
+        assertThat(report).contains("| codex | available | codex-cli 9.9; login=not-probed |");
+    }
+
+    @Test
+    void diagnosticsMarksFoundToolWithUnavailableVersionAsAvailable() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("version-unavailable-tool-config");
+        Path stateHome = tempDir.resolve("version-unavailable-tool-state");
+        Path toolDirectory = tempDir.resolve("version-unavailable-tools");
+        Path codexExe = toolDirectory.resolve("codex.EXE");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.createDirectories(toolDirectory);
+        Files.writeString(codexExe, "", StandardCharsets.UTF_8);
+        FakeCommandRunner commands =
+                new FakeCommandRunner().returns(2, "unsupported\n", codexExe.toString(), "--version");
+        var reporter = new SetupDiagnosticReporter(
+                Map.of("Path", toolDirectory.toString(), "PATHEXT", ".EXE"),
+                commands,
+                Files::list,
+                Clock.fixed(Instant.EPOCH, ZoneOffset.UTC),
+                "Windows 11");
+
+        // when
+        String report = renderGlobalDiagnostics(reporter, configDir, stateHome);
+
+        // then
+        assertThat(report).contains("| codex | available | version unavailable |");
+    }
+
+    @Test
+    void diagnosticsMarksFoundButUnlaunchableToolSeparately() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("unlaunchable-tool-config");
+        Path stateHome = tempDir.resolve("unlaunchable-tool-state");
+        Path toolDirectory = tempDir.resolve("unlaunchable-tools");
+        Path codexExe = toolDirectory.resolve("codex.EXE");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.createDirectories(toolDirectory);
+        Files.writeString(codexExe, "", StandardCharsets.UTF_8);
+        CommandRunner commands = command -> {
+            if (List.of(command).equals(List.of(codexExe.toString(), "--version"))) {
+                return CommandResult.launchFailed("permission denied");
+            }
+            return new CommandResult(127, "");
+        };
+        var reporter = new SetupDiagnosticReporter(
+                Map.of("Path", toolDirectory.toString(), "PATHEXT", ".EXE"),
+                commands,
+                Files::list,
+                Clock.fixed(Instant.EPOCH, ZoneOffset.UTC),
+                "Windows 11");
+
+        // when
+        String report = renderGlobalDiagnostics(reporter, configDir, stateHome);
+
+        // then
+        assertThat(report)
+                .contains("| codex | unlaunchable | could not launch |")
+                .doesNotContain(codexExe.toString(), "permission denied");
     }
 
     @Test
@@ -1054,13 +1408,13 @@ final class SetupDiagnosticReporterTest {
                 other-tail-line
                 """,
                 StandardCharsets.UTF_8);
+        Path toolDirectory = fakeToolDirectory(tempDir, "codex", "gh");
         FakeCommandRunner commands = new FakeCommandRunner()
-                .returns(0, "/usr/bin/codex\n", "sh", "-c", "command -v -- \"$1\"", "sh", "codex")
-                .returns(0, "codex-cli 1.2.3\n", "codex", "--version")
-                .returns(0, "/usr/bin/gh\n", "sh", "-c", "command -v -- \"$1\"", "sh", "gh")
-                .returns(0, "gh version 2.70.0\n", "gh", "--version");
+                .returns(0, "codex-cli 1.2.3\n", toolDirectory.resolve("codex").toString(), "--version")
+                .returns(0, "gh version 2.70.0\n", toolDirectory.resolve("gh").toString(), "--version");
         var reporter = new SetupDiagnosticReporter(
                 Map.of(
+                        "PATH", toolDirectory.toString(),
                         "SYMPHONY_TRELLO_CONFIG_DIR", configDir.toString(),
                         "SYMPHONY_TRELLO_WORKSPACE_ROOT", workspaceRoot.toString(),
                         "SYMPHONY_TRELLO_STATE_HOME", stateHome.toString(),
@@ -1281,8 +1635,9 @@ final class SetupDiagnosticReporterTest {
         // given
         Path configDir = tempDir.resolve("deep-config");
         Files.createDirectories(configDir);
-        FakeCommandRunner commands = authProbeCommandRunner();
-        var reporter = new SetupDiagnosticReporter(Map.of(), commands);
+        Path toolDirectory = fakeToolDirectory(tempDir, "codex", "gh");
+        FakeCommandRunner commands = authProbeCommandRunner(toolDirectory);
+        var reporter = new SetupDiagnosticReporter(Map.of("PATH", toolDirectory.toString()), commands);
 
         // when
         String report = reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
@@ -1312,8 +1667,9 @@ final class SetupDiagnosticReporterTest {
         // given
         Path configDir = tempDir.resolve("deep-private-config");
         Files.createDirectories(configDir);
-        FakeCommandRunner commands = authProbeCommandRunner();
-        var reporter = new SetupDiagnosticReporter(Map.of(), commands);
+        Path toolDirectory = fakeToolDirectory(tempDir, "codex", "gh");
+        FakeCommandRunner commands = authProbeCommandRunner(toolDirectory);
+        var reporter = new SetupDiagnosticReporter(Map.of("PATH", toolDirectory.toString()), commands);
         var request = new SetupDiagnosticReporter.DiagnosticsRequest(
                 Optional.empty(),
                 Optional.empty(),
@@ -2551,14 +2907,14 @@ final class SetupDiagnosticReporterTest {
                 """,
                 StandardCharsets.UTF_8);
         Files.writeString(stateHome.resolve("large.log"), largeLog(), StandardCharsets.UTF_8);
+        Path toolDirectory = fakeToolDirectory(tempDir, "git", "codex");
         FakeCommandRunner commands = new FakeCommandRunner()
-                .returns(0, "/usr/bin/git\n", "sh", "-c", "command -v -- \"$1\"", "sh", "git")
-                .returns(0, "git version 2.45.0\n", "git", "--version")
-                .returns(0, "/usr/bin/codex\n", "sh", "-c", "command -v -- \"$1\"", "sh", "codex")
-                .returns(0, "codex-cli 1.2.3\n", "codex", "--version")
-                .returns(1, "not logged in\n", "codex", "login", "status");
+                .returns(0, "git version 2.45.0\n", toolDirectory.resolve("git").toString(), "--version")
+                .returns(0, "codex-cli 1.2.3\n", toolDirectory.resolve("codex").toString(), "--version")
+                .returns(1, "not logged in\n", toolDirectory.resolve("codex").toString(), "login", "status");
         var reporter = new SetupDiagnosticReporter(
                 Map.of(
+                        "PATH", toolDirectory.toString(),
                         "SYMPHONY_TRELLO_APP_HOME", appHome.toString(),
                         "SYMPHONY_TRELLO_CONFIG_DIR", configDir.toString(),
                         "SYMPHONY_TRELLO_WORKSPACE_ROOT", workspaceRoot.toString(),
@@ -3118,6 +3474,21 @@ final class SetupDiagnosticReporterTest {
         return renderDiagnostics(reporter, Optional.empty(), configDir, Optional.empty(), stateHome, Optional.empty());
     }
 
+    private static String renderDeepDiagnostics(SetupDiagnosticReporter reporter, Path configDir, Path stateHome)
+            throws IOException {
+        return reporter.renderDiagnostics(new SetupDiagnosticReporter.DiagnosticsRequest(
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                true,
+                Optional.empty(),
+                Optional.of(configDir),
+                Optional.empty(),
+                Optional.of(stateHome),
+                Optional.empty(),
+                Optional.empty()));
+    }
+
     private static String renderGlobalDiagnostics(
             SetupDiagnosticReporter reporter, Path configDir, Path workspaceRoot, Path stateHome) throws IOException {
         return renderDiagnostics(
@@ -3255,14 +3626,45 @@ final class SetupDiagnosticReporterTest {
         return renderGlobalDiagnostics(reporter, configDir, workspaceRoot, stateHome);
     }
 
-    private static FakeCommandRunner authProbeCommandRunner() {
+    private static FakeCommandRunner authProbeCommandRunner(Path toolDirectory) {
         return new FakeCommandRunner()
-                .returns(0, "/usr/bin/codex\n", "sh", "-c", "command -v -- \"$1\"", "sh", "codex")
-                .returns(0, "codex-cli 1.2.3\n", "codex", "--version")
-                .returns(0, "Logged in using ChatGPT\n", "codex", "login", "status")
-                .returns(0, "/usr/bin/gh\n", "sh", "-c", "command -v -- \"$1\"", "sh", "gh")
-                .returns(0, "gh version 2.70.0\n", "gh", "--version")
-                .returns(0, "github.com\n", "gh", "auth", "status");
+                .returns(0, "codex-cli 1.2.3\n", toolDirectory.resolve("codex").toString(), "--version")
+                .returns(
+                        0,
+                        "Logged in using ChatGPT\n",
+                        toolDirectory.resolve("codex").toString(),
+                        "login",
+                        "status")
+                .returns(0, "gh version 2.70.0\n", toolDirectory.resolve("gh").toString(), "--version")
+                .returns(0, "github.com\n", toolDirectory.resolve("gh").toString(), "auth", "status");
+    }
+
+    private static Path fakeToolDirectory(Path parent, String... tools) throws IOException {
+        Path toolDirectory = parent.resolve("fake-tools-" + String.join("-", tools));
+        Files.createDirectories(toolDirectory);
+        for (String tool : tools) {
+            Path executable = toolDirectory.resolve(tool);
+            Files.writeString(executable, "", StandardCharsets.UTF_8);
+            executable.toFile().setExecutable(true);
+        }
+        return toolDirectory;
+    }
+
+    private static String[] windowsBatchCommand(Path executable, String... arguments) {
+        List<String> parts = new ArrayList<>();
+        parts.add(executable.toString());
+        parts.addAll(List.of(arguments));
+        return new String[] {
+            "cmd.exe",
+            "/d",
+            "/s",
+            "/c",
+            "\"" + parts.stream().map(SetupDiagnosticReporterTest::quoteForCmd).collect(joining(" ")) + "\""
+        };
+    }
+
+    private static String quoteForCmd(String value) {
+        return "\"" + value.replace("%", "%%").replace("\"", "\\\"") + "\"";
     }
 
     private static String pathToken(byte[] key, Path path) {
