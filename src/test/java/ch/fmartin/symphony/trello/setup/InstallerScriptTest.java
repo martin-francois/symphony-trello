@@ -71,6 +71,42 @@ final class InstallerScriptTest {
                 }));
     }
 
+    @Test
+    void posixUninstallHelpUsesStablePublicUrls() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+
+        // when
+        ProcessResult result = run(Map.of(), "bash", "uninstall.sh", "--help");
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output())
+                .contains(
+                        "curl -fsSL https://symphony-trello.fmartin.ch/uninstall.sh | bash",
+                        "curl -fsSL https://symphony-trello.fmartin.ch/uninstall.sh | bash -s -- --dry-run")
+                .doesNotContain("raw.githubusercontent.com");
+    }
+
+    @Test
+    void powershellUninstallHelpUsesStablePublicUrls() throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        assumeFalse(pwsh.isEmpty());
+
+        // when
+        ProcessResult result = run(
+                Map.of(),
+                command(pwsh, "-NoProfile", "-File", "./uninstall.ps1", "--help")
+                        .toArray(String[]::new));
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output())
+                .contains("powershell -c \"irm https://symphony-trello.fmartin.ch/uninstall.ps1 | iex\"")
+                .doesNotContain("raw.githubusercontent.com");
+    }
+
     @MethodSource("posixUnsafeCommandDirectoryScenarios")
     @ParameterizedTest(name = "{0}")
     void posixScriptsRejectUnsafeCommandDirectoriesBeforeDryRunPlan(PosixUnsafeCommandDirectoryScenario scenario)
