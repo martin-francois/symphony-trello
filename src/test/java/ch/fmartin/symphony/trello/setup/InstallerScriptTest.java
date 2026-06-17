@@ -826,6 +826,73 @@ final class InstallerScriptTest {
     }
 
     @Test
+    void posixSourceCheckoutInstallContextUsesBuiltVersionAndSourceCommit() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
+        Path sourceRepository = createSourceRepository(temporaryDirectory);
+        String expectedCommit = run(Map.of(), "git", "-C", sourceRepository.toString(), "rev-parse", "HEAD")
+                .output()
+                .trim();
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path symphonyHome = temporaryDirectory.resolve("source-context-home");
+        Path binDirectory = temporaryDirectory.resolve("source-context-bin");
+        Path fakeLog = temporaryDirectory.resolve("source-context.log");
+        Map<String, String> environment = Map.of(
+                "PATH", fakeBin + File.pathSeparator + System.getenv("PATH"),
+                "SYMPHONY_TRELLO_REPO_URL", sourceRepository.toUri().toString(),
+                "SYMPHONY_HOME", symphonyHome.toString(),
+                "SYMPHONY_FAKE_LOG", fakeLog.toString());
+
+        // when
+        ProcessResult result =
+                run(environment, "bash", "install.sh", "--no-onboard", "--bin-dir", binDirectory.toString());
+
+        // then
+        result.assertSuccess();
+        assertThat(symphonyHome.resolve("state/install-context.properties"))
+                .content(StandardCharsets.UTF_8)
+                .contains("install_source=source-checkout", "app_version=test", "source_commit=" + expectedCommit)
+                .doesNotContain(
+                        "app_version=" + installerDefaultRef().substring(1), "release_tag=", "release_base_url=");
+    }
+
+    @ParameterizedTest(name = "POSIX source checkout app_version fallback for {0} version output")
+    @ValueSource(strings = {"fail", "malformed", "multiline"})
+    void posixSourceCheckoutInstallContextUsesUnknownVersionWhenBuiltVersionIsNotProven(String versionMode)
+            throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
+        Path sourceRepository = createSourceRepository(temporaryDirectory);
+        String expectedCommit = run(Map.of(), "git", "-C", sourceRepository.toString(), "rev-parse", "HEAD")
+                .output()
+                .trim();
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path symphonyHome = temporaryDirectory.resolve("source-context-" + versionMode + "-home");
+        Path binDirectory = temporaryDirectory.resolve("source-context-" + versionMode + "-bin");
+        Path fakeLog = temporaryDirectory.resolve("source-context-" + versionMode + ".log");
+        Map<String, String> environment = Map.of(
+                "PATH", fakeBin + File.pathSeparator + System.getenv("PATH"),
+                "SYMPHONY_TRELLO_REPO_URL", sourceRepository.toUri().toString(),
+                "SYMPHONY_HOME", symphonyHome.toString(),
+                "SYMPHONY_FAKE_LOG", fakeLog.toString(),
+                "SYMPHONY_FAKE_VERSION_MODE", versionMode);
+
+        // when
+        ProcessResult result =
+                run(environment, "bash", "install.sh", "--no-onboard", "--bin-dir", binDirectory.toString());
+
+        // then
+        result.assertSuccess();
+        assertThat(symphonyHome.resolve("state/install-context.properties"))
+                .content(StandardCharsets.UTF_8)
+                .contains("install_source=source-checkout", "app_version=unknown", "source_commit=" + expectedCommit)
+                .doesNotContain(
+                        "app_version=" + installerDefaultRef().substring(1), "release_tag=", "release_base_url=");
+    }
+
+    @Test
     void posixInstallerDryRunReportsConcreteMissingPrerequisiteActions() throws Exception {
         // given
         assumeTrue(Files.exists(Path.of("/bin/bash")));
@@ -1300,7 +1367,7 @@ final class InstallerScriptTest {
 
         // when
         int javaGuard = installer.indexOf("if (-not (Get-Command java -ErrorAction SilentlyContinue))");
-        int javaLaunch = installer.indexOf("& java \"-Dsymphony.trello.app.home=");
+        int javaLaunch = installer.indexOf("& java \"-Dsymphony.trello.app.home=", javaGuard);
 
         // then
         assertThat(javaGuard)
@@ -4119,14 +4186,109 @@ final class InstallerScriptTest {
         Files.writeString(
                 appHome.resolve(".symphony-trello-install"), "installer-managed archive\n", StandardCharsets.UTF_8);
         Files.writeString(appHome.resolve("old-archive-file.txt"), "old archive content\n", StandardCharsets.UTF_8);
+
+        // when
+        ProcessResult result = runPowerShellSourceCheckoutInstall(
+                pwsh, sourceRepository, fakeBin, symphonyHome, binDirectory, fakeLog);
+
+        // then
+        result.assertSuccess();
+        assertThat(appHome.resolve(".git")).isDirectory();
+        assertThat(appHome.resolve("old-archive-file.txt")).doesNotExist();
+        assertThat(result.output())
+                .contains(
+                        "remove existing release archive app",
+                        appHome.getFileName().toString(),
+                        "git clone");
+    }
+
+    @Test
+    void powershellSourceCheckoutInstallContextUsesBuiltVersionAndSourceCommitWhenAvailable() throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        assumeFalse(pwsh.isEmpty());
+        assumeTrue(commandExists("git"));
+        Path sourceRepository = createPowerShellSourceRepository(temporaryDirectory);
+        String expectedCommit = run(Map.of(), "git", "-C", sourceRepository.toString(), "rev-parse", "HEAD")
+                .output()
+                .trim();
+        Path fakeBin = createPowerShellFakeToolchain(temporaryDirectory);
+        Path symphonyHome = temporaryDirectory.resolve("ps-source-context-home");
+        Path binDirectory = temporaryDirectory.resolve("ps-source-context-bin");
+        Path fakeLog = temporaryDirectory.resolve("ps-source-context.log");
+
+        // when
+        ProcessResult result = runPowerShellSourceCheckoutInstall(
+                pwsh, sourceRepository, fakeBin, symphonyHome, binDirectory, fakeLog);
+
+        // then
+        result.assertSuccess();
+        assertThat(symphonyHome.resolve("state/install-context.properties"))
+                .content(StandardCharsets.UTF_8)
+                .contains("install_source=source-checkout", "app_version=test", "source_commit=" + expectedCommit)
+                .doesNotContain(
+                        "app_version=" + installerDefaultRef().substring(1), "release_tag=", "release_base_url=");
+    }
+
+    @ParameterizedTest(name = "PowerShell source checkout app_version fallback for {0} version output")
+    @ValueSource(strings = {"fail", "malformed", "multiline"})
+    void powershellSourceCheckoutInstallContextUsesUnknownVersionWhenBuiltVersionIsNotProven(String versionMode)
+            throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        assumeFalse(pwsh.isEmpty());
+        assumeTrue(commandExists("git"));
+        Path sourceRepository = createPowerShellSourceRepository(temporaryDirectory);
+        String expectedCommit = run(Map.of(), "git", "-C", sourceRepository.toString(), "rev-parse", "HEAD")
+                .output()
+                .trim();
+        Path fakeBin = createPowerShellFakeToolchain(temporaryDirectory);
+        Path symphonyHome = temporaryDirectory.resolve("ps-source-context-" + versionMode + "-home");
+        Path binDirectory = temporaryDirectory.resolve("ps-source-context-" + versionMode + "-bin");
+        Path fakeLog = temporaryDirectory.resolve("ps-source-context-" + versionMode + ".log");
+
+        // when
+        ProcessResult result = runPowerShellSourceCheckoutInstall(
+                pwsh,
+                sourceRepository,
+                fakeBin,
+                symphonyHome,
+                binDirectory,
+                fakeLog,
+                Map.of("SYMPHONY_FAKE_VERSION_MODE", versionMode));
+
+        // then
+        result.assertSuccess();
+        assertThat(symphonyHome.resolve("state/install-context.properties"))
+                .content(StandardCharsets.UTF_8)
+                .contains("install_source=source-checkout", "app_version=unknown", "source_commit=" + expectedCommit)
+                .doesNotContain(
+                        "app_version=" + installerDefaultRef().substring(1), "release_tag=", "release_base_url=");
+    }
+
+    private static ProcessResult runPowerShellSourceCheckoutInstall(
+            List<String> pwsh, Path sourceRepository, Path fakeBin, Path symphonyHome, Path binDirectory, Path fakeLog)
+            throws Exception {
+        return runPowerShellSourceCheckoutInstall(
+                pwsh, sourceRepository, fakeBin, symphonyHome, binDirectory, fakeLog, Map.of());
+    }
+
+    private static ProcessResult runPowerShellSourceCheckoutInstall(
+            List<String> pwsh,
+            Path sourceRepository,
+            Path fakeBin,
+            Path symphonyHome,
+            Path binDirectory,
+            Path fakeLog,
+            Map<String, String> extraEnvironment)
+            throws Exception {
         Map<String, String> environment = new LinkedHashMap<>(nonWindowsPowerShellEnvironment());
         environment.put("PATH", fakeBin + File.pathSeparator + System.getenv("PATH"));
         environment.put("SYMPHONY_HOME", symphonyHome.toString());
         environment.put("SYMPHONY_FAKE_JAVA", fakeBin.resolve("fake-java.ps1").toString());
         environment.put("SYMPHONY_FAKE_LOG", fakeLog.toString());
-
-        // when
-        ProcessResult result = run(
+        environment.putAll(extraEnvironment);
+        return run(
                 environment,
                 command(
                                 pwsh,
@@ -4142,16 +4304,6 @@ final class InstallerScriptTest {
                                 "--bin-dir",
                                 binDirectory.toString())
                         .toArray(String[]::new));
-
-        // then
-        result.assertSuccess();
-        assertThat(appHome.resolve(".git")).isDirectory();
-        assertThat(appHome.resolve("old-archive-file.txt")).doesNotExist();
-        assertThat(result.output())
-                .contains(
-                        "remove existing release archive app",
-                        appHome.getFileName().toString(),
-                        "git clone");
     }
 
     private static Path createPowerShellSourceRepository(Path temporaryDirectory) throws Exception {
