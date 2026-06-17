@@ -85,13 +85,15 @@ public final class TrelloBoardSetup {
             List.of("Archived", "ArchivedList", "ArchivedBoard", "Deleted");
     static final String FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION =
             """
-            Filesystem access blocker details must include the inaccessible path, why it is inaccessible,
-            that deployed Symphony blocks undeclared host paths by default for security reasons so Trello
-            cards cannot make Codex read or edit unrelated host files, that accessible files are available
-            in the current per-card workspace shown by `pwd`, and that an operator can allow one or more
-            files or folders with the manual deployment
-            settings `BindPaths`, `ReadWritePaths`, and `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS`,
-            as documented in `docs/deployment.md#allow-host-path-access`.""";
+            Filesystem access blocker details must explain that the requested file or folder is inaccessible
+            because deployed Symphony blocks undeclared host paths by default for security reasons, so Trello
+            cards cannot make Codex read or edit unrelated host files. Tell the operator to use files already
+            available in the per-card workspace or ask an operator to allow the needed file or folder with
+            the manual deployment settings `BindPaths`, `ReadWritePaths`, and
+            `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS`, as documented in
+            `docs/deployment.md#allow-host-path-access`. Do not copy absolute host paths, per-card
+            workspace locations, account names, or deployment-specific paths into Trello comments or the
+            workpad; use labels such as "the requested path" and "the per-card workspace" instead.""";
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
     private static final TypeReference<List<Map<String, Object>>> LIST_MAP_TYPE = new TypeReference<>() {};
 
@@ -1317,11 +1319,11 @@ public final class TrelloBoardSetup {
                     This workflow does not have GitHub PR integration configured. Do not create pull requests,
                     do not require GitHub auth, and do not refer to a landing approval list. For repository-changing work,
                     make the smallest maintainable local commit when a Git repository is available, run relevant
-                    validation, and record the branch, commit, workspace path, and validation evidence in %s before
+                    validation, and record the branch, commit, workspace context without absolute paths, and validation evidence in %s before
                     moving the card to %s.
 
                     If the card explicitly asks for a patch instead of a commit, leave the patch or changed files in
-                    the workspace and record the exact location. If the work needs a remote Git provider or permission
+                    the workspace and describe the workspace-relative file names. If the work needs a remote Git provider or permission
                     that is not available in this non-GitHub workflow, treat that as a blocker instead of inventing a
                     GitHub PR flow.
                     """

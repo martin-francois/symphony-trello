@@ -25,6 +25,7 @@ import ch.fmartin.symphony.trello.workspace.WorkspaceManager;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -1196,6 +1197,63 @@ final class SymphonyOrchestratorTest {
         // then
         assertThat(snapshot.counts().running()).isEqualTo(1);
         assertThat(snapshot.counts().retrying()).isZero();
+    }
+
+    @Test
+    void invalidWorkflowReloadLeavesPreviousConfigActive() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        writeWorkflow(workflow, "60000");
+        FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-first", "Todo")));
+        AtomicInteger runs = new AtomicInteger();
+        AgentRunner runner = mock();
+        when(runner.run(any())).thenAnswer(invocation -> {
+            runs.incrementAndGet();
+            return AgentRunResult.ok();
+        });
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
+
+        // when
+        orchestrator.start();
+        waitUntil(() -> runs.get() == 1 && orchestrator.snapshot().counts().retrying() == 1);
+        int fetchesBeforeUnsafeReload = tracker.candidateFetches.get();
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker: []
+                workspace:
+                  root: work
+                polling:
+                  interval_ms: 60000
+                codex:
+                  command: fake
+                ---
+                ## Operating Posture
+
+                This is an unattended orchestration run.
+
+                ## Local And Non-GitHub Repository Work
+
+                Record the validation evidence.
+
+                ## Trello List Routing
+
+                Card URL: {{ card.url }}
+                """);
+        Files.setLastModifiedTime(
+                workflow,
+                FileTime.fromMillis(Files.getLastModifiedTime(workflow).toMillis() + 2_000));
+        tracker.setCandidates(List.of(TestCards.card("card-2", "TRELLO-second", "Other")));
+        orchestrator.requestRefresh();
+        waitUntil(() -> tracker.candidateFetches.get() > fetchesBeforeUnsafeReload);
+        RuntimeSnapshot snapshot = orchestrator.snapshot();
+        orchestrator.stop();
+
+        // then
+        assertThat(runs).hasValue(1);
+        assertThat(snapshot.retrying()).singleElement().satisfies(row -> assertThat(row.cardIdentifier())
+                .isEqualTo("TRELLO-first"));
     }
 
     private static BlockingRun blockRunnerUntilCancelled(AgentRunner runner) {
