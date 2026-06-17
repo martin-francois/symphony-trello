@@ -199,8 +199,7 @@ final class GitHubConfigurator {
 
     private static void printGithubLaterCommands(Terminal terminal) {
         terminal.info("  symphony-trello setup-local configure-github");
-        terminal.info(
-                "  curl -fsSL https://raw.githubusercontent.com/martin-francois/symphony-trello/main/install.sh | bash");
+        terminal.info("  curl -fsSL https://symphony-trello.fmartin.ch/install.sh | bash");
     }
 
     private static boolean blank(String value) {
