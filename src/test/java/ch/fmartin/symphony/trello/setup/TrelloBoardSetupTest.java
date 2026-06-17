@@ -19,6 +19,8 @@ import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.testsupport.FakeTrelloServer;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -798,6 +800,87 @@ final class TrelloBoardSetupTest {
         assertThat(config.codex().reasoningEffort()).isEqualTo("medium");
         assertThat(config.workspace().root()).isEqualTo(workflow.getParent().resolve("agent-workspaces"));
         assertThat(config.polling().interval()).isEqualTo(ConfigDefaults.GENERATED_WORKFLOW_POLLING_INTERVAL);
+    }
+
+    @Test
+    void importBoardTreatsDroppedMissingGithubListPostAsUnknownWriteOutcome() {
+        // given
+        Path workflow = tempDir.resolve("dropped-missing-list-post.md");
+
+        // when
+        Throwable thrown = importBoardWithMissingMergingListFailure(workflow, HttpExchange::close);
+
+        // then
+        assertUnknownWriteOutcome(thrown, workflow);
+    }
+
+    @Test
+    void importBoardTreatsIncompleteMissingGithubListPostAsUnknownWriteOutcome() {
+        // given
+        Path workflow = tempDir.resolve("incomplete-missing-list-post.md");
+
+        // when
+        Throwable thrown = importBoardWithMissingMergingListFailure(workflow, exchange -> respond(exchange, "{}"));
+
+        // then
+        assertUnknownWriteOutcome(thrown, workflow);
+    }
+
+    @Test
+    void importBoardTreatsNullMissingGithubListPostAsUnknownWriteOutcome() {
+        // given
+        Path workflow = tempDir.resolve("null-missing-list-post.md");
+
+        // when
+        Throwable thrown = importBoardWithMissingMergingListFailure(workflow, exchange -> respond(exchange, "null"));
+
+        // then
+        assertUnknownWriteOutcome(thrown, workflow);
+    }
+
+    private Throwable importBoardWithMissingMergingListFailure(Path workflow, HttpHandler missingListHandler) {
+        boardListsResponse.set(listsJson(
+                trelloList("list-inbox", "Inbox", 1),
+                trelloList("list-ready", "Ready for Codex", 2),
+                trelloList("list-review", "Human Review", 3),
+                trelloList("list-blocked", "Blocked", 4),
+                trelloList("list-done", "Done", 5)));
+        trello.remove("/1/lists").on("/1/lists", exchange -> {
+            assertThat(exchange.getRequestMethod()).isEqualTo("POST");
+            Map<String, String> query = query(exchange);
+            assertThat(query)
+                    .containsEntry("name", TrelloBoardSetup.RECOMMENDED_MERGING_STATE)
+                    .containsEntry("idBoard", "board-1");
+            createdLists.add(query.get("name"));
+            missingListHandler.handle(exchange);
+        });
+        return catchThrowable(() -> setup.importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "input",
+                List.of(),
+                List.of(),
+                null,
+                true,
+                null,
+                workflow,
+                Path.of("./agent-workspaces"),
+                null,
+                ConfigDefaults.DEFAULT_SETUP_MAX_CONCURRENT_AGENTS,
+                false,
+                TrelloBoardSetup.GitHubIntegration.ENABLED,
+                true)));
+    }
+
+    private void assertUnknownWriteOutcome(Throwable thrown, Path workflow) {
+        assertThat(thrown)
+                .isInstanceOf(TrelloBoardSetupException.class)
+                .hasMessageContaining("Trello write outcome is unknown")
+                .hasMessageNotContaining(workflow.toString())
+                .hasMessageNotContaining(tempDir.toString());
+        assertThat(((TrelloBoardSetupException) thrown).code()).isEqualTo("trello_write_outcome_unknown");
+        assertThat(createdLists).containsExactly(TrelloBoardSetup.RECOMMENDED_MERGING_STATE);
+        assertThat(workflow).doesNotExist();
     }
 
     @Test

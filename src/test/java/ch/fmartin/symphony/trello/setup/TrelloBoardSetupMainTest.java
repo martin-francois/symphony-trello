@@ -1879,6 +1879,208 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
+    void listWorkspacesTreatsUnreachableEndpointAsExpectedFailureWithoutReport() {
+        // given
+        String endpoint = "http://127.0.0.1:" + firstAvailableManagedPort();
+
+        // when
+        CliRunResult result = runCli("list-workspaces", "--endpoint", endpoint, "--key", "key", "--token", "token");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=trello_api_request message=Trello request failed",
+                        "Next step: Check the Trello API endpoint URL and network connection")
+                .stderrDoesNotContain("Troubleshooting report written", "Open a GitHub issue", endpoint)
+                .stdoutDoesNotContain("Trello workspaces:");
+        assertThat(workspaceLookups).hasValue(0);
+    }
+
+    @Test
+    void listWorkspacesTreatsMalformedTrelloPayloadAsUnexpectedFailureWithReport() {
+        // given
+        trello.remove("/1/members/me/organizations").on("/1/members/me/organizations", exchange -> {
+            workspaceLookups.incrementAndGet();
+            respond(exchange, "<html>not json</html>");
+        });
+
+        // when
+        CliRunResult result = runCli("list-workspaces", "--endpoint", endpoint(), "--key", "key", "--token", "token");
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=trello_unknown_payload",
+                        "Trello response payload could not be parsed",
+                        "Troubleshooting report written")
+                .stdoutDoesNotContain("Trello workspaces:");
+        assertThat(workspaceLookups).hasValue(1);
+    }
+
+    @Test
+    void newBoardTreatsDroppedPostResponseAsUnknownWriteOutcomeWithoutWritingWorkflow() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("dropped-board-post.WORKFLOW.md");
+        Path manifest = tempDir.resolve("connected-boards.json");
+        AtomicInteger boardCreateRequests = new AtomicInteger();
+        trello.remove("/1/boards/").on("/1/boards/", exchange -> {
+            boardCreateRequests.incrementAndGet();
+            createdBoardName.set(query(exchange).get("name"));
+            exchange.close();
+        });
+
+        // when
+        CliRunResult result = runCli(
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--name",
+                "Potentially Created Board",
+                "--workflow",
+                workflow.toString(),
+                "--manifest",
+                manifest.toString());
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=trello_write_outcome_unknown",
+                        "Inspect Trello before retrying setup",
+                        "Next step: Check Trello for any board or list that may already have been created")
+                .stderrDoesNotContain("Troubleshooting report written", workflow.toString(), manifest.toString())
+                .stdoutDoesNotContain("Created Trello board", "Wrote workflow");
+        assertThat(boardCreateRequests).hasValue(1);
+        assertThat(createdBoardName).hasValue("Potentially Created Board");
+        assertThat(workflow).doesNotExist();
+        assertThat(manifest).doesNotExist();
+    }
+
+    @Test
+    void newBoardTreatsMalformedPostResponseAsUnknownWriteOutcomeWithoutWritingWorkflow() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("malformed-board-post.WORKFLOW.md");
+        Path manifest = tempDir.resolve("connected-boards.json");
+        AtomicInteger boardCreateRequests = new AtomicInteger();
+        trello.remove("/1/boards/").on("/1/boards/", exchange -> {
+            boardCreateRequests.incrementAndGet();
+            createdBoardName.set(query(exchange).get("name"));
+            respond(exchange, "<html>not json</html>");
+        });
+
+        // when
+        CliRunResult result = runCli(
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--name",
+                "Malformed Response Board",
+                "--workflow",
+                workflow.toString(),
+                "--manifest",
+                manifest.toString());
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=trello_write_outcome_unknown", "Inspect Trello before retrying setup")
+                .stderrDoesNotContain("trello_unknown_payload", "Troubleshooting report written")
+                .stdoutDoesNotContain("Created Trello board", "Wrote workflow");
+        assertThat(boardCreateRequests).hasValue(1);
+        assertThat(workflow).doesNotExist();
+        assertThat(manifest).doesNotExist();
+    }
+
+    @Test
+    void newBoardTreatsIncompletePostResponseAsUnknownWriteOutcomeWithoutWritingWorkflow() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("incomplete-board-post.WORKFLOW.md");
+        Path manifest = tempDir.resolve("connected-boards.json");
+        AtomicInteger boardCreateRequests = new AtomicInteger();
+        trello.remove("/1/boards/").on("/1/boards/", exchange -> {
+            boardCreateRequests.incrementAndGet();
+            createdBoardName.set(query(exchange).get("name"));
+            respond(exchange, "{}");
+        });
+
+        // when
+        CliRunResult result = runCli(
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--name",
+                "Incomplete Response Board",
+                "--workflow",
+                workflow.toString(),
+                "--manifest",
+                manifest.toString());
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=trello_write_outcome_unknown", "Inspect Trello before retrying setup")
+                .stderrDoesNotContain("trello_unknown_payload", "Troubleshooting report written")
+                .stdoutDoesNotContain("Created Trello board", "Wrote workflow");
+        assertThat(boardCreateRequests).hasValue(1);
+        assertThat(workflow).doesNotExist();
+        assertThat(manifest).doesNotExist();
+    }
+
+    @Test
+    void newBoardTreatsPostServerErrorAsUnknownWriteOutcomeWithoutWritingWorkflow() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("server-error-board-post.WORKFLOW.md");
+        Path manifest = tempDir.resolve("connected-boards.json");
+        AtomicInteger boardCreateRequests = new AtomicInteger();
+        trello.remove("/1/boards/").on("/1/boards/", exchange -> {
+            boardCreateRequests.incrementAndGet();
+            createdBoardName.set(query(exchange).get("name"));
+            respond(exchange, 500, "temporary Trello server error");
+        });
+
+        // when
+        CliRunResult result = runCli(
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--name",
+                "Server Error Board",
+                "--workflow",
+                workflow.toString(),
+                "--manifest",
+                manifest.toString());
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=trello_write_outcome_unknown", "Inspect Trello before retrying setup")
+                .stderrDoesNotContain(
+                        "setup_failed code=trello_api_status",
+                        "temporary Trello server error",
+                        "Troubleshooting report written")
+                .stdoutDoesNotContain("Created Trello board", "Wrote workflow");
+        assertThat(boardCreateRequests).hasValue(1);
+        assertThat(createdBoardName).hasValue("Server Error Board");
+        assertThat(workflow).doesNotExist();
+        assertThat(manifest).doesNotExist();
+    }
+
+    @Test
     void createsRecommendedBoardAndPrintsNextSteps() throws Exception {
         // given
         Path workflow = tempDir.resolve("generated workflow.WORKFLOW.md");
@@ -2161,6 +2363,53 @@ final class TrelloBoardSetupMainTest {
                         "Imported Trello board", "Saving Trello credentials", "Troubleshooting report written");
         assertThat(boardInfoLookups).hasValue(0);
         assertThat(createdLists).isEmpty();
+        assertThat(workflow).doesNotExist();
+        assertThat(env).doesNotExist();
+    }
+
+    @Test
+    void importBoardTreatsUnreachableEndpointAsExpectedFailureWithoutReport() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("unreachable-import.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.unreachable-import");
+        String endpoint = "http://127.0.0.1:" + firstAvailableManagedPort();
+
+        // when
+        CliRunResult result = runCli(
+                "import-board",
+                "--endpoint",
+                endpoint,
+                "--key",
+                "direct-key",
+                "--token",
+                "direct-token",
+                "--board",
+                "https://trello.com/b/input/existing-board",
+                "--active",
+                "Queue for Codex",
+                "--terminal",
+                "Released",
+                "--workflow",
+                workflow.toString(),
+                "--manifest",
+                tempDir.resolve("connected-boards.json").toString(),
+                "--env",
+                env.toString());
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=trello_api_request message=Trello request failed",
+                        "Next step: Check the Trello API endpoint URL and network connection")
+                .stderrDoesNotContain(
+                        "Troubleshooting report written",
+                        "Open a GitHub issue",
+                        endpoint,
+                        "direct-key",
+                        "direct-token",
+                        workflow.toString(),
+                        env.toString())
+                .stdoutDoesNotContain("Imported Trello board", "Saving Trello credentials", "Wrote workflow");
         assertThat(workflow).doesNotExist();
         assertThat(env).doesNotExist();
     }
