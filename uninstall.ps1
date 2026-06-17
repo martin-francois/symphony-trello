@@ -25,6 +25,15 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+trap {
+  $message = if ($_.Exception -and -not [string]::IsNullOrWhiteSpace($_.Exception.Message)) {
+    $_.Exception.Message
+  } else {
+    $_.ToString()
+  }
+  [Console]::Error.WriteLine($message)
+  exit 1
+}
 $ScriptBoundParameters = @{} + $PSBoundParameters
 $DefaultSymphonyHome = if ($env:SYMPHONY_HOME) { $env:SYMPHONY_HOME } else { "$env:LOCALAPPDATA\SymphonyTrello" }
 $DefaultPrefix = ""
@@ -449,7 +458,7 @@ function Assert-AppRemovalPreservesCurrentData {
     $cleanupPaths += "STATE/LOGS $StateHome"
   }
   if ($conflicts.Count -gt 0) {
-    Write-Error "Refusing to remove app directory because it contains current local data that is preserved by default:`n  $($conflicts -join "`n  ")`nUse a dedicated app checkout path, or pass the matching cleanup scope with --yes-local-data."
+    [Console]::Error.WriteLine("Refusing to remove app directory because it contains current local data that is preserved by default:`n  $($conflicts -join "`n  ")`nUse a dedicated app checkout path, or pass the matching cleanup scope with --yes-local-data.")
     exit 2
   }
   if ($cleanupPaths.Count -gt 0) {

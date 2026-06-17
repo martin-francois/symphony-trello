@@ -2093,6 +2093,33 @@ final class InstallerScriptTest {
     }
 
     @Test
+    void powershellInstallerValidationErrorsArePlainWhenAvailable() throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        assumeFalse(pwsh.isEmpty());
+
+        // when
+        ProcessResult result = run(
+                nonWindowsPowerShellEnvironment(),
+                command(
+                                pwsh,
+                                "-NoProfile",
+                                "-File",
+                                "./install.ps1",
+                                "--dry-run",
+                                "--no-onboard",
+                                "--version",
+                                "latest")
+                        .toArray(String[]::new));
+
+        // then
+        assertThat(result.exitCode()).isNotZero();
+        assertThat(result.output())
+                .contains("--version must be a semantic version without the leading v.")
+                .doesNotContain("Exception:", "Line |", "install.ps1:", "throw \"--version");
+    }
+
+    @Test
     void powershellInstallerAcceptsPublicFlagsThroughScriptblockWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
@@ -2799,6 +2826,25 @@ final class InstallerScriptTest {
         assertThat(result.output())
                 .contains("Missing value for --prefix")
                 .doesNotContain("App checkout:", "Will remove if present:", "/--bin-dir");
+    }
+
+    @Test
+    void powershellUninstallerValidationErrorsArePlainWhenAvailable() throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        assumeFalse(pwsh.isEmpty());
+
+        // when
+        ProcessResult result = run(
+                nonWindowsPowerShellEnvironment(),
+                command(pwsh, "-NoProfile", "-File", "./uninstall.ps1", "--dry-run", "--prefix", "relative/path")
+                        .toArray(String[]::new));
+
+        // then
+        assertThat(result.exitCode()).isNotZero();
+        assertThat(result.output())
+                .contains("--prefix must be an absolute path.")
+                .doesNotContain("Exception:", "Line |", "uninstall.ps1:", "throw \"--prefix");
     }
 
     @Test
