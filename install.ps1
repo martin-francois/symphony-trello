@@ -25,6 +25,15 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+trap {
+  $message = if ($_.Exception -and -not [string]::IsNullOrWhiteSpace($_.Exception.Message)) {
+    $_.Exception.Message
+  } else {
+    $_.ToString()
+  }
+  [Console]::Error.WriteLine($message)
+  exit 1
+}
 $ScriptBoundParameters = @{} + $PSBoundParameters
 $OriginalPath = $env:PATH
 $DefaultSymphonyHome = if ($env:SYMPHONY_HOME) { $env:SYMPHONY_HOME } else { "$env:LOCALAPPDATA\SymphonyTrello" }
