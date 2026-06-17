@@ -3474,8 +3474,10 @@ When this profile is used:
   `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS` settings
 - a less strict Codex inner sandbox MAY be enabled for trusted workflows while systemd still limits
   the visible writable host paths
-- blocker comments for filesystem access problems SHOULD state the inaccessible path, why it was
-  inaccessible, where the per-card workspace is, and which documented setting relaxes access
+- blocker comments for filesystem access problems SHOULD explain that the requested file or folder
+  is inaccessible because undeclared host paths are blocked by default, SHOULD point to the
+  documented setting that relaxes access, and MUST NOT copy absolute host paths, per-card workspace
+  locations, account names, or deployment-specific paths into Trello-visible text
 
 Generated workflows SHOULD prefer writable per-card checkouts over editing shared host checkouts.
 When a card names only a repository URL or when a readable host checkout is not writable, the agent

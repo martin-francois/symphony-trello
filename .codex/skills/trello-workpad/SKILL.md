@@ -57,9 +57,10 @@ Update the workpad:
 - Prefer short bullet points over long status narratives.
 - Do not include secrets, API tokens, private board ids, account names, or
   unrelated host paths.
-- For filesystem blockers, include the inaccessible path only when it is
-  necessary for the operator to fix the issue. Prefer sanitized repository or
-  workspace names when enough.
+- For filesystem blockers, do not copy absolute host paths or per-card
+  workspace locations into the workpad. Refer to them as "the requested path"
+  or "the per-card workspace", explain that undeclared host paths are blocked by
+  default, and point the operator to the allowed-host-path settings.
 - If the tool fails because the existing workpad cannot be updated, treat the
   card as blocked instead of creating duplicate progress comments.
 

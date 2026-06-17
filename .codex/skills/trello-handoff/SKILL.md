@@ -111,6 +111,12 @@ If no `Blocked` list exists but the workflow configured a review list as
 the blocked destination, move there so the card leaves the active queue. In the
 comment, say that the card is blocked.
 
+For filesystem blockers, keep Trello-visible text path-safe. Do not copy
+absolute host paths or per-card workspace locations into Trello comments or the
+workpad. Refer to them as "the requested path" or "the per-card workspace",
+explain that undeclared host paths are blocked by default, and point the
+operator to the allowed-host-path settings.
+
 ## Merging And Done
 
 Use `Merging` only when a human has approved the work and the workflow enables a
