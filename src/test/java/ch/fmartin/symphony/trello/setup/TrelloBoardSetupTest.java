@@ -528,9 +528,10 @@ final class TrelloBoardSetupTest {
                 .contains("## Completion Bar Before \"Human Review\"")
                 .contains("A pull request exists and is linked in the workpad and handoff comment")
                 .contains("Filesystem access blocker details")
-                .contains("inaccessible path")
+                .contains("requested file or folder is inaccessible")
                 .contains("by default for security reasons")
                 .contains("undeclared host paths")
+                .contains("Do not copy absolute host paths")
                 .contains("docs/deployment.md#allow-host-path-access")
                 .contains("server:")
                 .contains("port: " + expectedPort)
@@ -562,6 +563,20 @@ final class TrelloBoardSetupTest {
         assertThat(config.trelloTools().allowChecklists()).isFalse();
         assertThat(config.trelloTools().allowUrlAttachments()).isFalse();
         assertThat(config.polling().interval()).isEqualTo(ConfigDefaults.GENERATED_WORKFLOW_POLLING_INTERVAL);
+    }
+
+    @Test
+    void shippedDebugSkillDoesNotAskAgentsToCopyExactFilesystemBlockerPaths() throws IOException {
+        // given
+        Path skill = Path.of(".codex/skills/debug/SKILL.md");
+
+        // when
+        String source = Files.readString(skill, StandardCharsets.UTF_8);
+
+        // then
+        assertThat(source)
+                .contains("requested path", "per-card workspace", "without\n   copying private host paths")
+                .doesNotContain("exact missing path");
     }
 
     @Test
@@ -1371,9 +1386,10 @@ final class TrelloBoardSetupTest {
                 .contains("Do not leave")
                 .contains("blocked work in an active list")
                 .contains("Filesystem access blocker details")
-                .contains("accessible files are available")
-                .contains("per-card workspace")
-                .contains("shown by `pwd`");
+                .contains("requested file or folder is inaccessible")
+                .contains("the per-card workspace")
+                .contains("Do not copy absolute host paths")
+                .doesNotContain("shown by `pwd`");
         EffectiveConfig config = resolve(workflow);
         assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("review", "done");
     }

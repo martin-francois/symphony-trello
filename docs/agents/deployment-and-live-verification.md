@@ -77,8 +77,10 @@ lives in [Testing](testing.md).
 - For deployment filesystem access, describe the concept as "allowed host paths". The allowed entries
   can be multiple files or folders; do not imply they must be repository or project roots. Explain
   that undeclared host paths are blocked by default for security reasons so Trello cards cannot make
-  Codex read or edit unrelated files. Blocker comments for filesystem access must name the
-  inaccessible path, explain the security default, and point to the exact manual systemd setting that
+  Codex read or edit unrelated files. Trello-visible blocker comments and workpad updates for
+  filesystem access must not copy absolute host paths, per-card workspace locations, account names, or
+  deployment-specific paths. Refer to them as "the requested path" or "the per-card workspace",
+  explain the security default, and point to the exact manual systemd or workflow setting that
   relaxes access.
 
 ## Generated workflows, PR publishing, and shipped skills

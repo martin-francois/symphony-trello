@@ -301,13 +301,15 @@ evidence, and PR URL when applicable, call trello_add_comment with a concise sum
 notes, then call trello_move_current_card with list_name "Human Review". If the work is blocked or
 unsafe to hand off, update the workpad with the blocker, add a Trello comment explaining the blocker,
 then call trello_move_current_card with list_name "Blocked". If the blocker is a local filesystem
-access problem, the Trello comment must include the inaccessible path, why it is inaccessible, that
-deployed Symphony blocks undeclared host paths by default for security reasons so Trello cards cannot
-make Codex read or edit unrelated host files, that accessible files are available in the current
-per-card workspace shown by `pwd`, and that an operator can allow one or more files or folders with
-the manual deployment settings `BindPaths`, `ReadWritePaths`, and
+access problem, the Trello comment must explain that the requested file or folder is inaccessible
+because deployed Symphony blocks undeclared host paths by default for security reasons, so Trello
+cards cannot make Codex read or edit unrelated host files. Tell the operator to use files already
+available in the per-card workspace or ask an operator to allow the needed file or folder with the
+manual deployment settings `BindPaths`, `ReadWritePaths`, and
 `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS`, as documented in
-`docs/deployment.md#allow-host-path-access`.
+`docs/deployment.md#allow-host-path-access`. Do not copy absolute host paths, per-card workspace
+locations, account names, or deployment-specific paths into Trello comments or the workpad; use
+labels such as "the requested path" and "the per-card workspace" instead.
 
 Card URL: {{ card.url }}
 

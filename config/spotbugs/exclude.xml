@@ -37,4 +37,11 @@
     <Class name="ch.fmartin.symphony.trello.tracker.TrelloClient"/>
     <Method name="exponentialBackoffWithJitter"/>
   </Match>
+
+  <!-- Workflow updates intentionally create a temporary file next to the selected workflow file so the final replacement can be same-directory and atomic when the platform supports it. -->
+  <Match>
+    <Bug pattern="PATH_TRAVERSAL_IN"/>
+    <Class name="ch.fmartin.symphony.trello.setup.WorkflowConfigEditor"/>
+    <Method name="writeAtomically"/>
+  </Match>
 </FindBugsFilter>

@@ -47,8 +47,9 @@ description: >
    - token totals and rate-limit data
 6. Check the card's current Trello list. Cards in non-active lists are not
    dispatched.
-7. Read recent Trello comments on the card. Blocker comments often contain the
-   exact missing path, auth, or permission problem.
+7. Read recent Trello comments on the card. Blocker comments often describe the
+   requested path, the per-card workspace, auth, or permission problem without
+   copying private host paths into Trello-visible text.
 8. Search logs by card identifier, worker identity, and session id. Prefer `rg`.
 9. Classify the failure:
    - Trello credentials or board access.

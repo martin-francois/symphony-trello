@@ -546,10 +546,10 @@ Trello moves the card from `Ready for Codex` to `In Progress` before the final h
 1. Deploy with no extra allowed host paths.
 2. Create a Trello card that asks Codex to inspect a disposable host path outside
    `/var/lib/symphony-trello`.
-3. Verify the card moves to the blocked handoff list and the new Trello comment says which path was
-   inaccessible, why the deployed service could not access it, that files are available in the
-   per-card workspace shown by `pwd`, and that deployment access can be relaxed with allowed host
-   paths.
+3. Verify the card moves to the blocked handoff list and the new Trello comment explains that the
+   requested path is inaccessible because undeclared host paths are blocked by default, avoids
+   absolute host paths and per-card workspace locations, and says deployment access can be relaxed with
+   allowed host paths.
 4. Deploy again with that disposable path in the manual systemd `BindPaths`, `ReadWritePaths`, and
    `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS` settings.
 5. Create a fresh card that asks Codex to read and write a harmless marker file in the allowed path.

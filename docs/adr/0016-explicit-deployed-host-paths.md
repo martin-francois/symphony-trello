@@ -49,10 +49,9 @@ For parent directories, operators can additionally set `SYMPHONY_CODEX_DANGER_FU
 systemd still limits visible writable host paths while Codex does not apply a narrower
 workspace-write list inside that namespace.
 
-Generated workflow prompts now tell Codex that filesystem blocker comments must state the
-inaccessible path, that deployed Symphony blocks undeclared host paths by default for security
-reasons, where accessible workspace files are, and which deployment settings allow one or more host
-paths.
+Generated workflow prompts now tell Codex that filesystem blocker comments must explain the access
+problem without copying absolute host paths or per-card workspace locations, as refined by
+[ADR 0057](0057-path-safe-filesystem-blockers.md).
 
 Generated workflow prompts also tell Codex not to edit shared host checkouts directly when a writable
 per-card checkout can be created. If a card names only a repository URL, Codex should create or reuse
