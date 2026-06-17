@@ -521,6 +521,32 @@ final class WorkflowConfigEditor {
         }
     }
 
+    WorkflowValidation diagnosticsConnectedBoardValidation(
+            ConnectedBoard board, Function<String, Optional<String>> environmentResolver) {
+        if (board.workflowPath() == null || !Files.isRegularFile(board.workflowPath())) {
+            return WorkflowValidation.warn("missing workflow file");
+        }
+        try {
+            FrontMatter frontMatter = read(board.workflowPath());
+            SequencedMap<String, Object> yaml = parseYaml(frontMatter);
+            WorkflowValidation boardIdValidation = boardId(yaml, environmentResolver)
+                    .map(configuredBoardId -> validateBoardId(board, configuredBoardId))
+                    .orElseGet(() -> WorkflowValidation.warn("missing tracker.board_id"));
+            if (!boardIdValidation.ok()) {
+                return boardIdValidation;
+            }
+            if (invalidServerPortSetting(yaml, environmentResolver)) {
+                return WorkflowValidation.warn("invalid server.port");
+            }
+            if (invalidListRoleOverlap(yaml, frontMatter.body())) {
+                return WorkflowValidation.warn("overlapping tracker list roles");
+            }
+            return WorkflowValidation.valid();
+        } catch (IOException | RuntimeException e) {
+            return WorkflowValidation.warn("unreadable or invalid workflow configuration");
+        }
+    }
+
     void updateServerPort(Path workflowPath, int port) throws IOException {
         ReadWorkflow readWorkflow = readWorkflow(workflowPath);
         SequencedMap<String, Object> yaml = parseYaml(readWorkflow.frontMatter());
