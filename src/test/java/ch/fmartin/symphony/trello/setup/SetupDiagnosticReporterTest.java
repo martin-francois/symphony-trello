@@ -37,6 +37,8 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 final class SetupDiagnosticReporterTest {
+    private static final String SYNTHETIC_BOARD_ID = "000000000000000000000001";
+
     @TempDir
     Path tempDir;
 
@@ -258,6 +260,51 @@ final class SetupDiagnosticReporterTest {
         assertThat(report)
                 .contains("Configured port " + port + " is outside the valid TCP port range; health probes skipped.")
                 .doesNotContain("http://127.0.0.1:20990/", "IllegalArgumentException");
+    }
+
+    @Test
+    void diagnosticsDoNotMarkManifestWorkflowPortMismatchAsInvalidWorkflow() throws Exception {
+        // given
+        DiagnosticsFixture fixture = DiagnosticsFixture.create(tempDir, "manifest-workflow-port-mismatch");
+        Path workflow = fixture.workflow(
+                "WORKFLOW.port-mismatch.md", TestWorkflows.workflowWithBoardAndPort(SYNTHETIC_BOARD_ID, 18211));
+        fixture.saveSyntheticBoard(workflow, 18210);
+
+        // when
+        String report = fixture.renderGlobal();
+
+        // then
+        assertThat(report)
+                .contains(
+                        "## Connected Board Manifest",
+                        " | 18210 | ",
+                        "## Workflow Summary",
+                        " | 18211 | ",
+                        "http://127.0.0.1:18211/api/v1/local-status")
+                .doesNotContain(
+                        "## Invalid Connected Board Workflows",
+                        "unusable workflow configuration",
+                        "http://127.0.0.1:18210/");
+    }
+
+    @Test
+    void diagnosticsStillMarkConnectedBoardIdMismatchAsInvalidWorkflow() throws Exception {
+        // given
+        DiagnosticsFixture fixture = DiagnosticsFixture.create(tempDir, "connected-board-id-mismatch");
+        Path workflow = fixture.workflow(
+                "WORKFLOW.board-id-mismatch.md", TestWorkflows.workflowWithBoardAndPort("other-board-id", 18212));
+        fixture.saveSyntheticBoard(workflow, 18212);
+
+        // when
+        String report = fixture.renderGlobal();
+
+        // then
+        assertThat(report)
+                .contains(
+                        "## Invalid Connected Board Workflows",
+                        "- **invalid_connected_board_workflow_count:** 1",
+                        "unusable workflow configuration")
+                .doesNotContain("other-board-id", SYNTHETIC_BOARD_ID, tempDir.toString());
     }
 
     @Test

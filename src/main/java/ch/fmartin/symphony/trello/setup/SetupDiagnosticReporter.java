@@ -1294,8 +1294,8 @@ final class SetupDiagnosticReporter {
 
     private Optional<InvalidConnectedBoardWorkflow> invalidConnectedBoardWorkflow(
             WorkflowConfigEditor editor, ConnectedBoard board, Path defaultEnvPath) {
-        WorkflowValidation validation =
-                editor.validate(board, workflowEnvironmentResolver(board.envPath(), defaultEnvPath));
+        WorkflowValidation validation = editor.diagnosticsConnectedBoardValidation(
+                board, workflowEnvironmentResolver(board.envPath(), defaultEnvPath));
         if (validation.ok()) {
             return Optional.empty();
         }
