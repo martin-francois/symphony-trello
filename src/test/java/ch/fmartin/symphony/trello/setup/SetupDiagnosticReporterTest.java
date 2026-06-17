@@ -66,14 +66,15 @@ final class SetupDiagnosticReporterTest {
                 "setup_worker_workflow_ambiguous",
                 "setup_workflow_unresolved_environment",
                 "trello_auth_failed",
-                "trello_permission_denied");
+                "trello_api_request",
+                "trello_permission_denied",
+                "trello_write_outcome_unknown");
         List<String> unexpectedFailureCodes = List.of(
                 "setup_workflow_write_failed",
                 "setup_workflow_scan_failed",
                 "setup_start_unhealthy",
                 "setup_start_failed",
                 "setup_stop_failed",
-                "trello_api_request",
                 "trello_api_status",
                 "trello_unknown_payload");
 
@@ -90,6 +91,34 @@ final class SetupDiagnosticReporterTest {
                 .as(code)
                 .isTrue());
         assertThat(reportsIoFailure).isTrue();
+    }
+
+    @Test
+    void givesActionableHintForTrelloRequestFailures() {
+        // given
+        var unreachableEndpoint = new TrelloBoardSetupException("trello_api_request", "Trello request failed");
+
+        // when
+        Optional<String> hint = SetupDiagnosticReporter.userActionHint(unreachableEndpoint);
+
+        // then
+        assertThat(hint)
+                .contains(
+                        "Check the Trello API endpoint URL and network connection, or remove the custom --endpoint value, then rerun the command.");
+    }
+
+    @Test
+    void givesActionableHintForUnknownTrelloWriteOutcome() {
+        // given
+        var unknownWrite =
+                new TrelloBoardSetupException("trello_write_outcome_unknown", "Trello write outcome is unknown.");
+
+        // when
+        Optional<String> hint = SetupDiagnosticReporter.userActionHint(unknownWrite);
+
+        // then
+        assertThat(hint).hasValueSatisfying(value -> assertThat(value)
+                .contains("Check Trello for any board or list that may already have been created"));
     }
 
     @Test
@@ -1092,7 +1121,9 @@ final class SetupDiagnosticReporterTest {
 
         Optional<Path> reportFailure() throws IOException {
             return reporter.reportFailure(
-                    new TrelloBoardSetupException("trello_api_request", "Trello request failed"), request, terminal);
+                    new TrelloBoardSetupException("setup_workflow_write_failed", "Workflow write failed"),
+                    request,
+                    terminal);
         }
     }
 
