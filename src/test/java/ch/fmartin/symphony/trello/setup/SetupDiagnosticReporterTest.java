@@ -2883,6 +2883,7 @@ final class SetupDiagnosticReporterTest {
                 Body
                 """
                         .formatted(port);
+        String privateSourceCommit = "abcdef0123456789abcdef0123456789abcdef01";
         Files.writeString(workflow, workflowContent, StandardCharsets.UTF_8);
         new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
@@ -2934,8 +2935,10 @@ final class SetupDiagnosticReporterTest {
                 """
                 repo_url=git@github.com:private/repo.git
                 ref=feature/private-ref
+                source_commit=%s
                 TRELLO_TOKEN=secret-value
-                """,
+                """
+                        .formatted(privateSourceCommit),
                 StandardCharsets.UTF_8);
         Files.writeString(stateHome.resolve("large.log"), largeLog(), StandardCharsets.UTF_8);
         Path toolDirectory = fakeToolDirectory(tempDir, "git", "codex");
@@ -3003,6 +3006,7 @@ final class SetupDiagnosticReporterTest {
                         "\"running_count\":1",
                         "\"retrying_count\":1",
                         "## Recent Logs",
+                        "source_commit=<value:",
                         "tail-line-149")
                 .doesNotContain(
                         "prefix-line-0",
@@ -3020,6 +3024,7 @@ final class SetupDiagnosticReporterTest {
                         "oauth-token-secret",
                         "git@github.com:private/repo.git",
                         "feature/private-ref",
+                        privateSourceCommit,
                         "Top Secret Board",
                         "split-secret",
                         "inline-secret",

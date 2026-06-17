@@ -71,6 +71,7 @@ final class SetupDiagnosticReporter {
     private static final List<String> SETUP_FAILURE_TOOL_COMMANDS = List.of(
             "git", "java", "javac", "mvn", "npm", "node", "codex", "gh", "apt-get", "sudo", "doas", "brew", "winget",
             "dnf", "yum", "pacman", "zypper", "docker");
+    private static final Set<String> HASHED_INSTALLER_CONTEXT_KEYS = Set.of("repo_url", "ref", "source_commit");
     private static final Pattern SECRET_ASSIGNMENT = Pattern.compile(
             "(?i)([\"']?(?:key|token|secret|password|api[_-]?key|api[_-]?token|oauth_consumer_key|oauth_token|authorization|bearer)[\"']?\\s*[:=]\\s*[\"']?)([^\\s,\"'}]+)");
     private static final Pattern AUTHORIZATION_HEADER = Pattern.compile("(?i)(Authorization\\s*[:=]\\s*)[^\\r\\n]+");
@@ -2227,8 +2228,8 @@ final class SetupDiagnosticReporter {
             return "";
         }
         String normalizedKey = key.toLowerCase(Locale.ROOT);
-        return switch (key) {
-            case "repo_url", "ref" -> "<value:" + hash(value) + ">";
+        return switch (normalizedKey) {
+            case "repo_url", "ref", "source_commit" -> "<value:" + hash(value) + ">";
             default ->
                 normalizedKey.contains("token")
                                 || normalizedKey.contains("secret")
@@ -2271,7 +2272,7 @@ final class SetupDiagnosticReporter {
                 return;
             }
             String key = line.substring(0, separator).toLowerCase(Locale.ROOT);
-            if ("repo_url".equals(key) || "ref".equals(key)) {
+            if (HASHED_INSTALLER_CONTEXT_KEYS.contains(key)) {
                 addValue(values, line.substring(separator + 1));
             }
         }));

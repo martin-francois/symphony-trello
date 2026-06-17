@@ -491,10 +491,27 @@ final class InstallerScriptFixture {
                     echo "Usage: symphony-trello"
                     exit 0
                   fi
-	                  if [[ "$*" == *"--version"* ]]; then
-	                    echo "symphony-trello test"
-	                    exit 0
-	                  fi
+                  if [[ "$*" == *"--version"* ]]; then
+                    case "${SYMPHONY_FAKE_VERSION_MODE:-ok}" in
+                      fail)
+                        echo "version failed" >&2
+                        exit 23
+                        ;;
+                      malformed)
+                        echo "not a symphony version"
+                        exit 0
+                        ;;
+                      multiline)
+                        echo "diagnostic preface"
+                        echo "symphony-trello test"
+                        exit 0
+                        ;;
+                      *)
+                        echo "symphony-trello test"
+                        exit 0
+                        ;;
+                    esac
+                  fi
 	                fi
 	                if [[ "${effective_cli_args[0]:-}" == "start" || "${effective_cli_args[0]:-}" == "status" || "${effective_cli_args[0]:-}" == "stop" || "${effective_cli_args[0]:-}" == "logs" || "${effective_cli_args[0]:-}" == "diagnostics" ]]; then
 	                  cli_args=("${effective_cli_args[@]}")
@@ -675,10 +692,23 @@ final class InstallerScriptFixture {
                     Write-Output "Usage: symphony-trello"
                     exit 0
                   }
-	                  if (($args -join " ") -like "*--version*") {
-	                    Write-Output "symphony-trello test"
-	                    exit 0
-	                  }
+                  if (($args -join " ") -like "*--version*") {
+                    if ($env:SYMPHONY_FAKE_VERSION_MODE -eq "fail") {
+                      [Console]::Error.WriteLine("version failed")
+                      exit 23
+                    }
+                    if ($env:SYMPHONY_FAKE_VERSION_MODE -eq "malformed") {
+                      Write-Output "not a symphony version"
+                      exit 0
+                    }
+                    if ($env:SYMPHONY_FAKE_VERSION_MODE -eq "multiline") {
+                      Write-Output "diagnostic preface"
+                      Write-Output "symphony-trello test"
+                      exit 0
+                    }
+                    Write-Output "symphony-trello test"
+                    exit 0
+                  }
 	                  if (($args -join " ") -like "*TrelloBoardSetupMain start*" -or
 	                      ($args -join " ") -like "*TrelloBoardSetupMain status*" -or
 	                      ($args -join " ") -like "*TrelloBoardSetupMain stop*" -or

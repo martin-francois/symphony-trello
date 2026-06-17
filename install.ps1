@@ -609,6 +609,49 @@ function Invoke-Step([string]$Label, [scriptblock]$Action) {
   }
 }
 
+function Get-InstalledAppVersionFallback {
+  if ($InstallSource -eq "release-archive") {
+    return $Version
+  }
+  return "unknown"
+}
+
+function Get-InstalledAppVersion {
+  if (-not (Test-Command "java")) {
+    return (Get-InstalledAppVersionFallback)
+  }
+  $classpath = @(
+    (Join-Path $Prefix "target\quarkus-app\quarkus-run.jar"),
+    (Join-Path $Prefix "target\quarkus-app\app\*"),
+    (Join-Path $Prefix "target\quarkus-app\lib\main\*"),
+    (Join-Path $Prefix "target\quarkus-app\quarkus\*")
+  ) -join ";"
+  try {
+    $output = @((& java "-Dsymphony.trello.app.home=$Prefix" "-Dsymphony.trello.config.dir=$ConfigDir" -cp $classpath ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain --version) 2>$null)
+    if ($LASTEXITCODE -eq 0 -and $output.Count -eq 1 -and $output[0] -match '^symphony-trello\s+(.+)$') {
+      return $Matches[1].Trim()
+    }
+  } catch {
+    return (Get-InstalledAppVersionFallback)
+  }
+  return (Get-InstalledAppVersionFallback)
+}
+
+function Get-InstalledSourceCommit {
+  if ($InstallSource -ne "source-checkout" -or -not (Test-Path -LiteralPath (Join-Path $Prefix ".git")) -or -not (Test-Command "git")) {
+    return ""
+  }
+  try {
+    $commit = (& git -C $Prefix rev-parse --verify HEAD) 2>$null | Select-Object -First 1
+    if ($LASTEXITCODE -eq 0) {
+      return $commit
+    }
+  } catch {
+    return ""
+  }
+  return ""
+}
+
 function Write-InstallContext {
   if ($DryRun) {
     return
@@ -616,13 +659,25 @@ function Write-InstallContext {
   try {
     New-Item -ItemType Directory -Force -Path $StateHome | Out-Null
     $packageManager = if (Test-Command "winget") { "winget" } else { "none" }
+    $appVersion = Get-InstalledAppVersion
+    $releaseMetadata = @()
+    if ($InstallSource -eq "release-archive") {
+      $releaseMetadata = @(
+        "release_tag=v$Version",
+        "release_base_url=$ReleaseBaseUrl"
+      )
+    } else {
+      $sourceCommit = Get-InstalledSourceCommit
+      if (-not [string]::IsNullOrWhiteSpace($sourceCommit)) {
+        $releaseMetadata = @("source_commit=$sourceCommit")
+      }
+    }
     @(
       "installer=install.ps1",
       "install_format_version=1",
       "install_source=$InstallSource",
-      "app_version=$Version",
-      "release_tag=v$Version",
-      "release_base_url=$ReleaseBaseUrl",
+      "app_version=$appVersion",
+      $releaseMetadata,
       "platform=$(Get-PlatformLabel)",
       "repo_url=$Repo",
       "ref=$Ref",
@@ -1276,6 +1331,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0symphony-trello.ps
 "@ | Set-Content -Encoding ASCII "$BinDir\symphony-trello.cmd"
 }
 Write-Host "  OK  Command installed: $BinDir\symphony-trello.ps1"
+Write-InstallContext
 
 Offer-PathSetup
 
@@ -1291,7 +1347,6 @@ if (-not $NoOnboard) {
       Write-Host "  WOULD run: $BinDir\symphony-trello.ps1 start --all"
     }
   } else {
-    Write-InstallContext
     Invoke-Step "$BinDir\symphony-trello.ps1 setup-local" { & "$BinDir\symphony-trello.ps1" setup-local }
     if ($RestartManagedWorkers) {
       Invoke-Step "$BinDir\symphony-trello.ps1 start --all" { & "$BinDir\symphony-trello.ps1" start --all }
@@ -1300,6 +1355,5 @@ if (-not $NoOnboard) {
 } elseif ($RestartManagedWorkers) {
   Write-Host
   Write-Host "Restarting managed workers after update..."
-  Write-InstallContext
   Invoke-Step "$BinDir\symphony-trello.ps1 start --all" { & "$BinDir\symphony-trello.ps1" start --all }
 }

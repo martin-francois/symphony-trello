@@ -176,13 +176,20 @@ write_install_context() {
     return
   fi
   mkdir -p "$STATE_HOME" 2>/dev/null || return
+  local app_version source_commit_value
+  app_version="$(installed_app_version)"
+  source_commit_value="$(installed_source_commit)"
   {
     printf 'installer=install.sh\n'
     printf 'install_format_version=1\n'
     printf 'install_source=%s\n' "$INSTALL_SOURCE"
-    printf 'app_version=%s\n' "$VERSION"
-    printf 'release_tag=%s\n' "$RELEASE_TAG"
-    printf 'release_base_url=%s\n' "$RELEASE_BASE_URL"
+    printf 'app_version=%s\n' "$app_version"
+    if [[ "$INSTALL_SOURCE" == "release-archive" ]]; then
+      printf 'release_tag=%s\n' "$RELEASE_TAG"
+      printf 'release_base_url=%s\n' "$RELEASE_BASE_URL"
+    elif [[ -n "$source_commit_value" ]]; then
+      printf 'source_commit=%s\n' "$source_commit_value"
+    fi
     printf 'platform=%s\n' "$(platform_name)"
     printf 'os_name=%s\n' "$OS_NAME"
     printf 'os_arch=%s\n' "$OS_ARCH"
@@ -204,6 +211,30 @@ write_install_context() {
     printf 'gh_available=%s\n' "$(if need gh; then echo yes; else echo no; fi)"
     printf 'package_manager=%s\n' "$(detected_package_manager)"
   } >"$INSTALL_CONTEXT_FILE" || true
+}
+
+installed_app_version() {
+  local output version
+  if [[ -x "$BIN_DIR/symphony-trello" ]]; then
+    output="$("$BIN_DIR/symphony-trello" --version 2>/dev/null || true)"
+    version="${output#symphony-trello }"
+    if [[ -n "$output" && "$output" != *$'\n'* && "$version" != "$output" && -n "$version" ]]; then
+      printf '%s\n' "$version"
+      return
+    fi
+  fi
+  if [[ "$INSTALL_SOURCE" == "release-archive" ]]; then
+    printf '%s\n' "$VERSION"
+  else
+    printf 'unknown\n'
+  fi
+}
+
+installed_source_commit() {
+  if [[ "$INSTALL_SOURCE" != "source-checkout" || ! -d "$APP_DIR/.git" ]] || ! need git; then
+    return
+  fi
+  git -C "$APP_DIR" rev-parse --verify HEAD 2>/dev/null || true
 }
 
 prompt_from_terminal() {
@@ -1497,6 +1528,7 @@ EOF
   chmod +x "$BIN_DIR/symphony-trello"
 fi
 echo "  OK  Command installed: $BIN_DIR/symphony-trello"
+write_install_context
 
 offer_path_setup
 
@@ -1506,7 +1538,6 @@ if [[ "$NO_ONBOARD" == false ]]; then
     echo "Restarting managed workers after update..."
   fi
   echo "Starting setup..."
-  write_install_context
   run_interactive "$BIN_DIR/symphony-trello" setup-local
   if [[ "$RESTART_MANAGED_WORKERS" == true ]]; then
     run "$BIN_DIR/symphony-trello" start --all
@@ -1514,6 +1545,5 @@ if [[ "$NO_ONBOARD" == false ]]; then
 elif [[ "$RESTART_MANAGED_WORKERS" == true ]]; then
   echo
   echo "Restarting managed workers after update..."
-  write_install_context
   run "$BIN_DIR/symphony-trello" start --all
 fi
