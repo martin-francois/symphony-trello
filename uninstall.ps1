@@ -285,7 +285,7 @@ if (($positionalTokens | Where-Object { $_.StartsWith("-") } | Select-Object -Fi
 if ($Help) {
   @"
 Usage:
-  powershell -c "irm https://raw.githubusercontent.com/martin-francois/symphony-trello/main/uninstall.ps1 | iex"
+  powershell -c "irm https://symphony-trello.fmartin.ch/uninstall.ps1 | iex"
 
 Options:
   --dry-run    Print planned actions without deleting files.

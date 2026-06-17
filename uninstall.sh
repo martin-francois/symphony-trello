@@ -26,8 +26,8 @@ PATH_BLOCK_END="# <<< Symphony for Trello PATH <<<"
 usage() {
   cat <<'USAGE'
 Usage:
-  curl -fsSL https://raw.githubusercontent.com/martin-francois/symphony-trello/main/uninstall.sh | bash
-  curl -fsSL https://raw.githubusercontent.com/martin-francois/symphony-trello/main/uninstall.sh | bash -s -- --dry-run
+  curl -fsSL https://symphony-trello.fmartin.ch/uninstall.sh | bash
+  curl -fsSL https://symphony-trello.fmartin.ch/uninstall.sh | bash -s -- --dry-run
 
 Options:
   --dry-run                 Print planned actions without deleting files.

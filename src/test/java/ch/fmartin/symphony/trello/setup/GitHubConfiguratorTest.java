@@ -111,7 +111,10 @@ final class GitHubConfiguratorTest {
 
         // then
         assertThat(integration.enabled()).isFalse();
-        assertThat(terminal.stdout()).contains("GitHub integration skipped");
+        assertThat(terminal.stdout())
+                .contains(
+                        "GitHub integration skipped", "curl -fsSL https://symphony-trello.fmartin.ch/install.sh | bash")
+                .doesNotContain("raw.githubusercontent.com");
     }
 
     @Test
