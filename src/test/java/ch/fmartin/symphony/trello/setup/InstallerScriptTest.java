@@ -2352,7 +2352,7 @@ final class InstallerScriptTest {
                 new UnsafeInstallerPath(
                         "root", platformRootPath(), "--prefix must point to a dedicated app checkout directory."),
                 new UnsafeInstallerPath(
-                        "control", temporaryDirectory.resolve("home").toString() + "\nline", "control characters"));
+                        "control", temporaryDirectory.resolve("home") + "\nline", "control characters"));
 
         // when
         List<ProcessResult> results = cases.stream()
@@ -4048,10 +4048,10 @@ final class InstallerScriptTest {
         Path oldRepository = createSourceRepository(temporaryDirectory.resolve("old-origin"));
         Path sourceRepository = createSourceRepository(temporaryDirectory.resolve("new-origin"));
         Path fakeBin = createFakeToolchain(temporaryDirectory);
-        Path symphonyHome = temporaryDirectory.resolve("remote-migration-home");
+        Path symphonyHome = temporaryDirectory.resolve("remote-update-home");
         Path appHome = symphonyHome.resolve("app");
-        Path binDirectory = temporaryDirectory.resolve("remote-migration-bin");
-        Path fakeLog = temporaryDirectory.resolve("remote-migration.log");
+        Path binDirectory = temporaryDirectory.resolve("remote-update-bin");
+        Path fakeLog = temporaryDirectory.resolve("remote-update.log");
         Files.createDirectories(appHome);
         run(Map.of(), "git", "-C", appHome.toString(), "init", "-b", "main").assertSuccess();
         run(
@@ -4551,7 +4551,7 @@ final class InstallerScriptTest {
                 new UnsafeCommandDirectory("root-relative", "\\relative-bin", "--bin-dir must be an absolute path."),
                 new UnsafeCommandDirectory(
                         "control",
-                        temporaryDirectory.resolve("bin").toString() + "\nline",
+                        temporaryDirectory.resolve("bin") + "\nline",
                         "--bin-dir must not contain control characters."),
                 new UnsafeCommandDirectory("file", file.toString(), "--bin-dir must be a directory.")));
         cases.addAll(unsafeCommandDirectorySymlinkCases(symlink, symlinkName));
@@ -4642,8 +4642,7 @@ final class InstallerScriptTest {
                 new UnsafeInstallerPath("relative", "relative-app", "--prefix must be an absolute path."),
                 new UnsafeInstallerPath("drive-relative", "C:relative-app", "--prefix must be an absolute path."),
                 new UnsafeInstallerPath("root-relative", "\\relative-app", "--prefix must be an absolute path."),
-                new UnsafeInstallerPath(
-                        "control", temporaryDirectory.resolve("app").toString() + "\nline", "control characters"),
+                new UnsafeInstallerPath("control", temporaryDirectory.resolve("app") + "\nline", "control characters"),
                 new UnsafeInstallerPath("file", file.toString(), "--prefix must be a directory.")));
         cases.addAll(unsafeAppSymlinkCases(symlink, symlinkName));
         return List.copyOf(cases);
