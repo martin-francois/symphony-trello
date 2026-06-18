@@ -45,10 +45,30 @@ commit and open pull requests. Topic-specific rules live in the pages linked und
 - When you notice a potential improvement that is outside the current task scope, keep the current
   work focused and create or suggest a GitHub issue instead of adding "future improvement",
   "convenience gap", or similar sections to user-facing documentation.
+- Until the first public release, apply [pre-public clean breaks](#pre-public-clean-breaks): implement
+  only the canonical current contract and update private deployments manually when private
+  pre-release files need a one-time edit.
 - When the user states a durable working preference or corrects a repeatable pattern, persist it in
   the same change by updating the most relevant agent-docs page. See
   [Maintaining agent docs](maintaining-agent-docs.md) for how to decide where it goes and how to
   check for conflicts; do not add such guidance to the root AGENTS.md.
+
+## Pre-Public Clean Breaks
+
+- Until the first public release, do not add or retain product migrations, legacy-shape support,
+  backward-compatibility shims, old-template fingerprints, old-private-state fallbacks, or automatic
+  upgrade code for private pre-release files, manifests, generated output, state, or release
+  destinations.
+- Implement and test only the canonical current contract. If private deployed files or generated
+  workflows are stale, update them manually once outside product code.
+- Do not add compatibility tests whose only purpose is to prove behavior for private historical
+  shapes. Test current behavior, current validation, and current failure modes instead.
+- Do not add generated-output version markers solely to support upgrades of private pre-release
+  generated files.
+- Do not commit private paths, credentials, Trello board links, account names, deployment details, or
+  private backup contents when doing a one-time private edit.
+- After the first public release, compatibility decisions require an explicit issue, specification
+  change, or ADR that defines the supported public contract.
 
 ## Fixing bugs
 

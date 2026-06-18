@@ -13,6 +13,11 @@ use pnpm via Corepack; do not add a `package.json` only to run a JavaScript CLI.
 Before starting any task, open [docs/agents/default-workflow.md](docs/agents/default-workflow.md)
 and follow it.
 
+Until the first public release, implement only the canonical current contract. Do not add or retain
+product migration, legacy-shape support, backward-compatibility shims, old-private-state fallbacks,
+or automatic upgrade code for private pre-release data; update the private deployment manually once.
+See [Pre-public clean breaks](docs/agents/default-workflow.md#pre-public-clean-breaks).
+
 For normal code changes, run `./mvnw -q spotless:check verify` before finishing (use
 `spotless:apply` first when formatting changed). Static-analysis and lint gates must be clean; give
 every suppression the narrowest possible scope and a documented reason.
