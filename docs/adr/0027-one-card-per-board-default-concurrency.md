@@ -91,9 +91,9 @@ Make generated and hand-written workflows consistent by making both use the upst
 * Bad, because it makes first-time setup process multiple cards from one board by default.
 * Bad, because it makes the README's one-card-per-board guidance false.
 
-### Add a migration or compatibility alias that rewrites older workflows
+### Add a Rewrite Alias for Previous Workflow Files
 
-Introduce migration logic to distinguish older generated workflows from hand-written workflows.
+Introduce rewrite logic to distinguish previous setup output from hand-written workflows.
 
 * Good, because it could preserve older behavior for selected workflows.
 * Bad, because no migration is needed: explicit workflow values already preserve intentional
