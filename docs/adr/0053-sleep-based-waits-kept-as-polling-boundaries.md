@@ -32,8 +32,8 @@ inherent?
   something is listening.
 - A replacement must keep behavior on platforms where file watching is unreliable, such as network
   filesystems, where `WatchService` events may not fire or degrade to internal polling.
-- Already-deployed workers run older builds. A new readiness signal they do not emit cannot
-  replace a poll; it can only run next to it.
+- A readiness signal would still need the HTTP verification path, so it can only choose when to
+  probe; it cannot replace the probe that proves the selected worker is actually serving.
 - Two mechanisms for the same wait double the code and the deterministic test surface. That cost
   must be paid back by a real latency or correctness win, not by style preference.
 
@@ -56,10 +56,9 @@ Per wait site:
 
 - `waitForSameWorkflow`: poll kept; the readiness-marker alternative is deferred (see its option
   below). The wait is bounded by process liveness, so a dead worker returns immediately.
-- `PORT_USED` delayed re-probe: kept as a compatibility layer for already-deployed workers that
-  predate the [ADR 0051](0051-orchestrator-operation-lock-and-state-monitor.md) lock split and
-  still block status reads during Trello polls, plus genuine GC/CPU pauses. Revisit removal only
-  once all deployed workers carry that fix.
+- `PORT_USED` delayed re-probe: kept for genuine GC and CPU pauses. A worker can miss the short
+  health-probe timeout even when it is still the intended process, and one cheap re-probe avoids
+  transiently reporting that local port as occupied by an unrelated process.
 - `TrelloClient` retry backoff: inherent. Trello publishes no event when a rate-limit window or
   outage ends; the client honors `Retry-After` when given and otherwise uses exponential backoff
   with jitter.
@@ -110,7 +109,7 @@ document at the wait site why polling is the right mechanism there.
 
 The worker writes a marker file into its state directory once `local-status` is answerable; the
 CLI registers a `WatchService` on that directory after spawning the process and probes when the
-marker appears, keeping the 200 ms poll as fallback for older workers.
+marker appears.
 
 - Good, because a freshly started worker would be detected almost immediately instead of up to
   200 ms late.
@@ -118,10 +117,8 @@ marker appears, keeping the 200 ms poll as fallback for older workers.
   listener is the expected worker for this workflow and board. A marker can be stale from a
   previous run or coexist with a foreign process on the port, so the event only changes when to
   probe, not what to verify.
-- Bad, because already-deployed workers write no marker, so the poll must stay as fallback. That
-  means two start-wait mechanisms, deterministic tests for both paths, and a versioned
-  marker contract between CLI and worker, to save at most one 200 ms interval on a wait
-  dominated by multi-second JVM startup.
+- Bad, because it means two start-wait mechanisms and a marker contract between CLI and worker, to
+  save at most one 200 ms interval on a wait dominated by multi-second JVM startup.
 - Bad, because `WatchService` degrades to internal polling on some filesystems, so the latency
   win is not even guaranteed.
 
@@ -143,20 +140,14 @@ events arrive, instead of polling each log file every 500 ms.
 
 ### Remove the `PORT_USED` delayed re-probe now
 
-Delete the 150 ms delayed re-probe in `workflowHealth`, relying on the
-[ADR 0051](0051-orchestrator-operation-lock-and-state-monitor.md) lock split that lets workers
-answer `local-status` during Trello polls.
+Delete the 150 ms delayed re-probe in `workflowHealth`.
 
 - Good, because probes of genuinely foreign ports would answer 150 ms faster and the probe logic
   would lose a branch.
-- Bad, because already-deployed workers without the lock split still block status reads mid-poll
-  and would again transiently misreport as `PORT_USED`, the exact regression the re-probe
-  prevents.
 - Bad, because even fixed workers can miss the 500 ms probe timeout during a GC or CPU pause; one
   cheap re-probe avoids misreporting a healthy worker.
 
-This option is deferred until all deployed workers carry the lock split; whether the re-probe can
-then be removed or reduced is tracked in
+Whether the re-probe can be removed or reduced is tracked in
 [GitHub issue #393](https://github.com/martin-francois/symphony-trello/issues/393).
 
 ### Schedule probes instead of blocking, or rely on virtual-thread parking
