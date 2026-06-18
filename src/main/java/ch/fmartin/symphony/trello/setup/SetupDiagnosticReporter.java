@@ -436,7 +436,7 @@ final class SetupDiagnosticReporter {
         Optional<Path> reportPath = write(exception, request);
         reportPath.ifPresent(path -> {
             terminal.err().println("Troubleshooting report written: " + path);
-            terminal.err().println("Review it before sharing. It is intended to omit secrets and private identifiers.");
+            terminal.err().println("Review it before sharing. It is intended to omit secrets and private context.");
             if (!request.nonInteractive()) {
                 offerGithubIssue(path, terminal);
             }
@@ -453,7 +453,7 @@ final class SetupDiagnosticReporter {
         Optional<Path> reportPath = write(exception, args, workflowPathResolution);
         reportPath.ifPresent(path -> {
             terminal.err().println("Troubleshooting report written: " + path);
-            terminal.err().println("Review it before sharing. It is intended to omit secrets and private identifiers.");
+            terminal.err().println("Review it before sharing. It is intended to omit secrets and private context.");
             if (offerIssuePrompt) {
                 offerGithubIssue(path, terminal);
             }
@@ -486,7 +486,7 @@ final class SetupDiagnosticReporter {
 
         StringBuilder body = new StringBuilder();
         body.append("# Symphony for Trello Diagnostics\n\n");
-        body.append("Review this output before sharing it. It is intended to omit secrets and private identifiers.\n");
+        body.append("Review this output before sharing it. It is intended to omit secrets and private context.\n");
 
         section(body, "Command");
         line(body, "time_utc", now().toString());
