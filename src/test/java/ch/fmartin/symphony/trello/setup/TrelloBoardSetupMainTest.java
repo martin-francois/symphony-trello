@@ -391,7 +391,7 @@ final class TrelloBoardSetupMainTest {
 
         // then
         result.assertSuccess()
-                .stdoutContains("Diagnostics written.", "Review it before sharing")
+                .stdoutContains("Diagnostics written.", "Review it before sharing", "private context")
                 .stdoutDoesNotContain(
                         output.toString(),
                         output.toAbsolutePath().normalize().toString(),
@@ -1160,7 +1160,12 @@ final class TrelloBoardSetupMainTest {
         assertThat(result.exitCode()).as(result.output()).isZero();
         assertThat(result.stderr()).isEmpty();
         assertThat(result.stdout())
-                .contains("# Symphony for Trello Diagnostics", "## Tool Availability", "openjdk version", "git version")
+                .contains(
+                        "# Symphony for Trello Diagnostics",
+                        "private context",
+                        "## Tool Availability",
+                        "openjdk version",
+                        "git version")
                 .doesNotContain(
                         "api_token=ATTAsecretsecretsecret",
                         "ATTAsecretsecretsecret",
@@ -1381,7 +1386,9 @@ final class TrelloBoardSetupMainTest {
         assertThat(result.exitCode()).as(result.output()).isZero();
         assertThat(result.stdout()).contains("Diagnostics written.");
         assertThat(result.stderr()).isEmpty();
-        assertThat(outputFile).content(StandardCharsets.UTF_8).contains("# Symphony for Trello Diagnostics");
+        assertThat(outputFile)
+                .content(StandardCharsets.UTF_8)
+                .contains("# Symphony for Trello Diagnostics", "private context");
     }
 
     private static void createSymbolicLinkOrSkip(Path link, Path target) throws IOException {

@@ -2722,7 +2722,7 @@ final class SetupDiagnosticReporterTest {
                             "Client Space",
                             tempDir.toString());
         });
-        assertThat(terminal.stderr()).contains("Troubleshooting report written:");
+        assertThat(terminal.stderr()).contains("Troubleshooting report written:", "private context");
     }
 
     @Test
