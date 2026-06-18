@@ -68,8 +68,7 @@ final class LocalHealthChecker {
      * <p>This polls instead of waiting for a worker-side readiness event. A readiness marker file
      * watched with {@code WatchService} was considered and deferred: the HTTP probe stays
      * mandatory because only the answer on the port proves the listener is the expected worker
-     * for this workflow and board, the poll must stay as fallback for already-deployed workers
-     * that write no marker, and the event would save at most one poll interval on a wait
+     * for this workflow and board, and the event would save at most one poll interval on a wait
      * dominated by multi-second JVM startup. See
      * docs/adr/0053-sleep-based-waits-kept-as-polling-boundaries.md.
      */
@@ -93,11 +92,8 @@ final class LocalHealthChecker {
         }
         // A briefly busy worker can miss the short local-status timeout; one delayed re-probe keeps
         // healthy managed workers from transiently showing up as PORT_USED. A longer timeout would
-        // slow every probe of a genuinely foreign port instead. Workers built after the orchestrator
-        // lock split (docs/adr/0051) answer local-status during Trello polls, so this re-probe is now
-        // a compatibility layer for already-deployed workers that still block status reads mid-poll,
-        // plus genuine GC/CPU pauses. Revisit removing it only once all deployed workers carry that
-        // lock split; until then it must stay.
+        // slow every probe of a genuinely foreign port instead. This covers occasional GC or CPU
+        // pauses without weakening the normal port-conflict signal.
         if (!sleptWithoutInterrupt(PORT_USED_RETRY_DELAY)) {
             return health;
         }
