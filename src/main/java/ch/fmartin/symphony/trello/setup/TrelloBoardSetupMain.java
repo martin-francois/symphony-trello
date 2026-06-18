@@ -568,7 +568,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             if (privateContext) {
                 parent.out.println("Review it before sharing. It contains private diagnostics context.");
             } else {
-                parent.out.println("Review it before sharing. It is intended to omit secrets and private identifiers.");
+                parent.out.println("Review it before sharing. It is intended to omit secrets and private context.");
             }
         }
 
