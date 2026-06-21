@@ -2,8 +2,6 @@ package ch.fmartin.symphony.trello.setup;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
-import static org.junit.jupiter.api.Assumptions.assumeFalse;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -11,6 +9,7 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mockConstruction;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -39,6 +38,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.mockito.MockedConstruction;
 
 final class LocalWorkerManagerTest {
     @TempDir
@@ -148,6 +148,7 @@ final class LocalWorkerManagerTest {
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
+        ManagedProcessStore.ManagedProcessFiles files = fixture.managedFiles(board);
         fixture.stubStartedWorkerProcessValidation(board, 42, false, false);
 
         // when
@@ -156,7 +157,12 @@ final class LocalWorkerManagerTest {
         // then
         assertThat(thrown)
                 .isInstanceOf(TrelloBoardSetupException.class)
-                .hasMessageContaining("newly started managed process is not running");
+                .hasMessageContaining("newly started managed process is not running")
+                .hasMessageContaining("symphony-trello diagnostics")
+                .hasMessageContaining("symphony-trello logs")
+                .hasMessageNotContaining(files.stdoutLog().toString())
+                .hasMessageNotContaining(files.stderrLog().toString())
+                .hasMessageNotContaining(tempDir.toString());
         assertThat(pidFiles(fixture.paths.stateHome())).isEmpty();
     }
 
@@ -1020,6 +1026,8 @@ final class LocalWorkerManagerTest {
         assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
             assertThat(failure.code()).isEqualTo("setup_worker_board_already_managed");
             assertThat(failure.getMessage()).contains("Queue", "already managed by a running worker");
+            assertThat(failure.getMessage())
+                    .doesNotContain(board.workflowPath().toString(), staleWorkflow.toString(), tempDir.toString());
         });
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
     }
@@ -1078,6 +1086,8 @@ final class LocalWorkerManagerTest {
         assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
             assertThat(failure.code()).isEqualTo("setup_worker_board_already_managed");
             assertThat(failure.getMessage()).contains("Shortlink Queue", "already managed by a running worker");
+            assertThat(failure.getMessage())
+                    .doesNotContain(rowWorkflow.toString(), staleWorkflow.toString(), tempDir.toString());
         });
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
     }
@@ -1138,7 +1148,9 @@ final class LocalWorkerManagerTest {
 
         // then
         result.assertSuccess()
-                .stdoutContains("Skipped workflow WORKFLOW.queue-stale.md", "already managed by the running workflow");
+                .stdoutContains("Skipped workflow file", "already managed by another running workflow")
+                .stdoutDoesNotContain(
+                        running.workflowPath().toString(), stale.workflowPath().toString(), tempDir.toString());
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
     }
 
@@ -1296,8 +1308,15 @@ final class LocalWorkerManagerTest {
                     .contains(
                             "already serving another Symphony workflow",
                             "Queue",
-                            "WORKFLOW.other.md",
+                            "another Symphony workflow",
                             "Stop that worker or change the workflow server.port");
+            assertThat(failure.getMessage())
+                    .doesNotContain(
+                            board.workflowPath().toString(),
+                            fixture.paths.configDir().toString(),
+                            fixture.paths.stateHome().toString(),
+                            ".log",
+                            ".err");
         });
         assertThat(pidFiles(fixture.paths.stateHome()))
                 .as("rejected start leaves no managed pid state")
@@ -1467,7 +1486,13 @@ final class LocalWorkerManagerTest {
         // then
         assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
             assertThat(failure.code()).isEqualTo("setup_start_unhealthy");
-            assertThat(failure).hasMessageContaining("did not report the expected workflow and board");
+            assertThat(failure)
+                    .hasMessageContaining("did not report the expected workflow and board")
+                    .hasMessageContaining("symphony-trello diagnostics")
+                    .hasMessageContaining("symphony-trello logs")
+                    .hasMessageNotContaining(files.stdoutLog().toString())
+                    .hasMessageNotContaining(files.stderrLog().toString())
+                    .hasMessageNotContaining(tempDir.toString());
         });
     }
 
@@ -1580,8 +1605,8 @@ final class LocalWorkerManagerTest {
                 .stdoutContains(
                         "invalid \"Queue\"",
                         "unreadable or invalid workflow configuration",
-                        board.workflowPath().toString())
-                .stdoutDoesNotContain("stopped \"Queue\"");
+                        "in that board's workflow file")
+                .stdoutDoesNotContain("stopped \"Queue\"", board.workflowPath().toString(), tempDir.toString());
         verify(fixture.healthChecker, never()).boardHealth(any());
     }
 
@@ -1598,11 +1623,8 @@ final class LocalWorkerManagerTest {
 
         // then
         result.assertSuccess()
-                .stdoutContains(
-                        "invalid \"Queue\"",
-                        "missing workflow file",
-                        board.workflowPath().toString())
-                .stdoutDoesNotContain("stopped \"Queue\"");
+                .stdoutContains("invalid \"Queue\"", "missing workflow file", "in that board's workflow file")
+                .stdoutDoesNotContain("stopped \"Queue\"", board.workflowPath().toString(), tempDir.toString());
         verify(fixture.healthChecker, never()).boardHealth(any());
     }
 
@@ -2551,36 +2573,42 @@ final class LocalWorkerManagerTest {
     void stopReportsFailedStalePidCleanupActionablyWithoutKillingTheProcess() throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
-        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
-        fixture.save(board);
-        ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
-        Path pidFile = store.files(board.workflowPath()).pidFile();
-        store.writePid(pidFile, 42);
+        Path pidFile = fixture.paths.stateHome().resolve("WORKFLOW.private.abc123.pid");
+        Files.createDirectories(pidFile.getParent());
+        Files.writeString(pidFile, "42", StandardCharsets.US_ASCII);
+        assertThat(pidFile).exists();
+        IOException deleteFailure = new IOException("denied " + pidFile);
         when(fixture.platform.isAlive(42L)).thenReturn(true);
-        when(fixture.platform.isManaged(42L, fixture.paths.appHome(), board.workflowPath()))
-                .thenReturn(false);
-        // Stop opens the process lock file in the same directory, so it must exist before the
-        // directory becomes read-only. Then only the pid file delete fails; reads still work.
-        Files.writeString(store.files(board.workflowPath()).processLockFile(), "", StandardCharsets.UTF_8);
-        Path stateHome = fixture.paths.stateHome();
-        assumeTrue(stateHome.toFile().setWritable(false));
-        assumeFalse(Files.isWritable(stateHome));
+        when(fixture.platform.isManaged(42L, fixture.paths.appHome())).thenReturn(false);
 
         // when
         WorkerRunResult result;
-        try {
-            result = fixture.stop(fixture.stopRequest("Queue"));
-        } finally {
-            assertThat(stateHome.toFile().setWritable(true)).isTrue();
-        }
+        try (MockedConstruction<ManagedProcessStore> mockedStores =
+                mockConstruction(ManagedProcessStore.class, (store, ignored) -> {
+                    when(store.pidFiles()).thenReturn(List.of(pidFile));
+                    when(store.readPid(pidFile)).thenReturn(42L);
+                    when(store.deletePid(pidFile)).thenThrow(deleteFailure);
+                })) {
+            result = fixture.stop(fixture.stopAllRequest());
 
-        // then
+            // then
+            ManagedProcessStore store = mockedStores.constructed().getFirst();
+            verify(store).deletePid(pidFile);
+        }
         result.assertSuccess()
                 .stdoutContains(
-                        "Skipped unmanaged stale pid for \"Queue\" pid=42",
-                        "Could not remove the stale managed pid file:",
-                        "Remove it manually, then rerun stop. The unrelated process was not stopped.")
-                .stdoutDoesNotContain("Removed the stale managed pid file.");
+                        "Skipped unmanaged stale pid WORKFLOW.private.abc123 pid=42",
+                        "Could not remove the stale managed pid file.",
+                        "The unrelated process was not stopped.",
+                        "Remove the stale managed pid file manually, then rerun stop.")
+                .stdoutDoesNotContain(
+                        "Removed the stale managed pid file.",
+                        pidFile.toString(),
+                        fixture.paths.stateHome().toString(),
+                        fixture.paths.appHome().toString(),
+                        tempDir.toString(),
+                        ".log",
+                        ".err");
         verify(fixture.platform, never()).stop(anyLong(), any(Duration.class), any(Duration.class));
         assertThat(pidFile).exists();
     }
