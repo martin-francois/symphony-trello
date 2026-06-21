@@ -68,6 +68,18 @@ public final class WorkflowAssertions {
         return this;
     }
 
+    public WorkflowAssertions hasNetworkEnabledWorkspaceSandbox() {
+        assertThat(content)
+                .contains("turn_sandbox_policy:", "type: workspaceWrite", "networkAccess: true")
+                .doesNotContain("dangerFullAccess");
+        return this;
+    }
+
+    public WorkflowAssertions hasNoNetworkEnabledWorkspaceSandbox() {
+        assertThat(content).doesNotContain("networkAccess: true");
+        return this;
+    }
+
     public WorkflowAssertions hasServerPort(int port) {
         assertThat(content).contains("port: " + port);
         return this;

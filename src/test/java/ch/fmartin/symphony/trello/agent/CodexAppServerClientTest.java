@@ -249,6 +249,64 @@ final class CodexAppServerClientTest {
     }
 
     @Test
+    void preservesWorkspaceWriteNetworkAccessWhenMergingWritableRoots() throws Exception {
+        // given
+        Path capture = tempDir.resolve("turn-start-network.jsonl");
+        Path appServer = writeExecutableScript(
+                "capturing-network-app-server.sh",
+                """
+                #!/usr/bin/env bash
+                capture="$1"
+                while IFS= read -r line; do
+                  case "$line" in
+                    *\\"method\\":\\"initialize\\"*) echo '{"id":1,"result":{"userAgent":"capture-test"}}' ;;
+                    *\\"method\\":\\"thread/start\\"*) echo '{"id":2,"result":{"thread":{"id":"thread-capture"}}}' ;;
+                    *\\"method\\":\\"turn/start\\"*)
+                      printf '%s\\n' "$line" > "$capture"
+                      echo '{"id":3,"result":{"turn":{"id":"turn-capture"}}}'
+                      echo '{"method":"turn/completed","params":{"threadId":"thread-capture","turn":{"id":"turn-capture","error":null}}}'
+                      ;;
+                  esac
+                done
+                """);
+        Path extraRoot = tempDir.resolve("allowed-project");
+        EffectiveConfig config = config(Map.of(
+                "command",
+                appServer + " " + capture,
+                "turn_sandbox_policy",
+                Map.of("type", "workspaceWrite", "networkAccess", true),
+                "additional_writable_roots",
+                List.of(extraRoot.toString()),
+                "read_timeout_ms",
+                1000,
+                "turn_timeout_ms",
+                1000));
+        Path workspace = config.workspace().root().resolve("TRELLO-capture-network");
+        Files.createDirectories(workspace);
+        CodexAppServerClient client =
+                new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
+
+        // when
+        AgentRunResult result = client.runTurn(
+                config,
+                TestCards.card("card-1", "TRELLO-capture-network", "Ready for Codex"),
+                workspace,
+                "Do a capture no-op turn.",
+                "worker-capture",
+                event -> {});
+
+        // then
+        assertThat(result).isEqualTo(AgentRunResult.ok());
+        JsonNode sandboxPolicy =
+                json.readTree(Files.readString(capture)).path("params").path("sandboxPolicy");
+        assertThat(sandboxPolicy.path("type").asText()).isEqualTo("workspaceWrite");
+        assertThat(sandboxPolicy.path("networkAccess").asBoolean()).isTrue();
+        assertThat(sandboxPolicy.path("writableRoots"))
+                .extracting(JsonNode::asText)
+                .contains(extraRoot.toAbsolutePath().normalize().toString());
+    }
+
+    @Test
     void sendsConfiguredModelAndReasoningEffortToCodexAppServer() throws Exception {
         // given
         Path capture = tempDir.resolve("model-requests.jsonl");

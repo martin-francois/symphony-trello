@@ -1159,7 +1159,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 .containsExactly("Inbox", "Ready for Codex", "In Progress", "Blocked", "Human Review", "Done");
         assertThat(env).content(StandardCharsets.UTF_8).contains("TRELLO_API_KEY=key", "TRELLO_API_TOKEN=token");
         assertOwnerOnlyWhenPosix(env);
-        assertThatWorkflow(workflow).hasNoGithubFlow().doesNotHaveMerging();
+        assertThatWorkflow(workflow).hasNoGithubFlow().doesNotHaveMerging().hasNoNetworkEnabledWorkspaceSandbox();
         assertThat(commands.startedWorkflows).containsExactly(workflow.toString());
         assertThat(commands.startedEnvFiles).containsExactly(env.toString());
     }
@@ -2806,7 +2806,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path workflow = tempDir.resolve("config").resolve("WORKFLOW.imported-queue.md");
         result.assertSuccess().stdoutContains("Board connected: \"Imported Queue\"");
         assertThat(trello.createdLists()).containsExactly("Merging");
-        assertThatWorkflow(workflow).hasGithubFlow().hasMerging();
+        assertThatWorkflow(workflow).hasGithubFlow().hasMerging().hasNetworkEnabledWorkspaceSandbox();
     }
 
     @Test
@@ -5651,7 +5651,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         assertThat(trello.createdLists())
                 .containsExactly(
                         "Inbox", "Ready for Codex", "In Progress", "Blocked", "Human Review", "Merging", "Done");
-        assertThatWorkflow(workflow).hasGithubFlow().hasMerging();
+        assertThatWorkflow(workflow).hasGithubFlow().hasMerging().hasNetworkEnabledWorkspaceSandbox();
         assertThat(commands.startedWorkflows).containsExactly(workflow.toString());
     }
 

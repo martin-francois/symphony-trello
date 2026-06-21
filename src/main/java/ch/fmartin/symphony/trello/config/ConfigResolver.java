@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.config;
 
+import ch.fmartin.symphony.trello.workflow.CodexSandboxPolicy;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.io.File;
@@ -42,6 +43,14 @@ public class ConfigResolver {
         Map<String, Object> hooks = object(root, "hooks");
         Map<String, Object> agent = object(root, "agent");
         Map<String, Object> codex = object(root, "codex");
+        boolean codexDangerFullAccess = environmentValue("SYMPHONY_CODEX_DANGER_FULL_ACCESS")
+                .map(Boolean::parseBoolean)
+                .orElse(false);
+        try {
+            CodexSandboxPolicy.validateCodexSection(codex, codexDangerFullAccess);
+        } catch (CodexSandboxPolicy.InvalidPolicyException e) {
+            throw new ConfigException("codex_sandbox_policy_invalid", e.getMessage(), e);
+        }
         object(root, "polling");
         object(root, "server");
         Map<String, Object> trelloTools = object(root, "trello_tools");
@@ -56,6 +65,15 @@ public class ConfigResolver {
                 secret(workflow.path().getParent(), tracker, "api_token", "tracker.api_token", "TRELLO_API_TOKEN");
         String boardId = environmentString(tracker, "board_id", null);
         String resolvedBoardId = environmentString(tracker, "resolved_board_id", boardId);
+        List<Path> codexAdditionalWritableRoots = codexDangerFullAccess
+                ? List.of()
+                : additionalWritableRoots(workflow.path().getParent(), codex);
+        try {
+            CodexSandboxPolicy.validateResolvedPolicy(
+                    codex.get("turn_sandbox_policy"), codexAdditionalWritableRoots, codexDangerFullAccess);
+        } catch (CodexSandboxPolicy.InvalidPolicyException e) {
+            throw new ConfigException("codex_sandbox_policy_invalid", e.getMessage(), e);
+        }
 
         boolean writes = bool(trelloTools, "allow_writes", false);
         return new EffectiveConfig(
@@ -116,10 +134,8 @@ public class ConfigResolver {
                         codex.get("approval_policy"),
                         codex.get("thread_sandbox"),
                         codex.get("turn_sandbox_policy"),
-                        additionalWritableRoots(workflow.path().getParent(), codex),
-                        LocalEnvironment.get("SYMPHONY_CODEX_DANGER_FULL_ACCESS")
-                                .map(Boolean::parseBoolean)
-                                .orElse(false),
+                        codexAdditionalWritableRoots,
+                        codexDangerFullAccess,
                         millis(
                                 typedWorkflow.codexTurnTimeoutMs(),
                                 "turn_timeout_ms",
@@ -238,7 +254,11 @@ public class ConfigResolver {
     }
 
     private String environmentValueOrDefault(String environmentName, String defaultValue) {
-        return environmentResolver.apply(environmentName).orElse(defaultValue);
+        return environmentValue(environmentName).orElse(defaultValue);
+    }
+
+    private Optional<String> environmentValue(String environmentName) {
+        return environmentResolver.apply(environmentName);
     }
 
     private static String fileSecret(Path workflowDirectory, String displayName, String configuredPath) {
@@ -336,12 +356,12 @@ public class ConfigResolver {
         return list(root, key, defaultValue).stream().map(StateNames::normalize).toList();
     }
 
-    private static List<Path> additionalWritableRoots(Path workflowDirectory, Map<String, Object> codex) {
+    private List<Path> additionalWritableRoots(Path workflowDirectory, Map<String, Object> codex) {
         List<Path> roots = new ArrayList<>();
         list(codex, "additional_writable_roots", List.of()).stream()
                 .map(value -> path(workflowDirectory, value))
                 .forEach(roots::add);
-        LocalEnvironment.get("SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS").stream()
+        environmentValue("SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS").stream()
                 .flatMap(value -> Arrays.stream(value.split(Pattern.quote(File.pathSeparator))))
                 .map(String::trim)
                 .filter(value -> !value.isBlank())

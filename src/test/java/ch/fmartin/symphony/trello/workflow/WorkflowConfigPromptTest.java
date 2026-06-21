@@ -11,6 +11,7 @@ import ch.fmartin.symphony.trello.config.StateNames;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -151,6 +152,8 @@ final class WorkflowConfigPromptTest {
                 .containsAll(config.tracker().activeStates().stream()
                         .map(StateNames::normalize)
                         .toList());
+        assertThat(config.codex().turnSandboxPolicy())
+                .isEqualTo(Map.of("type", "workspaceWrite", "networkAccess", true));
     }
 
     @Test

@@ -537,6 +537,7 @@ final class TrelloBoardSetupTest {
                 .contains("command: " + ConfigDefaults.DEFAULT_CODEX_COMMAND)
                 .contains("model: \"gpt-5.5\"")
                 .contains("reasoning_effort: \"medium\"")
+                .contains("turn_sandbox_policy:", "type: workspaceWrite", "networkAccess: true")
                 .contains("polling:")
                 .contains("interval_ms: " + ConfigDefaults.GENERATED_WORKFLOW_POLLING_INTERVAL_MS)
                 .contains("max_concurrent_agents: " + ConfigDefaults.DEFAULT_SETUP_MAX_CONCURRENT_AGENTS);
@@ -546,6 +547,8 @@ final class TrelloBoardSetupTest {
         assertThat(config.codex().command()).isEqualTo(ConfigDefaults.DEFAULT_CODEX_COMMAND);
         assertThat(config.codex().model()).isEqualTo("gpt-5.5");
         assertThat(config.codex().reasoningEffort()).isEqualTo("medium");
+        assertThat(config.codex().turnSandboxPolicy())
+                .isEqualTo(Map.of("type", "workspaceWrite", "networkAccess", true));
         assertThat(config.codex().turnTimeout()).isEqualTo(ConfigDefaults.DEFAULT_CODEX_TURN_TIMEOUT);
         assertThat(config.codex().readTimeout()).isEqualTo(ConfigDefaults.DEFAULT_CODEX_READ_TIMEOUT);
         assertThat(config.codex().stallTimeout()).isEqualTo(ConfigDefaults.DEFAULT_CODEX_STALL_TIMEOUT);
