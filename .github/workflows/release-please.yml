@@ -15,7 +15,10 @@ jobs:
     name: Create or update release PR
     runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
+      - name: Checkout release workflow source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - name: Choose release automation config
+        if: ${{ github.event_name == 'push' }}
         id: release-config
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -28,28 +31,123 @@ jobs:
             echo "config_file=release-please-public-baseline-config.json" >> "$GITHUB_OUTPUT"
           fi
       - name: Release Please
+        if: ${{ github.event_name == 'push' }}
         id: release
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0; packages release-please ^17.6.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           config-file: ${{ steps.release-config.outputs.config_file }}
           manifest-file: .release-please-manifest.json
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        if: ${{ steps.release.outputs.release_created == 'true' }}
+      - name: Resolve release asset upload target
+        id: release-assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_CREATED: ${{ steps.release.outputs.release_created }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          if [ "$RELEASE_CREATED" = "true" ]; then
+            if ! [[ "$RELEASE_VERSION" =~ ^[0-9]+[.][0-9]+[.][0-9]+([-+][A-Za-z0-9._-]+)?$ ]]; then
+              echo "release version is not a semantic version: $RELEASE_VERSION" >&2
+              exit 2
+            fi
+            if [ "$RELEASE_TAG" != "v$RELEASE_VERSION" ]; then
+              echo "release tag does not match release version." >&2
+              exit 2
+            fi
+            if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null; then
+              echo "release does not exist: $RELEASE_TAG" >&2
+              exit 2
+            fi
+            {
+              echo "upload_assets=true"
+              echo "version=$RELEASE_VERSION"
+              echo "tag_name=$RELEASE_TAG"
+              echo "checkout_ref=refs/tags/$RELEASE_TAG"
+              echo "source_root=$GITHUB_WORKSPACE/target/release-source"
+              echo "asset_dir=$GITHUB_WORKSPACE/target/release-source/dist/release-assets"
+            } >> "$GITHUB_OUTPUT"
+          else
+            echo "upload_assets=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Checkout release source tag
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        if: ${{ steps.release-assets.outputs.upload_assets == 'true' }}
         with:
-          ref: ${{ steps.release.outputs.tag_name }}
+          ref: ${{ steps.release-assets.outputs.checkout_ref }}
+          path: target/release-source
       - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5
-        if: ${{ steps.release.outputs.release_created == 'true' }}
+        if: ${{ steps.release-assets.outputs.upload_assets == 'true' }}
         with:
           distribution: temurin
           java-version: "25"
           cache: maven
       - name: Build release assets
-        if: ${{ steps.release.outputs.release_created == 'true' }}
-        run: ./scripts/package-release-assets.sh "${{ steps.release.outputs.version }}"
+        if: ${{ steps.release-assets.outputs.upload_assets == 'true' }}
+        run: |
+          release_script="${{ steps.release-assets.outputs.source_root }}/scripts/package-release-assets.sh"
+          if [ ! -f "$release_script" ]; then
+            echo "release tag does not contain scripts/package-release-assets.sh; cannot build immutable release assets." >&2
+            exit 2
+          fi
+          bash "$release_script" \
+            "${{ steps.release-assets.outputs.version }}" \
+            "${{ steps.release-assets.outputs.asset_dir }}"
       - name: Upload release assets
-        if: ${{ steps.release.outputs.release_created == 'true' }}
+        if: ${{ steps.release-assets.outputs.upload_assets == 'true' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
-        run: gh release upload "$RELEASE_TAG" dist/release-assets/* --clobber
+          RELEASE_TAG: ${{ steps.release-assets.outputs.tag_name }}
+          RELEASE_VERSION: ${{ steps.release-assets.outputs.version }}
+          ASSET_DIR: ${{ steps.release-assets.outputs.asset_dir }}
+        run: |
+          set -euo pipefail
+          expected_assets=(
+            "install.sh"
+            "install.ps1"
+            "uninstall.sh"
+            "uninstall.ps1"
+            "checksums.txt"
+            "symphony-trello-$RELEASE_VERSION.tar.gz"
+            "symphony-trello-$RELEASE_VERSION.zip"
+          )
+          existing_assets="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')"
+          upload_assets=()
+          for asset in "${expected_assets[@]}"; do
+            path="$ASSET_DIR/$asset"
+            if [ ! -f "$path" ]; then
+              echo "release asset was not built: $asset" >&2
+              exit 2
+            fi
+            if grep -Fx -- "$asset" <<<"$existing_assets" >/dev/null; then
+              echo "release already contains expected public assets; refusing same-tag asset reuse" >&2
+              exit 2
+            fi
+            upload_assets+=("$path")
+          done
+          gh release upload "$RELEASE_TAG" "${upload_assets[@]}"
+      - name: Verify release assets
+        if: ${{ steps.release-assets.outputs.upload_assets == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.release-assets.outputs.tag_name }}
+          RELEASE_VERSION: ${{ steps.release-assets.outputs.version }}
+        run: |
+          set -euo pipefail
+          expected_assets=(
+            "install.sh"
+            "install.ps1"
+            "uninstall.sh"
+            "uninstall.ps1"
+            "checksums.txt"
+            "symphony-trello-$RELEASE_VERSION.tar.gz"
+            "symphony-trello-$RELEASE_VERSION.zip"
+          )
+          release_assets="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')"
+          for asset in "${expected_assets[@]}"; do
+            if ! grep -Fx -- "$asset" <<<"$release_assets" >/dev/null; then
+              echo "release asset is missing after upload: $asset" >&2
+              exit 2
+            fi
+          done

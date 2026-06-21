@@ -47,8 +47,16 @@ Chosen option: publish GitHub Release archives and make the stable installer URL
 archives by default.
 
 Release Please remains the release automation entry point. When it creates a GitHub release, the
-release workflow checks out the tag, builds the packaged Quarkus app, packages Linux and Windows
-archives, uploads installer and uninstaller scripts, and uploads `checksums.txt`.
+release workflow checks out the new tag as the release source, runs the packaging script from that
+tag, builds the packaged Quarkus app, packages Linux and Windows archives, uploads installer and
+uninstaller scripts, and uploads `checksums.txt`. Release assets are built from tag-local source,
+scripts, and installer templates. Private pre-release test tags that predate the packaging script
+are not supported by the public release asset workflow.
+
+Release asset uploads do not clobber existing assets. If a public release is wrong or incomplete,
+publish a new patch release instead of replacing assets on the existing release. The workflow still
+verifies that all public download assets exist after upload, so a partial upload is visible
+immediately.
 
 The default installer downloads the archive for the selected version, verifies its SHA3-256 checksum
 from `checksums.txt`, and unpacks it into the installer-managed app directory. It does not require
@@ -71,9 +79,12 @@ signing evaluation.
 * Good, because normal users no longer need Git or Maven for installation.
 * Good, because the README can show stable one-line install commands.
 * Good, because release artifacts are built from the exact tag that Release Please created.
+* Good, because public release assets are not replaced in place.
 * Good, because source-checkout installation is still available when needed.
 * Bad, because private-repository release asset downloads cannot be tested exactly like public
   unauthenticated downloads until the repository is public.
+* Bad, because a broken public release requires a new patch release instead of a same-tag asset
+  repair.
 * Bad, because checksum verification is weaker than signing. Signing remains a follow-up.
 
 ### Confirmation
