@@ -74,6 +74,37 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
+    void startDoesNotRewriteExistingGithubWorkflowBeforeLaunchingWorker() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        writeExistingGithubWorkflowWithoutSandboxPolicy(board, "  board_id: \"board-1\"\n", "");
+        String originalWorkflow = Files.readString(board.workflowPath(), StandardCharsets.UTF_8);
+        ConnectedBoard githubBoard = new ConnectedBoard(
+                board.boardId(),
+                board.boardKey(),
+                board.boardName(),
+                board.boardUrl(),
+                board.workflowPath(),
+                board.envPath(),
+                board.workspaceRoot(),
+                board.serverPort(),
+                true,
+                board.additionalWritableRoots(),
+                board.dangerFullAccess());
+        fixture.save(githubBoard);
+        fixture.stubHealthyStartedWorker(githubBoard, 42);
+
+        // when
+        WorkerRunResult result = fixture.start(fixture.startRequest("Queue"));
+
+        // then
+        result.assertSuccess().stdoutContains("Started Symphony for Trello: \"Queue\"");
+        assertThat(board.workflowPath()).content(StandardCharsets.UTF_8).isEqualTo(originalWorkflow);
+        verify(fixture.platform).start(any(), eq(fixture.paths.appHome()), any(), any(), any());
+    }
+
+    @Test
     void startResolvesRelativeEnvPathBeforeLaunchingPackagedApp() throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
@@ -468,21 +499,31 @@ final class LocalWorkerManagerTest {
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
-        fixture.writeManagedPid(board, 42);
-        when(fixture.platform.isAlive(42)).thenReturn(true);
-        when(fixture.platform.isManaged(42, fixture.paths.appHome(), board.workflowPath()))
-                .thenReturn(true);
-        when(fixture.healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), board.envPath()))
-                .thenReturn(board.serverPort());
-        when(fixture.healthChecker.workflowHealth(
-                        board.workflowPath(), board.boardId(), board.boardKey(), board.serverPort()))
-                .thenReturn(fixture.sameWorkflow(board));
+        stubManagedSameWorkflow(fixture, board, 42);
 
         // when
         WorkerRunResult result = fixture.start(fixture.startRequest("Queue"));
 
         // then
         result.assertSuccess().stdoutContains("already running");
+    }
+
+    @Test
+    void startDoesNotResolveLaunchFileSecretsWhenExpectedWorkerIsAlreadyHealthy() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        Path missingSecret = fixture.paths.configDir().resolve("missing-secret.txt");
+        writeWorkflowWithMissingFileSecret(board, missingSecret);
+        fixture.save(board);
+        stubManagedSameWorkflow(fixture, board, 42);
+
+        // when
+        WorkerRunResult result = fixture.start(fixture.startRequest("Queue"));
+
+        // then
+        result.assertSuccess().stdoutContains("already running");
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -681,9 +722,25 @@ final class LocalWorkerManagerTest {
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Docs Queue");
         fixture.save(board);
-        when(fixture.healthChecker.workflowHealth(
-                        board.workflowPath(), board.boardId(), board.boardKey(), board.serverPort()))
-                .thenReturn(fixture.sameWorkflow(board));
+        stubSameWorkflowHealthProbe(fixture, board);
+
+        // when
+        WorkerRunResult result = fixture.start(fixture.startRequest("Docs Queue"));
+
+        // then
+        result.assertSuccess().stdoutContains("already running", "http://127.0.0.1:" + board.serverPort());
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void startDoesNotResolveLaunchFileSecretsWhenHealthProbeFindsAlreadyHealthyWorkerWithoutPid() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Docs Queue");
+        Path missingSecret = fixture.paths.configDir().resolve("missing-secret.txt");
+        writeWorkflowWithMissingFileSecret(board, missingSecret);
+        fixture.save(board);
+        stubSameWorkflowHealthProbe(fixture, board);
 
         // when
         WorkerRunResult result = fixture.start(fixture.startRequest("Docs Queue"));
@@ -1189,6 +1246,164 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
+    void startRestartsAliveManagedWorkerWhenHealthProbeStopsResponding() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = saveBoardWithManagedPid(fixture);
+        stubSuccessfulManagedRestart(fixture, board, portUsed(board));
+
+        // when
+        WorkerRunResult result = fixture.start(fixture.startRequest("Queue"));
+
+        // then
+        result.assertSuccess().stdoutContains("Started Symphony for Trello: \"Queue\"");
+        assertThat(Files.readString(onlyPidFile(fixture.paths.stateHome()))).isEqualTo("99");
+        verify(fixture.platform).stop(42, Duration.ofSeconds(15), Duration.ofSeconds(5));
+        verify(fixture.platform, times(1)).start(any(), eq(fixture.paths.appHome()), any(), any(), any());
+    }
+
+    @Test
+    void startReportsPortConflictAfterStoppingHungManagedWorkerWhenPortRemainsOccupied() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = saveBoardWithManagedPid(fixture);
+        when(fixture.healthChecker.workflowHealth(
+                        board.workflowPath(), board.boardId(), board.boardKey(), board.serverPort()))
+                .thenReturn(portUsed(board), portUsed(board));
+        when(fixture.platform.stop(42, Duration.ofSeconds(15), Duration.ofSeconds(5)))
+                .thenReturn(true);
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_worker_port_in_use");
+            assertThat(failure.getMessage())
+                    .contains("port " + board.serverPort() + " is already in use", "Queue")
+                    .doesNotContain(".log", ".err", tempDir.toString());
+        });
+        verify(fixture.platform).stop(42, Duration.ofSeconds(15), Duration.ofSeconds(5));
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+        assertThat(pidFiles(fixture.paths.stateHome())).isEmpty();
+    }
+
+    @Test
+    void startRestartsAliveManagedWorkerWhenHealthProbeReportsAnotherWorkflow() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = saveBoardWithManagedPid(fixture);
+        stubSuccessfulManagedRestart(fixture, board, fixture.wrongWorkflow(board));
+
+        // when
+        WorkerRunResult result = fixture.start(fixture.startRequest("Queue"));
+
+        // then
+        result.assertSuccess().stdoutContains("Started Symphony for Trello: \"Queue\"");
+        assertThat(Files.readString(onlyPidFile(fixture.paths.stateHome()))).isEqualTo("99");
+        verify(fixture.platform).stop(42, Duration.ofSeconds(15), Duration.ofSeconds(5));
+        verify(fixture.platform).start(any(), eq(fixture.paths.appHome()), any(), any(), any());
+    }
+
+    @Test
+    void startReportsPathSafeConflictWhenPostStopHealthReportsAnotherWorkflow() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = saveBoardWithManagedPid(fixture);
+        when(fixture.healthChecker.workflowHealth(
+                        board.workflowPath(), board.boardId(), board.boardKey(), board.serverPort()))
+                .thenReturn(portUsed(board), fixture.wrongWorkflow(board));
+        when(fixture.platform.stop(42, Duration.ofSeconds(15), Duration.ofSeconds(5)))
+                .thenReturn(true);
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_worker_port_in_use");
+            assertThat(failure.getMessage())
+                    .contains("already serving another Symphony workflow", "Stop that worker")
+                    .doesNotContain(
+                            board.workflowPath().toString(),
+                            fixture.paths.configDir().toString(),
+                            fixture.paths.stateHome().toString(),
+                            tempDir.toString(),
+                            ".log",
+                            ".err");
+        });
+        verify(fixture.platform).stop(42, Duration.ofSeconds(15), Duration.ofSeconds(5));
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+        assertThat(pidFiles(fixture.paths.stateHome())).isEmpty();
+    }
+
+    @MethodSource("postStopSameWorkflowStartSelectors")
+    @ParameterizedTest(name = "{0}")
+    void startRepairsTrackingWhenPostStopHealthReportsVerifiedManagedWorker(StartSelector selector) throws Exception {
+        // given
+        PostStopSameWorkflow scenario = postStopSameWorkflowWithReportedPid(true);
+
+        // when
+        WorkerRunResult result = scenario.fixture().start(selector.request(scenario.fixture(), scenario.board()));
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "already running", "Restored missing managed worker tracking pid=" + scenario.reportedPid());
+        assertNoLifecyclePrivateOutput(result, scenario.fixture(), scenario.board());
+        assertThat(Files.readString(onlyPidFile(scenario.fixture().paths.stateHome())))
+                .isEqualTo(Long.toString(scenario.reportedPid()));
+        verifyPostStopStoppedWithoutLaunch(scenario.fixture());
+    }
+
+    @Test
+    void startReportsManualStopWhenPostStopHealthReportsUnmanagedWorkerPid() throws Exception {
+        // given
+        PostStopSameWorkflow scenario = postStopSameWorkflowWithReportedPid(false);
+
+        // when
+        WorkerRunResult result = scenario.fixture().start(scenario.fixture().startRequest("Queue"));
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "already running",
+                        "Stop the worker process manually",
+                        "Reported worker pid=" + scenario.reportedPid());
+        assertNoPostStopUntrackedResult(result, scenario.fixture(), scenario.board());
+    }
+
+    @Test
+    void startReportsManualStopWhenPostStopHealthReportsSameWorkflowWithoutPid() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = saveBoardWithManagedPid(fixture);
+        when(fixture.healthChecker.workflowHealth(
+                        board.workflowPath(), board.boardId(), board.boardKey(), board.serverPort()))
+                .thenReturn(portUsed(board), fixture.sameWorkflow(board));
+        when(fixture.platform.stop(42, Duration.ofSeconds(15), Duration.ofSeconds(5)))
+                .thenReturn(true);
+
+        // when
+        WorkerRunResult result = fixture.start(fixture.startRequest("Queue"));
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("already running", "Stop the worker process manually")
+                .stdoutDoesNotContain("Reported worker pid=");
+        assertNoPostStopUntrackedResult(result, fixture, board);
+    }
+
+    private static Stream<StartSelector> postStopSameWorkflowStartSelectors() {
+        return Stream.of(
+                new StartSelector("plain start", (fixture, ignored) -> fixture.startRequest()),
+                new StartSelector("board selector", (fixture, ignored) -> fixture.startRequest("Queue")),
+                new StartSelector(
+                        "workflow selector", (fixture, board) -> fixture.startWorkflowRequest(board.workflowPath())),
+                new StartSelector("start all", (fixture, ignored) -> fixture.startAllRequest()));
+    }
+
+    @Test
     void startRestoresMissingManagedPidForHealthyUntrackedManagedWorker() throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
@@ -1605,8 +1820,9 @@ final class LocalWorkerManagerTest {
                 .stdoutContains(
                         "invalid \"Queue\"",
                         "unreadable or invalid workflow configuration",
-                        "in that board's workflow file")
-                .stdoutDoesNotContain("stopped \"Queue\"", board.workflowPath().toString(), tempDir.toString());
+                        "that board's workflow file")
+                .stdoutDoesNotContain(board.workflowPath().toString(), tempDir.toString())
+                .stdoutDoesNotContain("stopped \"Queue\"");
         verify(fixture.healthChecker, never()).boardHealth(any());
     }
 
@@ -1623,8 +1839,9 @@ final class LocalWorkerManagerTest {
 
         // then
         result.assertSuccess()
-                .stdoutContains("invalid \"Queue\"", "missing workflow file", "in that board's workflow file")
-                .stdoutDoesNotContain("stopped \"Queue\"", board.workflowPath().toString(), tempDir.toString());
+                .stdoutContains("invalid \"Queue\"", "missing workflow file", "that board's workflow file")
+                .stdoutDoesNotContain(board.workflowPath().toString(), tempDir.toString())
+                .stdoutDoesNotContain("stopped \"Queue\"");
         verify(fixture.healthChecker, never()).boardHealth(any());
     }
 
@@ -2205,6 +2422,12 @@ final class LocalWorkerManagerTest {
                         "setup_workflow_invalid",
                         "Invalid workflow configuration:"),
                 new InvalidWorkflowCase(
+                        "null front matter with generated body",
+                        "null-generated.WORKFLOW.md",
+                        "---\n~\n---\n## Operating Posture\n\n## Pull Request Publication\n\n## Trello List Routing\n",
+                        "setup_workflow_invalid",
+                        "Workflow front matter must be a YAML map."),
+                new InvalidWorkflowCase(
                         "bad server port",
                         "badport.WORKFLOW.md",
                         "---\ntracker:\n  kind: trello\n  board_id: board-1\nserver:\n  port: \"not-a-port\"\n---\nBody\n",
@@ -2228,6 +2451,93 @@ final class LocalWorkerManagerTest {
                         "---\ntracker:\n  kind: trello\n  board_id: board-1\nserver:\n  port: 18080.5\n---\nBody\n",
                         "setup_workflow_invalid",
                         "server.port"));
+    }
+
+    @Test
+    void startWorkflowDoesNotLeakMissingSecretFilePathFromInvalidWorkflow() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        Files.createDirectories(fixture.paths.configDir());
+        fixture.writeEnv(fixture.paths.defaultEnvPath());
+        Path privateDir = tempDir.resolve("Users").resolve("Jane Doe").resolve("Secrets");
+        Path secretPath = privateDir.resolve("trello-key.txt");
+        Path workflow = fixture.paths.configDir().resolve("WORKFLOW.secret-missing.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: board-1
+                  api_key: "file:%s"
+                  api_token: "$TRELLO_API_TOKEN"
+                server:
+                  port: 18080
+                ---
+                Body
+                """
+                        .formatted(secretPath),
+                StandardCharsets.UTF_8);
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startWorkflowRequest(workflow)));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_workflow_invalid");
+            assertThat(failure.getMessage())
+                    .contains(
+                            "Invalid workflow configuration:",
+                            "tracker.api_key secret file cannot be read.",
+                            "selected workflow file")
+                    .doesNotContain(secretPath.toString(), privateDir.toString(), tempDir.toString(), "Jane Doe");
+            assertThat(failure.getCause()).hasMessageContaining(secretPath.toString());
+        });
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void startAllDoesNotLeakOversizedSecretFilePathFromInvalidWorkflow() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        Path privateDir = tempDir.resolve("Users").resolve("Jane Doe").resolve("Secrets");
+        Path secretPath = privateDir.resolve("trello-token.txt");
+        Files.createDirectories(privateDir);
+        Files.writeString(secretPath, "x".repeat(70_000), StandardCharsets.UTF_8);
+        Files.writeString(
+                board.workflowPath(),
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: board-1
+                  api_key: "$TRELLO_API_KEY"
+                  api_token: "file:%s"
+                server:
+                  port: 18080
+                ---
+                Body
+                """
+                        .formatted(secretPath),
+                StandardCharsets.UTF_8);
+        fixture.save(board);
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startAllRequest()));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_workflow_invalid");
+            assertThat(failure.getMessage())
+                    .contains(
+                            "Invalid workflow configuration:",
+                            "tracker.api_token secret file is too large.",
+                            "selected workflow file")
+                    .doesNotContain(secretPath.toString(), privateDir.toString(), tempDir.toString(), "Jane Doe");
+            assertThat(failure.getCause()).hasMessageContaining(secretPath.toString());
+        });
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -2538,8 +2848,65 @@ final class LocalWorkerManagerTest {
         // then
         assertThat(thrown)
                 .isInstanceOf(TrelloBoardSetupException.class)
-                .hasMessageContaining("State file belongs to another process");
+                .hasMessageContaining("State file belongs to another process")
+                .hasMessageContaining("selected workflow file")
+                .hasMessageNotContaining(board.workflowPath().toString())
+                .hasMessageNotContaining(fixture.paths.stateHome().toString())
+                .hasMessageNotContaining(".log")
+                .hasMessageNotContaining(".err");
         verify(fixture.platform, never()).stop(anyLong(), any(Duration.class), any(Duration.class));
+    }
+
+    @Test
+    void startValidatesWorkflowConfigBeforeDeletingStalePid() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        ManagedProcessStore.ManagedProcessFiles files = fixture.writeManagedPid(board, 42);
+        writeWorkflowWithInvalidSandboxPolicy(board.workflowPath());
+        when(fixture.platform.isAlive(42)).thenReturn(false);
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
+
+        // then
+        assertInvalidWorkflowStartFailure(thrown, board, "codex.turn_sandbox_policy");
+        assertThat(new ManagedProcessStore(fixture.paths.stateHome()).readPid(files.pidFile()))
+                .isEqualTo(42);
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void startValidatesWorkflowConfigBeforeStoppingManagedProcess() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        ManagedProcessStore.ManagedProcessFiles files = fixture.writeManagedPid(board, 42);
+        writeWorkflowWithInvalidSandboxPolicy(board.workflowPath());
+        when(fixture.platform.isAlive(42)).thenReturn(true);
+        when(fixture.platform.isManaged(42, fixture.paths.appHome(), board.workflowPath()))
+                .thenReturn(true);
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
+
+        // then
+        assertInvalidWorkflowStartFailure(thrown, board, "codex.turn_sandbox_policy");
+        assertThat(new ManagedProcessStore(fixture.paths.stateHome()).readPid(files.pidFile()))
+                .isEqualTo(42);
+        verify(fixture.platform, never()).stop(anyLong(), any(Duration.class), any(Duration.class));
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    private void assertInvalidWorkflowStartFailure(Throwable thrown, ConnectedBoard board, String expectedProblem) {
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_workflow_invalid");
+            assertThat(failure.getMessage())
+                    .contains(expectedProblem, "selected workflow file")
+                    .doesNotContain(board.workflowPath().toString(), tempDir.toString());
+        });
     }
 
     @Test
@@ -2781,6 +3148,44 @@ final class LocalWorkerManagerTest {
         return board;
     }
 
+    private static void stubManagedSameWorkflow(LocalWorkerManagerTestFixture fixture, ConnectedBoard board, long pid)
+            throws Exception {
+        fixture.writeManagedPid(board, pid);
+        when(fixture.platform.isAlive(pid)).thenReturn(true);
+        when(fixture.platform.isManaged(pid, fixture.paths.appHome(), board.workflowPath()))
+                .thenReturn(true);
+        when(fixture.healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), board.envPath()))
+                .thenReturn(board.serverPort());
+        stubSameWorkflowHealthProbe(fixture, board);
+    }
+
+    private static void stubSameWorkflowHealthProbe(LocalWorkerManagerTestFixture fixture, ConnectedBoard board) {
+        when(fixture.healthChecker.workflowHealth(
+                        board.workflowPath(), board.boardId(), board.boardKey(), board.serverPort()))
+                .thenReturn(fixture.sameWorkflow(board));
+    }
+
+    private static void writeWorkflowWithMissingFileSecret(ConnectedBoard board, Path missingSecret)
+            throws IOException {
+        assertThat(missingSecret).doesNotExist();
+        Files.writeString(
+                board.workflowPath(),
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: "file:%s"
+                  api_token: literal-token
+                  board_id: %s
+                server:
+                  port: %d
+                ---
+                # Queue
+                """
+                        .formatted(missingSecret, board.boardId(), board.serverPort()),
+                StandardCharsets.UTF_8);
+    }
+
     private static List<Throwable> lifecycleCommandFailures(LocalWorkerManagerTestFixture fixture) {
         return List.of(
                 catchThrowable(() -> fixture.status(fixture.statusRequest("Queue"))),
@@ -2808,6 +3213,78 @@ final class LocalWorkerManagerTest {
         ManagedProcessStore.ManagedProcessFiles files =
                 new ManagedProcessStore(fixture.paths.stateHome()).files(workflow);
         Files.writeString(files.stdoutLog(), "worker log line\n", StandardCharsets.UTF_8);
+    }
+
+    private static ConnectedBoard saveBoardWithManagedPid(LocalWorkerManagerTestFixture fixture) throws Exception {
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        fixture.stubManagedPid(board, 42);
+        return board;
+    }
+
+    private PostStopSameWorkflow postStopSameWorkflowWithReportedPid(boolean managed) throws Exception {
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = saveBoardWithManagedPid(fixture);
+        long reportedPid = 99L;
+        when(fixture.healthChecker.workflowHealth(
+                        board.workflowPath(), board.boardId(), board.boardKey(), board.serverPort()))
+                .thenReturn(portUsed(board), fixture.sameWorkflowWithPid(board, reportedPid));
+        when(fixture.platform.stop(42, Duration.ofSeconds(15), Duration.ofSeconds(5)))
+                .thenReturn(true);
+        when(fixture.platform.isAlive(reportedPid)).thenReturn(true);
+        when(fixture.platform.isManaged(reportedPid, fixture.paths.appHome(), board.workflowPath()))
+                .thenReturn(managed);
+        return new PostStopSameWorkflow(fixture, board, reportedPid);
+    }
+
+    private void assertNoPostStopUntrackedResult(
+            WorkerRunResult result, LocalWorkerManagerTestFixture fixture, ConnectedBoard board) throws Exception {
+        assertNoLifecyclePrivateOutput(result, fixture, board, "Restored missing managed worker tracking");
+        assertThat(pidFiles(fixture.paths.stateHome())).isEmpty();
+        verifyPostStopStoppedWithoutLaunch(fixture);
+    }
+
+    private void assertNoLifecyclePrivateOutput(
+            WorkerRunResult result,
+            LocalWorkerManagerTestFixture fixture,
+            ConnectedBoard board,
+            String... additionalForbidden) {
+        String[] forbidden = Stream.concat(
+                        Stream.of(
+                                "Started Symphony for Trello",
+                                board.workflowPath().toString(),
+                                fixture.paths.stateHome().toString(),
+                                tempDir.toString(),
+                                ".log",
+                                ".err"),
+                        Stream.of(additionalForbidden))
+                .toArray(String[]::new);
+        result.stdoutDoesNotContain(forbidden);
+    }
+
+    private static void verifyPostStopStoppedWithoutLaunch(LocalWorkerManagerTestFixture fixture) throws IOException {
+        verify(fixture.platform).stop(42, Duration.ofSeconds(15), Duration.ofSeconds(5));
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    private static void stubSuccessfulManagedRestart(
+            LocalWorkerManagerTestFixture fixture, ConnectedBoard board, BoardHealth initialHealth) throws Exception {
+        when(fixture.healthChecker.workflowHealth(
+                        board.workflowPath(), board.boardId(), board.boardKey(), board.serverPort()))
+                .thenReturn(initialHealth, fixture.stopped(board));
+        when(fixture.platform.stop(42, Duration.ofSeconds(15), Duration.ofSeconds(5)))
+                .thenReturn(true);
+        when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
+                .thenReturn(new ManagedProcessHandle(99));
+        when(fixture.healthChecker.waitForSameWorkflow(eq(board), eq(board.serverPort()), any()))
+                .thenReturn(fixture.sameWorkflow(board));
+        when(fixture.platform.isAlive(99)).thenReturn(true);
+        when(fixture.platform.isManaged(99, fixture.paths.appHome(), board.workflowPath()))
+                .thenReturn(true);
+    }
+
+    private static BoardHealth portUsed(ConnectedBoard board) {
+        return new BoardHealth(BoardHealthKind.PORT_USED, board.serverPort(), Optional.empty(), Optional.empty());
     }
 
     private static void saveConnectedBoardsAndStubSuccessfulStarts(
@@ -2874,6 +3351,39 @@ final class LocalWorkerManagerTest {
         return board;
     }
 
+    private static ConnectedBoard githubEnabled(ConnectedBoard board) {
+        return ConnectedBoardBuilder.from(board).withGithubEnabled(true).build();
+    }
+
+    private static void writeExistingGithubWorkflowWithoutSandboxPolicy(
+            ConnectedBoard board, String trackerFields, String codexFields) throws IOException {
+        Files.writeString(
+                board.workflowPath(),
+                """
+                ---
+                tracker:
+                  kind: trello
+                %sserver:
+                  port: %d
+                codex:
+                  command: codex app-server
+                %s---
+                ## Operating Posture
+
+                Existing private workflow body.
+
+                ## Pull Request Publication
+
+                Run validation and record the review evidence.
+
+                ## Trello List Routing
+
+                Card URL: {{ card.url }}
+                """
+                        .formatted(trackerFields, board.serverPort(), codexFields),
+                StandardCharsets.UTF_8);
+    }
+
     private static void stubStartupLogRewrite(
             LocalWorkerManagerTestFixture fixture,
             ConnectedBoard board,
@@ -2886,6 +3396,25 @@ final class LocalWorkerManagerTest {
                     Files.writeString(files.stdoutLog(), logText, StandardCharsets.UTF_8);
                     return new ManagedProcessHandle(42);
                 });
+    }
+
+    private static void writeWorkflowWithInvalidSandboxPolicy(Path workflowPath) throws IOException {
+        Files.writeString(
+                workflowPath,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: board-1
+                server:
+                  port: 18080
+                codex:
+                  command: codex app-server
+                  turn_sandbox_policy: []
+                ---
+                Body
+                """,
+                StandardCharsets.UTF_8);
     }
 
     private static Thread startThread(
@@ -2932,6 +3461,21 @@ final class LocalWorkerManagerTest {
         }
     }
 
+    private record StartSelector(
+            String name, BiFunction<LocalWorkerManagerTestFixture, ConnectedBoard, StartWorkerRequest> requestFactory) {
+        private StartWorkerRequest request(LocalWorkerManagerTestFixture fixture, ConnectedBoard board) {
+            return requestFactory.apply(fixture, board);
+        }
+
+        @Override
+        public String toString() {
+            return name;
+        }
+    }
+
+    private record PostStopSameWorkflow(
+            LocalWorkerManagerTestFixture fixture, ConnectedBoard board, long reportedPid) {}
+
     private record UnusableWorkflowContent(String name, String fileName, String content) {
         @Override
         public String toString() {
@@ -2951,6 +3495,15 @@ final class LocalWorkerManagerTest {
         List<Path> files = pidFiles(stateHome);
         assertThat(files).hasSize(1);
         return files.getFirst();
+    }
+
+    private static void assertManagedWorkerStateUnchanged(
+            LocalWorkerManagerTestFixture fixture, ConnectedBoard board, String originalWorkflow, String expectedPid)
+            throws Exception {
+        assertThat(board.workflowPath()).content(StandardCharsets.UTF_8).isEqualTo(originalWorkflow);
+        assertThat(Files.readString(onlyPidFile(fixture.paths.stateHome()))).isEqualTo(expectedPid);
+        verify(fixture.platform, never()).stop(anyLong(), any(Duration.class), any(Duration.class));
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
     }
 
     private static List<Path> pidFiles(Path stateHome) throws Exception {

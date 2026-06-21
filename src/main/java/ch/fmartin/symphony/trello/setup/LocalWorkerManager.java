@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.locks.Lock;
+import java.util.function.Function;
 
 final class LocalWorkerManager {
     private static final int STARTUP_LOG_BYTE_LIMIT = 128 * 1024;
@@ -219,10 +220,13 @@ final class LocalWorkerManager {
             throws IOException {
         validateWorkerWorkflowPath(board.workflowPath());
         validateWorkerEnvPath(envPath);
+        workflowConfig.requireLaunchableWorkflowFile(board.workflowPath());
+        Function<String, Optional<String>> workflowEnvironment =
+                WorkflowEnvironmentResolver.resolver(environment, envPath);
         ManagedProcessStore store = new ManagedProcessStore(paths.stateHome());
         ManagedProcessStore.ManagedProcessFiles files = store.files(board.workflowPath());
         Files.createDirectories(paths.stateHome());
-        startWithProcessLock(paths, board, envPath, explicitEnvOverride, out, store, files);
+        startWithProcessLock(paths, board, envPath, explicitEnvOverride, out, store, files, workflowEnvironment);
     }
 
     private static void validateWorkerEnvPath(Path envPath) {
@@ -246,10 +250,11 @@ final class LocalWorkerManager {
             boolean explicitEnvOverride,
             PrintStream out,
             ManagedProcessStore store,
-            ManagedProcessStore.ManagedProcessFiles files)
+            ManagedProcessStore.ManagedProcessFiles files,
+            Function<String, Optional<String>> workflowEnvironment)
             throws IOException {
         try (var ignored = acquireProcessLock(files)) {
-            startLocked(paths, board, envPath, explicitEnvOverride, out, store, files);
+            startLocked(paths, board, envPath, explicitEnvOverride, out, store, files, workflowEnvironment);
         }
     }
 
@@ -260,11 +265,15 @@ final class LocalWorkerManager {
             boolean explicitEnvOverride,
             PrintStream out,
             ManagedProcessStore store,
-            ManagedProcessStore.ManagedProcessFiles files)
+            ManagedProcessStore.ManagedProcessFiles files,
+            Function<String, Optional<String>> workflowEnvironment)
             throws IOException {
-        Long existingPid = store.readPid(files.pidFile());
         int healthPort = healthChecker.managedHealthPort(board.workflowPath(), board.serverPort(), envPath);
         Optional<WorkerCredentialUsage> credentialUsage = workerCredentialUsage(board.workflowPath(), envPath);
+
+        Long existingPid = store.readPid(files.pidFile());
+        boolean restartManagedWorker = false;
+        BoardHealth existingHealth;
         if (existingPid != null && platform.isAlive(existingPid)) {
             if (!platform.isManaged(existingPid, paths.appHome(), board.workflowPath())) {
                 throw new TrelloBoardSetupException(
@@ -274,59 +283,52 @@ final class LocalWorkerManager {
             BoardHealth health =
                     healthChecker.workflowHealth(board.workflowPath(), board.boardId(), board.boardKey(), healthPort);
             if (health.kind() == BoardHealthKind.SAME_WORKFLOW) {
-                printIgnoredEnvOverride(paths, board, envPath, explicitEnvOverride, out);
-                out.println("Symphony for Trello is already running for " + DisplayNames.quotedName(board.boardName())
-                        + " pid=" + existingPid);
+                handleSameWorkflowWorker(
+                        paths,
+                        board,
+                        envPath,
+                        explicitEnvOverride,
+                        health,
+                        store,
+                        files,
+                        out,
+                        Optional.of(existingPid));
                 return;
             }
-            stopPid(store, files, existingPid);
-        } else if (existingPid != null) {
-            store.deletePid(files.pidFile());
+            existingHealth = health;
+            restartManagedWorker = true;
+        } else {
+            existingHealth =
+                    healthChecker.workflowHealth(board.workflowPath(), board.boardId(), board.boardKey(), healthPort);
         }
 
-        BoardHealth existingHealth =
-                healthChecker.workflowHealth(board.workflowPath(), board.boardId(), board.boardKey(), healthPort);
         if (existingHealth.kind() == BoardHealthKind.SAME_WORKFLOW) {
-            printIgnoredEnvOverride(paths, board, envPath, explicitEnvOverride, out);
-            out.println("Symphony for Trello is already running for " + DisplayNames.quotedName(board.boardName())
-                    + " at " + LocalHealthChecker.localServerUrl(existingHealth.port()));
-            repairOrReportUntrackedWorker(paths, board, existingHealth, store, files, out);
+            handleSameWorkflowWorker(
+                    paths, board, envPath, explicitEnvOverride, existingHealth, store, files, out, Optional.empty());
             return;
         }
 
-        // Workflow-local launch problems must win over port classification: an invalid workflow
-        // falls back to a default health port, so an occupied fallback port would otherwise mask
-        // the setup_workflow_invalid error the user needs.
-        boolean workflowServerPortUsed =
-                healthChecker.externalHttpPortOverrideSource(envPath).isEmpty();
-        EffectiveConfig launchConfig = workflowConfig.prepareLaunchWorkflow(
-                board.workflowPath(),
-                WorkflowEnvironmentResolver.resolver(environment, envPath),
-                workflowServerPortUsed);
+        boolean workflowServerPortUsed = workflowServerPortUsed(envPath);
+        EffectiveConfig launchConfig =
+                workflowConfig.prepareLaunchWorkflow(board.workflowPath(), workflowEnvironment, workflowServerPortUsed);
         credentialUsage.ifPresent(this::validateWorkerCredentials);
         workflowConfig.validateLaunchDispatch(board.workflowPath(), launchConfig);
 
-        if (existingHealth.kind() == BoardHealthKind.PORT_USED) {
-            throw new TrelloBoardSetupException(
-                    "setup_worker_port_in_use",
-                    "Local HTTP status port " + healthPort + " is already in use by another process, so the worker for "
-                            + DisplayNames.quotedName(board.boardName())
-                            + " cannot start.\nFree the port or change the workflow server.port, then rerun symphony-trello start.");
-        }
-        if (existingHealth.kind() == BoardHealthKind.WRONG_WORKFLOW) {
-            String servingWorkflow = existingHealth
-                    .actualWorkflowPath()
-                    .map(ignored -> " It currently serves another Symphony workflow.")
-                    .orElse("");
-            throw new TrelloBoardSetupException(
-                    "setup_worker_port_in_use",
-                    "Local HTTP status port " + healthPort
-                            + " is already serving another Symphony workflow, so the worker for "
-                            + DisplayNames.quotedName(board.boardName()) + " cannot start." + servingWorkflow
-                            + "\nStop that worker or change the workflow server.port, then rerun symphony-trello start.");
+        if (!restartManagedWorker) {
+            rejectPortConflict(board, existingHealth, healthPort);
         }
 
         verifyTrelloCredentialsBeforeLaunch(launchConfig, credentialUsage);
+        if (restartManagedWorker) {
+            stopPid(store, files, existingPid);
+            BoardHealth postStopHealth =
+                    healthChecker.workflowHealth(board.workflowPath(), board.boardId(), board.boardKey(), healthPort);
+            if (handlePostStopHealth(paths, board, envPath, explicitEnvOverride, store, files, out, postStopHealth)) {
+                return;
+            }
+        } else if (existingPid != null && !platform.isAlive(existingPid)) {
+            store.deletePid(files.pidFile());
+        }
 
         List<String> command = List.of(
                 javaExecutable(),
@@ -367,6 +369,89 @@ final class LocalWorkerManager {
                             + "or rerun symphony-trello logs with the same board or workflow selector for local log output.");
         }
         out.println("Started Symphony for Trello: " + DisplayNames.quotedName(board.boardName()));
+    }
+
+    private boolean workflowServerPortUsed(Path envPath) {
+        return healthChecker.externalHttpPortOverrideSource(envPath).isEmpty();
+    }
+
+    private boolean handlePostStopHealth(
+            LocalWorkerPaths paths,
+            ConnectedBoard board,
+            Path envPath,
+            boolean explicitEnvOverride,
+            ManagedProcessStore store,
+            ManagedProcessStore.ManagedProcessFiles files,
+            PrintStream out,
+            BoardHealth postStopHealth)
+            throws IOException {
+        return switch (postStopHealth.kind()) {
+            case STOPPED -> false;
+            case PORT_USED, WRONG_WORKFLOW -> {
+                rejectPortConflict(board, postStopHealth, postStopHealth.port());
+                yield true;
+            }
+            case SAME_WORKFLOW -> {
+                handleSameWorkflowWorker(
+                        paths,
+                        board,
+                        envPath,
+                        explicitEnvOverride,
+                        postStopHealth,
+                        store,
+                        files,
+                        out,
+                        Optional.empty());
+                yield true;
+            }
+        };
+    }
+
+    private static void rejectPortConflict(ConnectedBoard board, BoardHealth health, int healthPort) {
+        switch (health.kind()) {
+            case PORT_USED ->
+                throw new TrelloBoardSetupException(
+                        "setup_worker_port_in_use",
+                        "Local HTTP status port " + healthPort
+                                + " is already in use by another process, so the worker for "
+                                + DisplayNames.quotedName(board.boardName())
+                                + " cannot start.\nFree the port or change the workflow server.port, then rerun symphony-trello start.");
+            case WRONG_WORKFLOW -> {
+                String servingWorkflow = health.actualWorkflowPath()
+                        .map(ignored -> " It currently serves another Symphony workflow.")
+                        .orElse("");
+                throw new TrelloBoardSetupException(
+                        "setup_worker_port_in_use",
+                        "Local HTTP status port " + healthPort
+                                + " is already serving another Symphony workflow, so the worker for "
+                                + DisplayNames.quotedName(board.boardName()) + " cannot start." + servingWorkflow
+                                + "\nStop that worker or change the workflow server.port, then rerun symphony-trello start.");
+            }
+            case SAME_WORKFLOW, STOPPED -> {}
+        }
+    }
+
+    private void handleSameWorkflowWorker(
+            LocalWorkerPaths paths,
+            ConnectedBoard board,
+            Path envPath,
+            boolean explicitEnvOverride,
+            BoardHealth health,
+            ManagedProcessStore store,
+            ManagedProcessStore.ManagedProcessFiles files,
+            PrintStream out,
+            Optional<Long> recordedManagedPid)
+            throws IOException {
+        printIgnoredEnvOverride(paths, board, envPath, explicitEnvOverride, out);
+        recordedManagedPid.ifPresentOrElse(
+                pid -> out.println("Symphony for Trello is already running for "
+                        + DisplayNames.quotedName(board.boardName()) + " pid=" + pid),
+                () -> out.println("Symphony for Trello is already running for "
+                        + DisplayNames.quotedName(board.boardName()) + " at "
+                        + LocalHealthChecker.localServerUrl(health.port())));
+        if (recordedManagedPid.isEmpty()) {
+            repairOrReportUntrackedWorker(paths, board, health, store, files, out);
+        }
     }
 
     private void repairOrReportUntrackedWorker(
