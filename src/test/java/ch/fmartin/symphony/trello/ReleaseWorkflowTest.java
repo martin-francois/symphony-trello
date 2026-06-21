@@ -104,6 +104,31 @@ final class ReleaseWorkflowTest {
                 source, "echo \"upload_assets=false\" >> \"$GITHUB_OUTPUT\"", "Checkout release source tag");
     }
 
+    @Test
+    void releasePackagingUsesTagLocalToolingForInstallersAndApp() throws IOException {
+        // given
+        Path script = Path.of("scripts/package-release-assets.sh");
+
+        // when
+        String source = Files.readString(script);
+
+        // then
+        assertThat(source)
+                .contains(
+                        "Usage: scripts/package-release-assets.sh VERSION [DIST]",
+                        "stamp_posix_installer",
+                        "stamp_powershell_installer",
+                        "/^DEFAULT_VERSION=.*# x-release-please-version/",
+                        "/^[[:space:]]*\\[string\\]\\$Version = .*# x-release-please-version/",
+                        "/^[[:space:]]*\\[string\\]\\$Ref = .*# x-release-please-version/",
+                        "/^\\$DefaultVersion = .*# x-release-please-version/",
+                        "cd \"$ROOT\"",
+                        "cp -R \"$ROOT/target/quarkus-app\" \"$STAGING/target/quarkus-app\"",
+                        "cp \"$ROOT/README.md\" \"$STAGING/README.md\"",
+                        "cp \"$ROOT/uninstall.sh\" \"$ROOT/uninstall.ps1\" \"$ASSET_DIR/\"")
+                .doesNotContain("SOURCE_ROOT", "[SOURCE_ROOT]");
+    }
+
     private static void assertAppearsBefore(String source, String earlier, String later) {
         assertThat(source.indexOf(earlier))
                 .as("expected `%s` to appear", earlier)
