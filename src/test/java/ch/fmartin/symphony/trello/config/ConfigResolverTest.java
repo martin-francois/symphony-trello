@@ -5,8 +5,11 @@ import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
@@ -675,6 +678,180 @@ final class ConfigResolverTest {
 
         // then
         assertThat(config.tracker().apiKey()).isEqualTo("${SYMPHONY_TEST_KEY:-fallback}");
+    }
+
+    @Test
+    void preservesReadOnlyCodexSandboxPolicyWithoutWritableRootMerge() throws Exception {
+        // given
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.read-only-sandbox.md",
+                """
+                codex:
+                  command: codex app-server
+                  turn_sandbox_policy:
+                    type: readOnly
+                """);
+        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.codex().turnSandboxPolicy()).isEqualTo(Map.of("type", "readOnly"));
+    }
+
+    @Test
+    void rejectsReadOnlySandboxPolicyWithAdditionalWritableRoots() throws Exception {
+        // given
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.read-only-sandbox-with-roots.md",
+                """
+                codex:
+                  command: codex app-server
+                  turn_sandbox_policy:
+                    type: readOnly
+                  additional_writable_roots:
+                    - /allowed/project
+                """);
+        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        ConfigException error = catchThrowableOfType(
+                ConfigException.class, () -> resolver.resolve(new WorkflowLoader().load(workflow)));
+
+        // then
+        assertThat(error.code()).isEqualTo("codex_sandbox_policy_invalid");
+        assertThat(error)
+                .hasMessage(
+                        "codex.additional_writable_roots require a workspaceWrite or dangerFullAccess sandbox policy.");
+    }
+
+    @Test
+    void rejectsReadOnlySandboxPolicyWithEnvironmentAdditionalWritableRoots() throws Exception {
+        // given
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.read-only-sandbox-with-env-roots.md",
+                """
+                codex:
+                  command: codex app-server
+                  turn_sandbox_policy:
+                    type: readOnly
+                """);
+        ConfigResolver resolver = new ConfigResolver(name -> "SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS".equals(name)
+                ? Optional.of("/allowed/env")
+                : Optional.empty());
+
+        // when
+        ConfigException error = catchThrowableOfType(
+                ConfigException.class, () -> resolver.resolve(new WorkflowLoader().load(workflow)));
+
+        // then
+        assertThat(error.code()).isEqualTo("codex_sandbox_policy_invalid");
+        assertThat(error)
+                .hasMessage(
+                        "codex.additional_writable_roots require a workspaceWrite or dangerFullAccess sandbox policy.");
+    }
+
+    @Test
+    void forceDangerFullAccessIgnoresReadOnlyAdditionalWritableRootConflict() throws Exception {
+        // given
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.read-only-sandbox-force-danger.md",
+                """
+                codex:
+                  command: codex app-server
+                  turn_sandbox_policy:
+                    type: readOnly
+                  additional_writable_roots:
+                    - /allowed/project
+                """);
+        ConfigResolver resolver = new ConfigResolver(
+                name -> "SYMPHONY_CODEX_DANGER_FULL_ACCESS".equals(name) ? Optional.of("true") : Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.codex().forceDangerFullAccess()).isTrue();
+        assertThat(config.codex().turnSandboxPolicy()).isEqualTo(Map.of("type", "readOnly"));
+        assertThat(config.codex().additionalWritableRoots()).isEmpty();
+    }
+
+    @MethodSource("invalidSandboxFallbacksIgnoredWhenDangerFullAccessIsForced")
+    @ParameterizedTest
+    @SuppressWarnings("JUnitValueSource")
+    void forceDangerFullAccessIgnoresInvalidConfiguredSandboxFallback(String codexYaml) throws Exception {
+        // given
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.force-danger-invalid-sandbox.md",
+                """
+                codex:
+                  command: codex app-server
+                %s
+                """
+                        .formatted(codexYaml.indent(2)));
+        ConfigResolver resolver = new ConfigResolver(
+                name -> "SYMPHONY_CODEX_DANGER_FULL_ACCESS".equals(name) ? Optional.of("true") : Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.codex().forceDangerFullAccess()).isTrue();
+        assertThat(config.codex().additionalWritableRoots()).isEmpty();
+    }
+
+    @Test
+    void forceDangerFullAccessIgnoresInvalidCurrentSandboxPolicy() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.force-danger-invalid-sandbox.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: literal-key
+                  api_token: literal-token
+                  board_id: board-1
+                server:
+                  port: 18080
+                codex:
+                  command: codex app-server
+                  turn_sandbox_policy: []
+                ---
+                ## Operating Posture
+
+                This is an unattended orchestration run.
+
+                ## Pull Request Publication
+
+                Create a pull request when needed.
+
+                ## Trello List Routing
+
+                Card URL: {{ card.url }}
+                """,
+                StandardCharsets.UTF_8);
+        ConfigResolver resolver = new ConfigResolver(
+                name -> "SYMPHONY_CODEX_DANGER_FULL_ACCESS".equals(name) ? Optional.of("true") : Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.codex().forceDangerFullAccess()).isTrue();
+        assertThat(config.codex().turnSandboxPolicy()).isEqualTo(List.of());
+    }
+
+    private static Stream<String> invalidSandboxFallbacksIgnoredWhenDangerFullAccessIsForced() {
+        return Stream.of(
+                "turn_sandbox_policy: workspaceWrite",
+                "turn_sandbox_policy: []",
+                "turn_sandbox_policy: {}",
+                "turn_sandbox_policy:\n  type: futurePolicy\n",
+                "turn_sandbox_policy:\n  type: workspaceWrite\n  networkAccess: \"true\"\n",
+                "additional_writable_roots: /ignored-when-danger-is-forced");
     }
 
     private Path writeDefaultWorkflow(String fileName, String extraFrontMatter) throws Exception {

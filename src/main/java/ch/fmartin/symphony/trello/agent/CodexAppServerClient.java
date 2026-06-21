@@ -1,14 +1,13 @@
 package ch.fmartin.symphony.trello.agent;
 
-import ch.fmartin.symphony.trello.config.ConfigException;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.process.ProcessEnvironment;
 import ch.fmartin.symphony.trello.time.ApplicationClock;
+import ch.fmartin.symphony.trello.workflow.CodexSandboxPolicy;
 import ch.fmartin.symphony.trello.workspace.WorkspaceManager;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -219,52 +218,11 @@ public class CodexAppServerClient {
     }
 
     private JsonNode sandboxPolicy(EffectiveConfig config) {
-        if (config.codex().forceDangerFullAccess()) {
-            return object("type", "dangerFullAccess");
-        }
-        JsonNode configured = config.codex().turnSandboxPolicy() == null
-                ? null
-                : json.valueToTree(config.codex().turnSandboxPolicy());
-        if (config.codex().additionalWritableRoots().isEmpty()) {
-            return configured;
-        }
-        if (configured == null || configured.isNull()) {
-            ObjectNode policy = object("type", "workspaceWrite");
-            policy.set("writableRoots", writableRoots(config));
-            return policy;
-        }
-        if (configured.isObject()
-                && "workspaceWrite".equals(configured.path("type").asText())) {
-            ObjectNode merged = configured.deepCopy();
-            ArrayNode writableRoots = merged.withArray("writableRoots");
-            config.codex().additionalWritableRoots().stream()
-                    .map(Path::toString)
-                    .filter(root -> !containsText(writableRoots, root))
-                    .forEach(writableRoots::add);
-            return merged;
-        }
-        if (configured.isObject()
-                && "dangerFullAccess".equals(configured.path("type").asText())) {
-            return configured;
-        }
-        throw new ConfigException(
-                "codex_sandbox_policy_conflict",
-                "codex.additional_writable_roots requires a workspaceWrite or dangerFullAccess turn_sandbox_policy");
-    }
-
-    private ArrayNode writableRoots(EffectiveConfig config) {
-        ArrayNode roots = json.createArrayNode();
-        config.codex().additionalWritableRoots().stream().map(Path::toString).forEach(roots::add);
-        return roots;
-    }
-
-    private static boolean containsText(ArrayNode values, String expected) {
-        for (JsonNode value : values) {
-            if (expected.equals(value.asText())) {
-                return true;
-            }
-        }
-        return false;
+        return CodexSandboxPolicy.effectivePolicy(
+                json,
+                config.codex().turnSandboxPolicy(),
+                config.codex().additionalWritableRoots(),
+                config.codex().forceDangerFullAccess());
     }
 
     private void putIfPresent(ObjectNode node, String key, Object value) {

@@ -827,6 +827,9 @@ codex:
   model: gpt-5.5
   reasoning_effort: medium
   approval_policy: never
+  turn_sandbox_policy:
+    type: workspaceWrite
+    networkAccess: true
   turn_timeout_ms: 3600000
   read_timeout_ms: 5000
   stall_timeout_ms: 300000
@@ -1096,7 +1099,9 @@ unrelated host files. Keep that default until a card needs another local file or
 During guided setup, you can add allowed host paths. In `WORKFLOW.md`, those become
 `codex.additional_writable_roots`. Relative paths resolve relative to the workflow file. The runtime
 adds those paths to a Codex `workspaceWrite` sandbox policy unless the workflow already uses
-`dangerFullAccess`.
+`dangerFullAccess`. GitHub-enabled starter workflows also set `networkAccess: true` on the
+`workspaceWrite` policy so Codex can clone repositories and create pull requests while keeping the
+filesystem sandbox enabled.
 
 Example:
 
@@ -1341,8 +1346,9 @@ credentials, and Codex approval/sandbox settings appropriate to the board's trus
 Approval and sandbox values are passed through from [`WORKFLOW.md`](#workflow-contract) to the
 installed Codex app-server schema. When additional writable roots are configured, this implementation
 adds them to a `workspaceWrite` turn sandbox policy unless the workflow already uses
-`dangerFullAccess`. User-input and unsupported dynamic tool requests are answered without waiting
-indefinitely.
+`dangerFullAccess`. GitHub-enabled starter workflows use `workspaceWrite` with network access so
+Codex can publish pull requests without disabling the filesystem sandbox. User-input and unsupported
+dynamic tool requests are answered without waiting indefinitely.
 
 ## Production Deployment
 

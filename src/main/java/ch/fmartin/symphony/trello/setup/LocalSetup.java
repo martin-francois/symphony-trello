@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -294,8 +295,9 @@ public final class LocalSetup {
             if (!localValidation.ok()) {
                 ok = false;
             } else {
-                WorkflowValidation workflow = workflowConfig.validate(
-                        board, WorkflowEnvironmentResolver.resolver(environment, board.envPath()));
+                Function<String, Optional<String>> workflowEnvironment =
+                        WorkflowEnvironmentResolver.resolver(environment, board.envPath());
+                WorkflowValidation workflow = workflowConfig.validate(board, workflowEnvironment);
                 if (workflow.ok() || isHealthyStaleManifestPort(board, healthBoard, workflow, health)) {
                     out.println("  OK      Workflow: " + board.workflowPath());
                 } else {
