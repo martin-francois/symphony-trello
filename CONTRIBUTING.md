@@ -265,8 +265,9 @@ after reviewing the release automation output.
 
 When Release Please creates a GitHub release, the release workflow checks out the tag, builds the
 packaged Quarkus app, uploads `install.sh`, `install.ps1`, `uninstall.sh`, `uninstall.ps1`, Linux
-and Windows release archives, and a SHA3-256 `checksums.txt` file. To validate the packaging step
-locally, run:
+and Windows release archives, and a SHA3-256 `checksums.txt` file. Release assets are not replaced
+in place; if a public release is wrong or incomplete, publish a new patch release after fixing the
+release pipeline. To validate the packaging step locally, run:
 
 ```bash
 scripts/package-release-assets.sh 0.2.0
