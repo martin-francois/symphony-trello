@@ -2,15 +2,19 @@ package ch.fmartin.symphony.trello.setup;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.config.WorkflowServerPortClassification;
 import ch.fmartin.symphony.trello.workflow.CodexSandboxPolicy;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
@@ -56,6 +60,104 @@ final class WorkflowConfigEditorTest {
         assertThat(lists.activeStates()).containsExactly("Ready for Codex");
         assertThat(editor.serverPort(workflow)).contains(18081);
         assertThat(workflow).content(StandardCharsets.UTF_8).contains("# Body");
+    }
+
+    @Test
+    void updatesOneCharacterWorkflowFileName() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("x");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: "board-1"
+                  active_states:
+                    - "Ready for Codex"
+                  terminal_states:
+                    - "Done"
+                server:
+                  port: 18080
+                codex:
+                  command: codex app-server
+                ---
+                # Body
+                """,
+                StandardCharsets.UTF_8);
+        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+
+        // when
+        editor.updateServerPort(workflow, 18081);
+
+        // then
+        assertThat(editor.serverPort(workflow)).contains(18081);
+        assertThat(workflow).content(StandardCharsets.UTF_8).contains("# Body");
+    }
+
+    @Test
+    void updateServerPortPreservesWorkflowSymlinkAndUpdatesTarget() throws Exception {
+        // given
+        Path target = tempDir.resolve("WORKFLOW.target.md");
+        Path link = tempDir.resolve("WORKFLOW.link.md");
+        Files.writeString(target, workflowWithBody("# Body"), StandardCharsets.UTF_8);
+        try {
+            Files.createSymbolicLink(link, target.getFileName());
+        } catch (IOException | UnsupportedOperationException e) {
+            assumeTrue(false, "symbolic links are not available: " + e.getMessage());
+        }
+        assertThat(Files.isSymbolicLink(link)).isTrue();
+        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+
+        // when
+        editor.updateServerPort(link, 18081);
+
+        // then
+        assertThat(Files.isSymbolicLink(link)).isTrue();
+        assertThat(editor.serverPort(target)).contains(18081);
+        assertThat(link).content(StandardCharsets.UTF_8).contains("port: 18081", "# Body");
+        assertThat(target).content(StandardCharsets.UTF_8).contains("port: 18081", "# Body");
+    }
+
+    @Test
+    void updateServerPortPreservesPosixPermissionsWhenSupported() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.permissions.md");
+        Files.writeString(workflow, workflowWithBody("# Body"), StandardCharsets.UTF_8);
+        assumeTrue(Files.getFileStore(workflow).supportsFileAttributeView("posix"));
+        Set<PosixFilePermission> permissions = Set.of(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE);
+        Files.setPosixFilePermissions(workflow, permissions);
+        assertThat(Files.getPosixFilePermissions(workflow)).containsExactlyInAnyOrderElementsOf(permissions);
+        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+
+        // when
+        editor.updateServerPort(workflow, 18081);
+
+        // then
+        assertThat(editor.serverPort(workflow)).contains(18081);
+        assertThat(Files.getPosixFilePermissions(workflow)).containsExactlyInAnyOrderElementsOf(permissions);
+    }
+
+    @Test
+    void updateServerPortLeavesOriginalContentWhenWorkflowIsReadOnly() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.read-only-update.md");
+        String original = workflowWithBody("# Body");
+        Files.writeString(workflow, original, StandardCharsets.UTF_8);
+        assumeTrue(Files.getFileStore(workflow).supportsFileAttributeView("posix"));
+        Set<PosixFilePermission> readOnlyPermissions = Set.of(PosixFilePermission.OWNER_READ);
+        Files.setPosixFilePermissions(workflow, readOnlyPermissions);
+        assertThat(Files.getPosixFilePermissions(workflow)).containsExactlyInAnyOrderElementsOf(readOnlyPermissions);
+        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+
+        // when
+        Throwable thrown = catchThrowable(() -> editor.updateServerPort(workflow, 18081));
+
+        // then
+        assertThat(thrown).isInstanceOf(IOException.class).hasMessageContaining("cannot be updated");
+        assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo(original);
+        Files.setPosixFilePermissions(
+                workflow, Set.of(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE));
     }
 
     @MethodSource("serverPortClassifications")
