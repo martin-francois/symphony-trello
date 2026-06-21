@@ -2473,7 +2473,7 @@ final class TrelloBoardSetupMainTest {
         int listeningPort = listeningServer.getAddress().getPort();
         Files.writeString(
                 workflow, TestWorkflows.workflowWithBoardAndPort("board-1", listeningPort), StandardCharsets.UTF_8);
-        ConnectedBoard oldBoard = ConnectedBoardBuilder.connectedBoard(
+        ConnectedBoard previousBoard = ConnectedBoardBuilder.connectedBoard(
                         workflow.toAbsolutePath().normalize())
                 .withBoardId("board-1")
                 .withBoardKey("SYNTH002")
@@ -2486,9 +2486,9 @@ final class TrelloBoardSetupMainTest {
                 .withGithubEnabled(true)
                 .build();
         new ConnectedBoardRepository(tempDir.resolve("connected-boards.json"))
-                .save(new ConnectedBoardManifest(List.of(oldBoard)));
+                .save(new ConnectedBoardManifest(List.of(previousBoard)));
         LocalWorkerManager workerManager = mock();
-        when(workerManager.canStopRunningWorker(any(LocalWorkerPaths.class), eq(oldBoard)))
+        when(workerManager.canStopRunningWorker(any(LocalWorkerPaths.class), eq(previousBoard)))
                 .thenReturn(true);
         TrelloBoardSetup boardSetup = new TrelloBoardSetup(
                 new ObjectMapper(),
@@ -2529,8 +2529,8 @@ final class TrelloBoardSetupMainTest {
         // then
         result.assertSuccess()
                 .stdoutContains("Imported Trello board: \"Existing Board\"", "HTTP status port: " + listeningPort);
-        verify(workerManager, times(2)).canStopRunningWorker(any(LocalWorkerPaths.class), eq(oldBoard));
-        verify(workerManager).stop(any(LocalWorkerPaths.class), eq(oldBoard), any(PrintStream.class));
+        verify(workerManager, times(2)).canStopRunningWorker(any(LocalWorkerPaths.class), eq(previousBoard));
+        verify(workerManager).stop(any(LocalWorkerPaths.class), eq(previousBoard), any(PrintStream.class));
     }
 
     @Test
@@ -3096,23 +3096,23 @@ final class TrelloBoardSetupMainTest {
     @Test
     void importBoardStopsReplacedManifestWorkflowBeforeSavingReplacement() throws Exception {
         // given
-        Path oldWorkflow = tempDir.resolve("old-existing-board.WORKFLOW.md");
+        Path previousWorkflow = tempDir.resolve("previous-existing-board.WORKFLOW.md");
         Path newWorkflow = tempDir.resolve("new-existing-board.WORKFLOW.md");
-        Path oldEnv = tempDir.resolve(".env.old-existing");
+        Path previousEnv = tempDir.resolve(".env.previous-existing");
         Path newEnv = tempDir.resolve(".env.new-existing");
-        Files.writeString(oldWorkflow, "old workflow", StandardCharsets.UTF_8);
-        ConnectedBoard oldBoard = ConnectedBoardBuilder.connectedBoard(
-                        oldWorkflow.toAbsolutePath().normalize())
+        Files.writeString(previousWorkflow, "previous workflow", StandardCharsets.UTF_8);
+        ConnectedBoard previousBoard = ConnectedBoardBuilder.connectedBoard(
+                        previousWorkflow.toAbsolutePath().normalize())
                 .withBoardId("board-1")
                 .withBoardName("Existing Board")
                 .withBoardUrl("https://trello.com/b/SYNTH001/board")
-                .withEnvPath(oldEnv.toAbsolutePath().normalize())
+                .withEnvPath(previousEnv.toAbsolutePath().normalize())
                 .withWorkspaceRoot(
                         TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT.toAbsolutePath().normalize())
                 .withGithubEnabled(true)
                 .build();
         new ConnectedBoardRepository(tempDir.resolve("connected-boards.json"))
-                .save(new ConnectedBoardManifest(List.of(oldBoard)));
+                .save(new ConnectedBoardManifest(List.of(previousBoard)));
         LocalWorkerManager workerManager = mock();
         TrelloBoardSetup boardSetup = new TrelloBoardSetup(
                 new ObjectMapper(),
@@ -3145,10 +3145,10 @@ final class TrelloBoardSetupMainTest {
 
         // then
         result.assertSuccess();
-        verify(workerManager).stop(any(LocalWorkerPaths.class), eq(oldBoard), any(PrintStream.class));
+        verify(workerManager).stop(any(LocalWorkerPaths.class), eq(previousBoard), any(PrintStream.class));
         verify(workerManager)
                 .rotateLogsForReplacedBoards(
-                        any(LocalWorkerPaths.class), any(ConnectedBoard.class), eq(List.of(oldBoard)));
+                        any(LocalWorkerPaths.class), any(ConnectedBoard.class), eq(List.of(previousBoard)));
         verify(workerManager, never())
                 .start(any(LocalWorkerPaths.class), any(ConnectedBoard.class), any(Path.class), any(PrintStream.class));
         ConnectedBoardManifest manifest = new ConnectedBoardRepository(tempDir.resolve("connected-boards.json")).load();
@@ -3173,7 +3173,7 @@ final class TrelloBoardSetupMainTest {
                 .contains(
                         "This update stopped the running worker for \"Existing Board\". Restarting it with the updated workflow.");
         verify(fixture.workerManager())
-                .stop(any(LocalWorkerPaths.class), eq(fixture.oldBoard()), any(PrintStream.class));
+                .stop(any(LocalWorkerPaths.class), eq(fixture.previousBoard()), any(PrintStream.class));
         ArgumentCaptor<ConnectedBoard> restartedBoard = ArgumentCaptor.forClass(ConnectedBoard.class);
         verify(fixture.workerManager())
                 .start(any(LocalWorkerPaths.class), restartedBoard.capture(), any(Path.class), any(PrintStream.class));
@@ -6402,15 +6402,15 @@ final class TrelloBoardSetupMainTest {
     }
 
     private record ReplacedRunningWorkerFixture(
-            ConnectedBoard oldBoard, Path newWorkflow, Path env, LocalWorkerManager workerManager) {}
+            ConnectedBoard previousBoard, Path newWorkflow, Path env, LocalWorkerManager workerManager) {}
 
     private ReplacedRunningWorkerFixture replacedRunningWorkerFixture(String slug) throws Exception {
-        Path oldWorkflow = tempDir.resolve(slug + "-old.WORKFLOW.md");
+        Path previousWorkflow = tempDir.resolve(slug + "-previous.WORKFLOW.md");
         Path newWorkflow = tempDir.resolve(slug + "-new.WORKFLOW.md");
         Path env = tempDir.resolve(".env." + slug);
-        Files.writeString(oldWorkflow, "old workflow", StandardCharsets.UTF_8);
-        ConnectedBoard oldBoard = ConnectedBoardBuilder.connectedBoard(
-                        oldWorkflow.toAbsolutePath().normalize())
+        Files.writeString(previousWorkflow, "previous workflow", StandardCharsets.UTF_8);
+        ConnectedBoard previousBoard = ConnectedBoardBuilder.connectedBoard(
+                        previousWorkflow.toAbsolutePath().normalize())
                 .withBoardId("board-1")
                 .withBoardName("Existing Board")
                 .withBoardUrl("https://trello.com/b/SYNTH001/board")
@@ -6420,11 +6420,11 @@ final class TrelloBoardSetupMainTest {
                 .withGithubEnabled(true)
                 .build();
         new ConnectedBoardRepository(tempDir.resolve("connected-boards.json"))
-                .save(new ConnectedBoardManifest(List.of(oldBoard)));
+                .save(new ConnectedBoardManifest(List.of(previousBoard)));
         LocalWorkerManager workerManager = mock();
-        when(workerManager.canStopRunningWorker(any(LocalWorkerPaths.class), eq(oldBoard)))
+        when(workerManager.canStopRunningWorker(any(LocalWorkerPaths.class), eq(previousBoard)))
                 .thenReturn(true);
-        return new ReplacedRunningWorkerFixture(oldBoard, newWorkflow, env, workerManager);
+        return new ReplacedRunningWorkerFixture(previousBoard, newWorkflow, env, workerManager);
     }
 
     private CliRunResult runForcedImportBoard(ReplacedRunningWorkerFixture fixture) throws Exception {
