@@ -10,9 +10,9 @@ import ch.fmartin.symphony.trello.config.TypedWorkflowConfig;
 import ch.fmartin.symphony.trello.config.WorkflowConfigIngestion;
 import ch.fmartin.symphony.trello.config.WorkflowIntegerSetting;
 import ch.fmartin.symphony.trello.config.WorkflowServerPortClassification;
+import ch.fmartin.symphony.trello.workflow.CodexSandboxPolicy;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import ch.fmartin.symphony.trello.workflow.WorkflowException;
-import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
@@ -36,8 +36,6 @@ final class WorkflowConfigEditor {
     private static final TypeReference<SequencedMap<String, Object>> YAML_MAP_TYPE = new TypeReference<>() {};
     private static final Pattern FRONT_MATTER =
             Pattern.compile("\\A---\\R(?<yaml>.*?)\\R---\\R(?<body>.*)\\z", Pattern.DOTALL);
-
-    private final WorkflowLoader workflowLoader = new WorkflowLoader();
 
     WorkflowValidation validate(ConnectedBoard board) {
         return validate(board, LocalEnvironment::get);
@@ -177,10 +175,21 @@ final class WorkflowConfigEditor {
             // setup_workflow_invalid classification with the underlying cause.
             throw invalidWorkflowForLaunch(workflowPath, e);
         }
+        try {
+            validateStartEnvironmentReferences(yaml, environmentResolver, validateServerPort);
+        } catch (ConfigException | TrelloBoardSetupException e) {
+            throw invalidWorkflowForLaunch(workflowPath, e);
+        }
+    }
+
+    private void validateStartEnvironmentReferences(
+            SequencedMap<String, Object> yaml,
+            Function<String, Optional<String>> environmentResolver,
+            boolean validateServerPort) {
         validateResolvedTextReference(yaml, "tracker", "board_id", "tracker.board_id", environmentResolver);
         if (validateServerPort) {
             validateServerPortReference(yaml, environmentResolver);
-            validateLaunchServerPort(workflowPath, yaml, environmentResolver);
+            validateLaunchServerPort(yaml, environmentResolver);
         }
     }
 
@@ -190,15 +199,10 @@ final class WorkflowConfigEditor {
      * check only flags literal values such as 70000, -1, or fractional YAML numbers.
      */
     private void validateLaunchServerPort(
-            Path workflowPath,
-            SequencedMap<String, Object> yaml,
-            Function<String, Optional<String>> environmentResolver) {
+            SequencedMap<String, Object> yaml, Function<String, Optional<String>> environmentResolver) {
         if (invalidServerPortSetting(yaml, environmentResolver)) {
-            throw invalidWorkflowForLaunch(
-                    workflowPath,
-                    new ConfigException(
-                            "invalid_server_port",
-                            "server.port must be an integer between 0 and " + LocalPort.MAX + "."));
+            throw new ConfigException(
+                    "invalid_server_port", "server.port must be an integer between 0 and " + LocalPort.MAX + ".");
         }
     }
 
@@ -276,11 +280,32 @@ final class WorkflowConfigEditor {
     }
 
     EffectiveConfig resolveLaunchConfig(Path workflowPath, Function<String, Optional<String>> environmentResolver) {
+        return prepareLaunchWorkflow(workflowPath, environmentResolver, true);
+    }
+
+    EffectiveConfig prepareLaunchWorkflow(
+            Path workflowPath, Function<String, Optional<String>> environmentResolver, boolean validateServerPort) {
         requireLaunchableWorkflowFile(workflowPath);
+        ReadWorkflow readWorkflow = readWorkflowForLaunch(workflowPath);
         try {
-            WorkflowDefinition workflow = workflowLoader.load(workflowPath);
-            return new ConfigResolver(environmentResolver).resolve(workflow);
-        } catch (WorkflowException | ConfigException | IllegalArgumentException | ClassCastException e) {
+            SequencedMap<String, Object> yaml = parseYaml(readWorkflow.frontMatter());
+            WorkflowDefinition workflow = new WorkflowDefinition(
+                    workflowPath.toAbsolutePath().normalize(),
+                    yaml,
+                    readWorkflow.frontMatter().body().trim());
+            EffectiveConfig config = new ConfigResolver(environmentResolver).resolve(workflow);
+            validateStartEnvironmentReferences(yaml, environmentResolver, validateServerPort);
+            return config;
+        } catch (IOException e) {
+            throw invalidWorkflowForLaunch(
+                    workflowPath,
+                    new TrelloBoardSetupException(
+                            "setup_workflow_yaml_invalid", "Workflow front matter is invalid YAML.", e));
+        } catch (WorkflowException
+                | ConfigException
+                | TrelloBoardSetupException
+                | IllegalArgumentException
+                | ClassCastException e) {
             throw invalidWorkflowForLaunch(workflowPath, e);
         }
     }
@@ -298,6 +323,19 @@ final class WorkflowConfigEditor {
         throw invalidWorkflowForLaunch(workflowPath, new ConfigException("workflow_file_unusable", problem));
     }
 
+    private ReadWorkflow readWorkflowForLaunch(Path workflowPath) {
+        try {
+            return readWorkflow(workflowPath);
+        } catch (IOException e) {
+            throw invalidWorkflowForLaunch(
+                    workflowPath,
+                    new TrelloBoardSetupException(
+                            "setup_workflow_read_failed", "Workflow file cannot be read before worker start.", e));
+        } catch (TrelloBoardSetupException e) {
+            throw invalidWorkflowForLaunch(workflowPath, e);
+        }
+    }
+
     void validateLaunchDispatch(Path workflowPath, EffectiveConfig launchConfig) {
         try {
             new ConfigResolver().validateForDispatch(launchConfig);
@@ -309,10 +347,152 @@ final class WorkflowConfigEditor {
     private static TrelloBoardSetupException invalidWorkflowForLaunch(Path workflowPath, RuntimeException cause) {
         return new TrelloBoardSetupException(
                 "setup_workflow_invalid",
-                "Invalid workflow configuration: " + cause.getMessage() + "\nWorkflow file:\n  "
-                        + workflowPath.toAbsolutePath().normalize()
-                        + "\nFix the workflow front matter, then rerun symphony-trello start.",
+                "Invalid workflow configuration: " + publicWorkflowLaunchProblem(cause)
+                        + "\nWorkflow file:\n  selected workflow file"
+                        + "\n" + publicWorkflowLaunchNextStep(cause),
                 cause);
+    }
+
+    private static String publicWorkflowLaunchProblem(RuntimeException cause) {
+        if (cause instanceof ConfigException config) {
+            return publicConfigProblem(config);
+        }
+        if (cause instanceof WorkflowException workflow) {
+            return publicWorkflowProblem(workflow);
+        }
+        if (cause instanceof TrelloBoardSetupException setup) {
+            return publicSetupProblem(setup);
+        }
+        if (cause instanceof IllegalArgumentException || cause instanceof ClassCastException) {
+            return "Workflow front matter contains invalid values.";
+        }
+        return "Workflow front matter is invalid.";
+    }
+
+    private static String publicConfigProblem(ConfigException failure) {
+        return switch (failure.code()) {
+            case "invalid_server_port" -> "server.port must be an integer between 0 and " + LocalPort.MAX + ".";
+            case "config_value_error" -> publicConfigValueProblem(failure);
+            case "config_type_error" -> publicConfigTypeProblem(failure);
+            case "unsupported_tracker_kind" -> "tracker.kind must be trello.";
+            case "invalid_tracker_endpoint" -> "tracker.endpoint must be an absolute http(s) URL with a host.";
+            case "missing_tracker_api_key" -> "tracker.api_key is required.";
+            case "missing_tracker_api_token" -> "tracker.api_token is required.";
+            case "missing_tracker_board_id" -> "tracker.board_id is required.";
+            case "missing_codex_command" -> "codex.command is required.";
+            case "overlapping_tracker_list_roles" -> "tracker list roles must use distinct Trello lists.";
+            case "invalid_in_progress_state" ->
+                "tracker.in_progress_state must also be listed in tracker.active_states.";
+            case "secret_file_too_large" -> publicSecretFileProblem(failure, "secret file is too large.");
+            case "secret_file_read_error" -> publicSecretFileProblem(failure, "secret file cannot be read.");
+            case "codex_sandbox_policy_invalid" -> publicCodexSandboxPolicyProblem(failure);
+            case "workflow_file_unusable" -> publicWorkflowFileProblem(failure);
+            case "workflow_yaml_invalid" -> "Workflow front matter is invalid YAML.";
+            default -> "Workflow configuration is invalid.";
+        };
+    }
+
+    private static String publicConfigValueProblem(ConfigException failure) {
+        String message = failure.getMessage();
+        if (message == null) {
+            return "A numeric workflow setting is invalid.";
+        }
+        if (message.startsWith("server.port ")
+                || message.startsWith("max_concurrent_agents ")
+                || message.startsWith("agent.max_concurrent_agents ")
+                || message.startsWith("interval_ms ")
+                || message.startsWith("request_timeout_ms ")
+                || message.startsWith("api_retry_base_delay_ms ")
+                || message.startsWith("max_retry_backoff_ms ")
+                || message.startsWith("turn_timeout_ms ")
+                || message.startsWith("read_timeout_ms ")
+                || message.startsWith("stall_timeout_ms ")
+                || message.startsWith("timeout_ms ")
+                || message.startsWith("max_turns ")) {
+            return message;
+        }
+        return "A numeric workflow setting is invalid.";
+    }
+
+    private static String publicConfigTypeProblem(ConfigException failure) {
+        String message = failure.getMessage();
+        if (message != null
+                && (message.endsWith(" must be an object")
+                        || message.endsWith(" must be a list")
+                        || message.endsWith(" must be a string"))) {
+            return message;
+        }
+        return "Workflow front matter has an invalid value type.";
+    }
+
+    private static String publicSecretFileProblem(ConfigException failure, String suffix) {
+        String message = failure.getMessage();
+        if (message != null && message.startsWith("tracker.api_key ")) {
+            return "tracker.api_key " + suffix;
+        }
+        if (message != null && message.startsWith("tracker.api_token ")) {
+            return "tracker.api_token " + suffix;
+        }
+        return "A configured secret file " + suffix;
+    }
+
+    private static String publicCodexSandboxPolicyProblem(ConfigException failure) {
+        String message = failure.getMessage();
+        if (message != null
+                && (message.startsWith("codex.turn_sandbox_policy")
+                        || message.startsWith("codex.additional_writable_roots"))) {
+            return message;
+        }
+        return "codex.turn_sandbox_policy is invalid.";
+    }
+
+    private static String publicWorkflowFileProblem(ConfigException failure) {
+        String message = failure.getMessage();
+        if ("missing workflow file".equals(message) || "workflow path is not a regular workflow file".equals(message)) {
+            return message;
+        }
+        return "Workflow file cannot be read.";
+    }
+
+    private static String publicWorkflowProblem(WorkflowException failure) {
+        return switch (failure.code()) {
+            case "missing_workflow_file" -> "Workflow file cannot be read.";
+            case "workflow_front_matter_not_a_map" -> "Workflow front matter must be a YAML map.";
+            case "workflow_parse_error" -> "Workflow front matter is invalid YAML.";
+            default -> "Workflow front matter is invalid.";
+        };
+    }
+
+    private static String publicSetupProblem(TrelloBoardSetupException failure) {
+        return switch (failure.code()) {
+            case "setup_workflow_frontmatter_missing" -> "Workflow has no YAML front matter.";
+            case "setup_workflow_frontmatter_not_map" -> "Workflow front matter must be a YAML map.";
+            case "setup_workflow_read_failed" -> "Workflow file cannot be read.";
+            case "setup_workflow_yaml_invalid" -> "Workflow front matter is invalid YAML.";
+            case "setup_workflow_unresolved_environment" -> publicUnresolvedEnvironmentProblem(failure);
+            case "setup_invalid_server_port" ->
+                "server.port must resolve to an integer between 0 and " + LocalPort.MAX + ".";
+            default -> "Workflow setup state is invalid.";
+        };
+    }
+
+    private static String publicUnresolvedEnvironmentProblem(TrelloBoardSetupException failure) {
+        String message = failure.getMessage();
+        if (message != null
+                && message.startsWith("Workflow tracker.board_id references missing environment variable")) {
+            return "tracker.board_id references a missing environment variable.";
+        }
+        if (message != null && message.startsWith("Workflow server.port references missing environment variable")) {
+            return "server.port references a missing environment variable.";
+        }
+        return "Workflow front matter references a missing environment variable.";
+    }
+
+    private static String publicWorkflowLaunchNextStep(RuntimeException cause) {
+        if (cause instanceof TrelloBoardSetupException setup && "setup_workflow_read_failed".equals(setup.code())) {
+            return "Make sure the selected workflow file exists and can be read, then rerun symphony-trello start.";
+        }
+        return "Fix the workflow front matter, then rerun symphony-trello start.";
     }
 
     WorkflowValidation diagnosticsValidation(
@@ -336,8 +516,8 @@ final class WorkflowConfigEditor {
     }
 
     void updateServerPort(Path workflowPath, int port) throws IOException {
-        FrontMatter frontMatter = read(workflowPath);
-        SequencedMap<String, Object> yaml = parseYaml(frontMatter);
+        ReadWorkflow readWorkflow = readWorkflow(workflowPath);
+        SequencedMap<String, Object> yaml = parseYaml(readWorkflow.frontMatter());
         Object serverValue = yaml.get("server");
         SequencedMap<String, Object> server = new LinkedHashMap<>();
         if (serverValue instanceof Map<?, ?> existingServer) {
@@ -345,7 +525,11 @@ final class WorkflowConfigEditor {
         }
         server.put("port", port);
         yaml.put("server", server);
-        write(workflowPath, yaml, frontMatter.body());
+        write(
+                workflowPath,
+                readWorkflow.content(),
+                yaml,
+                readWorkflow.frontMatter().body());
     }
 
     void applyCodexAccess(Path workflowPath, List<Path> additionalWritableRoots, boolean dangerFullAccess)
@@ -353,8 +537,8 @@ final class WorkflowConfigEditor {
         if (additionalWritableRoots.isEmpty() && !dangerFullAccess) {
             return;
         }
-        FrontMatter frontMatter = read(workflowPath);
-        SequencedMap<String, Object> yaml = parseYaml(frontMatter);
+        ReadWorkflow readWorkflow = readWorkflow(workflowPath);
+        SequencedMap<String, Object> yaml = parseYaml(readWorkflow.frontMatter());
         Object codexValue = yaml.get("codex");
         if (!(codexValue instanceof Map<?, ?> existingCodex)) {
             throw new TrelloBoardSetupException("setup_workflow_codex_missing", "Workflow has no codex section.");
@@ -370,23 +554,45 @@ final class WorkflowConfigEditor {
             codex.put("turn_sandbox_policy", Map.of("type", "dangerFullAccess"));
         }
         yaml.put("codex", codex);
-        write(workflowPath, yaml, frontMatter.body());
+        try {
+            CodexSandboxPolicy.validateCodexSection(codex);
+            CodexSandboxPolicy.validateResolvedPolicy(
+                    codex.get(CodexSandboxPolicy.TURN_SANDBOX_POLICY), additionalWritableRoots, dangerFullAccess);
+        } catch (CodexSandboxPolicy.InvalidPolicyException e) {
+            throw new TrelloBoardSetupException(
+                    "setup_workflow_invalid", "Cannot update Codex access because " + e.getMessage(), e);
+        }
+        write(
+                workflowPath,
+                readWorkflow.content(),
+                yaml,
+                readWorkflow.frontMatter().body());
     }
 
     private static FrontMatter read(Path workflowPath) throws IOException {
+        return readWorkflow(workflowPath).frontMatter();
+    }
+
+    private static ReadWorkflow readWorkflow(Path workflowPath) throws IOException {
         if (!Files.isRegularFile(workflowPath)) {
             throw new IOException("Workflow path is not a regular file.");
         }
-        return FrontMatter.parse(Files.readString(workflowPath, StandardCharsets.UTF_8));
+        String content = Files.readString(workflowPath, StandardCharsets.UTF_8);
+        return new ReadWorkflow(content, FrontMatter.parse(content));
     }
 
     private static SequencedMap<String, Object> parseYaml(FrontMatter frontMatter) throws IOException {
-        return YAML.readValue(frontMatter.yaml(), YAML_MAP_TYPE);
+        SequencedMap<String, Object> yaml = YAML.readValue(frontMatter.yaml(), YAML_MAP_TYPE);
+        if (yaml == null) {
+            throw new TrelloBoardSetupException(
+                    "setup_workflow_frontmatter_not_map", "Workflow front matter must be a YAML map.");
+        }
+        return yaml;
     }
 
-    private static void write(Path workflowPath, SequencedMap<String, Object> yaml, String body) throws IOException {
-        Files.writeString(
-                workflowPath, "---\n" + YAML.writeValueAsString(yaml) + "---\n" + body, StandardCharsets.UTF_8);
+    private static void write(Path workflowPath, String expectedContent, SequencedMap<String, Object> yaml, String body)
+            throws IOException {
+        Files.writeString(workflowPath, "---\n" + YAML.writeValueAsString(yaml) + "---\n" + body);
     }
 
     private static Optional<Integer> serverPort(
@@ -560,6 +766,8 @@ final class WorkflowConfigEditor {
             return new FrontMatter(matcher.group("yaml"), matcher.group("body"));
         }
     }
+
+    record ReadWorkflow(String content, FrontMatter frontMatter) {}
 
     record TrackerCredentialReferences(Optional<String> apiKey, Optional<String> apiToken) {}
 }

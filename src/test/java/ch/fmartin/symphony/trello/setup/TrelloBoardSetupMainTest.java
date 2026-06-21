@@ -5438,12 +5438,14 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
-    void startRejectsOutOfRangeLiteralServerPortBeforeLaunchingWorker() throws Exception {
+    void startRejectsInvalidLiteralServerPortWithoutLeakingWorkflowPath() throws Exception {
         // given
         Path configDir = tempDir.resolve("literal-port-config");
+        Path privateWorkflowDir = tempDir.resolve("Jane Doe workflows");
         Path stateHome = tempDir.resolve("literal-port-state");
         Files.createDirectories(configDir);
-        Path workflow = configDir.resolve("WORKFLOW.literal-port.md");
+        Files.createDirectories(privateWorkflowDir);
+        Path workflow = privateWorkflowDir.resolve("WORKFLOW.literal-port.md");
         Files.writeString(
                 workflow,
                 """
@@ -5452,7 +5454,7 @@ final class TrelloBoardSetupMainTest {
                   kind: trello
                   board_id: board-1
                 server:
-                  port: 70000
+                  port: 18123.5
                 ---
                 Body
                 """,
@@ -5474,8 +5476,19 @@ final class TrelloBoardSetupMainTest {
 
         // then
         result.assertFailure(2)
-                .stderrContains("setup_failed code=setup_workflow_invalid", "server.port")
-                .stderrDoesNotContain("Troubleshooting report written", ".log", ".err")
+                .stderrContains(
+                        "setup_failed code=setup_workflow_invalid",
+                        "server.port",
+                        "whole number",
+                        "selected workflow file")
+                .stderrDoesNotContain(
+                        "Troubleshooting report written",
+                        ".log",
+                        ".err",
+                        workflow.toString(),
+                        privateWorkflowDir.toString(),
+                        tempDir.toString(),
+                        "Jane Doe")
                 .stdoutDoesNotContain("Started Symphony for Trello");
         try (var stateFiles = Files.list(stateHome)) {
             assertThat(stateFiles.filter(file -> file.getFileName().toString().endsWith(".pid")))

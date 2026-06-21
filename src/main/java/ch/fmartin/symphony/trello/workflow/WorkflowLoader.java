@@ -28,8 +28,8 @@ public class WorkflowLoader {
         }
 
         ParsedMarkdown parsed = splitFrontMatter(lines);
-        return new WorkflowDefinition(
-                absolute, parseYamlMap(parsed.frontMatter()), parsed.body().trim());
+        Map<String, Object> config = parseYamlMap(parsed.frontMatter());
+        return new WorkflowDefinition(absolute, config, parsed.body().trim());
     }
 
     private Map<String, Object> parseYamlMap(String frontMatter) {

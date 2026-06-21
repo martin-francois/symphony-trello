@@ -1,11 +1,15 @@
 package ch.fmartin.symphony.trello.setup;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
+import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.config.WorkflowServerPortClassification;
+import ch.fmartin.symphony.trello.workflow.CodexSandboxPolicy;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Stream;
@@ -357,6 +361,202 @@ final class WorkflowConfigEditorTest {
     }
 
     @Test
+    void codexAccessUpdateRejectsWritableRootsForExplicitReadOnlySandboxWithoutRewriting() throws Exception {
+        // given
+        Path privateRoot = tempDir.resolve("Jane Doe");
+        Path workflow = privateRoot.resolve("WORKFLOW.read-only.md");
+        Files.createDirectories(privateRoot);
+        String original = workflowWithCodex(
+                """
+                codex:
+                  command: codex app-server
+                  turn_sandbox_policy:
+                    type: readOnly
+                """,
+                currentWorkflowBody());
+        Files.writeString(workflow, original, StandardCharsets.UTF_8);
+        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+
+        // when
+        Throwable thrown =
+                catchThrowable(() -> editor.applyCodexAccess(workflow, List.of(privateRoot.resolve("repo")), false));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_workflow_invalid");
+            assertThat(failure.getMessage())
+                    .contains(
+                            "Cannot update Codex access",
+                            "codex.additional_writable_roots require a workspaceWrite or dangerFullAccess sandbox policy")
+                    .doesNotContain(workflow.toString(), privateRoot.toString(), tempDir.toString(), "Jane Doe");
+            assertThat(failure.getCause()).isInstanceOf(CodexSandboxPolicy.InvalidPolicyException.class);
+        });
+        assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo(original);
+    }
+
+    @Test
+    void rejectsCurrentWorkflowWithNullSandboxPolicyWithoutRewriting() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.null-policy.md");
+        String original = workflowWithCodex(
+                """
+                codex:
+                  command: codex app-server
+                  turn_sandbox_policy:
+                """,
+                currentWorkflowBody());
+        Files.writeString(workflow, original, StandardCharsets.UTF_8);
+        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+
+        // when
+        Throwable thrown =
+                catchThrowable(() -> editor.applyCodexAccess(workflow, List.of(tempDir.resolve("repo")), false));
+
+        // then
+        assertThat(thrown)
+                .isInstanceOf(TrelloBoardSetupException.class)
+                .hasMessageContaining("codex.turn_sandbox_policy must be an object")
+                .hasMessageNotContaining(workflow.toString());
+        assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo(original);
+    }
+
+    @Test
+    void launchHonorsForcedDangerFullAccessBeforeConfiguredSandboxPolicyValidation() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.force-danger-invalid-sandbox.md");
+        String original =
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: "board-1"
+                  active_states:
+                    - "Ready for Codex"
+                  terminal_states:
+                    - "Done"
+                server:
+                  port: 18080
+                codex:
+                  command: codex app-server
+                  turn_sandbox_policy: []
+                ---
+                %s
+                """
+                        .formatted(currentWorkflowBody());
+        Files.writeString(workflow, original, StandardCharsets.UTF_8);
+        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+
+        // when
+        EffectiveConfig config = editor.prepareLaunchWorkflow(workflow, trelloCredentialsAndForcedDanger(), true);
+
+        // then
+        assertThat(config.codex().forceDangerFullAccess()).isTrue();
+        assertThat(config.codex().turnSandboxPolicy()).isEqualTo(List.of());
+        assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo(original);
+    }
+
+    @Test
+    void launchPreparationDoesNotRewriteExistingWorkflowContent() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.current-unmarked.md");
+        String original =
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: literal-key
+                  api_token: literal-token
+                  board_id: "board-1"
+                  active_states:
+                    - "Ready for Codex"
+                  terminal_states:
+                    - "Done"
+                server:
+                  port: 18080
+                codex:
+                  command: codex app-server
+                ---
+                ## Operating Posture
+
+                This is an existing private workflow. It may mention that operators should record the branch,
+                commit, and validation evidence.
+                """;
+        Files.writeString(workflow, original, StandardCharsets.UTF_8);
+        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+
+        // when
+        EffectiveConfig config = editor.prepareLaunchWorkflow(workflow, ignored -> Optional.empty(), true);
+
+        // then
+        assertThat(config.codex().turnSandboxPolicy()).isNull();
+        assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo(original);
+    }
+
+    @Test
+    void launchValidationDoesNotRewriteCurrentWorkflowWhenTrackerStructureIsInvalid() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.invalid-tracker.md");
+        String original =
+                """
+                ---
+                tracker: []
+                server:
+                  port: 18080
+                codex:
+                  command: codex app-server
+                ---
+                Body
+                """;
+        Files.writeString(workflow, original, StandardCharsets.UTF_8);
+        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+
+        // when
+        Throwable thrown = catchThrowable(() -> editor.prepareLaunchWorkflow(workflow, trelloCredentials(), true));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_workflow_invalid");
+            assertThat(failure.getMessage()).contains("tracker must be an object", "selected workflow file");
+        });
+        assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo(original);
+    }
+
+    @Test
+    void launchValidationDoesNotRewriteCurrentWorkflowWhenEnvironmentReferenceIsUnresolved() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.unresolved-env.md");
+        String original =
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: "$MISSING_TRELLO_BOARD"
+                  active_states:
+                    - "Ready for Codex"
+                  terminal_states:
+                    - "Done"
+                server:
+                  port: 18080
+                codex:
+                  command: codex app-server
+                ---
+                Body
+                """;
+        Files.writeString(workflow, original, StandardCharsets.UTF_8);
+        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+
+        // when
+        Throwable thrown = catchThrowable(() -> editor.prepareLaunchWorkflow(workflow, trelloCredentials(), true));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_workflow_invalid");
+            assertThat(failure.getMessage()).contains("tracker.board_id", "selected workflow file");
+        });
+        assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo(original);
+    }
+
+    @Test
     void permitsDuplicateValuesWithinOneListRole() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.duplicate-role-values.md");
@@ -388,5 +588,65 @@ final class WorkflowConfigEditorTest {
 
         // then
         assertThat(validation.ok()).isTrue();
+    }
+
+    private static String workflowWithBody(String body) {
+        return workflowWithCodex(
+                """
+                codex:
+                  command: codex app-server
+                """, body);
+    }
+
+    private static String workflowWithCodex(String codexYaml, String body) {
+        return """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: "board-1"
+                  active_states:
+                    - "Ready for Codex"
+                  terminal_states:
+                    - "Done"
+                server:
+                  port: 18080
+                %s
+                ---
+                %s
+                """
+                .formatted(codexYaml.stripTrailing(), body);
+    }
+
+    private static Function<String, Optional<String>> trelloCredentials() {
+        return name -> switch (name) {
+            case "TRELLO_API_KEY" -> Optional.of("test-key");
+            case "TRELLO_API_TOKEN" -> Optional.of("test-token");
+            default -> Optional.empty();
+        };
+    }
+
+    private static Function<String, Optional<String>> trelloCredentialsAndForcedDanger() {
+        return name -> switch (name) {
+            case "TRELLO_API_KEY" -> Optional.of("test-key");
+            case "TRELLO_API_TOKEN" -> Optional.of("test-token");
+            case "SYMPHONY_CODEX_DANGER_FULL_ACCESS" -> Optional.of("true");
+            default -> Optional.empty();
+        };
+    }
+
+    private static String currentWorkflowBody() {
+        return """
+                ## Operating Posture
+
+                This is an unattended orchestration run. Do not ask a human to perform routine follow-up actions.
+
+                ## Pull Request Publication
+
+                Create a pull request when needed.
+
+                ## Trello List Routing
+
+                Card URL: {{ card.url }}
+                """;
     }
 }
