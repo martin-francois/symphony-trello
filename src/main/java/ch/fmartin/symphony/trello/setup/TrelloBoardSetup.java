@@ -83,7 +83,7 @@ public final class TrelloBoardSetup {
 
     private static final List<String> SYSTEM_TERMINAL_STATES =
             List.of("Archived", "ArchivedList", "ArchivedBoard", "Deleted");
-    private static final String FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION =
+    static final String FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION =
             """
             Filesystem access blocker details must include the inaccessible path, why it is inaccessible,
             that deployed Symphony blocks undeclared host paths by default for security reasons so Trello
@@ -949,7 +949,7 @@ public final class TrelloBoardSetup {
                   max_concurrent_agents: %d
                 codex:
                   command: %s
-                %s
+                %s%s
                   approval_policy: never
                   turn_timeout_ms: %d
                   read_timeout_ms: %d
@@ -1037,6 +1037,7 @@ public final class TrelloBoardSetup {
                         maxAgents,
                         ConfigDefaults.DEFAULT_CODEX_COMMAND,
                         codexModelYaml(codexModelDefaults),
+                        codexSandboxPolicyYaml(githubEnabled),
                         ConfigDefaults.DEFAULT_CODEX_TURN_TIMEOUT_MS,
                         ConfigDefaults.DEFAULT_CODEX_READ_TIMEOUT_MS,
                         ConfigDefaults.DEFAULT_CODEX_STALL_TIMEOUT_MS,
@@ -1143,6 +1144,17 @@ public final class TrelloBoardSetup {
                     .append('\n');
         }
         return yaml.toString();
+    }
+
+    private static String codexSandboxPolicyYaml(boolean githubEnabled) {
+        if (!githubEnabled) {
+            return "";
+        }
+        return """
+                  turn_sandbox_policy:
+                    type: workspaceWrite
+                    networkAccess: true
+                """;
     }
 
     private static String workpadPrompt(boolean workpadToolEnabled) {
