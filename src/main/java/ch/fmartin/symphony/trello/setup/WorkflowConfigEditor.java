@@ -19,13 +19,17 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.PosixFilePermission;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.SequencedMap;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 
@@ -36,6 +40,8 @@ final class WorkflowConfigEditor {
     private static final TypeReference<SequencedMap<String, Object>> YAML_MAP_TYPE = new TypeReference<>() {};
     private static final Pattern FRONT_MATTER =
             Pattern.compile("\\A---\\R(?<yaml>.*?)\\R---\\R(?<body>.*)\\z", Pattern.DOTALL);
+    private static final Set<PosixFilePermission> POSIX_WRITE_PERMISSIONS =
+            Set.of(PosixFilePermission.OWNER_WRITE, PosixFilePermission.GROUP_WRITE, PosixFilePermission.OTHERS_WRITE);
 
     WorkflowValidation validate(ConnectedBoard board) {
         return validate(board, LocalEnvironment::get);
@@ -592,7 +598,65 @@ final class WorkflowConfigEditor {
 
     private static void write(Path workflowPath, String expectedContent, SequencedMap<String, Object> yaml, String body)
             throws IOException {
-        Files.writeString(workflowPath, "---\n" + YAML.writeValueAsString(yaml) + "---\n" + body);
+        writeAtomically(workflowPath, expectedContent, "---\n" + YAML.writeValueAsString(yaml) + "---\n" + body);
+    }
+
+    private static void writeAtomically(Path workflowPath, String expectedContent, String content) throws IOException {
+        Path target = Files.isSymbolicLink(workflowPath)
+                ? workflowPath.toRealPath()
+                : workflowPath.toAbsolutePath().normalize();
+        Path parent = target.getParent();
+        if (parent == null) {
+            throw new IOException("Workflow path has no parent directory.");
+        }
+        Optional<Set<PosixFilePermission>> permissions = readPosixPermissions(target);
+        requireWritableTarget(target, permissions);
+        requireUnchangedTarget(target, expectedContent);
+        Path temporary = Files.createTempFile(parent, temporaryPrefix(target), ".tmp");
+        try {
+            Files.writeString(temporary, content, StandardCharsets.UTF_8);
+            if (permissions.isPresent()) {
+                Files.setPosixFilePermissions(temporary, permissions.get());
+            }
+            requireUnchangedTarget(target, expectedContent);
+            Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } catch (AtomicMoveNotSupportedException e) {
+            throw new IOException("Atomic workflow replacement is not supported.", e);
+        } finally {
+            Files.deleteIfExists(temporary);
+        }
+    }
+
+    private static String temporaryPrefix(Path target) {
+        String prefix = "." + target.getFileName();
+        return prefix.length() >= 3 ? prefix : prefix + ".".repeat(3 - prefix.length());
+    }
+
+    private static void requireUnchangedTarget(Path target, String expectedContent) throws IOException {
+        if (!Files.readString(target, StandardCharsets.UTF_8).equals(expectedContent)) {
+            throw new IOException("Workflow file changed while preparing the update.");
+        }
+    }
+
+    private static void requireWritableTarget(Path target, Optional<Set<PosixFilePermission>> permissions)
+            throws IOException {
+        if (!Files.isWritable(target)
+                || permissions.map(WorkflowConfigEditor::lacksPosixWriteBit).orElse(false)) {
+            throw new IOException("Workflow file cannot be updated.");
+        }
+    }
+
+    private static boolean lacksPosixWriteBit(Set<PosixFilePermission> permissions) {
+        return POSIX_WRITE_PERMISSIONS.stream().noneMatch(permissions::contains);
+    }
+
+    private static Optional<Set<PosixFilePermission>> readPosixPermissions(Path target) {
+        try {
+            return Optional.of(Files.getPosixFilePermissions(target));
+        } catch (IOException | UnsupportedOperationException ignored) {
+            // Preserving POSIX permissions is best effort; the write path itself remains strict.
+            return Optional.empty();
+        }
     }
 
     private static Optional<Integer> serverPort(
