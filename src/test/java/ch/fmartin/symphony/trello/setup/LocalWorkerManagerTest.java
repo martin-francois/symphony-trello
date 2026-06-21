@@ -320,9 +320,46 @@ final class LocalWorkerManagerTest {
 
         // then
         assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
-            assertThat(failure.code()).isEqualTo("setup_workflow_unresolved_environment");
+            assertThat(failure.code()).isEqualTo("setup_workflow_invalid");
             assertThat(failure)
-                    .hasMessage("Workflow server.port references missing environment variable SYMPHONY_TEST_PORT.");
+                    .hasMessageContaining(
+                            "server.port references a missing environment variable", "selected workflow file");
+        });
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void startRejectsInvalidWorkflowServerPortEnvironmentValueWithActionableMessage() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture =
+                new LocalWorkerManagerTestFixture(tempDir, Map.of("SYMPHONY_TEST_PORT", "70000"));
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        Files.writeString(
+                board.workflowPath(),
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: literal-key
+                  api_token: literal-token
+                  board_id: board-1
+                server:
+                  port: $SYMPHONY_TEST_PORT
+                ---
+                # Queue
+                """,
+                StandardCharsets.UTF_8);
+        fixture.save(board);
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.code()).isEqualTo("setup_workflow_invalid");
+            assertThat(failure)
+                    .hasMessageContaining("server.port must resolve to an integer between 0 and 65535")
+                    .hasMessageContaining("selected workflow file");
         });
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
     }
@@ -377,9 +414,10 @@ final class LocalWorkerManagerTest {
 
         // then
         assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
-            assertThat(failure.code()).isEqualTo("setup_workflow_unresolved_environment");
+            assertThat(failure.code()).isEqualTo("setup_workflow_invalid");
             assertThat(failure)
-                    .hasMessage("Workflow tracker.board_id references missing environment variable MISSING_BOARD_ID.");
+                    .hasMessageContaining(
+                            "tracker.board_id references a missing environment variable", "selected workflow file");
         });
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
     }

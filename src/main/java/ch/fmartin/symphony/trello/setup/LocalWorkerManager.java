@@ -299,11 +299,9 @@ final class LocalWorkerManager {
         // Workflow-local launch problems must win over port classification: an invalid workflow
         // falls back to a default health port, so an occupied fallback port would otherwise mask
         // the setup_workflow_invalid error the user needs.
-        EffectiveConfig launchConfig = workflowConfig.resolveLaunchConfig(
-                board.workflowPath(), WorkflowEnvironmentResolver.resolver(environment, envPath));
         boolean workflowServerPortUsed =
                 healthChecker.externalHttpPortOverrideSource(envPath).isEmpty();
-        workflowConfig.validateStartEnvironmentReferences(
+        EffectiveConfig launchConfig = workflowConfig.prepareLaunchWorkflow(
                 board.workflowPath(),
                 WorkflowEnvironmentResolver.resolver(environment, envPath),
                 workflowServerPortUsed);
