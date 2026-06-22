@@ -1367,12 +1367,31 @@ public final class LocalSetup {
             out.println("  WOULD require Codex CLI installation");
         }
         out.println("  WOULD configure Trello credentials: " + options.envPath());
-        out.println("  WOULD write workflows under: " + options.configDir());
+        if (options.workflowPathExplicit()) {
+            out.println("  WOULD write workflow: " + plannedWorkflowPath(options));
+        } else {
+            out.println("  WOULD write workflow under: " + options.configDir());
+        }
+        out.println("  WOULD update connected-board manifest: " + options.manifestPath());
+        if (!options.additionalWritableRoots().isEmpty()) {
+            out.println("  WOULD allow Codex read/write access to:");
+            options.additionalWritableRoots().forEach(root -> out.println("    " + root));
+        }
+        if (options.dangerFullAccess()) {
+            out.println("  WOULD disable Codex command/filesystem sandbox with danger-full-access");
+        }
         if (options.noStart()) {
             out.println("  WOULD NOT start Symphony after setup because --no-start is set");
         } else {
             out.println("  WOULD start Symphony after setup unless --no-start is used");
         }
+    }
+
+    private static Path plannedWorkflowPath(Options options) {
+        if (options.workflowPath().isAbsolute()) {
+            return options.workflowPath().normalize();
+        }
+        return options.configDir().resolve(options.workflowPath()).normalize();
     }
 
     private static void printMiniTutorial(

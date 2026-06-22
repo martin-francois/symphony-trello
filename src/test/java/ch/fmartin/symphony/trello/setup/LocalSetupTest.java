@@ -46,7 +46,74 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "Symphony for Trello setup",
                         "Checking prerequisites",
                         "Dry run",
-                        "WOULD write workflows under:");
+                        "WOULD write workflow:",
+                        workflow.toAbsolutePath().normalize().toString());
+        assertThat(trello.createdLists()).isEmpty();
+    }
+
+    @Test
+    void dryRunReportsSelectedWorkflowManifestAndAccessPlan() {
+        // given
+        Path workflow = tempDir.resolve("custom workflow").resolve("WORKFLOW.dry-run.md");
+        Path manifest = tempDir.resolve("custom config").resolve("connected-boards.json");
+        Path env = tempDir.resolve("custom env").resolve(".env");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--dry-run",
+                "--non-interactive",
+                "--no-start",
+                "--board",
+                "https://trello.com/b/input/queue",
+                "--workflow",
+                workflow.toString(),
+                "--manifest",
+                manifest.toString(),
+                "--env",
+                env.toString(),
+                "--add-path",
+                "/",
+                "--allow-all-paths",
+                "--danger-full-access");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "Dry run",
+                        "WOULD configure Trello credentials: "
+                                + env.toAbsolutePath().normalize(),
+                        "WOULD write workflow: " + workflow.toAbsolutePath().normalize(),
+                        "WOULD update connected-board manifest: "
+                                + manifest.toAbsolutePath().normalize(),
+                        "WOULD allow Codex read/write access to:",
+                        "  /",
+                        "WOULD disable Codex command/filesystem sandbox with danger-full-access",
+                        "WOULD NOT start Symphony after setup because --no-start is set")
+                .stdoutDoesNotContain("WOULD write workflows under:");
+        assertThat(workflow).doesNotExist();
+        assertThat(manifest).doesNotExist();
+        assertThat(env).doesNotExist();
+        assertThat(trello.createdLists()).isEmpty();
+    }
+
+    @Test
+    void dryRunReportsImplicitWorkflowDirectoryWithoutInventingFileName() {
+        // given
+        Path configDir = tempDir.resolve("implicit dry run config");
+        Path defaultWorkflow = configDir.resolve("WORKFLOW.md");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--dry-run", "--non-interactive", "--board-name", "Docs", "--config-dir", configDir.toString());
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "Dry run",
+                        "WOULD write workflow under: "
+                                + configDir.toAbsolutePath().normalize())
+                .stdoutDoesNotContain("WOULD write workflow: "
+                        + defaultWorkflow.toAbsolutePath().normalize());
         assertThat(trello.createdLists()).isEmpty();
     }
 
@@ -276,7 +343,13 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 runSetup("--dry-run", "--board-name", "Dry Add Absolute", "--add-path", firstPath + ", " + secondPath);
 
         // then
-        result.assertSuccess().stdoutContains("Dry run", "WOULD write workflows under:");
+        result.assertSuccess()
+                .stdoutContains(
+                        "Dry run",
+                        "WOULD write workflow under:",
+                        "WOULD allow Codex read/write access to:",
+                        firstPath.toAbsolutePath().normalize().toString(),
+                        secondPath.toAbsolutePath().normalize().toString());
         assertThat(trello.createdLists()).isEmpty();
     }
 
@@ -289,7 +362,15 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 runSetup("--dry-run", "--board-name", "Dry Add Home", "--add-path", "~,~/project,~/../project");
 
         // then
-        result.assertSuccess().stdoutContains("Dry run", "WOULD write workflows under:");
+        result.assertSuccess()
+                .stdoutContains(
+                        "Dry run",
+                        "WOULD write workflow under:",
+                        "WOULD allow Codex read/write access to:",
+                        Path.of(System.getProperty("user.home"))
+                                .toAbsolutePath()
+                                .normalize()
+                                .toString());
         assertThat(trello.createdLists()).isEmpty();
     }
 
