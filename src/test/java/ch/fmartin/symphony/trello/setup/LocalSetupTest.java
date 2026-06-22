@@ -3621,6 +3621,80 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void repairPortUpdatesConfiguredPortOccupiedByNonSymphonyListener() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.repair-occupied.md");
+        Path env = tempDir.resolve(".env.repair-occupied");
+        Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
+        int occupiedPort = firstAvailableManagedPort();
+        SetupRunResult firstResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Occupied Repair Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--server-port",
+                String.valueOf(occupiedPort),
+                "--no-start",
+                "--no-github");
+        firstResult.assertSuccess();
+        commands.startedWorkflows.clear();
+        commands.startedEnvFiles.clear();
+        commands.stoppedWorkflows.clear();
+        commands.commandEvents.clear();
+
+        try (ServerSocket listener = new ServerSocket(occupiedPort, 50, LocalHealthChecker.loopbackIpv4ForTests())) {
+            Thread acceptThread = Thread.ofVirtual()
+                    .name("repair-port-foreign-listener")
+                    .start(() -> acceptConnectionsUntilClosed(listener));
+            assertThat(listener.isBound())
+                    .as("test listener must occupy the configured port")
+                    .isTrue();
+            assertThat(LocalHealthChecker.portAcceptsConnections(occupiedPort))
+                    .as("test listener must make the configured port unavailable")
+                    .isTrue();
+
+            // when
+            SetupRunResult result = runSetup("repair-port", "--board", "Occupied Repair Queue");
+
+            // then
+            int updatedPort = new WorkflowConfigEditor().serverPort(workflow).orElseThrow();
+            result.assertSuccess()
+                    .stdoutContains("OK      Updated \"Occupied Repair Queue\" to use http://127.0.0.1:")
+                    .stdoutDoesNotContain(
+                            "No port repair needed.",
+                            "already configured for an available port",
+                            "http://127.0.0.1:" + occupiedPort);
+            assertThat(updatedPort).isNotEqualTo(occupiedPort);
+            assertThatWorkflow(workflow).hasServerPort(updatedPort).doesNotHaveServerPort(occupiedPort);
+            assertThatManifest(manifest).hasBoardWithPort("Occupied Repair Queue", updatedPort);
+            assertThat(commands.commandEvents).isEmpty();
+            assertThat(commands.stoppedWorkflows).isEmpty();
+            assertThat(commands.startedWorkflows).isEmpty();
+            assertThat(commands.startedEnvFiles).isEmpty();
+            acceptThread.interrupt();
+        }
+    }
+
+    private static void acceptConnectionsUntilClosed(ServerSocket listener) {
+        while (!Thread.currentThread().isInterrupted()) {
+            try (var ignored = listener.accept()) {
+                // The foreign process is not Symphony, but it does accept TCP connections.
+            } catch (IOException e) {
+                return;
+            }
+        }
+    }
+
+    @Test
     void checkUsesWorkflowServerPortWhenManifestPortIsStale() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.stale-manifest-check.md");
