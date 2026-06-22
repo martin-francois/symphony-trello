@@ -82,6 +82,11 @@ lives in [Testing](testing.md).
   deployment-specific paths. Refer to them as "the requested path" or "the per-card workspace",
   explain the security default, and point to the exact manual systemd or workflow setting that
   relaxes access.
+- Do not assume the person using the Trello board has shell access to the machine where Symphony runs.
+  For cards that wait, block, or do not move, make the actionable reason visible on the Trello card
+  itself through the workpad, a managed status comment, or the configured handoff/blocker comment.
+  Local logs and diagnostics can carry operator detail, but they are not enough as the only user-facing
+  explanation.
 
 ## Generated workflows, PR publishing, and shipped skills
 

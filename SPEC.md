@@ -1804,6 +1804,10 @@ Optional client-side tool extension:
   authoritative workpad first and report the duplicate cleanup outcome in the tool result. Deleting
   the duplicate comments needs `trello_tools.allow_destructive_operations`; without that opt-in the
   updated workpad text SHOULD make the required manual cleanup visible on the card.
+- Trello-visible status, workpad, handoff, and blocker text SHOULD be sufficient for a Trello board
+  user who does not have shell or host access to understand why a card is waiting, blocked, or not
+  moving. Local logs and diagnostics MAY include equivalent operator detail, but they MUST NOT be the
+  only place where a board user can learn the actionable reason.
 - If writes are exposed through generic `trello_rest`, the implementation MUST classify each write
   request before execution and enforce the same policy as the corresponding high-level operation. If
   a write request cannot be safely classified, it MUST fail with a structured policy error.
