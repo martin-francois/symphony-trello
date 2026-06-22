@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
+import ch.fmartin.symphony.trello.CliExitCodes;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.GitHubIntegration;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.TrelloCredentials;
 import ch.fmartin.symphony.trello.setup.TrelloCredentialStore.CredentialSelection;
@@ -228,7 +229,7 @@ public final class LocalSetup {
             Optional<Path> hintEnvPath = options == null ? Optional.empty() : Optional.of(options.envPath());
             SetupDiagnosticReporter.userActionHint(e, hintEnvPath).ifPresent(hint -> err.println("Next step: " + hint));
             diagnosticReporter.reportFailure(e, request, terminal);
-            return 2;
+            return CliExitCodes.SETUP_FAILURE;
         }
     }
 
@@ -277,10 +278,10 @@ public final class LocalSetup {
         }
         if (manifest.boards().isEmpty()) {
             if (!manifestLoad.warnings().isEmpty()) {
-                return 2;
+                return CliExitCodes.SETUP_FAILURE;
             }
             out.println("  WARN    No Trello boards connected to Symphony");
-            return prerequisites.readyFor(options) ? 0 : 2;
+            return prerequisites.readyFor(options) ? 0 : CliExitCodes.SETUP_FAILURE;
         }
         List<ConnectedBoard> selectedBoards = boardsForCheck(manifest, options);
         for (ConnectedBoard board : selectedBoards) {
@@ -318,7 +319,7 @@ public final class LocalSetup {
                 ok = ok && health.kind() == BoardHealthKind.SAME_WORKFLOW;
             }
         }
-        return ok ? 0 : 2;
+        return ok ? 0 : CliExitCodes.SETUP_FAILURE;
     }
 
     private static boolean isHealthyStaleManifestPort(

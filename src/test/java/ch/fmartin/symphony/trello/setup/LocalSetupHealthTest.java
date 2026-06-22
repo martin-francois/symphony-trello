@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static ch.fmartin.symphony.trello.CliExitCodes.SETUP_FAILURE;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.fmartin.symphony.trello.testsupport.SetupRunResult;
@@ -44,7 +45,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
 
             // then
             setupResult.assertSuccess();
-            result.assertFailure(2)
+            result.assertFailure(SETUP_FAILURE)
                     .stderrEmpty()
                     .stdoutContains(scenario.expectedOutput(this, workflow, env))
                     .stdoutDoesNotContain(scenario.forbiddenOutputFragments());
@@ -254,7 +255,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
 
         // then
         setupResult.assertSuccess();
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrEmpty()
                 .stdoutContains(
                         "Workflow tracker.board_id does not match the connected board",
@@ -294,7 +295,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
 
         // then
         setupResult.assertSuccess();
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrEmpty()
                 .stdoutContains(
                         "Workflow server.port does not match the connected board",
@@ -332,7 +333,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetup("check", "--endpoint", endpoint());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrEmpty()
                 .stdoutContains(
                         "Workspace root for \"Workspace File\" must be a directory: " + workspaceFile,
@@ -362,7 +363,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetup("check", "--endpoint", endpoint());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrEmpty()
                 .stdoutContains(
                         "Connected-board manifest entry \"Sneaky \\\"Q\\\"\\nBoard\" field githubEnabled must be true or false.")
@@ -386,7 +387,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetup("check", "--endpoint", endpoint());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrEmpty()
                 .stdoutContains(
                         "Connected-board manifest entry \"Synthetic Board\" field githubEnabled must be true or false.",
@@ -416,7 +417,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetup("check", "--endpoint", endpoint());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrEmpty()
                 .stdoutContains(
                         "Connected-board manifest entry 1 must be an object.",
@@ -440,7 +441,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetup("check", "--endpoint", endpoint());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrEmpty()
                 .stdoutContains(
                         "Connected-board manifest entry \"Synthetic Board\" field workflowPath must be a non-blank string.",
@@ -480,7 +481,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetup("check", "--board", "valid-key", "--endpoint", endpoint());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrEmpty()
                 .stdoutContains(
                         "Connected-board manifest entry 1 field boardName must be a non-blank string.",
@@ -518,7 +519,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetup("check", "--board", "missing-private-selector", "--endpoint", endpoint());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stdoutContains("Connected-board manifest entry 1 field boardName must be a non-blank string.")
                 .stderrContains(
                         "setup_failed code=setup_board_selection_required",
@@ -543,7 +544,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetup("check", "--endpoint", endpoint());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrEmpty()
                 .stdoutContains(
                         "Connected-board manifest entry \"Synthetic Board\" field serverPort must be between 1 and 65535.")
@@ -600,7 +601,7 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
         // then
         firstResult.assertSuccess();
         secondResult
-                .assertFailure(2)
+                .assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_server_port_conflict", "already reserved by another connected workflow");
         assertThat(trello.createdLists()).isEmpty();
         assertThat(secondWorkflow).doesNotExist();

@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
+import ch.fmartin.symphony.trello.CliExitCodes;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import ch.fmartin.symphony.trello.setup.SetupDiagnosticReporter.DiagnosticsRequest;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.GitHubIntegration;
@@ -166,7 +167,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                     if (!(exception instanceof ParameterException)) {
                         SetupDiagnosticReporter.reportFailure(exception, effectiveArgs, input, out, err);
                     }
-                    return 2;
+                    return CliExitCodes.SETUP_FAILURE;
                 })
                 .setParameterExceptionHandler(SetupLocalCommandFactory.usageErrors());
         SetupLocalCommandFactory.hideUnsupportedSubcommandOptions(

@@ -769,7 +769,7 @@ final class LocalWorkerManager {
     int stop(StopWorkerRequest request, PrintStream out) throws IOException {
         LocalWorkerPaths paths = LocalWorkerPaths.from(
                 request.appHome(), request.configDir(), request.workspaceRoot(), request.stateHome(), environment);
-        ConnectedBoardManifest manifest = new ConnectedBoardRepository(paths.manifestPath()).loadForLifecycle();
+        ConnectedBoardManifest manifest = loadLifecycleManifest(paths, request.workflow());
         List<ConnectedBoard> boards =
                 selectForStop(manifest, request.board(), request.workflow(), paths.defaultEnvPath());
         boards = withDefaultEnvForExplicitWorkflow(paths, request.workflow(), boards);
@@ -824,7 +824,7 @@ final class LocalWorkerManager {
     int status(WorkerStatusRequest request, PrintStream out) throws IOException {
         LocalWorkerPaths paths = LocalWorkerPaths.from(
                 request.appHome(), request.configDir(), request.workspaceRoot(), request.stateHome(), environment);
-        ConnectedBoardManifest manifest = new ConnectedBoardRepository(paths.manifestPath()).loadForLifecycle();
+        ConnectedBoardManifest manifest = loadLifecycleManifest(paths, request.workflow());
         List<ConnectedBoard> boards =
                 selectForStatus(manifest, request.board(), request.workflow(), paths.defaultEnvPath());
         boards = withDefaultEnvForExplicitWorkflow(paths, request.workflow(), boards);
@@ -836,6 +836,7 @@ final class LocalWorkerManager {
         Set<String> duplicateBoardNames = duplicateBoardNames(boards);
         for (ConnectedBoard board : boards) {
             String boardLabel = statusBoardLabel(board, duplicateBoardNames);
+            ManagedProcessStore.ManagedProcessFiles files = store.files(board.workflowPath());
             WorkflowValidation workflowDiagnostics = workflowConfig.diagnosticsValidation(
                     board.workflowPath(), WorkflowEnvironmentResolver.resolver(environment, board.envPath()));
             if (!workflowDiagnostics.ok()) {
@@ -843,7 +844,6 @@ final class LocalWorkerManager {
                         + " in that board's workflow file");
                 continue;
             }
-            ManagedProcessStore.ManagedProcessFiles files = store.files(board.workflowPath());
             Long pid = store.readPid(files.pidFile());
             BoardHealth health = healthChecker.boardHealth(board);
             if (pid != null
@@ -896,7 +896,7 @@ final class LocalWorkerManager {
     int logs(WorkerLogsRequest request, PrintStream out) throws IOException {
         LocalWorkerPaths paths = LocalWorkerPaths.from(
                 request.appHome(), request.configDir(), request.workspaceRoot(), request.stateHome(), environment);
-        ConnectedBoardManifest manifest = new ConnectedBoardRepository(paths.manifestPath()).loadForLifecycle();
+        ConnectedBoardManifest manifest = loadLifecycleManifest(paths, request.workflow());
         ConnectedBoard board = selectOne(
                 manifest, request.board(), request.workflow(), "logs", Optional.empty(), paths.defaultEnvPath(), false);
         ManagedProcessStore.ManagedProcessFiles files =
@@ -1175,6 +1175,21 @@ final class LocalWorkerManager {
             validateWorkerWorkflowPath(workflowPath);
         }
         validateWorkerEnvPath(envPath);
+    }
+
+    private static ConnectedBoardManifest loadLifecycleManifest(LocalWorkerPaths paths, Optional<Path> explicitWorkflow)
+            throws IOException {
+        explicitWorkflow.ifPresent(LocalWorkerManager::requireExistingExplicitWorkflow);
+        return new ConnectedBoardRepository(paths.manifestPath()).loadForLifecycle();
+    }
+
+    private static void requireExistingExplicitWorkflow(Path workflow) {
+        Path workflowPath = workflow.toAbsolutePath().normalize();
+        if (!Files.exists(workflowPath)) {
+            throw new TrelloBoardSetupException(
+                    "setup_invalid_arguments", "--workflow must point to an existing workflow file.");
+        }
+        validateWorkerWorkflowPath(workflowPath);
     }
 
     private ConnectedBoard defaultSelectedBoard(ConnectedBoardManifest manifest, String command) {

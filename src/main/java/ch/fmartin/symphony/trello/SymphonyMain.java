@@ -93,14 +93,14 @@ public class SymphonyMain {
         private int selectWorkflow(Path workflow) {
             if (!Files.isRegularFile(workflow)) {
                 System.err.println("Workflow file does not exist: " + workflow);
-                return 2;
+                return CliExitCodes.SETUP_FAILURE;
             }
             Path requestedWorkflow = workflow.toAbsolutePath().normalize();
             if (orchestrator.isStarted()) {
                 if (!orchestrator.selectedWorkflowPath().equals(requestedWorkflow)) {
                     System.err.println("Workflow file was provided after startup already selected: "
                             + orchestrator.selectedWorkflowPath());
-                    return 2;
+                    return CliExitCodes.SETUP_FAILURE;
                 }
             } else {
                 orchestrator.setWorkflowPath(requestedWorkflow);

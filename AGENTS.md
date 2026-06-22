@@ -13,6 +13,13 @@ use pnpm via Corepack; do not add a `package.json` only to run a JavaScript CLI.
 Before starting any task, open [docs/agents/default-workflow.md](docs/agents/default-workflow.md)
 and follow it.
 
+When a user corrects a repeatable mistake or states a generally useful working preference, make the
+durable agent-doc update proactively in the same change; do not wait for the user to explicitly ask
+for persistence. If the right persistence scope is unclear, ask before finishing.
+For repeated literals, scenario-table values, or parallel edits that look coupled, apply the
+centralization and refactoring guidance in
+[Java style & design preferences](docs/agents/java-style.md).
+
 Until the first public release, implement only the canonical current contract. Do not add or retain
 product migration, legacy-shape support, backward-compatibility shims, old-private-state fallbacks,
 or automatic upgrade code for private pre-release data; update the private deployment manually once.

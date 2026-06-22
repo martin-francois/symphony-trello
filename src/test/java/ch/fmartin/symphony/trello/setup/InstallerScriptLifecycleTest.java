@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static ch.fmartin.symphony.trello.CliExitCodes.SETUP_FAILURE;
 import static ch.fmartin.symphony.trello.setup.InstallerScriptFixture.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -182,7 +183,7 @@ final class InstallerScriptLifecycleTest {
             assertThat(result.output()).containsAnyOf("Usage: symphony-trello", "symphony-trello test");
         });
         assertThat(directBoardSetup.exitCode()).as(directBoardSetup.output()).isZero();
-        assertThat(unknownCommand.exitCode()).isEqualTo(2);
+        assertThat(unknownCommand.exitCode()).isEqualTo(SETUP_FAILURE);
         assertThat(unknownCommand.output())
                 .contains("setup_failed code=setup_invalid_arguments")
                 .contains("Unmatched argument: 'definitely-not-a-command'")
@@ -470,7 +471,7 @@ final class InstallerScriptLifecycleTest {
         });
         assertThat(directBoardSetup.exitCode()).as(directBoardSetup.output()).isZero();
         assertThat(cmdShimBoardSetup.exitCode()).as(cmdShimBoardSetup.output()).isZero();
-        assertThat(unknownCommand.exitCode()).isEqualTo(2);
+        assertThat(unknownCommand.exitCode()).isEqualTo(SETUP_FAILURE);
         assertThat(unknownCommand.output())
                 .contains("setup_failed code=setup_invalid_arguments")
                 .contains("Unmatched argument: 'definitely-not-a-command'")

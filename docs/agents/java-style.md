@@ -99,6 +99,10 @@ References.
   pattern, in two or more places during one change as that signal: those places will have to change
   together again, so centralize them into a shared helper or constant before finishing instead of
   leaving parallel copies.
+- Apply the same centralization rule to test scenario data. When a repeated literal appears across
+  rows of one parameterized test, scenario factory, fake fixture, or state-machine table, assume it
+  is one coupled concept unless the test names or scenario fields make it clear that each occurrence
+  is intentionally independent and may be changed separately.
 - Treat an unexplained numeric literal as a magic number when its meaning is not obvious from the
   immediate expression and surrounding API. Numeric literals other than `0` and `1` usually deserve
   a name; `0` and `1` are only exempt when they are ordinary counts, indexes, or boolean-adjacent
