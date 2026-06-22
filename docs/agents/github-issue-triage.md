@@ -48,6 +48,25 @@ auditing that may create issues lives in
 
 ## Triage labels
 
+- During issue triage, check every open issue for breaking-change risk, especially before the first
+  public release when incompatible changes are cheaper to make. Add the `breaking change` label when
+  the accepted implementation may intentionally change or invalidate current user-facing contracts:
+  CLI arguments, exit codes, config keys or values, environment precedence, workflow schema,
+  generated workflow behavior, Trello interpretation rules, installer version syntax, release
+  artifact contracts, or other behavior that scripts or operators could reasonably rely on. Do not
+  remove or omit the label only because the issue plans an automatic migration, upgrade prompt,
+  compatibility path, or other mitigation; the label tracks the contract change itself. Do not add
+  the label to purely internal refactors, behavior-preserving library evaluations, documentation
+  cleanup, or additive opt-in features whose default behavior stays unchanged. When a not-ready issue
+  contains both breaking and non-breaking options, keep the label if the issue is explicitly asking
+  the maintainer to choose whether to break the current contract. Whenever adding the label, record
+  why the issue is breaking, whether migration or compatibility logic would make sense, and whether
+  such compatibility is possible or intentionally not recommended. If the issue was opened by the
+  current authenticated GitHub account, edit the issue body itself so future readers see the
+  rationale without scanning comments. If another account opened the issue, add that explanation as a
+  comment instead of rewriting the reporter's issue body. Determine the current account from the
+  active GitHub tool or CLI authentication; do not hardcode a personal username in this rule or in
+  triage automation.
 - During issue triage, add `needs human review` when an issue cannot be implemented as written until
   a maintainer decision, owner-only repository action, external account/form submission, secret
   provisioning, external prerequisite, or explicit human review happens. Issues with
