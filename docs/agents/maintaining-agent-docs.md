@@ -6,16 +6,17 @@
 - All topic-specific guidance must live under docs/agents and be linked from AGENTS.md.
 - When asked to add content to AGENTS.md, first validate it against the allowlist below; if it is
   topic-specific, add it under docs/agents and link it instead.
-- When the user states a generally useful working preference, corrects an agent mistake, says
-  something was not done the way they wanted, or explicitly asks for a durable preference to persist,
-  capture it in the most relevant docs/agents page in the same change so future sessions do not
-  repeat the issue. If the user explicitly scopes the instruction to the current session, do not make
-  it durable. Do not add new rules only because the agent independently chose a reasonable
-  improvement. If the correction is about a concrete preference, add or update the concrete rule for
-  that preference; do not replace it with only a generic process reminder. When the correction is
-  about a repeatable code, documentation, issue-triage, PR, ADR, or workflow pattern, treat the
-  durable update as part of the fix: make the immediate correction, add or update the specific rule
-  that would have prevented it, and check nearby rules for conflicts before finishing.
+- When the user states a generally useful working preference, corrects an agent mistake, or says
+  something was not done the way they wanted, proactively capture it in the most relevant docs/agents
+  page in the same change so future sessions do not repeat the issue. Do not wait for the user to
+  explicitly ask for a durable rule. If the right persistence scope is unclear, ask before finishing.
+  If the user explicitly scopes the instruction to the current session, do not make it durable. Do
+  not add new rules only because the agent independently chose a reasonable improvement. If the
+  correction is about a concrete preference, add or update the concrete rule for that preference; do
+  not replace it with only a generic process reminder. When the correction is about a repeatable
+  code, documentation, issue-triage, PR, ADR, or workflow pattern, treat the durable update as part
+  of the fix: make the immediate correction, add or update the specific rule that would have
+  prevented it, and check nearby rules for conflicts before finishing.
 - When a new user preference changes how these agent docs themselves should be maintained, review
   existing agent-added rules for conflicts with that new preference in the same turn.
 - When fixing a documentation pattern, search the relevant file or docs set for similar instances

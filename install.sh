@@ -4,7 +4,6 @@ set -euo pipefail
 ORIGINAL_PATH="$PATH"
 DEFAULT_VERSION="0.2.0" # x-release-please-version
 VERSION="${SYMPHONY_TRELLO_VERSION:-$DEFAULT_VERSION}"
-VERSION="${VERSION#v}"
 RELEASE_TAG="${SYMPHONY_TRELLO_RELEASE_TAG:-v$VERSION}"
 RELEASE_BASE_URL="${SYMPHONY_TRELLO_RELEASE_BASE_URL:-https://github.com/martin-francois/symphony-trello/releases/download/$RELEASE_TAG}"
 REPO_URL="${SYMPHONY_TRELLO_REPO_URL:-https://github.com/martin-francois/symphony-trello.git}"
@@ -52,7 +51,7 @@ Options:
   --no-update-path   Do not edit shell profile files.
   --prefix PATH     App install path. Default: \$SYMPHONY_HOME/app
   --bin-dir PATH    Command directory. Default: ~/.local/bin
-  --version VERSION Release version to install. Default: ${DEFAULT_VERSION}
+  --version VERSION Release version to install without leading v. Default: ${DEFAULT_VERSION}
   --from-source     Install from a Git checkout instead of release assets.
   --repo URL        Git repository URL for --from-source.
   --ref REF         Git ref for --from-source. Default: ${DEFAULT_REF}
@@ -80,7 +79,7 @@ while [[ $# -gt 0 ]]; do
       echo "Missing value for --version" >&2
       exit 2
     fi
-    VERSION="${2#v}"
+    VERSION="$2"
     RELEASE_TAG="v$VERSION"
     RELEASE_BASE_URL="${SYMPHONY_TRELLO_RELEASE_BASE_URL:-https://github.com/martin-francois/symphony-trello/releases/download/$RELEASE_TAG}"
     shift

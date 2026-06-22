@@ -67,6 +67,11 @@ References.
 
 - Add comments only for non-obvious decisions, surprising constraints, or tradeoffs that would slow
   down a future maintainer.
+- Prefer making unclear code self-documenting before adding prose. Extract a variable, constant,
+  method, type, or helper with a precise name when that name can explain what a value means or why a
+  branch exists. Use a short comment or Javadoc only when the rationale cannot be expressed cleanly
+  in the code structure. If the explanation is a durable design tradeoff rather than a local
+  implementation detail, also add or update an ADR.
 
 ## Complexity, reuse, and centralization
 
@@ -100,6 +105,10 @@ References.
   duplicated shape should be refactored before continuing. If those places would likely have to
   change together again, centralize them into a shared helper or constant before finishing instead of
   leaving parallel copies.
+- Apply the same centralization rule to test scenario data. When a repeated literal appears across
+  rows of one parameterized test, scenario factory, fake fixture, or state-machine table, assume it
+  is one coupled concept unless the test names or scenario fields make it clear that each occurrence
+  is intentionally independent and may be changed separately.
 - Treat an unexplained numeric literal as a magic number when its meaning is not obvious from the
   immediate expression and surrounding API. Numeric literals other than `0` and `1` usually deserve
   a name; `0` and `1` are only exempt when they are ordinary counts, indexes, or boolean-adjacent

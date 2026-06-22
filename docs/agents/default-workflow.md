@@ -34,8 +34,21 @@ commit and open pull requests. Topic-specific rules live in the pages linked und
   refactoring, formatting, dependency updates, or tooling changes in a separate issue, branch, or
   pull request.
 - Update documentation and ADRs when behavior, setup, architecture, or tradeoffs change.
+- Before finishing a task where you made or explained a deliberate design tradeoff, run an explicit
+  ADR check: if the choice would be costly for a future maintainer to rediscover, add or update the
+  ADR in the same change without waiting for the user to ask. Treat a user having to ask for an ADR
+  after the fact as evidence that the agent-doc trigger was too weak; strengthen or move the
+  relevant guidance before finishing.
+- Before finishing code that is not self-explanatory, make the meaning or rationale explicit. Prefer
+  a named variable, constant, method, type, or helper when the name can carry the explanation. Use a
+  short comment or Javadoc when naming cannot express a local constraint clearly. If the reason is a
+  durable design tradeoff rather than a local implementation detail, add or update the ADR as well.
 - When fixing a documentation pattern, search the relevant file or docs set for similar instances
   before committing instead of correcting only the one sentence the user pointed out.
+- When changing tests, read [Testing](testing.md) during the relevant-docs pass and apply its
+  duplication rules before committing. If the same setup, command construction, or assertion is
+  edited in multiple tests during one change, treat that as a refactoring signal, not as acceptable
+  local repetition.
 - When the user or a review comment identifies a concrete mistake or maintainability pattern, check
   for similar occurrences before finishing. Fix matching cases that are in the current branch scope
   or directly touched by the change. For matching cases outside scope, create or suggest a focused
@@ -48,10 +61,16 @@ commit and open pull requests. Topic-specific rules live in the pages linked und
 - Until the first public release, apply [pre-public clean breaks](#pre-public-clean-breaks): implement
   only the canonical current contract and update private deployments manually when private
   pre-release files need a one-time edit.
-- When the user states a durable working preference or corrects a repeatable pattern, persist it in
-  the same change by updating the most relevant agent-docs page. See
+- When the user states a generally useful working preference or corrects a repeatable pattern,
+  proactively persist it in the same change by updating the most relevant agent-docs page; do not
+  wait for the user to explicitly ask for durable guidance. If the right persistence scope is
+  unclear, ask before finishing. See
   [Maintaining agent docs](maintaining-agent-docs.md) for how to decide where it goes and how to
-  check for conflicts; do not add such guidance to the root AGENTS.md.
+  check for conflicts; keep detailed guidance in docs/agents, and add only a concise root
+  `AGENTS.md` summary when the preference changes broad agent operation. If the mistake happened
+  even though a rule already existed, do not conclude that no durable change is needed. Strengthen the
+  wording, move the rule closer to the always-read workflow, or add a cross-link so the rule is more
+  likely to be applied next time.
 
 ## Pre-Public Clean Breaks
 

@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static ch.fmartin.symphony.trello.CliExitCodes.SETUP_FAILURE;
 import static ch.fmartin.symphony.trello.testsupport.ManifestAssertions.assertThatManifest;
 import static ch.fmartin.symphony.trello.testsupport.TerminalTranscriptAssertions.assertThatTranscript;
 import static ch.fmartin.symphony.trello.testsupport.WorkflowAssertions.assertThatWorkflow;
@@ -46,7 +47,74 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "Symphony for Trello setup",
                         "Checking prerequisites",
                         "Dry run",
-                        "WOULD write workflows under:");
+                        "WOULD write workflow:",
+                        workflow.toAbsolutePath().normalize().toString());
+        assertThat(trello.createdLists()).isEmpty();
+    }
+
+    @Test
+    void dryRunReportsSelectedWorkflowManifestAndAccessPlan() {
+        // given
+        Path workflow = tempDir.resolve("custom workflow").resolve("WORKFLOW.dry-run.md");
+        Path manifest = tempDir.resolve("custom config").resolve("connected-boards.json");
+        Path env = tempDir.resolve("custom env").resolve(".env");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--dry-run",
+                "--non-interactive",
+                "--no-start",
+                "--board",
+                "https://trello.com/b/input/queue",
+                "--workflow",
+                workflow.toString(),
+                "--manifest",
+                manifest.toString(),
+                "--env",
+                env.toString(),
+                "--add-path",
+                "/",
+                "--allow-all-paths",
+                "--danger-full-access");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "Dry run",
+                        "WOULD configure Trello credentials: "
+                                + env.toAbsolutePath().normalize(),
+                        "WOULD write workflow: " + workflow.toAbsolutePath().normalize(),
+                        "WOULD update connected-board manifest: "
+                                + manifest.toAbsolutePath().normalize(),
+                        "WOULD allow Codex read/write access to:",
+                        "  /",
+                        "WOULD disable Codex command/filesystem sandbox with danger-full-access",
+                        "WOULD NOT start Symphony after setup because --no-start is set")
+                .stdoutDoesNotContain("WOULD write workflows under:");
+        assertThat(workflow).doesNotExist();
+        assertThat(manifest).doesNotExist();
+        assertThat(env).doesNotExist();
+        assertThat(trello.createdLists()).isEmpty();
+    }
+
+    @Test
+    void dryRunReportsImplicitWorkflowDirectoryWithoutInventingFileName() {
+        // given
+        Path configDir = tempDir.resolve("implicit dry run config");
+        Path defaultWorkflow = configDir.resolve("WORKFLOW.md");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--dry-run", "--non-interactive", "--board-name", "Docs", "--config-dir", configDir.toString());
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "Dry run",
+                        "WOULD write workflow under: "
+                                + configDir.toAbsolutePath().normalize())
+                .stdoutDoesNotContain("WOULD write workflow: "
+                        + defaultWorkflow.toAbsolutePath().normalize());
         assertThat(trello.createdLists()).isEmpty();
     }
 
@@ -59,7 +127,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetup("--dry-run", "--non-interactive", "--no-start", optionName, " ");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_failed code=setup_invalid_arguments", optionName + " must not be blank.")
                 .stderrDoesNotContain("Troubleshooting report written")
                 .stdoutDoesNotContain("Dry run", "WOULD write workflows");
@@ -75,7 +143,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetup(option.commandArray());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_failed code=setup_invalid_arguments", option.expectedMessage())
                 .stderrDoesNotContain("Troubleshooting report written")
                 .stdoutDoesNotContain("Dry run", "WOULD write workflows");
@@ -118,7 +186,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetup("--dry-run", "--non-interactive", "--no-start", optionName, invalidValue);
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_invalid_arguments",
                         optionName + " must not contain control characters.")
@@ -137,7 +205,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetup("--dry-run", "--non-interactive", "--no-start", optionName, invalidValue);
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_invalid_arguments",
                         optionName + " must not contain control characters.")
@@ -165,7 +233,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetup(command);
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_failed code=setup_invalid_arguments", "--board must not be empty.")
                 .stderrDoesNotContain("Troubleshooting report written")
                 .stdoutDoesNotContain("Symphony setup check", "Health check");
@@ -191,7 +259,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 .map(InvalidPathOptionCase::rawValue)
                 .filter(value -> !value.equals(invalidCase.rawValue()))
                 .toArray(String[]::new);
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_invalid_arguments",
                         invalidCase.optionName() + " must not contain control characters")
@@ -224,7 +292,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetup(scenario.commandArray(tempDir));
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_failed code=" + scenario.expectedCode(), scenario.expectedMessage())
                 .stderrDoesNotContain("Troubleshooting report written")
                 .stdoutDoesNotContain("Dry run", "WOULD write workflows");
@@ -276,7 +344,13 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 runSetup("--dry-run", "--board-name", "Dry Add Absolute", "--add-path", firstPath + ", " + secondPath);
 
         // then
-        result.assertSuccess().stdoutContains("Dry run", "WOULD write workflows under:");
+        result.assertSuccess()
+                .stdoutContains(
+                        "Dry run",
+                        "WOULD write workflow under:",
+                        "WOULD allow Codex read/write access to:",
+                        firstPath.toAbsolutePath().normalize().toString(),
+                        secondPath.toAbsolutePath().normalize().toString());
         assertThat(trello.createdLists()).isEmpty();
     }
 
@@ -289,7 +363,15 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 runSetup("--dry-run", "--board-name", "Dry Add Home", "--add-path", "~,~/project,~/../project");
 
         // then
-        result.assertSuccess().stdoutContains("Dry run", "WOULD write workflows under:");
+        result.assertSuccess()
+                .stdoutContains(
+                        "Dry run",
+                        "WOULD write workflow under:",
+                        "WOULD allow Codex read/write access to:",
+                        Path.of(System.getProperty("user.home"))
+                                .toAbsolutePath()
+                                .normalize()
+                                .toString());
         assertThat(trello.createdLists()).isEmpty();
     }
 
@@ -313,7 +395,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 scenario.workspaceRoot(workspaceFile));
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_failed code=setup_invalid_arguments", scenario.expectedMessage())
                 .stderrDoesNotContain("Troubleshooting report written", workspaceFile.toString(), "not a directory")
                 .stdoutDoesNotContain("Dry run", "WOULD write workflows");
@@ -446,7 +528,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 workflowPath);
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_failed code=setup_invalid_arguments", "--workflow must not be empty.")
                 .stderrDoesNotContain("Troubleshooting report written")
                 .stdoutDoesNotContain("Dry run", "WOULD write workflows");
@@ -463,7 +545,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetup(scenario.commandArray());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_failed code=setup_invalid_arguments", scenario.expectedMessage())
                 .stderrDoesNotContain("Troubleshooting report written")
                 .stdoutDoesNotContain("Dry run", "WOULD write workflows", "Symphony setup check");
@@ -498,7 +580,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetup(scenario.commandArray(pathReplacements));
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_failed code=setup_invalid_arguments", scenario.expectedMessage())
                 .stderrDoesNotContain(
                         "Troubleshooting report written",
@@ -604,7 +686,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetup("--dry-run", "--endpoint", invalidEndpoint, "--board-name", boardName);
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_invalid_arguments",
                         "--endpoint must point to the Trello REST API base, for example https://api.trello.com/1")
@@ -631,7 +713,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--no-github");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_invalid_arguments", "--board-name must not contain control characters")
                 .stderrDoesNotContain(badBoardName, "Troubleshooting report written")
@@ -659,7 +741,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--no-github");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_invalid_arguments", "--board must not contain control characters")
                 .stderrDoesNotContain(badBoardSelector, "Troubleshooting report written")
@@ -696,7 +778,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--no-start");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_invalid_arguments",
                         "Invalid --board value. Use a Trello board URL, short link, board id, or a connected board name.")
@@ -729,7 +811,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--no-github");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_invalid_arguments",
                         "--workspace-id must not contain control characters")
@@ -756,7 +838,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--no-github");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_invalid_arguments",
                         "--workspace-id must be a Trello Workspace id, not a URL or path.")
@@ -817,7 +899,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetup(command.commandArray());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_worker_board_ambiguous",
                         "Multiple connected boards match --board. Re-run with a board id or short link.")
@@ -856,7 +938,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 tempDir.resolve("selected-path").toString());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_failed code=setup_board_selection_required", "Board selection is required.")
                 .stderrDoesNotContain("Duplicate Private Board", "Troubleshooting report written");
     }
@@ -871,7 +953,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "\n", "configure-github", "--endpoint", endpoint(), "--key", "key", "--token", "token");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_failed code=setup_github_upgrade_board_required", "Board selection is required.")
                 .stderrDoesNotContain("Troubleshooting report written");
     }
@@ -956,7 +1038,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetup("check", "--board", "board-1");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stdoutContains(
                         "  WARN  \"Plan \\\"B\\\" Queue\" local server:",
                         "Suggested fix: symphony-trello setup-local repair-port --board \"abc123\"")
@@ -1004,7 +1086,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetup("check", "--board", "board-1");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stdoutContains(
                         "  WARN  \"" + boardName + "\" local server:",
                         "Suggested fix: symphony-trello setup-local repair-port --board \"abc123\"")
@@ -1022,7 +1104,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetup("check", "--board", "private-key-one");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stdoutContains("Suggested fix: symphony-trello setup-local repair-port --board \"private-key-one\"")
                 .stdoutDoesNotContain("setup-local repair-port --board \"Duplicate Private Board\"");
     }
@@ -1181,7 +1263,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--no-github");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_missing_trello_credentials",
                         "Next step: Provide Trello credentials with --key and --token",
@@ -2482,7 +2564,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--no-github");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_server_port_conflict",
                         "--server-port %d is already reserved by another connected workflow.".formatted(reservedPort));
@@ -2529,7 +2611,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                     "--no-start",
                     "--no-github");
 
-            result.assertFailure(2)
+            result.assertFailure(SETUP_FAILURE)
                     .stderrContains(
                             "setup_failed code=setup_server_port_conflict",
                             "--server-port %d is already in use on 127.0.0.1.".formatted(port));
@@ -2761,7 +2843,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--no-github");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_unknown_in_progress_state",
                         "Unknown in-progress list(s): \"No Such List 123\"")
@@ -2833,7 +2915,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--github");
 
         // then
-        result.assertFailure(2).stderrContains("setup_unknown_active_state");
+        result.assertFailure(SETUP_FAILURE).stderrContains("setup_unknown_active_state");
         assertThat(trello.createdLists()).isEmpty();
     }
 
@@ -2875,7 +2957,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--github");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stdoutContains("GitHub mode will create this missing list: Merging")
                 .stderrContains("setup_github_import_list_declined", "needs a Merging list");
         assertThat(trello.createdLists()).isEmpty();
@@ -3286,7 +3368,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--no-github");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_server_port_conflict",
                         "--server-port %d is already in use on 127.0.0.1.".formatted(configuredPort));
@@ -3366,7 +3448,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--no-github");
 
         // then
-        result.assertFailure(2).stderrContains("setup_worker_start_failed", "Unable to start managed worker.");
+        result.assertFailure(SETUP_FAILURE)
+                .stderrContains("setup_worker_start_failed", "Unable to start managed worker.");
     }
 
     @Test
@@ -3399,7 +3482,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--no-github");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_start_unhealthy", "/api/v1/state", "Troubleshooting report written:");
     }
 
@@ -3469,7 +3552,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // then
         firstResult.assertSuccess();
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_failed code=setup_invalid_choice", "Choice must be a number between 1 and")
                 .stderrDoesNotContain("For input string", "Troubleshooting report written");
     }
@@ -3511,7 +3594,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "repair-port", "--board", "anything", "--non-interactive", "--manifest", emptyManifest.toString());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_repair_board_not_found", "No Trello boards are connected to Symphony");
     }
@@ -3621,6 +3704,80 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void repairPortUpdatesConfiguredPortOccupiedByNonSymphonyListener() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.repair-occupied.md");
+        Path env = tempDir.resolve(".env.repair-occupied");
+        Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
+        int occupiedPort = firstAvailableManagedPort();
+        SetupRunResult firstResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Occupied Repair Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--server-port",
+                String.valueOf(occupiedPort),
+                "--no-start",
+                "--no-github");
+        firstResult.assertSuccess();
+        commands.startedWorkflows.clear();
+        commands.startedEnvFiles.clear();
+        commands.stoppedWorkflows.clear();
+        commands.commandEvents.clear();
+
+        try (ServerSocket listener = new ServerSocket(occupiedPort, 50, LocalHealthChecker.loopbackIpv4ForTests())) {
+            Thread acceptThread = Thread.ofVirtual()
+                    .name("repair-port-foreign-listener")
+                    .start(() -> acceptConnectionsUntilClosed(listener));
+            assertThat(listener.isBound())
+                    .as("test listener must occupy the configured port")
+                    .isTrue();
+            assertThat(LocalHealthChecker.portAcceptsConnections(occupiedPort))
+                    .as("test listener must make the configured port unavailable")
+                    .isTrue();
+
+            // when
+            SetupRunResult result = runSetup("repair-port", "--board", "Occupied Repair Queue");
+
+            // then
+            int updatedPort = new WorkflowConfigEditor().serverPort(workflow).orElseThrow();
+            result.assertSuccess()
+                    .stdoutContains("OK      Updated \"Occupied Repair Queue\" to use http://127.0.0.1:")
+                    .stdoutDoesNotContain(
+                            "No port repair needed.",
+                            "already configured for an available port",
+                            "http://127.0.0.1:" + occupiedPort);
+            assertThat(updatedPort).isNotEqualTo(occupiedPort);
+            assertThatWorkflow(workflow).hasServerPort(updatedPort).doesNotHaveServerPort(occupiedPort);
+            assertThatManifest(manifest).hasBoardWithPort("Occupied Repair Queue", updatedPort);
+            assertThat(commands.commandEvents).isEmpty();
+            assertThat(commands.stoppedWorkflows).isEmpty();
+            assertThat(commands.startedWorkflows).isEmpty();
+            assertThat(commands.startedEnvFiles).isEmpty();
+            acceptThread.interrupt();
+        }
+    }
+
+    private static void acceptConnectionsUntilClosed(ServerSocket listener) {
+        while (!Thread.currentThread().isInterrupted()) {
+            try (var ignored = listener.accept()) {
+                // The foreign process is not Symphony, but it does accept TCP connections.
+            } catch (IOException e) {
+                return;
+            }
+        }
+    }
+
+    @Test
     void checkUsesWorkflowServerPortWhenManifestPortIsStale() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.stale-manifest-check.md");
@@ -3658,7 +3815,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 runSetup("--dry-run", "--non-interactive", "--workflow", workflowDirectory.toString(), "--force");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_failed code=setup_invalid_path", "directory")
                 .stderrDoesNotContain("Troubleshooting report written");
         assertThat(result.stdout()).doesNotContain("Dry run");
@@ -3676,7 +3833,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 runSetup("--dry-run", "--non-interactive", "--workflow", workflow.toString(), "--force");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_failed code=setup_invalid_path", "not a directory")
                 .stderrDoesNotContain("Troubleshooting report written");
         assertThat(result.stdout()).doesNotContain("Dry run");
@@ -3705,7 +3862,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--no-github");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_failed code=setup_invalid_path", "directory")
                 .stderrDoesNotContain("trello_api_request", "Troubleshooting report written");
     }
@@ -3722,7 +3879,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "repair-port", "--dry-run", "--manifest", manifest.toString(), "--board", "Broken Manifest Queue");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_manifest_unavailable",
                         "Repair or remove connected-boards.json, then rerun the command.")
@@ -3757,7 +3914,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--no-github");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_credentials_environment_reference",
                         "credential file values are used literally",
@@ -3790,7 +3947,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--no-github");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_manifest_unavailable",
                         "Repair or remove connected-boards.json, then rerun the command.")
@@ -3824,7 +3981,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetup("check", "--non-interactive", "--manifest", manifest.toString());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stdoutContains("WARN", "Connected-board manifest is not valid JSON.")
                 .stderrDoesNotContain("JsonParseException", "Cannot invoke", "Troubleshooting report written");
     }
@@ -3839,7 +3996,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetup("check", "--non-interactive", "--manifest", manifest.toString());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stdoutContains("WARN", "must be a non-blank string")
                 .stderrDoesNotContain("Cannot invoke", "NullPointerException", "Troubleshooting report written");
     }
@@ -3878,7 +4035,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetup("check", "--endpoint", endpoint(), "--board", "Overlap Check Queue");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stdoutContains("WARN", "Workflow tracker list roles overlap", "overlapping tracker list roles")
                 .stdoutDoesNotContain("OK      Workflow: " + workflow);
     }
@@ -4092,7 +4249,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetup("repair-port", "--board", "board-1");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_stop_failed",
                         "Could not stop Symphony for \"Plan \\\"B\\\"\\nQueue\": simulated stop failure")
@@ -4172,7 +4329,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // then
         firstResult.assertSuccess();
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stdoutDoesNotContain("Updated \"Dotenv Repair Override Queue\"")
                 .stderrContains(
                         "setup_repair_port_http_override",
@@ -4226,7 +4383,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // then
         firstResult.assertSuccess();
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stdoutDoesNotContain("Updated \"Environment Repair Override Queue\"")
                 .stderrContains(
                         "setup_repair_port_http_override",
@@ -4430,7 +4587,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--no-github");
 
         // then
-        result.assertFailure(2).stderrContains("setup_workspace_id_required", "--workspace-id");
+        result.assertFailure(SETUP_FAILURE).stderrContains("setup_workspace_id_required", "--workspace-id");
         assertThat(trello.createdLists()).isEmpty();
         assertThat(workflow).doesNotExist();
     }
@@ -4466,7 +4623,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--no-github");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_failed code=setup_workspace_id_required", "Workspace selection is required.")
                 .stderrDoesNotContain("Troubleshooting report written");
         assertThat(trello.createdLists()).isEmpty();
@@ -4705,7 +4862,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // then
         firstResult.assertSuccess();
-        secondResult.assertFailure(2).stderrContains("setup_invalid_arguments", "--server-port");
+        secondResult.assertFailure(SETUP_FAILURE).stderrContains("setup_invalid_arguments", "--server-port");
         assertThatWorkflow(workflow).doesNotHaveServerPort(19000);
         assertThat(commands.stoppedWorkflows).isEmpty();
         assertThat(commands.startedWorkflows).isEmpty();
@@ -4752,7 +4909,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // then
         firstResult.assertSuccess();
         secondResult
-                .assertFailure(2)
+                .assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_invalid_arguments", "--server-port")
                 .stderrDoesNotContain("setup_codex_auth_required");
         assertThatWorkflow(workflow).hasNoGithubFlow().doesNotHaveServerPort(19000);
@@ -4800,7 +4957,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // then
         firstResult.assertSuccess();
         secondResult
-                .assertFailure(2)
+                .assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_github_upgrade_not_found",
                         "No connected non-GitHub board matches \"definitely-not-a-board\"")
@@ -4850,7 +5007,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // then
         firstResult.assertSuccess();
         secondResult
-                .assertFailure(2)
+                .assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_invalid_arguments", "setup-local configure-github does not support --workflow")
                 .stderrDoesNotContain("setup-local configure-github can apply", "Troubleshooting report written");
         assertThatWorkflow(workflow).hasNoGithubFlow();
@@ -4898,7 +5055,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // then
         firstResult.assertSuccess();
         secondResult
-                .assertFailure(2)
+                .assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_github_upgrade_not_found", "non-GitHub connected Trello board");
         assertThat(workflow).content(StandardCharsets.UTF_8).doesNotContain("gpt-new");
         assertThat(commands.stoppedWorkflows).isEmpty();
@@ -4944,7 +5101,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // then
         firstResult.assertSuccess();
-        secondResult.assertFailure(2).stderrContains("setup_invalid_arguments", "--server-port");
+        secondResult.assertFailure(SETUP_FAILURE).stderrContains("setup_invalid_arguments", "--server-port");
         assertThatWorkflow(workflow).doesNotHaveServerPort(19000);
         assertThat(commands.stoppedWorkflows).isEmpty();
         assertThat(commands.startedWorkflows).isEmpty();
@@ -5304,7 +5461,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetup(scenario.commandArray());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_invalid_arguments",
                         "setup-local " + scenario.subcommand() + " does not support " + scenario.optionName())
@@ -5554,7 +5711,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--no-github");
 
         // then
-        result.assertFailure(2).stderrContains(scenario.expectedErrorFragments());
+        result.assertFailure(SETUP_FAILURE).stderrContains(scenario.expectedErrorFragments());
         assertThat(trello.createdLists()).isEmpty();
         assertThat(env).doesNotExist();
     }
@@ -5607,7 +5764,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--no-github");
 
         // then
-        result.assertFailure(2).stderrContains("setup_workflow_exists");
+        result.assertFailure(SETUP_FAILURE).stderrContains("setup_workflow_exists");
         assertThat(trello.memberLookups()).isEmpty();
         assertThat(trello.workspaceLookups()).isEmpty();
         assertThat(trello.boardLookups()).isEmpty();
@@ -5709,7 +5866,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--github");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stdoutContains("GitHub CLI is missing.", "Proposed install command:")
                 .stderrContains("setup_github_cli_declined");
         assertThat(commands.githubLoginCommands).isEmpty();
@@ -5789,7 +5946,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetup("check", "--no-github");
 
         // then
-        result.assertFailure(2).stderrEmpty().stdoutContains("NEEDED  Java 25+ JDK");
+        result.assertFailure(SETUP_FAILURE).stderrEmpty().stdoutContains("NEEDED  Java 25+ JDK");
     }
 
     @Test
@@ -5849,7 +6006,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--github");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(scenario.expectedErrorFragments())
                 .stderrDoesNotContain(scenario.forbiddenErrorFragments());
         assertThat(trello.createdLists()).isEmpty();

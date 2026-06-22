@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
+import ch.fmartin.symphony.trello.CliExitCodes;
 import ch.fmartin.symphony.trello.setup.LocalSetupRequest.Action;
 import java.io.BufferedReader;
 import java.io.PrintStream;
@@ -74,7 +75,7 @@ final class SetupLocalCommandFactory {
                     if (!(exception instanceof ParameterException)) {
                         SetupDiagnosticReporter.reportSetupLocalFailure(exception, args, input, out, err);
                     }
-                    return 2;
+                    return CliExitCodes.SETUP_FAILURE;
                 })
                 .setParameterExceptionHandler(usageErrors());
         return commandLine.execute(args);
@@ -122,7 +123,7 @@ final class SetupLocalCommandFactory {
                     .println("setup_failed code=setup_invalid_arguments message="
                             + CliInputValidation.safeCliMessage(usageErrorMessage(exception)));
             commandLine.getErr().println("Try '" + commandLine.getCommandName() + " --help' for usage.");
-            return 2;
+            return CliExitCodes.SETUP_FAILURE;
         };
     }
 

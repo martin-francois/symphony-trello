@@ -72,6 +72,14 @@ final class SetupDiagnosticReporter {
             "git", "java", "javac", "mvn", "npm", "node", "codex", "gh", "apt-get", "sudo", "doas", "brew", "winget",
             "dnf", "yum", "pacman", "zypper", "docker");
     private static final Set<String> HASHED_INSTALLER_CONTEXT_KEYS = Set.of("repo_url", "ref", "source_commit");
+    /**
+     * Installer refs are used as diagnostics redaction terms only when they are distinctive. Common
+     * branch names appear in normal logs and framework thread names, so redacting them would damage
+     * public-safe diagnostics more than it would protect private context.
+     */
+    private static final Set<String> NON_DISTINCTIVE_INSTALLER_REFS = Set.of("head", "main", "master", "trunk");
+
+    private static final Pattern GIT_COMMIT_ID = Pattern.compile("(?i)[0-9a-f]{7,64}");
     private static final Pattern SECRET_ASSIGNMENT = Pattern.compile(
             "(?i)([\"']?(?:key|token|secret|password|api[_-]?key|api[_-]?token|oauth_consumer_key|oauth_token|authorization|bearer)[\"']?\\s*[:=]\\s*[\"']?)([^\\s,\"'}]+)");
     private static final Pattern AUTHORIZATION_HEADER = Pattern.compile("(?i)(Authorization\\s*[:=]\\s*)[^\\r\\n]+");
@@ -2263,8 +2271,8 @@ final class SetupDiagnosticReporter {
                 .filter(value -> value != null && !value.isBlank())
                 .toList());
         values.addAll(commandOptionValues(args));
-        addValue(values, environment.get("SYMPHONY_TRELLO_REPO_URL"));
-        addValue(values, environment.get("SYMPHONY_TRELLO_REF"));
+        addDistinctiveInstallerContextValue(values, "repo_url", environment.get("SYMPHONY_TRELLO_REPO_URL"));
+        addDistinctiveInstallerContextValue(values, "ref", environment.get("SYMPHONY_TRELLO_REF"));
         Path context = paths.stateHome().resolve("install-context.properties");
         readInstallContextContent(context).ifPresent(content -> content.lines().forEach(line -> {
             int separator = line.indexOf('=');
@@ -2273,10 +2281,32 @@ final class SetupDiagnosticReporter {
             }
             String key = line.substring(0, separator).toLowerCase(Locale.ROOT);
             if (HASHED_INSTALLER_CONTEXT_KEYS.contains(key)) {
-                addValue(values, line.substring(separator + 1));
+                addDistinctiveInstallerContextValue(values, key, line.substring(separator + 1));
             }
         }));
         return values.stream().distinct().toList();
+    }
+
+    private static void addDistinctiveInstallerContextValue(List<String> values, String key, String value) {
+        if (isDistinctiveInstallerContextValue(key, value)) {
+            values.add(value);
+        }
+    }
+
+    private static boolean isDistinctiveInstallerContextValue(String key, String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        return switch (key) {
+            case "repo_url" -> true;
+            case "ref" -> isDistinctiveInstallerRef(value);
+            case "source_commit" -> GIT_COMMIT_ID.matcher(value).matches();
+            default -> false;
+        };
+    }
+
+    private static boolean isDistinctiveInstallerRef(String value) {
+        return !NON_DISTINCTIVE_INSTALLER_REFS.contains(value.toLowerCase(Locale.ROOT));
     }
 
     private static Optional<String> readInstallContextContent(Path context) {

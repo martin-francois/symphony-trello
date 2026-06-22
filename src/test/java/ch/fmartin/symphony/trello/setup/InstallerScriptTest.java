@@ -918,7 +918,7 @@ final class InstallerScriptTest {
     }
 
     @Test
-    void posixInstallerNormalizesLeadingVVersionBeforeReleaseAssetUrls() throws Exception {
+    void posixInstallerRejectsLeadingVVersionEnvironmentValue() throws Exception {
         // given
         assumeTrue(Files.exists(Path.of("/bin/bash")));
         String version = installerDefaultRef().substring(1);
@@ -936,13 +936,27 @@ final class InstallerScriptTest {
         ProcessResult result = run(environment, "/bin/bash", "install.sh", "--dry-run", "--no-onboard");
 
         // then
-        result.assertSuccess();
+        assertThat(result.exitCode()).isEqualTo(2);
         assertThat(result.output())
-                .contains(
-                        "Version: " + version,
-                        "releases/download/v" + version + "/symphony-trello-" + version + ".tar.gz",
-                        "releases/download/v" + version + "/checksums.txt")
-                .doesNotContain("vv" + version);
+                .contains("--version must be a semantic version without the leading v.")
+                .doesNotContain("Dry run: no files changed.", "Version: " + version, "vv" + version);
+    }
+
+    @Test
+    void posixInstallerRejectsLeadingVVersionArgument() throws Exception {
+        // given
+        assumeTrue(Files.exists(Path.of("/bin/bash")));
+        String version = installerDefaultRef().substring(1);
+
+        // when
+        ProcessResult result =
+                run(Map.of(), "/bin/bash", "install.sh", "--dry-run", "--no-onboard", "--version", "v" + version);
+
+        // then
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.output())
+                .contains("--version must be a semantic version without the leading v.")
+                .doesNotContain("Dry run: no files changed.", "Version: " + version, "vv" + version);
     }
 
     @Test
@@ -2154,7 +2168,7 @@ final class InstallerScriptTest {
     }
 
     @Test
-    void powershellInstallerNormalizesLeadingVVersionBeforeReleaseAssetUrlsWhenAvailable() throws Exception {
+    void powershellInstallerRejectsLeadingVVersionEnvironmentValueWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
         assumeFalse(pwsh.isEmpty());
@@ -2169,13 +2183,38 @@ final class InstallerScriptTest {
                         .toArray(String[]::new));
 
         // then
-        result.assertSuccess();
+        assertThat(result.exitCode()).isNotZero();
         assertThat(result.output())
-                .contains(
-                        "Version: " + version,
-                        "releases/download/v" + version + "/symphony-trello-" + version + ".zip",
-                        "releases/download/v" + version + "/checksums.txt")
-                .doesNotContain("vv" + version);
+                .contains("--version must be a semantic version without the leading v.")
+                .doesNotContain("Dry run: no files changed.", "Version: " + version, "vv" + version);
+    }
+
+    @Test
+    void powershellInstallerRejectsLeadingVVersionArgumentWhenAvailable() throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        assumeFalse(pwsh.isEmpty());
+        String version = installerDefaultRef().substring(1);
+
+        // when
+        ProcessResult result = run(
+                nonWindowsPowerShellEnvironment(),
+                command(
+                                pwsh,
+                                "-NoProfile",
+                                "-File",
+                                "./install.ps1",
+                                "--dry-run",
+                                "--no-onboard",
+                                "--version",
+                                "v" + version)
+                        .toArray(String[]::new));
+
+        // then
+        assertThat(result.exitCode()).isNotZero();
+        assertThat(result.output())
+                .contains("--version must be a semantic version without the leading v.")
+                .doesNotContain("Dry run: no files changed.", "Version: " + version, "vv" + version);
     }
 
     @Test
@@ -2241,6 +2280,31 @@ final class InstallerScriptTest {
         // then
         result.assertSuccess();
         assertThat(result.output()).contains("Symphony for Trello installer", "Dry run: no files changed.");
+    }
+
+    @Test
+    void powershellInstallerRejectsLeadingVVersionThroughScriptblockWhenAvailable() throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        assumeFalse(pwsh.isEmpty());
+        String version = installerDefaultRef().substring(1);
+
+        // when
+        ProcessResult result = run(
+                nonWindowsPowerShellEnvironment(),
+                command(
+                                pwsh,
+                                "-NoProfile",
+                                "-Command",
+                                "& ([scriptblock]::Create((Get-Content -Raw './install.ps1'))) "
+                                        + "--dry-run --no-onboard --version v" + version)
+                        .toArray(String[]::new));
+
+        // then
+        assertThat(result.exitCode()).isNotZero();
+        assertThat(result.output())
+                .contains("--version must be a semantic version without the leading v.")
+                .doesNotContain("Dry run: no files changed.", "Version: " + version, "vv" + version);
     }
 
     @Test

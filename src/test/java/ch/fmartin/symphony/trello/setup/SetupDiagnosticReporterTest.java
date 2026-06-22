@@ -2083,6 +2083,145 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
+    void preservesCommonInstallerRefWordsInRecentLogs() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("common-ref-config");
+        Path workspaceRoot = tempDir.resolve("common-ref-workspaces");
+        Path stateHome = tempDir.resolve("common-ref-state");
+        Files.createDirectories(configDir);
+        Files.createDirectories(workspaceRoot);
+        Files.createDirectories(stateHome);
+        Files.writeString(stateHome.resolve("install-context.properties"), "ref=main\n", StandardCharsets.UTF_8);
+        Files.writeString(
+                stateHome.resolve("worker.log"),
+                "INFO  [io.quarkus] (main) symphony-trello started\n",
+                StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of("SYMPHONY_TRELLO_REF", "main"), new FakeCommandRunner());
+
+        // when
+        String report = renderDefaultDiagnostics(reporter, configDir, workspaceRoot, stateHome);
+
+        // then
+        byte[] key = diagnosticsKey(configDir);
+        assertThat(report)
+                .contains("ref=<value:" + token(key, "main") + ">", "INFO  [io.quarkus] (main)")
+                .doesNotContain("(<value:", "ref=main");
+    }
+
+    @Test
+    void redactsShortPrivateInstallerRefsInRecentLogs() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("short-private-ref-config");
+        Path workspaceRoot = tempDir.resolve("short-private-ref-workspaces");
+        Path stateHome = tempDir.resolve("short-private-ref-state");
+        Files.createDirectories(configDir);
+        Files.createDirectories(workspaceRoot);
+        Files.createDirectories(stateHome);
+        Files.writeString(stateHome.resolve("install-context.properties"), "ref=prod\n", StandardCharsets.UTF_8);
+        Files.writeString(stateHome.resolve("worker.log"), "branch prod failed\n", StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of("SYMPHONY_TRELLO_REF", "prod"), new FakeCommandRunner());
+
+        // when
+        String report = renderDefaultDiagnostics(reporter, configDir, workspaceRoot, stateHome);
+
+        // then
+        byte[] key = diagnosticsKey(configDir);
+        assertThat(report)
+                .contains("ref=<value:" + token(key, "prod") + ">", "branch <value:" + token(key, "prod") + "> failed")
+                .doesNotContain("ref=prod", "branch prod failed");
+    }
+
+    @Test
+    void redactsShortInstallerRepoUrlsInRecentLogs() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("short-repo-url-config");
+        Path workspaceRoot = tempDir.resolve("short-repo-url-workspaces");
+        Path stateHome = tempDir.resolve("short-repo-url-state");
+        Files.createDirectories(configDir);
+        Files.createDirectories(workspaceRoot);
+        Files.createDirectories(stateHome);
+        String repoUrl = "git@h:r";
+        Files.writeString(
+                stateHome.resolve("install-context.properties"), "repo_url=" + repoUrl + "\n", StandardCharsets.UTF_8);
+        Files.writeString(stateHome.resolve("worker.log"), "repo " + repoUrl + " failed\n", StandardCharsets.UTF_8);
+        var reporter =
+                new SetupDiagnosticReporter(Map.of("SYMPHONY_TRELLO_REPO_URL", repoUrl), new FakeCommandRunner());
+
+        // when
+        String report = renderDefaultDiagnostics(reporter, configDir, workspaceRoot, stateHome);
+
+        // then
+        byte[] key = diagnosticsKey(configDir);
+        assertThat(report)
+                .contains(
+                        "repo_url=<value:" + token(key, repoUrl) + ">",
+                        "repo <value:" + token(key, repoUrl) + "> failed")
+                .doesNotContain("repo_url=" + repoUrl, "repo " + repoUrl + " failed");
+    }
+
+    @Test
+    void redactsInstallerSourceCommitsInRecentLogs() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("source-commit-config");
+        Path workspaceRoot = tempDir.resolve("source-commit-workspaces");
+        Path stateHome = tempDir.resolve("source-commit-state");
+        Files.createDirectories(configDir);
+        Files.createDirectories(workspaceRoot);
+        Files.createDirectories(stateHome);
+        String sourceCommit = "0123456789abcdef0123456789abcdef01234567";
+        Files.writeString(
+                stateHome.resolve("install-context.properties"),
+                "source_commit=" + sourceCommit + "\n",
+                StandardCharsets.UTF_8);
+        Files.writeString(
+                stateHome.resolve("worker.log"), "commit " + sourceCommit + " failed\n", StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = renderDefaultDiagnostics(reporter, configDir, workspaceRoot, stateHome);
+
+        // then
+        byte[] key = diagnosticsKey(configDir);
+        assertThat(report)
+                .contains(
+                        "source_commit=<value:" + token(key, sourceCommit) + ">",
+                        "commit <value:" + token(key, sourceCommit) + "> failed")
+                .doesNotContain("source_commit=" + sourceCommit, "commit " + sourceCommit + " failed");
+    }
+
+    @Test
+    void doesNotUseMalformedInstallerSourceCommitAsRecentLogRedactionTerm() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("malformed-source-commit-config");
+        Path workspaceRoot = tempDir.resolve("malformed-source-commit-workspaces");
+        Path stateHome = tempDir.resolve("malformed-source-commit-state");
+        Files.createDirectories(configDir);
+        Files.createDirectories(workspaceRoot);
+        Files.createDirectories(stateHome);
+        String malformedSourceCommit = "not-a-commit-value";
+        Files.writeString(
+                stateHome.resolve("install-context.properties"),
+                "source_commit=" + malformedSourceCommit + "\n",
+                StandardCharsets.UTF_8);
+        Files.writeString(
+                stateHome.resolve("worker.log"),
+                "ordinary " + malformedSourceCommit + " text\n",
+                StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = renderDefaultDiagnostics(reporter, configDir, workspaceRoot, stateHome);
+
+        // then
+        byte[] key = diagnosticsKey(configDir);
+        assertThat(report)
+                .contains(
+                        "source_commit=<value:" + token(key, malformedSourceCommit) + ">",
+                        "ordinary " + malformedSourceCommit + " text")
+                .doesNotContain("ordinary <value:" + token(key, malformedSourceCommit) + "> text");
+    }
+
+    @Test
     void diagnosticsRedactsYamlParserSecretContinuationLinesInRecentLogs() throws Exception {
         // given
         Path configDir = tempDir.resolve("yaml-parser-log-config");

@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static ch.fmartin.symphony.trello.CliExitCodes.SETUP_FAILURE;
 import static ch.fmartin.symphony.trello.testsupport.ManifestAssertions.assertThatManifest;
 import static ch.fmartin.symphony.trello.testsupport.WorkflowAssertions.assertThatWorkflow;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -334,7 +335,8 @@ final class LocalSetupRerunAccessTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetup("--non-interactive", "--add-path", allowedPath.toString(), "--no-github");
 
         // then
-        result.assertFailure(2).stderrContains("setup_board_selection_required", "Re-run with --board NAME");
+        result.assertFailure(SETUP_FAILURE)
+                .stderrContains("setup_board_selection_required", "Re-run with --board NAME");
         assertThatWorkflow(firstWorkflow).doesNotContain(allowedPath.toString());
         assertThatWorkflow(secondWorkflow).doesNotContain(allowedPath.toString());
     }
@@ -361,7 +363,7 @@ final class LocalSetupRerunAccessTest extends LocalSetupFixtureSupport {
                 "--non-interactive", "--add-path", allowedPath.toString(), "--server-port", "19000", "--no-github");
 
         // then
-        result.assertFailure(2).stderrContains("setup_mixed_codex_access_update", "--server-port");
+        result.assertFailure(SETUP_FAILURE).stderrContains("setup_mixed_codex_access_update", "--server-port");
         assertThatWorkflow(workflow).doesNotContain(allowedPath.toString(), "19000");
         assertThat(commands.startedWorkflows).isEmpty();
         assertThat(commands.stoppedWorkflows).isEmpty();
@@ -395,7 +397,7 @@ final class LocalSetupRerunAccessTest extends LocalSetupFixtureSupport {
 
         // then
         firstResult.assertSuccess();
-        result.assertFailure(2).stderrContains("setup_board_selection_required", "--server-port");
+        result.assertFailure(SETUP_FAILURE).stderrContains("setup_board_selection_required", "--server-port");
         assertThatWorkflow(workflow).doesNotHaveServerPort(19000);
         assertThat(commands.startedWorkflows).isEmpty();
         assertThat(commands.stoppedWorkflows).isEmpty();
@@ -424,7 +426,7 @@ final class LocalSetupRerunAccessTest extends LocalSetupFixtureSupport {
         SetupRunResult result = runSetup("--non-interactive", "--add-path", allowedPath.toString(), "--no-github");
 
         // then
-        result.assertFailure(2).stderrContains("setup_worker_untracked", "no managed pid");
+        result.assertFailure(SETUP_FAILURE).stderrContains("setup_worker_untracked", "no managed pid");
         assertThatWorkflow(workflow).doesNotContain(allowedPath.toString());
         assertThat(commands.startedWorkflows).isEmpty();
         assertThat(commands.stoppedWorkflows).isEmpty();

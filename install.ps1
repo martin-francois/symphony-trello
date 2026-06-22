@@ -364,9 +364,6 @@ function Apply-PublicArgs([string[]]$Tokens) {
       { $_ -in @("-version", "--version") } {
         $i++
         $value = Read-PublicSourceOptionValue $Tokens $i $token
-        if ($value.StartsWith("v")) {
-          $value = $value.Substring(1)
-        }
         Set-Variable -Name Version -Value $value -Scope 1
         if (-not $env:SYMPHONY_TRELLO_RELEASE_BASE_URL) {
           Set-Variable -Name ReleaseBaseUrl -Value "https://github.com/martin-francois/symphony-trello/releases/download/v$value" -Scope 1
@@ -467,9 +464,6 @@ function Assert-ReleaseInputs {
   if ([string]::IsNullOrWhiteSpace($Version)) {
     throw "--version must not be blank."
   }
-  if ($Version.StartsWith("v")) {
-    Set-Variable -Name Version -Value $Version.Substring(1) -Scope 1
-  }
   if ($InstallSource -eq "source-checkout") {
     return
   }
@@ -559,7 +553,7 @@ Options:
   --no-update-path
                  Do not edit the current user PATH.
   --version VERSION
-                 Release version to install. Default: $DefaultVersion.
+                 Release version to install without leading v. Default: $DefaultVersion.
   --from-source Install from a Git checkout instead of release assets.
   -DryRun       Alias for --dry-run.
   -NoOnboard    Alias for --no-onboard.

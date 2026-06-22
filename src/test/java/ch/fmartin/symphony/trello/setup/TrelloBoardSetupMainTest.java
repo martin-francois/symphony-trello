@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static ch.fmartin.symphony.trello.CliExitCodes.SETUP_FAILURE;
 import static ch.fmartin.symphony.trello.TestHttpExchange.query;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.boardJson;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.createdListJson;
@@ -233,7 +234,7 @@ final class TrelloBoardSetupMainTest {
                 env.toString());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_failed code=setup_invalid_arguments", "Invalid --board value.")
                 .stderrDoesNotContain("trello_invalid_request")
                 .stdoutDoesNotContain("Imported Trello board");
@@ -450,7 +451,7 @@ final class TrelloBoardSetupMainTest {
                 "https://not-trello.com/b/abc123/anything");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_invalid_arguments",
                         "Invalid --board value. Use a Trello board URL, short link, board id, or a connected board name.")
@@ -495,7 +496,7 @@ final class TrelloBoardSetupMainTest {
                 "https://trello.com/c/abc123/not-a-board");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_invalid_arguments",
                         "Invalid --board value. Use a Trello board URL, short link, board id, or a connected board name.")
@@ -637,7 +638,7 @@ final class TrelloBoardSetupMainTest {
                 output.toString());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stdoutDoesNotContain(
                         "# Symphony for Trello Diagnostics", "board A log", "board B log", "19188", "19189")
                 .stderrContains(
@@ -660,7 +661,7 @@ final class TrelloBoardSetupMainTest {
                 runCli("diagnostics", "--board", firstBoard, "--board", secondBoard, "--output", output.toString());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stdoutDoesNotContain("# Symphony for Trello Diagnostics", "Diagnostics written")
                 .stderrContains(
                         "setup_failed code=setup_invalid_arguments",
@@ -694,7 +695,7 @@ final class TrelloBoardSetupMainTest {
                 output.toString());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stdoutDoesNotContain("# Symphony for Trello Diagnostics", "Diagnostics written")
                 .stderrContains(
                         "setup_failed code=setup_invalid_arguments",
@@ -765,7 +766,7 @@ final class TrelloBoardSetupMainTest {
 
         // then
         for (CliRunResult result : results) {
-            result.assertFailure(2)
+            result.assertFailure(SETUP_FAILURE)
                     .stdoutDoesNotContain("# Symphony for Trello Diagnostics", "selected_workflow_file_count")
                     .stderrContains(
                             "setup_failed code=setup_invalid_arguments",
@@ -864,7 +865,7 @@ final class TrelloBoardSetupMainTest {
                 output.toString());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stdoutDoesNotContain(
                         "# Symphony for Trello Diagnostics",
                         "Troubleshooting report written",
@@ -950,7 +951,7 @@ final class TrelloBoardSetupMainTest {
                 runCli("diagnostics", "--config-dir", configDir.toString(), "--output", output.toString());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stdoutDoesNotContain("# Symphony for Trello Diagnostics")
                 .stderrContains("Could not write diagnostics output")
                 .stderrDoesNotContain(
@@ -966,7 +967,7 @@ final class TrelloBoardSetupMainTest {
         CliRunResult result = runCli(invalidCase.commandArray());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_invalid_arguments",
                         invalidCase.optionName() + " must not contain control characters")
@@ -1869,7 +1870,7 @@ final class TrelloBoardSetupMainTest {
         CliRunResult result = runCli("list-workspaces", "--endpoint", endpoint, "--key", "key", "--token", "token");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_invalid_arguments",
                         "--endpoint must point to the Trello REST API base, for example https://api.trello.com/1")
@@ -1887,7 +1888,7 @@ final class TrelloBoardSetupMainTest {
         CliRunResult result = runCli("list-workspaces", "--endpoint", endpoint, "--key", "key", "--token", "token");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=trello_api_request message=Trello request failed",
                         "Next step: Check the Trello API endpoint URL and network connection")
@@ -1908,7 +1909,7 @@ final class TrelloBoardSetupMainTest {
         CliRunResult result = runCli("list-workspaces", "--endpoint", endpoint(), "--key", "key", "--token", "token");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=trello_unknown_payload",
                         "Trello response payload could not be parsed",
@@ -1946,7 +1947,7 @@ final class TrelloBoardSetupMainTest {
                 manifest.toString());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=trello_write_outcome_unknown",
                         "Inspect Trello before retrying setup",
@@ -1988,7 +1989,7 @@ final class TrelloBoardSetupMainTest {
                 manifest.toString());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=trello_write_outcome_unknown", "Inspect Trello before retrying setup")
                 .stderrDoesNotContain("trello_unknown_payload", "Troubleshooting report written")
@@ -2027,7 +2028,7 @@ final class TrelloBoardSetupMainTest {
                 manifest.toString());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=trello_write_outcome_unknown", "Inspect Trello before retrying setup")
                 .stderrDoesNotContain("trello_unknown_payload", "Troubleshooting report written")
@@ -2066,7 +2067,7 @@ final class TrelloBoardSetupMainTest {
                 manifest.toString());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=trello_write_outcome_unknown", "Inspect Trello before retrying setup")
                 .stderrDoesNotContain(
@@ -2175,7 +2176,7 @@ final class TrelloBoardSetupMainTest {
                 "1");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_invalid_server_port",
                         "--server-port must be between 1024 and 65535 for local HTTP status.")
@@ -2218,7 +2219,7 @@ final class TrelloBoardSetupMainTest {
                 "18081");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_server_port_conflict",
                         "--server-port 18081 is already reserved by another connected workflow.")
@@ -2265,7 +2266,7 @@ final class TrelloBoardSetupMainTest {
         }
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_server_port_conflict",
                         "--server-port %d is already in use on 127.0.0.1.".formatted(listeningPort))
@@ -2309,7 +2310,7 @@ final class TrelloBoardSetupMainTest {
                 "2");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_invalid_server_port",
                         "--server-port must be between 1024 and 65535 for local HTTP status.")
@@ -2355,7 +2356,7 @@ final class TrelloBoardSetupMainTest {
                 "18082");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_server_port_conflict",
                         "--server-port 18082 is already reserved by another connected workflow.")
@@ -2397,7 +2398,7 @@ final class TrelloBoardSetupMainTest {
                 env.toString());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=trello_api_request message=Trello request failed",
                         "Next step: Check the Trello API endpoint URL and network connection")
@@ -2452,7 +2453,7 @@ final class TrelloBoardSetupMainTest {
         }
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_server_port_conflict",
                         "--server-port %d is already in use on 127.0.0.1.".formatted(listeningPort))
@@ -2559,7 +2560,7 @@ final class TrelloBoardSetupMainTest {
                 env.toString());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_manifest_unavailable",
                         "Connected-board manifest is not valid JSON",
@@ -2597,7 +2598,7 @@ final class TrelloBoardSetupMainTest {
                 env.toString());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_manifest_unavailable",
                         "Connected-board manifest is not valid connected-board JSON",
@@ -2638,7 +2639,7 @@ final class TrelloBoardSetupMainTest {
                 env.toString());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_manifest_unavailable",
                         "Connected-board manifest is not valid connected-board JSON")
@@ -2807,7 +2808,7 @@ final class TrelloBoardSetupMainTest {
                 "--force");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_failed code=setup_invalid_path", "directory")
                 .stderrDoesNotContain("Troubleshooting report written");
     }
@@ -2842,7 +2843,7 @@ final class TrelloBoardSetupMainTest {
                 "--force");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_failed code=setup_invalid_path", "not a directory")
                 .stderrDoesNotContain("setup_manifest_unavailable", "Troubleshooting report written");
     }
@@ -2856,7 +2857,9 @@ final class TrelloBoardSetupMainTest {
         CliRunResult result = runCli("diagnostics", extra);
 
         // then
-        result.assertFailure(2).stderrContains("Unmatched argument: 'extra'").stderrDoesNotContain("at index");
+        result.assertFailure(SETUP_FAILURE)
+                .stderrContains("Unmatched argument: 'extra'")
+                .stderrDoesNotContain("at index");
     }
 
     @Test
@@ -2879,7 +2882,8 @@ final class TrelloBoardSetupMainTest {
         Files.writeString(env, TestEnv.trelloCredentials("env-key", "env-token"), StandardCharsets.UTF_8);
 
         // when
-        CliRunResult result = runCli("list-workspaces", "--endpoint", endpoint(), "--env", env.toString());
+        CliRunResult result =
+                runCliWithoutTrelloCredentials("list-workspaces", "--endpoint", endpoint(), "--env", env.toString());
 
         // then
         result.assertSuccess().stdoutContains("Trello workspaces:", "workspace-1");
@@ -2894,12 +2898,91 @@ final class TrelloBoardSetupMainTest {
         Files.writeString(env, "\uFEFFTRELLO_API_KEY=bom-key\nTRELLO_API_TOKEN=bom-token\n", StandardCharsets.UTF_8);
 
         // when
-        CliRunResult result = runCli("list-workspaces", "--endpoint", endpoint(), "--env", env.toString());
+        CliRunResult result =
+                runCliWithoutTrelloCredentials("list-workspaces", "--endpoint", endpoint(), "--env", env.toString());
 
         // then
         result.assertSuccess().stdoutContains("Trello workspaces:");
         assertThat(workspaceAuthorization.get())
                 .contains("oauth_consumer_key=\"bom-key\"", "oauth_token=\"bom-token\"");
+    }
+
+    @MethodSource("listWorkspacesMissingCredentialSources")
+    @ParameterizedTest(name = "{0}")
+    void listWorkspacesMissingCredentialsHintUsesSelectedEnvFile(ListWorkspacesMissingCredentialSource credentialSource)
+            throws Exception {
+        // given
+        Path env = credentialSource.envPath(tempDir);
+        Files.createDirectories(env.getParent());
+        Files.writeString(env, "# no Trello credentials yet\n", StandardCharsets.UTF_8);
+
+        // when
+        CliRunResult result = runCliWithoutTrelloCredentials(
+                credentialSource.commandArgs(endpoint(), env).toArray(String[]::new));
+
+        // then
+        result.assertFailure(SETUP_FAILURE)
+                .stderrContains(
+                        "setup_failed code=setup_missing_api_key",
+                        env.toAbsolutePath().normalize().toString())
+                .stderrDoesNotContain(
+                        LocalEnvironment.defaultDotenv()
+                                .toAbsolutePath()
+                                .normalize()
+                                .toString(),
+                        "Troubleshooting report written");
+        assertThat(workspaceAuthorization.get())
+                .as("the expected local error must fire before any Trello request")
+                .isNull();
+    }
+
+    private static Stream<ListWorkspacesMissingCredentialSource> listWorkspacesMissingCredentialSources() {
+        return Stream.of(ListWorkspacesMissingCredentialSource.values());
+    }
+
+    private enum ListWorkspacesMissingCredentialSource {
+        EXPLICIT_ENV("explicit --env") {
+            @Override
+            Path envPath(Path tempDir) {
+                return tempDir.resolve("custom-env-dir").resolve(".env.empty");
+            }
+
+            @Override
+            List<String> commandArgs(String endpoint, Path env) {
+                return List.of("list-workspaces", "--endpoint", endpoint, "--env", env.toString());
+            }
+        },
+        CONFIG_DIR_ENV("config-dir .env") {
+            @Override
+            Path envPath(Path tempDir) {
+                return tempDir.resolve("empty-config-dir").resolve(".env");
+            }
+
+            @Override
+            List<String> commandArgs(String endpoint, Path env) {
+                return List.of(
+                        "list-workspaces",
+                        "--endpoint",
+                        endpoint,
+                        "--config-dir",
+                        env.getParent().toString());
+            }
+        };
+
+        private final String displayName;
+
+        ListWorkspacesMissingCredentialSource(String displayName) {
+            this.displayName = displayName;
+        }
+
+        abstract Path envPath(Path tempDir);
+
+        abstract List<String> commandArgs(String endpoint, Path env);
+
+        @Override
+        public String toString() {
+            return displayName;
+        }
     }
 
     @CsvSource({"$REAL_KEY", "${REAL_KEY}", "${REAL_KEY:-fallback}"})
@@ -2911,10 +2994,11 @@ final class TrelloBoardSetupMainTest {
                 env, "TRELLO_API_KEY=" + dotenvValue + "\nTRELLO_API_TOKEN=real-token\n", StandardCharsets.UTF_8);
 
         // when
-        CliRunResult result = runCli("list-workspaces", "--endpoint", endpoint(), "--env", env.toString());
+        CliRunResult result =
+                runCliWithoutTrelloCredentials("list-workspaces", "--endpoint", endpoint(), "--env", env.toString());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_credentials_environment_reference",
                         "credential file values are used literally",
@@ -2961,7 +3045,8 @@ final class TrelloBoardSetupMainTest {
                 StandardCharsets.UTF_8);
 
         // when
-        CliRunResult result = runCli("list-workspaces", "--endpoint", endpoint(), "--config-dir", configDir.toString());
+        CliRunResult result = runCliWithoutTrelloCredentials(
+                "list-workspaces", "--endpoint", endpoint(), "--config-dir", configDir.toString());
 
         // then
         result.assertSuccess().stdoutContains("Trello workspaces:", "workspace-1");
@@ -2982,7 +3067,7 @@ final class TrelloBoardSetupMainTest {
         Files.writeString(env, TestEnv.trelloCredentials("env-key", "env-token"), StandardCharsets.UTF_8);
 
         // when
-        CliRunResult result = runCli(
+        CliRunResult result = runCliWithoutTrelloCredentials(
                 "list-workspaces",
                 "--endpoint",
                 endpoint(),
@@ -3040,7 +3125,7 @@ final class TrelloBoardSetupMainTest {
                 runCli("list-workspaces", "--endpoint", endpoint(), "--config-dir", notADirectory.toString());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_failed code=setup_invalid_arguments", "--config-dir must be a directory.")
                 .stderrDoesNotContain("Troubleshooting report written");
         assertThat(workspaceAuthorization.get())
@@ -3487,7 +3572,7 @@ final class TrelloBoardSetupMainTest {
         CliRunResult result = runNewBoardWithRuntimeEnv(workflow, env, true);
 
         // then
-        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.exitCode()).isEqualTo(SETUP_FAILURE);
         assertThat(createdBoardName.get()).isNull();
         assertThat(workflow).doesNotExist();
         assertThat(result.stdout()).doesNotContain("Created Trello board", "Troubleshooting report written");
@@ -3510,7 +3595,7 @@ final class TrelloBoardSetupMainTest {
         CliRunResult result = runNewBoardWithRuntimeEnv(workflow, env, true);
 
         // then
-        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.exitCode()).isEqualTo(SETUP_FAILURE);
         assertThat(createdBoardName.get()).isNull();
         assertThat(workflow).doesNotExist();
         assertThat(result.stdout()).doesNotContain("Created Trello board", "Troubleshooting report written");
@@ -3541,7 +3626,7 @@ final class TrelloBoardSetupMainTest {
         CliRunResult result = runNewBoardWithRuntimeEnv(workflow, env, true);
 
         // then
-        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.exitCode()).isEqualTo(SETUP_FAILURE);
         assertThat(env).doesNotExist();
         assertThat(result.stdout()).doesNotContain("Created Trello board", "Troubleshooting report written");
         assertThat(result.stderr())
@@ -3578,7 +3663,7 @@ final class TrelloBoardSetupMainTest {
         CliRunResult result = runNewBoardWithRuntimeEnv(workflow, env, false);
 
         // then
-        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.exitCode()).isEqualTo(SETUP_FAILURE);
         assertThat(createdBoardName.get()).isNull();
         assertThat(workflow).doesNotExist();
         assertThat(env).content(StandardCharsets.UTF_8).isEqualTo("readme");
@@ -3600,7 +3685,7 @@ final class TrelloBoardSetupMainTest {
         CliRunResult result = runCli(setupCommandWithRuntimeEnv(command, workflow, envValue));
 
         // then
-        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.exitCode()).isEqualTo(SETUP_FAILURE);
         assertThat(createdBoardName.get()).isNull();
         assertThat(workflow).doesNotExist();
         assertThat(result.stdout()).doesNotContain("Created Trello board", "Troubleshooting report written");
@@ -3641,7 +3726,7 @@ final class TrelloBoardSetupMainTest {
         CliRunResult result = runCli(setupCommandWithWorkflow(command, workflowValue, env));
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_failed code=setup_invalid_arguments", "--workflow must be a file path.")
                 .stderrDoesNotContain("Troubleshooting report written");
         assertThat(result.stdout())
@@ -3668,7 +3753,7 @@ final class TrelloBoardSetupMainTest {
         CliRunResult result = runNewBoardWithRuntimeEnv(workflow, env, true);
 
         // then
-        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.exitCode()).isEqualTo(SETUP_FAILURE);
         assertThat(createdBoardName.get()).isNull();
         assertThat(workflow).doesNotExist();
         assertThat(result.stdout()).doesNotContain("Created Trello board", "Troubleshooting report written");
@@ -3705,7 +3790,7 @@ final class TrelloBoardSetupMainTest {
                 env.toString());
 
         // then
-        result.assertFailure(2);
+        result.assertFailure(SETUP_FAILURE);
         assertThat(createdBoardName.get()).isNull();
         assertThat(env).doesNotExist();
         assertThat(workflow).doesNotExist();
@@ -3737,7 +3822,7 @@ final class TrelloBoardSetupMainTest {
                 env.toString());
 
         // then
-        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.exitCode()).isEqualTo(SETUP_FAILURE);
         assertThat(createdBoardName.get()).isNull();
         assertThat(workflow).doesNotExist();
         assertThat(result.stdout()).doesNotContain("Troubleshooting report written");
@@ -3777,7 +3862,7 @@ final class TrelloBoardSetupMainTest {
                 env.toString());
 
         // then
-        result.assertFailure(2);
+        result.assertFailure(SETUP_FAILURE);
         assertThat(createdBoardName.get()).isNull();
         assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo("existing workflow");
         assertThat(env).doesNotExist();
@@ -3820,7 +3905,7 @@ final class TrelloBoardSetupMainTest {
                 env.toString());
 
         // then
-        result.assertFailure(2);
+        result.assertFailure(SETUP_FAILURE);
         assertThat(boardInfoLookups).hasValue(0);
         assertThat(createdLists).isEmpty();
         assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo("existing workflow");
@@ -3845,7 +3930,7 @@ final class TrelloBoardSetupMainTest {
         CliRunResult result = runImportBoardWithRuntimeEnv(workflow, env, true);
 
         // then
-        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.exitCode()).isEqualTo(SETUP_FAILURE);
         assertThat(boardInfoLookups).hasValue(0);
         assertThat(createdBoardName.get()).isNull();
         assertThat(workflow).doesNotExist();
@@ -3988,7 +4073,7 @@ final class TrelloBoardSetupMainTest {
                 " ");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_failed code=setup_invalid_arguments", optionName + " must not be blank.")
                 .stderrDoesNotContain("Troubleshooting report written");
         assertThat(result.stdout()).doesNotContain("Created Trello board", "Saving Trello credentials");
@@ -4009,7 +4094,7 @@ final class TrelloBoardSetupMainTest {
         CliRunResult result = runCli(option.command(workflow, env));
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_invalid_arguments", option.optionName() + " must not be blank.")
                 .stderrDoesNotContain("Troubleshooting report written");
@@ -4090,7 +4175,7 @@ final class TrelloBoardSetupMainTest {
                 " ");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_failed code=setup_invalid_arguments", optionName + " must not be blank.")
                 .stderrDoesNotContain("Troubleshooting report written");
         assertThat(result.stdout()).doesNotContain("Imported Trello board", "Saving Trello credentials");
@@ -4111,7 +4196,7 @@ final class TrelloBoardSetupMainTest {
         CliRunResult result = runCli(option.command(workflow, env));
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_invalid_arguments", option.optionName() + " must not be blank.")
                 .stderrDoesNotContain("trello_api_request", "Troubleshooting report written");
@@ -4167,7 +4252,7 @@ final class TrelloBoardSetupMainTest {
         CliRunResult result = runCli(setupCommandWithCodexOverride(command, workflow, env, optionName, invalidValue));
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_invalid_arguments",
                         optionName + " must not contain control characters.")
@@ -4392,7 +4477,7 @@ final class TrelloBoardSetupMainTest {
                 env.toString());
 
         // then
-        result.assertFailure(2);
+        result.assertFailure(SETUP_FAILURE);
         assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo("existing workflow");
         assertThat(fallback).doesNotExist();
         assertThat(result.stdout()).isEmpty();
@@ -4700,7 +4785,7 @@ final class TrelloBoardSetupMainTest {
                 "No Such List 123");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_unknown_in_progress_state",
                         "Unknown in-progress list(s): \"No Such List 123\"")
@@ -4913,7 +4998,7 @@ final class TrelloBoardSetupMainTest {
         CliRunResult result = runCli(invalidCase.commandArray(Map.of("<endpoint>", endpoint())));
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_invalid_arguments",
                         invalidCase.optionName() + " must not contain control characters")
@@ -5010,7 +5095,7 @@ final class TrelloBoardSetupMainTest {
         CliRunResult result = runCli(scenario.commandArray(replacements));
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_failed code=setup_invalid_arguments", scenario.expectedMessage())
                 .stderrDoesNotContain("Troubleshooting report written", workspaceFile.toString(), "not a directory")
                 .stdoutDoesNotContain("Created Trello board", "Imported Trello board");
@@ -5180,7 +5265,7 @@ final class TrelloBoardSetupMainTest {
         CliRunResult result = runCli(scenario.commandArray(replacements));
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_failed code=setup_invalid_arguments", scenario.expectedMessage())
                 .stderrDoesNotContain(
                         "Troubleshooting report written",
@@ -5253,7 +5338,7 @@ final class TrelloBoardSetupMainTest {
                 "new-board", "--endpoint", endpoint(), "--key", "key", "--token", "token", "--name", badBoardName);
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_invalid_arguments", "--name must not contain control characters")
                 .stderrDoesNotContain(badBoardName, "Troubleshooting report written")
@@ -5281,7 +5366,7 @@ final class TrelloBoardSetupMainTest {
                 badWorkspaceId);
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_invalid_arguments",
                         "--workspace-id must not contain control characters")
@@ -5310,7 +5395,7 @@ final class TrelloBoardSetupMainTest {
                 badWorkspaceId);
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_invalid_arguments",
                         "--workspace-id must be a Trello Workspace id, not a URL or path.")
@@ -5348,7 +5433,7 @@ final class TrelloBoardSetupMainTest {
                 "--force");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_invalid_arguments", "--board must not contain control characters")
                 .stderrDoesNotContain(badBoardSelector, "Troubleshooting report written")
@@ -5385,7 +5470,7 @@ final class TrelloBoardSetupMainTest {
         CliRunResult result = runCli(args.toArray(String[]::new));
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_invalid_arguments",
                         optionName + " must not contain control characters")
@@ -5442,7 +5527,7 @@ final class TrelloBoardSetupMainTest {
         CliRunResult result = runCli(args.toArray(String[]::new));
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_failed code=" + expectedCode, expectedMessage)
                 .stderrDoesNotContain("Troubleshooting report written")
                 .stdoutDoesNotContain("Imported Trello board", "Wrote workflow");
@@ -5516,7 +5601,7 @@ final class TrelloBoardSetupMainTest {
                 "--force");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_ambiguous_active_state",
                         "Multiple open Trello lists match active list selector(s): \"Ready for Codex\"")
@@ -5571,7 +5656,7 @@ final class TrelloBoardSetupMainTest {
         CliRunResult result = runCli(args.toArray(String[]::new));
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_failed code=setup_overlapping_list_roles", expectedMessage)
                 .stderrDoesNotContain("Troubleshooting report written")
                 .stdoutDoesNotContain("Imported Trello board", "Wrote workflow");
@@ -5638,7 +5723,7 @@ final class TrelloBoardSetupMainTest {
                 "--force");
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_invalid_arguments",
                         "Invalid --board value. Use a Trello board URL, short link, or board id.")
@@ -5658,7 +5743,7 @@ final class TrelloBoardSetupMainTest {
         CliRunResult result = runCli(command, "--board", badBoardSelector);
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_invalid_arguments", "--board must not contain control characters")
                 .stderrDoesNotContain(badBoardSelector, "\n# injected", "\u001B", "Troubleshooting report written")
@@ -5675,7 +5760,7 @@ final class TrelloBoardSetupMainTest {
         CliRunResult result = runCli(command, optionName, optionValue);
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_failed code=setup_invalid_arguments", expectedMessage)
                 .stderrDoesNotContain("Troubleshooting report written")
                 .stdoutDoesNotContain("running ", "stopped ", "Logs for ");
@@ -5691,6 +5776,95 @@ final class TrelloBoardSetupMainTest {
                 Arguments.of("stop", "--workflow", "   ", "--workflow must not be empty."),
                 Arguments.of("status", "--workflow", "", "--workflow must not be empty."),
                 Arguments.of("logs", "--workflow", "   ", "--workflow must not be empty."));
+    }
+
+    @Test
+    void startRejectsDuplicateRunningBoardWithoutLeakingWorkflowPaths() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("duplicate-board-config");
+        Path stateHome = tempDir.resolve("duplicate-board-state");
+        Path runningWorkflow = configDir.resolve("WORKFLOW.running.md");
+        Path requestedWorkflow = configDir.resolve("WORKFLOW.requested.md");
+        Path env = configDir.resolve(".env");
+        Files.createDirectories(configDir);
+        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
+        HttpServer runningWorker = startLoopbackServer();
+        int runningPort = runningWorker.getAddress().getPort();
+        Files.writeString(
+                runningWorkflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  endpoint: "%s"
+                  board_id: board-conflict
+                server:
+                  port: %d
+                ---
+                # Running workflow
+                """
+                        .formatted(endpoint(), runningPort),
+                StandardCharsets.UTF_8);
+        Files.writeString(
+                requestedWorkflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  endpoint: "%s"
+                  board_id: board-conflict
+                server:
+                  port: 19091
+                ---
+                # Requested workflow
+                """
+                        .formatted(endpoint()),
+                StandardCharsets.UTF_8);
+        ConnectedBoard runningBoard = connectedBoard(runningWorkflow, runningPort);
+        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(runningBoard)));
+        runningWorker.createContext(
+                "/api/v1/local-status",
+                exchange -> respond(
+                        exchange,
+                        """
+                        {"workflowPath":%s,"boardId":"board-conflict","configuredBoardId":"board-conflict","pid":4242}
+                        """
+                                .formatted(new ObjectMapper().writeValueAsString(runningWorkflow.toString()))));
+
+        // when
+        CliRunResult result;
+        try {
+            result = runCli(
+                    "start",
+                    "--workflow",
+                    requestedWorkflow.toString(),
+                    "--env",
+                    env.toString(),
+                    "--config-dir",
+                    configDir.toString(),
+                    "--state-home",
+                    stateHome.toString());
+        } finally {
+            runningWorker.stop(0);
+        }
+
+        // then
+        result.assertFailure(SETUP_FAILURE)
+                .stderrContains(
+                        "setup_failed code=setup_worker_board_already_managed",
+                        "Conflicting Trello Board",
+                        "already managed by a running worker for another workflow",
+                        "symphony-trello stop --workflow")
+                .stderrDoesNotContain(
+                        runningWorkflow.toString(),
+                        requestedWorkflow.toString(),
+                        configDir.toString(),
+                        stateHome.toString(),
+                        env.toString(),
+                        tempDir.toString(),
+                        ".log",
+                        ".err");
     }
 
     @Test
@@ -5731,7 +5905,7 @@ final class TrelloBoardSetupMainTest {
                 stateHome.toString());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_workflow_invalid",
                         "server.port",
@@ -5774,7 +5948,7 @@ final class TrelloBoardSetupMainTest {
                 workflow.toString());
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_workflow_invalid",
                         "missing workflow file",
@@ -5782,6 +5956,91 @@ final class TrelloBoardSetupMainTest {
                 .stderrDoesNotContain("Troubleshooting report written")
                 .stdoutDoesNotContain("Started Symphony for Trello", "running ", "stopped ", "Logs for ");
         assertThat(stateHome).doesNotExist();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"status", "stop", "logs"})
+    void lifecycleCommandsRejectMissingExplicitWorkflowWithoutLeakingPath(String command) {
+        // given
+        Path configDir = tempDir.resolve("missing-lifecycle-config");
+        Path stateHome = tempDir.resolve("missing-lifecycle-state");
+        Path workflow = configDir.resolve("missing.WORKFLOW.md");
+
+        // when
+        CliRunResult result = runCli(
+                command,
+                "--config-dir",
+                configDir.toString(),
+                "--state-home",
+                stateHome.toString(),
+                "--workflow",
+                workflow.toString());
+
+        // then
+        result.assertFailure(SETUP_FAILURE)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments",
+                        "--workflow must point to an existing workflow file.")
+                .stderrDoesNotContain(workflow.toString(), configDir.toString(), tempDir.toString())
+                .stdoutDoesNotContain("running ", "stopped ", "already stopped", "Logs for ");
+        assertThat(stateHome).doesNotExist();
+    }
+
+    @ParameterizedTest(name = "{0} rejects a missing explicit workflow despite stale managed state")
+    @ValueSource(strings = {"status", "stop", "logs"})
+    void lifecycleCommandsRejectMissingExplicitWorkflowBeforeReadingManagedState(String command) throws Exception {
+        // given
+        Path configDir = tempDir.resolve("missing-lifecycle-state-config");
+        Path stateHome = tempDir.resolve("missing-lifecycle-state-home");
+        Path workflow = configDir.resolve("missing.WORKFLOW.md");
+        ManagedProcessStore.ManagedProcessFiles files = new ManagedProcessStore(stateHome).files(workflow);
+        Files.createDirectories(stateHome);
+        Files.writeString(files.pidFile(), "42", StandardCharsets.UTF_8);
+        Files.writeString(files.stdoutLog(), "stdout should not be printed\n", StandardCharsets.UTF_8);
+        Files.writeString(files.stderrLog(), "stderr should not be printed\n", StandardCharsets.UTF_8);
+        Files.writeString(files.processLockFile(), "lock should remain\n", StandardCharsets.UTF_8);
+        String pidBefore = Files.readString(files.pidFile(), StandardCharsets.UTF_8);
+        String stdoutBefore = Files.readString(files.stdoutLog(), StandardCharsets.UTF_8);
+        String stderrBefore = Files.readString(files.stderrLog(), StandardCharsets.UTF_8);
+        String lockBefore = Files.readString(files.processLockFile(), StandardCharsets.UTF_8);
+        assertThat(workflow).doesNotExist();
+
+        // when
+        CliRunResult result = runCli(
+                command,
+                "--config-dir",
+                configDir.toString(),
+                "--state-home",
+                stateHome.toString(),
+                "--workflow",
+                workflow.toString());
+
+        // then
+        result.assertFailure(SETUP_FAILURE)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments",
+                        "--workflow must point to an existing workflow file.")
+                .stderrDoesNotContain(
+                        workflow.toString(),
+                        configDir.toString(),
+                        stateHome.toString(),
+                        tempDir.toString(),
+                        files.pidFile().getFileName().toString(),
+                        files.stdoutLog().getFileName().toString(),
+                        files.stderrLog().getFileName().toString(),
+                        "Troubleshooting report written")
+                .stdoutDoesNotContain(
+                        "running ",
+                        "stopped ",
+                        "already stopped",
+                        "Logs for ",
+                        "stdout should not be printed",
+                        "stderr should not be printed");
+        assertThat(Files.readString(files.pidFile(), StandardCharsets.UTF_8)).isEqualTo(pidBefore);
+        assertThat(Files.readString(files.stdoutLog(), StandardCharsets.UTF_8)).isEqualTo(stdoutBefore);
+        assertThat(Files.readString(files.stderrLog(), StandardCharsets.UTF_8)).isEqualTo(stderrBefore);
+        assertThat(Files.readString(files.processLockFile(), StandardCharsets.UTF_8))
+                .isEqualTo(lockBefore);
     }
 
     @Test
@@ -5793,7 +6052,7 @@ final class TrelloBoardSetupMainTest {
         CliRunResult result = runCli("diagnostics", "--board", badBoardSelector);
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_invalid_arguments", "--board must not contain control characters")
                 .stderrDoesNotContain(badBoardSelector, "\n# injected", "\u001B", "Troubleshooting report written")
@@ -5809,7 +6068,7 @@ final class TrelloBoardSetupMainTest {
         CliRunResult result = runCli(badCommand);
 
         // then
-        result.assertFailure(2)
+        result.assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_failed code=setup_invalid_arguments", "bad\\n# injected\\u001B[31mred\\u001B[0m")
                 .stderrDoesNotContain(badCommand, "\n# injected", "\u001B", "Troubleshooting report written")
                 .stdoutDoesNotContain(badCommand);
@@ -5826,7 +6085,7 @@ final class TrelloBoardSetupMainTest {
                 runMainProcessWithoutTrelloCredentials(workingDir, "new-board", "--name", "Test Board 1");
 
         // then
-        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.exitCode()).isEqualTo(SETUP_FAILURE);
         assertThat(result.stdout()).isEmpty();
         assertThat(result.stderr())
                 .contains(
@@ -5967,6 +6226,11 @@ final class TrelloBoardSetupMainTest {
 
     private CliRunResult runCli(String... args) {
         return runCli(() -> TrelloBoardSetup.CodexModelDefaults.fallback(), args);
+    }
+
+    private CliRunResult runCliWithoutTrelloCredentials(String... args) throws IOException, InterruptedException {
+        MainProcessResult result = runMainProcessWithoutTrelloCredentials(tempDir, args);
+        return new CliRunResult(result.exitCode(), result.stdout(), result.stderr());
     }
 
     private CliRunResult runCli(Map<String, String> properties, String... args) {

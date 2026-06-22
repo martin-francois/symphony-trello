@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.setup;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -19,6 +20,7 @@ import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
@@ -41,6 +43,8 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.MockedConstruction;
 
 final class LocalWorkerManagerTest {
+    private static final long MISSING_WORKFLOW_STATE_PID = 42L;
+
     @TempDir
     Path tempDir;
 
@@ -2301,24 +2305,163 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
-    void startWorkflowSelectorRejectsMissingWorkflowFileButRecoveryCommandsCanStillAct() throws Exception {
+    void lifecycleWorkflowSelectorsRejectMissingWorkflowFileBeforeActing() throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         Path workflow = fixture.paths.configDir().resolve("missing.WORKFLOW.md");
-        writeManagedLog(fixture, workflow);
 
         // when
         Throwable start = catchThrowable(() -> fixture.start(fixture.startWorkflowRequest(workflow)));
-        WorkerRunResult status = fixture.status(fixture.statusWorkflowRequest(workflow));
-        WorkerRunResult stop = fixture.stop(fixture.stopWorkflowRequest(workflow));
-        WorkerRunResult logs = fixture.logs(fixture.logsWorkflowRequest(workflow));
+        Throwable status = catchThrowable(() -> fixture.status(fixture.statusWorkflowRequest(workflow)));
+        Throwable stop = catchThrowable(() -> fixture.stop(fixture.stopWorkflowRequest(workflow)));
+        Throwable logs = catchThrowable(() -> fixture.logs(fixture.logsWorkflowRequest(workflow)));
 
         // then
         assertWorkflowInvalidForLaunch(start, "missing workflow file");
-        status.assertSuccess().stdoutContains("invalid \"missing.WORKFLOW.md\"", "missing workflow file");
-        stop.assertSuccess().stdoutContains("Symphony for Trello is already stopped for \"missing.WORKFLOW.md\"");
-        logs.assertSuccess();
+        assertInvalidExplicitWorkflowSelector(status, "--workflow must point to an existing workflow file.");
+        assertInvalidExplicitWorkflowSelector(stop, "--workflow must point to an existing workflow file.");
+        assertInvalidExplicitWorkflowSelector(logs, "--workflow must point to an existing workflow file.");
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    @MethodSource("missingWorkflowArtifactScenarios")
+    @ParameterizedTest(name = "{0} rejects missing explicit workflow before status side effects")
+    void statusWorkflowSelectorRejectsMissingWorkflowDespiteState(MissingWorkflowArtifactScenario scenario)
+            throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
+        Path workflow = fixture.paths.configDir().resolve("missing.WORKFLOW.md");
+        ManagedProcessStore.ManagedProcessFiles files = store.files(workflow);
+        scenario.create(fixture, files);
+        StateSnapshot before = StateSnapshot.capture(files);
+        assertThat(workflow).doesNotExist();
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.status(fixture.statusWorkflowRequest(workflow)));
+
+        // then
+        assertMissingExplicitWorkflowRejected(thrown);
+        before.assertUnchanged(files);
+        verifyNoMissingWorkflowSideEffects(fixture);
+    }
+
+    @MethodSource("missingWorkflowArtifactScenarios")
+    @ParameterizedTest(name = "{0} rejects missing explicit workflow before stop side effects")
+    void stopWorkflowSelectorRejectsMissingWorkflowDespiteState(MissingWorkflowArtifactScenario scenario)
+            throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
+        Path workflow = fixture.paths.configDir().resolve("missing.WORKFLOW.md");
+        ManagedProcessStore.ManagedProcessFiles files = store.files(workflow);
+        scenario.create(fixture, files);
+        StateSnapshot before = StateSnapshot.capture(files);
+        assertThat(workflow).doesNotExist();
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.stop(fixture.stopWorkflowRequest(workflow)));
+
+        // then
+        assertMissingExplicitWorkflowRejected(thrown);
+        before.assertUnchanged(files);
+        verifyNoMissingWorkflowSideEffects(fixture);
+    }
+
+    @MethodSource("missingWorkflowArtifactScenarios")
+    @ParameterizedTest(name = "{0} rejects missing explicit workflow before log side effects")
+    void logsWorkflowSelectorRejectsMissingWorkflowDespiteState(MissingWorkflowArtifactScenario scenario)
+            throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
+        Path workflow = fixture.paths.configDir().resolve("missing.WORKFLOW.md");
+        ManagedProcessStore.ManagedProcessFiles files = store.files(workflow);
+        scenario.create(fixture, files);
+        StateSnapshot before = StateSnapshot.capture(files);
+        assertThat(workflow).doesNotExist();
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.logs(fixture.logsWorkflowRequest(workflow)));
+
+        // then
+        assertMissingExplicitWorkflowRejected(thrown);
+        before.assertUnchanged(files);
+        verifyNoMissingWorkflowSideEffects(fixture);
+    }
+
+    private static Stream<MissingWorkflowArtifactScenario> missingWorkflowArtifactScenarios() {
+        return Stream.of(
+                new MissingWorkflowArtifactScenario("no state", (fixture, files) -> {}),
+                new MissingWorkflowArtifactScenario("live managed pid", (fixture, files) -> {
+                    writePid(files, MISSING_WORKFLOW_STATE_PID);
+                    when(fixture.platform.isAlive(MISSING_WORKFLOW_STATE_PID)).thenReturn(true);
+                }),
+                new MissingWorkflowArtifactScenario("live foreign pid", (fixture, files) -> {
+                    writePid(files, MISSING_WORKFLOW_STATE_PID);
+                    when(fixture.platform.isAlive(MISSING_WORKFLOW_STATE_PID)).thenReturn(true);
+                }),
+                new MissingWorkflowArtifactScenario("dead pid", (fixture, files) -> {
+                    writePid(files, MISSING_WORKFLOW_STATE_PID);
+                    when(fixture.platform.isAlive(MISSING_WORKFLOW_STATE_PID)).thenReturn(false);
+                }),
+                new MissingWorkflowArtifactScenario("empty pid", (fixture, files) -> writePid(files, "")),
+                new MissingWorkflowArtifactScenario("malformed pid", (fixture, files) -> writePid(files, "not-a-pid")),
+                new MissingWorkflowArtifactScenario("pid path is a directory", (fixture, files) -> {
+                    Files.createDirectories(files.pidFile());
+                    assertThat(files.pidFile()).isDirectory();
+                }),
+                new MissingWorkflowArtifactScenario(
+                        "stdout log only", (fixture, files) -> writeFile(files.stdoutLog(), "out\n")),
+                new MissingWorkflowArtifactScenario(
+                        "stderr log only", (fixture, files) -> writeFile(files.stderrLog(), "err\n")),
+                new MissingWorkflowArtifactScenario(
+                        "empty stdout log", (fixture, files) -> writeFile(files.stdoutLog(), "")),
+                new MissingWorkflowArtifactScenario("both logs", (fixture, files) -> {
+                    writeFile(files.stdoutLog(), "out\n");
+                    writeFile(files.stderrLog(), "err\n");
+                }),
+                new MissingWorkflowArtifactScenario("log path is a directory", (fixture, files) -> {
+                    Files.createDirectories(files.stdoutLog());
+                    assertThat(files.stdoutLog()).isDirectory();
+                }),
+                new MissingWorkflowArtifactScenario(
+                        "lock only", (fixture, files) -> writeFile(files.processLockFile(), "lock\n")),
+                new MissingWorkflowArtifactScenario("mixed stale artifacts", (fixture, files) -> {
+                    writePid(files, "bad-pid");
+                    writeFile(files.stdoutLog(), "out\n");
+                    writeFile(files.stderrLog(), "err\n");
+                    writeFile(files.processLockFile(), "lock\n");
+                }));
+    }
+
+    private static void writePid(ManagedProcessStore.ManagedProcessFiles files, String text) throws IOException {
+        writeFile(files.pidFile(), text);
+    }
+
+    private static void writePid(ManagedProcessStore.ManagedProcessFiles files, long pid) throws IOException {
+        writePid(files, Long.toString(pid));
+    }
+
+    private static void writeFile(Path path, String text) throws IOException {
+        Path parent = path.getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
+        Files.writeString(path, text, StandardCharsets.UTF_8);
+    }
+
+    private static void createSymbolicLinkOrSkip(Path link, Path target) throws IOException {
+        Path parent = link.getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
+        try {
+            Files.createSymbolicLink(link, target);
+        } catch (UnsupportedOperationException | IOException e) {
+            assumeTrue(false, "symbolic links are not available in this test environment: " + e.getMessage());
+        }
+        assumeTrue(Files.isSymbolicLink(link), "symbolic link precondition must hold");
     }
 
     @Test
@@ -2332,6 +2475,119 @@ final class LocalWorkerManagerTest {
         assertLifecycleRejectsExplicitWorkflow(
                 fixture,
                 workflowDirectory,
+                "--workflow must point to a regular workflow file.",
+                "workflow path is not a regular workflow file");
+
+        // then
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void lifecycleWorkflowSelectorsRejectMissingWorkflowPathAliasesBeforeActing() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        Path nested = fixture.paths.configDir().resolve("nested");
+        Files.createDirectories(nested);
+        List<Path> missingAliases = List.of(
+                fixture.paths
+                        .configDir()
+                        .resolve("absolute-missing.WORKFLOW.md")
+                        .toAbsolutePath(),
+                nested.resolve(".").resolve("relative-missing.WORKFLOW.md"),
+                nested.resolve("child").resolve("..").resolve("normalized-missing.WORKFLOW.md"),
+                Path.of(fixture.paths.configDir() + "//repeated-separator.WORKFLOW.md"));
+
+        for (Path workflow : missingAliases) {
+
+            // when
+            Throwable status = catchThrowable(() -> fixture.status(fixture.statusWorkflowRequest(workflow)));
+            Throwable stop = catchThrowable(() -> fixture.stop(fixture.stopWorkflowRequest(workflow)));
+            Throwable logs = catchThrowable(() -> fixture.logs(fixture.logsWorkflowRequest(workflow)));
+
+            // then
+            assertMissingExplicitWorkflowRejected(status);
+            assertMissingExplicitWorkflowRejected(stop);
+            assertMissingExplicitWorkflowRejected(logs);
+        }
+        verifyNoMissingWorkflowSideEffects(fixture);
+    }
+
+    @Test
+    void lifecycleWorkflowSelectorsRejectDanglingWorkflowSymlinkBeforeActing() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        Path target = fixture.paths.configDir().resolve("missing-target.WORKFLOW.md");
+        Path link = fixture.paths.configDir().resolve("dangling-link.WORKFLOW.md");
+        createSymbolicLinkOrSkip(link, target);
+        assertThat(link).isSymbolicLink();
+        assertThat(target).doesNotExist();
+
+        // when
+        Throwable status = catchThrowable(() -> fixture.status(fixture.statusWorkflowRequest(link)));
+        Throwable stop = catchThrowable(() -> fixture.stop(fixture.stopWorkflowRequest(link)));
+        Throwable logs = catchThrowable(() -> fixture.logs(fixture.logsWorkflowRequest(link)));
+
+        // then
+        assertMissingExplicitWorkflowRejected(status);
+        assertMissingExplicitWorkflowRejected(stop);
+        assertMissingExplicitWorkflowRejected(logs);
+        verifyNoMissingWorkflowSideEffects(fixture);
+    }
+
+    @Test
+    void lifecycleWorkflowSelectorsRejectParentSymlinkToMissingWorkflowBeforeActing() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        Path realParent = fixture.paths.configDir().resolve("real-parent");
+        Path linkedParent = fixture.paths.configDir().resolve("linked-parent");
+        Files.createDirectories(realParent);
+        createSymbolicLinkOrSkip(linkedParent, realParent);
+        assertThat(linkedParent).isSymbolicLink();
+        Path workflow = linkedParent.resolve("missing.WORKFLOW.md");
+        assertThat(workflow).doesNotExist();
+
+        // when
+        Throwable status = catchThrowable(() -> fixture.status(fixture.statusWorkflowRequest(workflow)));
+        Throwable stop = catchThrowable(() -> fixture.stop(fixture.stopWorkflowRequest(workflow)));
+        Throwable logs = catchThrowable(() -> fixture.logs(fixture.logsWorkflowRequest(workflow)));
+
+        // then
+        assertMissingExplicitWorkflowRejected(status);
+        assertMissingExplicitWorkflowRejected(stop);
+        assertMissingExplicitWorkflowRejected(logs);
+        verifyNoMissingWorkflowSideEffects(fixture);
+    }
+
+    @Test
+    void lifecycleWorkflowSelectorsAcceptSymlinkToRegularWorkflow() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        Path link = fixture.paths.configDir().resolve("workflow-link.md");
+        createSymbolicLinkOrSkip(link, board.workflowPath());
+        assertThat(link).isSymbolicLink().isRegularFile();
+
+        // when
+        WorkerRunResult status = fixture.status(fixture.statusWorkflowRequest(link));
+
+        // then
+        status.assertSuccess().stdoutContains("stopped \"workflow-link.md\"");
+    }
+
+    @Test
+    void lifecycleWorkflowSelectorsRejectSymlinkToDirectoryAsNonRegularWorkflow() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        Path directory = fixture.paths.configDir().resolve("workflow-dir");
+        Files.createDirectories(directory);
+        Path link = fixture.paths.configDir().resolve("workflow-dir-link.md");
+        createSymbolicLinkOrSkip(link, directory);
+        assertThat(link).isSymbolicLink().isDirectory();
+
+        // when
+        assertLifecycleRejectsExplicitWorkflow(
+                fixture,
+                link,
                 "--workflow must point to a regular workflow file.",
                 "workflow path is not a regular workflow file");
 
@@ -3099,6 +3355,90 @@ final class LocalWorkerManagerTest {
             assertThat(failure).hasMessage(expectedMessage);
             assertThat(failure.getMessage()).doesNotContain(tempDir.toString());
         });
+    }
+
+    private void assertMissingExplicitWorkflowRejected(Throwable thrown) {
+        assertInvalidExplicitWorkflowSelector(thrown, "--workflow must point to an existing workflow file.");
+    }
+
+    private void verifyNoMissingWorkflowSideEffects(LocalWorkerManagerTestFixture fixture) throws Exception {
+        verify(fixture.platform, never()).isAlive(anyLong());
+        verify(fixture.platform, never()).isManaged(anyLong(), any());
+        verify(fixture.platform, never()).isManaged(anyLong(), any(), any());
+        verify(fixture.platform, never()).stop(anyLong(), any(Duration.class), any(Duration.class));
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+        verify(fixture.healthChecker, never()).boardHealth(any());
+        verify(fixture.healthChecker, never()).managedHealthPort(any(), anyInt(), any());
+        verify(fixture.healthChecker, never()).workflowHealth(any(), any(), any(), anyInt());
+        verify(fixture.healthChecker, never()).waitForSameWorkflow(any(), anyInt(), any());
+    }
+
+    private record MissingWorkflowArtifactScenario(String name, MissingWorkflowArtifactWriter writer) {
+        void create(LocalWorkerManagerTestFixture fixture, ManagedProcessStore.ManagedProcessFiles files)
+                throws Exception {
+            writer.create(fixture, files);
+        }
+
+        @Override
+        public String toString() {
+            return name;
+        }
+    }
+
+    @FunctionalInterface
+    private interface MissingWorkflowArtifactWriter {
+        void create(LocalWorkerManagerTestFixture fixture, ManagedProcessStore.ManagedProcessFiles files)
+                throws Exception;
+    }
+
+    private record StateSnapshot(
+            FileSnapshot pid,
+            FileSnapshot stdout,
+            FileSnapshot stderr,
+            FileSnapshot lock,
+            boolean stateDirectoryExists) {
+        static StateSnapshot capture(ManagedProcessStore.ManagedProcessFiles files) throws IOException {
+            Path parent = files.pidFile().getParent();
+            return new StateSnapshot(
+                    FileSnapshot.capture(files.pidFile()),
+                    FileSnapshot.capture(files.stdoutLog()),
+                    FileSnapshot.capture(files.stderrLog()),
+                    FileSnapshot.capture(files.processLockFile()),
+                    parent != null && Files.exists(parent, LinkOption.NOFOLLOW_LINKS));
+        }
+
+        void assertUnchanged(ManagedProcessStore.ManagedProcessFiles files) throws IOException {
+            pid.assertUnchanged(files.pidFile());
+            stdout.assertUnchanged(files.stdoutLog());
+            stderr.assertUnchanged(files.stderrLog());
+            lock.assertUnchanged(files.processLockFile());
+            Path parent = files.pidFile().getParent();
+            assertThat(parent != null && Files.exists(parent, LinkOption.NOFOLLOW_LINKS))
+                    .isEqualTo(stateDirectoryExists);
+        }
+    }
+
+    private record FileSnapshot(boolean exists, boolean directory, String content) {
+        static FileSnapshot capture(Path path) throws IOException {
+            if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
+                return new FileSnapshot(false, false, "");
+            }
+            if (Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
+                return new FileSnapshot(true, true, "");
+            }
+            return new FileSnapshot(true, false, Files.readString(path, StandardCharsets.UTF_8));
+        }
+
+        void assertUnchanged(Path path) throws IOException {
+            assertThat(Files.exists(path, LinkOption.NOFOLLOW_LINKS)).isEqualTo(exists);
+            if (!exists) {
+                return;
+            }
+            assertThat(Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)).isEqualTo(directory);
+            if (!directory) {
+                assertThat(Files.readString(path, StandardCharsets.UTF_8)).isEqualTo(content);
+            }
+        }
     }
 
     @Test

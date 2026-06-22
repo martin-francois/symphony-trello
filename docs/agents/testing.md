@@ -18,6 +18,11 @@ parallel safety. Live end-to-end and deployed-verification rules live in
 ## Frameworks
 
 - Use JUnit 6 and AssertJ. Prefer readable AssertJ chains when they improve the failure message.
+- Prefer AssertJ's type-specific assertions over asserting raw booleans from helper APIs when the
+  feature exists. For example, use `assertThat(path).isSymbolicLink().isDirectory()` instead of
+  `assertThat(Files.isSymbolicLink(path)).isTrue()` followed by
+  `assertThat(Files.isDirectory(path)).isTrue()`. Reserve `isTrue()` and `isFalse()` for values that
+  are already domain booleans or for cases where AssertJ has no clearer assertion.
 - Use Mockito for mocks. Keep purpose-built fakes only when they model an external protocol, stateful
   fixture, or concurrency behavior more clearly than Mockito stubbing.
 - Prefer parameterized tests with `@MethodSource` for data-driven behavior.
@@ -55,6 +60,10 @@ parallel safety. Live end-to-end and deployed-verification rules live in
 - When two or more tests repeat the same given-scaffolding or differ only in input data, extract a
   shared fixture helper or use a parameterized test instead of copying the block. Keep each test's
   distinctive inputs and assertions visible at the call site; share only the genuinely common setup.
+- If you catch yourself making the same setup, command-construction, or assertion edit in more than
+  one test, stop and decide whether a parameterized test, scenario record, enum, or helper would make
+  the coupling explicit. Apply that refactor before committing unless the cases truly represent
+  different concepts that should evolve independently.
 - Before adding a new fake server, CLI command array, workflow/env text block, manifest assertion,
   workflow assertion, or terminal transcript assertion, check
   `src/test/java/ch/fmartin/symphony/trello/testsupport` and existing package-local fixtures for a
