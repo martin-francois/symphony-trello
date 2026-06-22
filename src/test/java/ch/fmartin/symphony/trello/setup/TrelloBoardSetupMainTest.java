@@ -5698,6 +5698,95 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
+    void startRejectsDuplicateRunningBoardWithoutLeakingWorkflowPaths() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("duplicate-board-config");
+        Path stateHome = tempDir.resolve("duplicate-board-state");
+        Path runningWorkflow = configDir.resolve("WORKFLOW.running.md");
+        Path requestedWorkflow = configDir.resolve("WORKFLOW.requested.md");
+        Path env = configDir.resolve(".env");
+        Files.createDirectories(configDir);
+        Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
+        HttpServer runningWorker = startLoopbackServer();
+        int runningPort = runningWorker.getAddress().getPort();
+        Files.writeString(
+                runningWorkflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  endpoint: "%s"
+                  board_id: board-conflict
+                server:
+                  port: %d
+                ---
+                # Running workflow
+                """
+                        .formatted(endpoint(), runningPort),
+                StandardCharsets.UTF_8);
+        Files.writeString(
+                requestedWorkflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  endpoint: "%s"
+                  board_id: board-conflict
+                server:
+                  port: 19091
+                ---
+                # Requested workflow
+                """
+                        .formatted(endpoint()),
+                StandardCharsets.UTF_8);
+        ConnectedBoard runningBoard = connectedBoard(runningWorkflow, runningPort);
+        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(runningBoard)));
+        runningWorker.createContext(
+                "/api/v1/local-status",
+                exchange -> respond(
+                        exchange,
+                        """
+                        {"workflowPath":%s,"boardId":"board-conflict","configuredBoardId":"board-conflict","pid":4242}
+                        """
+                                .formatted(new ObjectMapper().writeValueAsString(runningWorkflow.toString()))));
+
+        // when
+        CliRunResult result;
+        try {
+            result = runCli(
+                    "start",
+                    "--workflow",
+                    requestedWorkflow.toString(),
+                    "--env",
+                    env.toString(),
+                    "--config-dir",
+                    configDir.toString(),
+                    "--state-home",
+                    stateHome.toString());
+        } finally {
+            runningWorker.stop(0);
+        }
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_worker_board_already_managed",
+                        "Conflicting Trello Board",
+                        "already managed by a running worker for another workflow",
+                        "symphony-trello stop --workflow")
+                .stderrDoesNotContain(
+                        runningWorkflow.toString(),
+                        requestedWorkflow.toString(),
+                        configDir.toString(),
+                        stateHome.toString(),
+                        env.toString(),
+                        tempDir.toString(),
+                        ".log",
+                        ".err");
+    }
+
+    @Test
     void startRejectsInvalidLiteralServerPortWithoutLeakingWorkflowPath() throws Exception {
         // given
         Path configDir = tempDir.resolve("literal-port-config");
