@@ -16,7 +16,7 @@ final class PrerequisiteCheckerTest {
         FakeCommandRunner commands = baseCommands()
                 .returns(0, javaOutput, "java", "-version")
                 .returns(
-                        javacOutput == null ? 127 : 0,
+                        javacOutput == null ? CommandResult.COMMAND_NOT_FOUND_EXIT_CODE : 0,
                         javacOutput == null ? "missing" : javacOutput,
                         "javac",
                         "-version");

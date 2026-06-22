@@ -99,6 +99,14 @@ References.
   pattern, in two or more places during one change as that signal: those places will have to change
   together again, so centralize them into a shared helper or constant before finishing instead of
   leaving parallel copies.
+- Treat an unexplained numeric literal as a magic number when its meaning is not obvious from the
+  immediate expression and surrounding API. Numeric literals other than `0` and `1` usually deserve
+  a name; `0` and `1` are only exempt when they are ordinary counts, indexes, or boolean-adjacent
+  values, and should still be named when they represent a sentinel, limit, exit code, protocol
+  value, status code, timeout, retry count, size, or another domain contract. Extract such values to
+  a named constant at the narrowest sensible scope. When fixing one magic number, search for the same
+  concept nearby and update matching occurrences; create or suggest a follow-up issue for broader
+  unrelated magic-number cleanup.
 
 ## JDK APIs and platform
 

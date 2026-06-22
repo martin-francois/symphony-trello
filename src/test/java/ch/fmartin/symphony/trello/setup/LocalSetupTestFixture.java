@@ -387,7 +387,9 @@ final class LocalSetupTestFixture implements AutoCloseable {
                 return new CommandResult(0, "openjdk version \"25.0.1\" 2026-01-01");
             }
             if ("javac -version".equals(joined)) {
-                return new CommandResult(javacAvailable ? 0 : 127, javacAvailable ? "javac 25.0.1" : "missing");
+                return new CommandResult(
+                        javacAvailable ? 0 : CommandResult.COMMAND_NOT_FOUND_EXIT_CODE,
+                        javacAvailable ? "javac 25.0.1" : "missing");
             }
             if ("git --version".equals(joined)) {
                 return new CommandResult(0, "git version 2.51.0");
@@ -405,7 +407,8 @@ final class LocalSetupTestFixture implements AutoCloseable {
             }
             if ("gh --version".equals(joined)) {
                 return new CommandResult(
-                        githubCliAvailable ? 0 : 127, githubCliAvailable ? "gh version 2.83.0" : "missing");
+                        githubCliAvailable ? 0 : CommandResult.COMMAND_NOT_FOUND_EXIT_CODE,
+                        githubCliAvailable ? "gh version 2.83.0" : "missing");
             }
             if ("apt-get --version".equals(joined)) {
                 return new CommandResult(0, "apt 3.0.0");
@@ -414,7 +417,9 @@ final class LocalSetupTestFixture implements AutoCloseable {
                 return new CommandResult(0, "0");
             }
             if ("winget --version".equals(joined)) {
-                return new CommandResult(wingetAvailable ? 0 : 127, wingetAvailable ? "v1.12.0" : "missing");
+                return new CommandResult(
+                        wingetAvailable ? 0 : CommandResult.COMMAND_NOT_FOUND_EXIT_CODE,
+                        wingetAvailable ? "v1.12.0" : "missing");
             }
             if ("gh auth status".equals(joined)) {
                 return new CommandResult(githubAuthenticated ? 0 : 1, githubAuthenticated ? "ok" : "not logged in");
@@ -440,16 +445,19 @@ final class LocalSetupTestFixture implements AutoCloseable {
                 return new CommandResult(0, "installed gh");
             }
             if (command.length == 2 && "symphony-trello".equals(command[0]) && "status".equals(command[1])) {
-                return new CommandResult(managedCommandAvailable ? 0 : 127, managedCommandAvailable ? "ok" : "missing");
+                return new CommandResult(
+                        managedCommandAvailable ? 0 : CommandResult.COMMAND_NOT_FOUND_EXIT_CODE,
+                        managedCommandAvailable ? "ok" : "missing");
             }
             if (command.length == 3 && "symphony-trello".equals(command[0]) && "status".equals(command[1])) {
                 String overriddenStatus = statusByWorkflow.get(command[2]);
                 if (overriddenStatus != null) {
-                    return new CommandResult(managedCommandAvailable ? 0 : 127, overriddenStatus);
+                    return new CommandResult(
+                            managedCommandAvailable ? 0 : CommandResult.COMMAND_NOT_FOUND_EXIT_CODE, overriddenStatus);
                 }
                 boolean running = startedWorkflows.contains(command[2]);
                 return new CommandResult(
-                        managedCommandAvailable ? 0 : 127,
+                        managedCommandAvailable ? 0 : CommandResult.COMMAND_NOT_FOUND_EXIT_CODE,
                         running ? "running " + command[2] : "No managed Symphony process found");
             }
             if (command.length >= 4 && "symphony-trello".equals(command[0]) && "start".equals(command[1])) {
@@ -467,7 +475,7 @@ final class LocalSetupTestFixture implements AutoCloseable {
                 stopHealthServer(command[2]);
                 return new CommandResult(0, "Stopped Symphony for Trello");
             }
-            return new CommandResult(127, "missing");
+            return new CommandResult(CommandResult.COMMAND_NOT_FOUND_EXIT_CODE, "missing");
         }
 
         void startHealthServer(Path workflowPath) {
