@@ -23,6 +23,16 @@ parallel safety. Live end-to-end and deployed-verification rules live in
   `assertThat(Files.isSymbolicLink(path)).isTrue()` followed by
   `assertThat(Files.isDirectory(path)).isTrue()`. Reserve `isTrue()` and `isFalse()` for values that
   are already domain booleans or for cases where AssertJ has no clearer assertion.
+- Prefer AssertJ's collection, map, path, optional, string, throwable, and type-specific assertions
+  over assertion loops, assertion streams, boolean reducers, or collected intermediate values.
+  Reaching for `for`, `.forEach(...)`, `.stream()`, `.allMatch(...)`, `.anyMatch(...)`, or
+  `.map(...).toList()` in a test assertion is a code smell when AssertJ can express the expectation
+  directly with better failure output. Use features such as `extracting`, `flatExtracting`,
+  `filteredOn`, `containsExactly`, `containsExactlyInAnyOrder`, `containsEntry`, `allSatisfy`,
+  `anySatisfy`, `noneSatisfy`, `zipSatisfy`, and `singleElement` where they fit. Keep loops or
+  streams when they are clearer for fixture construction, fake protocol behavior, concurrency
+  orchestration, or another non-assertion purpose; add a short explanation when that intent is not
+  obvious.
 - Use Mockito for mocks. Keep purpose-built fakes only when they model an external protocol, stateful
   fixture, or concurrency behavior more clearly than Mockito stubbing.
 - Prefer parameterized tests with `@MethodSource` for data-driven behavior.

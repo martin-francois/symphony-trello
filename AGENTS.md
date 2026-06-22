@@ -24,6 +24,9 @@ Add or update it before the user asks.
 For repeated literals, scenario-table values, or parallel edits that look coupled, apply the
 centralization and refactoring guidance in
 [Java style & design preferences](docs/agents/java-style.md).
+When adding or editing tests, apply the AssertJ and test-duplication guidance in
+[Testing](docs/agents/testing.md), including avoiding assertion loops or assertion streams when
+AssertJ can express the expectation directly.
 
 Until the first public release, implement only the canonical current contract. Do not add or retain
 product migration, legacy-shape support, backward-compatibility shims, old-private-state fallbacks,
