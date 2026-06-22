@@ -566,23 +566,32 @@ project, run it, write the output to a file in the same disposable project, veri
 move the Trello card to `Human Review`. While Docker is running, the card should already be visible
 in `In Progress`.
 
-### Regression Scenario: Repository URL Or Read-Only Host Checkout
+### Regression Scenario: Repository URL, Workflow Default, Or Read-Only Host Checkout
 
 Use this when changing generated workflow repository checkout instructions or deployment path access.
 Use a disposable repository, not a private project checkout.
 
 1. Prepare a readable local repository checkout outside the Symphony workspace root and make it
    read-only for the service user.
-2. Deploy with the parent directory in the manual systemd host path settings.
+2. Deploy with the parent directory in the manual systemd host path settings. For the default
+   repository check, use a disposable workflow copy whose `hooks.after_create` clones the disposable
+   repository into each new per-card workspace.
 3. Create one Trello card whose title names only the repository URL and asks for a small committed
    code or documentation change.
-4. Create another Trello card whose title names the read-only local checkout path and asks for the
+4. Create another Trello card whose title names no repository and asks for the same kind of change.
+   It should use the repository checkout prepared by the workflow hook.
+5. Create another Trello card whose title names the read-only local checkout path and asks for the
    same kind of change.
-5. Verify Codex does not edit the shared checkout directly. It should clone from the readable local
-   checkout or repository URL into the per-card workspace, make the change there, commit when the
-   card asks for commits, add handoff evidence, and move the card to `Human Review`.
-6. Verify the shared checkout remains unchanged, `/api/v1/state` drains to zero running and retrying
-   entries, and the latest Trello comments are handoff comments rather than filesystem blockers.
+6. Create a final card that names no repository while using a workflow without an `after_create`
+   repository hook. It should move to `Blocked` with path-safe guidance instead of guessing from
+   previous cards or host checkouts.
+7. Verify Codex does not edit the shared host checkout directly. It should use the hook-prepared
+   per-card checkout, clone from the readable local checkout, or clone the repository URL into the
+   per-card workspace, make the change there, commit when the card asks for commits, add handoff
+   evidence, and move successful cards to `Human Review`.
+8. Verify the shared checkout remains unchanged, `/api/v1/state` drains to zero running and retrying
+   entries, and the latest Trello comments are handoff or path-safe blocker comments rather than
+   filesystem blockers with private paths.
 
 ### Regression Scenario: PR Handoff With Unavailable Or Stale CI
 

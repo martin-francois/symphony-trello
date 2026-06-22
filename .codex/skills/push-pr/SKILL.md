@@ -138,9 +138,27 @@ description: >
 5. If push is rejected because the branch is stale, use `repo-sync`, rerun
    checks, then push again. Use `--force-with-lease` only after a deliberate
    history rewrite.
-6. If push fails because of auth, permissions, or branch protection, surface the
-   exact failure. Do not rewrite remotes or switch protocols as a workaround.
-7. Create or update the PR:
+6. If push fails because the authenticated GitHub user cannot write branches to
+   the target repository, try a fork fallback when GitHub allows it:
+
+   ```bash
+   target_repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
+   target_name="$(gh repo view --json name --jq .name)"
+   git remote remove symphony-fork 2>/dev/null || true
+   gh repo fork "$target_repo" --remote --remote-name symphony-fork --default-branch-only ||
+     git remote add symphony-fork "https://github.com/$github_name/$target_name.git"
+   git push -u symphony-fork HEAD
+   ```
+
+   Keep `origin` pointing at the target repository so merge-base, review, and
+   upstream status checks still use the original repository. If fork creation,
+   fork push, or PR creation from the fork fails, surface the exact blocker in
+   the workpad and move the card to `Blocked` instead of pretending the work is
+   ready for review.
+7. If push fails because of auth, branch protection, or repository policy that
+   the fork fallback cannot solve, surface the exact failure. Do not rewrite
+   remotes or switch protocols as a workaround.
+8. Create or update the PR:
 
    ```bash
    gh pr view --json number,state,title,url,isDraft
@@ -152,11 +170,13 @@ description: >
      for the intended publishing path.
    - If an existing PR is draft and the card did not ask for draft, mark it
      ready for review before handoff, for example with `gh pr ready`.
+   - When the branch was pushed to `symphony-fork`, create the PR from the fork
+     head with `gh pr create --repo "$target_repo" --head "$github_name:$branch"`.
    - Reconsider the title and body on every update.
-8. Use `.github/pull_request_template.md` when present. Fill every section with
+9. Use `.github/pull_request_template.md` when present. Fill every section with
    concrete content and remove placeholders.
-9. Include validation evidence and any known limitations.
-10. Return the PR URL. When writing it into Trello-visible text, put it on its
+10. Include validation evidence and any known limitations.
+11. Return the PR URL. When writing it into Trello-visible text, put it on its
     own line as `PR: <https://github.com/owner/repo/pull/123>` so trailing
     punctuation cannot be absorbed into the link.
 

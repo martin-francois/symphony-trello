@@ -1030,28 +1030,7 @@ public final class TrelloBoardSetup {
                 Read the Trello description carefully, inspect the repository, make the smallest maintainable change,
                 run relevant verification, and leave the workspace in a reviewable state.
 
-                ## Repository Checkout Policy
-
-                Do implementation work inside the current per-card workspace or a writable checkout under it.
-                Do not edit a shared host checkout directly unless the card explicitly asks you to work there and
-                that checkout is writable.
-
-                If the Trello card names only a repository URL, create or reuse a writable checkout in a subdirectory
-                of the current workspace. Prefer cloning from a readable matching local checkout under an allowed host
-                path, then set the checkout's `origin` remote to the repository URL when needed. If no matching local
-                checkout is readable, clone the repository URL into a new subdirectory named after the repository.
-
-                If the Trello card names a specific local path or checkout, inspect it as source context. When it is
-                not writable, clone from that readable local path into a subdirectory of the current workspace and work
-                in the clone instead of blocking. Block only when the path is not readable, the repository cannot be
-                cloned into a writable workspace subdirectory, or required repository/auth context is unavailable. If
-                Git rejects a readable
-                local checkout because of safe-directory ownership checks, add only that source checkout to the
-                current user's Git safe directories with `git config --global --add safe.directory <source-checkout>`,
-                then retry a read-only clone with `git clone --no-hardlinks <source-checkout> <workspace-checkout>`.
-                After cloning from a local checkout, do not inherit the source checkout's current branch as the task
-                base. Start the task branch from the repository's default branch when it is discoverable, usually
-                `origin/main`, unless the Trello card explicitly asks for a different base.
+                %s
 
                 %s
 
@@ -1097,6 +1076,7 @@ public final class TrelloBoardSetup {
                         ConfigDefaults.DEFAULT_CODEX_STALL_TIMEOUT_MS,
                         workpadPrompt(!handoffStates.isEmpty()),
                         repositorySkillsPrompt(githubEnabled),
+                        repositoryCheckoutPolicyPrompt(),
                         operatingPosturePrompt(!handoffStates.isEmpty()),
                         routingPrompt(
                                 activeStates, terminalStates, inProgressState, reviewState, blockedState, mergingState),
@@ -1180,6 +1160,48 @@ public final class TrelloBoardSetup {
                         skillPath("land"),
                         skillPath("debug"))
                 .stripTrailing();
+    }
+
+    private static String repositoryCheckoutPolicyPrompt() {
+        return """
+                ## Repository Checkout Policy
+
+                Do implementation work inside the current per-card workspace or a writable checkout under it.
+                Do not edit a shared host checkout directly unless the card explicitly asks you to work there and
+                that checkout is writable.
+
+                Treat repository source precedence as: an explicit Trello card repository URL or local checkout path,
+                then an existing Git checkout prepared in this per-card workspace by workflow hooks, then no selected
+                repository. Do not infer a repository from previous Trello cards, unrelated host checkouts, branch names,
+                or leftover workspace contents.
+
+                If the Trello card names only a repository URL, create or reuse a writable task checkout in a stable
+                subdirectory of the current workspace named after the repository. Prefer cloning from a readable matching
+                local checkout under an allowed host path, then set the checkout's `origin` remote to the repository URL
+                when needed. If no matching local checkout is readable, clone the repository URL into that workspace
+                subdirectory.
+
+                If the workflow uses `hooks.after_create` to clone a default repository for a one-board-per-repository
+                workflow, use that per-card workspace checkout for cards that do not name a repository. If no card-level
+                source and no workflow-prepared checkout exists, move the Trello card to `Blocked` with path-safe
+                guidance instead of guessing.
+
+                If the Trello card names a specific local path or checkout, inspect it as source context. By default,
+                do not edit that host checkout directly. Clone from that readable local path into a subdirectory of the
+                current workspace and work in the clone instead. Work directly in the provided checkout only when the
+                card explicitly asks for that, the checkout is writable, and deployment filesystem policy allows it.
+                Block only when the path is not readable, the repository cannot be cloned into a writable workspace
+                subdirectory, or required repository/auth context is unavailable.
+
+                If Git rejects a readable local checkout because of safe-directory ownership checks, add only that source
+                checkout to the current user's Git safe directories with
+                `git config --global --add safe.directory <source-checkout>`, then retry a read-only clone with
+                `git clone --no-hardlinks <source-checkout> <workspace-checkout>`. After cloning from a local checkout,
+                do not inherit the source checkout's current branch as the task base. Start the task branch from the
+                repository's default branch when it is discoverable, usually `origin/main`, unless the Trello card
+                explicitly asks for a different base.
+                """
+                .strip();
     }
 
     private static String codexModelYaml(CodexModelDefaults codexModelDefaults) {
@@ -1422,7 +1444,7 @@ public final class TrelloBoardSetup {
                 the local-only result and the workspace/branch/commit evidence in %s.
 
                 If GitHub auth, push permission, branch protection, or repository policy prevents a required PR, try
-                the fallback strategies in `%s`. If a PR is still required and cannot be
+                the fork and fallback strategies in `%s`. If a PR is still required and cannot be
                 created or updated, %s with the exact blocker instead of moving to %s.
                 """
                 .formatted(

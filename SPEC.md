@@ -885,15 +885,33 @@ The generated workflow treats `Ready for Codex`, `In Progress`, and `Merging` as
 `Done` as terminal, `In Progress` as the visible pickup list, `Blocked` as the blocked handoff list,
 `Human Review` as the review handoff list, and `Merging` as the human approval list for landing.
 When the generated workflow receives repository work, it tells Codex to use a writable checkout under
-the per-card workspace by default, to clone from a readable matching local checkout or repository URL
-when the card names only a repository URL, and to clone from a readable but non-writable local
-checkout into the workspace instead of editing that shared checkout directly. If Git rejects a
-readable local checkout because of safe-directory ownership checks, the generated workflow tells
-Codex to add only that source checkout to the current user's Git safe directories before retrying the
-read-only clone. It also tells Codex to start task branches from the repository's default branch when
-that branch is discoverable, instead of inheriting the source checkout's current branch.
+the per-card workspace by default. Repository source precedence is: an explicit Trello card
+repository URL or local checkout path, then an existing Git checkout prepared in that per-card
+workspace by workflow hooks, then no selected repository. Generated workflows MUST tell Codex not to
+guess a repository from previous cards, unrelated host checkouts, branch names, or leftover workspace
+contents.
+
+If a card names only a repository URL, generated workflows tell Codex to use a stable
+repository-named task checkout under the per-card workspace, preferably cloning from a readable
+matching local checkout under an allowed host path and otherwise cloning from the repository URL. If a
+workflow hook such as `hooks.after_create` prepares a default repository checkout in each per-card
+workspace for a one-board-per-repository workflow, generated workflows tell Codex to use that
+workspace checkout for cards without a card-level repository source. If no card-level source and no
+workflow-prepared checkout exists, generated workflows tell Codex to move the Trello card to
+`Blocked` with path-safe guidance instead of guessing.
+
+If a card names a local checkout path, generated workflows tell Codex to treat it as source context
+and, by default, clone it into the per-card workspace instead of editing that host checkout directly.
+The workflow permits working directly in the provided checkout only when the card explicitly asks for
+that, the checkout is writable, and deployment filesystem policy allows it. If Git rejects a readable
+local checkout because of safe-directory ownership checks, the generated workflow tells Codex to add
+only that source checkout to the current user's Git safe directories before retrying the read-only
+clone. It also tells Codex to start task branches from the repository's default branch when that
+branch is discoverable, instead of inheriting the source checkout's current branch.
 The generated workflow treats unavailable push credentials as blocking only when a card, repository
-policy, or human requires a push or pull request. For repository-changing work in the recommended
+policy, or human requires a push or pull request. The shipped PR publication skill should use direct
+branch push when allowed and a GitHub fork fallback when the authenticated user cannot push branches
+to the target repository and GitHub allows a fork. For repository-changing work in the recommended
 workflow, `Human Review` means a pull request is available for review unless the card explicitly asks
 for local-only or no-push work. Generated workflows create ready-for-review, non-draft pull requests
 by default and create draft pull requests only when the Trello card explicitly asks for a draft PR.
@@ -3484,11 +3502,20 @@ When this profile is used:
   locations, account names, or deployment-specific paths into Trello-visible text
 
 Generated workflows SHOULD prefer writable per-card checkouts over editing shared host checkouts.
+This Java implementation keeps repository preparation in generated workflow instructions, workspace
+hooks, and shipped skills for the OSS release. It does not ship a Java pre-run repository manager,
+provider-specific fork manager, or shared base-clone cache. The shipped PR publication skill owns the
+current GitHub fork fallback when direct branch push is unavailable. A workflow can still model a
+one-board-per-repository default by cloning the repository in `hooks.after_create`; because the hook
+runs inside the per-card workspace, that default remains isolated per card. Card-level repository
+URLs and local checkout paths take precedence over such a workflow-prepared default.
+
 When a card names only a repository URL or when a readable host checkout is not writable, the agent
-should clone into a repository-named subdirectory of the per-card workspace and work there. This
-preserves the security default while still allowing cards to use existing host repositories as source
-context when an operator has allowed read access, and it keeps the workspace root available for
-runtime-managed metadata such as Codex skills.
+should clone into a repository-named subdirectory of the per-card workspace and work there. If no
+card-level repository source and no workflow-prepared checkout exists, the generated workflow should
+block instead of guessing. This preserves the security default while still allowing cards to use
+existing host repositories as source context when an operator has allowed read access, and it keeps
+the workspace root available for runtime-managed metadata such as Codex skills.
 
 ### 19.4 Opt-In Java Live E2E Harness
 
