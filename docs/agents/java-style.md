@@ -96,8 +96,9 @@ References.
   reasonably change independently. When duplicated logic would need to change together at multiple
   call sites, extract a shared helper or abstraction so the coupling is explicit and future
   contributors only have one place to update. Treat making the same edit, or copying the same
-  pattern, in two or more places during one change as that signal: those places will have to change
-  together again, so centralize them into a shared helper or constant before finishing instead of
+  pattern, in two or more places during one change as that signal: stop and ask whether the
+  duplicated shape should be refactored before continuing. If those places would likely have to
+  change together again, centralize them into a shared helper or constant before finishing instead of
   leaving parallel copies.
 - Treat an unexplained numeric literal as a magic number when its meaning is not obvious from the
   immediate expression and surrounding API. Numeric literals other than `0` and `1` usually deserve
