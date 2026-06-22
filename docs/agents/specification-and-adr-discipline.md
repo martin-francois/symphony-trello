@@ -74,9 +74,16 @@ label mechanics live in [GitHub issue triage](github-issue-triage.md).
   rediscover, add or update an ADR in the same change. Signals include choosing one reasonable
   approach over another, removing or narrowing a supported path, accepting a user-facing tradeoff, or
   explaining why an obvious alternative should not be used.
+- When implementation code needs a rationale that cannot be made obvious with names, types, or a
+  narrow local comment, treat that as an ADR signal. Local comments can explain immediate mechanics;
+  ADRs should capture durable reasons, rejected alternatives, and tradeoffs that future maintainers
+  would otherwise rediscover.
 - When a session contains multiple durable design decisions, review the recent conversation and
   commit history before finishing so relevant decisions are captured in ADRs instead of living only
   in chat.
+- If the user has to ask for an ADR after a deliberate design decision was already made or explained,
+  do not treat that as a one-off miss. Add or update the ADR, then strengthen the agent instructions
+  that should have triggered the ADR check so future agents perform it before being asked.
 - Treat naming decisions for public CLI flags, commands, config fields, workflow fields, API fields,
   labels, or other user-visible contract terms as ADR-worthy when multiple plausible names were
   discussed or rejected. Capture the chosen name, rejected names, why each was rejected, and the

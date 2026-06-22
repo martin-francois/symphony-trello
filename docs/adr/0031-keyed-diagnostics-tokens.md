@@ -58,6 +58,22 @@ printing the key file path, the key value, or the original error.
 Displayed tokens remain short by design. They are correlation handles, not cryptographic proofs. The
 private diagnostics context command exists to map them back locally when needed.
 
+Diagnostics also reads installer context such as `repo_url`, `ref`, and `source_commit` so public
+reports do not repeat private install-source identifiers from recent logs or failure text. Those
+values are not all equally distinctive:
+
+* Always tokenize `repo_url` because even short repository URLs can identify private infrastructure.
+* Tokenize `ref` only when it is not a generic public ref word such as `HEAD`, `main`, `master`, or
+  `trunk`. Generic ref words appear in framework thread names and ordinary prose, so using them as
+  global redaction terms would make reports harder to read without protecting private context.
+* Tokenize `source_commit` only when it is shaped like a Git commit id, currently 7 to 64 hex
+  characters. This covers short and full SHA-1/SHA-256 commit identifiers without turning malformed
+  or unrelated text into a broad redaction term.
+
+Do not use a generic string-length threshold for installer-context redaction terms. Redaction terms
+must be tied to the meaning of the context key so the public report does not hide unrelated words
+only because they are long enough.
+
 ### Consequences
 
 * Good, because likely Trello board names, short links, and paths cannot be checked by hashing a
@@ -65,10 +81,14 @@ private diagnostics context command exists to map them back locally when needed.
 * Good, because reports from the same installation keep stable tokens while the key exists.
 * Good, because the implementation uses standard Java 25 APIs.
 * Good, because the local key is owner-only on POSIX file systems.
+* Good, because private installer refs and commit ids can be traced with the same local token
+  mechanism as other private diagnostics context.
 * Good, because diagnostics remains best-effort even when the key file cannot be persisted.
 * Bad, because replacing the local key changes all future tokens for that installation.
 * Bad, because very short displayed tokens can theoretically collide, so they are only for
   diagnostics correlation.
+* Bad, because generic branch names such as `main` remain visible in public reports when they are
+  not attached to a private repository URL or another distinctive value.
 * Bad, because an ephemeral fallback key means a report generated while the config directory is not
   writable may not be mappable by a later command.
 

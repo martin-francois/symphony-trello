@@ -16,6 +16,11 @@ and follow it.
 When a user corrects a repeatable mistake or states a generally useful working preference, make the
 durable agent-doc update proactively in the same change; do not wait for the user to explicitly ask
 for persistence. If the right persistence scope is unclear, ask before finishing.
+Before finishing a task where you made or explained a deliberate design tradeoff, or where the code
+does not make the meaning or rationale obvious, make the decision explicit in the code where
+possible and check whether
+[Specification & ADR discipline](docs/agents/specification-and-adr-discipline.md) requires an ADR.
+Add or update it before the user asks.
 For repeated literals, scenario-table values, or parallel edits that look coupled, apply the
 centralization and refactoring guidance in
 [Java style & design preferences](docs/agents/java-style.md).

@@ -34,6 +34,15 @@ commit and open pull requests. Topic-specific rules live in the pages linked und
   refactoring, formatting, dependency updates, or tooling changes in a separate issue, branch, or
   pull request.
 - Update documentation and ADRs when behavior, setup, architecture, or tradeoffs change.
+- Before finishing a task where you made or explained a deliberate design tradeoff, run an explicit
+  ADR check: if the choice would be costly for a future maintainer to rediscover, add or update the
+  ADR in the same change without waiting for the user to ask. Treat a user having to ask for an ADR
+  after the fact as evidence that the agent-doc trigger was too weak; strengthen or move the
+  relevant guidance before finishing.
+- Before finishing code that is not self-explanatory, make the meaning or rationale explicit. Prefer
+  a named variable, constant, method, type, or helper when the name can carry the explanation. Use a
+  short comment or Javadoc when naming cannot express a local constraint clearly. If the reason is a
+  durable design tradeoff rather than a local implementation detail, add or update the ADR as well.
 - When fixing a documentation pattern, search the relevant file or docs set for similar instances
   before committing instead of correcting only the one sentence the user pointed out.
 - When changing tests, read [Testing](testing.md) during the relevant-docs pass and apply its

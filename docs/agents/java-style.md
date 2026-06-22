@@ -67,6 +67,11 @@ References.
 
 - Add comments only for non-obvious decisions, surprising constraints, or tradeoffs that would slow
   down a future maintainer.
+- Prefer making unclear code self-documenting before adding prose. Extract a variable, constant,
+  method, type, or helper with a precise name when that name can explain what a value means or why a
+  branch exists. Use a short comment or Javadoc only when the rationale cannot be expressed cleanly
+  in the code structure. If the explanation is a durable design tradeoff rather than a local
+  implementation detail, also add or update an ADR.
 
 ## Complexity, reuse, and centralization
 
