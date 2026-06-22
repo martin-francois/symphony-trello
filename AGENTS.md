@@ -34,6 +34,9 @@ For normal code changes, run `./mvnw -q spotless:check verify` before finishing 
 `spotless:apply` first when formatting changed). Static-analysis and lint gates must be clean; give
 every suppression the narrowest possible scope and a documented reason.
 
+When asked to "rebase main to the Symphony repo" or similar, follow the upstream Symphony rebase
+process in [Default workflow](docs/agents/default-workflow.md#upstream-symphony-rebase).
+
 ## Maintenance
 
 AGENTS.md is intentionally minimal and should not contain topic-specific guidance. See

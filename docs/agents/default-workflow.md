@@ -89,6 +89,44 @@ commit and open pull requests. Topic-specific rules live in the pages linked und
 - After the first public release, compatibility decisions require an explicit issue, specification
   change, or ADR that defines the supported public contract.
 
+## Upstream Symphony Rebase
+
+When the user asks to "rebase main to the Symphony repo" or equivalent, treat it as a history
+operation whose default outcome is no tree change. The purpose is to make `main` descend from the
+latest `openai/symphony` `main` while preserving the current Symphony for Trello content unless the
+user explicitly chooses a spec carry-over.
+
+1. Confirm the working tree is clean and fetch `origin` and `upstream`.
+2. Inspect upstream `SPEC.md` changes first:
+   - Identify the merge base between local `main` and `upstream/main`.
+   - Review `git log <base>..upstream/main -- SPEC.md`.
+   - Review the net `git diff <base>..upstream/main -- SPEC.md`.
+   - Compare every surviving upstream spec change with this repo's Trello-adapted `SPEC.md` and
+     implementation.
+3. If upstream contains a `SPEC.md` change that is not already present in an equivalent Trello form,
+   stop before rebasing. Summarize the upstream change, the likely Trello equivalent, and ask the
+   user whether to carry it over. Do not create the backup branch or rewrite history until the user
+   decides.
+4. If there is nothing to carry over, or after the user decides exactly which spec changes to carry
+   over, record the current `HEAD` and tree hash, create a timestamped local and remote backup branch
+   such as `backup/main-before-upstream-rebase-YYYYMMDDHHMMSS`, and only then rebase `main` onto
+   `upstream/main`.
+5. Resolve conflicts so the final tree contains only the user-approved changes. If the user approved
+   no spec carry-over, the final tree must match the pre-rebase tree exactly. Upstream-only files
+   that this repo intentionally removed, such as the original Elixir reference project, must remain
+   removed.
+6. Before force-pushing, verify:
+   - `git diff <backup>..HEAD` is empty when no carry-over was approved, or contains only the
+     user-approved carry-over.
+   - `git rev-parse <backup>^{tree}` matches `git rev-parse HEAD^{tree}` when no carry-over was
+     approved.
+   - `git merge-base --is-ancestor upstream/main HEAD` succeeds.
+   - `git diff --check <backup>..HEAD` passes.
+7. Force-push `main` only with `--force-with-lease` against the pre-rebase `origin/main` SHA.
+8. After pushing, fetch `origin/main` and verify local `HEAD`, `origin/main`, the backup branch, the
+   tree comparison, and the clean working tree. Report the backup branch, old and new head SHAs,
+   upstream SHA, and the exact tree/diff verification.
+
 ## Fixing bugs
 
 - Fix bugs in this order: investigate first, reproduce second, fix third. The investigation must
