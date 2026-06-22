@@ -2879,7 +2879,8 @@ final class TrelloBoardSetupMainTest {
         Files.writeString(env, TestEnv.trelloCredentials("env-key", "env-token"), StandardCharsets.UTF_8);
 
         // when
-        CliRunResult result = runCli("list-workspaces", "--endpoint", endpoint(), "--env", env.toString());
+        CliRunResult result =
+                runCliWithoutTrelloCredentials("list-workspaces", "--endpoint", endpoint(), "--env", env.toString());
 
         // then
         result.assertSuccess().stdoutContains("Trello workspaces:", "workspace-1");
@@ -2894,7 +2895,8 @@ final class TrelloBoardSetupMainTest {
         Files.writeString(env, "\uFEFFTRELLO_API_KEY=bom-key\nTRELLO_API_TOKEN=bom-token\n", StandardCharsets.UTF_8);
 
         // when
-        CliRunResult result = runCli("list-workspaces", "--endpoint", endpoint(), "--env", env.toString());
+        CliRunResult result =
+                runCliWithoutTrelloCredentials("list-workspaces", "--endpoint", endpoint(), "--env", env.toString());
 
         // then
         result.assertSuccess().stdoutContains("Trello workspaces:");
@@ -2911,7 +2913,8 @@ final class TrelloBoardSetupMainTest {
                 env, "TRELLO_API_KEY=" + dotenvValue + "\nTRELLO_API_TOKEN=real-token\n", StandardCharsets.UTF_8);
 
         // when
-        CliRunResult result = runCli("list-workspaces", "--endpoint", endpoint(), "--env", env.toString());
+        CliRunResult result =
+                runCliWithoutTrelloCredentials("list-workspaces", "--endpoint", endpoint(), "--env", env.toString());
 
         // then
         result.assertFailure(2)
@@ -2961,7 +2964,8 @@ final class TrelloBoardSetupMainTest {
                 StandardCharsets.UTF_8);
 
         // when
-        CliRunResult result = runCli("list-workspaces", "--endpoint", endpoint(), "--config-dir", configDir.toString());
+        CliRunResult result = runCliWithoutTrelloCredentials(
+                "list-workspaces", "--endpoint", endpoint(), "--config-dir", configDir.toString());
 
         // then
         result.assertSuccess().stdoutContains("Trello workspaces:", "workspace-1");
@@ -2982,7 +2986,7 @@ final class TrelloBoardSetupMainTest {
         Files.writeString(env, TestEnv.trelloCredentials("env-key", "env-token"), StandardCharsets.UTF_8);
 
         // when
-        CliRunResult result = runCli(
+        CliRunResult result = runCliWithoutTrelloCredentials(
                 "list-workspaces",
                 "--endpoint",
                 endpoint(),
@@ -5967,6 +5971,11 @@ final class TrelloBoardSetupMainTest {
 
     private CliRunResult runCli(String... args) {
         return runCli(() -> TrelloBoardSetup.CodexModelDefaults.fallback(), args);
+    }
+
+    private CliRunResult runCliWithoutTrelloCredentials(String... args) throws IOException, InterruptedException {
+        MainProcessResult result = runMainProcessWithoutTrelloCredentials(tempDir, args);
+        return new CliRunResult(result.exitCode(), result.stdout(), result.stderr());
     }
 
     private CliRunResult runCli(Map<String, String> properties, String... args) {
