@@ -584,7 +584,7 @@ final class SetupDiagnosticReporterTest {
             if (List.of(command).equals(List.of(java.toString(), "-version"))) {
                 return new CommandResult(0, "openjdk version \"25\"\n");
             }
-            return new CommandResult(127, "");
+            return new CommandResult(CommandResult.COMMAND_NOT_FOUND_EXIT_CODE, "");
         };
         var reporter = new SetupDiagnosticReporter(Map.of("PATH", toolDirectory.toString()), commands);
 
@@ -699,7 +699,7 @@ final class SetupDiagnosticReporterTest {
             if (List.of(command).equals(List.of(windowsBatchCommand(codexShim, "--version")))) {
                 return new CommandResult(0, "codex-cli 9.9\n");
             }
-            return new CommandResult(127, "");
+            return new CommandResult(CommandResult.COMMAND_NOT_FOUND_EXIT_CODE, "");
         };
         var reporter = new SetupDiagnosticReporter(
                 Map.of("Path", '"' + toolDirectory.toString() + '"', "PATHEXT", ".CMD;.EXE"),
@@ -898,7 +898,7 @@ final class SetupDiagnosticReporterTest {
             if (List.of(command).equals(List.of(codexExe.toString(), "--version"))) {
                 return CommandResult.launchFailed("permission denied");
             }
-            return new CommandResult(127, "");
+            return new CommandResult(CommandResult.COMMAND_NOT_FOUND_EXIT_CODE, "");
         };
         var reporter = new SetupDiagnosticReporter(
                 Map.of("Path", toolDirectory.toString(), "PATHEXT", ".EXE"),

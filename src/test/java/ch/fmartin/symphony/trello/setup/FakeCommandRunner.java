@@ -26,7 +26,7 @@ final class FakeCommandRunner implements CommandRunner {
     public CommandResult run(String... command) {
         Queue<CommandResult> queue = results.get(List.of(command));
         if (queue == null || queue.isEmpty()) {
-            return new CommandResult(127, "missing: " + Arrays.toString(command));
+            return new CommandResult(CommandResult.COMMAND_NOT_FOUND_EXIT_CODE, "missing: " + Arrays.toString(command));
         }
         CommandResult result = queue.peek();
         if (queue.size() > 1) {
