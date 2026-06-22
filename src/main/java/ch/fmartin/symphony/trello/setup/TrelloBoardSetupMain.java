@@ -373,10 +373,23 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             Path dotenv = envPath.or(() -> configDir.map(dir -> dir.resolve(".env")))
                     .map(path -> path.toAbsolutePath().normalize())
                     .orElseGet(LocalEnvironment::defaultDotenv);
-            parent.boardSetup.listWorkspaces(
-                    new WorkspaceListRequest(TrelloApiEndpoint.normalize(endpoint), auth.credentials(dotenv)),
-                    parent.out);
+            try {
+                parent.boardSetup.listWorkspaces(
+                        new WorkspaceListRequest(TrelloApiEndpoint.normalize(endpoint), auth.credentials(dotenv)),
+                        parent.out);
+            } catch (TrelloBoardSetupException exception) {
+                throw withListWorkspaceEnvHint(exception, dotenv);
+            }
             return 0;
+        }
+
+        private static TrelloBoardSetupException withListWorkspaceEnvHint(
+                TrelloBoardSetupException exception, Path dotenv) {
+            return switch (exception.code()) {
+                case "setup_missing_api_key", "setup_missing_api_token", "setup_missing_trello_credentials" ->
+                    exception.withDotenvPath(dotenv);
+                default -> exception;
+            };
         }
     }
 

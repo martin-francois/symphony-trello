@@ -2904,6 +2904,33 @@ final class TrelloBoardSetupMainTest {
                 .contains("oauth_consumer_key=\"bom-key\"", "oauth_token=\"bom-token\"");
     }
 
+    @Test
+    void listWorkspacesMissingCredentialsHintUsesExplicitEnvFile() throws Exception {
+        // given
+        Path env = tempDir.resolve("custom-env-dir").resolve(".env.empty");
+        Files.createDirectories(env.getParent());
+        Files.writeString(env, "# no Trello credentials yet\n", StandardCharsets.UTF_8);
+
+        // when
+        CliRunResult result =
+                runCliWithoutTrelloCredentials("list-workspaces", "--endpoint", endpoint(), "--env", env.toString());
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_missing_api_key",
+                        env.toAbsolutePath().normalize().toString())
+                .stderrDoesNotContain(
+                        LocalEnvironment.defaultDotenv()
+                                .toAbsolutePath()
+                                .normalize()
+                                .toString(),
+                        "Troubleshooting report written");
+        assertThat(workspaceAuthorization.get())
+                .as("the expected local error must fire before any Trello request")
+                .isNull();
+    }
+
     @CsvSource({"$REAL_KEY", "${REAL_KEY}", "${REAL_KEY:-fallback}"})
     @ParameterizedTest
     void rejectsReferenceLookingCredentialFileValuesBeforeAnyTrelloRequest(String dotenvValue) throws Exception {
@@ -2971,6 +2998,34 @@ final class TrelloBoardSetupMainTest {
         result.assertSuccess().stdoutContains("Trello workspaces:", "workspace-1");
         assertThat(workspaceAuthorization.get())
                 .contains("oauth_consumer_key=\"config-dir-key\"", "oauth_token=\"config-dir-token\"");
+    }
+
+    @Test
+    void listWorkspacesMissingCredentialsHintUsesConfigDirEnvFile() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("empty-config-dir");
+        Files.createDirectories(configDir);
+        Path env = configDir.resolve(".env");
+        Files.writeString(env, "# no Trello credentials yet\n", StandardCharsets.UTF_8);
+
+        // when
+        CliRunResult result = runCliWithoutTrelloCredentials(
+                "list-workspaces", "--endpoint", endpoint(), "--config-dir", configDir.toString());
+
+        // then
+        result.assertFailure(2)
+                .stderrContains(
+                        "setup_failed code=setup_missing_api_key",
+                        env.toAbsolutePath().normalize().toString())
+                .stderrDoesNotContain(
+                        LocalEnvironment.defaultDotenv()
+                                .toAbsolutePath()
+                                .normalize()
+                                .toString(),
+                        "Troubleshooting report written");
+        assertThat(workspaceAuthorization.get())
+                .as("the expected local error must fire before any Trello request")
+                .isNull();
     }
 
     @Test
