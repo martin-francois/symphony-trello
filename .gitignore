@@ -5,6 +5,18 @@ target/
 *.iml
 .mvn/wrapper/maven-wrapper.jar
 .mvn/wrapper/dists/
+
+# Tessl install output. Keep tessl.json tracked as the source of truth.
+.tessl/
+.agents/skills/tessl__*
+.agents/skills/tessl:*
+.claude/skills/tessl__*
+.claude/skills/tessl:*
+.codex/skills/tessl__*
+.codex/skills/tessl:*
+.github/skills/tessl__*
+.github/skills/tessl:*
+
 workspaces/
 logs/
 WORKFLOW.md
