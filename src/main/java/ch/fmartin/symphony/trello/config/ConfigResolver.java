@@ -9,6 +9,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -40,6 +41,7 @@ public class ConfigResolver {
         Map<String, Object> root = workflow.config();
         Map<String, Object> tracker = object(root, "tracker");
         Map<String, Object> workspace = object(root, "workspace");
+        Map<String, Object> repository = object(root, "repository");
         Map<String, Object> hooks = object(root, "hooks");
         Map<String, Object> agent = object(root, "agent");
         Map<String, Object> codex = object(root, "codex");
@@ -111,6 +113,7 @@ public class ConfigResolver {
                         typedWorkflow.pollingIntervalMs(), "interval_ms", ConfigDefaults.DEFAULT_POLLING_INTERVAL_MS)),
                 new EffectiveConfig.WorkspaceConfig(
                         path(workflow.path().getParent(), string(workspace, "root", systemTempRoot()))),
+                repositoryConfig(workflow.path().getParent(), repository),
                 new EffectiveConfig.HooksConfig(
                         string(hooks, "after_create", null),
                         string(hooks, "before_run", null),
@@ -240,6 +243,25 @@ public class ConfigResolver {
         return configured;
     }
 
+    private String optionalEnvironmentString(Map<String, Object> root, String key) {
+        String configured = optionalString(root, key);
+        Optional<String> reference = EnvironmentReferences.referenceName(configured);
+        if (reference.isPresent()) {
+            return environmentValue(reference.get())
+                    .filter(value -> !blank(value))
+                    .orElse(null);
+        }
+        return configured;
+    }
+
+    private EffectiveConfig.RepositoryConfig repositoryConfig(Path workflowDirectory, Map<String, Object> repository) {
+        String defaultUrl = optionalEnvironmentString(repository, "default_url");
+        if (defaultUrl != null) {
+            return new EffectiveConfig.RepositoryConfig(defaultUrl, null);
+        }
+        return new EffectiveConfig.RepositoryConfig(null, optionalRepositoryPath(workflowDirectory, repository));
+    }
+
     private String secret(
             Path workflowDirectory, Map<String, Object> root, String key, String displayName, String defaultEnv) {
         String configured = string(root, key, "$" + defaultEnv);
@@ -261,7 +283,7 @@ public class ConfigResolver {
         return environmentResolver.apply(environmentName);
     }
 
-    private static String fileSecret(Path workflowDirectory, String displayName, String configuredPath) {
+    private String fileSecret(Path workflowDirectory, String displayName, String configuredPath) {
         Path secretPath = path(workflowDirectory, configuredPath);
         try {
             long size = Files.size(secretPath);
@@ -370,7 +392,7 @@ public class ConfigResolver {
         return roots.stream().distinct().toList();
     }
 
-    private static Path path(Path workflowDirectory, String value) {
+    private Path path(Path workflowDirectory, String value) {
         String expanded = expandPath(value);
         Path path = Path.of(expanded);
         if (!path.isAbsolute()) {
@@ -379,20 +401,58 @@ public class ConfigResolver {
         return path.toAbsolutePath().normalize();
     }
 
-    private static String expandPath(String value) {
+    private Path optionalPath(Path workflowDirectory, Map<String, Object> root, String key) {
+        String configured = optionalString(root, key);
+        String resolved = optionalEnvironmentPathValue(configured);
+        return resolved == null ? null : path(workflowDirectory, resolved);
+    }
+
+    private Path optionalRepositoryPath(Path workflowDirectory, Map<String, Object> repository) {
+        try {
+            return optionalPath(workflowDirectory, repository, "default_path");
+        } catch (InvalidPathException e) {
+            throw new ConfigException("config_value_error", "repository.default_path must be a valid local path", e);
+        }
+    }
+
+    private String optionalEnvironmentPathValue(String configured) {
+        if (configured == null) {
+            return null;
+        }
+        Optional<String> reference = EnvironmentReferences.referenceName(configured);
+        if (reference.isPresent()) {
+            return environmentValue(reference.get())
+                    .filter(value -> !blank(value))
+                    .orElse(null);
+        }
+        if (configured.startsWith("$")) {
+            int separator = configured.indexOf('/');
+            if (separator > 1) {
+                String name = configured.substring(1, separator);
+                if (EnvironmentReferences.referenceName("$" + name).isPresent()) {
+                    String suffix = configured.substring(separator);
+                    return environmentValue(name)
+                            .filter(value -> !blank(value))
+                            .map(value -> value + suffix)
+                            .orElse(null);
+                }
+            }
+        }
+        return configured;
+    }
+
+    private String expandPath(String value) {
         String expanded = value;
         if (expanded.startsWith("~/")) {
             expanded = System.getProperty("user.home") + expanded.substring(1);
         }
         if (expanded.startsWith("$") && expanded.indexOf('/') < 0) {
-            expanded = LocalEnvironment.get(expanded.substring(1)).orElse(expanded);
+            expanded = environmentValue(expanded.substring(1)).orElse(expanded);
         } else if (expanded.startsWith("$")) {
             int separator = expanded.indexOf('/');
             String name = expanded.substring(1, separator);
             String suffix = expanded.substring(separator);
-            expanded = LocalEnvironment.get(name)
-                    .map(envValue -> envValue + suffix)
-                    .orElse(expanded);
+            expanded = environmentValue(name).map(envValue -> envValue + suffix).orElse(expanded);
         }
         return expanded;
     }

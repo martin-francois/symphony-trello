@@ -884,14 +884,27 @@ The recommended board created by `new-board` uses these lists, in order:
 The generated workflow treats `Ready for Codex`, `In Progress`, and `Merging` as active lists,
 `Done` as terminal, `In Progress` as the visible pickup list, `Blocked` as the blocked handoff list,
 `Human Review` as the review handoff list, and `Merging` as the human approval list for landing.
-When the generated workflow receives repository work, it tells Codex to use a writable checkout under
-the per-card workspace by default, to clone from a readable matching local checkout or repository URL
-when the card names only a repository URL, and to clone from a readable but non-writable local
-checkout into the workspace instead of editing that shared checkout directly. If Git rejects a
-readable local checkout because of safe-directory ownership checks, the generated workflow tells
-Codex to add only that source checkout to the current user's Git safe directories before retrying the
-read-only clone. It also tells Codex to start task branches from the repository's default branch when
-that branch is discoverable, instead of inheriting the source checkout's current branch.
+When the generated workflow receives repository work, it tells Codex to select repository source
+context in this order: an explicit Trello card repository URL or local checkout path, workflow
+`repository.default_url`, workflow `repository.default_path`, and finally no selected repository. A
+valid selected source suppresses lower-priority fallbacks. An invalid explicit Trello card source
+blocks instead of falling back to workflow defaults. The generated workflow tells Codex not to infer
+a repository from previous Trello cards, unrelated host checkouts, branch names, or leftover
+workspace contents.
+
+Repository preparation remains workflow-owned in this phase. For a selected repository URL, the
+generated workflow tells Codex to create or reuse a writable checkout under the current per-card
+workspace. For a selected local checkout path, it tells Codex to treat that path as source context
+by default and clone from it into the current per-card workspace before implementation. It tells
+Codex not to inherit the source checkout's current branch as the task base after cloning from a
+local checkout. New task work starts from the repository's default branch when it is discoverable
+unless the Trello card clearly requests another base. It tells Codex not to edit the shared checkout
+directly unless the Trello card explicitly requests direct work, the checkout is writable, and
+deployment filesystem policy permits it. Phase 1 adds no Java enforcement, locking, ownership
+metadata, transaction state, or recovery guarantees for direct checkout. If no source is selected or
+the selected source is missing, unreadable, unclonable, or lacks required repository/auth context,
+the generated workflow tells Codex to use the configured blocker or review fallback with path-safe
+guidance, or to record a path-safe blocker when no move destination is configured.
 The generated workflow treats unavailable push credentials as blocking only when a card, repository
 policy, or human requires a push or pull request. For repository-changing work in the recommended
 workflow, `Human Review` means a pull request is available for review unless the card explicitly asks
@@ -1091,6 +1104,9 @@ implemented.
 - `polling.interval_ms`: integer, must be positive, runtime fallback default `30000`; generated
   workflows write `5000`
 - `workspace.root`: path resolved to absolute, default `<system-temp>/symphony_workspaces`
+- `repository.default_url`: optional repository URL string or null, default null
+- `repository.default_path`: optional local repository path or null, resolved like other workflow
+  paths relative to the workflow file, default null
 - `hooks.after_create`: shell script or null
 - `hooks.before_run`: shell script or null
 - `hooks.after_run`: shell script or null
@@ -3484,11 +3500,21 @@ When this profile is used:
   locations, account names, or deployment-specific paths into Trello-visible text
 
 Generated workflows SHOULD prefer writable per-card checkouts over editing shared host checkouts.
-When a card names only a repository URL or when a readable host checkout is not writable, the agent
-should clone into a repository-named subdirectory of the per-card workspace and work there. This
-preserves the security default while still allowing cards to use existing host repositories as source
-context when an operator has allowed read access, and it keeps the workspace root available for
-runtime-managed metadata such as Codex skills.
+Repository source context is selected in this order: explicit Trello card repository URL or local
+checkout path, workflow `repository.default_url`, workflow `repository.default_path`, and no selected
+repository. A valid selected source suppresses lower-priority fallbacks, and an invalid explicit
+Trello card source does not fall back. For a selected repository URL, the agent should create or
+reuse a writable checkout under the per-card workspace. For a selected local checkout path, the agent
+should treat that path as source context by default and clone from it into the per-card workspace
+before implementation. After cloning from a local checkout, the agent should not inherit the source
+checkout's current branch as the task base. New task work should start from the repository's default
+branch when it is discoverable unless the Trello card clearly requests another base. The agent
+should not edit the shared checkout directly unless the Trello card explicitly requests direct work,
+the checkout is writable, and deployment filesystem policy permits it. Phase 1 does not add Java
+enforcement, locking, ownership metadata, transaction state, or recovery guarantees for direct
+checkout. This preserves the security default while still allowing cards to use existing host
+repositories as source context when an operator has allowed access, and it keeps the workspace root
+available for runtime-managed metadata such as Codex skills.
 
 ### 19.4 Opt-In Java Live E2E Harness
 

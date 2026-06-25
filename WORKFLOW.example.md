@@ -22,6 +22,9 @@ tracker:
     - Deleted
 workspace:
   root: ./workspaces
+repository:
+  default_url: null
+  default_path: null
 server:
   port: 18080
 polling:
@@ -115,29 +118,33 @@ starts, so they are available even when the target repository does not provide i
   is Merging.
 - `.codex/skills/symphony-trello-debug/SKILL.md` when diagnosing a stuck or retrying run.
 
-## Repository Checkout Policy
+## Repository Source Precedence
 
-Do implementation work inside the current per-card workspace or a writable checkout under it.
-Do not edit a shared host checkout directly unless the card explicitly asks you to work there and
-that checkout is writable.
+Select repository source context in this order:
 
-If the Trello card names only a repository URL, create or reuse a writable checkout in a subdirectory
-of the current workspace. Prefer cloning from a readable matching local checkout under an allowed
-host path, then set the checkout's `origin` remote to the repository URL when needed. If no matching
-local checkout is readable, clone the repository URL into a new subdirectory named after the
-repository.
+1. An explicit Trello card repository URL or local checkout path.
+2. Workflow `repository.default_url`.
+3. Workflow `repository.default_path`.
+4. No selected repository.
 
-If the Trello card names a specific local path or checkout, inspect it as source context. When it is
-not writable, clone from that readable local path into a subdirectory of the current workspace and
-work in the clone instead of blocking. Block only when the path is not readable, the repository
-cannot be cloned into a writable workspace subdirectory, or required repository/auth context is
-unavailable. If Git rejects a readable local checkout because of safe-directory ownership checks, add
-only that source checkout to the current user's Git safe directories with
-`git config --global --add safe.directory <source-checkout>`, then retry a read-only clone with
-`git clone --no-hardlinks <source-checkout> <workspace-checkout>`.
-After cloning from a local checkout, do not inherit the source checkout's current branch as the task
-base. Start the task branch from the repository's default branch when it is discoverable, usually
-`origin/main`, unless the Trello card explicitly asks for a different base.
+A valid selected source wins and suppresses lower-priority fallbacks. Do not validate or use an
+unselected fallback once a higher-priority source is selected. An invalid explicit Trello card source
+blocks instead of falling back to workflow defaults. Do not infer a repository from previous Trello
+cards, unrelated host checkouts, branch names, or leftover workspace contents.
+
+Repository preparation is workflow-owned in this phase. For a selected repository URL, create or
+reuse a writable checkout under the current per-card workspace. For a selected local checkout path,
+treat that path as source context by default and clone from it into the current per-card workspace
+before implementation. After cloning from a local checkout, do not inherit the source checkout's
+current branch as the task base. Start new task work from the repository's default branch when it is
+discoverable unless the Trello card clearly requests another base. Do not edit the shared checkout
+directly unless the Trello card explicitly requests direct work, the checkout is writable, and
+deployment filesystem policy permits it. Phase 1 adds no Java enforcement, locking, ownership
+metadata, transaction state, or recovery guarantees for direct checkout.
+
+If no source is selected or the selected source is missing, unreadable, unclonable, or lacks required
+repository/auth context, move the Trello card to `Blocked` with path-safe guidance instead of
+guessing.
 
 ## Execution Flow
 

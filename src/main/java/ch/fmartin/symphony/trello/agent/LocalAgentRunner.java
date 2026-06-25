@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.agent;
 
 import ch.fmartin.symphony.trello.codex.CodexSkillCatalog;
+import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
 import ch.fmartin.symphony.trello.tracker.CardLookupResult;
 import ch.fmartin.symphony.trello.tracker.TrackerClient;
@@ -62,14 +63,17 @@ public class LocalAgentRunner implements AgentRunner {
                     request.config().hooks().beforeRun(),
                     workspace.path(),
                     request.config().hooks());
-            if (usesBundledCodexSkills(request.prompt())) {
+            boolean installBundledSkills = usesBundledCodexSkills(request.prompt());
+            String prompt = withRepositoryDefaultContext(
+                    request.prompt(), request.config().repository());
+            if (installBundledSkills) {
                 codexSkills.installInto(workspace.path());
             }
             return codex.runSession(
                     request.config(),
                     request.card(),
                     workspace.path(),
-                    request.prompt(),
+                    prompt,
                     request.workerIdentity(),
                     request.listener(),
                     turn -> continuationDecision(request, turn));
@@ -93,7 +97,51 @@ public class LocalAgentRunner implements AgentRunner {
      * workflows that expect an empty workspace root, keep their workspace shape.
      */
     private static boolean usesBundledCodexSkills(String prompt) {
-        return prompt.contains(".codex/skills/" + CodexSkillCatalog.INSTALLED_SKILL_PREFIX);
+        return prompt != null && prompt.contains(".codex/skills/" + CodexSkillCatalog.INSTALLED_SKILL_PREFIX);
+    }
+
+    private static String withRepositoryDefaultContext(String prompt, EffectiveConfig.RepositoryConfig repository) {
+        String basePrompt = prompt == null ? "" : prompt.stripTrailing();
+        return basePrompt + "\n\n" + repositoryDefaultContext(repository);
+    }
+
+    private static String repositoryDefaultContext(EffectiveConfig.RepositoryConfig repository) {
+        return switch (repository.selectedDefaultSource()) {
+            case URL ->
+                String.join(
+                        "\n",
+                        "## Workflow Repository Default",
+                        "",
+                        "This context comes from trusted workflow configuration, not from the Trello card.",
+                        "",
+                        "- Type: URL",
+                        "- Resolved URL: " + repository.defaultUrl(),
+                        "- Use this workflow default only when the current Trello card names no explicit repository URL or local checkout path.",
+                        "- An explicit Trello card repository source remains authoritative.",
+                        "- If the Trello card names an invalid explicit repository source, block with path-safe guidance instead of using this workflow default.",
+                        "- Do not copy private repository URLs from this context into Trello-visible comments or status text.");
+            case PATH ->
+                String.join(
+                        "\n",
+                        "## Workflow Repository Default",
+                        "",
+                        "This context comes from trusted workflow configuration, not from the Trello card.",
+                        "",
+                        "- Type: local path",
+                        "- Resolved local path: "
+                                + repository.defaultPath().toAbsolutePath().normalize(),
+                        "- Use this workflow default only when the current Trello card names no explicit repository URL or local checkout path.",
+                        "- An explicit Trello card repository source remains authoritative.",
+                        "- If the Trello card names an invalid explicit repository source, block with path-safe guidance instead of using this workflow default.",
+                        "- Do not copy local host paths from this context into Trello-visible comments or status text.");
+            case NONE ->
+                """
+                    ## Workflow Repository Default
+
+                    No workflow repository default is configured. If the current Trello card names no explicit repository URL or local checkout path, no repository source is selected.
+                    """
+                        .stripTrailing();
+        };
     }
 
     private CodexAppServerClient.TurnDecision continuationDecision(AgentRunRequest request, int completedTurns) {

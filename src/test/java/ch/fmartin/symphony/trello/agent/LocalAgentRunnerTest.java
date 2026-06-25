@@ -24,11 +24,16 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 
 final class LocalAgentRunnerTest {
@@ -64,7 +69,10 @@ final class LocalAgentRunnerTest {
                         eq("worker-success"),
                         any(),
                         any());
-        assertThat(prompt.getValue()).isEqualTo(renderedPrompt);
+        assertThat(prompt.getValue())
+                .startsWith(renderedPrompt)
+                .contains("## Workflow Repository Default")
+                .contains("No workflow repository default is configured");
         assertThat(workspace.getValue())
                 .isEqualTo(expectedWorkspace.toAbsolutePath().normalize());
         assertThat(Files.readString(expectedWorkspace.resolve("before.txt"))).contains("before");
@@ -72,6 +80,190 @@ final class LocalAgentRunnerTest {
         assertThat(expectedWorkspace.resolve(CodexSkillInstaller.installedSkillPath("commit")))
                 .content()
                 .contains("configure it from the authenticated GitHub login");
+    }
+
+    @Test
+    void passesResolvedLiteralUrlDefaultToCodexPrompt() {
+        // given
+        String repositoryUrl = "https://example.invalid/team/project.git";
+        EffectiveConfig config = configWithRepository(Map.of("default_url", repositoryUrl));
+
+        // when
+        String prompt = promptPassedToCodex(config, "Card task");
+
+        // then
+        assertThat(prompt)
+                .contains("## Workflow Repository Default")
+                .contains("- Type: URL")
+                .contains("- Resolved URL: " + repositoryUrl)
+                .contains("only when the current Trello card names no explicit repository URL or local checkout path")
+                .contains("explicit Trello card repository source remains authoritative");
+    }
+
+    @Test
+    void passesResolvedEnvironmentUrlDefaultToCodexPrompt() {
+        // given
+        String repositoryUrl = "ssh://git@example.invalid/team/project.git";
+        EffectiveConfig config =
+                configWithRepository(Map.of("default_url", "$REPOSITORY_URL"), Map.of("REPOSITORY_URL", repositoryUrl));
+
+        // when
+        String prompt = promptPassedToCodex(config, "Card task");
+
+        // then
+        assertThat(prompt).contains("- Type: URL").contains("- Resolved URL: " + repositoryUrl);
+    }
+
+    @Test
+    void passesResolvedRelativePathDefaultToCodexPrompt() {
+        // given
+        Path workflow = tempDir.resolve("configs/WORKFLOW.md");
+        Path expectedPath = workflow.getParent()
+                .resolve("checkouts/project")
+                .toAbsolutePath()
+                .normalize();
+        EffectiveConfig config = configWithRepository(workflow, Map.of("default_path", "checkouts/project"), Map.of());
+
+        // when
+        String prompt = promptPassedToCodex(config, "Card task");
+
+        // then
+        assertThat(prompt).contains("- Type: local path").contains("- Resolved local path: " + expectedPath);
+    }
+
+    @Test
+    void passesResolvedAbsolutePathDefaultToCodexPrompt() {
+        // given
+        Path repositoryPath =
+                tempDir.resolve("absolute-repository").toAbsolutePath().normalize();
+        EffectiveConfig config = configWithRepository(Map.of("default_path", repositoryPath.toString()));
+
+        // when
+        String prompt = promptPassedToCodex(config, "Card task");
+
+        // then
+        assertThat(prompt).contains("- Type: local path").contains("- Resolved local path: " + repositoryPath);
+    }
+
+    @Test
+    void passesResolvedEnvironmentPathDefaultToCodexPrompt() {
+        // given
+        Path repositoryPath =
+                tempDir.resolve("environment-repository").toAbsolutePath().normalize();
+        EffectiveConfig config = configWithRepository(
+                Map.of("default_path", "$REPOSITORY_PATH"), Map.of("REPOSITORY_PATH", repositoryPath.toString()));
+
+        // when
+        String prompt = promptPassedToCodex(config, "Card task");
+
+        // then
+        assertThat(prompt).contains("- Type: local path").contains("- Resolved local path: " + repositoryPath);
+    }
+
+    @Test
+    void includesOnlyUrlDefaultWhenUrlAndPathAreConfigured() {
+        // given
+        String repositoryUrl = "https://example.invalid/team/project.git";
+        Path lowerPriorityPath =
+                tempDir.resolve("lower-priority-repository").toAbsolutePath().normalize();
+        EffectiveConfig config = configWithRepository(
+                Map.of("default_url", repositoryUrl, "default_path", lowerPriorityPath.toString()));
+
+        // when
+        String prompt = promptPassedToCodex(config, "Card task");
+
+        // then
+        assertThat(prompt)
+                .contains("- Type: URL")
+                .contains("- Resolved URL: " + repositoryUrl)
+                .doesNotContain("- Type: local path")
+                .doesNotContain(lowerPriorityPath.toString());
+        assertThat(config.repository().defaultPath()).isNull();
+    }
+
+    @MethodSource("missingOrBlankUrlDefaults")
+    @ParameterizedTest(name = "{0}")
+    void usesPathWhenEnvironmentUrlDefaultIsMissingOrBlank(String name, Map<String, String> environment) {
+        // given
+        Path repositoryPath = tempDir.resolve(name).toAbsolutePath().normalize();
+        EffectiveConfig config = configWithRepository(
+                Map.of("default_url", "$REPOSITORY_URL", "default_path", repositoryPath.toString()), environment);
+
+        // when
+        String prompt = promptPassedToCodex(config, "Card task");
+
+        // then
+        assertThat(prompt)
+                .contains("- Type: local path")
+                .contains("- Resolved local path: " + repositoryPath)
+                .doesNotContain("- Type: URL");
+    }
+
+    @MethodSource("missingOrBlankRepositoryDefaults")
+    @ParameterizedTest(name = "{0}")
+    void reportsNoDefaultWhenEnvironmentUrlAndPathDefaultsAreMissingOrBlank(
+            String ignored, Map<String, String> environment) {
+        // given
+        EffectiveConfig config = configWithRepository(
+                Map.of("default_url", "$REPOSITORY_URL", "default_path", "$REPOSITORY_PATH"), environment);
+
+        // when
+        String prompt = promptPassedToCodex(config, "Card task");
+
+        // then
+        assertThat(prompt)
+                .contains("No workflow repository default is configured")
+                .doesNotContain("Resolved URL:")
+                .doesNotContain("Resolved local path:");
+    }
+
+    @Test
+    void keepsExplicitCardSourcePromptAuthoritativeWhenWorkflowDefaultExists() {
+        // given
+        EffectiveConfig config = configWithRepository(Map.of("default_url", "https://example.invalid/default.git"));
+        String cardPrompt = "Card source: https://example.invalid/card-specific.git";
+
+        // when
+        String prompt = promptPassedToCodex(config, cardPrompt);
+
+        // then
+        assertThat(prompt)
+                .startsWith(cardPrompt)
+                .contains("An explicit Trello card repository source remains authoritative")
+                .contains("If the Trello card names an invalid explicit repository source, block");
+    }
+
+    @Test
+    void doesNotCreateOrInspectRepositoryPathWhileAddingRuntimePromptContext() {
+        // given
+        Path missingParent = tempDir.resolve("missing-parent");
+        Path repositoryPath = missingParent.resolve("repository");
+        EffectiveConfig config = configWithRepository(Map.of("default_path", repositoryPath.toString()));
+        assertThat(missingParent).doesNotExist();
+
+        // when
+        String prompt = promptPassedToCodex(config, "Card task");
+
+        // then
+        assertThat(prompt)
+                .contains("- Resolved local path: "
+                        + repositoryPath.toAbsolutePath().normalize());
+        assertThat(missingParent).doesNotExist();
+    }
+
+    @Test
+    void runtimePromptWarnsAgainstEchoingResolvedPrivateDefaultsToTrello() {
+        // given
+        String privateRepositoryUrl = "https://private.example.invalid/team/project.git";
+        EffectiveConfig config = configWithRepository(Map.of("default_url", privateRepositoryUrl));
+
+        // when
+        String prompt = promptPassedToCodex(config, "Card task");
+
+        // then
+        assertThat(prompt)
+                .contains("- Resolved URL: " + privateRepositoryUrl)
+                .contains("Do not copy private repository URLs from this context into Trello-visible comments");
     }
 
     @Test
@@ -91,6 +283,40 @@ final class LocalAgentRunnerTest {
         assertThat(result).isEqualTo(AgentRunResult.ok());
         assertThat(config.workspace().root().resolve("TRELLO-plain").resolve(".codex"))
                 .doesNotExist();
+    }
+
+    @Test
+    void repositoryDefaultUrlSkillPathDoesNotTriggerBundledSkillInstallation() {
+        // given
+        String repositoryUrl = "https://example.invalid/.codex/skills/symphony-trello-commit.git";
+        EffectiveConfig config = configWithRepository(Map.of("default_url", repositoryUrl));
+
+        // when
+        String prompt = promptPassedToCodex(config, "hand-authored prompt", "TRELLO-url-skill-default");
+
+        // then
+        Path workspace = config.workspace().root().resolve("TRELLO-url-skill-default");
+        assertThat(prompt).contains("hand-authored prompt").contains("- Resolved URL: " + repositoryUrl);
+        assertThat(workspace.resolve(".codex")).doesNotExist();
+        assertThat(workspace.resolve(".git/info/exclude")).doesNotExist();
+    }
+
+    @Test
+    void repositoryDefaultPathSkillPathDoesNotTriggerBundledSkillInstallation() {
+        // given
+        Path repositoryPath = tempDir.resolve(".codex/skills/symphony-trello-source")
+                .toAbsolutePath()
+                .normalize();
+        EffectiveConfig config = configWithRepository(Map.of("default_path", repositoryPath.toString()));
+
+        // when
+        String prompt = promptPassedToCodex(config, "hand-authored prompt", "TRELLO-path-skill-default");
+
+        // then
+        Path workspace = config.workspace().root().resolve("TRELLO-path-skill-default");
+        assertThat(prompt).contains("hand-authored prompt").contains("- Resolved local path: " + repositoryPath);
+        assertThat(workspace.resolve(".codex")).doesNotExist();
+        assertThat(workspace.resolve(".git/info/exclude")).doesNotExist();
     }
 
     @Test
@@ -218,6 +444,32 @@ final class LocalAgentRunnerTest {
                 new WorkspaceManager(new HookRunner()), new HookRunner(), codex, tracker(lookup), new PromptRenderer());
     }
 
+    private String promptPassedToCodex(EffectiveConfig config, String renderedPrompt) {
+        return promptPassedToCodex(config, renderedPrompt, "TRELLO-runtime-prompt");
+    }
+
+    private String promptPassedToCodex(EffectiveConfig config, String renderedPrompt, String cardIdentifier) {
+        CodexAppServerClient codex = mock();
+        AtomicReference<String> prompt = new AtomicReference<>();
+        when(codex.runSession(any(), any(), any(), any(), any(), any(), any())).thenAnswer(invocation -> {
+            prompt.set(invocation.getArgument(3));
+            return AgentRunResult.ok();
+        });
+        var runner = runner(codex, CardLookupResult.Found::new);
+
+        AgentRunResult result = runner.run(new AgentRunner.AgentRunRequest(
+                TestCards.card("card-1", cardIdentifier, "Ready for Codex"),
+                null,
+                renderedPrompt,
+                config,
+                "worker-runtime-prompt",
+                event -> {}));
+
+        assertThat(result).isEqualTo(AgentRunResult.ok());
+        assertThat(prompt).hasValueSatisfying(value -> assertThat(value).isNotBlank());
+        return prompt.get();
+    }
+
     private TrackerClient tracker(CardLookup lookup) {
         return new TrackerClient() {
             @Override
@@ -249,31 +501,69 @@ final class LocalAgentRunnerTest {
     }
 
     private EffectiveConfig config(Map<String, String> hooks, Map<String, Object> agent) {
-        return new ConfigResolver()
-                .resolve(new WorkflowDefinition(
-                        tempDir.resolve("WORKFLOW.md"),
-                        Map.of(
-                                "tracker",
-                                Map.of(
-                                        "kind",
-                                        "trello",
-                                        "api_key",
-                                        "key",
-                                        "api_token",
-                                        "token",
-                                        "board_id",
-                                        "board-1",
-                                        "active_states",
-                                        List.of("Ready for Codex", "In Progress"),
-                                        "terminal_states",
-                                        List.of("Done")),
-                                "workspace",
-                                Map.of("root", tempDir.resolve("workspaces").toString()),
-                                "agent",
-                                agent,
-                                "hooks",
-                                hooks),
-                        ""));
+        return config(hooks, agent, Map.of(), Map.of(), tempDir.resolve("WORKFLOW.md"));
+    }
+
+    private EffectiveConfig configWithRepository(Map<String, Object> repository) {
+        return configWithRepository(repository, Map.of());
+    }
+
+    private EffectiveConfig configWithRepository(Map<String, Object> repository, Map<String, String> environment) {
+        return configWithRepository(tempDir.resolve("WORKFLOW.md"), repository, environment);
+    }
+
+    private EffectiveConfig configWithRepository(
+            Path workflow, Map<String, Object> repository, Map<String, String> environment) {
+        return config(Map.of(), Map.of(), repository, environment, workflow);
+    }
+
+    private EffectiveConfig config(
+            Map<String, String> hooks,
+            Map<String, Object> agent,
+            Map<String, Object> repository,
+            Map<String, String> environment,
+            Path workflowPath) {
+        return new ConfigResolver(name -> Optional.ofNullable(environment.get(name)))
+                .resolve(new WorkflowDefinition(workflowPath, workflowConfig(hooks, agent, repository), ""));
+    }
+
+    private Map<String, Object> workflowConfig(
+            Map<String, String> hooks, Map<String, Object> agent, Map<String, Object> repository) {
+        return Map.of(
+                "tracker",
+                Map.of(
+                        "kind",
+                        "trello",
+                        "api_key",
+                        "key",
+                        "api_token",
+                        "token",
+                        "board_id",
+                        "board-1",
+                        "active_states",
+                        List.of("Ready for Codex", "In Progress"),
+                        "terminal_states",
+                        List.of("Done")),
+                "workspace",
+                Map.of("root", tempDir.resolve("workspaces").toString()),
+                "agent",
+                agent,
+                "hooks",
+                hooks,
+                "repository",
+                repository);
+    }
+
+    private static Stream<Arguments> missingOrBlankUrlDefaults() {
+        return Stream.of(
+                Arguments.of("missing-url-default", Map.of()),
+                Arguments.of("blank-url-default", Map.of("REPOSITORY_URL", "   ")));
+    }
+
+    private static Stream<Arguments> missingOrBlankRepositoryDefaults() {
+        return Stream.of(
+                Arguments.of("missing-defaults", Map.of()),
+                Arguments.of("blank-defaults", Map.of("REPOSITORY_URL", " ", "REPOSITORY_PATH", "\t")));
     }
 
     private static void blockUntilInterruptedOrTimedOut() throws InterruptedException {
