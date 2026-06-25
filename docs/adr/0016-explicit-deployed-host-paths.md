@@ -53,17 +53,18 @@ Generated workflow prompts now tell Codex that filesystem blocker comments must 
 problem without copying absolute host paths or per-card workspace locations, as refined by
 [ADR 0057](0057-path-safe-filesystem-blockers.md).
 
-Generated workflow prompts also tell Codex not to edit shared host checkouts directly when a writable
-per-card checkout can be created. If a card names only a repository URL, Codex should create or reuse
-a writable checkout under the current per-card workspace, preferring a readable matching local
-checkout as the clone source when available. If a card names a read-only local checkout, Codex should
-inspect it as source context and clone it into the current workspace before implementing the task.
-The workflow also tells Codex to add only the source checkout to the current user's Git
-`safe.directory` list when Git refuses a read-only local clone because the source checkout is owned
-by another user. It tells Codex to start task branches from the repository's default branch when that
-branch is discoverable so local clones do not inherit a shared checkout's current feature branch.
-This keeps shared checkouts clean while avoiding blockers when the source is readable but not
-writable.
+Generated workflow prompts also tell Codex to choose repository source context in this order:
+explicit Trello card repository URL or local checkout path, workflow `repository.default_url`,
+workflow `repository.default_path`, and no selected repository. A selected local checkout remains
+source context by default; Codex should clone from it into the current per-card workspace before
+implementation rather than editing that shared checkout directly. After cloning from a local
+checkout, Codex should not inherit the source checkout's current branch as the task base; new task
+work should start from the repository's default branch when it is discoverable unless the Trello
+card clearly requests another base. The existing generated workflow exception remains: Codex may
+work directly in the selected checkout only when the Trello card explicitly requests direct work,
+the checkout is writable, and deployment filesystem policy permits it. Cross-owner Git trust,
+direct-checkout ownership metadata, locking, transaction state, recovery, and managed checkout
+enforcement are future issue #33 phases, not part of this ADR's filesystem access decision.
 
 The generated workflow does not treat missing push credentials as a blocker when a Trello card only
 asks for local commits. It also allows handoff when broad validation has clearly unrelated failures

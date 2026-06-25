@@ -518,15 +518,27 @@ final class TrelloBoardSetupTest {
                 .contains(".codex/skills/symphony-trello-trello-handoff/SKILL.md")
                 .contains(".codex/skills/symphony-trello-review-sweep/SKILL.md")
                 .contains(".codex/skills/symphony-trello-land/SKILL.md")
-                .contains("## Repository Checkout Policy")
-                .contains("Do implementation work inside the current per-card workspace")
-                .contains("names only a repository URL")
-                .contains("cloning from a readable matching local checkout")
-                .contains("clone the repository URL into a new subdirectory named after the repository")
-                .contains("clone from that readable local path into a subdirectory of the current workspace")
-                .contains("git config --global --add safe.directory <source-checkout>")
-                .contains("git clone --no-hardlinks <source-checkout> <workspace-checkout>")
-                .contains("Start the task branch from the repository's default branch")
+                .contains("repository:")
+                .contains("default_url: null")
+                .contains("default_path: null")
+                .contains("## Repository Source Precedence")
+                .contains("1. An explicit Trello card repository URL or local checkout path.")
+                .contains("2. Workflow `repository.default_url`.")
+                .contains("3. Workflow `repository.default_path`.")
+                .contains("4. No selected repository.")
+                .contains("A valid selected source wins and suppresses lower-priority fallbacks")
+                .contains("An invalid explicit Trello card source\nblocks instead of falling back")
+                .contains("Repository preparation is workflow-owned in this phase")
+                .contains("For a selected repository URL, create or reuse a\nwritable checkout")
+                .contains("For a selected local checkout path, treat that\npath as source context")
+                .contains("clone from it into the current per-card workspace")
+                .contains("do not inherit the source checkout's current branch")
+                .contains("repository's default branch")
+                .contains("the Trello card clearly requests another base")
+                .contains("Do not edit the shared checkout directly")
+                .contains("direct work, the checkout is writable")
+                .contains("Phase 1 adds no Java enforcement, locking, ownership metadata")
+                .contains("move the Trello card to \"Blocked\" with path-safe guidance instead of guessing")
                 .contains("## Completion Bar Before \"Human Review\"")
                 .contains("A pull request exists and is linked in the workpad and handoff comment")
                 .contains("Filesystem access blocker details")
@@ -555,6 +567,9 @@ final class TrelloBoardSetupTest {
         assertThat(config.codex().turnTimeout()).isEqualTo(ConfigDefaults.DEFAULT_CODEX_TURN_TIMEOUT);
         assertThat(config.codex().readTimeout()).isEqualTo(ConfigDefaults.DEFAULT_CODEX_READ_TIMEOUT);
         assertThat(config.codex().stallTimeout()).isEqualTo(ConfigDefaults.DEFAULT_CODEX_STALL_TIMEOUT);
+        assertThat(config.repository().defaultUrl()).isNull();
+        assertThat(config.repository().defaultPath()).isNull();
+        assertThat(config.repository().selectedDefaultSource()).isEqualTo(EffectiveConfig.DefaultSource.NONE);
         assertThat(config.tracker().activeStates()).containsExactly("Ready for Codex", "In Progress", "Merging");
         assertThat(config.tracker().terminalStates())
                 .contains("done", "archived", "archivedlist", "archivedboard", "deleted");
@@ -655,6 +670,17 @@ final class TrelloBoardSetupTest {
                 .content(StandardCharsets.UTF_8)
                 .contains("- \"Ready for Codex\"")
                 .contains("- \"In Progress\"")
+                .contains("## Repository Source Precedence")
+                .contains("Workflow `repository.default_url`")
+                .contains("Workflow `repository.default_path`")
+                .contains("clone from it into the current per-card workspace")
+                .contains("do not inherit the source checkout's current branch")
+                .contains("repository's default branch")
+                .contains("the Trello card clearly requests another base")
+                .contains("explicitly requests direct work")
+                .contains("direct work, the checkout is writable")
+                .contains("Phase 1 adds no Java enforcement")
+                .contains("move the Trello card to \"Blocked\" with path-safe guidance instead of guessing")
                 .contains("## Local And Non-GitHub Repository Work")
                 .contains("do not require GitHub auth")
                 .contains("## Non-GitHub Review Feedback")
@@ -781,6 +807,22 @@ final class TrelloBoardSetupTest {
                 .contains("## Trello List Routing")
                 .contains("\"Ready for Codex\": queued work")
                 .contains("\"In Progress\": work currently running in Codex")
+                .contains("repository:")
+                .contains("default_url: null")
+                .contains("default_path: null")
+                .contains("## Repository Source Precedence")
+                .contains("1. An explicit Trello card repository URL or local checkout path.")
+                .contains("2. Workflow `repository.default_url`.")
+                .contains("3. Workflow `repository.default_path`.")
+                .contains("4. No selected repository.")
+                .contains("clone from it into the current per-card workspace")
+                .contains("do not inherit the source checkout's current branch")
+                .contains("repository's default branch")
+                .contains("the Trello card clearly requests another base")
+                .contains("explicitly requests direct work")
+                .contains("direct work, the checkout is writable")
+                .contains("Phase 1 adds no Java enforcement")
+                .contains("move the Trello card to \"Blocked\" with path-safe guidance instead of guessing")
                 .contains("workspace-local skills")
                 .contains("after workspace sync hooks")
                 .contains(".codex/skills/symphony-trello-commit/SKILL.md")
@@ -800,6 +842,74 @@ final class TrelloBoardSetupTest {
         assertThat(config.codex().reasoningEffort()).isEqualTo("medium");
         assertThat(config.workspace().root()).isEqualTo(workflow.getParent().resolve("agent-workspaces"));
         assertThat(config.polling().interval()).isEqualTo(ConfigDefaults.GENERATED_WORKFLOW_POLLING_INTERVAL);
+        assertThat(config.repository().selectedDefaultSource()).isEqualTo(EffectiveConfig.DefaultSource.NONE);
+    }
+
+    @Test
+    void importUsesReviewFallbackForRepositoryBlockerWhenNoBlockedListIsConfigured() {
+        // given
+        boardListsResponse.set(
+                """
+                [
+                  {"id":"list-ready","name":"Ready for Codex","closed":false,"pos":1},
+                  {"id":"list-review","name":"Human Review","closed":false,"pos":2},
+                  {"id":"list-done","name":"Done","closed":false,"pos":3}
+                ]
+                """);
+        Path workflow = tempDir.resolve("imported-review-fallback.md");
+
+        // when
+        var result = importBoardWithoutRepositoryBlockerDestination(workflow);
+
+        // then
+        assertThat(result.blockedState()).isNull();
+        EffectiveConfig config = resolve(workflow);
+        assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("human review", "done");
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("## Repository Source Precedence")
+                .contains("For a selected local checkout path, treat that")
+                .contains("clone from it into the current per-card workspace")
+                .contains("do not inherit the source checkout's current branch")
+                .contains("repository's default branch")
+                .contains("the Trello card clearly requests another base")
+                .contains("explicitly requests direct work")
+                .contains("direct work, the checkout is writable")
+                .contains("move the Trello card to \"Human Review\" with path-safe guidance instead of guessing");
+    }
+
+    @Test
+    void importRecordsRepositoryBlockerGuidanceWhenNoMoveDestinationExists() {
+        // given
+        boardListsResponse.set(
+                """
+                [
+                  {"id":"list-ready","name":"Ready for Codex","closed":false,"pos":1},
+                  {"id":"list-done","name":"Done","closed":false,"pos":2}
+                ]
+                """);
+        Path workflow = tempDir.resolve("imported-no-blocker-destination.md");
+
+        // when
+        var result = importBoardWithoutRepositoryBlockerDestination(workflow);
+
+        // then
+        assertThat(result.blockedState()).isNull();
+        EffectiveConfig config = resolve(workflow);
+        assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("done");
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("## Repository Source Precedence")
+                .contains("For a selected local checkout path, treat that")
+                .contains("clone from it into the current per-card workspace")
+                .contains("do not inherit the source checkout's current branch")
+                .contains("repository's default branch")
+                .contains("the Trello card clearly requests another base")
+                .contains("explicitly requests direct work")
+                .contains("direct work, the checkout is writable")
+                .contains("record a path-safe blocker in the workpad")
+                .contains("operator must move the Trello card to the appropriate blocked list")
+                .doesNotContain("move the Trello card to \"Done\" with path-safe guidance");
     }
 
     @Test
@@ -870,6 +980,25 @@ final class TrelloBoardSetupTest {
                 false,
                 TrelloBoardSetup.GitHubIntegration.ENABLED,
                 true)));
+    }
+
+    private TrelloBoardSetup.ImportBoardResult importBoardWithoutRepositoryBlockerDestination(Path workflow) {
+        return setup.importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "input",
+                List.of(),
+                List.of(),
+                null,
+                false,
+                "-",
+                workflow,
+                Path.of("./agent-workspaces"),
+                null,
+                2,
+                false,
+                TrelloBoardSetup.GitHubIntegration.DISABLED,
+                false));
     }
 
     private void assertUnknownWriteOutcome(Throwable thrown, Path workflow) {
@@ -1188,6 +1317,15 @@ final class TrelloBoardSetupTest {
         assertThat(config.agent().maxConcurrentAgents()).isEqualTo(2);
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
+                .contains("## Repository Source Precedence")
+                .contains("For a selected local checkout path, treat that")
+                .contains("clone from it into the current per-card workspace")
+                .contains("do not inherit the source checkout's current branch")
+                .contains("repository's default branch")
+                .contains("the Trello card clearly requests another base")
+                .contains("explicitly requests direct work")
+                .contains("direct work, the checkout is writable")
+                .contains("move the Trello card to \"Needs Help\" with path-safe guidance instead of guessing")
                 .contains("Do not move the card to \"Review\"")
                 .contains("card to \"Review\" or landing from Merging")
                 .contains("Before returning the card to \"Review\"")

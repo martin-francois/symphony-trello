@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
+import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -11,6 +12,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -49,6 +51,317 @@ final class ConfigResolverTest {
         assertThat(config.server().port()).hasValue(19093);
     }
 
+    @Test
+    void resolvesLiteralRepositoryDefaultUrl() throws Exception {
+        // given
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.repository-url.md",
+                """
+                repository:
+                  default_url: https://github.com/example/project.git
+                """);
+        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.repository().defaultUrl()).isEqualTo("https://github.com/example/project.git");
+        assertThat(config.repository().defaultPath()).isNull();
+        assertThat(config.repository().selectedDefaultSource()).isEqualTo(EffectiveConfig.DefaultSource.URL);
+    }
+
+    @Test
+    void resolvesEnvironmentBackedRepositoryDefaultUrl() throws Exception {
+        // given
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.repository-url-env.md",
+                """
+                repository:
+                  default_url: $SYMPHONY_DEFAULT_REPOSITORY_URL
+                """);
+        ConfigResolver resolver = new ConfigResolver(name -> "SYMPHONY_DEFAULT_REPOSITORY_URL".equals(name)
+                ? Optional.of("ssh://git@example.com/team/project.git")
+                : Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.repository().defaultUrl()).isEqualTo("ssh://git@example.com/team/project.git");
+        assertThat(config.repository().selectedDefaultSource()).isEqualTo(EffectiveConfig.DefaultSource.URL);
+    }
+
+    @Test
+    void missingOptionalRepositoryDefaultUrlEnvironmentReferenceResolvesToAbsent() throws Exception {
+        // given
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.repository-url-env-missing.md",
+                """
+                repository:
+                  default_url: $SYMPHONY_MISSING_REPOSITORY_URL
+                """);
+        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.repository().defaultUrl()).isNull();
+        assertThat(config.repository().selectedDefaultSource()).isEqualTo(EffectiveConfig.DefaultSource.NONE);
+    }
+
+    @Test
+    void blankOptionalRepositoryDefaultUrlEnvironmentReferenceResolvesToAbsent() throws Exception {
+        // given
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.repository-url-env-blank.md",
+                """
+                repository:
+                  default_url: $SYMPHONY_BLANK_REPOSITORY_URL
+                """);
+        ConfigResolver resolver = new ConfigResolver(
+                name -> "SYMPHONY_BLANK_REPOSITORY_URL".equals(name) ? Optional.of("   ") : Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.repository().defaultUrl()).isNull();
+        assertThat(config.repository().selectedDefaultSource()).isEqualTo(EffectiveConfig.DefaultSource.NONE);
+    }
+
+    @Test
+    void resolvesLiteralRelativeRepositoryDefaultPathAgainstWorkflowDirectoryWithoutProbingIt() throws Exception {
+        // given
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.repository-path-relative.md",
+                """
+                repository:
+                  default_path: ../repositories/project
+                """);
+        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.repository().defaultPath())
+                .isEqualTo(tempDir.resolve("../repositories/project")
+                        .toAbsolutePath()
+                        .normalize());
+        assertThat(config.repository().selectedDefaultSource()).isEqualTo(EffectiveConfig.DefaultSource.PATH);
+        assertThat(config.repository().defaultPath()).doesNotExist();
+    }
+
+    @Test
+    void resolvesLiteralAbsoluteRepositoryDefaultPathWithoutProbingIt() throws Exception {
+        // given
+        Path missingCheckout = tempDir.resolve("missing-checkout");
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.repository-path-absolute.md",
+                """
+                repository:
+                  default_path: %s
+                """
+                        .formatted(missingCheckout));
+        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.repository().defaultPath())
+                .isEqualTo(missingCheckout.toAbsolutePath().normalize());
+        assertThat(config.repository().defaultPath()).doesNotExist();
+    }
+
+    @Test
+    void resolvesEnvironmentBackedRepositoryDefaultPath() throws Exception {
+        // given
+        Path repositoryPath = tempDir.resolve("source-repository");
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.repository-path-env.md",
+                """
+                repository:
+                  default_path: $SYMPHONY_DEFAULT_REPOSITORY_PATH
+                """);
+        ConfigResolver resolver = new ConfigResolver(name -> "SYMPHONY_DEFAULT_REPOSITORY_PATH".equals(name)
+                ? Optional.of(repositoryPath.toString())
+                : Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.repository().defaultPath())
+                .isEqualTo(repositoryPath.toAbsolutePath().normalize());
+        assertThat(config.repository().selectedDefaultSource()).isEqualTo(EffectiveConfig.DefaultSource.PATH);
+    }
+
+    @Test
+    void resolvesEnvironmentBackedRepositoryDefaultPathWithSuffix() throws Exception {
+        // given
+        Path repositoryParent = tempDir.resolve("repositories");
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.repository-path-env-suffix.md",
+                """
+                repository:
+                  default_path: $SYMPHONY_REPOSITORY_PARENT/project
+                """);
+        ConfigResolver resolver = new ConfigResolver(name -> "SYMPHONY_REPOSITORY_PARENT".equals(name)
+                ? Optional.of(repositoryParent.toString())
+                : Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.repository().defaultPath())
+                .isEqualTo(repositoryParent.resolve("project").toAbsolutePath().normalize());
+    }
+
+    @Test
+    void missingOptionalRepositoryDefaultPathEnvironmentReferenceResolvesToAbsent() throws Exception {
+        // given
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.repository-path-env-missing.md",
+                """
+                repository:
+                  default_path: $SYMPHONY_MISSING_REPOSITORY_PATH
+                """);
+        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.repository().defaultPath()).isNull();
+        assertThat(config.repository().selectedDefaultSource()).isEqualTo(EffectiveConfig.DefaultSource.NONE);
+    }
+
+    @Test
+    void blankOptionalRepositoryDefaultPathEnvironmentReferenceResolvesToAbsent() throws Exception {
+        // given
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.repository-path-env-blank.md",
+                """
+                repository:
+                  default_path: $SYMPHONY_BLANK_REPOSITORY_PATH
+                """);
+        ConfigResolver resolver = new ConfigResolver(
+                name -> "SYMPHONY_BLANK_REPOSITORY_PATH".equals(name) ? Optional.of("   ") : Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.repository().defaultPath()).isNull();
+        assertThat(config.repository().selectedDefaultSource()).isEqualTo(EffectiveConfig.DefaultSource.NONE);
+    }
+
+    @Test
+    void repositoryDefaultUrlTakesPrecedenceOverRepositoryDefaultPath() throws Exception {
+        // given
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.repository-url-over-path.md",
+                """
+                repository:
+                  default_url: https://github.com/example/project.git
+                  default_path: ../repositories/project
+                """);
+        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.repository().defaultUrl()).isEqualTo("https://github.com/example/project.git");
+        assertThat(config.repository().defaultPath()).isNull();
+        assertThat(config.repository().selectedDefaultSource()).isEqualTo(EffectiveConfig.DefaultSource.URL);
+    }
+
+    @Test
+    void repositoryDefaultUrlSuppressesMalformedLowerPriorityPath() {
+        // given
+        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        EffectiveConfig config = resolver.resolve(workflowDefinitionWithRepository(Map.of(
+                "default_url", "https://github.com/example/project.git",
+                "default_path", "bad\u0000path")));
+
+        // then
+        assertThat(config.repository().defaultUrl()).isEqualTo("https://github.com/example/project.git");
+        assertThat(config.repository().defaultPath()).isNull();
+        assertThat(config.repository().selectedDefaultSource()).isEqualTo(EffectiveConfig.DefaultSource.URL);
+    }
+
+    @Test
+    void environmentRepositoryDefaultUrlSuppressesMalformedLowerPriorityEnvironmentPath() {
+        // given
+        AtomicInteger pathEnvironmentRequests = new AtomicInteger();
+        ConfigResolver resolver = new ConfigResolver(name -> switch (name) {
+            case "SYMPHONY_DEFAULT_REPOSITORY_URL" -> Optional.of("ssh://git@example.com/team/project.git");
+            case "SYMPHONY_DEFAULT_REPOSITORY_PATH" -> {
+                pathEnvironmentRequests.incrementAndGet();
+                yield Optional.of("bad\u0000path");
+            }
+            default -> Optional.empty();
+        });
+
+        // when
+        EffectiveConfig config = resolver.resolve(workflowDefinitionWithRepository(Map.of(
+                "default_url", "$SYMPHONY_DEFAULT_REPOSITORY_URL",
+                "default_path", "$SYMPHONY_DEFAULT_REPOSITORY_PATH")));
+
+        // then
+        assertThat(config.repository().defaultUrl()).isEqualTo("ssh://git@example.com/team/project.git");
+        assertThat(config.repository().defaultPath()).isNull();
+        assertThat(pathEnvironmentRequests).hasValue(0);
+    }
+
+    @MethodSource("missingOrBlankUrlWithValidPath")
+    @ParameterizedTest(name = "{0}")
+    void absentRepositoryDefaultUrlAllowsRepositoryDefaultPath(String ignored, Map<String, String> environment)
+            throws Exception {
+        // given
+        Path repositoryPath = tempDir.resolve("selected-path");
+        Path workflow = writeDefaultWorkflow(
+                "WORKFLOW.repository-url-absent-path-selected.md",
+                """
+                repository:
+                  default_url: $SYMPHONY_DEFAULT_REPOSITORY_URL
+                  default_path: %s
+                """
+                        .formatted(repositoryPath));
+        ConfigResolver resolver = new ConfigResolver(name -> Optional.ofNullable(environment.get(name)));
+
+        // when
+        EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
+
+        // then
+        assertThat(config.repository().defaultUrl()).isNull();
+        assertThat(config.repository().defaultPath())
+                .isEqualTo(repositoryPath.toAbsolutePath().normalize());
+        assertThat(config.repository().selectedDefaultSource()).isEqualTo(EffectiveConfig.DefaultSource.PATH);
+    }
+
+    @Test
+    void malformedSelectedRepositoryDefaultPathFailsAsConfigurationError() {
+        // given
+        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+
+        // when
+        ConfigException error = catchThrowableOfType(
+                ConfigException.class,
+                () -> resolver.resolve(workflowDefinitionWithRepository(Map.of("default_path", "bad\u0000path"))));
+
+        // then
+        assertThat(error.code()).isEqualTo("config_value_error");
+        assertThat(error).hasMessage("repository.default_path must be a valid local path");
+    }
+
     @MethodSource("fractionalNumericValues")
     @ParameterizedTest
     void rejectsFractionalNumericValuesInsteadOfTruncatingThem(String name, String section, String expectedMessage)
@@ -78,6 +391,12 @@ final class ConfigResolverTest {
                         "tracker:\n  max_api_retries: not-a-number",
                         "max_api_retries must be a whole number"),
                 Arguments.of("overflowing-float-port", "server:\n  port: 1e400", "server.port must be a whole number"));
+    }
+
+    private static Stream<Arguments> missingOrBlankUrlWithValidPath() {
+        return Stream.of(
+                Arguments.of("missing-url", Map.of()),
+                Arguments.of("blank-url", Map.of("SYMPHONY_DEFAULT_REPOSITORY_URL", "   ")));
     }
 
     @MethodSource("malformedObjectSections")
@@ -856,6 +1175,25 @@ final class ConfigResolverTest {
 
     private Path writeDefaultWorkflow(String fileName, String extraFrontMatter) throws Exception {
         return writeTrelloWorkflow(fileName, "board-1", extraFrontMatter);
+    }
+
+    private WorkflowDefinition workflowDefinitionWithRepository(Map<String, Object> repository) {
+        return new WorkflowDefinition(
+                tempDir.resolve("WORKFLOW.repository-direct.md"),
+                Map.of(
+                        "tracker",
+                        Map.of(
+                                "kind",
+                                "trello",
+                                "api_key",
+                                "literal-key",
+                                "api_token",
+                                "literal-token",
+                                "board_id",
+                                "board-1"),
+                        "repository",
+                        repository),
+                "Prompt");
     }
 
     private Path writeTrelloWorkflow(String fileName, String boardId, String extraFrontMatter) throws Exception {

@@ -994,6 +994,9 @@ public final class TrelloBoardSetup {
                 %s
                 workspace:
                   root: %s
+                repository:
+                  default_url: null
+                  default_path: null
                 server:
                   port: %d
                 polling:
@@ -1030,28 +1033,7 @@ public final class TrelloBoardSetup {
                 Read the Trello description carefully, inspect the repository, make the smallest maintainable change,
                 run relevant verification, and leave the workspace in a reviewable state.
 
-                ## Repository Checkout Policy
-
-                Do implementation work inside the current per-card workspace or a writable checkout under it.
-                Do not edit a shared host checkout directly unless the card explicitly asks you to work there and
-                that checkout is writable.
-
-                If the Trello card names only a repository URL, create or reuse a writable checkout in a subdirectory
-                of the current workspace. Prefer cloning from a readable matching local checkout under an allowed host
-                path, then set the checkout's `origin` remote to the repository URL when needed. If no matching local
-                checkout is readable, clone the repository URL into a new subdirectory named after the repository.
-
-                If the Trello card names a specific local path or checkout, inspect it as source context. When it is
-                not writable, clone from that readable local path into a subdirectory of the current workspace and work
-                in the clone instead of blocking. Block only when the path is not readable, the repository cannot be
-                cloned into a writable workspace subdirectory, or required repository/auth context is unavailable. If
-                Git rejects a readable
-                local checkout because of safe-directory ownership checks, add only that source checkout to the
-                current user's Git safe directories with `git config --global --add safe.directory <source-checkout>`,
-                then retry a read-only clone with `git clone --no-hardlinks <source-checkout> <workspace-checkout>`.
-                After cloning from a local checkout, do not inherit the source checkout's current branch as the task
-                base. Start the task branch from the repository's default branch when it is discoverable, usually
-                `origin/main`, unless the Trello card explicitly asks for a different base.
+                %s
 
                 %s
 
@@ -1097,6 +1079,10 @@ public final class TrelloBoardSetup {
                         ConfigDefaults.DEFAULT_CODEX_STALL_TIMEOUT_MS,
                         workpadPrompt(!handoffStates.isEmpty()),
                         repositorySkillsPrompt(githubEnabled),
+                        repositoryCheckoutPolicyPrompt(
+                                blockedDestination(reviewState, blockedState),
+                                !handoffStates.isEmpty(),
+                                !handoffStates.isEmpty()),
                         operatingPosturePrompt(!handoffStates.isEmpty()),
                         routingPrompt(
                                 activeStates, terminalStates, inProgressState, reviewState, blockedState, mergingState),
@@ -1180,6 +1166,55 @@ public final class TrelloBoardSetup {
                         skillPath("land"),
                         skillPath("debug"))
                 .stripTrailing();
+    }
+
+    private static String repositoryCheckoutPolicyPrompt(
+            String blockedDestination, boolean moveToolEnabled, boolean workpadToolEnabled) {
+        String blockerInstruction =
+                repositoryBlockerInstruction(blockedDestination, moveToolEnabled, workpadToolEnabled);
+        return """
+                ## Repository Source Precedence
+
+                Select repository source context in this order:
+
+                1. An explicit Trello card repository URL or local checkout path.
+                2. Workflow `repository.default_url`.
+                3. Workflow `repository.default_path`.
+                4. No selected repository.
+
+                A valid selected source wins and suppresses lower-priority fallbacks. Do not validate or use an
+                unselected fallback once a higher-priority source is selected. An invalid explicit Trello card source
+                blocks instead of falling back to workflow defaults. Do not infer a repository from previous Trello
+                cards, unrelated host checkouts, branch names, or leftover workspace contents.
+
+                Repository preparation is workflow-owned in this phase. For a selected repository URL, create or reuse a
+                writable checkout under the current per-card workspace. For a selected local checkout path, treat that
+                path as source context by default and clone from it into the current per-card workspace before
+                implementation. After cloning from a local checkout, do not inherit the source checkout's current branch
+                as the task base. Start new task work from the repository's default branch when it is discoverable unless
+                the Trello card clearly requests another base. Do not edit the shared checkout directly unless the Trello
+                card explicitly requests direct work, the checkout is writable, and deployment filesystem policy permits
+                it. Phase 1 adds no Java enforcement, locking, ownership metadata, transaction state, or recovery
+                guarantees for direct checkout.
+
+                If no source is selected or the selected source is missing, unreadable, unclonable, or lacks required
+                repository/auth context, %s
+                """
+                .formatted(blockerInstruction)
+                .stripTrailing();
+    }
+
+    private static String repositoryBlockerInstruction(
+            String blockedDestination, boolean moveToolEnabled, boolean workpadToolEnabled) {
+        String recordTarget = workpadToolEnabled ? "the workpad" : "the final response";
+        if (moveToolEnabled && !blank(blockedDestination)) {
+            return "move the Trello card to "
+                    + quote(blockedDestination)
+                    + " with path-safe guidance instead of guessing.";
+        }
+        return "record a path-safe blocker in "
+                + recordTarget
+                + " and explain that an operator must move the Trello card to the appropriate blocked list.";
     }
 
     private static String codexModelYaml(CodexModelDefaults codexModelDefaults) {

@@ -11,6 +11,7 @@ public record EffectiveConfig(
         TrackerConfig tracker,
         PollingConfig polling,
         WorkspaceConfig workspace,
+        RepositoryConfig repository,
         HooksConfig hooks,
         AgentConfig agent,
         CodexConfig codex,
@@ -42,6 +43,7 @@ public record EffectiveConfig(
                         tracker.apiRetryBaseDelay()),
                 polling,
                 workspace,
+                repository,
                 hooks,
                 agent,
                 codex,
@@ -83,6 +85,24 @@ public record EffectiveConfig(
     public record PollingConfig(Duration interval) {}
 
     public record WorkspaceConfig(Path root) {}
+
+    public record RepositoryConfig(String defaultUrl, Path defaultPath) {
+        public DefaultSource selectedDefaultSource() {
+            if (defaultUrl != null) {
+                return DefaultSource.URL;
+            }
+            if (defaultPath != null) {
+                return DefaultSource.PATH;
+            }
+            return DefaultSource.NONE;
+        }
+    }
+
+    public enum DefaultSource {
+        URL,
+        PATH,
+        NONE
+    }
 
     public record HooksConfig(
             String afterCreate, String beforeRun, String afterRun, String beforeRemove, Duration timeout) {}
