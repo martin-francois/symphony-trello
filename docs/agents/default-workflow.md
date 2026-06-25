@@ -19,10 +19,11 @@ commit and open pull requests. Topic-specific rules live in the pages linked und
    `CONTRIBUTING.md`, and ADRs before changing code.
 2. If this checkout contains `tessl.json` and the `tessl` command is available, run `tessl install`
    from the repository root before contribution work so generated agent links and rules are fresh.
-   If `tessl` is not available, say so briefly and continue by following `AGENTS.md`,
-   `CONTRIBUTING.md`, `AI_CONTRIBUTION_POLICY.md`, the issue/PR templates, and the vendored
-   `tessl-labs/good-oss-citizen` rules at
-   `.tessl/tiles/tessl-labs/good-oss-citizen/rules/good-oss-citizen.md` directly.
+   Treat `.tessl/` and Tessl-generated `tessl__*` skill links as local generated output;
+   `tessl.json` is the tracked source of truth. Do not stage Tessl install churn, and add generated
+   tool output that should never be tracked to `.gitignore` instead of repeatedly cleaning it by
+   hand. If `tessl` is not available, say so briefly and continue by following `AGENTS.md`,
+   `CONTRIBUTING.md`, `AI_CONTRIBUTION_POLICY.md`, and the issue/PR templates directly.
 
 ## Making the change
 
