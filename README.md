@@ -662,6 +662,16 @@ Select repository source context in this order:
 3. Workflow `repository.default_path`.
 4. No selected repository.
 
+Name an explicit Trello card source with a line such as `Repository URL: <url>`,
+`Repository path: <path>`, `Local checkout: <path>`, or `Repository: <url-or-path>` in the title,
+description, or a Trello comment. Ordinary unlabelled web links are not selected as repositories.
+Each source declaration is read from one logical line. If multiple declarations are present, they
+must all name the same source. URL labels and `repository.default_url` accept credential-free
+HTTP(S), username-only `ssh://`, SCP-style SSH such as `git@example.com:team/project.git`, and
+`file://` URLs. Path and checkout labels accept local checkout paths. Generic `Repository:` labels
+accept either form. HTTP(S) source URLs must not include user info, query strings, or fragments. URI
+paths may keep safe percent-encoding, but encoded or literal control characters are invalid.
+
 A valid selected source wins and suppresses lower-priority fallbacks. Do not validate or use an
 unselected fallback once a higher-priority source is selected. An invalid explicit Trello card source
 blocks instead of falling back to workflow defaults. Do not infer a repository from previous Trello
@@ -873,6 +883,16 @@ Select repository source context in this order:
 2. Workflow `repository.default_url`.
 3. Workflow `repository.default_path`.
 4. No selected repository.
+
+Name an explicit Trello card source with a line such as `Repository URL: <url>`,
+`Repository path: <path>`, `Local checkout: <path>`, or `Repository: <url-or-path>` in the title,
+description, or a Trello comment. Ordinary unlabelled web links are not selected as repositories.
+Each source declaration is read from one logical line. If multiple declarations are present, they
+must all name the same source. URL labels and `repository.default_url` accept credential-free
+HTTP(S), username-only `ssh://`, SCP-style SSH such as `git@example.com:team/project.git`, and
+`file://` URLs. Path and checkout labels accept local checkout paths. Generic `Repository:` labels
+accept either form. HTTP(S) source URLs must not include user info, query strings, or fragments. URI
+paths may keep safe percent-encoding, but encoded or literal control characters are invalid.
 
 A valid selected source wins and suppresses lower-priority fallbacks. Do not validate or use an
 unselected fallback once a higher-priority source is selected. An invalid explicit Trello card source

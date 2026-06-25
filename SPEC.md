@@ -886,11 +886,19 @@ The generated workflow treats `Ready for Codex`, `In Progress`, and `Merging` as
 `Human Review` as the review handoff list, and `Merging` as the human approval list for landing.
 When the generated workflow receives repository work, it tells Codex to select repository source
 context in this order: an explicit Trello card repository URL or local checkout path, workflow
-`repository.default_url`, workflow `repository.default_path`, and finally no selected repository. A
-valid selected source suppresses lower-priority fallbacks. An invalid explicit Trello card source
-blocks instead of falling back to workflow defaults. The generated workflow tells Codex not to infer
-a repository from previous Trello cards, unrelated host checkouts, branch names, or leftover
-workspace contents.
+`repository.default_url`, workflow `repository.default_path`, and finally no selected repository.
+Explicit Trello card sources use a labelled line such as `Repository URL: <url>`,
+`Repository path: <path>`, `Local checkout: <path>`, or `Repository: <url-or-path>` in the title,
+description, or a Trello comment. Ordinary unlabelled web links are not selected as repositories.
+Each source declaration is read from one logical line. If multiple declarations are present, they
+MUST all name the same source. URL labels and `repository.default_url` accept credential-free
+HTTP(S), username-only `ssh://`, SCP-style SSH, and `file://` URLs. Path and checkout labels accept
+local checkout paths. Generic `Repository:` labels accept either form. HTTP(S) source URLs MUST NOT
+include user info, query strings, or fragments. URI paths MAY keep safe percent-encoding, but encoded
+or literal control characters are invalid. A valid selected source suppresses lower-priority fallbacks. An
+invalid explicit Trello card source blocks instead of falling back to workflow defaults. The
+generated workflow tells Codex not to infer a repository from previous Trello cards, unrelated host
+checkouts, branch names, or leftover workspace contents.
 
 Repository preparation remains workflow-owned in this phase. For a selected repository URL, the
 generated workflow tells Codex to create or reuse a writable checkout under the current per-card
@@ -3502,15 +3510,23 @@ When this profile is used:
 Generated workflows SHOULD prefer writable per-card checkouts over editing shared host checkouts.
 Repository source context is selected in this order: explicit Trello card repository URL or local
 checkout path, workflow `repository.default_url`, workflow `repository.default_path`, and no selected
-repository. A valid selected source suppresses lower-priority fallbacks, and an invalid explicit
-Trello card source does not fall back. For a selected repository URL, the agent should create or
-reuse a writable checkout under the per-card workspace. For a selected local checkout path, the agent
-should treat that path as source context by default and clone from it into the per-card workspace
-before implementation. After cloning from a local checkout, the agent should not inherit the source
+repository. Explicit Trello card sources use a labelled line such as `Repository URL: <url>`,
+`Repository path: <path>`, `Local checkout: <path>`, or `Repository: <url-or-path>`. Ordinary
+unlabelled web links are not selected as repositories. Each source declaration is read from one
+logical line. If multiple declarations are present, they MUST all name the same source. URL labels
+and `repository.default_url` accept credential-free HTTP(S), username-only `ssh://`, SCP-style SSH,
+and `file://` URLs. Path and checkout labels accept local checkout paths. Generic `Repository:`
+labels accept either form. HTTP(S) source URLs MUST NOT include user info, query strings, or
+fragments. URI paths MAY keep safe percent-encoding, but encoded or literal control characters are
+invalid. A valid selected source suppresses lower-priority fallbacks, and an invalid explicit Trello
+card source does not fall back. For a selected repository URL, the agent should create or reuse a
+writable checkout under the per-card workspace. For a selected local checkout path, the agent should
+treat that path as source context by default and clone from it into the per-card workspace before
+implementation. After cloning from a local checkout, the agent should not inherit the source
 checkout's current branch as the task base. New task work should start from the repository's default
-branch when it is discoverable unless the Trello card clearly requests another base. The agent
-should not edit the shared checkout directly unless the Trello card explicitly requests direct work,
-the checkout is writable, and deployment filesystem policy permits it. Phase 1 does not add Java
+branch when it is discoverable unless the Trello card clearly requests another base. The agent should
+not edit the shared checkout directly unless the Trello card explicitly requests direct work, the
+checkout is writable, and deployment filesystem policy permits it. Phase 1 does not add Java
 enforcement, locking, ownership metadata, transaction state, or recovery guarantees for direct
 checkout. This preserves the security default while still allowing cards to use existing host
 repositories as source context when an operator has allowed access, and it keeps the workspace root

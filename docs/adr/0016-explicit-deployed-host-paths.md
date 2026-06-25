@@ -55,16 +55,22 @@ problem without copying absolute host paths or per-card workspace locations, as 
 
 Generated workflow prompts also tell Codex to choose repository source context in this order:
 explicit Trello card repository URL or local checkout path, workflow `repository.default_url`,
-workflow `repository.default_path`, and no selected repository. A selected local checkout remains
-source context by default; Codex should clone from it into the current per-card workspace before
-implementation rather than editing that shared checkout directly. After cloning from a local
-checkout, Codex should not inherit the source checkout's current branch as the task base; new task
-work should start from the repository's default branch when it is discoverable unless the Trello
-card clearly requests another base. The existing generated workflow exception remains: Codex may
-work directly in the selected checkout only when the Trello card explicitly requests direct work,
-the checkout is writable, and deployment filesystem policy permits it. Cross-owner Git trust,
-direct-checkout ownership metadata, locking, transaction state, recovery, and managed checkout
-enforcement are future issue #33 phases, not part of this ADR's filesystem access decision.
+workflow `repository.default_path`, and no selected repository. Explicit Trello card sources use
+labelled lines such as `Repository URL: <url>`, `Repository path: <path>`, `Local checkout: <path>`,
+or `Repository: <url-or-path>`; ordinary unlabelled web links are not selected as repositories. Each
+source declaration is read from one logical line, and duplicate declarations must name the same
+source. URL-labelled sources accept supported remotes and `file://` URLs; path-labelled sources
+accept local paths; generic `Repository:` labels accept either form. HTTP(S) source URLs must not
+include user info, query strings, or fragments. A selected local
+checkout remains source context by default; Codex should clone from it into the current per-card
+workspace before implementation rather than editing that shared checkout directly. After cloning
+from a local checkout, Codex should not inherit the source checkout's current branch as the task
+base; new task work should start from the repository's default branch when it is discoverable unless
+the Trello card clearly requests another base. The existing generated workflow exception remains:
+Codex may work directly in the selected checkout only when the Trello card explicitly requests
+direct work, the checkout is writable, and deployment filesystem policy permits it. Cross-owner Git
+trust, direct-checkout ownership metadata, locking, transaction state, recovery, and managed
+checkout enforcement are future issue #33 phases, not part of this ADR's filesystem access decision.
 
 The generated workflow does not treat missing push credentials as a blocker when a Trello card only
 asks for local commits. It also allows handoff when broad validation has clearly unrelated failures
