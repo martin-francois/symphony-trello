@@ -58,6 +58,15 @@ printing the key file path, the key value, or the original error.
 Displayed tokens remain short by design. They are correlation handles, not cryptographic proofs. The
 private diagnostics context command exists to map them back locally when needed.
 
+Focused lookup reuses the same tokens. `diagnostics --show-private-context --lookup <token>` accepts
+only recognized public diagnostics token shapes, such as a 12-hex value from a `board_hash` or
+`key_hash` row, or a `<path:...>` token. It reports missing or ambiguous tokens explicitly instead
+of searching arbitrary private strings or choosing one collision silently.
+
+Setup and lifecycle output may include those tokens when it hides local workflow, log, managed
+PID/state, or file-backed secret paths. The same persisted diagnostics key makes those tokens
+resolvable by a later focused lookup on the same installation without printing credential values.
+
 Diagnostics also reads installer context such as `repo_url`, `ref`, and `source_commit` so public
 reports do not repeat private install-source identifiers from recent logs or failure text. Those
 values are not all equally distinctive:

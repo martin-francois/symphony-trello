@@ -1801,6 +1801,254 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
+    void privateContextLookupResolvesOneDiagnosticsToken() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("lookup-config");
+        Path workspaceRoot = tempDir.resolve("lookup-workspaces");
+        Path stateHome = tempDir.resolve("lookup-state");
+        Path workflow = configDir.resolve("WORKFLOW.lookup.md");
+        Path env = configDir.resolve(".env.lookup");
+        Files.createDirectories(configDir);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19201), StandardCharsets.UTF_8);
+        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
+                        "lookup-board-id",
+                        "lookup-key",
+                        "Lookup Board",
+                        "https://trello.com/b/lookup-key/lookup-board",
+                        workflow,
+                        env,
+                        workspaceRoot,
+                        19201,
+                        false,
+                        List.of(),
+                        false))));
+        DiagnosticsTokenHasher.load(configDir);
+        String lookupToken = pathToken(diagnosticsKey(configDir), workflow);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderReport(
+                new SetupDiagnosticReporter.DiagnosticsRequest(
+                        Optional.of("Lookup Board"),
+                        Optional.empty(),
+                        false,
+                        false,
+                        Optional.empty(),
+                        Optional.of(configDir),
+                        Optional.of(workspaceRoot),
+                        Optional.of(stateHome),
+                        Optional.empty(),
+                        Optional.empty(),
+                        Optional.of(lookupToken)),
+                true);
+
+        // then
+        assertThat(report)
+                .contains(
+                        "# Symphony for Trello Private Context",
+                        "## Lookup",
+                        "- **lookup_token:** " + lookupToken,
+                        "- **lookup_status:** found",
+                        "| connected_board | workflow_path | " + lookupToken + " | " + workflow + " |",
+                        "| workflow | workflow_path | " + lookupToken + " | " + workflow + " |")
+                .doesNotContain("lookup-key", "https://trello.com/b/lookup-key/lookup-board");
+    }
+
+    @Test
+    void privateContextLookupResolvesManagedPidToken() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("lookup-pid-config");
+        Path workspaceRoot = tempDir.resolve("lookup-pid-workspaces");
+        Path stateHome = tempDir.resolve("lookup-pid-state");
+        Path workflow = configDir.resolve("WORKFLOW.lookup-pid.md");
+        Files.createDirectories(configDir);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19203), StandardCharsets.UTF_8);
+        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
+                        "lookup-pid-board-id",
+                        "pid-key",
+                        "Lookup Pid Board",
+                        "https://trello.com/b/pid-key/lookup-pid-board",
+                        workflow,
+                        configDir.resolve(".env.pid"),
+                        workspaceRoot,
+                        19203,
+                        false,
+                        List.of(),
+                        false))));
+        DiagnosticsTokenHasher.load(configDir);
+        Path pidFile = new ManagedProcessStore(stateHome).files(workflow).pidFile();
+        String lookupToken = pathToken(diagnosticsKey(configDir), pidFile);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderReport(
+                new SetupDiagnosticReporter.DiagnosticsRequest(
+                        Optional.of("Lookup Pid Board"),
+                        Optional.empty(),
+                        false,
+                        false,
+                        Optional.empty(),
+                        Optional.of(configDir),
+                        Optional.of(workspaceRoot),
+                        Optional.of(stateHome),
+                        Optional.empty(),
+                        Optional.empty(),
+                        Optional.of(lookupToken)),
+                true);
+
+        // then
+        assertThat(report)
+                .contains(
+                        "## Lookup",
+                        "- **lookup_token:** " + lookupToken,
+                        "- **lookup_status:** found",
+                        "| process_state | pid_file | " + lookupToken + " | " + pidFile + " |")
+                .doesNotContain("pid-key", "https://trello.com/b/pid-key/lookup-pid-board");
+    }
+
+    @Test
+    void privateContextLookupResolvesFileBackedSecretTokenWithoutReadingSecretValue() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("lookup-secret-config");
+        Path workspaceRoot = tempDir.resolve("lookup-secret-workspaces");
+        Path stateHome = tempDir.resolve("lookup-secret-state");
+        Path workflow = configDir.resolve("WORKFLOW.lookup-secret.md");
+        Path secretFile = configDir.resolve("secrets").resolve("trello-api-key");
+        Files.createDirectories(configDir);
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: lookup-secret-board-id
+                  api_key: file:secrets/trello-api-key
+                  api_token: literal-secret-token
+                server:
+                  port: 19204
+                ---
+                # Lookup Secret
+                """,
+                StandardCharsets.UTF_8);
+        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
+                        "lookup-secret-board-id",
+                        "lookup-secret-key",
+                        "Lookup Secret Board",
+                        "https://trello.com/b/lookup-secret-key/lookup-secret-board",
+                        workflow,
+                        configDir.resolve(".env.secret"),
+                        workspaceRoot,
+                        19204,
+                        false,
+                        List.of(),
+                        false))));
+        DiagnosticsTokenHasher.load(configDir);
+        String lookupToken = pathToken(diagnosticsKey(configDir), secretFile);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderReport(
+                new SetupDiagnosticReporter.DiagnosticsRequest(
+                        Optional.of("Lookup Secret Board"),
+                        Optional.empty(),
+                        false,
+                        false,
+                        Optional.empty(),
+                        Optional.of(configDir),
+                        Optional.of(workspaceRoot),
+                        Optional.of(stateHome),
+                        Optional.empty(),
+                        Optional.empty(),
+                        Optional.of(lookupToken)),
+                true);
+
+        // then
+        assertThat(report)
+                .contains(
+                        "## Lookup",
+                        "- **lookup_token:** " + lookupToken,
+                        "- **lookup_status:** found",
+                        "| secret_file | tracker.api_key | " + lookupToken + " | " + secretFile + " |")
+                .doesNotContain(
+                        "literal-secret-token",
+                        "lookup-secret-key",
+                        "https://trello.com/b/lookup-secret-key/lookup-secret-board");
+    }
+
+    @Test
+    void privateContextLookupReportsMissingTokenWithoutDumpingFullPrivateContext() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("lookup-missing-config");
+        Files.createDirectories(configDir);
+        DiagnosticsTokenHasher.load(configDir);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderReport(
+                new SetupDiagnosticReporter.DiagnosticsRequest(
+                        Optional.empty(),
+                        Optional.empty(),
+                        false,
+                        false,
+                        Optional.empty(),
+                        Optional.of(configDir),
+                        Optional.empty(),
+                        Optional.empty(),
+                        Optional.empty(),
+                        Optional.empty(),
+                        Optional.of("<path:000000000000>")),
+                true);
+
+        // then
+        assertThat(report)
+                .contains(
+                        "## Lookup",
+                        "- **lookup_token:** <path:000000000000>",
+                        "- **lookup_status:** not_found",
+                        "No private-context mapping matched this token")
+                .doesNotContain("## Local Paths", "## Connected Board Identifiers");
+    }
+
+    @Test
+    void privateContextLookupRejectsMalformedTokenWithoutDumpingFullPrivateContext() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("lookup-malformed-config");
+        Path workflow = configDir.resolve("WORKFLOW.private.md");
+        Files.createDirectories(configDir);
+        Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19202), StandardCharsets.UTF_8);
+        DiagnosticsTokenHasher.load(configDir);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = reporter.renderReport(
+                new SetupDiagnosticReporter.DiagnosticsRequest(
+                        Optional.empty(),
+                        Optional.empty(),
+                        false,
+                        false,
+                        Optional.empty(),
+                        Optional.of(configDir),
+                        Optional.empty(),
+                        Optional.empty(),
+                        Optional.empty(),
+                        Optional.empty(),
+                        Optional.of("not-a-token")),
+                true);
+
+        // then
+        assertThat(report)
+                .contains(
+                        "## Lookup",
+                        "- **lookup_token:** not-a-token",
+                        "- **lookup_status:** invalid_token",
+                        "Lookup accepts public diagnostics tokens")
+                .doesNotContain("## Local Paths", "## Workflow Identifiers", workflow.toString());
+    }
+
+    @Test
     void diagnosticsReportsTemporaryTokenKeyFallbackWithoutLeakingKeyFilePath() throws Exception {
         // given
         Path configDir = tempDir.resolve("Jane Doe").resolve("temporary-key-config");

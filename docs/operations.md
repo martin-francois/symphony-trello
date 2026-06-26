@@ -122,14 +122,31 @@ symphony-trello diagnostics --show-private-context
 Use `--board` or `--workflow` with `--show-private-context` when you only need one connected Trello
 board or workflow. The command prints private diagnostics context that maps diagnostics tokens to
 local Trello identifiers, URLs, and paths. A coding agent running locally can use the same command to
-understand which installed board, workflow, env file, workspace, state directory, or log file a
-sanitized diagnostics row refers to before inspecting files or reproducing a failure. It can help you
-or a local coding agent answer questions such as:
+understand which installed board, workflow, env file, workspace, state directory, log file, or
+file-backed secret path a sanitized diagnostics row refers to before inspecting files or reproducing a
+failure. It can help you or a local coding agent answer questions such as:
 
 - which Trello board a `board_hash` refers to.
 - which workflow file a `<path:...>` token refers to.
 - which worker log file matches a diagnostics log section.
 - which env file, workspace root, or state directory the installed wrapper used.
+- which managed PID/state file a lifecycle command hid behind a token.
+- which file-backed secret path a lifecycle command hid behind a token, without printing the secret
+  value stored in that file.
+
+When you only need one mapping, add `--lookup <token>`:
+
+```bash
+symphony-trello diagnostics --show-private-context --lookup '<path:abc123def456>'
+```
+
+Lookup accepts the public diagnostics token values shown in sanitized output, such as the 12-hex
+value in a `board_hash` or `key_hash` row, or a `<path:...>` token. It does not search arbitrary
+private strings.
+
+Some `start`, `stop`, or `status` failures also include a `<path:...>` token and the same lookup
+command when they need to hide a local workflow, log, managed PID/state path, or file-backed secret
+path.
 
 Do not paste `--show-private-context` output into public issues. It intentionally contains private
 Trello board identifiers and local paths. It does not print Trello API keys, Trello tokens, GitHub

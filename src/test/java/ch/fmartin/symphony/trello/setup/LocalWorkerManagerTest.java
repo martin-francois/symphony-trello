@@ -1698,6 +1698,9 @@ final class LocalWorkerManagerTest {
                 """,
                 StandardCharsets.UTF_8);
         fixture.stubStoppedStartedWorker(board, 42);
+        String workflowToken = PrivateContextTokens.pathToken(fixture.paths.configDir(), board.workflowPath());
+        String stdoutToken = PrivateContextTokens.pathToken(fixture.paths.configDir(), files.stdoutLog());
+        String stderrToken = PrivateContextTokens.pathToken(fixture.paths.configDir(), files.stderrLog());
 
         // when
         Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
@@ -1709,6 +1712,10 @@ final class LocalWorkerManagerTest {
                     .hasMessageContaining("did not report the expected workflow and board")
                     .hasMessageContaining("symphony-trello diagnostics")
                     .hasMessageContaining("symphony-trello logs")
+                    .hasMessageContaining("Private context tokens: workflow=%s", workflowToken)
+                    .hasMessageContaining("stdout_log=%s", stdoutToken)
+                    .hasMessageContaining("stderr_log=%s", stderrToken)
+                    .hasMessageContaining(PrivateContextTokens.lookupCommand(workflowToken))
                     .hasMessageNotContaining(files.stdoutLog().toString())
                     .hasMessageNotContaining(files.stderrLog().toString())
                     .hasMessageNotContaining(tempDir.toString());
@@ -1806,6 +1813,31 @@ final class LocalWorkerManagerTest {
         result.assertSuccess()
                 .stdoutContains("running \"Queue\"", "untracked, no managed pid")
                 .stdoutDoesNotContain("stopped \"Queue\"");
+    }
+
+    @Test
+    void statusReportsStalePidFileTokenWithoutRawPath() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        ManagedProcessStore.ManagedProcessFiles files = fixture.writeManagedPid(board, 42);
+        when(fixture.platform.isAlive(42L)).thenReturn(true);
+        when(fixture.platform.isManaged(42L, fixture.paths.appHome(), board.workflowPath()))
+                .thenReturn(false);
+        String pidToken = PrivateContextTokens.pathToken(fixture.paths.configDir(), files.pidFile());
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("stale \"Queue\" pid=42 does not belong to this install", "pid_file_token=" + pidToken)
+                .stdoutDoesNotContain(
+                        files.pidFile().toString(),
+                        fixture.paths.stateHome().toString(),
+                        fixture.paths.appHome().toString(),
+                        tempDir.toString());
     }
 
     @Test
@@ -2717,7 +2749,10 @@ final class LocalWorkerManagerTest {
         fixture.writeEnv(fixture.paths.defaultEnvPath());
         Path privateDir = tempDir.resolve("Users").resolve("Jane Doe").resolve("Secrets");
         Path secretPath = privateDir.resolve("trello-key.txt");
-        Path workflow = fixture.paths.configDir().resolve("WORKFLOW.secret-missing.md");
+        Path workflowDir = tempDir.resolve("Users").resolve("Jane Doe").resolve("External Workflow");
+        Path workflow = workflowDir.resolve("WORKFLOW.secret-missing.md");
+        String secretFileToken = PrivateContextTokens.pathToken(fixture.paths.configDir(), secretPath);
+        Files.createDirectories(workflowDir);
         Files.writeString(
                 workflow,
                 """
@@ -2734,9 +2769,19 @@ final class LocalWorkerManagerTest {
                 """
                         .formatted(secretPath),
                 StandardCharsets.UTF_8);
+        ConnectedBoard board = ConnectedBoardBuilder.connectedBoard(
+                        workflow.toAbsolutePath().normalize())
+                .withBoardId("board-1")
+                .withBoardKey("board-1")
+                .withBoardName("Queue")
+                .withBoardUrl("https://trello.com/b/board-1")
+                .withEnvPath(fixture.paths.defaultEnvPath())
+                .withWorkspaceRoot(fixture.paths.workspaceRoot())
+                .build();
+        fixture.save(board);
 
         // when
-        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startWorkflowRequest(workflow)));
+        Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
 
         // then
         assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
@@ -2745,10 +2790,39 @@ final class LocalWorkerManagerTest {
                     .contains(
                             "Invalid workflow configuration:",
                             "tracker.api_key secret file cannot be read.",
+                            "secret_file_token=" + secretFileToken,
+                            PrivateContextTokens.lookupCommand(secretFileToken),
                             "selected workflow file")
-                    .doesNotContain(secretPath.toString(), privateDir.toString(), tempDir.toString(), "Jane Doe");
+                    .doesNotContain(
+                            secretPath.toString(),
+                            workflow.toString(),
+                            workflowDir.toString(),
+                            privateDir.toString(),
+                            tempDir.toString(),
+                            "Jane Doe");
             assertThat(failure.getCause()).hasMessageContaining(secretPath.toString());
         });
+        assertThat(workflowDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME)).doesNotExist();
+        String privateLookup = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner())
+                .renderReport(
+                        new SetupDiagnosticReporter.DiagnosticsRequest(
+                                Optional.of("Queue"),
+                                Optional.empty(),
+                                false,
+                                false,
+                                Optional.empty(),
+                                Optional.of(fixture.paths.configDir()),
+                                Optional.of(fixture.paths.workspaceRoot()),
+                                Optional.of(fixture.paths.stateHome()),
+                                Optional.empty(),
+                                Optional.empty(),
+                                Optional.of(secretFileToken)),
+                        true);
+        assertThat(privateLookup)
+                .contains(
+                        "- **lookup_status:** found",
+                        "| secret_file | tracker.api_key | " + secretFileToken + " | " + secretPath + " |")
+                .doesNotContain("test-key", "test-token");
         verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
     }
 
@@ -2759,6 +2833,7 @@ final class LocalWorkerManagerTest {
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         Path privateDir = tempDir.resolve("Users").resolve("Jane Doe").resolve("Secrets");
         Path secretPath = privateDir.resolve("trello-token.txt");
+        String secretFileToken = PrivateContextTokens.pathToken(fixture.paths.configDir(), secretPath);
         Files.createDirectories(privateDir);
         Files.writeString(secretPath, "x".repeat(70_000), StandardCharsets.UTF_8);
         Files.writeString(
@@ -2789,6 +2864,8 @@ final class LocalWorkerManagerTest {
                     .contains(
                             "Invalid workflow configuration:",
                             "tracker.api_token secret file is too large.",
+                            "secret_file_token=" + secretFileToken,
+                            PrivateContextTokens.lookupCommand(secretFileToken),
                             "selected workflow file")
                     .doesNotContain(secretPath.toString(), privateDir.toString(), tempDir.toString(), "Jane Doe");
             assertThat(failure.getCause()).hasMessageContaining(secretPath.toString());
@@ -3091,12 +3168,7 @@ final class LocalWorkerManagerTest {
     void startDoesNotStopReusedPidBelongingToAnotherWorkflow() throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
-        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
-        fixture.save(board);
-        fixture.writeManagedPid(board, 42);
-        when(fixture.platform.isAlive(42)).thenReturn(true);
-        when(fixture.platform.isManaged(42, fixture.paths.appHome(), board.workflowPath()))
-                .thenReturn(false);
+        StalePidScenario scenario = stalePidScenario(fixture);
 
         // when
         Throwable thrown = catchThrowable(() -> fixture.start(fixture.startRequest("Queue")));
@@ -3106,7 +3178,10 @@ final class LocalWorkerManagerTest {
                 .isInstanceOf(TrelloBoardSetupException.class)
                 .hasMessageContaining("State file belongs to another process")
                 .hasMessageContaining("selected workflow file")
-                .hasMessageNotContaining(board.workflowPath().toString())
+                .hasMessageContaining("pid_file_token=%s", scenario.pidToken())
+                .hasMessageContaining(PrivateContextTokens.lookupCommand(scenario.pidToken()))
+                .hasMessageNotContaining(scenario.board().workflowPath().toString())
+                .hasMessageNotContaining(scenario.files().pidFile().toString())
                 .hasMessageNotContaining(fixture.paths.stateHome().toString())
                 .hasMessageNotContaining(".log")
                 .hasMessageNotContaining(".err");
@@ -3169,12 +3244,7 @@ final class LocalWorkerManagerTest {
     void stopDoesNotStopReusedPidBelongingToAnotherWorkflow() throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
-        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
-        fixture.save(board);
-        fixture.writeManagedPid(board, 42);
-        when(fixture.platform.isAlive(42)).thenReturn(true);
-        when(fixture.platform.isManaged(42, fixture.paths.appHome(), board.workflowPath()))
-                .thenReturn(false);
+        StalePidScenario scenario = stalePidScenario(fixture);
 
         // when
         WorkerRunResult firstStop = fixture.stop(fixture.stopRequest("Queue"));
@@ -3184,11 +3254,14 @@ final class LocalWorkerManagerTest {
         firstStop
                 .assertSuccess()
                 .stdoutContains(
-                        "Skipped unmanaged stale pid for \"Queue\" pid=42", "Removed the stale managed pid file.")
+                        "Skipped unmanaged stale pid for \"Queue\" pid=42",
+                        "pid_file_token=" + scenario.pidToken(),
+                        "Removed the stale managed pid file.")
                 .stdoutDoesNotContain("Skipped unmanaged stale pid WORKFLOW");
         secondStop.assertSuccess().stdoutDoesNotContain("Skipped unmanaged stale pid");
         ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
-        assertThat(store.readPid(store.files(board.workflowPath()).pidFile())).isNull();
+        assertThat(store.readPid(store.files(scenario.board().workflowPath()).pidFile()))
+                .isNull();
         verify(fixture.platform, never()).stop(anyLong(), any(Duration.class), any(Duration.class));
     }
 
@@ -3196,6 +3269,7 @@ final class LocalWorkerManagerTest {
     void stopReportsFailedStalePidCleanupActionablyWithoutKillingTheProcess() throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        Files.createDirectories(fixture.paths.configDir());
         Path pidFile = fixture.paths.stateHome().resolve("WORKFLOW.private.abc123.pid");
         Files.createDirectories(pidFile.getParent());
         Files.writeString(pidFile, "42", StandardCharsets.US_ASCII);
@@ -3203,6 +3277,7 @@ final class LocalWorkerManagerTest {
         IOException deleteFailure = new IOException("denied " + pidFile);
         when(fixture.platform.isAlive(42L)).thenReturn(true);
         when(fixture.platform.isManaged(42L, fixture.paths.appHome())).thenReturn(false);
+        String pidToken = PrivateContextTokens.pathToken(fixture.paths.configDir(), pidFile);
 
         // when
         WorkerRunResult result;
@@ -3223,7 +3298,9 @@ final class LocalWorkerManagerTest {
                         "Skipped unmanaged stale pid WORKFLOW.private.abc123 pid=42",
                         "Could not remove the stale managed pid file.",
                         "The unrelated process was not stopped.",
-                        "Remove the stale managed pid file manually, then rerun stop.")
+                        "Remove the stale managed pid file manually, then rerun stop.",
+                        "pid_file_token=" + pidToken,
+                        PrivateContextTokens.lookupCommand(pidToken))
                 .stdoutDoesNotContain(
                         "Removed the stale managed pid file.",
                         pidFile.toString(),
@@ -3282,6 +3359,34 @@ final class LocalWorkerManagerTest {
         result.assertSuccess()
                 .stdoutContains("running WORKFLOW.fallback.md pid=41")
                 .stdoutDoesNotContain("running WORKFLOW.fallback.md.");
+    }
+
+    @Test
+    void statusAllReportsStalePidFileTokenWithoutRawPath() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        Files.createDirectories(fixture.paths.configDir());
+        ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
+        Path workflow = fixture.paths.configDir().resolve("WORKFLOW.fallback-stale.md");
+        Path pidFile = store.files(workflow).pidFile();
+        store.writePid(pidFile, 42);
+        when(fixture.platform.isAlive(42L)).thenReturn(true);
+        when(fixture.platform.isManaged(42L, fixture.paths.appHome())).thenReturn(false);
+        String pidToken = PrivateContextTokens.pathToken(fixture.paths.configDir(), pidFile);
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusAllRequest());
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "stale WORKFLOW.fallback-stale.md pid=42 does not belong to this install",
+                        "pid_file_token=" + pidToken)
+                .stdoutDoesNotContain(
+                        "WORKFLOW.fallback-stale.md.",
+                        pidFile.toString(),
+                        fixture.paths.stateHome().toString(),
+                        tempDir.toString());
     }
 
     @Test
@@ -3784,6 +3889,17 @@ final class LocalWorkerManagerTest {
         throw new AssertionError("condition was not met before timeout");
     }
 
+    private static StalePidScenario stalePidScenario(LocalWorkerManagerTestFixture fixture) throws Exception {
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        ManagedProcessStore.ManagedProcessFiles files = fixture.writeManagedPid(board, 42);
+        when(fixture.platform.isAlive(42)).thenReturn(true);
+        when(fixture.platform.isManaged(42, fixture.paths.appHome(), board.workflowPath()))
+                .thenReturn(false);
+        String pidToken = PrivateContextTokens.pathToken(fixture.paths.configDir(), files.pidFile());
+        return new StalePidScenario(board, files, pidToken);
+    }
+
     @FunctionalInterface
     private interface WorkerRunAction {
         WorkerRunResult get() throws Exception;
@@ -3815,6 +3931,9 @@ final class LocalWorkerManagerTest {
 
     private record PostStopSameWorkflow(
             LocalWorkerManagerTestFixture fixture, ConnectedBoard board, long reportedPid) {}
+
+    private record StalePidScenario(
+            ConnectedBoard board, ManagedProcessStore.ManagedProcessFiles files, String pidToken) {}
 
     private record UnusableWorkflowContent(String name, String fileName, String content) {
         @Override

@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
+import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import ch.fmartin.symphony.trello.config.WorkflowServerPortClassification;
 import ch.fmartin.symphony.trello.time.ApplicationClock;
@@ -100,6 +101,7 @@ final class SetupDiagnosticReporter {
     private static final Pattern QUOTED_POSIX_PATH = Pattern.compile("([\"'`])(/[^\"'`\\r\\n]+)\\1");
     private static final Pattern QUOTED_WINDOWS_PATH = Pattern.compile("(?i)([\"'`])([A-Z]:\\\\[^\"'`\\r\\n]+)\\1");
     private static final Pattern WINDOWS_PATH = Pattern.compile("(?i)\\b[A-Z]:\\\\[^\\r\\n:'\"<>|]+");
+    private static final Pattern PRIVATE_CONTEXT_LOOKUP_TOKEN = Pattern.compile("(?:[0-9a-f]{12}|<path:[0-9a-f]{12}>)");
     private static final Pattern TRELLO_OBJECT_ID = Pattern.compile("\\b[0-9a-f]{24}\\b", Pattern.CASE_INSENSITIVE);
     private static final CharMatcher POSIX_PATH_START = CharMatcher.is('/');
     private static final CharMatcher URL_AUTHORITY_TERMINATOR =
@@ -609,25 +611,230 @@ final class SetupDiagnosticReporter {
         line(body, "command_context", commandContext());
         appendSelectionMetadata(body, context);
         appendDiagnosticsTokenKeyStatus(body);
+        request.lookup()
+                .ifPresentOrElse(
+                        lookup -> {
+                            section(body, "Lookup");
+                            appendPrivateContextLookup(body, context, lookup);
+                        },
+                        () -> {
+                            section(body, "Local Paths");
+                            appendLocalPathIdentifiers(body, context.paths(), context.manifestPath());
 
-        section(body, "Local Paths");
-        appendLocalPathIdentifiers(body, context.paths(), context.manifestPath());
+                            section(body, "Connected Board Identifiers");
+                            appendLocalManifestIdentifiers(
+                                    body,
+                                    context.selectedManifest(),
+                                    context.manifestSnapshot().status(),
+                                    context.paths().defaultEnvPath());
 
-        section(body, "Connected Board Identifiers");
-        appendLocalManifestIdentifiers(
-                body,
+                            section(body, "Workflow Identifiers");
+                            appendLocalWorkflowIdentifiers(body, context.selectedWorkflowPaths());
+                            appendLocalSecretFileIdentifiers(body, context.selectedWorkflowPaths());
+
+                            section(body, "Log Identifiers");
+                            appendLocalLogIdentifiers(
+                                    body,
+                                    context.paths().stateHome(),
+                                    context.selectedWorkflowPaths(),
+                                    context.selected());
+
+                            section(body, "Process State Identifiers");
+                            appendLocalProcessStateIdentifiers(
+                                    body,
+                                    context.paths().stateHome(),
+                                    context.selectedWorkflowPaths(),
+                                    context.selected());
+                        });
+
+        return body.toString();
+    }
+
+    private void appendPrivateContextLookup(StringBuilder body, DiagnosticsContext context, String rawLookup) {
+        String lookup = rawLookup.strip();
+        line(body, "lookup_token", lookup);
+        if (!PRIVATE_CONTEXT_LOOKUP_TOKEN.matcher(lookup).matches()) {
+            line(body, "lookup_status", "invalid_token");
+            body.append("Lookup accepts public diagnostics tokens such as `<path:abc123def456>` or `abc123def456`.\n");
+            return;
+        }
+
+        List<PrivateContextMapping> matches = privateContextMappings(context).stream()
+                .filter(mapping -> mapping.token().equals(lookup))
+                .toList();
+        if (matches.isEmpty()) {
+            line(body, "lookup_status", "not_found");
+            body.append("No private-context mapping matched this token in the current diagnostics context.\n");
+            body.append("Run full `diagnostics --show-private-context` if the token came from a different selector.\n");
+            return;
+        }
+
+        long distinctValues =
+                matches.stream().map(PrivateContextMapping::value).distinct().count();
+        line(body, "lookup_status", distinctValues == 1 ? "found" : "ambiguous");
+        line(body, "lookup_match_count", matches.size());
+        if (distinctValues > 1) {
+            body.append(
+                    "Multiple private-context values matched this token. Review the rows below instead of choosing silently.\n");
+        }
+        MarkdownTable table = MarkdownTable.leftAligned(List.of("category", "name", "token", "value"));
+        matches.forEach(mapping -> table.row(mapping.category(), mapping.name(), mapping.token(), mapping.value()));
+        table.appendTo(body);
+    }
+
+    private List<PrivateContextMapping> privateContextMappings(DiagnosticsContext context) {
+        List<PrivateContextMapping> mappings = new ArrayList<>();
+        addLocalPathMappings(mappings, context.paths(), context.manifestPath());
+        addManifestMappings(
+                mappings,
                 context.selectedManifest(),
                 context.manifestSnapshot().status(),
                 context.paths().defaultEnvPath());
+        addWorkflowMappings(mappings, context.selectedWorkflowPaths());
+        addSecretFileMappings(mappings, context.selectedWorkflowPaths());
+        addLogMappings(mappings, context.paths().stateHome(), context.selectedWorkflowPaths(), context.selected());
+        addProcessStateMappings(
+                mappings, context.paths().stateHome(), context.selectedWorkflowPaths(), context.selected());
+        return mappings;
+    }
 
-        section(body, "Workflow Identifiers");
-        appendLocalWorkflowIdentifiers(body, context.selectedWorkflowPaths());
+    private void addLocalPathMappings(List<PrivateContextMapping> mappings, LocalWorkerPaths paths, Path manifestPath) {
+        addMapping(mappings, "local_path", "app_home", pathToken(paths.appHome().toString()), paths.appHome());
+        addMapping(
+                mappings,
+                "local_path",
+                "config_dir",
+                pathToken(paths.configDir().toString()),
+                paths.configDir());
+        addMapping(
+                mappings,
+                "local_path",
+                "workspace_root",
+                pathToken(paths.workspaceRoot().toString()),
+                paths.workspaceRoot());
+        addMapping(
+                mappings,
+                "local_path",
+                "state_home",
+                pathToken(paths.stateHome().toString()),
+                paths.stateHome());
+        addMapping(mappings, "local_path", "manifest", pathToken(manifestPath.toString()), manifestPath);
+        Path dotenv = Path.of(environment.getOrDefault(
+                "SYMPHONY_TRELLO_DOTENV", paths.defaultEnvPath().toString()));
+        addMapping(mappings, "local_path", "dotenv", pathToken(dotenv.toString()), dotenv);
+        Optional.ofNullable(environment.get("SYMPHONY_TRELLO_CALLER_DIR"))
+                .filter(value -> !value.isBlank())
+                .ifPresent(value -> addMapping(mappings, "local_path", "caller_dir", pathToken(value), value));
+        Optional.ofNullable(environment.get("SYMPHONY_TRELLO_COMMAND"))
+                .filter(value -> !value.isBlank())
+                .ifPresent(value -> addMapping(mappings, "local_path", "command", pathToken(value), value));
+    }
 
-        section(body, "Log Identifiers");
-        appendLocalLogIdentifiers(
-                body, context.paths().stateHome(), context.selectedWorkflowPaths(), context.selected());
+    private void addManifestMappings(
+            List<PrivateContextMapping> mappings,
+            ConnectedBoardManifest manifest,
+            ManifestStatus status,
+            Path defaultEnvPath) {
+        if (status != ManifestStatus.LOADED) {
+            return;
+        }
+        for (ConnectedBoard board : manifest.boards()) {
+            addMapping(mappings, "connected_board", "board_id", hash(board.boardId()), board.boardId());
+            addMapping(mappings, "connected_board", "board_key", hash(board.boardKey()), board.boardKey());
+            addMapping(
+                    mappings,
+                    "connected_board",
+                    "workflow_path",
+                    pathToken(safePathText(board.workflowPath())),
+                    safePathText(board.workflowPath()));
+            addMapping(
+                    mappings,
+                    "connected_board",
+                    "env_path",
+                    pathToken(safePathText(effectiveEnvPath(board, defaultEnvPath))),
+                    safePathText(effectiveEnvPath(board, defaultEnvPath)));
+            addMapping(
+                    mappings,
+                    "connected_board",
+                    "workspace_root",
+                    pathToken(safePathText(board.workspaceRoot())),
+                    safePathText(board.workspaceRoot()));
+        }
+    }
 
-        return body.toString();
+    private void addWorkflowMappings(List<PrivateContextMapping> mappings, SequencedSet<Path> workflowPaths) {
+        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+        for (Path workflow : workflowPaths) {
+            String boardId = editor.boardId(workflow).orElse("");
+            addMapping(mappings, "workflow", "workflow_path", pathToken(workflow.toString()), workflow);
+            addMapping(mappings, "workflow", "board_id", hash(boardId), boardId);
+        }
+    }
+
+    private void addSecretFileMappings(List<PrivateContextMapping> mappings, SequencedSet<Path> workflowPaths) {
+        for (SecretFileMapping secretFile : secretFileMappings(workflowPaths)) {
+            addMapping(
+                    mappings,
+                    "secret_file",
+                    secretFile.credential(),
+                    pathToken(secretFile.path().toString()),
+                    secretFile.path());
+            addMapping(
+                    mappings,
+                    "secret_file",
+                    "workflow_path",
+                    pathToken(secretFile.workflow().toString()),
+                    secretFile.workflow());
+        }
+    }
+
+    private void addLogMappings(
+            List<PrivateContextMapping> mappings, Path stateHome, SequencedSet<Path> workflowPaths, boolean selected) {
+        Set<Path> rows = new LinkedHashSet<>();
+        rows.addAll(expectedLogFiles(stateHome, workflowPaths));
+        if (!selected) {
+            rows.addAll(existingLogFiles(stateHome));
+        }
+        for (Path log : rows) {
+            addMapping(mappings, "log", "log_path", pathToken(log.toString()), log);
+            workflowLogMapping(stateHome, workflowPaths, log)
+                    .ifPresent(mapping -> addMapping(
+                            mappings,
+                            "log",
+                            "workflow_path",
+                            pathToken(mapping.workflow().toString()),
+                            mapping.workflow()));
+        }
+    }
+
+    private void addProcessStateMappings(
+            List<PrivateContextMapping> mappings, Path stateHome, SequencedSet<Path> workflowPaths, boolean selected) {
+        Set<Path> rows = new LinkedHashSet<>();
+        rows.addAll(expectedPidFiles(stateHome, workflowPaths));
+        if (!selected) {
+            rows.addAll(existingPidFiles(stateHome));
+        }
+        for (Path pidFile : rows) {
+            addMapping(mappings, "process_state", "pid_file", pathToken(pidFile.toString()), pidFile);
+            workflowProcessStateMapping(stateHome, workflowPaths, pidFile)
+                    .ifPresent(mapping -> addMapping(
+                            mappings,
+                            "process_state",
+                            "workflow_path",
+                            pathToken(mapping.workflow().toString()),
+                            mapping.workflow()));
+        }
+    }
+
+    private static void addMapping(
+            List<PrivateContextMapping> mappings, String category, String name, String token, Object value) {
+        if (token == null
+                || token.isBlank()
+                || value == null
+                || value.toString().isBlank()) {
+            return;
+        }
+        mappings.add(new PrivateContextMapping(category, name, token, value.toString()));
     }
 
     private DiagnosticsContext diagnosticsContext(
@@ -1501,6 +1708,68 @@ final class SetupDiagnosticReporter {
         table.appendTo(body);
     }
 
+    private void appendLocalSecretFileIdentifiers(StringBuilder body, SequencedSet<Path> workflowPaths) {
+        List<SecretFileMapping> secretFiles = secretFileMappings(workflowPaths);
+        if (secretFiles.isEmpty()) {
+            return;
+        }
+        section(body, "Secret File Identifiers");
+        MarkdownTable table = MarkdownTable.leftAligned(
+                List.of("workflow_token", "workflow_path", "credential", "secret_file_token", "secret_file"));
+        for (SecretFileMapping secretFile : secretFiles) {
+            table.row(
+                    pathToken(secretFile.workflow().toString()),
+                    secretFile.workflow(),
+                    secretFile.credential(),
+                    pathToken(secretFile.path().toString()),
+                    secretFile.path());
+        }
+        table.appendTo(body);
+    }
+
+    private List<SecretFileMapping> secretFileMappings(SequencedSet<Path> workflowPaths) {
+        WorkflowConfigEditor editor = new WorkflowConfigEditor();
+        List<SecretFileMapping> secretFiles = new ArrayList<>();
+        for (Path workflow : workflowPaths) {
+            editor.trackerCredentialReferences(workflow).ifPresent(credentials -> {
+                secretFileMapping(workflow, "tracker.api_key", credentials.apiKey())
+                        .ifPresent(secretFiles::add);
+                secretFileMapping(workflow, "tracker.api_token", credentials.apiToken())
+                        .ifPresent(secretFiles::add);
+            });
+        }
+        return secretFiles;
+    }
+
+    private Optional<SecretFileMapping> secretFileMapping(
+            Path workflow, String credential, Optional<String> configuredValue) {
+        return configuredValue
+                .flatMap(value -> secretFilePath(workflow, value))
+                .map(path -> new SecretFileMapping(workflow, credential, path));
+    }
+
+    private Optional<Path> secretFilePath(Path workflow, String configuredValue) {
+        String prefix = "file:";
+        if (!configuredValue.startsWith(prefix)) {
+            return Optional.empty();
+        }
+        try {
+            Path configuredPath = Path.of(
+                    ConfigResolver.expandPath(configuredValue.substring(prefix.length()), this::environmentValue));
+            Path workflowDirectory = workflowDirectory(workflow);
+            Path secretFile = configuredPath.isAbsolute() ? configuredPath : workflowDirectory.resolve(configuredPath);
+            return Optional.of(secretFile.toAbsolutePath().normalize());
+        } catch (InvalidPathException e) {
+            return Optional.empty();
+        }
+    }
+
+    private static Path workflowDirectory(Path workflow) {
+        Path absoluteWorkflow = workflow.toAbsolutePath().normalize();
+        Path parent = absoluteWorkflow.getParent();
+        return parent == null ? absoluteWorkflow : parent;
+    }
+
     private Function<String, Optional<String>> workflowEnvironmentResolver(
             ConnectedBoardManifest manifest, Path workflowPath, Path defaultEnvPath) {
         return manifest.boards().stream()
@@ -1818,6 +2087,34 @@ final class SetupDiagnosticReporter {
         table.appendTo(body);
     }
 
+    private void appendLocalProcessStateIdentifiers(
+            StringBuilder body, Path stateHome, SequencedSet<Path> workflowPaths, boolean selected) {
+        if (!Files.isDirectory(stateHome)) {
+            body.append(Files.exists(stateHome) ? "State home is not a directory.\n" : "State directory is missing.\n");
+            return;
+        }
+        MarkdownTable table = MarkdownTable.leftAligned(
+                List.of("path_token", "pid_file", "workflow_token", "workflow_path", "exists"));
+        Set<Path> rows = new LinkedHashSet<>();
+        rows.addAll(expectedPidFiles(stateHome, workflowPaths));
+        if (!selected) {
+            rows.addAll(existingPidFiles(stateHome));
+        }
+        for (Path pidFile : rows) {
+            Optional<WorkflowProcessStateMapping> mapping =
+                    workflowProcessStateMapping(stateHome, workflowPaths, pidFile);
+            table.row(
+                    pathToken(pidFile.toString()),
+                    pidFile,
+                    mapping.map(value -> pathToken(value.workflow().toString())).orElse(""),
+                    mapping.map(WorkflowProcessStateMapping::workflow)
+                            .map(Path::toString)
+                            .orElse(""),
+                    Files.isRegularFile(pidFile, LinkOption.NOFOLLOW_LINKS));
+        }
+        table.appendTo(body);
+    }
+
     private List<Path> existingLogFiles(Path stateHome) {
         try (Stream<Path> files = recentLogLister.list(stateHome)) {
             return files.filter(SetupDiagnosticReporter::isRegularLogFile)
@@ -1832,12 +2129,29 @@ final class SetupDiagnosticReporter {
         }
     }
 
+    private static List<Path> existingPidFiles(Path stateHome) {
+        try {
+            return new ManagedProcessStore(stateHome).pidFiles();
+        } catch (IOException e) {
+            return List.of();
+        }
+    }
+
     private static Optional<WorkflowLogMapping> workflowLogMapping(
             Path stateHome, SequencedSet<Path> workflowPaths, Path log) {
         return workflowPaths.stream()
                 .map(workflow -> new WorkflowLogMapping(workflow, new ManagedProcessStore(stateHome).files(workflow)))
                 .filter(mapping -> sameNormalizedPath(log, mapping.files().stdoutLog())
                         || sameNormalizedPath(log, mapping.files().stderrLog()))
+                .findAny();
+    }
+
+    private static Optional<WorkflowProcessStateMapping> workflowProcessStateMapping(
+            Path stateHome, SequencedSet<Path> workflowPaths, Path pidFile) {
+        return workflowPaths.stream()
+                .map(workflow ->
+                        new WorkflowProcessStateMapping(workflow, new ManagedProcessStore(stateHome).files(workflow)))
+                .filter(mapping -> sameNormalizedPath(pidFile, mapping.files().pidFile()))
                 .findAny();
     }
 
@@ -1880,6 +2194,14 @@ final class SetupDiagnosticReporter {
                     ManagedProcessStore.ManagedProcessFiles files = store.files(workflow);
                     return Stream.of(files.stdoutLog(), files.stderrLog());
                 })
+                .map(path -> path.toAbsolutePath().normalize())
+                .collect(Collectors.toUnmodifiableSet());
+    }
+
+    private static Set<Path> expectedPidFiles(Path stateHome, SequencedSet<Path> workflowPaths) {
+        ManagedProcessStore store = new ManagedProcessStore(stateHome);
+        return workflowPaths.stream()
+                .map(workflow -> store.files(workflow).pidFile())
                 .map(path -> path.toAbsolutePath().normalize())
                 .collect(Collectors.toUnmodifiableSet());
     }
@@ -1980,6 +2302,7 @@ final class SetupDiagnosticReporter {
         addFlag(args, privateContext, "--show-private-context");
         addOption(args, "--board", request.board());
         request.output().ifPresent(path -> addOption(args, "--output", path.toString()));
+        addOption(args, "--lookup", request.lookup());
         request.configDir().ifPresent(path -> addOption(args, "--config-dir", path.toString()));
         request.manifestPath().ifPresent(path -> addOption(args, "--manifest", path.toString()));
         request.workspaceRoot().ifPresent(path -> addOption(args, "--workspace-root", path.toString()));
@@ -2713,6 +3036,12 @@ final class SetupDiagnosticReporter {
 
     private record WorkflowLogMapping(Path workflow, ManagedProcessStore.ManagedProcessFiles files) {}
 
+    private record WorkflowProcessStateMapping(Path workflow, ManagedProcessStore.ManagedProcessFiles files) {}
+
+    private record SecretFileMapping(Path workflow, String credential, Path path) {}
+
+    private record PrivateContextMapping(String category, String name, String token, String value) {}
+
     record DiagnosticsRequest(
             Optional<String> board,
             Optional<Path> output,
@@ -2723,5 +3052,31 @@ final class SetupDiagnosticReporter {
             Optional<Path> workspaceRoot,
             Optional<Path> stateHome,
             Optional<Path> manifestPath,
-            Optional<Path> workflow) {}
+            Optional<Path> workflow,
+            Optional<String> lookup) {
+        DiagnosticsRequest(
+                Optional<String> board,
+                Optional<Path> output,
+                boolean json,
+                boolean deep,
+                Optional<Path> appHome,
+                Optional<Path> configDir,
+                Optional<Path> workspaceRoot,
+                Optional<Path> stateHome,
+                Optional<Path> manifestPath,
+                Optional<Path> workflow) {
+            this(
+                    board,
+                    output,
+                    json,
+                    deep,
+                    appHome,
+                    configDir,
+                    workspaceRoot,
+                    stateHome,
+                    manifestPath,
+                    workflow,
+                    Optional.empty());
+        }
+    }
 }

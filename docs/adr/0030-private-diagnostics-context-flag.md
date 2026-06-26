@@ -52,6 +52,11 @@ The flag prints a separate private diagnostics context report. The report must s
 warning that it is not for public issues, may include Trello board names, Trello board ids, Trello
 board URLs, and local paths, and does not include credential values or worker log contents.
 
+The same flag owns focused lookup. `diagnostics --show-private-context --lookup <token>` filters the
+private-context report to one public diagnostics token when an operator or maintainer needs only one
+local mapping. Lookup remains private-context output and keeps the same warning. It may identify a
+file-backed secret path, but it still does not print the secret value stored in that file.
+
 The public-safe command remains `symphony-trello diagnostics` without this flag.
 
 ### Consequences
