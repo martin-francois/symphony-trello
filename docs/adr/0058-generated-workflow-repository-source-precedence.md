@@ -61,6 +61,16 @@ Source precedence is:
 3. workflow `repository.default_path`;
 4. no selected repository.
 
+Explicit Trello card sources use a labelled line such as `Repository URL: <url>`,
+`Repository path: <path>`, `Local checkout: <path>`, or `Repository: <url-or-path>` in the title,
+description, or a Trello comment. Ordinary unlabelled web links are not selected as repositories.
+Each source declaration is read from one logical line. If multiple declarations are present, they
+must all name the same source. URL labels and `repository.default_url` accept credential-free
+HTTP(S), username-only `ssh://`, SCP-style SSH such as `git@example.com:team/project.git`, and
+`file://` URLs. Path and checkout labels accept local checkout paths. Generic `Repository:` labels
+accept either form. HTTP(S) source URLs must not include user info, query strings, or fragments. URI
+paths may keep safe percent-encoding, but encoded or literal control characters are invalid.
+
 `repository.default_url` and `repository.default_path` use the existing environment-reference
 conventions. Missing or blank optional environment values resolve to absent. Relative
 `repository.default_path` values resolve relative to `WORKFLOW.md`.

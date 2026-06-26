@@ -71,7 +71,7 @@ final class LocalAgentRunnerTest {
                         any());
         assertThat(prompt.getValue())
                 .startsWith(renderedPrompt)
-                .contains("## Workflow Repository Default")
+                .contains("## Repository Source Context")
                 .contains("No workflow repository default is configured");
         assertThat(workspace.getValue())
                 .isEqualTo(expectedWorkspace.toAbsolutePath().normalize());
@@ -93,11 +93,11 @@ final class LocalAgentRunnerTest {
 
         // then
         assertThat(prompt)
-                .contains("## Workflow Repository Default")
+                .contains("## Repository Source Context")
+                .contains("- Selected by: workflow repository.default_url")
                 .contains("- Type: URL")
-                .contains("- Resolved URL: " + repositoryUrl)
-                .contains("only when the current Trello card names no explicit repository URL or local checkout path")
-                .contains("explicit Trello card repository source remains authoritative");
+                .contains("- Credential-free remote: " + repositoryUrl)
+                .contains("only when the current Trello card names no explicit repository URL or local checkout path");
     }
 
     @Test
@@ -111,7 +111,7 @@ final class LocalAgentRunnerTest {
         String prompt = promptPassedToCodex(config, "Card task");
 
         // then
-        assertThat(prompt).contains("- Type: URL").contains("- Resolved URL: " + repositoryUrl);
+        assertThat(prompt).contains("- Type: URL").contains("- Credential-free remote: " + repositoryUrl);
     }
 
     @Test
@@ -175,7 +175,7 @@ final class LocalAgentRunnerTest {
         // then
         assertThat(prompt)
                 .contains("- Type: URL")
-                .contains("- Resolved URL: " + repositoryUrl)
+                .contains("- Credential-free remote: " + repositoryUrl)
                 .doesNotContain("- Type: local path")
                 .doesNotContain(lowerPriorityPath.toString());
         assertThat(config.repository().defaultPath()).isNull();
@@ -220,17 +220,73 @@ final class LocalAgentRunnerTest {
     @Test
     void keepsExplicitCardSourcePromptAuthoritativeWhenWorkflowDefaultExists() {
         // given
+        String cardRepository = "https://example.invalid/card-specific.git";
         EffectiveConfig config = configWithRepository(Map.of("default_url", "https://example.invalid/default.git"));
-        String cardPrompt = "Card source: https://example.invalid/card-specific.git";
+        Card card = TestCards.cardWithText(
+                "card-1",
+                "TRELLO-explicit-source",
+                "Ready for Codex",
+                "Implement feature",
+                "Repository URL: " + cardRepository,
+                List.of());
 
         // when
-        String prompt = promptPassedToCodex(config, cardPrompt);
+        String prompt = promptPassedToCodex(config, "Card task", card);
 
         // then
         assertThat(prompt)
-                .startsWith(cardPrompt)
-                .contains("An explicit Trello card repository source remains authoritative")
-                .contains("If the Trello card names an invalid explicit repository source, block");
+                .startsWith("Card task")
+                .contains("- Selected by: explicit Trello card source")
+                .contains("- Credential-free remote: " + cardRepository)
+                .contains("Explicit Trello card repository sources are authoritative and suppress workflow defaults")
+                .doesNotContain("https://example.invalid/default.git");
+    }
+
+    @Test
+    void invalidExplicitCardSourceDoesNotFallBackToWorkflowDefaultInPrompt() {
+        // given
+        EffectiveConfig config = configWithRepository(Map.of("default_url", "https://example.invalid/default.git"));
+        Card card = TestCards.cardWithText(
+                "card-1",
+                "TRELLO-invalid-source",
+                "Ready for Codex",
+                "Implement feature",
+                "Repository URL: ftp://example.invalid/team/project.git",
+                List.of());
+
+        // when
+        String prompt = promptPassedToCodex(config, "Card task", card);
+
+        // then
+        assertThat(prompt)
+                .contains("- Status: invalid selected source")
+                .contains("- Code: repository_remote_unsupported")
+                .contains("Do not use workflow defaults or other lower-priority fallbacks")
+                .doesNotContain("https://example.invalid/default.git");
+    }
+
+    @Test
+    void explicitCardSourceSuppressesCredentialBearingWorkflowDefaultInPrompt() {
+        // given
+        String secretDefault = "https://token@example.invalid/team/default.git?access_token=secret";
+        EffectiveConfig config = configWithRepository(Map.of("default_url", secretDefault));
+        Card card = TestCards.cardWithText(
+                "card-1",
+                "TRELLO-secret-default",
+                "Ready for Codex",
+                "Implement feature",
+                "Repository URL: https://example.invalid/card.git",
+                List.of());
+
+        // when
+        String prompt = promptPassedToCodex(config, "Card task", card);
+
+        // then
+        assertThat(prompt)
+                .contains("- Credential-free remote: https://example.invalid/card.git")
+                .doesNotContain("token")
+                .doesNotContain("access_token")
+                .doesNotContain("secret");
     }
 
     @Test
@@ -262,8 +318,45 @@ final class LocalAgentRunnerTest {
 
         // then
         assertThat(prompt)
-                .contains("- Resolved URL: " + privateRepositoryUrl)
-                .contains("Do not copy private repository URLs from this context into Trello-visible comments");
+                .contains("- Credential-free remote: " + privateRepositoryUrl)
+                .contains(
+                        "Do not copy private repository URLs, local host paths, credentials, or source details from this context into Trello-visible comments or status text.");
+    }
+
+    @Test
+    void runtimePromptWarnsAgainstEchoingResolvedPrivatePathsToTrello() {
+        // given
+        Path privateRepositoryPath =
+                tempDir.resolve("private/project").toAbsolutePath().normalize();
+        EffectiveConfig config = configWithRepository(Map.of("default_path", privateRepositoryPath.toString()));
+
+        // when
+        String prompt = promptPassedToCodex(config, "Card task");
+
+        // then
+        assertThat(prompt)
+                .contains("- Resolved local path: " + privateRepositoryPath)
+                .contains(
+                        "Do not copy private repository URLs, local host paths, credentials, or source details from this context into Trello-visible comments or status text.");
+    }
+
+    @Test
+    void credentialBearingWorkflowDefaultIsSanitizedInCodexPrompt() {
+        // given
+        String secretDefault = "https://token@example.invalid/team/project.git?access_token=secret";
+        EffectiveConfig config = configWithRepository(Map.of("default_url", secretDefault));
+
+        // when
+        String prompt = promptPassedToCodex(config, "Card task");
+
+        // then
+        assertThat(prompt)
+                .contains("- Status: invalid selected source")
+                .contains("- Code: repository_remote_credentials_unsupported")
+                .contains("Use a credential helper or SSH")
+                .doesNotContain("token")
+                .doesNotContain("access_token")
+                .doesNotContain("secret");
     }
 
     @Test
@@ -296,7 +389,7 @@ final class LocalAgentRunnerTest {
 
         // then
         Path workspace = config.workspace().root().resolve("TRELLO-url-skill-default");
-        assertThat(prompt).contains("hand-authored prompt").contains("- Resolved URL: " + repositoryUrl);
+        assertThat(prompt).contains("hand-authored prompt").contains("- Credential-free remote: " + repositoryUrl);
         assertThat(workspace.resolve(".codex")).doesNotExist();
         assertThat(workspace.resolve(".git/info/exclude")).doesNotExist();
     }
@@ -449,6 +542,10 @@ final class LocalAgentRunnerTest {
     }
 
     private String promptPassedToCodex(EffectiveConfig config, String renderedPrompt, String cardIdentifier) {
+        return promptPassedToCodex(config, renderedPrompt, TestCards.card("card-1", cardIdentifier, "Ready for Codex"));
+    }
+
+    private String promptPassedToCodex(EffectiveConfig config, String renderedPrompt, Card card) {
         CodexAppServerClient codex = mock();
         AtomicReference<String> prompt = new AtomicReference<>();
         when(codex.runSession(any(), any(), any(), any(), any(), any(), any())).thenAnswer(invocation -> {
@@ -458,12 +555,7 @@ final class LocalAgentRunnerTest {
         var runner = runner(codex, CardLookupResult.Found::new);
 
         AgentRunResult result = runner.run(new AgentRunner.AgentRunRequest(
-                TestCards.card("card-1", cardIdentifier, "Ready for Codex"),
-                null,
-                renderedPrompt,
-                config,
-                "worker-runtime-prompt",
-                event -> {}));
+                card, null, renderedPrompt, config, "worker-runtime-prompt", event -> {}));
 
         assertThat(result).isEqualTo(AgentRunResult.ok());
         assertThat(prompt).hasValueSatisfying(value -> assertThat(value).isNotBlank());
