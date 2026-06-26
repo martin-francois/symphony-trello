@@ -712,7 +712,11 @@ feedback before changing code again.
 
 For repository-changing work, "Human Review" means there is a pull request ready for a person.
 Commit the change, push the branch, create or update the PR, and include the PR URL in the workpad
-and handoff comment before moving the card. This does not apply when the card explicitly asks for
+and handoff comment before moving the card. When the target repository has a pull request template
+in GitHub-supported repository-local locations, inspect the default/base template source, preserve
+the selected template's headings, checklists, and prompts, and fill concrete task details and
+validation. If multiple directory templates exist and no Trello card or repository instruction
+selects one, block instead of guessing. This does not apply when the card explicitly asks for
 local-only or no-push work.
 
 When the work is ready for human review, update the workpad with the final summary, validation
@@ -939,7 +943,11 @@ landing cannot safely proceed, move the card to "Blocked" with a concise blocker
 
 For repository-changing work, "Human Review" means there is a pull request ready for a person.
 Commit the change, push the branch, create or update the PR, and include the PR URL in the workpad
-and handoff comment before moving the card. This does not apply when the card explicitly asks for
+and handoff comment before moving the card. When the target repository has a pull request template
+in GitHub-supported repository-local locations, inspect the default/base template source, preserve
+the selected template's headings, checklists, and prompts, and fill concrete task details and
+validation. If multiple directory templates exist and no Trello card or repository instruction
+selects one, block instead of guessing. This does not apply when the card explicitly asks for
 local-only or no-push work.
 
 When the work is ready for human review, update the workpad with the final summary, validation
@@ -1254,7 +1262,8 @@ The most common skills are:
   committing.
 - `.codex/skills/symphony-trello-push-pr/SKILL.md`: push the branch, check PR-bound commit authors,
   and create or update the pull request. Repository-changing work creates a ready-for-review PR by
-  default. Cards that need a draft PR must ask for one explicitly.
+  default, and PR bodies preserve the target repository's pull request template when one exists.
+  Cards that need a draft PR must ask for one explicitly.
 - `.codex/skills/symphony-trello-land/SKILL.md`: land an approved PR only from `Merging`, resolve
   addressed review threads when possible, then move successful work to the configured completion list
   or blocked landing attempts to `Blocked`.

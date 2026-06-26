@@ -203,6 +203,17 @@ the current branch. Create a ready-for-review, non-draft PR by default. Create a
 the Trello card explicitly asks for a draft PR. Add the PR URL to the workpad and the visible
 handoff comment.
 
+Before creating or updating the PR body, inspect target repository pull request templates from the
+repository's default/base template source, not templates that only exist on the unmerged task branch.
+Inspect supported single-template locations under `.github/`, the repository root, and `docs/`.
+Match `pull_request_template` filenames case-insensitively with supported `.md` or `.txt`
+extensions. If no single-file template is selected, inspect `PULL_REQUEST_TEMPLATE/` directories
+under `.github/`, the repository root, and `docs/`. Preserve the selected template's headings,
+checklists, and prompts. Fill sections with concrete task details, validation, caveats, and linked
+Trello/GitHub context; remove placeholders only after replacing them. If no template exists, use the
+normal generated PR body. If multiple directory template candidates exist and no Trello card or
+repository instruction selects exactly one, treat PR publication as blocked instead of guessing.
+
 Before creating commits for PR-bound work, reuse the task checkout's local Git author only when both
 `user.name` and `user.email` are already configured and `symphony-trello.github-author-verified` is
 `true`. Otherwise, resolve the authenticated GitHub login with `gh api user` and configure the task
