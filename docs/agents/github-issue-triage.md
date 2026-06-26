@@ -19,6 +19,12 @@ auditing that may create issues lives in
 
 ## Triage sweeps
 
+- Keep open issues aligned with the accepted product direction. If a product decision rejects a
+  prototype, architecture path, or implementation layer, close or explicitly de-scope issues that
+  would invite contributors to build that rejected direction. Use `not planned` for closed GitHub
+  issues unless the issue was actually completed, and leave a short comment that names the current
+  accepted boundary. Do not keep speculative or superseded prototype issues open merely as archived
+  ideas; use closed issue comments, ADRs, or external planning notes for historical context.
 - When the user asks for an issue triage audit, triage sweep, issue audit, or similar wording, audit
   all open issues, not only the examples named by the user. Read each open issue's title, body,
   labels, milestone, and relevant comments. Update issue bodies directly so they read as current and
