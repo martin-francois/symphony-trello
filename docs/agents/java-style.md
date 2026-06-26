@@ -24,6 +24,10 @@ References.
   than manual loop state. Do not replace a readable collection stream with a loop just to avoid an
   `Optional`, especially when the loop needs labeled `continue`, mutable sentinel flags beyond the
   natural state of the algorithm, or duplicated branch flow.
+- When refactoring Java code to make better use of streams, use the repo-local
+  `java-streams-eval-capture` Codex skill. Capture the before, prompt, intermediate when present,
+  and final code, then create or update the corresponding eval issue in
+  `martinfrancois/java-streams-skill`.
 - Avoid Optional-as-null-control-flow. Do not use `optional.isPresent()` followed by `optional.get()`,
   `optional.orElseThrow()`, or equivalent value reads, and do not convert an `Optional` to nullable
   state with `optional.orElse(null)` just to branch on `value != null`. Do not convert an `Optional`
