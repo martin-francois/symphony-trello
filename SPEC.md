@@ -3447,6 +3447,19 @@ GitHub pull request publication extension:
 - if a draft pull request already exists for completed repository-changing work and the card did not
   ask for draft, generated workflows SHOULD mark it ready for review before moving the card to
   `Human Review`
+- before creating or updating a pull request body, generated workflows SHOULD inspect the target
+  repository's default/base template source rather than task-branch-only template files
+- generated workflows SHOULD inspect supported repository-local single-template locations under
+  `.github/`, the repository root, and `docs/`, matching `pull_request_template` filenames
+  case-insensitively with supported `.md` or `.txt` extensions
+- if no single-file template is selected, generated workflows SHOULD inspect
+  `PULL_REQUEST_TEMPLATE/` directories under `.github/`, the repository root, and `docs/`
+- when a PR template is selected, generated workflows SHOULD preserve its headings, checklists, and
+  prompts while filling concrete task details, implementation summary, validation, caveats, and
+  linked Trello/GitHub context
+- if no PR template exists, generated workflows MAY use the normal generated PR body
+- if multiple directory template candidates exist and no Trello card or repository instruction
+  selects exactly one, generated workflows SHOULD block or ask for human input instead of guessing
 
 GitHub landing extension:
 

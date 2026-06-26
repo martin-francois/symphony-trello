@@ -153,8 +153,29 @@ description: >
    - If an existing PR is draft and the card did not ask for draft, mark it
      ready for review before handoff, for example with `gh pr ready`.
    - Reconsider the title and body on every update.
-8. Use `.github/pull_request_template.md` when present. Fill every section with
-   concrete content and remove placeholders.
+8. Build the PR body from the target repository's pull request template when
+   one is available:
+
+   - Inspect the repository's default/base template source, matching how GitHub
+     creates PRs; do not rely on templates that only exist on the unmerged task
+     branch.
+   - Inspect supported single-template locations under `.github/`, the
+     repository root, and `docs/`. Match `pull_request_template` filenames
+     case-insensitively with supported `.md` or `.txt` extensions, and use the
+     selected single-file template from that documented location precedence.
+   - If no single-file template is selected, inspect `PULL_REQUEST_TEMPLATE/`
+     directories under `.github/`, the repository root, and `docs/`.
+   - If exactly one directory template candidate exists across those supported
+     directories, use it.
+   - If multiple directory template candidates exist, use one only when the
+     Trello card, repository docs, or repository instructions unambiguously name
+     the intended template. If the choice is still ambiguous, stop and surface a
+     blocker instead of creating a PR with the wrong template.
+   - Preserve required headings, checklists, and prompts. Fill sections with
+     concrete task details, implementation summary, validation, caveats, and
+     linked Trello/GitHub context. Remove placeholders only after replacing them
+     with real content.
+   - If no template exists, use the normal generated PR body.
 9. Include validation evidence and any known limitations.
 10. Return the PR URL. When writing it into Trello-visible text, put it on its
     own line as `PR: <https://github.com/owner/repo/pull/123>` so trailing
