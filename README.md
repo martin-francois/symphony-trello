@@ -321,9 +321,10 @@ Common setup command options:
 - `--server-port PORT`: choose the HTTP status port written into the generated workflow. Use a port
   from `1024` through `65535`. If you omit it, Symphony uses the first unused workflow port starting
   at `18080`.
-- `--max-agents N`: choose how many cards from this board may run at the same time. Start with `1`
-  if you want one-at-a-time review, or raise it when your machine and workflow can handle parallel
-  Codex sessions.
+- `--max-agents N`: choose how many cards from this board may run at the same time. Guided setup
+  asks about this when you do not pass the option. Keep `1` until your machine can run several
+  Codex sessions, builds, tests, package installs, and network calls at once. If cards depend on
+  other cards, add prerequisite checklist items before moving them into `Ready for Codex`.
 - `--codex-model MODEL`: write a Codex model into generated workflows without prompting. Omit it
   during guided setup to accept or edit the recommended model interactively.
 - `--codex-reasoning-effort EFFORT`: write a Codex reasoning effort into generated workflows
@@ -1156,9 +1157,9 @@ tracker:
 ```
 
 `agent.max_concurrent_agents` controls how many cards from one workflow may run at the same time.
-Generated workflows use `1`. Raise it only when the machine can run that many Codex sessions and
-their build/test commands in parallel, and when your board process makes task ordering clear enough
-for parallel work.
+Generated workflows use `1`. Guided setup asks before raising it. Raise it only when the machine can
+run that many Codex sessions and their build/test commands in parallel. If cards depend on other
+cards, use prerequisite checklist items before moving the dependent cards into an active Trello list.
 
 `agent.max_turns` limits how many Codex turns one worker session may take before Symphony stops that
 session and schedules normal continuation handling. Increase it only when long cards need more

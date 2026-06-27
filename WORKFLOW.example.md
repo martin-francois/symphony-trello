@@ -32,6 +32,7 @@ polling:
 hooks:
   timeout_ms: 60000
 agent:
+  # Keep this at 1 unless the board and machine are ready for parallel Codex work.
   max_concurrent_agents: 2
   max_turns: 20
   max_retry_backoff_ms: 300000

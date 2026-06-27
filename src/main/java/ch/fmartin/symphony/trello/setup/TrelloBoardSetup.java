@@ -962,6 +962,13 @@ public final class TrelloBoardSetup {
         }
     }
 
+    private static void validatePreservedWorkflowMaxAgents(int maxConcurrentAgents) {
+        if (maxConcurrentAgents < 1) {
+            throw new TrelloBoardSetupException(
+                    "setup_invalid_max_agents", "agent.max_concurrent_agents must be positive.");
+        }
+    }
+
     private static String workflowTemplate(
             String boardId,
             List<String> activeStates,
@@ -2346,7 +2353,37 @@ public final class TrelloBoardSetup {
             boolean force,
             boolean useBoardNameWorkflowFallback,
             GitHubIntegration githubIntegration,
-            Path envPath) {
+            Path envPath,
+            boolean preserveConfiguredMaxConcurrentAgents) {
+        public NewBoardRequest(
+                URI endpoint,
+                TrelloCredentials credentials,
+                String boardName,
+                String workspaceId,
+                Path workflowPath,
+                Path workspaceRoot,
+                Integer serverPort,
+                int maxConcurrentAgents,
+                boolean force,
+                boolean useBoardNameWorkflowFallback,
+                GitHubIntegration githubIntegration,
+                Path envPath) {
+            this(
+                    endpoint,
+                    credentials,
+                    boardName,
+                    workspaceId,
+                    workflowPath,
+                    workspaceRoot,
+                    serverPort,
+                    maxConcurrentAgents,
+                    force,
+                    useBoardNameWorkflowFallback,
+                    githubIntegration,
+                    envPath,
+                    false);
+        }
+
         public NewBoardRequest(
                 URI endpoint,
                 TrelloCredentials credentials,
@@ -2435,7 +2472,11 @@ public final class TrelloBoardSetup {
             if (blank(boardName)) {
                 throw new TrelloBoardSetupException("setup_missing_board_name", "Missing board name");
             }
-            validateSetupMaxAgents(maxConcurrentAgents);
+            if (preserveConfiguredMaxConcurrentAgents) {
+                validatePreservedWorkflowMaxAgents(maxConcurrentAgents);
+            } else {
+                validateSetupMaxAgents(maxConcurrentAgents);
+            }
         }
     }
 
@@ -2479,10 +2520,48 @@ public final class TrelloBoardSetup {
             boolean force,
             GitHubIntegration githubIntegration,
             boolean createMissingGithubLists,
-            Path envPath) {
+            Path envPath,
+            boolean preserveConfiguredMaxConcurrentAgents) {
         public ImportBoardRequest {
             activeStates = List.copyOf(activeStates);
             terminalStates = List.copyOf(terminalStates);
+        }
+
+        public ImportBoardRequest(
+                URI endpoint,
+                TrelloCredentials credentials,
+                String boardId,
+                List<String> activeStates,
+                List<String> terminalStates,
+                String inProgressState,
+                boolean detectInProgressState,
+                String blockedState,
+                Path workflowPath,
+                Path workspaceRoot,
+                Integer serverPort,
+                int maxConcurrentAgents,
+                boolean force,
+                GitHubIntegration githubIntegration,
+                boolean createMissingGithubLists,
+                Path envPath) {
+            this(
+                    endpoint,
+                    credentials,
+                    boardId,
+                    activeStates,
+                    terminalStates,
+                    inProgressState,
+                    detectInProgressState,
+                    blockedState,
+                    workflowPath,
+                    workspaceRoot,
+                    serverPort,
+                    maxConcurrentAgents,
+                    force,
+                    githubIntegration,
+                    createMissingGithubLists,
+                    envPath,
+                    false);
         }
 
         public ImportBoardRequest(
@@ -2692,7 +2771,11 @@ public final class TrelloBoardSetup {
             if (blank(boardId)) {
                 throw new TrelloBoardSetupException("setup_missing_board_id", "Missing board id");
             }
-            validateSetupMaxAgents(maxConcurrentAgents);
+            if (preserveConfiguredMaxConcurrentAgents) {
+                validatePreservedWorkflowMaxAgents(maxConcurrentAgents);
+            } else {
+                validateSetupMaxAgents(maxConcurrentAgents);
+            }
         }
     }
 

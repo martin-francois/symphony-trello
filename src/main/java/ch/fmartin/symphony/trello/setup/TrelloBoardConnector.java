@@ -101,6 +101,7 @@ final class TrelloBoardConnector {
         ExistingBoardLists configuredLists = existingBoardLists(options, terminal, openLists, githubIntegration);
         Path workflowPath = resolveWorkflowPath(options, boardInfo.boardName());
         options = configureCodexModel(options, workflowPath, terminal);
+        MaxAgentsSelection maxAgents = configureMaxAgents(options, workflowPath, terminal);
         TrelloBoardSetup.ImportBoardResult result = boardSetup(options)
                 .importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
                         options.endpoint(),
@@ -114,11 +115,12 @@ final class TrelloBoardConnector {
                         workflowPath,
                         options.workspaceRoot(),
                         localSetupImportServerPort(options, manifest, workflowPath),
-                        options.maxAgents(),
+                        maxAgents.value(),
                         options.force(),
                         githubIntegration,
                         configuredLists.createMissingGithubLists(),
-                        options.envPath()));
+                        options.envPath(),
+                        maxAgents.preservedFromWorkflow()));
         return LocalSetup.SetupResult.from(result);
     }
 
@@ -142,6 +144,7 @@ final class TrelloBoardConnector {
         String workspaceId = workspaceId(options, workspaces, terminal);
         Path workflowPath = resolveWorkflowPath(options, boardName);
         options = configureCodexModel(options, workflowPath, terminal);
+        MaxAgentsSelection maxAgents = configureMaxAgents(options, workflowPath, terminal);
         return LocalSetup.SetupResult.from(boardSetup(options)
                 .createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
                         options.endpoint(),
@@ -151,11 +154,12 @@ final class TrelloBoardConnector {
                         workflowPath,
                         options.workspaceRoot(),
                         localSetupServerPort(options, manifest, workflowPath),
-                        options.maxAgents(),
+                        maxAgents.value(),
                         options.force(),
                         !options.workflowPathExplicit(),
                         githubIntegration,
-                        options.envPath())));
+                        options.envPath(),
+                        maxAgents.preservedFromWorkflow())));
     }
 
     private LocalSetup.Options configureCodexModel(LocalSetup.Options options, Path workflowPath, Terminal terminal)
@@ -175,6 +179,42 @@ final class TrelloBoardConnector {
                 ? boardSetup.withCodexModelOverrides(defaults, options.codexModel(), options.codexReasoningEffort())
                 : boardSetup.withCodexModelDefaults(defaults);
     }
+
+    private MaxAgentsSelection configureMaxAgents(LocalSetup.Options options, Path workflowPath, Terminal terminal)
+            throws IOException {
+        if (options.maxAgentsExplicit()) {
+            return new MaxAgentsSelection(options.maxAgents(), false);
+        }
+        Optional<Integer> configuredMaxAgents = workflowConfig.maxAgents(workflowPath);
+        int defaultMaxAgents = configuredMaxAgents.orElse(TrelloBoardSetup.DEFAULT_MAX_CONCURRENT_AGENTS);
+        if (options.nonInteractive()) {
+            return new MaxAgentsSelection(defaultMaxAgents, configuredMaxAgents.isPresent());
+        }
+
+        terminal.info("");
+        terminal.info("Per-board concurrency");
+        terminal.info("Current value for this board: " + defaultMaxAgents + " card" + (defaultMaxAgents == 1 ? "" : "s")
+                + " at a time.");
+        terminal.info(
+                "Higher values run multiple Codex agents for this board at once, including their builds, tests, package installs, and network calls.");
+        terminal.info(
+                "Only raise this when the machine and repository can handle parallel runs from separate workspaces.");
+        terminal.info(
+                "If Trello cards depend on each other, add prerequisite checklist items before moving them into Ready for Codex.");
+        if (!PromptSupport.yes(terminal, "Change how many cards from this board may run at once? [y/N] ")) {
+            return new MaxAgentsSelection(defaultMaxAgents, configuredMaxAgents.isPresent());
+        }
+        int promptedDefault =
+                defaultMaxAgents == 1 ? 2 : Math.min(defaultMaxAgents, TrelloBoardSetup.MAX_SETUP_CONCURRENT_AGENTS);
+        return new MaxAgentsSelection(
+                PromptSupport.choice(
+                        terminal.readLine("Maximum cards from this board at once [" + promptedDefault + "]: "),
+                        promptedDefault,
+                        TrelloBoardSetup.MAX_SETUP_CONCURRENT_AGENTS),
+                false);
+    }
+
+    private record MaxAgentsSelection(int value, boolean preservedFromWorkflow) {}
 
     private static String workspaceId(
             LocalSetup.Options options, List<TrelloBoardSetup.WorkspaceInfo> workspaces, Terminal terminal)

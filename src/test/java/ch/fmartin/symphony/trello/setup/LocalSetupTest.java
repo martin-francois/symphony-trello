@@ -1247,6 +1247,283 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void interactiveSetupPromptsForPerBoardConcurrencyAndWritesSelectedValue() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.concurrency.md");
+        Path env = tempDir.resolve(".env.concurrency");
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                "\n\ny\n3\nn\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Concurrency Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "Per-board concurrency",
+                        "Current value for this board: 1 card at a time.",
+                        "multiple Codex agents",
+                        "builds, tests, package installs, and network calls",
+                        "prerequisite checklist items",
+                        "Maximum cards from this board at once [2]: ");
+        assertThatWorkflow(workflow).hasMaxAgents(3);
+    }
+
+    @Test
+    void interactiveExistingBoardSetupPromptsForPerBoardConcurrencyAndWritesSelectedValue() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.import-concurrency.md");
+        Path env = tempDir.resolve(".env.import-concurrency");
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                "\n\n\n\ny\n2\nn\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "board-1",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess().stdoutContains("Per-board concurrency", "Change how many cards");
+        assertThatWorkflow(workflow).hasBoardId("abc123").hasMaxAgents(2);
+    }
+
+    @Test
+    void nonInteractiveSetupWritesExplicitMaxAgentsWithoutPrompting() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.explicit-concurrency.md");
+        Path env = tempDir.resolve(".env.explicit-concurrency");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Explicit Concurrency Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--max-agents",
+                "4",
+                "--no-github");
+
+        // then
+        result.assertSuccess().stdoutDoesNotContain("Per-board concurrency", "[y/N]");
+        assertThatWorkflow(workflow).hasMaxAgents(4);
+    }
+
+    @Test
+    void setupPreservesExistingMaxAgentsWhenWorkflowIsRegeneratedWithoutExplicitChange() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.preserve-concurrency.md");
+        Path env = tempDir.resolve(".env.preserve-concurrency");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                agent:
+                  max_concurrent_agents: 4
+                ---
+                Old body
+                """,
+                StandardCharsets.UTF_8);
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Preserved Concurrency Queue",
+                "--workflow",
+                workflow.toString(),
+                "--force",
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess();
+        assertThatWorkflow(workflow).hasMaxAgents(4);
+    }
+
+    @Test
+    void nonInteractiveSetupPreservesAboveSetupCapMaxAgentsWhenWorkflowIsRegeneratedWithoutExplicitChange()
+            throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.preserve-large-concurrency.md");
+        Path env = tempDir.resolve(".env.preserve-large-concurrency");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                agent:
+                  max_concurrent_agents: 64
+                ---
+                Old body
+                """,
+                StandardCharsets.UTF_8);
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Large Preserved Concurrency Queue",
+                "--workflow",
+                workflow.toString(),
+                "--force",
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess();
+        assertThatWorkflow(workflow).hasMaxAgents(64);
+    }
+
+    @Test
+    void interactiveSetupPreservesAboveSetupCapMaxAgentsWhenOperatorDeclinesChange() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.preserve-large-interactive-concurrency.md");
+        Path env = tempDir.resolve(".env.preserve-large-interactive-concurrency");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                agent:
+                  max_concurrent_agents: 64
+                ---
+                Old body
+                """,
+                StandardCharsets.UTF_8);
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                "\n\nn\nn\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Large Interactive Preserved Concurrency Queue",
+                "--workflow",
+                workflow.toString(),
+                "--force",
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "Per-board concurrency",
+                        "Current value for this board: 64 cards at a time.",
+                        "Change how many cards from this board may run at once?");
+        assertThatWorkflow(workflow).hasMaxAgents(64);
+    }
+
+    @Test
+    void explicitSetupMaxAgentsAboveSetupCapFailsBeforeTrelloMutationOrWorkflowWrite() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.explicit-too-large-concurrency.md");
+        Path env = tempDir.resolve(".env.explicit-too-large-concurrency");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Too Large Explicit Concurrency Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--max-agents",
+                "33",
+                "--no-github");
+
+        // then
+        result.assertFailure(SETUP_FAILURE).stderrContains("--max-agents must be between 1 and 32");
+        assertThat(trello.memberLookups()).isEmpty();
+        assertThat(trello.workspaceLookups()).isEmpty();
+        assertThat(trello.boardLookups()).isEmpty();
+        assertThat(trello.createdLists()).isEmpty();
+        assertThat(workflow).doesNotExist();
+    }
+
+    @Test
+    void interactiveSetupRejectsNewlyEnteredMaxAgentsAboveSetupCapWithoutWritingWorkflow() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.prompt-too-large-concurrency.md");
+        Path env = tempDir.resolve(".env.prompt-too-large-concurrency");
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                "\n\ny\n33\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Prompt Too Large Concurrency Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertFailure(SETUP_FAILURE).stderrContains("Choice must be a number between 1 and 32");
+        assertThat(workflow).doesNotExist();
+    }
+
+    @Test
     void nonInteractiveSetupMissingCredentialsPrintsConfiguredEnvPath() {
         // given
         Path env = tempDir.resolve(".env.custom-credentials");
@@ -4767,6 +5044,49 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         firstResult.assertSuccess();
         secondResult.assertSuccess().stdoutContains("GitHub workflow enabled for \"GitHub Upgrade Max Agents\"");
         assertThatWorkflow(workflow).hasGithubFlow().hasMaxAgents(3);
+        assertThat(trello.createdLists()).containsExactly("Merging");
+        assertThat(commands.stoppedWorkflows).containsExactly(workflow.toString());
+        assertThat(commands.startedWorkflows).containsExactly(workflow.toString());
+    }
+
+    @Test
+    void configureGithubPreservesAboveSetupCapMaxAgentsWhenWorkflowIsRegeneratedWithoutExplicitChange()
+            throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.github-upgrade-large-max-agents.md");
+        Path env = tempDir.resolve(".env");
+        SetupRunResult firstResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "GitHub Upgrade Large Max Agents",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+        String content = Files.readString(workflow, StandardCharsets.UTF_8)
+                .replace("max_concurrent_agents: 1", "max_concurrent_agents: 64");
+        Files.writeString(workflow, content, StandardCharsets.UTF_8);
+        commands.githubAuthenticated = true;
+        commands.startedWorkflows.clear();
+        commands.startedEnvFiles.clear();
+        commands.stoppedWorkflows.clear();
+        trello.createdLists().clear();
+
+        // when
+        SetupRunResult secondResult = runSetup(
+                "configure-github", "--non-interactive", "--endpoint", endpoint(), "--key", "key", "--token", "token");
+
+        // then
+        firstResult.assertSuccess();
+        secondResult.assertSuccess().stdoutContains("GitHub workflow enabled for \"GitHub Upgrade Large Max Agents\"");
+        assertThatWorkflow(workflow).hasGithubFlow().hasMaxAgents(64);
         assertThat(trello.createdLists()).containsExactly("Merging");
         assertThat(commands.stoppedWorkflows).containsExactly(workflow.toString());
         assertThat(commands.startedWorkflows).containsExactly(workflow.toString());

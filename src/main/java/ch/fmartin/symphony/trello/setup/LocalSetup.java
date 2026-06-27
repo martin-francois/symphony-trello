@@ -1035,6 +1035,7 @@ public final class LocalSetup {
             }
         }
 
+        MaxAgentsSelection maxAgents = configureGithubMaxAgents(options, board.workflowPath());
         TrelloBoardSetup.ImportBoardResult result =
                 selectedBoardSetup.importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
                         options.endpoint(),
@@ -1048,13 +1049,12 @@ public final class LocalSetup {
                         board.workflowPath(),
                         board.workspaceRoot(),
                         board.serverPort(),
-                        options.maxAgentsExplicit()
-                                ? options.maxAgents()
-                                : workflowConfig.maxAgents(board.workflowPath()).orElseGet(options::maxAgents),
+                        maxAgents.value(),
                         true,
                         GitHubIntegration.ENABLED,
                         true,
-                        board.envPath()));
+                        board.envPath(),
+                        maxAgents.preservedFromWorkflow()));
         ConnectedBoard access = withRequestedCodexAccess(options, board, terminal);
         applyCodexAccess(
                 options.withCodexAccess(access.additionalWritableRoots(), access.dangerFullAccess()),
@@ -1087,6 +1087,15 @@ public final class LocalSetup {
             out.println("          Restart: " + options.command() + " start --env " + board.envPath() + " --workflow "
                     + board.workflowPath());
         }
+    }
+
+    private MaxAgentsSelection configureGithubMaxAgents(Options options, Path workflowPath) {
+        if (options.maxAgentsExplicit()) {
+            return new MaxAgentsSelection(options.maxAgents(), false);
+        }
+        Optional<Integer> configuredMaxAgents = workflowConfig.maxAgents(workflowPath);
+        return new MaxAgentsSelection(
+                configuredMaxAgents.orElseGet(options::maxAgents), configuredMaxAgents.isPresent());
     }
 
     private static ConnectedBoard selectNonGithubBoardForUpgrade(
@@ -1420,7 +1429,7 @@ public final class LocalSetup {
                         "Landing stays manual until a `Merging` Trello list and terminal Trello list are configured in the workflow.");
             }
             out.println(
-                    "By default, Symphony handles one card per board at a time; later you can raise `agent.max_concurrent_agents` in `WORKFLOW.md`.");
+                    "Use `agent.max_concurrent_agents` in `WORKFLOW.md` to control how many cards from this board may run at the same time.");
         } else {
             out.println("Symphony picks it up, " + runningText + ", and keeps the Trello card updated.");
             out.println(
@@ -1428,7 +1437,7 @@ public final class LocalSetup {
                             + queueTarget + " when you want Symphony to address them. If you accept it, move it to "
                             + doneTarget + ".");
             out.println(
-                    "By default, Symphony handles one card per board at a time; later you can raise `agent.max_concurrent_agents` in `WORKFLOW.md`.");
+                    "Use `agent.max_concurrent_agents` in `WORKFLOW.md` to control how many cards from this board may run at the same time.");
             out.println();
             out.println(
                     "PS: to add GitHub later, run `symphony-trello setup-local configure-github`. Symphony will add the GitHub PR flow to a connected board, including GitHub-specific Trello lists such as `Merging` when needed. In GitHub mode Symphony can create PRs and link them on the Trello card. `Merging` means: Symphony, please do final checks, merge this PR if safe, and move the Trello card to the configured terminal Trello list.");
@@ -1820,6 +1829,8 @@ public final class LocalSetup {
             return warnings.isEmpty();
         }
     }
+
+    private record MaxAgentsSelection(int value, boolean preservedFromWorkflow) {}
 
     private enum ExistingSetupAction {
         KEEP,
