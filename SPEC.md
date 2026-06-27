@@ -815,7 +815,7 @@ This Java implementation provides:
 - `status [--board NAME | --workflow PATH]`: reports managed local worker health
 - `logs [--board NAME | --workflow PATH] [--follow]`: prints or follows managed local worker logs
 - `diagnostics [--board NAME | --workflow PATH] [--output PATH] [--json] [--deep]
-  [--show-private-context]`:
+  [--show-private-context [--lookup TOKEN]]`:
   prints sanitized issue-report diagnostics from local setup, connected-board metadata, workflow
   summaries, loopback health probes, and recent managed-worker logs. `--deep` adds deeper
   public-safe troubleshooting checks, including Codex and GitHub auth-status probes, and may include
@@ -824,8 +824,12 @@ This Java implementation provides:
   link with `--board` to avoid ambiguity. `--show-private-context` prints private diagnostics
   context, including Trello board identifiers, board URLs, and local paths. It exists so operators
   can map public-safe diagnostics rows back to local boards, workflows, env files, workspace roots,
-  state directories, and worker logs when a maintainer asks for clarification. That output is for
-  local troubleshooting only and MUST NOT be pasted into public issue reports.
+  state directories, worker logs, managed PID/state files, and file-backed secret paths when a
+  maintainer asks for clarification. It MUST NOT print the secret values stored in those files.
+  `--lookup TOKEN` filters private context to one public diagnostics token, such as a 12-hex value
+  shown in a `board_hash` or `key_hash` row, or a `<path:...>` token. It is valid only with
+  `--show-private-context`. That output is for local troubleshooting only and MUST NOT be pasted into
+  public issue reports.
 
 The installed Bash and PowerShell wrappers dispatch `--help`, `-h`, `--version`, `setup-local`,
 `new-board`, `import-board`, `list-workspaces`, `start`, `stop`, `status`, `logs`, `diagnostics`,
@@ -848,9 +852,16 @@ and GitHub auth-status commands. `--deep` output MUST remain public-safe unless 
 `diagnostics --show-private-context` is an explicit exception to the public-safe diagnostics contract.
 It MUST NOT print credential values or log contents, but it MAY print private Trello board
 identifiers and local paths because its purpose is to help the local operator translate public-safe
-tokens into the real local board, workflow, env file, workspace, state directory, and
-worker log names. The command output MUST warn that it is local-only and not for public issue
-reports.
+tokens into the real local board, workflow, env file, workspace, state directory, worker log names,
+and file-backed secret paths. It MUST NOT print the secret values stored in those files.
+`--lookup TOKEN` MUST resolve only recognized public diagnostics tokens in that private context.
+Malformed lookup tokens MUST be rejected without searching arbitrary private strings. Ambiguous token
+collisions MUST be reported instead of choosing a value silently. The command output MUST warn that
+it is local-only and not for public issue reports.
+
+Setup and lifecycle commands that hide a local object such as a workflow file, worker log, managed
+PID/state file, or file-backed secret path SHOULD include the same public-safe token and a
+`diagnostics --show-private-context --lookup` hint so operators can resolve only that object locally.
 
 Public-safe diagnostics tokens SHOULD be stable for a local installation and SHOULD be generated from
 private values with a local random diagnostics key using a keyed hash such as `HmacSHA3-256`. The

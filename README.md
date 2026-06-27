@@ -441,7 +441,8 @@ Diagnostics are safe to paste into public issues by default. They summarize loca
 boards, workflow files, health probes, and recent logs while hiding secrets and private context. Use
 `symphony-trello diagnostics` when asking for help. Use `--deep` when a maintainer needs deeper
 public-safe checks. Use `--show-private-context` only locally when you need to map diagnostics hashes
-back to your own board, workflow, or log file; do not paste that output into public issues.
+back to your own board, workflow, log file, or PID/state file. Add `--lookup <token>` when you only
+need one mapping. Do not paste private-context output into public issues.
 
 ## Installer Reference
 
@@ -1340,17 +1341,20 @@ default. Add `--deep` when the default report does not include enough context; i
 public-safe checks such as local Codex and GitHub auth-status commands. Review the output before
 sharing it.
 
-Diagnostics replaces private values with stable local tokens such as `board_hash`, `key_hash`, and
-`<path:...>` so maintainers can compare related rows without seeing your Trello identifiers or local
-paths. These tokens are created with a random key stored on your machine, so they are stable for your
-installation but are not meant to be guessed by other people. If a maintainer asks which local board,
-workflow, or log one of those tokens refers to, run `symphony-trello diagnostics --show-private-context`
-on your machine. It prints private diagnostics context that maps tokens back to your local Trello
-board ids, board URLs, workflow paths, env file path, workspace root, state directory, and worker log
-files. Use it to inspect your own machine or answer a maintainer's question in your own words. Do not
-paste the `--show-private-context` output into public issues because it intentionally contains
-private Trello identifiers, URLs, and local paths. It does not include credential values or worker log
-contents.
+Diagnostics replaces private values with stable local tokens such as the value in a `board_hash` or
+`key_hash` row, and `<path:...>` path tokens, so maintainers can compare related rows without seeing
+your Trello identifiers or local paths. These tokens are created with a random key stored on your
+machine, so they are stable for your installation but are not meant to be guessed by other people.
+If a maintainer asks which local board, workflow, or log one of those tokens refers to, run
+`symphony-trello diagnostics --show-private-context` on your machine. Add `--lookup <token>` to
+resolve only one token instead of printing the full private-context report. Private context maps
+tokens back to your local Trello board ids, board URLs, workflow paths, env file path, workspace
+root, state directory, worker log files, managed PID/state files, and file-backed secret paths. It
+does not print the secret values stored in those files. The lifecycle commands may also print one of
+these tokens when hiding a local path in an error. Use it to inspect your own machine or answer a
+maintainer's question in your own words. Do not paste the `--show-private-context` output
+into public issues because it intentionally contains private Trello identifiers, URLs, and local
+paths. It does not include credential values or worker log contents.
 
 [`WORKFLOW.md`](#workflow-contract) is watched for changes and also checked defensively on each
 scheduler tick. Invalid reloads are logged and the last known good configuration remains active.

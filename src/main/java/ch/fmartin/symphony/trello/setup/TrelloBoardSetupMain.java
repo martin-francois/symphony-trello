@@ -543,6 +543,9 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                 description = "Show private Trello identifiers, URLs, and local paths for local troubleshooting.")
         boolean privateContext;
 
+        @Option(names = "--lookup", description = "Resolve one diagnostics token. Requires --show-private-context.")
+        Optional<String> lookup = Optional.empty();
+
         @Spec
         CommandSpec spec;
 
@@ -553,6 +556,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             CliInputValidation.rejectDashOutputFile(output);
             CliInputValidation.rejectStandardStreamOutputFile(output);
             CliInputValidation.rejectNonRegularOutputFile(output);
+            rejectLookupWithoutPrivateContext();
             var reporter = new SetupDiagnosticReporter(System.getenv(), new ProcessCommandRunner());
             var request = new DiagnosticsRequest(
                     options.board(),
@@ -564,11 +568,18 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                     options.workspaceRoot,
                     options.stateHome,
                     options.manifest,
-                    options.workflow());
+                    options.workflow(),
+                    lookup);
             String report = reporter.renderReport(request, privateContext);
             String body = json ? jsonReport(report) : report;
             output.ifPresentOrElse(path -> writeOutputFile(path, body), () -> printDiagnostics(body));
             return 0;
+        }
+
+        private void rejectLookupWithoutPrivateContext() {
+            if (lookup.isPresent() && !privateContext) {
+                throw new ParameterException(spec.commandLine(), "--lookup requires --show-private-context.");
+            }
         }
 
         private void writeOutputFile(Path path, String body) {

@@ -577,6 +577,78 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
+    void diagnosticsPrivateContextLookupResolvesOneToken() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("private-context-lookup-config");
+        Path workspaceRoot = tempDir.resolve("private-context-lookup-workspaces");
+        Path stateHome = tempDir.resolve("private-context-lookup-state");
+        Path workflow = configDir.resolve("WORKFLOW.private-lookup.md");
+        Path env = configDir.resolve(".env.private-lookup");
+        Files.createDirectories(configDir);
+        Files.writeString(
+                workflow, TestWorkflows.workflowWithBoardAndPort("lookup-board-id", 19185), StandardCharsets.UTF_8);
+        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+                .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
+                        "lookup-board-id",
+                        "lookup-key",
+                        "Lookup Board",
+                        "https://trello.com/b/lookup-key/lookup-board",
+                        workflow,
+                        env,
+                        workspaceRoot,
+                        19185,
+                        false,
+                        List.of(),
+                        false))));
+        String lookupToken = "<path:" + DiagnosticsTokenHasher.load(configDir).token(workflow.toString()) + ">";
+
+        // when
+        CliRunResult result = runCli(
+                "diagnostics",
+                "--config-dir",
+                configDir.toString(),
+                "--workspace-root",
+                workspaceRoot.toString(),
+                "--state-home",
+                stateHome.toString(),
+                "--board",
+                "Lookup Board",
+                "--show-private-context",
+                "--lookup",
+                lookupToken);
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "# Symphony for Trello Private Context",
+                        "## Lookup",
+                        "- **lookup_status:** found",
+                        lookupToken,
+                        workflow.toString())
+                .stdoutDoesNotContain("lookup-key", "https://trello.com/b/lookup-key/lookup-board")
+                .stderrEmpty();
+    }
+
+    @Test
+    void diagnosticsLookupRequiresPrivateContext() throws Exception {
+        // given
+        Path output = tempDir.resolve("lookup-without-private-context.md");
+
+        // when
+        CliRunResult result = runCli("diagnostics", "--lookup", "<path:000000000000>", "--output", output.toString());
+
+        // then
+        result.assertFailure(SETUP_FAILURE)
+                .stdoutDoesNotContain("# Symphony for Trello Diagnostics", "Diagnostics written")
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments",
+                        "--lookup requires --show-private-context",
+                        "Try 'diagnostics --help' for usage.")
+                .stderrDoesNotContain(output.toString(), tempDir.toString());
+        assertThat(output).doesNotExist();
+    }
+
+    @Test
     void diagnosticsRejectsBoardAndWorkflowTogetherWithoutWritingReport() throws Exception {
         // given
         Path configDir = tempDir.resolve("diagnostics-selector-config");

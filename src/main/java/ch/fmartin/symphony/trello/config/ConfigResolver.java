@@ -441,20 +441,27 @@ public class ConfigResolver {
         return configured;
     }
 
-    private String expandPath(String value) {
+    public static String expandPath(String value, Function<String, Optional<String>> environmentResolver) {
         String expanded = value;
         if (expanded.startsWith("~/")) {
             expanded = System.getProperty("user.home") + expanded.substring(1);
         }
         if (expanded.startsWith("$") && expanded.indexOf('/') < 0) {
-            expanded = environmentValue(expanded.substring(1)).orElse(expanded);
+            expanded = environmentResolver.apply(expanded.substring(1)).orElse(expanded);
         } else if (expanded.startsWith("$")) {
             int separator = expanded.indexOf('/');
             String name = expanded.substring(1, separator);
             String suffix = expanded.substring(separator);
-            expanded = environmentValue(name).map(envValue -> envValue + suffix).orElse(expanded);
+            expanded = environmentResolver
+                    .apply(name)
+                    .map(envValue -> envValue + suffix)
+                    .orElse(expanded);
         }
         return expanded;
+    }
+
+    private String expandPath(String value) {
+        return expandPath(value, this::environmentValue);
     }
 
     private static String systemTempRoot() {

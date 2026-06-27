@@ -276,9 +276,11 @@ final class LocalWorkerManager {
         BoardHealth existingHealth;
         if (existingPid != null && platform.isAlive(existingPid)) {
             if (!platform.isManaged(existingPid, paths.appHome(), board.workflowPath())) {
+                String pidToken = pathToken(paths, files.pidFile());
                 throw new TrelloBoardSetupException(
                         "setup_worker_pid_unmanaged",
-                        "State file belongs to another process for selected workflow file pid=" + existingPid);
+                        "State file belongs to another process for selected workflow file pid=" + existingPid
+                                + " pid_file_token=" + pidToken + lookupHint(pidToken));
             }
             BoardHealth health =
                     healthChecker.workflowHealth(board.workflowPath(), board.boardId(), board.boardKey(), healthPort);
@@ -309,8 +311,8 @@ final class LocalWorkerManager {
         }
 
         boolean workflowServerPortUsed = workflowServerPortUsed(envPath);
-        EffectiveConfig launchConfig =
-                workflowConfig.prepareLaunchWorkflow(board.workflowPath(), workflowEnvironment, workflowServerPortUsed);
+        EffectiveConfig launchConfig = workflowConfig.prepareLaunchWorkflow(
+                board.workflowPath(), workflowEnvironment, workflowServerPortUsed, paths.configDir());
         credentialUsage.ifPresent(this::validateWorkerCredentials);
         workflowConfig.validateLaunchDispatch(board.workflowPath(), launchConfig);
 
@@ -355,7 +357,8 @@ final class LocalWorkerManager {
                             + " did not report the expected workflow and board for "
                             + DisplayNames.quotedName(board.boardName()) + ". Run symphony-trello diagnostics "
                             + "to collect safe troubleshooting details, or rerun symphony-trello logs with the same "
-                            + "board or workflow selector for local log output.");
+                            + "board or workflow selector for local log output."
+                            + startupPrivateContextHint(paths, board, files));
         }
         if (!platform.isAlive(handle.pid())
                 || !platform.isManaged(handle.pid(), paths.appHome(), board.workflowPath())) {
@@ -366,7 +369,8 @@ final class LocalWorkerManager {
                             + LocalHealthChecker.localStateUrl(health.port())
                             + ", but the newly started managed process is not running for this install. "
                             + "Run symphony-trello diagnostics to collect safe troubleshooting details, "
-                            + "or rerun symphony-trello logs with the same board or workflow selector for local log output.");
+                            + "or rerun symphony-trello logs with the same board or workflow selector for local log output."
+                            + startupPrivateContextHint(paths, board, files));
         }
         out.println("Started Symphony for Trello: " + DisplayNames.quotedName(board.boardName()));
     }
@@ -858,7 +862,8 @@ final class LocalWorkerManager {
                 out.println("unhealthy " + boardLabel + " pid=" + pid + " "
                         + LocalHealthChecker.localServerUrl(health.port()) + " (" + health.kind() + ")");
             } else if (pid != null && platform.isAlive(pid)) {
-                out.println("stale " + boardLabel + " pid=" + pid + " does not belong to this install");
+                out.println("stale " + boardLabel + " pid=" + pid + " does not belong to this install"
+                        + " pid_file_token=" + pathToken(paths, files.pidFile()));
             } else {
                 store.deletePid(files.pidFile());
                 if (health.kind() == BoardHealthKind.SAME_WORKFLOW) {
@@ -955,9 +960,9 @@ final class LocalWorkerManager {
         if (!platform.isManaged(pid, paths.appHome(), board.workflowPath())) {
             // The process is not ours, but the pid file is managed state pointing at a foreign
             // process; remove it so repeated stops do not keep reporting the same stale pid.
-            out.println(
-                    "Skipped unmanaged stale pid for " + DisplayNames.quotedName(board.boardName()) + " pid=" + pid);
-            removeStalePidFile(store, files.pidFile(), out);
+            out.println("Skipped unmanaged stale pid for " + DisplayNames.quotedName(board.boardName()) + " pid=" + pid
+                    + " pid_file_token=" + pathToken(paths, files.pidFile()));
+            removeStalePidFile(paths, store, files.pidFile(), out);
             return;
         }
         stopPid(store, files, pid);
@@ -1044,8 +1049,9 @@ final class LocalWorkerManager {
                 stopPid(store, store.filesFromPidFile(pidFile), pid);
                 out.println("Stopped " + label);
             } else if (pid != null && platform.isAlive(pid)) {
-                out.println("Skipped unmanaged stale pid " + label + " pid=" + pid);
-                removeStalePidFile(store, pidFile, out);
+                out.println("Skipped unmanaged stale pid " + label + " pid=" + pid + " pid_file_token="
+                        + pathToken(paths, pidFile));
+                removeStalePidFile(paths, store, pidFile, out);
             } else {
                 store.deletePid(pidFile);
             }
@@ -1066,7 +1072,7 @@ final class LocalWorkerManager {
      * best effort on top. A failed or already-done removal must say so instead of claiming the
      * file was removed.
      */
-    private void removeStalePidFile(ManagedProcessStore store, Path pidFile, PrintStream out) {
+    private void removeStalePidFile(LocalWorkerPaths paths, ManagedProcessStore store, Path pidFile, PrintStream out) {
         try {
             if (store.deletePid(pidFile)) {
                 out.println("Removed the stale managed pid file. The unrelated process was not stopped.");
@@ -1075,8 +1081,26 @@ final class LocalWorkerManager {
             }
         } catch (IOException e) {
             out.println("Could not remove the stale managed pid file. The unrelated process was not stopped.");
-            out.println("Remove the stale managed pid file manually, then rerun stop.");
+            String pidToken = pathToken(paths, pidFile);
+            out.println("Remove the stale managed pid file manually, then rerun stop. pid_file_token=" + pidToken
+                    + lookupHint(pidToken));
         }
+    }
+
+    private static String startupPrivateContextHint(
+            LocalWorkerPaths paths, ConnectedBoard board, ManagedProcessStore.ManagedProcessFiles files) {
+        String workflowToken = pathToken(paths, board.workflowPath());
+        return " Private context tokens: workflow=" + workflowToken + ", stdout_log="
+                + pathToken(paths, files.stdoutLog()) + ", stderr_log=" + pathToken(paths, files.stderrLog()) + "."
+                + lookupHint(workflowToken);
+    }
+
+    private static String lookupHint(String token) {
+        return PrivateContextTokens.lookupHint(token);
+    }
+
+    private static String pathToken(LocalWorkerPaths paths, Path path) {
+        return PrivateContextTokens.pathToken(paths.configDir(), path);
     }
 
     private void printPidFileStatus(LocalWorkerPaths paths, PrintStream out) throws IOException {
@@ -1092,7 +1116,8 @@ final class LocalWorkerManager {
             if (pid != null && platform.isAlive(pid) && platform.isManaged(pid, paths.appHome())) {
                 out.println("running " + label + " pid=" + pid);
             } else if (pid != null && platform.isAlive(pid)) {
-                out.println("stale " + label + " pid=" + pid + " does not belong to this install");
+                out.println("stale " + label + " pid=" + pid + " does not belong to this install pid_file_token="
+                        + pathToken(paths, pidFile));
             } else {
                 store.deletePid(pidFile);
                 out.println("stopped " + label);

@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.PosixFilePermission;
@@ -291,6 +292,26 @@ final class WorkflowConfigEditor {
 
     EffectiveConfig prepareLaunchWorkflow(
             Path workflowPath, Function<String, Optional<String>> environmentResolver, boolean validateServerPort) {
+        return prepareLaunchWorkflow(workflowPath, environmentResolver, validateServerPort, Optional.empty());
+    }
+
+    EffectiveConfig prepareLaunchWorkflow(
+            Path workflowPath,
+            Function<String, Optional<String>> environmentResolver,
+            boolean validateServerPort,
+            Path diagnosticsConfigDir) {
+        return prepareLaunchWorkflow(
+                workflowPath,
+                environmentResolver,
+                validateServerPort,
+                Optional.of(diagnosticsConfigDir.toAbsolutePath().normalize()));
+    }
+
+    private EffectiveConfig prepareLaunchWorkflow(
+            Path workflowPath,
+            Function<String, Optional<String>> environmentResolver,
+            boolean validateServerPort,
+            Optional<Path> diagnosticsConfigDir) {
         requireLaunchableWorkflowFile(workflowPath);
         ReadWorkflow readWorkflow = readWorkflowForLaunch(workflowPath);
         try {
@@ -306,13 +327,14 @@ final class WorkflowConfigEditor {
             throw invalidWorkflowForLaunch(
                     workflowPath,
                     new TrelloBoardSetupException(
-                            "setup_workflow_yaml_invalid", "Workflow front matter is invalid YAML.", e));
+                            "setup_workflow_yaml_invalid", "Workflow front matter is invalid YAML.", e),
+                    diagnosticsConfigDir);
         } catch (WorkflowException
                 | ConfigException
                 | TrelloBoardSetupException
                 | IllegalArgumentException
                 | ClassCastException e) {
-            throw invalidWorkflowForLaunch(workflowPath, e);
+            throw invalidWorkflowForLaunch(workflowPath, e, diagnosticsConfigDir);
         }
     }
 
@@ -351,17 +373,24 @@ final class WorkflowConfigEditor {
     }
 
     private static TrelloBoardSetupException invalidWorkflowForLaunch(Path workflowPath, RuntimeException cause) {
+        return invalidWorkflowForLaunch(workflowPath, cause, Optional.empty());
+    }
+
+    private static TrelloBoardSetupException invalidWorkflowForLaunch(
+            Path workflowPath, RuntimeException cause, Optional<Path> diagnosticsConfigDir) {
         return new TrelloBoardSetupException(
                 "setup_workflow_invalid",
-                "Invalid workflow configuration: " + publicWorkflowLaunchProblem(cause)
+                "Invalid workflow configuration: "
+                        + publicWorkflowLaunchProblem(workflowPath, cause, diagnosticsConfigDir)
                         + "\nWorkflow file:\n  selected workflow file"
                         + "\n" + publicWorkflowLaunchNextStep(cause),
                 cause);
     }
 
-    private static String publicWorkflowLaunchProblem(RuntimeException cause) {
+    private static String publicWorkflowLaunchProblem(
+            Path workflowPath, RuntimeException cause, Optional<Path> diagnosticsConfigDir) {
         if (cause instanceof ConfigException config) {
-            return publicConfigProblem(config);
+            return publicConfigProblem(workflowPath, config, diagnosticsConfigDir);
         }
         if (cause instanceof WorkflowException workflow) {
             return publicWorkflowProblem(workflow);
@@ -375,7 +404,8 @@ final class WorkflowConfigEditor {
         return "Workflow front matter is invalid.";
     }
 
-    private static String publicConfigProblem(ConfigException failure) {
+    private static String publicConfigProblem(
+            Path workflowPath, ConfigException failure, Optional<Path> diagnosticsConfigDir) {
         return switch (failure.code()) {
             case "invalid_server_port" -> "server.port must be an integer between 0 and " + LocalPort.MAX + ".";
             case "config_value_error" -> publicConfigValueProblem(failure);
@@ -389,8 +419,10 @@ final class WorkflowConfigEditor {
             case "overlapping_tracker_list_roles" -> "tracker list roles must use distinct Trello lists.";
             case "invalid_in_progress_state" ->
                 "tracker.in_progress_state must also be listed in tracker.active_states.";
-            case "secret_file_too_large" -> publicSecretFileProblem(failure, "secret file is too large.");
-            case "secret_file_read_error" -> publicSecretFileProblem(failure, "secret file cannot be read.");
+            case "secret_file_too_large" ->
+                publicSecretFileProblem(diagnosticsConfigDir, failure, "secret file is too large.");
+            case "secret_file_read_error" ->
+                publicSecretFileProblem(diagnosticsConfigDir, failure, "secret file cannot be read.");
             case "codex_sandbox_policy_invalid" -> publicCodexSandboxPolicyProblem(failure);
             case "workflow_file_unusable" -> publicWorkflowFileProblem(failure);
             case "workflow_yaml_invalid" -> "Workflow front matter is invalid YAML.";
@@ -431,15 +463,45 @@ final class WorkflowConfigEditor {
         return "Workflow front matter has an invalid value type.";
     }
 
-    private static String publicSecretFileProblem(ConfigException failure, String suffix) {
+    private static String publicSecretFileProblem(
+            Optional<Path> diagnosticsConfigDir, ConfigException failure, String suffix) {
         String message = failure.getMessage();
+        String tokenHint = secretFileTokenHint(diagnosticsConfigDir, failure)
+                .map(" "::concat)
+                .orElse("");
         if (message != null && message.startsWith("tracker.api_key ")) {
-            return "tracker.api_key " + suffix;
+            return "tracker.api_key " + suffix + tokenHint;
         }
         if (message != null && message.startsWith("tracker.api_token ")) {
-            return "tracker.api_token " + suffix;
+            return "tracker.api_token " + suffix + tokenHint;
         }
-        return "A configured secret file " + suffix;
+        return "A configured secret file " + suffix + tokenHint;
+    }
+
+    private static Optional<String> secretFileTokenHint(Optional<Path> diagnosticsConfigDir, ConfigException failure) {
+        return diagnosticsConfigDir.flatMap(
+                configDir -> secretPathFromConfigFailure(failure).map(path -> {
+                    String token = PrivateContextTokens.pathToken(configDir, path);
+                    return "secret_file_token=" + token + PrivateContextTokens.lookupHint(token);
+                }));
+    }
+
+    private static Optional<Path> secretPathFromConfigFailure(ConfigException failure) {
+        String message = failure.getMessage();
+        if (message == null) {
+            return Optional.empty();
+        }
+        int separator = message.lastIndexOf(": ");
+        if (separator < 0 || separator + 2 >= message.length()) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(Path.of(message.substring(separator + 2)));
+        } catch (InvalidPathException ignored) {
+            // If the underlying private path cannot be parsed on this host, keep the public
+            // message sanitized and omit only the optional lookup token.
+            return Optional.empty();
+        }
     }
 
     private static String publicCodexSandboxPolicyProblem(ConfigException failure) {
