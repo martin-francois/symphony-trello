@@ -376,6 +376,19 @@ look while a card is running: it should say what Codex is doing, what it has lea
 and whether it is blocked. Symphony updates that same comment instead of creating a long stream of
 progress comments.
 
+Use normal Trello checklists when one card must wait for another. Add a checklist such as
+`Must finish first`; the checklist name is only for people. Put one bare Trello card reference in
+each prerequisite item, for example `https://trello.com/c/abc123`. Symphony waits until each linked
+card is in a list that this workflow treats as finished, such as `Done`. It keeps the checklist
+checkmarks in sync and keeps one waiting comment on the blocked Trello card.
+
+Keep related Trello card links out of prerequisite checklists, or write them as Markdown links such
+as `related to [the API card](https://trello.com/c/abc123)`. A bare Trello card link with extra text,
+such as `Wait for https://trello.com/c/abc123`, is unclear and blocks until someone fixes the
+checklist. Links in descriptions, Trello comments, attachments, and Markdown checklist links are
+given to Codex as context. Codex can use them to notice likely missing prerequisites before it edits,
+but those links do not block scheduling by themselves.
+
 Use priority labels when one ready card should run before another. The default labels are `p1`,
 `p2`, `p3`, `p4`, `priority: critical`, `priority: high`, `priority: medium`, and `priority: low`.
 Within the same active Trello list, higher-priority cards run first. When priority is the same,
@@ -647,6 +660,18 @@ Work on {{ card.identifier }}: {{ card.title }}.
 - {{ comment.created_at }}{% if comment.author %} {{ comment.author }}{% endif %}: {{ comment.text }}
 {% endfor %}
 
+## Trello Checklists And Related Cards
+
+Normal Trello checklists are available in `{{ card.checklists }}`. A checklist blocks the card only
+when every non-blank item is exactly one bare Trello card reference. Problems with prerequisite
+checklists are available in `{{ card.prerequisite_problems }}`.
+
+Trello card links from the title, description, checklists, attachments, and Trello comments are
+available in `{{ card.trello_references }}`. Before editing, check whether any of them look like a
+missing prerequisite. A later Trello comment such as `Proceed anyway` may ignore only this agent
+warning. That comment is not allowed to skip prerequisite checklists, unclear prerequisite
+checklists, unresolved prerequisites, or other hard blockers.
+
 ## Codex Workpad
 
 Maintain one Trello workpad comment for this card by calling trello_upsert_workpad. Reuse the
@@ -869,6 +894,18 @@ You are working on {{ card.identifier }}: {{ card.title }}.
 {% for comment in card.comments %}
 - {{ comment.created_at }}{% if comment.author %} {{ comment.author }}{% endif %}: {{ comment.text }}
 {% endfor %}
+
+## Trello Checklists And Related Cards
+
+Normal Trello checklists are available in `{{ card.checklists }}`. A checklist blocks the card only
+when every non-blank item is exactly one bare Trello card reference. Problems with prerequisite
+checklists are available in `{{ card.prerequisite_problems }}`.
+
+Trello card links from the title, description, checklists, attachments, and Trello comments are
+available in `{{ card.trello_references }}`. Before editing, check whether any of them look like a
+missing prerequisite. A later Trello comment such as `Proceed anyway` may ignore only this agent
+warning. That comment is not allowed to skip prerequisite checklists, unclear prerequisite
+checklists, unresolved prerequisites, or other hard blockers.
 
 ## Codex Workpad
 

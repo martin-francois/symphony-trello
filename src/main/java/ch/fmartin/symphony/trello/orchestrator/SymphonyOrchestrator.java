@@ -32,6 +32,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -266,40 +267,30 @@ public class SymphonyOrchestrator {
     private void tick() {
         operationLock.lock();
         try {
-            synchronized (this) {
-                if (!started) {
-                    return;
-                }
-                tickRunning = true;
+            if (!beginTick()) {
+                return;
             }
-            consumeRefreshRequest();
-            reloadIfChanged();
-            reconcileRunningCards();
             try {
-                configResolver.validateForDispatch(config);
-                List<Card> candidates = tracker.fetchCandidateCards(config).stream()
-                        .sorted(TrelloClient.dispatchComparator(config))
-                        .toList();
-                Set<String> releasedCards = releaseIdleInProgressOverflow(candidates);
-                for (Card card : candidates) {
-                    if (releasedCards.contains(card.id())) {
-                        continue;
-                    }
-                    if (availableSlots() <= 0) {
-                        break;
-                    }
-                    if (shouldDispatch(card, false)) {
-                        refreshForDispatch(card).ifPresent(refreshed -> dispatch(refreshed, null));
-                    }
-                }
+                consumeRefreshRequest();
+                reloadIfChanged();
+                reconcileRunningCards();
+                dispatchCandidates();
             } catch (RuntimeException e) {
-                LOG.errorf("dispatch outcome=skipped reason=%s", e.getMessage());
+                LOG.errorf("tick outcome=skipped reason=%s", e.getMessage());
             } finally {
                 finishTickAndScheduleNext();
             }
         } finally {
             operationLock.unlock();
         }
+    }
+
+    private synchronized boolean beginTick() {
+        if (!started) {
+            return false;
+        }
+        tickRunning = true;
+        return true;
     }
 
     /**
@@ -517,7 +508,32 @@ public class SymphonyOrchestrator {
         LOG.infof("card_id=%s card_identifier=%s outcome=terminated reason=%s", cardId, entry.identifier(), reason);
     }
 
-    private void dispatch(Card card, Integer attempt) {
+    private void dispatchCandidates() {
+        configResolver.validateForDispatch(config);
+        List<Card> fetchedCandidates = tracker.fetchCandidateCards(config);
+        List<Card> candidates = fetchedCandidates.stream()
+                .sorted(TrelloClient.dispatchComparator(config, prerequisitePriorityOverrides(fetchedCandidates)))
+                .toList();
+        Set<String> releasedCards = releaseIdleInProgressOverflow(candidates);
+        DispatchBudget budget = DispatchBudget.from(config, running.values());
+        for (Card card : candidates) {
+            if (releasedCards.contains(card.id())) {
+                continue;
+            }
+            if (!budget.hasAnySlot()) {
+                break;
+            }
+            if (!canDispatch(card, budget)) {
+                continue;
+            }
+
+            refreshForDispatch(card, budget)
+                    .flatMap(refreshed -> dispatch(refreshed, null))
+                    .ifPresent(budget::reserve);
+        }
+    }
+
+    private Optional<Card> dispatch(Card card, Integer attempt) {
         RetryEntry retry;
         synchronized (this) {
             claimed.add(card.id());
@@ -535,7 +551,7 @@ public class SymphonyOrchestrator {
             }
             releaseCurrentFromDispatch(card, "prepare for dispatch failed");
             scheduleRetry(card.id(), nextAttempt(attempt), card.identifier(), card.cardUrl(), e.getMessage(), false);
-            return;
+            return Optional.empty();
         }
         String workerIdentity = UUID.randomUUID().toString();
         RunningEntry entry = new RunningEntry(dispatchCard, workerIdentity, attempt, clock.instant());
@@ -557,7 +573,7 @@ public class SymphonyOrchestrator {
                     dispatchCard.cardUrl(),
                     e.getMessage(),
                     false);
-            return;
+            return Optional.empty();
         }
         entry.workerTask = workers.submit(() -> {
             AgentRunResult result = agentRunner.run(new AgentRunner.AgentRunRequest(
@@ -567,13 +583,18 @@ public class SymphonyOrchestrator {
         LOG.infof(
                 "card_id=%s card_identifier=%s worker_identity=%s outcome=dispatched",
                 dispatchCard.id(), dispatchCard.identifier(), workerIdentity);
+        return Optional.of(dispatchCard);
     }
 
     private Optional<Card> refreshForDispatch(Card card) {
+        return refreshForDispatch(card, DispatchBudget.from(config, running.values()));
+    }
+
+    private Optional<Card> refreshForDispatch(Card card, DispatchBudget budget) {
         try {
             CardLookupResult result = tracker.fetchCardStatesForPromptByIds(config, List.of(card.id()))
                     .get(card.id());
-            if (result instanceof CardLookupResult.Found found && shouldDispatch(found.card(), false)) {
+            if (result instanceof CardLookupResult.Found found && canDispatch(found.card(), budget)) {
                 return Optional.of(found.card());
             }
             if (result instanceof CardLookupResult.Failed failed) {
@@ -868,6 +889,10 @@ public class SymphonyOrchestrator {
         return shouldDispatchIgnoringSlots(card, ignoreClaim) && availableSlots() > 0 && perStateSlots(card) > 0;
     }
 
+    private boolean canDispatch(Card card, DispatchBudget budget) {
+        return shouldDispatchIgnoringSlots(card, false) && budget.hasSlotFor(card);
+    }
+
     private boolean shouldDispatchIgnoringSlots(Card card, boolean ignoreClaim) {
         return isCandidateEligibleIgnoringRuntimeState(card)
                 && (ignoreClaim || !claimed.contains(card.id()))
@@ -897,25 +922,50 @@ public class SymphonyOrchestrator {
         return cardLabels.containsAll(requiredLabels);
     }
 
+    private Map<String, Integer> prerequisitePriorityOverrides(List<Card> candidates) {
+        Set<String> dispatchableCandidateIds = dispatchableCandidateIds(candidates);
+        Map<String, Integer> overrides = HashMap.newHashMap(dispatchableCandidateIds.size());
+        for (Card card : candidates) {
+            if (blockersAllowDispatch(card)) {
+                continue;
+            }
+            int inheritedPriority = priorityOrDefault(card);
+            for (var blocker : card.blockedBy()) {
+                if (dispatchableCandidateIds.contains(blocker.id())) {
+                    overrides.merge(blocker.id(), inheritedPriority, Math::min);
+                }
+            }
+        }
+        return overrides;
+    }
+
+    private Set<String> dispatchableCandidateIds(List<Card> candidates) {
+        Set<String> seen = HashSet.newHashSet(candidates.size());
+        Set<String> dispatchableIds = HashSet.newHashSet(candidates.size());
+        for (Card candidate : candidates) {
+            if (seen.add(candidate.id()) && shouldDispatchIgnoringSlots(candidate, false)) {
+                dispatchableIds.add(candidate.id());
+            }
+        }
+        return dispatchableIds;
+    }
+
+    private static int priorityOrDefault(Card card) {
+        return card.priority() == null ? Integer.MAX_VALUE : card.priority();
+    }
+
     private Set<String> releaseIdleInProgressOverflow(List<Card> candidates) {
         if (blank(config.tracker().inProgressState())) {
             return Set.of();
         }
 
-        int plannedRunning = running.size();
-        Map<String, Integer> plannedRunningByState = runningCountsByState();
-        Set<String> releasedCards = new HashSet<>();
+        DispatchBudget planned = DispatchBudget.from(config, running.values());
+        Set<String> releasedCards = HashSet.newHashSet(candidates.size());
         for (Card card : candidates) {
-            if (running.containsKey(card.id()) || claimed.contains(card.id())) {
+            if (isAlreadyReserved(card)) {
                 continue;
             }
-            String state = StateNames.normalize(card.state());
-            int plannedStateRunning = plannedRunningByState.getOrDefault(state, 0);
-            if (shouldDispatchIgnoringSlots(card, false)
-                    && plannedRunning < config.agent().maxConcurrentAgents()
-                    && plannedStateRunning < perStateLimit(card)) {
-                plannedRunning++;
-                plannedRunningByState.put(state, plannedStateRunning + 1);
+            if (shouldDispatchIgnoringSlots(card, false) && planned.tryReserve(card)) {
                 continue;
             }
             if (isConfiguredInProgress(card)) {
@@ -924,6 +974,10 @@ public class SymphonyOrchestrator {
             }
         }
         return releasedCards;
+    }
+
+    private boolean isAlreadyReserved(Card card) {
+        return running.containsKey(card.id()) || claimed.contains(card.id());
     }
 
     private void releaseFromDispatch(Card card, String reason) {
@@ -971,6 +1025,9 @@ public class SymphonyOrchestrator {
         if (!config.tracker().blockerEnforcedStates().contains(StateNames.normalize(card.state()))) {
             return true;
         }
+        if (!card.prerequisiteProblems().isEmpty()) {
+            return false;
+        }
         return card.blockedBy().stream()
                 .allMatch(blocker -> blocker.state() != null
                         && config.tracker().terminalStates().contains(StateNames.normalize(blocker.state())));
@@ -1001,6 +1058,59 @@ public class SymphonyOrchestrator {
                 .map(entry -> StateNames.normalize(entry.card.state()))
                 .forEach(state -> counts.merge(state, 1, Integer::sum));
         return counts;
+    }
+
+    private static final class DispatchBudget {
+        private final int maxTotal;
+        private final Map<String, Integer> maxByState;
+        private final Map<String, Integer> usedByState;
+        private int usedTotal;
+
+        private DispatchBudget(
+                int maxTotal, Map<String, Integer> maxByState, int usedTotal, Map<String, Integer> usedByState) {
+            this.maxTotal = maxTotal;
+            this.maxByState = maxByState;
+            this.usedTotal = usedTotal;
+            this.usedByState = usedByState;
+        }
+
+        static DispatchBudget from(EffectiveConfig config, Collection<RunningEntry> runningEntries) {
+            Map<String, Integer> usedByState = HashMap.newHashMap(runningEntries.size());
+            for (RunningEntry entry : runningEntries) {
+                usedByState.merge(StateNames.normalize(entry.card.state()), 1, Integer::sum);
+            }
+            return new DispatchBudget(
+                    config.agent().maxConcurrentAgents(),
+                    config.agent().maxConcurrentAgentsByState(),
+                    runningEntries.size(),
+                    usedByState);
+        }
+
+        boolean hasAnySlot() {
+            return usedTotal < maxTotal;
+        }
+
+        boolean hasSlotFor(Card card) {
+            String state = StateNames.normalize(card.state());
+            return hasAnySlot() && usedByState.getOrDefault(state, 0) < limitFor(state);
+        }
+
+        boolean tryReserve(Card card) {
+            if (!hasSlotFor(card)) {
+                return false;
+            }
+            reserve(card);
+            return true;
+        }
+
+        void reserve(Card card) {
+            usedTotal++;
+            usedByState.merge(StateNames.normalize(card.state()), 1, Integer::sum);
+        }
+
+        private int limitFor(String state) {
+            return maxByState.getOrDefault(state, maxTotal);
+        }
     }
 
     private boolean isOutOfBoardScope(Card card) {

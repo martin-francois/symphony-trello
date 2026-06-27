@@ -33,6 +33,11 @@ prompts, and product terminology. Deployment steps and installer lifecycle testi
 
 - Write README prose in simple, direct language. Prefer short sentences and plain words over polished
   or elaborate wording.
+- Write all user-facing and contributor-facing documentation for software engineers who may not be
+  native English speakers. Common software terms are fine, but prefer simple verbs, short sentences,
+  and concrete examples. Avoid inflated phrases when a plain word explains the same behavior. This
+  does not override the separate `SPEC.md` style rule in
+  [Specification & ADR discipline](specification-and-adr-discipline.md#specmd-as-the-contract).
 - Avoid redundant clarifications that create false significance. If a sentence already states the
   point clearly, do not add a follow-up such as "not only X", "meaning...", or "in other words..."
   unless it removes a real ambiguity, adds an exception, or changes the action the reader should
