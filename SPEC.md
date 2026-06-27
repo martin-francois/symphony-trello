@@ -842,6 +842,11 @@ If implemented, setup commands SHOULD:
 - write workflow files that satisfy this specification's runtime schema
 - refuse to overwrite an existing workflow file unless the operator explicitly asks for overwrite,
   or select a predictable alternate workflow file when that behavior is documented
+- keep `agent.max_concurrent_agents` at `1` unless the operator explicitly configures a higher
+  per-board value, and explain that higher values run multiple Codex agents and their commands for
+  the same board concurrently
+- preserve an existing workflow's `agent.max_concurrent_agents` value when regenerating the
+  workflow unless the operator explicitly changes it
 - emit enough output for the operator to know which board and workflow file were created or imported
 
 This Java implementation provides:
@@ -876,6 +881,11 @@ This Java implementation provides:
   shown in a `board_hash` or `key_hash` row, or a `<path:...>` token. It is valid only with
   `--show-private-context`. That output is for local troubleshooting only and MUST NOT be pasted into
   public issue reports.
+
+During guided `setup-local` board creation or import, when `--max-agents` is omitted, the Java
+implementation asks whether to change the per-board concurrency value before writing the workflow.
+The prompt MUST explain local resource and parallel command risk, and MUST mention prerequisite
+checklist items for dependent Trello cards before those cards are moved into an active list.
 
 The installed Bash and PowerShell wrappers dispatch `--help`, `-h`, `--version`, `setup-local`,
 `new-board`, `import-board`, `list-workspaces`, `start`, `stop`, `status`, `logs`, `diagnostics`,
