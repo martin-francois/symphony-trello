@@ -213,6 +213,11 @@ user explicitly chooses a spec carry-over.
 
 - When the user asks for a concrete repo change, commit and push the completed change unless they
   explicitly ask not to.
+- When a branch already has a pull request authored by the authenticated GitHub user, check before
+  finishing whether the PR description needs to change because the scope, verification, known
+  limitations, linked issues, or deployment/live evidence changed. Update the PR description when it
+  would otherwise be stale or incomplete, and report whether you updated it. For PRs authored by
+  someone else, do not edit the PR description unless the user explicitly asks.
 
 ## References
 
