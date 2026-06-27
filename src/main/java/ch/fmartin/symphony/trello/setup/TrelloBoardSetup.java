@@ -1030,6 +1030,8 @@ public final class TrelloBoardSetup {
 
                 %s
 
+                %s
+
                 Read the Trello description carefully, inspect the repository, make the smallest maintainable change,
                 run relevant verification, and leave the workspace in a reviewable state.
 
@@ -1077,6 +1079,7 @@ public final class TrelloBoardSetup {
                         ConfigDefaults.DEFAULT_CODEX_TURN_TIMEOUT_MS,
                         ConfigDefaults.DEFAULT_CODEX_READ_TIMEOUT_MS,
                         ConfigDefaults.DEFAULT_CODEX_STALL_TIMEOUT_MS,
+                        trelloRelationshipContextPrompt(),
                         workpadPrompt(!handoffStates.isEmpty()),
                         repositorySkillsPrompt(githubEnabled),
                         repositoryCheckoutPolicyPrompt(
@@ -1116,6 +1119,45 @@ public final class TrelloBoardSetup {
                                 !handoffStates.isEmpty(),
                                 githubEnabled),
                         handoffPrompt(reviewState, blockedState, !handoffStates.isEmpty(), githubEnabled));
+    }
+
+    private static String trelloRelationshipContextPrompt() {
+        return """
+                ## Trello Checklists
+
+                {% for checklist in card.checklists %}
+                - {{ checklist.name }}
+                {% for item in checklist.items %}
+                  - complete={{ item.complete }} text={{ item.text }}
+                {% endfor %}
+                {% endfor %}
+
+                ## Trello Relationship Context
+
+                Scheduler-enforced prerequisites come only from normal Trello checklists whose non-blank items are
+                exactly one bare Trello card reference each. Ordinary description links, Trello comments, attachment
+                links, and Markdown checklist links are context unless the text clearly says they must block this card.
+
+                Parsed prerequisite problems:
+                {% for problem in card.prerequisite_problems %}
+                - code={{ problem.code }} checklist={{ problem.checklist }} guidance={{ problem.message }}
+                {% endfor %}
+
+                Trello card references found on this card:
+                {% for reference in card.trello_references %}
+                - source={{ reference.source }} status={{ reference.status }} terminal={{ reference.terminal }} identifier={{ reference.identifier }} state={{ reference.state }} title={{ reference.title }} url={{ reference.url }} text={{ reference.text }}
+                {% endfor %}
+
+                Before editing, review this context for credible missed prerequisites. If the description, a Trello
+                comment, an attachment, or a Markdown checklist link appears to say another Trello card must finish
+                first, stop before code changes and use the normal Trello-visible blocker or workpad path. Explain
+                where the signal appeared, that the durable convention is a prerequisite checklist whose items are
+                exactly one bare Trello card reference each, and that Markdown links and prose references are ordinary
+                context unless they are clearly dependency instructions. A later Trello comment such as `Proceed anyway`
+                may override only this agent-side safety net; it must not bypass scheduler-enforced
+                prerequisite checklists, ambiguous prerequisite checklists, unresolved prerequisite references, or
+                other hard blockers.
+                """;
     }
 
     private static String repositorySkillsPrompt(boolean githubEnabled) {

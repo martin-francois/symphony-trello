@@ -33,6 +33,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.jboss.logging.Logger;
 
 @ApplicationScoped
@@ -41,10 +42,12 @@ public class TrelloClient implements TrackerClient {
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
     private static final TypeReference<List<Map<String, Object>>> LIST_MAP_TYPE = new TypeReference<>() {};
     private static final String CARD_FIELDS =
-            "id,name,desc,idList,idBoard,closed,idShort,shortLink,shortUrl,url,labels,dateLastActivity,due,dueComplete,pos";
+            "id,name,desc,idList,idBoard,closed,idShort,shortLink,shortUrl,url,labels,dateLastActivity,due,dueComplete,pos,badges";
     private static final String COMMENT_ACTION_FIELDS = "data,date,memberCreator";
     private static final String COMMENT_ACTION_FIELDS_WITH_ID = "id,data,date,memberCreator";
     public static final String WORKPAD_MARKER = "## Codex Workpad";
+    public static final String WAITING_COMMENT_MARKER = "## Symphony Waiting for Prerequisites";
+    public static final String PREREQUISITE_STATUS_COMMENT_MARKER = "## Symphony Prerequisite Status";
     public static final int RECENT_COMMENT_ACTION_LIMIT = 20;
     public static final int WORKPAD_COMMENT_ACTION_LIMIT = 1000;
 
@@ -74,11 +77,23 @@ public class TrelloClient implements TrackerClient {
                 config,
                 "boards/" + encodeSegment(context.boardId()) + "/cards/open",
                 Map.of("fields", CARD_FIELDS, "filter", "open"));
-        return payload.stream()
-                .map(card -> normalize(card, context, config))
-                .flatMap(Optional::stream)
-                .filter(card -> isActive(card, config) && !isTerminal(card, config))
-                .toList();
+        List<Card> candidates = new ArrayList<>();
+        Set<String> cardsWithComments = new HashSet<>();
+        for (Map<String, Object> cardPayload : payload) {
+            normalize(cardPayload, context, config).ifPresent(card -> {
+                if (!isActive(card, config) || isTerminal(card, config)) {
+                    return;
+                }
+                if (hasComments(cardPayload)) {
+                    cardsWithComments.add(card.id());
+                }
+                candidates.add(
+                        hasChecklistItems(cardPayload)
+                                ? card.withChecklists(fetchChecklists(config, card.id()))
+                                : card);
+            });
+        }
+        return enrichPrerequisites(config, candidates, false, cardsWithComments);
     }
 
     @Override
@@ -124,7 +139,27 @@ public class TrelloClient implements TrackerClient {
 
     @Override
     public Map<String, CardLookupResult> fetchCardStatesForPromptByIds(EffectiveConfig config, List<String> cardIds) {
-        return fetchCardStatesByIds(config, cardIds, true);
+        Map<String, CardLookupResult> results = fetchCardStatesByIds(config, cardIds, true);
+        List<Card> foundCards = results.values().stream()
+                .filter(CardLookupResult.Found.class::isInstance)
+                .map(CardLookupResult.Found.class::cast)
+                .map(CardLookupResult.Found::card)
+                .toList();
+        Map<String, Card> enriched =
+                enrichPrerequisites(config, foundCards, true, cardsWithComments(foundCards)).stream()
+                        .collect(Collectors.toMap(Card::id, card -> card, (left, right) -> left, LinkedHashMap::new));
+        Map<String, CardLookupResult> updated = new LinkedHashMap<>();
+        results.forEach((cardId, result) -> {
+            if (result instanceof CardLookupResult.Found found) {
+                updated.put(
+                        cardId,
+                        new CardLookupResult.Found(
+                                enriched.getOrDefault(found.card().id(), found.card())));
+            } else {
+                updated.put(cardId, result);
+            }
+        });
+        return updated;
     }
 
     @Override
@@ -181,7 +216,8 @@ public class TrelloClient implements TrackerClient {
         Map<String, CardLookupResult> results = new LinkedHashMap<>();
         for (String cardId : cardIds) {
             try {
-                Map<String, Object> payload = cardWithComments(config, cardId, RECENT_COMMENT_ACTION_LIMIT);
+                Map<String, Object> payload =
+                        cardWithComments(config, cardId, RECENT_COMMENT_ACTION_LIMIT, includeOlderWorkpad);
                 if (includeOlderWorkpad) {
                     payload = includeOlderWorkpadComment(config, cardId, payload);
                 }
@@ -219,22 +255,34 @@ public class TrelloClient implements TrackerClient {
     }
 
     private Map<String, Object> cardWithComments(EffectiveConfig config, String cardId, int actionLimit) {
-        return getMap(
+        return cardWithComments(config, cardId, actionLimit, false);
+    }
+
+    private Map<String, Object> cardWithComments(
+            EffectiveConfig config, String cardId, int actionLimit, boolean includePromptContext) {
+        Map<String, String> query = new LinkedHashMap<>();
+        query.put("fields", CARD_FIELDS);
+        query.put("attachments", includePromptContext ? "true" : "false");
+        if (includePromptContext) {
+            query.put("attachment_fields", "name,url");
+            query.put("checklists", "all");
+            query.put("checklist_fields", "id,name");
+            query.put("checkItem_fields", "id,name,state");
+        }
+        query.put("actions", "commentCard");
+        query.put("actions_limit", Integer.toString(actionLimit));
+        query.put(
+                "action_fields",
+                actionLimit == WORKPAD_COMMENT_ACTION_LIMIT ? COMMENT_ACTION_FIELDS_WITH_ID : COMMENT_ACTION_FIELDS);
+        return getMap(config, "cards/" + encodeSegment(cardId), query);
+    }
+
+    private List<Card.Checklist> fetchChecklists(EffectiveConfig config, String cardId) {
+        List<Map<String, Object>> payload = getList(
                 config,
-                "cards/" + encodeSegment(cardId),
-                Map.of(
-                        "fields",
-                        CARD_FIELDS,
-                        "attachments",
-                        "false",
-                        "actions",
-                        "commentCard",
-                        "actions_limit",
-                        Integer.toString(actionLimit),
-                        "action_fields",
-                        actionLimit == WORKPAD_COMMENT_ACTION_LIMIT
-                                ? COMMENT_ACTION_FIELDS_WITH_ID
-                                : COMMENT_ACTION_FIELDS));
+                "cards/" + encodeSegment(cardId) + "/checklists",
+                Map.of("fields", "id,name", "checkItem_fields", "id,name,state"));
+        return payload.stream().map(TrelloClient::checklist).toList();
     }
 
     private Map<String, Object> includeOlderWorkpadComment(
@@ -270,6 +318,399 @@ public class TrelloClient implements TrackerClient {
         Map<String, Object> mergedPayload = new LinkedHashMap<>(recentPayload);
         mergedPayload.put("actions", mergedActions);
         return mergedPayload;
+    }
+
+    private List<Card> enrichPrerequisites(
+            EffectiveConfig config, List<Card> cards, boolean includeReferenceContext, Set<String> cardsWithComments) {
+        if (cards.isEmpty()) {
+            return List.of();
+        }
+        List<PrerequisiteAnalysis> analyses = cards.stream()
+                .map(card -> analyzePrerequisites(card, includeReferenceContext))
+                .toList();
+        Map<String, CardLookupResult> lookupResults = lookupReferencedCards(config, analyses);
+        List<Card> enriched = new ArrayList<>();
+        for (PrerequisiteAnalysis analysis : analyses) {
+            enriched.add(enrichPrerequisiteCard(
+                    config,
+                    analysis,
+                    lookupResults,
+                    cardsWithComments.contains(analysis.card().id())));
+        }
+        return enriched;
+    }
+
+    private static PrerequisiteAnalysis analyzePrerequisites(Card card, boolean includeReferenceContext) {
+        PrerequisitePlan plan = prerequisitePlan(card);
+        Map<String, ReferencedText> promptReferences =
+                includeReferenceContext ? promptReferenceTexts(card, plan) : Map.of();
+        return new PrerequisiteAnalysis(card, plan, promptReferences);
+    }
+
+    private Map<String, CardLookupResult> lookupReferencedCards(
+            EffectiveConfig config, List<PrerequisiteAnalysis> analyses) {
+        List<String> lookupIds =
+                analyses.stream().flatMap(TrelloClient::lookupIds).distinct().toList();
+        return lookupIds.isEmpty() ? Map.of() : fetchCardStatesByIds(config, lookupIds);
+    }
+
+    private static Stream<String> lookupIds(PrerequisiteAnalysis analysis) {
+        Stream<String> prerequisiteLookupIds = analysis.plan().items().stream()
+                .map(TrelloChecklistClassifier.PrerequisiteItem::reference)
+                .map(TrelloCardReference::lookupId);
+        Stream<String> promptLookupIds = analysis.promptReferences().values().stream()
+                .map(ReferencedText::reference)
+                .map(TrelloCardReference::lookupId);
+        return Stream.concat(prerequisiteLookupIds, promptLookupIds);
+    }
+
+    private Card enrichPrerequisiteCard(
+            EffectiveConfig config,
+            PrerequisiteAnalysis analysis,
+            Map<String, CardLookupResult> lookupResults,
+            boolean mayHaveWaitingComment) {
+        Card card = analysis.card();
+        ResolvedPrerequisites resolved = resolvePrerequisites(config, card, analysis.plan(), lookupResults);
+        List<Card.TrelloReference> references = promptReferences(config, analysis.promptReferences(), lookupResults);
+        Card enriched = card.withRelationships(card.checklists(), references, resolved.problems(), resolved.blockers());
+        syncPrerequisiteWaitingFeedback(config, enriched, mayHaveWaitingComment);
+        return enriched;
+    }
+
+    private static Set<String> cardsWithComments(List<Card> cards) {
+        return cards.stream()
+                .filter(card -> !card.comments().isEmpty())
+                .map(Card::id)
+                .collect(Collectors.toUnmodifiableSet());
+    }
+
+    private static PrerequisitePlan prerequisitePlan(Card card) {
+        List<TrelloChecklistClassifier.PrerequisiteItem> items = new ArrayList<>();
+        List<Card.PrerequisiteProblem> problems = new ArrayList<>();
+        for (Card.Checklist checklist : card.checklists()) {
+            TrelloChecklistClassifier.ChecklistAnalysis analysis = TrelloChecklistClassifier.analyze(checklist);
+            items.addAll(analysis.prerequisites());
+            problems.addAll(analysis.problems());
+        }
+        return new PrerequisitePlan(List.copyOf(items), List.copyOf(problems));
+    }
+
+    private ResolvedPrerequisites resolvePrerequisites(
+            EffectiveConfig config, Card card, PrerequisitePlan plan, Map<String, CardLookupResult> lookupResults) {
+        List<Card.PrerequisiteProblem> problems = new ArrayList<>(plan.problems());
+        Map<String, BlockerRef> blockers = LinkedHashMap.newLinkedHashMap(
+                plan.items().size() + (plan.problems().isEmpty() ? 0 : 1));
+        boolean continueChecklistSync = true;
+        for (TrelloChecklistClassifier.PrerequisiteItem item : plan.items()) {
+            TrelloCardReference reference = item.reference();
+            CardLookupResult result = lookupResults.get(reference.lookupId());
+            BlockerRef blocker = blockerRef(config, card, reference, result, problems);
+            blockers.putIfAbsent(blocker.id() == null ? reference.key() : blocker.id(), blocker);
+            if (continueChecklistSync) {
+                continueChecklistSync = syncPrerequisiteItem(config, card, item, result, problems);
+            }
+        }
+        if (!plan.problems().isEmpty()) {
+            String blockerId = "ambiguous-prerequisite:" + card.id();
+            blockers.putIfAbsent(
+                    blockerId, new BlockerRef(blockerId, "Ambiguous prerequisite checklist", null, card.cardUrl()));
+        }
+        return new ResolvedPrerequisites(List.copyOf(problems), List.copyOf(blockers.values()));
+    }
+
+    private BlockerRef blockerRef(
+            EffectiveConfig config,
+            Card card,
+            TrelloCardReference reference,
+            CardLookupResult result,
+            List<Card.PrerequisiteProblem> problems) {
+        if (result instanceof CardLookupResult.Found found) {
+            Card blocker = found.card();
+            if (Objects.equals(card.id(), blocker.id())) {
+                problems.add(new Card.PrerequisiteProblem(
+                        "trello_prerequisite_self_reference",
+                        "A Trello card cannot use itself as a prerequisite.",
+                        null));
+                return unresolvedBlocker(reference, "Self prerequisite");
+            }
+            if (isCrossBoard(config, blocker)) {
+                problems.add(new Card.PrerequisiteProblem(
+                        "trello_prerequisite_cross_board",
+                        "A prerequisite card is outside the configured Trello board.",
+                        null));
+                return unresolvedBlocker(reference, "Unsupported cross-board prerequisite");
+            }
+            return new BlockerRef(blocker.id(), blocker.identifier(), blocker.state(), blocker.cardUrl());
+        }
+        if (result instanceof CardLookupResult.Failed failed) {
+            problems.add(
+                    new Card.PrerequisiteProblem(failed.code(), "Could not resolve a prerequisite Trello card.", null));
+            return unresolvedBlocker(reference, "Unresolved prerequisite");
+        }
+        problems.add(new Card.PrerequisiteProblem(
+                "trello_prerequisite_missing", "A prerequisite Trello card is missing or inaccessible.", null));
+        return unresolvedBlocker(reference, "Missing prerequisite");
+    }
+
+    private static BlockerRef unresolvedBlocker(TrelloCardReference reference, String identifier) {
+        return new BlockerRef(reference.lookupId(), identifier, null, reference.url());
+    }
+
+    private boolean syncPrerequisiteItem(
+            EffectiveConfig config,
+            Card card,
+            TrelloChecklistClassifier.PrerequisiteItem item,
+            CardLookupResult result,
+            List<Card.PrerequisiteProblem> problems) {
+        if (blank(item.item().id())) {
+            return true;
+        }
+        boolean targetComplete = isResolvedTerminal(config, card, result);
+        if (item.item().complete() == targetComplete) {
+            return true;
+        }
+        try {
+            updateCheckItemState(config, card.id(), item.item().id(), targetComplete);
+            return true;
+        } catch (RuntimeException e) {
+            problems.add(new Card.PrerequisiteProblem(
+                    "trello_prerequisite_checklist_sync_failed",
+                    "Could not update a prerequisite checklist item.",
+                    item.checklist().name()));
+            LOG.warnf(
+                    "card_id=%s checklist_id=%s check_item_id=%s prerequisite_sync=failed reason=%s",
+                    card.id(), item.checklist().id(), item.item().id(), e.getMessage());
+            return false;
+        }
+    }
+
+    private boolean isResolvedTerminal(EffectiveConfig config, Card currentCard, CardLookupResult result) {
+        if (!(result instanceof CardLookupResult.Found found)) {
+            return false;
+        }
+        Card prerequisite = found.card();
+        return isSupportedPrerequisite(config, currentCard, prerequisite) && isTerminal(prerequisite, config);
+    }
+
+    private static boolean isSupportedPrerequisite(EffectiveConfig config, Card currentCard, Card prerequisite) {
+        return !Objects.equals(currentCard.id(), prerequisite.id()) && isOnConfiguredBoard(config, prerequisite);
+    }
+
+    private static boolean isOnConfiguredBoard(EffectiveConfig config, Card card) {
+        return card.boardId() == null
+                || Objects.equals(card.boardId(), config.tracker().resolvedBoardId());
+    }
+
+    private static boolean isCrossBoard(EffectiveConfig config, Card card) {
+        return card.boardId() != null
+                && !Objects.equals(card.boardId(), config.tracker().resolvedBoardId());
+    }
+
+    private List<Card.TrelloReference> promptReferences(
+            EffectiveConfig config,
+            Map<String, ReferencedText> references,
+            Map<String, CardLookupResult> lookupResults) {
+        if (references.isEmpty()) {
+            return List.of();
+        }
+        return references.values().stream()
+                .map(reference -> promptReference(
+                        config,
+                        reference,
+                        lookupResults.get(reference.reference().lookupId())))
+                .toList();
+    }
+
+    private static Map<String, ReferencedText> promptReferenceTexts(Card card, PrerequisitePlan plan) {
+        ReferenceAccumulator references = new ReferenceAccumulator();
+        references.add("title", card.title());
+        references.add("description", card.description());
+        for (Card.Checklist checklist : card.checklists()) {
+            String source = "checklist:" + nullToEmpty(checklist.name());
+            for (Card.ChecklistItem item : checklist.items()) {
+                references.addExact(source, item.text());
+                references.add(source, item.text());
+            }
+        }
+        for (Card.Comment comment : card.comments()) {
+            references.add("comment", comment.text());
+        }
+        for (Card.Attachment attachment : card.attachments()) {
+            references.add("attachment", attachment.name());
+            references.add("attachment", attachment.url());
+        }
+        plan.items().stream()
+                .map(TrelloChecklistClassifier.PrerequisiteItem::reference)
+                .forEach(reference -> references.add("checklist", reference.url(), reference));
+        return references.asMap();
+    }
+
+    private static Card.TrelloReference promptReference(
+            EffectiveConfig config, ReferencedText reference, CardLookupResult result) {
+        if (result instanceof CardLookupResult.Found found) {
+            Card card = found.card();
+            Boolean terminal = card.boardId() != null
+                            && !Objects.equals(card.boardId(), config.tracker().resolvedBoardId())
+                    ? null
+                    : isTerminal(card, config);
+            String status = terminal == null ? "unsupported_cross_board" : "found";
+            return new Card.TrelloReference(
+                    reference.source(),
+                    reference.text(),
+                    reference.reference().lookupId(),
+                    card.identifier(),
+                    card.title(),
+                    card.state(),
+                    card.cardUrl(),
+                    status,
+                    terminal);
+        }
+        if (result instanceof CardLookupResult.Failed failed) {
+            return new Card.TrelloReference(
+                    reference.source(),
+                    reference.text(),
+                    reference.reference().lookupId(),
+                    null,
+                    null,
+                    null,
+                    reference.reference().url(),
+                    failed.code(),
+                    null);
+        }
+        return new Card.TrelloReference(
+                reference.source(),
+                reference.text(),
+                reference.reference().lookupId(),
+                null,
+                null,
+                null,
+                reference.reference().url(),
+                "missing",
+                null);
+    }
+
+    private void syncPrerequisiteWaitingFeedback(EffectiveConfig config, Card card, boolean mayHaveWaitingComment) {
+        if (!config.tracker().blockerEnforcedStates().contains(StateNames.normalize(card.state()))) {
+            return;
+        }
+        boolean waiting = card.blockedBy().stream()
+                .anyMatch(blocker -> blocker.state() == null
+                        || !config.tracker().terminalStates().contains(StateNames.normalize(blocker.state())));
+        if (!waiting && card.prerequisiteProblems().isEmpty()) {
+            if (!card.checklists().isEmpty() || mayHaveWaitingComment) {
+                clearPrerequisiteWaitingComment(config, card);
+            }
+        } else if (waiting || !card.prerequisiteProblems().isEmpty()) {
+            upsertPrerequisiteWaitingComment(config, card, prerequisiteWaitingText(card));
+        }
+    }
+
+    private void upsertPrerequisiteWaitingComment(EffectiveConfig config, Card card, String text) {
+        try {
+            prerequisiteWaitingComment(config, card.id())
+                    .ifPresentOrElse(
+                            comment -> updateOrCreatePrerequisiteWaitingComment(config, card, comment, text),
+                            () -> addComment(config, card.id(), text));
+        } catch (RuntimeException e) {
+            LOG.warnf("card_id=%s prerequisite_waiting_comment=failed reason=%s", card.id(), e.getMessage());
+        }
+    }
+
+    private void updateOrCreatePrerequisiteWaitingComment(
+            EffectiveConfig config, Card card, Card.Comment existing, String text) {
+        if (text.equals(existing.text())) {
+            return;
+        }
+        if (blank(existing.id())) {
+            addComment(config, card.id(), text);
+            return;
+        }
+        updateComment(config, existing.id(), text);
+    }
+
+    private void clearPrerequisiteWaitingComment(EffectiveConfig config, Card card) {
+        try {
+            Optional<Card.Comment> existing = prerequisiteWaitingComment(config, card.id());
+            String text = resolvedPrerequisiteStatusText();
+            existing.filter(comment -> !blank(comment.id()))
+                    .filter(comment -> !text.equals(comment.text()))
+                    .ifPresent(comment -> updateComment(config, comment.id(), text));
+        } catch (RuntimeException e) {
+            LOG.warnf("card_id=%s prerequisite_waiting_comment_clear=failed reason=%s", card.id(), e.getMessage());
+        }
+    }
+
+    private Optional<Card.Comment> prerequisiteWaitingComment(EffectiveConfig config, String cardId) {
+        Map<String, Object> payload = getMap(
+                config,
+                "cards/" + encodeSegment(cardId),
+                Map.of(
+                        "fields",
+                        CARD_FIELDS,
+                        "attachments",
+                        "false",
+                        "actions",
+                        "commentCard",
+                        "actions_limit",
+                        Integer.toString(WORKPAD_COMMENT_ACTION_LIMIT),
+                        "action_fields",
+                        COMMENT_ACTION_FIELDS_WITH_ID));
+        return comments(payload).stream()
+                .filter(comment -> isManagedPrerequisiteStatusComment(comment.text()))
+                .findFirst();
+    }
+
+    private static boolean isManagedPrerequisiteStatusComment(String text) {
+        return text != null
+                && (text.startsWith(PREREQUISITE_STATUS_COMMENT_MARKER) || text.startsWith(WAITING_COMMENT_MARKER));
+    }
+
+    private static String prerequisiteWaitingText(Card card) {
+        List<String> lines = new ArrayList<>();
+        lines.add(PREREQUISITE_STATUS_COMMENT_MARKER);
+        lines.add("");
+        lines.add("Status: waiting for prerequisites.");
+        lines.add("");
+        lines.add("Symphony has not started this Trello card because prerequisite checklists are not resolved.");
+        if (!card.blockedBy().isEmpty()) {
+            lines.add("");
+            lines.add("Waiting for:");
+            card.blockedBy().forEach(blocker -> lines.add("- " + waitingBlockerText(blocker)));
+        }
+        if (!card.prerequisiteProblems().isEmpty()) {
+            lines.add("");
+            lines.add("Checklist cleanup needed:");
+            card.prerequisiteProblems()
+                    .forEach(problem -> lines.add("- " + problem.message()
+                            + (blank(problem.checklist()) ? "" : " Checklist: " + problem.checklist() + ".")));
+        }
+        lines.add("");
+        lines.add(
+                "Fix by making prerequisite checklist items exactly one bare Trello card reference each, moving notes to a separate checklist, or writing non-prerequisite Trello references as Markdown links.");
+        return String.join("\n", lines);
+    }
+
+    private static String resolvedPrerequisiteStatusText() {
+        return String.join(
+                "\n",
+                PREREQUISITE_STATUS_COMMENT_MARKER,
+                "",
+                "Status: prerequisites resolved.",
+                "",
+                "Symphony may start this Trello card when other dispatch rules allow.");
+    }
+
+    private static String waitingBlockerText(BlockerRef blocker) {
+        String identifier = blank(blocker.identifier()) ? blocker.id() : blocker.identifier();
+        String state = blank(blocker.state()) ? "unresolved" : blocker.state();
+        return identifier + " (" + state + ")";
+    }
+
+    private void updateCheckItemState(EffectiveConfig config, String cardId, String checkItemId, boolean complete) {
+        putMap(
+                config,
+                "cards/" + encodeSegment(cardId) + "/checkItem/" + encodeSegment(checkItemId),
+                Map.of("state", complete ? "complete" : "incomplete"));
     }
 
     private static boolean hasWorkpadComment(List<Map<String, Object>> actions) {
@@ -321,11 +762,24 @@ public class TrelloClient implements TrackerClient {
     }
 
     public static Comparator<Card> dispatchComparator(EffectiveConfig config) {
+        return dispatchComparator(config, Map.of());
+    }
+
+    public static Comparator<Card> dispatchComparator(EffectiveConfig config, Map<String, Integer> priorityOverrides) {
         return Comparator.comparingInt((Card card) -> activeOrder(card, config))
-                .thenComparingInt(card -> card.priority() == null ? Integer.MAX_VALUE : card.priority())
+                .thenComparingInt(card -> dispatchPriority(priorityOverrides, card))
                 .thenComparing(card -> card.position() == null ? BigDecimal.valueOf(Long.MAX_VALUE) : card.position())
                 .thenComparing(card -> card.createdAt() == null ? Instant.MAX : card.createdAt())
                 .thenComparing(Card::identifier);
+    }
+
+    private static int dispatchPriority(Map<String, Integer> priorityOverrides, Card card) {
+        Integer override = priorityOverrides.get(card.id());
+        if (override != null) {
+            return override;
+        }
+        Integer priority = card.priority();
+        return priority == null ? Integer.MAX_VALUE : priority;
     }
 
     private static int activeOrder(Card card, EffectiveConfig config) {
@@ -477,6 +931,10 @@ public class TrelloClient implements TrackerClient {
                 labels,
                 labelIds(payload),
                 List.of(),
+                checklists(payload),
+                attachments(payload),
+                List.of(),
+                List.of(),
                 List.<BlockerRef>of(),
                 comments(payload),
                 createdAtFromObjectId(id),
@@ -497,6 +955,53 @@ public class TrelloClient implements TrackerClient {
                 .map(TrelloClient::comment)
                 .flatMap(Optional::stream)
                 .toList();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Card.Checklist> checklists(Map<String, Object> payload) {
+        Object checklists = payload.get("checklists");
+        if (!(checklists instanceof List<?> checklistList)) {
+            return List.of();
+        }
+        return checklistList.stream()
+                .filter(Map.class::isInstance)
+                .map(checklist -> checklist((Map<String, Object>) checklist))
+                .toList();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Card.Checklist checklist(Map<String, Object> payload) {
+        Object checkItems = payload.get("checkItems");
+        List<Card.ChecklistItem> items = checkItems instanceof List<?> itemList
+                ? itemList.stream()
+                        .filter(Map.class::isInstance)
+                        .map(item -> checklistItem((Map<String, Object>) item))
+                        .toList()
+                : List.of();
+        return new Card.Checklist(string(payload.get("id")), string(payload.get("name")), items);
+    }
+
+    private static Card.ChecklistItem checklistItem(Map<String, Object> payload) {
+        return new Card.ChecklistItem(
+                string(payload.get("id")),
+                string(payload.get("name")),
+                "complete".equalsIgnoreCase(string(payload.get("state"))));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Card.Attachment> attachments(Map<String, Object> payload) {
+        Object attachments = payload.get("attachments");
+        if (!(attachments instanceof List<?> attachmentList)) {
+            return List.of();
+        }
+        return attachmentList.stream()
+                .filter(Map.class::isInstance)
+                .map(attachment -> attachment((Map<String, Object>) attachment))
+                .toList();
+    }
+
+    private static Card.Attachment attachment(Map<String, Object> payload) {
+        return new Card.Attachment(string(payload.get("id")), string(payload.get("name")), string(payload.get("url")));
     }
 
     private static Optional<Card.Comment> comment(Map<?, ?> action) {
@@ -663,6 +1168,30 @@ public class TrelloClient implements TrackerClient {
         }
     }
 
+    private static boolean hasChecklistItems(Map<String, Object> payload) {
+        return badgeCount(payload, "checkItems") > 0;
+    }
+
+    private static boolean hasComments(Map<String, Object> payload) {
+        return badgeCount(payload, "comments") > 0;
+    }
+
+    private static int badgeCount(Map<String, Object> payload, String name) {
+        Object badges = payload.get("badges");
+        if (!(badges instanceof Map<?, ?> badgeMap)) {
+            return 0;
+        }
+        Object value = badgeMap.get(name);
+        if (value == null) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(value.toString());
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
     private static URI uri(EffectiveConfig config, String path, Map<String, String> query) {
         String normalizedPath = path.startsWith("/") ? path.substring(1) : path;
         if (normalizedPath.contains("..") || normalizedPath.contains("?") || normalizedPath.contains("#")) {
@@ -791,6 +1320,10 @@ public class TrelloClient implements TrackerClient {
         return value == null || value.isBlank();
     }
 
+    private static String nullToEmpty(String value) {
+        return value == null ? "" : value;
+    }
+
     private static String encodeSegment(String value) {
         return encode(value).replace("+", "%20");
     }
@@ -802,4 +1335,40 @@ public class TrelloClient implements TrackerClient {
     private record BoardContext(String boardId, boolean boardClosed, Map<String, BoardList> lists) {}
 
     public record BoardList(String id, String name, boolean closed) {}
+
+    private record PrerequisitePlan(
+            List<TrelloChecklistClassifier.PrerequisiteItem> items, List<Card.PrerequisiteProblem> problems) {}
+
+    private record PrerequisiteAnalysis(
+            Card card, PrerequisitePlan plan, Map<String, ReferencedText> promptReferences) {}
+
+    private record ResolvedPrerequisites(List<Card.PrerequisiteProblem> problems, List<BlockerRef> blockers) {}
+
+    private record ReferencedText(String source, String text, TrelloCardReference reference) {}
+
+    private static final class ReferenceAccumulator {
+        private final Map<String, ReferencedText> references = new LinkedHashMap<>();
+
+        void add(String source, String text) {
+            if (blank(text)) {
+                return;
+            }
+            TrelloCardReferenceParser.referencesIn(text).forEach(reference -> add(source, text, reference));
+        }
+
+        void addExact(String source, String text) {
+            if (blank(text)) {
+                return;
+            }
+            TrelloCardReferenceParser.exactReference(text).ifPresent(reference -> add(source, text, reference));
+        }
+
+        void add(String source, String text, TrelloCardReference reference) {
+            references.putIfAbsent(reference.key(), new ReferencedText(source, text, reference));
+        }
+
+        Map<String, ReferencedText> asMap() {
+            return references;
+        }
+    }
 }

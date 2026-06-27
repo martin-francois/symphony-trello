@@ -244,11 +244,57 @@ Fields:
   - Trello label IDs, if available.
 - `members` (list of strings)
   - Member usernames or IDs if the implementation fetches them; otherwise empty.
+- `checklists` (list of checklist records)
+  - Normal Trello card checklists fetched for active candidate prerequisite parsing and for selected
+    card prompt context.
+  - Default: empty list.
+  - Each checklist record contains:
+    - `id` (string or null)
+    - `name` (string or null)
+    - `items` (list of checklist item records)
+  - Each checklist item record contains:
+    - `id` (string or null)
+    - `text` (string)
+    - `complete` (boolean)
+- `attachments` (list of attachment records)
+  - Normal Trello card attachments fetched for selected card prompt context.
+  - Attachments are relationship context only; they do not populate `blocked_by`.
+  - Default: empty list.
+  - Each attachment record contains:
+    - `id` (string or null)
+    - `name` (string or null)
+    - `url` (string or null)
+- `trello_references` (list of reference records)
+  - Structured Trello card references found on the selected Trello card for agent safety-net
+    context.
+  - References from title, description, checklist items, attachments, and rendered Trello comments
+    are deduplicated before lookup.
+  - These references are context only unless they came from a scheduler-enforced prerequisite
+    checklist convention.
+  - Default: empty list.
+  - Each reference record contains:
+    - `source` (string)
+    - `text` (string or null)
+    - `lookup_id` (string)
+    - `identifier` (string or null)
+    - `title` (string or null)
+    - `state` (string or null)
+    - `url` (string or null)
+    - `status` (string)
+    - `terminal` (boolean or null)
+- `prerequisite_problems` (list of prerequisite problem records)
+  - Structured issues discovered while parsing or synchronizing Trello prerequisite checklists.
+  - Default: empty list.
+  - Each problem record contains:
+    - `code` (string)
+    - `message` (string)
+    - `checklist` (string or null)
 - `blocked_by` (list of blocker refs)
   - Trello has no native blocker relation.
   - Default: empty list.
-  - Implementations MAY derive blockers from documented conventions, such as checklist items,
-    attachments, labels, or linked cards.
+  - The Java Trello implementation derives blockers only from the documented Trello prerequisite
+    checklist convention below. Arbitrary title, description, Trello comment, attachment, or Markdown
+    checklist links are agent safety-net context and MUST NOT populate scheduler `blocked_by`.
   - Each blocker ref contains:
     - `id` (string or null)
     - `identifier` (string or null)
@@ -1775,7 +1821,7 @@ Optional client-side tool extension:
 - Availability: only meaningful when `tracker.kind == "trello"` and valid Trello auth is
   configured.
 - Trello Automation/Butler is not required for this tool.
-- Trello Workflow Conformance, defined in Section 11.5, requires this tool or an equivalent
+- Trello Workflow Conformance, defined in Section 11.6, requires this tool or an equivalent
   write-capable Trello tool when workflows expect the agent to perform Trello handoff writes.
 - Preferred input shape:
 
@@ -2027,10 +2073,52 @@ Additional normalization details:
 - `priority` -> integer from configured `tracker.priority_labels`, using the best/highest priority
   label match.
 - `created_at` -> derived from Trello ObjectId timestamp when possible, otherwise null.
-- `blocked_by` -> empty by default unless the implementation documents a Trello-specific blocker
-  convention.
+- `blocked_by` -> empty by default unless populated by the Trello prerequisite checklist convention.
 
-### 11.4 Error Handling Contract
+### 11.4 Trello Prerequisite Checklist Convention
+
+The Java Trello implementation supports a Trello Free-compatible prerequisite convention using
+normal Trello checklists. Checklist names are display-only; users may name the checklist `Must finish
+first`, `Prerequisites`, or anything else.
+
+For each non-blank checklist item, after trimming leading and trailing whitespace:
+
+- An exact prerequisite item is exactly one Trello card reference, such as a full
+  `https://trello.com/c/<shortLink>` card URL, a 24-character Trello card ID, or an 8-to-24
+  character alphanumeric Trello short link containing at least one digit.
+- An ordinary reference item uses Markdown link syntax around the Trello card URL, such as
+  `related to [the API card](https://trello.com/c/abc123)`.
+- An ambiguous item contains a bare Trello card URL with surrounding text or malformed Markdown, such
+  as `Wait for https://trello.com/c/abc123` or `refs: https://trello.com/c/abc123`.
+- An ordinary non-reference item contains no Trello card reference.
+
+A checklist is a prerequisite checklist when every non-blank item is an exact prerequisite item. The
+current Trello card MUST be treated as blocked until every referenced Trello card is terminal under
+the workflow terminal-state model. Multiple prerequisite checklists on one Trello card are unioned
+and duplicate references are deduplicated for lookup and display.
+
+A checklist is an ambiguous prerequisite checklist when it contains any ambiguous item, or when exact
+prerequisite items are mixed with any ordinary item or Markdown ordinary-reference item. Ambiguous
+checklists MUST block dispatch safely. Trello-visible waiting guidance MUST explain how to fix the
+checklist by making prerequisite checklist items exactly one bare Trello card reference each, moving
+notes to a separate checklist, or using Markdown links for non-prerequisite references.
+
+Ordinary checklists do not populate `blocked_by`. Markdown Trello card links, description links,
+Trello comments, and attachment links are included in selected-card prompt context as a missed
+dependency safety net, but they MUST NOT become scheduler blockers in this issue.
+
+Before dispatch eligibility is evaluated, the implementation SHOULD refresh referenced card state and
+sync prerequisite checklist item completion: terminal referenced cards are checked, unresolved or
+non-terminal references are unchecked. Dispatch MUST use live referenced-card state, not the current
+manual checklist item state. If checklist sync fails, dispatch remains safe and one managed
+Trello-visible waiting status records the sync problem without creating comment spam.
+
+When a skipped Trello card has unresolved, missing, inaccessible, unsupported cross-board, ambiguous,
+or sync-failed prerequisites, Symphony MUST update one managed Trello-visible status/workpad comment
+or equivalent card-visible surface. Board users MUST NOT need host logs to understand why a Trello
+card has not left an active list.
+
+### 11.5 Error Handling Contract
 
 RECOMMENDED error categories:
 
@@ -2056,12 +2144,15 @@ Orchestrator behavior on tracker errors:
 - Running-state refresh per-card not-found/deleted result: terminate that worker and clean workspace.
 - Startup terminal cleanup failure: log warning and continue startup.
 
-### 11.5 Tracker Writes (Important Boundary)
+### 11.6 Tracker Writes (Important Boundary)
 
 Symphony does not require first-class tracker write APIs in the orchestrator.
 
 - Card mutations, such as list moves, comments, checklist updates, labels, attachments, and PR
   metadata, are typically handled by the coding agent using tools defined by the workflow prompt.
+- Java implementation extension: prerequisite checklist item sync and the managed prerequisite
+  waiting status are service-owned tracker writes. They are limited to the documented prerequisite
+  convention and do not expose general checklist or comment mutation to Codex.
 - The service remains a scheduler/runner and Trello reader, except for workflow-configured pickup
   transitions such as `tracker.in_progress_state`.
 - This boundary only limits where card mutation decisions live. It does not require operators to
@@ -3250,7 +3341,9 @@ These checks are REQUIRED when the workflow expects the agent to perform Trello 
 - `trello_tools.allow_writes=false` causes write requests to fail with structured policy errors.
 - Comment writes are allowed only when `trello_tools.allow_comments` permits them.
 - Card moves are allowed only to configured board-local list IDs or names.
-- Checklist writes are allowed only when `trello_tools.allow_checklists` permits them.
+- Agent-requested checklist writes are allowed only when `trello_tools.allow_checklists` permits
+  them. The Java implementation's service-owned prerequisite checklist sync is a separate tracker
+  extension, not a generic agent checklist tool.
 - URL attachment writes are allowed only when `trello_tools.allow_url_attachments` permits them.
 - Destructive operations are disabled unless explicitly configured.
 - Startup validates write capability or emits an operator-visible warning when verification is not

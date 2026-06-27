@@ -15,6 +15,10 @@ label mechanics live in [GitHub issue triage](github-issue-triage.md).
   tracker model. The upstream reference implementation is useful evidence for intent and edge cases.
   A difference from it is acceptable when the Java behavior still follows `SPEC.md`, fits Trello, and
   is covered by project ADRs. Do not copy reference behavior merely because it exists.
+- Keep `SPEC.md` wording close to the original Symphony specification style so the adapted spec reads
+  consistently with upstream. Do not rewrite spec text into the simpler README or contributor-doc
+  style unless the existing wording is unclear or wrong. When simplifying spec wording, preserve the
+  formal contract shape and the upstream terminology that still applies.
 - Use `SPEC.md` for normative behavior and compatibility requirements. Use ADRs to explain why a
   decision was made, which alternatives were considered, and how to confirm the decision still holds.
   When a decision changes required behavior, update both: `SPEC.md` for the contract and an ADR for

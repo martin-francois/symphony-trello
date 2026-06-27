@@ -68,6 +68,23 @@ satisfies the card, run relevant verification, and leave the workspace in a revi
 Recent Trello comments are available in `{{ card.comments }}`. Read them before changing code when
 the card is returned for rework.
 
+## Trello Checklists And Relationship Context
+
+Normal Trello checklists are available in `{{ card.checklists }}`. Scheduler-enforced
+prerequisites come only from checklists whose non-blank items are exactly one bare Trello card
+reference each. Ambiguous prerequisite checklist problems are available in
+`{{ card.prerequisite_problems }}`.
+
+Structured Trello card references from the title, description, checklists, attachments, and rendered
+Trello comments are available in `{{ card.trello_references }}`. Before editing, review them for
+credible missed prerequisites. If a description, Trello comment, attachment, or Markdown checklist
+link appears to say another Trello card must finish first, stop before code changes and use the
+normal Trello-visible blocker or workpad path. Explain that the durable convention is a prerequisite
+checklist whose items are exactly one bare Trello card reference each. A later Trello comment such
+as `Proceed anyway` may override only this agent-side safety net; it must not bypass
+scheduler-enforced prerequisite checklists, ambiguous prerequisite checklists, unresolved
+prerequisite references, or other hard blockers.
+
 Maintain one Trello workpad comment by calling trello_upsert_workpad. Reuse the comment that starts
 with `## Codex Workpad`; do not create separate progress comments. Keep it current with the plan,
 acceptance criteria, progress, validation evidence, blockers, and handoff notes.

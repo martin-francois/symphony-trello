@@ -23,6 +23,7 @@ import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import ch.fmartin.symphony.trello.workspace.HookRunner;
 import ch.fmartin.symphony.trello.workspace.WorkspaceManager;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
@@ -642,6 +643,37 @@ final class SymphonyOrchestratorTest {
     }
 
     @Test
+    void refreshAfterTerminalReconcileCleanupFailureSchedulesNextTick() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        writeWorkflow(workflow, "60000");
+        FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
+        AgentRunner runner = mock();
+        BlockingRun blockingRun = blockRunnerUntilCancelled(runner);
+        ThrowingWorkspaceManager workspaces = new ThrowingWorkspaceManager();
+        AtomicInteger tickCompletions = new AtomicInteger();
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner, workspaces);
+        orchestrator.tickCompletionHookForTests = tickCompletions::incrementAndGet;
+
+        orchestrator.start();
+        assertThat(blockingRun.started.await(5, TimeUnit.SECONDS)).isTrue();
+        int completedTicksBeforeFailure = tickCompletions.get();
+        tracker.setCardState(TestCards.card("card-1", "TRELLO-abc", "done"));
+
+        // when
+        orchestrator.requestRefresh();
+        waitUntil(() -> workspaces.removalAttempts.get() == 1 && tickCompletions.get() > completedTicksBeforeFailure);
+        int candidateFetchesAfterFailedTick = tracker.candidateFetches.get();
+        orchestrator.requestRefresh();
+        waitUntil(() -> tracker.candidateFetches.get() > candidateFetchesAfterFailedTick);
+        orchestrator.stop();
+
+        // then
+        assertThat(blockingRun.cancelled).hasValue(1);
+        assertThat(workspaces.removalAttempts).hasValue(1);
+    }
+
+    @Test
     void refreshRequestedDuringAndAfterStopIsANoOpAndDoesNotThrow() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
@@ -1149,6 +1181,92 @@ final class SymphonyOrchestratorTest {
     }
 
     @Test
+    void dispatchesEligiblePrerequisiteBeforeUnrelatedLowerPriorityWork() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: key
+                  api_token: token
+                  board_id: board-1
+                  active_states: [Todo]
+                  blocker_enforced_states: [Todo]
+                  terminal_states: [Done]
+                workspace:
+                  root: work
+                polling:
+                  interval_ms: 60000
+                codex:
+                  command: fake
+                ---
+                {{ card.identifier }}
+                """);
+        Card blocked = cardWithPriorityAndBlockers(
+                "card-blocked",
+                "TRELLO-blocked",
+                1,
+                List.of(new BlockerRef("card-prerequisite", "TRELLO-prerequisite", "Todo", null)));
+        Card unrelated = cardWithPriorityAndBlockers("card-unrelated", "TRELLO-unrelated", 2, List.of());
+        Card prerequisite = cardWithPriorityAndBlockers("card-prerequisite", "TRELLO-prerequisite", null, List.of());
+        FakeTracker tracker = new FakeTracker(List.of(blocked, unrelated, prerequisite));
+
+        // when
+        String dispatched = dispatchFirstCard(workflow, tracker);
+
+        // then
+        assertThat(dispatched).isEqualTo("TRELLO-prerequisite");
+    }
+
+    @Test
+    void prerequisiteProblemsDenyDispatchEvenWhenPrerequisiteBlockerIsTerminal() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: key
+                  api_token: token
+                  board_id: board-1
+                  active_states: [Todo]
+                  blocker_enforced_states: [Todo]
+                  terminal_states: [Done]
+                workspace:
+                  root: work
+                polling:
+                  interval_ms: 60000
+                codex:
+                  command: fake
+                ---
+                {{ card.identifier }}
+                """);
+        Card blocked = cardWithPriorityBlockersAndProblems(
+                "card-blocked",
+                "TRELLO-blocked",
+                1,
+                List.of(new BlockerRef(
+                        "card-prerequisite", "TRELLO-prerequisite", "Done", "https://trello.com/c/SYNTH103")),
+                List.of(new Card.PrerequisiteProblem(
+                        "trello_prerequisite_checklist_sync_failed",
+                        "Could not update a prerequisite checklist item.",
+                        "Must finish first")));
+        Card unrelated = cardWithPriorityAndBlockers("card-unrelated", "TRELLO-unrelated", 2, List.of());
+        FakeTracker tracker = new FakeTracker(List.of(blocked, unrelated));
+
+        // when
+        String dispatched = dispatchFirstCard(workflow, tracker);
+
+        // then
+        assertThat(dispatched).isEqualTo("TRELLO-unrelated");
+    }
+
+    @Test
     void runningCardContinuesWhenItOnlyGainsANonTerminalBlocker() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
@@ -1281,6 +1399,69 @@ final class SymphonyOrchestratorTest {
 
     private record BlockingRun(CountDownLatch started, AtomicInteger cancelled) {}
 
+    private String dispatchFirstCard(Path workflow, FakeTracker tracker) throws Exception {
+        AtomicReference<String> dispatched = new AtomicReference<>();
+        AgentRunner runner = mock();
+        doAnswer(invocation -> {
+                    AgentRunner.AgentRunRequest request = invocation.getArgument(0);
+                    dispatched.set(request.card().identifier());
+                    return AgentRunResult.ok();
+                })
+                .when(runner)
+                .run(any());
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
+        orchestrator.start();
+        waitUntil(() -> dispatched.get() != null);
+        orchestrator.stop();
+        return dispatched.get();
+    }
+
+    private static Card cardWithPriorityAndBlockers(
+            String id, String identifier, Integer priority, List<BlockerRef> blockers) {
+        return cardWithPriorityBlockersAndProblems(id, identifier, priority, blockers, List.of());
+    }
+
+    private static Card cardWithPriorityBlockersAndProblems(
+            String id,
+            String identifier,
+            Integer priority,
+            List<BlockerRef> blockers,
+            List<Card.PrerequisiteProblem> prerequisiteProblems) {
+        return new Card(
+                id,
+                identifier,
+                "Implement feature",
+                "Description",
+                priority,
+                "Todo",
+                "list",
+                "list-todo",
+                "Todo",
+                false,
+                "board-1",
+                false,
+                false,
+                1,
+                identifier,
+                "https://trello.com/c/" + identifier,
+                null,
+                "https://trello.com/c/" + identifier,
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                prerequisiteProblems,
+                blockers,
+                List.of(),
+                Instant.parse("2026-01-01T00:00:00Z"),
+                Instant.parse("2026-01-02T00:00:00Z"),
+                null,
+                false,
+                BigDecimal.ONE);
+    }
+
     private static void writeWorkflow(Path workflow, String pollIntervalMs) throws Exception {
         writeWorkflow(workflow, pollIntervalMs, "");
     }
@@ -1347,13 +1528,13 @@ final class SymphonyOrchestratorTest {
     }
 
     private static SymphonyOrchestrator orchestrator(Path workflow, TrackerClient tracker, AgentRunner runner) {
+        return orchestrator(workflow, tracker, runner, new WorkspaceManager(new HookRunner()));
+    }
+
+    private static SymphonyOrchestrator orchestrator(
+            Path workflow, TrackerClient tracker, AgentRunner runner, WorkspaceManager workspaces) {
         SymphonyOrchestrator orchestrator = new SymphonyOrchestrator(
-                new WorkflowLoader(),
-                new ConfigResolver(),
-                tracker,
-                runner,
-                new PromptRenderer(),
-                new WorkspaceManager(new HookRunner()));
+                new WorkflowLoader(), new ConfigResolver(), tracker, runner, new PromptRenderer(), workspaces);
         orchestrator.workflowPath = workflow;
         return orchestrator;
     }
@@ -1471,6 +1652,20 @@ final class SymphonyOrchestratorTest {
         public void releaseFromDispatch(EffectiveConfig config, Card card) {
             releasedCards.add(card.identifier());
             setCardState(TestCards.card(card.id(), card.identifier(), "Todo"));
+        }
+    }
+
+    private static final class ThrowingWorkspaceManager extends WorkspaceManager {
+        private final AtomicInteger removalAttempts = new AtomicInteger();
+
+        private ThrowingWorkspaceManager() {
+            super(new HookRunner());
+        }
+
+        @Override
+        public void removeForIdentifierIfPresent(String cardIdentifier, EffectiveConfig config) {
+            removalAttempts.incrementAndGet();
+            throw new IllegalStateException("workspace cleanup failed");
         }
     }
 
