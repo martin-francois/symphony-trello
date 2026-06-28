@@ -3277,25 +3277,23 @@ final class SetupDiagnosticReporterTest {
                 .toList();
 
         // then
-        for (Throwable exception : thrown) {
-            assertThat(exception)
-                    .isInstanceOfSatisfying(
-                            TrelloBoardSetupException.class,
-                            setupException -> assertThat(setupException)
-                                    .extracting(TrelloBoardSetupException::code, Throwable::getMessage)
-                                    .containsExactly(
-                                            "setup_invalid_arguments",
-                                            "--workflow must reference a readable workflow file with usable workflow front matter."))
-                    .satisfies(error -> assertThat(error.getMessage())
-                            .doesNotContain(
-                                    tempDir.toString(),
-                                    configDir.toString(),
-                                    directory.toString(),
-                                    missing.toString(),
-                                    empty.toString(),
-                                    noFrontMatter.toString(),
-                                    "private-board-id"));
-        }
+        assertThat(thrown).allSatisfy(exception -> assertThat(exception)
+                .isInstanceOfSatisfying(
+                        TrelloBoardSetupException.class,
+                        setupException -> assertThat(setupException)
+                                .extracting(TrelloBoardSetupException::code, Throwable::getMessage)
+                                .containsExactly(
+                                        "setup_invalid_arguments",
+                                        "--workflow must reference a readable workflow file with usable workflow front matter."))
+                .satisfies(error -> assertThat(error.getMessage())
+                        .doesNotContain(
+                                tempDir.toString(),
+                                configDir.toString(),
+                                directory.toString(),
+                                missing.toString(),
+                                empty.toString(),
+                                noFrontMatter.toString(),
+                                "private-board-id")));
         String invalidPortReport =
                 renderWorkflowDiagnostics(reporter, configDir, workspaceRoot, stateHome, invalidPort);
         assertThat(invalidPortReport).contains("invalid server.port");

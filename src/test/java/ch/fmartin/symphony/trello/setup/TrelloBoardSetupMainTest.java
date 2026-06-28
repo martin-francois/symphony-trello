@@ -837,27 +837,24 @@ final class TrelloBoardSetupMainTest {
                 .toList();
 
         // then
-        for (CliRunResult result : results) {
-            result.assertFailure(SETUP_FAILURE)
-                    .stdoutDoesNotContain("# Symphony for Trello Diagnostics", "selected_workflow_file_count")
-                    .stderrContains(
-                            "setup_failed code=setup_invalid_arguments",
-                            "--workflow must reference a readable workflow file with usable workflow front matter.")
-                    .stderrDoesNotContain(
-                            "Troubleshooting report written",
-                            tempDir.toString(),
-                            configDir.toString(),
-                            directory.toString(),
-                            missing.toString(),
-                            empty.toString(),
-                            noFrontMatter.toString(),
-                            invalidPort.toString(),
-                            "private-board-id",
-                            "not-a-port");
-        }
-        for (UnusableWorkflowSelector selector : selectors) {
-            assertThat(tempDir.resolve(selector.name() + "-diagnostics.md")).doesNotExist();
-        }
+        assertThat(results).allSatisfy(result -> result.assertFailure(SETUP_FAILURE)
+                .stdoutDoesNotContain("# Symphony for Trello Diagnostics", "selected_workflow_file_count")
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments",
+                        "--workflow must reference a readable workflow file with usable workflow front matter.")
+                .stderrDoesNotContain(
+                        "Troubleshooting report written",
+                        tempDir.toString(),
+                        configDir.toString(),
+                        directory.toString(),
+                        missing.toString(),
+                        empty.toString(),
+                        noFrontMatter.toString(),
+                        invalidPort.toString(),
+                        "private-board-id",
+                        "not-a-port"));
+        assertThat(selectors).allSatisfy(selector -> assertThat(tempDir.resolve(selector.name() + "-diagnostics.md"))
+                .doesNotExist());
         CliRunResult invalidPortResult = runCli(
                 "diagnostics",
                 "--config-dir",
@@ -3769,7 +3766,8 @@ final class TrelloBoardSetupMainTest {
         assertThat(result.stderr())
                 .contains(scenario.expectedErrorFragments().toArray(String[]::new))
                 .doesNotContain("direct-key", "direct-token", tempDir.toString(), "Troubleshooting report written");
-        scenario.rawPrivateValues().forEach(value -> assertThat(result.stderr()).doesNotContain(value));
+        assertThat(scenario.rawPrivateValues())
+                .allSatisfy(value -> assertThat(result.stderr()).doesNotContain(value));
     }
 
     private static Stream<Arguments> invalidRuntimeEnvPathScenarios() {
