@@ -195,7 +195,7 @@ final class TrelloBoardConnector {
         terminal.info("");
         terminal.info("Per-board concurrency");
         terminal.info("Current value for this board: " + defaultMaxAgents + " card" + (defaultMaxAgents == 1 ? "" : "s")
-                + " at a time.");
+                + " processed concurrently.");
         terminal.info(
                 "Higher values run multiple Codex agents for this board at once, including their builds, tests, package installs, and network calls.");
         terminal.info(
@@ -208,7 +208,8 @@ final class TrelloBoardConnector {
     }
 
     private static int promptedMaxAgents(Terminal terminal, MaxAgentsSelection currentMaxAgents) throws IOException {
-        String answer = terminal.readLine("Maximum cards from this board at once [" + currentMaxAgents.value() + "]: ");
+        String answer = terminal.readLine(
+                "Maximum cards processed concurrently for this board [" + currentMaxAgents.value() + "]: ");
         if (answer == null || answer.isBlank()) {
             return currentMaxAgents.value();
         }

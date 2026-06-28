@@ -1450,7 +1450,7 @@ public final class LocalSetup {
 
     private static void printConcurrencyHint(PrintStream out) {
         out.println(
-                "Use `agent.max_concurrent_agents` in `WORKFLOW.md` to control how many cards from this board may run at the same time.");
+                "Use `agent.max_concurrent_agents` in `WORKFLOW.md` to control how many cards from this board are processed concurrently.");
     }
 
     private static String tutorialQueueTarget(WorkflowListConfiguration listConfiguration) {
