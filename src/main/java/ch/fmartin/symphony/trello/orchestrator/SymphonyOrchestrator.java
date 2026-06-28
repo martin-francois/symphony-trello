@@ -918,8 +918,10 @@ public class SymphonyOrchestrator {
         if (requiredLabels.stream().anyMatch(String::isBlank)) {
             return false;
         }
-        Set<String> cardLabels =
-                card.labels().stream().map(StateNames::normalize).collect(Collectors.toCollection(HashSet::new));
+        Set<String> cardLabels = card.labels().stream()
+                .map(StateNames::normalize)
+                // HashSet is intentional: dispatch checks use containsAll for label membership.
+                .collect(Collectors.toCollection(HashSet::new));
         return cardLabels.containsAll(requiredLabels);
     }
 
