@@ -59,6 +59,11 @@ commit and open pull requests. Topic-specific rules live in the pages linked und
 - When you notice a potential improvement that is outside the current task scope, keep the current
   work focused and create or suggest a GitHub issue instead of adding "future improvement",
   "convenience gap", or similar sections to user-facing documentation.
+- When you investigate a real improvement but decide not to implement it because no option satisfies
+  the current constraints, create or suggest a GitHub issue before finishing. The issue must state
+  the desired outcome, the options checked, why each option is not good enough right now, what a
+  future acceptable solution would need to provide, and any ADR or PR that records the current
+  decision. Use the `idea` label when the work is exploratory rather than ready to implement.
 - Until the first public release, apply [pre-public clean breaks](#pre-public-clean-breaks): implement
   only the canonical current contract and update private deployments manually when private
   pre-release files need a one-time edit.

@@ -60,10 +60,11 @@ label mechanics live in [GitHub issue triage](github-issue-triage.md).
   decide on one, or whenever implementation work requires choosing between meaningful alternatives.
   The ADR must make the selected approach explicit, list the alternatives considered, and explain why
   they were not chosen. Do not leave these decisions only in chat, PR comments, or commit messages.
-- Treat evaluated tool, dependency, scanner, analyzer, CI gate, and wrapper-vs-premade decisions as
-  ADR-worthy when more than one plausible maintained option exists. This especially applies when a
-  user rejects an in-house or hand-rolled implementation in favor of a premade solution. Record the
-  chosen tool, the rejected tools or custom approach, and the operational tradeoffs in the same PR.
+- Treat evaluated tool, dependency, formatter, scanner, analyzer, CI gate, and wrapper-vs-premade
+  decisions as ADR-worthy when more than one plausible maintained option exists. This especially
+  applies when a user rejects an in-house or hand-rolled implementation in favor of a premade
+  solution. Record the chosen tool, the rejected tools or custom approach, and the operational
+  tradeoffs in the same PR.
 - Treat CI runner and execution-runtime choices as ADR-worthy when more than one practical option
   exists. Examples include choosing native Windows runners instead of Linux Docker for PowerShell,
   moving checks between jobs, deciding whether local fallbacks remain supported, or deciding that a

@@ -134,10 +134,7 @@ public class TrelloClient implements TrackerClient {
     }
 
     private void appendTerminalCards(
-            List<Card> cards,
-            List<Map<String, Object>> payloads,
-            BoardContext context,
-            EffectiveConfig config) {
+            List<Card> cards, List<Map<String, Object>> payloads, BoardContext context, EffectiveConfig config) {
         for (Map<String, Object> payload : payloads) {
             normalize(payload, context, config)
                     .filter(card -> isTerminal(card, config))
