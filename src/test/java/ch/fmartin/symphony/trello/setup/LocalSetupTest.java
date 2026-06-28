@@ -1254,7 +1254,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "\n\ny\n3\nn\nn\n",
+                "\n\n3\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -1277,7 +1277,9 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "multiple Codex agents",
                         "builds, tests, package installs, and network calls",
                         "prerequisite checklist items",
-                        "Maximum cards from this board at once [2]: ");
+                        "If you are unsure, press Enter to keep the current value.",
+                        "Maximum cards from this board at once [1]: ")
+                .stdoutDoesNotContain("Change how many cards from this board may run at once?");
         assertThatWorkflow(workflow).hasMaxAgents(3);
     }
 
@@ -1289,7 +1291,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "\n\n\n\ny\n2\nn\nn\n",
+                "\n\n\n\n2\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -1305,7 +1307,9 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--no-github");
 
         // then
-        result.assertSuccess().stdoutContains("Per-board concurrency", "Change how many cards");
+        result.assertSuccess()
+                .stdoutContains("Per-board concurrency", "Maximum cards from this board at once [1]: ")
+                .stdoutDoesNotContain("Change how many cards");
         assertThatWorkflow(workflow).hasBoardId("abc123").hasMaxAgents(2);
     }
 
@@ -1436,7 +1440,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "\n\nn\nn\nn\n",
+                "\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -1457,7 +1461,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 .stdoutContains(
                         "Per-board concurrency",
                         "Current value for this board: 64 cards at a time.",
-                        "Change how many cards from this board may run at once?");
+                        "Maximum cards from this board at once [64]: ")
+                .stdoutDoesNotContain("Change how many cards from this board may run at once?");
         assertThatWorkflow(workflow).hasMaxAgents(64);
     }
 
@@ -1503,7 +1508,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "\n\ny\n33\n",
+                "\n\n33\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -1559,7 +1564,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 modelBackedSetup,
-                "\n\n\n\nn\nn\n",
+                "\n\n\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -1596,7 +1601,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 catalogBackedSetup,
-                "\n\ngpt-6\n\nn\nn\n",
+                "\n\ngpt-6\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -1625,7 +1630,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "\n\ngpt-selected\nlow\nn\nn\n",
+                "\n\ngpt-selected\nlow\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -1665,7 +1670,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "gpt-selected\nlow\nn\nn\n",
+                "gpt-selected\nlow\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -1713,7 +1718,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 modelBackedSetup,
-                "\n\nn\nn\n",
+                "\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -1763,7 +1768,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 catalogBackedSetup,
-                "gpt-6\n\nn\nn\n",
+                "gpt-6\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -1861,7 +1866,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 catalogBackedSetup,
-                "gpt-6\n\nn\nn\n",
+                "gpt-6\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -2105,7 +2110,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 unsupportedModelSetup,
-                "\n\nn\nn\n",
+                "\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -2144,7 +2149,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 unsupportedModelSetup,
-                "\n\nn\nn\n",
+                "\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -2374,7 +2379,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 environmentBackedSetup,
-                "prompt-token\n\nn\nn\n",
+                "prompt-token\n\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--board-name",
@@ -2469,7 +2474,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "\n\nn\nn\n",
+                "\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -3257,7 +3262,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "2\nboard-1\nQueue\nFinished\nWorking\nBlocked\n\n\nn\nn\n",
+                "2\nboard-1\nQueue\nFinished\nWorking\nBlocked\n\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -3298,7 +3303,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "2\nboard-1\nQueue\nFinished\nWorking\n-\n\n\nn\nn\n",
+                "2\nboard-1\nQueue\nFinished\nWorking\n-\n\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -3332,7 +3337,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "2\nboard-1\n-\n-\n\n\nn\nn\n",
+                "2\nboard-1\n-\n-\n\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -5719,7 +5724,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "\n\n\n\nn\nn\n",
+                "\n\n\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -5923,7 +5928,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
     private static Stream<BroadWorkspacePathScenario> broadWorkspacePathScenarios() {
         return Stream.of(
-                new BroadWorkspacePathScenario("interactive-declined", false, false, "\nn\nn\nn\n", 0, false),
+                new BroadWorkspacePathScenario("interactive-declined", false, false, "\n\n\nn\nn\nn\n", 0, false),
                 new BroadWorkspacePathScenario("non-interactive-rejected", true, false, null, 2, false),
                 new BroadWorkspacePathScenario("non-interactive-allowed", true, true, null, 0, true));
     }
@@ -6201,7 +6206,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "y\n\nn\nn\n",
+                "y\n\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -6235,7 +6240,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 windowsSetup,
-                "y\n\nn\nn\n",
+                "y\n\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -6278,7 +6283,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "n\n\nn\nn\n",
+                "n\n\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",

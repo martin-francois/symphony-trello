@@ -883,9 +883,10 @@ This Java implementation provides:
   public issue reports.
 
 During guided `setup-local` board creation or import, when `--max-agents` is omitted, the Java
-implementation asks whether to change the per-board concurrency value before writing the workflow.
-The prompt MUST explain local resource and parallel command risk, and MUST mention prerequisite
-checklist items for dependent Trello cards before those cards are moved into an active list.
+implementation prompts for the per-board concurrency value before writing the workflow. A blank
+answer MUST keep the current value. The prompt MUST explain local resource and parallel command risk,
+and MUST mention prerequisite checklist items for dependent Trello cards before those cards are moved
+into an active list.
 
 The installed Bash and PowerShell wrappers dispatch `--help`, `-h`, `--version`, `setup-local`,
 `new-board`, `import-board`, `list-workspaces`, `start`, `stop`, `status`, `logs`, `diagnostics`,

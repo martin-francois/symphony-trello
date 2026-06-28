@@ -1093,9 +1093,10 @@ public final class LocalSetup {
         if (options.maxAgentsExplicit()) {
             return new MaxAgentsSelection(options.maxAgents(), false);
         }
-        Optional<Integer> configuredMaxAgents = workflowConfig.maxAgents(workflowPath);
-        return new MaxAgentsSelection(
-                configuredMaxAgents.orElseGet(options::maxAgents), configuredMaxAgents.isPresent());
+        return workflowConfig
+                .maxAgents(workflowPath)
+                .map(maxAgents -> new MaxAgentsSelection(maxAgents, true))
+                .orElseGet(() -> new MaxAgentsSelection(options.maxAgents(), false));
     }
 
     private static ConnectedBoard selectNonGithubBoardForUpgrade(
@@ -1428,16 +1429,14 @@ public final class LocalSetup {
                 out.println(
                         "Landing stays manual until a `Merging` Trello list and terminal Trello list are configured in the workflow.");
             }
-            out.println(
-                    "Use `agent.max_concurrent_agents` in `WORKFLOW.md` to control how many cards from this board may run at the same time.");
+            printConcurrencyHint(out);
         } else {
             out.println("Symphony picks it up, " + runningText + ", and keeps the Trello card updated.");
             out.println(
                     "Review the result and add Trello comments describing what should change. Move the Trello card back to "
                             + queueTarget + " when you want Symphony to address them. If you accept it, move it to "
                             + doneTarget + ".");
-            out.println(
-                    "Use `agent.max_concurrent_agents` in `WORKFLOW.md` to control how many cards from this board may run at the same time.");
+            printConcurrencyHint(out);
             out.println();
             out.println(
                     "PS: to add GitHub later, run `symphony-trello setup-local configure-github`. Symphony will add the GitHub PR flow to a connected board, including GitHub-specific Trello lists such as `Merging` when needed. In GitHub mode Symphony can create PRs and link them on the Trello card. `Merging` means: Symphony, please do final checks, merge this PR if safe, and move the Trello card to the configured terminal Trello list.");
@@ -1447,6 +1446,11 @@ public final class LocalSetup {
         out.println("  Features: https://github.com/martin-francois/symphony-trello#current-capabilities");
         out.println("  How it works: https://github.com/martin-francois/symphony-trello#how-it-works");
         out.println("  Concurrency: https://github.com/martin-francois/symphony-trello#workflow-contract");
+    }
+
+    private static void printConcurrencyHint(PrintStream out) {
+        out.println(
+                "Use `agent.max_concurrent_agents` in `WORKFLOW.md` to control how many cards from this board may run at the same time.");
     }
 
     private static String tutorialQueueTarget(WorkflowListConfiguration listConfiguration) {

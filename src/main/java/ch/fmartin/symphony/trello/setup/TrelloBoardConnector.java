@@ -170,14 +170,12 @@ final class TrelloBoardConnector {
     }
 
     private TrelloBoardSetup boardSetup(LocalSetup.Options options) {
-        if (options.codexModelDefaults().isEmpty()) {
-            return boardSetup;
-        }
-        TrelloBoardSetup.CodexModelDefaults defaults =
-                options.codexModelDefaults().orElseThrow();
-        return options.hasExplicitCodexModelRequest()
-                ? boardSetup.withCodexModelOverrides(defaults, options.codexModel(), options.codexReasoningEffort())
-                : boardSetup.withCodexModelDefaults(defaults);
+        return options.codexModelDefaults()
+                .map(defaults -> options.hasExplicitCodexModelRequest()
+                        ? boardSetup.withCodexModelOverrides(
+                                defaults, options.codexModel(), options.codexReasoningEffort())
+                        : boardSetup.withCodexModelDefaults(defaults))
+                .orElse(boardSetup);
     }
 
     private MaxAgentsSelection configureMaxAgents(LocalSetup.Options options, Path workflowPath, Terminal terminal)
@@ -185,10 +183,13 @@ final class TrelloBoardConnector {
         if (options.maxAgentsExplicit()) {
             return new MaxAgentsSelection(options.maxAgents(), false);
         }
-        Optional<Integer> configuredMaxAgents = workflowConfig.maxAgents(workflowPath);
-        int defaultMaxAgents = configuredMaxAgents.orElse(TrelloBoardSetup.DEFAULT_MAX_CONCURRENT_AGENTS);
+        MaxAgentsSelection currentMaxAgents = workflowConfig
+                .maxAgents(workflowPath)
+                .map(maxAgents -> new MaxAgentsSelection(maxAgents, true))
+                .orElseGet(() -> new MaxAgentsSelection(TrelloBoardSetup.DEFAULT_MAX_CONCURRENT_AGENTS, false));
+        int defaultMaxAgents = currentMaxAgents.value();
         if (options.nonInteractive()) {
-            return new MaxAgentsSelection(defaultMaxAgents, configuredMaxAgents.isPresent());
+            return currentMaxAgents;
         }
 
         terminal.info("");
@@ -201,17 +202,17 @@ final class TrelloBoardConnector {
                 "Only raise this when the machine and repository can handle parallel runs from separate workspaces.");
         terminal.info(
                 "If Trello cards depend on each other, add prerequisite checklist items before moving them into Ready for Codex.");
-        if (!PromptSupport.yes(terminal, "Change how many cards from this board may run at once? [y/N] ")) {
-            return new MaxAgentsSelection(defaultMaxAgents, configuredMaxAgents.isPresent());
-        }
-        int promptedDefault =
-                defaultMaxAgents == 1 ? 2 : Math.min(defaultMaxAgents, TrelloBoardSetup.MAX_SETUP_CONCURRENT_AGENTS);
+        terminal.info("If you are unsure, press Enter to keep the current value.");
         return new MaxAgentsSelection(
-                PromptSupport.choice(
-                        terminal.readLine("Maximum cards from this board at once [" + promptedDefault + "]: "),
-                        promptedDefault,
-                        TrelloBoardSetup.MAX_SETUP_CONCURRENT_AGENTS),
-                false);
+                promptedMaxAgents(terminal, currentMaxAgents), currentMaxAgents.preservedFromWorkflow());
+    }
+
+    private static int promptedMaxAgents(Terminal terminal, MaxAgentsSelection currentMaxAgents) throws IOException {
+        String answer = terminal.readLine("Maximum cards from this board at once [" + currentMaxAgents.value() + "]: ");
+        if (answer == null || answer.isBlank()) {
+            return currentMaxAgents.value();
+        }
+        return PromptSupport.parseBoundedChoice(answer, TrelloBoardSetup.MAX_SETUP_CONCURRENT_AGENTS);
     }
 
     private record MaxAgentsSelection(int value, boolean preservedFromWorkflow) {}
