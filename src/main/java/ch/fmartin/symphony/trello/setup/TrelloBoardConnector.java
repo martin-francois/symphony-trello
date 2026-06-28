@@ -62,13 +62,11 @@ final class TrelloBoardConnector {
         if (options.existingBoardId().isPresent()) {
             return Optional.empty();
         }
-        if (options.boardName().isPresent()) {
-            return Optional.of(resolveWorkflowPath(options, options.boardName().orElseThrow()));
-        }
-        if (options.nonInteractive()) {
-            return Optional.of(resolveWorkflowPath(options, DEFAULT_BOARD_NAME));
-        }
-        return Optional.empty();
+        return options.boardName()
+                .map(name -> resolveWorkflowPath(options, name))
+                .or(() -> options.nonInteractive()
+                        ? Optional.of(resolveWorkflowPath(options, DEFAULT_BOARD_NAME))
+                        : Optional.empty());
     }
 
     private LocalSetup.SetupResult importExistingBoard(
@@ -78,10 +76,7 @@ final class TrelloBoardConnector {
             ConnectedBoardManifest manifest,
             Terminal terminal)
             throws IOException {
-        String boardId = options.existingBoardId().orElse(null);
-        if (blank(boardId)) {
-            boardId = terminal.readLine("Trello board URL, shortlink, or id: ");
-        }
+        String boardId = requestedBoardSelector(options, terminal);
         String selector = boardId;
         List<ConnectedBoard> connectedMatches = manifest.boards().stream()
                 .filter(board -> board.boardName().equalsIgnoreCase(selector))
@@ -124,6 +119,14 @@ final class TrelloBoardConnector {
         return LocalSetup.SetupResult.from(result);
     }
 
+    private static String requestedBoardSelector(LocalSetup.Options options, Terminal terminal) throws IOException {
+        Optional<String> boardId = options.existingBoardId().filter(id -> !blank(id));
+        if (boardId.isEmpty()) {
+            return terminal.readLine("Trello board URL, shortlink, or id: ");
+        }
+        return boardId.get();
+    }
+
     private LocalSetup.SetupResult createRecommendedBoard(
             LocalSetup.Options options,
             TrelloCredentials credentials,
@@ -131,14 +134,12 @@ final class TrelloBoardConnector {
             ConnectedBoardManifest manifest,
             Terminal terminal)
             throws IOException {
-        String boardName = options.boardName().orElse(null);
-        if (blank(boardName) && !options.nonInteractive()) {
+        Optional<String> configuredBoardName = options.boardName().filter(name -> !blank(name));
+        if (configuredBoardName.isEmpty() && !options.nonInteractive()) {
             String answer = terminal.readLine("Board name [\"" + DEFAULT_BOARD_NAME + "\"]: ");
-            boardName = blank(answer) ? DEFAULT_BOARD_NAME : answer;
+            configuredBoardName = Optional.ofNullable(answer).filter(name -> !blank(name));
         }
-        if (blank(boardName)) {
-            boardName = DEFAULT_BOARD_NAME;
-        }
+        String boardName = configuredBoardName.orElse(DEFAULT_BOARD_NAME);
         List<TrelloBoardSetup.WorkspaceInfo> workspaces =
                 boardSetup.listWorkspaces(new TrelloBoardSetup.WorkspaceListRequest(options.endpoint(), credentials));
         String workspaceId = workspaceId(options, workspaces, terminal);

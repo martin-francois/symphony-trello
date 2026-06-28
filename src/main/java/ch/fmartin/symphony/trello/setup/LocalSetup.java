@@ -1546,9 +1546,9 @@ public final class LocalSetup {
             Path workflow = request.workflowPath().orElse(TrelloBoardSetup.DEFAULT_WORKFLOW_PATH);
             boolean workflowPathExplicit = request.workflowPath().isPresent();
             Path workspaceRoot = request.workspaceRoot().orElseGet(() -> defaultWorkspaceRoot(environment));
-            Path manifest = request.manifestPath().orElse(null);
+            Path manifest = request.manifestPath().orElse(Path.of("connected-boards.json"));
             boolean manifestPathExplicit = request.manifestPath().isPresent();
-            Path envPath = request.envPath().orElse(null);
+            Path envPath = request.envPath().orElse(DEFAULT_ENV_PATH);
             List<Path> additionalWritableRoots = request.additionalWritableRoots().stream()
                     .map(path -> WorkspaceAccessFlow.resolveAccessPath(path, callerDirectory(environment)))
                     .toList();
@@ -1558,8 +1558,8 @@ public final class LocalSetup {
                 githubMode = true;
             }
             configDir = configDir.toAbsolutePath().normalize();
-            envPath = resolveUserDataPath(envPath == null ? DEFAULT_ENV_PATH : envPath, configDir);
-            manifest = resolveUserDataPath(manifest == null ? Path.of("connected-boards.json") : manifest, configDir);
+            envPath = resolveUserDataPath(envPath, configDir);
+            manifest = resolveUserDataPath(manifest, configDir);
             validateResolvedSetupPaths(configDir, manifest, manifestPathExplicit, request.action());
             additionalWritableRoots =
                     additionalWritableRoots.stream().map(Path::normalize).toList();
