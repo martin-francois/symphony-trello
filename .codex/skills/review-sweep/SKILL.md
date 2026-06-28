@@ -15,8 +15,8 @@ description: >
 - Gather GitHub review threads, including whether each thread is resolved.
 - Treat actionable human, bot, and Codex review feedback as blocking until
   handled.
-- Resolve addressed GitHub review threads when the authenticated user is
-  allowed to resolve them.
+- Reply to addressed GitHub review threads, but leave thread resolution to the
+  reviewer unless the user explicitly asks you to resolve them.
 - Reply in the right place when accepting, clarifying, or pushing back.
 - Keep PR title, body, branch, and metadata aligned with the current Trello
   scope when an existing PR is reused.
@@ -142,24 +142,10 @@ For each item, choose one outcome:
 Use inline replies for inline review comments. Use the PR issue thread for
 top-level comments and Codex review issue comments.
 
-When an inline review thread is addressed, resolve the GitHub review thread if
-the authenticated GitHub user is allowed to do so:
-
-```bash
-gh api graphql \
-  -f thread_id="$thread_id" \
-  -f query='
-    mutation($thread_id: ID!) {
-      resolveReviewThread(input: {threadId: $thread_id}) {
-        thread { id isResolved }
-      }
-    }'
-```
-
-If the API call fails because of permissions, API support, or ambiguity, do not
-claim the thread was resolved. Record that the feedback was addressed but the
-thread remains unresolved, and include the reason in the Trello workpad or PR
-reply.
+When an inline review thread is addressed, reply in that thread with the change
+or rationale and leave the thread unresolved for the reviewer. Resolve review
+threads only when the user explicitly asks you to do so. If resolution was not
+requested, do not claim the thread was resolved.
 
 If the PR title, body, branch, labels, or linked card references no longer
 match the work actually completed, update the PR metadata before handoff.
@@ -195,8 +181,8 @@ workpad with:
 
 - PR URL, if one exists.
 - Feedback classes found.
-- What changed, which review threads were resolved, and why any thread remains
-  unresolved.
+- What changed, which review threads were answered, and which ones remain for
+  reviewer resolution.
 - Check status and validation evidence.
 - Remaining blockers, if any.
 

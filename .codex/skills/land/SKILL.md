@@ -29,10 +29,10 @@ description: >
 ## Steps
 
 1. Use `review-sweep` and address all actionable feedback.
-   Resolve addressed GitHub review threads when possible. If a thread cannot be
-   resolved because of permissions or API limitations, keep landing eligible
-   only when the feedback is otherwise addressed and the workpad records the
-   unresolved thread and reason.
+   Reply to addressed GitHub review threads, but leave thread resolution to the
+   reviewer unless the user explicitly asks you to resolve them. Keep landing
+   eligible only when the feedback is otherwise addressed and the workpad records
+   any thread still awaiting reviewer resolution.
 2. Run local validation required by `AGENTS.md` and the Trello card.
 3. Check PR mergeability and branch state:
 
@@ -53,8 +53,7 @@ description: >
    - required checks are green,
    - mergeability is clean,
    - required reviews are satisfied,
-   - actionable comments and review threads are addressed or explicitly
-     resolved,
+   - actionable comments and review threads are addressed and replied to,
    - local validation is current.
 8. After merging:
    - update the workpad with merge evidence,
