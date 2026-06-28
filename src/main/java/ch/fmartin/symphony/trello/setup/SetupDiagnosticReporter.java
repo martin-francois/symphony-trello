@@ -340,7 +340,9 @@ final class SetupDiagnosticReporter {
                         setupException.dotenvPath().or(() -> dotenvPath).orElseGet(LocalEnvironment::defaultDotenv)));
             case "setup_env_write_failed" -> Optional.of("Choose a writable .env or .env.NAME file, then rerun setup.");
             case "setup_manifest_unavailable", "setup_manifest_write_failed" ->
-                Optional.of("Check that the workflow directory is writable and connected-boards.json is valid JSON.");
+                Optional.of("Check that the workflow directory is writable and "
+                        + ConnectedBoardManifest.FILE_NAME
+                        + " is valid JSON.");
             case "setup_prerequisite_missing" ->
                 Optional.of("Install the missing prerequisites shown above, then rerun setup.");
             case "setup_github_cli_required", "setup_github_cli_install_failed" ->
@@ -364,8 +366,9 @@ final class SetupDiagnosticReporter {
                 Optional.of(
                         "Re-run with --workspace-id, or use setup-local to choose a Trello Workspace interactively.");
             case "setup_worker_workflow_ambiguous" ->
-                Optional.of(
-                        "Remove duplicate rows for the same workflow from connected-boards.json in the active Symphony config directory, then rerun the command.");
+                Optional.of("Remove duplicate rows for the same workflow from "
+                        + ConnectedBoardManifest.FILE_NAME
+                        + " in the active Symphony config directory, then rerun the command.");
             default -> Optional.empty();
         };
     }
@@ -1509,7 +1512,9 @@ final class SetupDiagnosticReporter {
         if (matches.size() > 1) {
             throw new TrelloBoardSetupException(
                     "setup_invalid_arguments",
-                    "Multiple connected-board rows reference --workflow. Repair connected-boards.json, then rerun the command.");
+                    "Multiple connected-board rows reference --workflow. Repair "
+                            + ConnectedBoardManifest.FILE_NAME
+                            + ", then rerun the command.");
         }
         return new DiagnosticsSelection(DiagnosticsSelectorKind.WORKFLOW, matches, Optional.of(workflow));
     }

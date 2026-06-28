@@ -44,7 +44,9 @@ final class ConnectedBoardRepository {
                     "setup_manifest_unavailable",
                     "Connected-board manifest is not valid JSON:\n  "
                             + manifestPath.toAbsolutePath().normalize()
-                            + "\nRepair or remove connected-boards.json, then rerun the command.",
+                            + "\nRepair or remove "
+                            + ConnectedBoardManifest.FILE_NAME
+                            + ", then rerun the command.",
                     e);
         }
     }
@@ -105,7 +107,9 @@ final class ConnectedBoardRepository {
                 "Connected-board manifest is not valid connected-board JSON:\n  "
                         + manifestPath.toAbsolutePath().normalize()
                         + "\n  - " + String.join("\n  - ", warnings)
-                        + "\nRepair or remove connected-boards.json, then rerun the command.");
+                        + "\nRepair or remove "
+                        + ConnectedBoardManifest.FILE_NAME
+                        + ", then rerun the command.");
     }
 
     void save(ConnectedBoardManifest manifest) throws IOException {

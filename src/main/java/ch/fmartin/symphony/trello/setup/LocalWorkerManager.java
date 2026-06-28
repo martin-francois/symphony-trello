@@ -1172,7 +1172,9 @@ final class LocalWorkerManager {
         if (matches.size() > 1) {
             throw new TrelloBoardSetupException(
                     "setup_worker_workflow_ambiguous",
-                    "Multiple connected-board rows reference --workflow. Repair connected-boards.json, then rerun the command.");
+                    "Multiple connected-board rows reference --workflow. Repair "
+                            + ConnectedBoardManifest.FILE_NAME
+                            + ", then rerun the command.");
         }
         Path validationEnvPath = explicitWorkflowEnvPath.orElse(fallbackWorkflowEnvPath);
         ConnectedBoard board = matches.isEmpty() ? workflowBoard(workflowPath, validationEnvPath) : matches.getFirst();

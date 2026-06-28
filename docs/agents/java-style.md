@@ -179,6 +179,14 @@ instead of following it.
   leaving parallel copies. Apply the same standard to review feedback: when a reviewer points out
   duplicated edits or says two places must change together, treat that as an immediate refactoring
   requirement in the current scope rather than leaving another parallel copy for a later pass.
+- File names, manifest names, directory names, command names, environment-variable names, and other
+  path or protocol fragments are connected constants when product code, tests, installer fixtures,
+  diagnostics, or generated output must agree on them. Before finishing a change that introduces or
+  touches such a literal, search for the exact literal and obvious embedded forms such as
+  `config/<name>` or `<prefix>-<name>` across production code, tests, scripts, fixtures, and docs.
+  Centralize path construction and test assertions where code can share a source; leave public prose
+  spelled out only when it is intentionally naming the user-visible contract, and still prefer to
+  build production diagnostic strings from the shared constant.
 - Apply the same centralization rule to test scenario data. When a repeated literal appears across
   rows of one parameterized test, scenario factory, fake fixture, or state-machine table, assume it
   is one coupled concept unless the test names or scenario fields make it clear that each occurrence

@@ -148,8 +148,8 @@ final class SetupDiagnosticReporterTest {
 
         // then
         assertThat(hint).hasValueSatisfying(value -> assertThat(value)
-                .contains(
-                        "Remove duplicate rows for the same workflow from connected-boards.json in the active Symphony config directory")
+                .contains("Remove duplicate rows for the same workflow from " + ConnectedBoardManifest.FILE_NAME
+                        + " in the active Symphony config directory")
                 .doesNotContain(tempDir.toString(), "WORKFLOW", "board-1", "board-2"));
     }
 
@@ -222,7 +222,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(stateHome);
         Path workflow = configDir.resolve("WORKFLOW.symlink-target.md");
         Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(20992), StandardCharsets.UTF_8);
-        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+        new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "000000000000000000000001",
                         "SYNTH001",
@@ -494,7 +494,7 @@ final class SetupDiagnosticReporterTest {
     }
 
     private static void saveSyntheticBoard(Path configDir, Path workflow, int serverPort) throws IOException {
-        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+        new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "000000000000000000000001",
                         "SYNTH001",
@@ -924,7 +924,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Files.writeString(
-                configDir.resolve("connected-boards.json"),
+                configDir.resolve(ConnectedBoardManifest.FILE_NAME),
                 """
                 {"boards":[{},{"boardName":"Private Board","boardId":"abc","boardKey":"def","serverPort":18199}]}
                 """,
@@ -951,7 +951,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(stateHome);
         Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(20723), StandardCharsets.UTF_8);
         Files.writeString(
-                configDir.resolve("connected-boards.json"),
+                configDir.resolve(ConnectedBoardManifest.FILE_NAME),
                 """
                 {"boards":[{}]}
                 """,
@@ -978,7 +978,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(stateHome);
         Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(20724), StandardCharsets.UTF_8);
         Files.writeString(
-                configDir.resolve("connected-boards.json"),
+                configDir.resolve(ConnectedBoardManifest.FILE_NAME),
                 """
                 {"boards":[{"boardName":"Private Board","boardId":"abc","boardKey":"def","serverPort":18199}]}
                 """,
@@ -1002,7 +1002,7 @@ final class SetupDiagnosticReporterTest {
         Path stateHome = tempDir.resolve("state");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        Path manifest = configDir.resolve("connected-boards.json");
+        Path manifest = configDir.resolve(ConnectedBoardManifest.FILE_NAME);
         Files.writeString(manifest, manifestContent, StandardCharsets.UTF_8);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
@@ -1129,7 +1129,7 @@ final class SetupDiagnosticReporterTest {
     private SameSecondReportScenario sameSecondReportScenario(String prefix) throws IOException {
         Path configDir = tempDir.resolve(prefix + "-config");
         Path workspaceRoot = tempDir.resolve(prefix + "-workspaces");
-        Path manifest = configDir.resolve("connected-boards.json");
+        Path manifest = configDir.resolve(ConnectedBoardManifest.FILE_NAME);
         Path workflow = configDir.resolve("WORKFLOW.report.md");
         Path env = configDir.resolve(".env");
         Files.createDirectories(configDir);
@@ -1152,7 +1152,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(stateHome);
         Path workflow = configDir.resolve("WORKFLOW.reused.md");
         Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(20991), StandardCharsets.UTF_8);
-        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+        new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "000000000000000000000001",
                         "SYNTH001",
@@ -1203,7 +1203,7 @@ final class SetupDiagnosticReporterTest {
         Path stateHome = tempDir.resolve("state");
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
-        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+        new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "000000000000000000000001",
                         "SYNTH001",
@@ -1235,7 +1235,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Path missingWorkflow = configDir.resolve("WORKFLOW.deleted.md");
-        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+        new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "000000000000000000000001",
                         "SYNTH001",
@@ -1394,7 +1394,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(stateHome);
         Files.writeString(privateWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19181), StandardCharsets.UTF_8);
         Files.writeString(otherWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19182), StandardCharsets.UTF_8);
-        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+        new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(
                         new ConnectedBoard(
                                 "private-board-id",
@@ -1502,7 +1502,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(stateHome);
         Files.writeString(selectedWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19191), StandardCharsets.UTF_8);
         Files.writeString(otherWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19192), StandardCharsets.UTF_8);
-        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+        new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(
                         new ConnectedBoard(
                                 "000000000000000000000001",
@@ -1586,7 +1586,7 @@ final class SetupDiagnosticReporterTest {
                 SYNTHETIC_WORKER_PORT=19301
                 """,
                 StandardCharsets.UTF_8);
-        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+        new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "resolved-env-board-id",
                         "env-key",
@@ -1741,7 +1741,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(stateHome);
         Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19199), StandardCharsets.UTF_8);
         Files.writeString(env, "TRELLO_API_TOKEN=secret-token\n", StandardCharsets.UTF_8);
-        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+        new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "private-board-id",
                         "private-key",
@@ -1808,7 +1808,7 @@ final class SetupDiagnosticReporterTest {
         Path env = configDir.resolve(".env.lookup");
         Files.createDirectories(configDir);
         Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19201), StandardCharsets.UTF_8);
-        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+        new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "lookup-board-id",
                         "lookup-key",
@@ -1862,7 +1862,7 @@ final class SetupDiagnosticReporterTest {
         Path workflow = configDir.resolve("WORKFLOW.lookup-pid.md");
         Files.createDirectories(configDir);
         Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19203), StandardCharsets.UTF_8);
-        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+        new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "lookup-pid-board-id",
                         "pid-key",
@@ -1930,7 +1930,7 @@ final class SetupDiagnosticReporterTest {
                 # Lookup Secret
                 """,
                 StandardCharsets.UTF_8);
-        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+        new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "lookup-secret-board-id",
                         "lookup-secret-key",
@@ -2137,7 +2137,7 @@ final class SetupDiagnosticReporterTest {
         Files.writeString(
                 configDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME), "invalid-local-key", StandardCharsets.UTF_8);
         Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19198), StandardCharsets.UTF_8);
-        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+        new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "private-board-id",
                         "private-key",
@@ -2252,7 +2252,8 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(workspaceRoot);
         Files.createDirectories(stateHome);
-        Files.writeString(configDir.resolve("connected-boards.json"), "{\"boards\":[]}", StandardCharsets.UTF_8);
+        Files.writeString(
+                configDir.resolve(ConnectedBoardManifest.FILE_NAME), "{\"boards\":[]}", StandardCharsets.UTF_8);
         String githubToken = "ghp_" + "abcdefghijklmnopqrstuvwxyz1234567890abcd";
         String trelloToken = "ATTA" + "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz";
         String openAiToken = "sk-" + "proj-abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz";
@@ -2476,7 +2477,8 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(workspaceRoot);
         Files.createDirectories(stateHome);
-        Files.writeString(configDir.resolve("connected-boards.json"), "{\"boards\":[]}", StandardCharsets.UTF_8);
+        Files.writeString(
+                configDir.resolve(ConnectedBoardManifest.FILE_NAME), "{\"boards\":[]}", StandardCharsets.UTF_8);
         String trelloToken = "ATTA" + "thisLooksLikeASecretTokenValue1234567890";
         Files.writeString(
                 stateHome.resolve("parser-secret.log"),
@@ -2513,7 +2515,8 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(workspaceRoot);
         Files.createDirectories(stateHome);
-        Files.writeString(configDir.resolve("connected-boards.json"), "{\"boards\":[]}", StandardCharsets.UTF_8);
+        Files.writeString(
+                configDir.resolve(ConnectedBoardManifest.FILE_NAME), "{\"boards\":[]}", StandardCharsets.UTF_8);
         Files.writeString(
                 stateHome.resolve("fake-fence.log"),
                 """
@@ -2555,7 +2558,8 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(workspaceRoot);
         Files.createDirectories(stateHome);
-        Files.writeString(configDir.resolve("connected-boards.json"), "{\"boards\":[]}", StandardCharsets.UTF_8);
+        Files.writeString(
+                configDir.resolve(ConnectedBoardManifest.FILE_NAME), "{\"boards\":[]}", StandardCharsets.UTF_8);
         Files.writeString(
                 stateHome.resolve("fake-control.log"),
                 """
@@ -2764,7 +2768,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(stateHome);
         Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19184), StandardCharsets.UTF_8);
         Files.writeString(otherWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19185), StandardCharsets.UTF_8);
-        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+        new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(
                         new ConnectedBoard(
                                 "relative-board-id",
@@ -2844,7 +2848,7 @@ final class SetupDiagnosticReporterTest {
                 BOARD_STATUS_PORT=19421
                 """,
                 StandardCharsets.UTF_8);
-        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+        new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "000000000000000000000002",
                         "SYNTH002",
@@ -2890,7 +2894,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(stateHome);
         Files.writeString(manifestWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19186), StandardCharsets.UTF_8);
         Files.writeString(requestedWorkflow, TestWorkflows.diagnosticsWorkflowWithPort(19187), StandardCharsets.UTF_8);
-        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+        new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "manifest-board-id",
                         "SYNTH201",
@@ -2944,7 +2948,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(stateHome);
         Files.writeString(workflowA, TestWorkflows.diagnosticsWorkflowWithPort(19188), StandardCharsets.UTF_8);
         Files.writeString(workflowB, TestWorkflows.diagnosticsWorkflowWithPort(19189), StandardCharsets.UTF_8);
-        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+        new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(
                         new ConnectedBoard(
                                 "private-board-a-id",
@@ -3014,7 +3018,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Files.writeString(workflow, TestWorkflows.diagnosticsWorkflowWithPort(19193), StandardCharsets.UTF_8);
-        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+        new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(
                         new ConnectedBoard(
                                 "private-workflow-board-a-id",
@@ -3050,13 +3054,12 @@ final class SetupDiagnosticReporterTest {
 
         // then
         assertThat(thrown)
-                .isInstanceOfSatisfying(
-                        TrelloBoardSetupException.class,
-                        exception -> assertThat(exception)
-                                .extracting(TrelloBoardSetupException::code, Throwable::getMessage)
-                                .containsExactly(
-                                        "setup_invalid_arguments",
-                                        "Multiple connected-board rows reference --workflow. Repair connected-boards.json, then rerun the command."))
+                .isInstanceOfSatisfying(TrelloBoardSetupException.class, exception -> assertThat(exception)
+                        .extracting(TrelloBoardSetupException::code, Throwable::getMessage)
+                        .containsExactly(
+                                "setup_invalid_arguments",
+                                "Multiple connected-board rows reference --workflow. Repair "
+                                        + ConnectedBoardManifest.FILE_NAME + ", then rerun the command."))
                 .hasMessageContaining("Multiple connected-board rows reference --workflow")
                 .satisfies(exception -> assertThat(exception.getMessage())
                         .doesNotContain(
@@ -3270,7 +3273,7 @@ final class SetupDiagnosticReporterTest {
                         .formatted(port);
         String privateSourceCommit = "abcdef0123456789abcdef0123456789abcdef01";
         Files.writeString(workflow, workflowContent, StandardCharsets.UTF_8);
-        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+        new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(new ConnectedBoard(
                         "private-board-id",
                         "private-key",
@@ -3453,7 +3456,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(workspaceRoot);
         Files.createDirectories(stateHome);
-        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+        new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of()));
         Path privateContext = tempDir.resolve("private-context.txt");
         Files.writeString(
@@ -3554,7 +3557,7 @@ final class SetupDiagnosticReporterTest {
         // given
         Path configDir = tempDir.resolve("dry-run-config");
         Path workspaceRoot = tempDir.resolve("dry-run-workspaces");
-        Path manifest = Path.of("connected-boards.json");
+        Path manifest = Path.of(ConnectedBoardManifest.FILE_NAME);
         Path workflow = configDir.resolve("WORKFLOW.dry-run.md");
         Path env = configDir.resolve(".env");
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
@@ -3585,7 +3588,7 @@ final class SetupDiagnosticReporterTest {
         // when
         Optional<Path> report = reporter.reportFailure(
                 new TrelloBoardSetupException("setup_missing_config", "setup failed"),
-                request(configDir, workspaceRoot, Path.of("connected-boards.json"), workflow, env),
+                request(configDir, workspaceRoot, Path.of(ConnectedBoardManifest.FILE_NAME), workflow, env),
                 terminal);
 
         // then
@@ -3811,7 +3814,7 @@ final class SetupDiagnosticReporterTest {
         Files.createDirectories(configDir);
         Files.createDirectories(stateHome);
         Files.writeString(plainWorkflow, "plain body with client notes\n", StandardCharsets.UTF_8);
-        new ConnectedBoardRepository(configDir.resolve("connected-boards.json"))
+        new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
                 .save(new ConnectedBoardManifest(List.of(
                         new ConnectedBoard(
                                 "private-board-id",

@@ -51,7 +51,9 @@ final class WorkflowConfigEditor {
     WorkflowValidation validate(ConnectedBoard board, Function<String, Optional<String>> environmentResolver) {
         if (board.workflowPath() == null) {
             return WorkflowValidation.warn("Workflow path for " + DisplayNames.quotedName(board.boardName())
-                    + " is missing from connected-boards.json.");
+                    + " is missing from "
+                    + ConnectedBoardManifest.FILE_NAME
+                    + ".");
         }
         if (!Files.isRegularFile(board.workflowPath())) {
             return WorkflowValidation.warn("Workflow file is missing for " + DisplayNames.quotedName(board.boardName())

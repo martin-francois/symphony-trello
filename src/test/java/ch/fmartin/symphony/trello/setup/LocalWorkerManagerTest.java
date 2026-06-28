@@ -881,7 +881,7 @@ final class LocalWorkerManagerTest {
         assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
             assertThat(failure.code()).isEqualTo("setup_manifest_unavailable");
             assertThat(failure.getMessage())
-                    .contains("not valid JSON", "connected-boards.json")
+                    .contains("not valid JSON", ConnectedBoardManifest.FILE_NAME)
                     .doesNotContain("double-quote", "Unexpected character");
         });
     }
@@ -3419,8 +3419,8 @@ final class LocalWorkerManagerTest {
         assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
             assertThat(failure.code()).isEqualTo("setup_worker_workflow_ambiguous");
             assertThat(failure)
-                    .hasMessage(
-                            "Multiple connected-board rows reference --workflow. Repair connected-boards.json, then rerun the command.");
+                    .hasMessage("Multiple connected-board rows reference --workflow. Repair "
+                            + ConnectedBoardManifest.FILE_NAME + ", then rerun the command.");
             assertThat(failure.getMessage())
                     .doesNotContain(
                             first.boardId(),
@@ -3646,7 +3646,7 @@ final class LocalWorkerManagerTest {
                 assertThat(failure.code()).as(label).isEqualTo("setup_manifest_unavailable");
                 assertThat(failure.getMessage())
                         .as(label)
-                        .contains("connected-boards.json")
+                        .contains(ConnectedBoardManifest.FILE_NAME)
                         .doesNotContain("Cannot invoke", "NullPointerException");
             });
         }

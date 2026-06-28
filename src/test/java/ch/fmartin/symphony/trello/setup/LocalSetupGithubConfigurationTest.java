@@ -169,7 +169,7 @@ final class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
         secondResult.assertSuccess();
         assertThat(trello.createdLists()).containsExactly("Merging");
         assertThatWorkflow(workflow).hasGithubFlow().hasMerging().hasAdditionalWritableRoot(allowedPath);
-        assertThatManifest(tempDir.resolve("config/connected-boards.json"))
+        assertThatManifest(tempDir.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME))
                 .hasGithubEnabled("Local First")
                 .hasAdditionalWritableRoot("Local First", allowedPath);
         assertThat(commands.stoppedWorkflows).containsExactly(workflow.toString());
@@ -210,7 +210,7 @@ final class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
         result.assertSuccess().stdoutContains("Updated workflow: " + workflow);
         assertThat(trello.createdLists()).isEmpty();
         assertThatWorkflow(workflow).hasAdditionalWritableRoot(allowedPath);
-        assertThatManifest(tempDir.resolve("config/connected-boards.json"))
+        assertThatManifest(tempDir.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME))
                 .hasGithubEnabled("GitHub Configure Access Rerun Queue")
                 .hasAdditionalWritableRoot("GitHub Configure Access Rerun Queue", allowedPath);
         assertThat(commands.stoppedWorkflows).containsExactly(workflow.toString());
@@ -302,7 +302,7 @@ final class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
         Files.createDirectories(config);
         Path workflow = config.resolve("WORKFLOW.custom.md");
         Path env = config.resolve(".env.custom");
-        Path manifest = config.resolve("connected-boards.json");
+        Path manifest = config.resolve(ConnectedBoardManifest.FILE_NAME);
         int port = availablePort();
         Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
         Files.writeString(
@@ -395,7 +395,7 @@ final class LocalSetupGithubConfigurationTest extends LocalSetupFixtureSupport {
         Files.createDirectories(config);
         Path workflow = config.resolve("WORKFLOW.no-progress.md");
         Path env = config.resolve(".env.no-progress");
-        Path manifest = config.resolve("connected-boards.json");
+        Path manifest = config.resolve(ConnectedBoardManifest.FILE_NAME);
         int port = availablePort();
         Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
         Files.writeString(

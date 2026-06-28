@@ -93,7 +93,7 @@ final class InstallerScriptLifecycleTest {
         Files.createDirectories(isolatedConfigDirectory);
         Files.createDirectories(isolatedCallerDirectory);
         Files.writeString(
-                isolatedConfigDirectory.resolve("connected-boards.json"),
+                isolatedConfigDirectory.resolve(ConnectedBoardManifest.FILE_NAME),
                 """
                 {"boards":[{"boardId":"isolated-board","boardName":"Isolated Board","workflowPath":"%s","envPath":"%s"}]}
                 """
@@ -227,7 +227,7 @@ final class InstallerScriptLifecycleTest {
                 .content(StandardCharsets.UTF_8)
                 .contains("TRELLO_API_KEY=api-key");
         assertThat(configDirectory.resolve("WORKFLOW.lifecycle-board.md")).exists();
-        assertThat(configDirectory.resolve("connected-boards.json"))
+        assertThat(configDirectory.resolve(ConnectedBoardManifest.FILE_NAME))
                 .content(StandardCharsets.UTF_8)
                 .contains(configDirectory.resolve("WORKFLOW.lifecycle-board.md").toString());
         assertThat(workspaceRoot).exists();
