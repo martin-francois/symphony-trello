@@ -1076,10 +1076,9 @@ public class SymphonyOrchestrator {
         }
 
         static DispatchBudget from(EffectiveConfig config, Collection<RunningEntry> runningEntries) {
-            Map<String, Integer> usedByState = HashMap.newHashMap(runningEntries.size());
-            for (RunningEntry entry : runningEntries) {
-                usedByState.merge(StateNames.normalize(entry.card.state()), 1, Integer::sum);
-            }
+            Map<String, Integer> usedByState = runningEntries.stream()
+                    .map(entry -> StateNames.normalize(entry.card.state()))
+                    .collect(Collectors.toMap(Function.identity(), state -> 1, Integer::sum, HashMap::new));
             return new DispatchBudget(
                     config.agent().maxConcurrentAgents(),
                     config.agent().maxConcurrentAgentsByState(),
