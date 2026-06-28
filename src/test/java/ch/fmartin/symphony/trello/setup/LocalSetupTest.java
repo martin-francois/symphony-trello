@@ -1273,12 +1273,12 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         result.assertSuccess()
                 .stdoutContains(
                         "Per-board concurrency",
-                        "Current value for this board: 1 card at a time.",
+                        "Current value for this board: 1 card processed concurrently.",
                         "multiple Codex agents",
                         "builds, tests, package installs, and network calls",
                         "prerequisite checklist items",
                         "If you are unsure, press Enter to keep the current value.",
-                        "Maximum cards from this board at once [1]: ")
+                        "Maximum cards processed concurrently for this board [1]: ")
                 .stdoutDoesNotContain("Change how many cards from this board may run at once?");
         assertThatWorkflow(workflow).hasMaxAgents(3);
     }
@@ -1308,7 +1308,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // then
         result.assertSuccess()
-                .stdoutContains("Per-board concurrency", "Maximum cards from this board at once [1]: ")
+                .stdoutContains("Per-board concurrency", "Maximum cards processed concurrently for this board [1]: ")
                 .stdoutDoesNotContain("Change how many cards");
         assertThatWorkflow(workflow).hasBoardId("abc123").hasMaxAgents(2);
     }
@@ -1460,8 +1460,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         result.assertSuccess()
                 .stdoutContains(
                         "Per-board concurrency",
-                        "Current value for this board: 64 cards at a time.",
-                        "Maximum cards from this board at once [64]: ")
+                        "Current value for this board: 64 cards processed concurrently.",
+                        "Maximum cards processed concurrently for this board [64]: ")
                 .stdoutDoesNotContain("Change how many cards from this board may run at once?");
         assertThatWorkflow(workflow).hasMaxAgents(64);
     }
