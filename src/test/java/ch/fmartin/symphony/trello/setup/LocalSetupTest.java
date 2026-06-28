@@ -1344,6 +1344,36 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void nonInteractiveSetupAcceptsMaximumSetupMaxAgents() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.explicit-maximum-concurrency.md");
+        Path env = tempDir.resolve(".env.explicit-maximum-concurrency");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Explicit Maximum Concurrency Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--max-agents",
+                Integer.toString(TrelloBoardSetup.MAX_SETUP_CONCURRENT_AGENTS),
+                "--no-github");
+
+        // then
+        result.assertSuccess();
+        assertThatWorkflow(workflow).hasMaxAgents(TrelloBoardSetup.MAX_SETUP_CONCURRENT_AGENTS);
+    }
+
+    @Test
     void setupPreservesExistingMaxAgentsWhenWorkflowIsRegeneratedWithoutExplicitChange() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.preserve-concurrency.md");
@@ -1488,11 +1518,11 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--env",
                 env.toString(),
                 "--max-agents",
-                "33",
+                "100",
                 "--no-github");
 
         // then
-        result.assertFailure(SETUP_FAILURE).stderrContains("--max-agents must be between 1 and 32");
+        result.assertFailure(SETUP_FAILURE).stderrContains("--max-agents must be between 1 and 99");
         assertThat(trello.memberLookups()).isEmpty();
         assertThat(trello.workspaceLookups()).isEmpty();
         assertThat(trello.boardLookups()).isEmpty();
@@ -1508,7 +1538,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "\n\n33\n",
+                "\n\n100\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -1524,7 +1554,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--no-github");
 
         // then
-        result.assertFailure(SETUP_FAILURE).stderrContains("Choice must be a number between 1 and 32");
+        result.assertFailure(SETUP_FAILURE).stderrContains("Choice must be a number between 1 and 99");
         assertThat(workflow).doesNotExist();
     }
 
