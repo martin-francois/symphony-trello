@@ -3,6 +3,7 @@ package ch.fmartin.symphony.trello.setup;
 import static com.google.common.base.Preconditions.checkArgument;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 final class MarkdownTable {
@@ -35,11 +36,7 @@ final class MarkdownTable {
                 "Markdown table row cell count must match header count: expected %s but got %s",
                 headers.size(),
                 cells.length);
-        List<String> row = new ArrayList<>(cells.length);
-        for (Object cell : cells) {
-            row.add(escape(cell));
-        }
-        rows.add(List.copyOf(row));
+        rows.add(Arrays.stream(cells).map(MarkdownTable::escape).toList());
         return this;
     }
 
