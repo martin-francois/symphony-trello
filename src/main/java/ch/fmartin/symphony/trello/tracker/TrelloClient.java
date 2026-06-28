@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.tracker;
 
+import static com.google.common.collect.ImmutableSet.toImmutableSet;
+
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.config.StateNames;
 import ch.fmartin.symphony.trello.config.WholeNumbers;
@@ -108,12 +110,13 @@ public class TrelloClient implements TrackerClient {
                 .map(card -> normalize(card, context, config))
                 .flatMap(Optional::stream)
                 .filter(card -> isTerminal(card, config))
+                // Keep this mutable: archived terminal cards are appended below before de-duplication.
                 .collect(Collectors.toCollection(ArrayList::new));
 
         Set<String> archivedListIds = context.lists().values().stream()
                 .filter(BoardList::closed)
                 .map(BoardList::id)
-                .collect(Collectors.toCollection(HashSet::new));
+                .collect(toImmutableSet());
         for (String listId : archivedListIds) {
             List<Map<String, Object>> listCards = getList(
                     config,

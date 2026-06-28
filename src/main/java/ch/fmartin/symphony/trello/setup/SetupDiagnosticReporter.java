@@ -868,6 +868,7 @@ final class SetupDiagnosticReporter {
                 ? reportWorkflowPaths(selectedManifest, selection.workflow(), paths.configDir(), true).stream()
                         .filter(workflow -> selectedWorkflowPaths.stream()
                                 .noneMatch(connected -> PathsEqual.samePath(connected, workflow)))
+                        // Diagnostics should de-duplicate paths while preserving encounter order.
                         .collect(Collectors.toCollection(LinkedHashSet::new))
                 : new LinkedHashSet<>();
         return new DiagnosticsContext(

@@ -586,6 +586,8 @@ public final class LocalSetup {
         Set<Integer> reserved = manifest.boards().stream()
                 .filter(board -> !board.boardId().equals(ignoredBoard.boardId()))
                 .map(ConnectedBoard::serverPort)
+                // Use a mutable HashSet so file-discovered reservations can be merged below and
+                // port scanning can use constant-time membership checks.
                 .collect(Collectors.toCollection(HashSet::new));
         // Local workflow files outside the manifest still reserve their ports, so a repaired
         // board cannot collide with a stale or disconnected workflow that may be started later.
@@ -605,14 +607,14 @@ public final class LocalSetup {
             return reserved;
         }
         try (var files = Files.list(configDir)) {
-            Set<Integer> workflowPorts = files.filter(Files::isRegularFile)
+            List<Integer> workflowPorts = files.filter(Files::isRegularFile)
                     .filter(file -> PathNames.fileName(file).endsWith(".md"))
                     .filter(file -> ignoredBoard.workflowPath() == null
                             || !PathsEqual.samePath(file, ignoredBoard.workflowPath()))
                     .map(file -> workflowConfig.serverPort(
                             file, WorkflowEnvironmentResolver.resolver(environment, options.envPath())))
                     .flatMap(Optional::stream)
-                    .collect(Collectors.toCollection(HashSet::new));
+                    .toList();
             reserved.addAll(workflowPorts);
         } catch (IOException ignored) {
             // A config directory that cannot be listed leaves only the manifest and probe checks.

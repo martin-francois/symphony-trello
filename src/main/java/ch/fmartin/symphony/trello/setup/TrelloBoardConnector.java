@@ -533,6 +533,8 @@ final class TrelloBoardConnector {
         Set<Integer> reservedPorts = manifest.boards().stream()
                 .filter(board -> !PathsEqual.samePath(board.workflowPath(), workflowPath))
                 .map(ConnectedBoard::serverPort)
+                // Keep this mutable because sibling workflow ports are merged before returning the
+                // reserved-port set to setup validation.
                 .collect(Collectors.toCollection(HashSet::new));
         reservedPorts.addAll(siblingWorkflowServerPorts(workflowPath, replacingTarget, editor, environmentResolver));
         return reservedPorts;
