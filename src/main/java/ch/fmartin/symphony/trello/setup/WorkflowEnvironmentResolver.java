@@ -16,19 +16,21 @@ final class WorkflowEnvironmentResolver {
     }
 
     static Optional<String> externalHttpPortOverrideSource(Map<String, String> environment, Path envPath) {
-        for (String name : LocalHealthChecker.HTTP_PORT_ENVIRONMENT_NAMES) {
-            if (hasText(environment.get(name))) {
-                return Optional.of(name + " environment variable");
-            }
-        }
+        return firstPresentHttpPortName(environment)
+                .map(name -> name + " environment variable")
+                .or(() -> dotenvHttpPortOverrideSource(environment, envPath));
+    }
+
+    private static Optional<String> dotenvHttpPortOverrideSource(Map<String, String> environment, Path envPath) {
         Path dotenvPath = envPath == null ? LocalEnvironment.defaultDotenv(environment) : envPath;
         Map<String, String> dotenv = LocalEnvironment.load(dotenvPath);
-        for (String name : LocalHealthChecker.HTTP_PORT_ENVIRONMENT_NAMES) {
-            if (hasText(dotenv.get(name))) {
-                return Optional.of(name + " in " + dotenvPath);
-            }
-        }
-        return Optional.empty();
+        return firstPresentHttpPortName(dotenv).map(name -> name + " in " + dotenvPath);
+    }
+
+    private static Optional<String> firstPresentHttpPortName(Map<String, String> values) {
+        return LocalHealthChecker.HTTP_PORT_ENVIRONMENT_NAMES.stream()
+                .filter(name -> hasText(values.get(name)))
+                .findFirst();
     }
 
     private static Optional<String> value(Map<String, String> environment, Map<String, String> dotenv, String name) {
