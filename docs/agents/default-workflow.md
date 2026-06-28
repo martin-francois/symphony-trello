@@ -197,7 +197,9 @@ user explicitly chooses a spec carry-over.
   changes in a separate follow-up commit so the review delta is easy to inspect. Do not amend those
   changes into the existing PR commit unless the user explicitly asks. Run the Codex review/fix loop
   before pushing, reply on GitHub to every handled review comment or thread, and push the updated
-  branch. If the user also asks to squash the already-pushed PR commits first, squash them into one
+  branch. When a review reply says code changed, include a small snippet of the resulting code with
+  enough surrounding context that the reviewer can understand the change without hunting through the
+  diff. If the user also asks to squash the already-pushed PR commits first, squash them into one
   base commit before adding the separate review-response commit.
 - Keep `feat/issue-35-plan-b-onboarding` as a single commit on top of `main`; amend or squash and
   force-push when changing that branch.

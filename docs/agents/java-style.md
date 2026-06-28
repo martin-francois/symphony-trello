@@ -24,19 +24,16 @@ References.
   than manual loop state. Do not replace a readable collection stream with a loop just to avoid an
   `Optional`, especially when the loop needs labeled `continue`, mutable sentinel flags beyond the
   natural state of the algorithm, or duplicated branch flow.
-- Before using `collect(Collectors.toCollection(...))`, verify that the code truly needs the
-  requested collection implementation, such as mutability after collection, encounter-order
-  preservation, sorted ordering, or set membership performance. Prefer `toList()`, Guava immutable
-  collectors such as `toImmutableSet()`, `Collectors.toMap(...)`, or another simpler explicit
-  collector when the implementation type does not matter. Do not use ambiguous JDK collectors such
-  as `Collectors.toSet()` because the repository enforces Picnic's `CollectorMutability` check. When
-  `toCollection(...)` remains, add a short nearby comment explaining why that concrete collection
-  type is required.
+- Before using `collect(Collectors.toCollection(...))`, first check whether a simpler collector such
+  as `toList()`, a Guava immutable collector, or `Collectors.toMap(...)` states the result clearly
+  enough. Keep `toCollection(...)` only when the chosen collection type matters, and explain that
+  choice with the same non-default collection rule below. Do not use ambiguous JDK collectors such as
+  `Collectors.toSet()` because the repository enforces Picnic's `CollectorMutability` check.
 - When code directly chooses a non-default collection implementation such as `LinkedHashMap`,
-  `LinkedHashSet`, `TreeMap`, `TreeSet`, `ArrayDeque`, or a sequenced collection, make the reason
-  obvious at the allocation site. Add a short comment when the surrounding names do not already
-  explain the need for encounter order, sorted order, deque semantics, mutability, or duplicate
-  handling.
+  `LinkedHashSet`, `TreeMap`, `TreeSet`, `ArrayDeque`, a sequenced collection, or
+  `Collectors.toCollection(...)`, make the reason obvious at the allocation site. Add a short
+  comment when the surrounding names do not already explain the need for encounter order, sorted
+  order, deque semantics, mutability, duplicate handling, or fast membership checks.
 - Treat stream and Optional refactors as behavior-preserving by default. Before accepting a skill
   suggestion, verify mutability, encounter order, duplicate handling, parser splitting, laziness,
   exception behavior, nullability, prompt ordering, and side-effect boundaries. If a better-looking
@@ -139,6 +136,8 @@ instead of following it.
 
 - Add comments only for non-obvious decisions, surprising constraints, or tradeoffs that would slow
   down a future maintainer.
+- Write comments in plain, specific language. Explain the user-visible or domain reason when there
+  is one, and avoid shorthand that only names an internal implementation detail.
 - Prefer making unclear code self-documenting before adding prose. Extract a variable, constant,
   method, type, or helper with a precise name when that name can explain what a value means or why a
   branch exists. Use a short comment or Javadoc only when the rationale cannot be expressed cleanly
@@ -165,28 +164,21 @@ instead of following it.
   solution and a custom implementation stays ADR-worthy per the specification section.
 - Centralize connected constants and configuration values. Do not duplicate magic values with the
   same meaning in multiple places. More generally, when separate code, docs, test data, generated
-  templates, constants, literals, or other artifacts represent one concept and a maintainer would
-  expect them to change together, centralize or derive them from one shared source in the narrowest
-  sensible scope. Strings and numbers are common examples, but the rule is about coupled change, not
-  literal type or textual equality. Do not centralize independent values only because they happen to
-  look the same today; leave them separate when they represent different concepts that could
-  reasonably change independently. When duplicated logic would need to change together at multiple
-  call sites, extract a shared helper or abstraction so the coupling is explicit and future
-  contributors only have one place to update. Treat making the same edit, or copying the same
-  pattern, in two or more places during one change as that signal: stop and ask whether the
-  duplicated shape should be refactored before continuing. If those places would likely have to
-  change together again, centralize them into a shared helper or constant before finishing instead of
-  leaving parallel copies. Apply the same standard to review feedback: when a reviewer points out
-  duplicated edits or says two places must change together, treat that as an immediate refactoring
-  requirement in the current scope rather than leaving another parallel copy for a later pass.
-- File names, manifest names, directory names, command names, environment-variable names, and other
-  path or protocol fragments are connected constants when product code, tests, installer fixtures,
-  diagnostics, or generated output must agree on them. Before finishing a change that introduces or
-  touches such a literal, search for the exact literal and obvious embedded forms such as
-  `config/<name>` or `<prefix>-<name>` across production code, tests, scripts, fixtures, and docs.
-  Centralize path construction and test assertions where code can share a source; leave public prose
-  spelled out only when it is intentionally naming the user-visible contract, and still prefer to
-  build production diagnostic strings from the shared constant.
+  templates, constants, literals, path fragments, command names, environment-variable names, or other
+  artifacts represent one concept and a maintainer would expect them to change together, centralize
+  or derive them from one shared source in the narrowest sensible scope. Strings and numbers are
+  common examples, but the rule is about coupled change, not literal type or textual equality. Do not
+  centralize independent values only because they happen to look the same today; leave them separate
+  when they represent different concepts that could reasonably change independently. When duplicated
+  logic would need to change together at multiple call sites, extract a shared helper or abstraction
+  so the coupling is explicit and future contributors only have one place to update. Treat making the
+  same edit, or copying the same pattern, in two or more places during one change as that signal:
+  stop and ask whether the duplicated shape should be refactored before continuing. If those places
+  would likely have to change together again, centralize them into a shared helper or constant before
+  finishing instead of leaving parallel copies. Apply the same standard to review feedback: when a
+  reviewer points out duplicated edits or says two places must change together, treat that as an
+  immediate refactoring requirement in the current scope rather than leaving another parallel copy
+  for a later pass.
 - Apply the same centralization rule to test scenario data. When a repeated literal appears across
   rows of one parameterized test, scenario factory, fake fixture, or state-machine table, assume it
   is one coupled concept unless the test names or scenario fields make it clear that each occurrence

@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static com.google.common.collect.ImmutableSet.toImmutableSet;
+
 import ch.fmartin.symphony.trello.CliExitCodes;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.GitHubIntegration;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.TrelloCredentials;
@@ -586,8 +588,7 @@ public final class LocalSetup {
         Set<Integer> reserved = manifest.boards().stream()
                 .filter(board -> !board.boardId().equals(ignoredBoard.boardId()))
                 .map(ConnectedBoard::serverPort)
-                // Use a mutable HashSet so file-discovered reservations can be merged below and
-                // port scanning can use constant-time membership checks.
+                // Use a mutable HashSet so file-discovered ports can be merged below and each port check is fast.
                 .collect(Collectors.toCollection(HashSet::new));
         // Local workflow files outside the manifest still reserve their ports, so a repaired
         // board cannot collide with a stale or disconnected workflow that may be started later.
@@ -601,25 +602,23 @@ public final class LocalSetup {
     }
 
     private Set<Integer> localWorkflowFilePortReservations(Options options, ConnectedBoard ignoredBoard) {
-        Set<Integer> reserved = new HashSet<>();
         Path configDir = options.configDir();
         if (configDir == null || !Files.isDirectory(configDir)) {
-            return reserved;
+            return Set.of();
         }
         try (var files = Files.list(configDir)) {
-            List<Integer> workflowPorts = files.filter(Files::isRegularFile)
+            return files.filter(Files::isRegularFile)
                     .filter(file -> PathNames.fileName(file).endsWith(".md"))
                     .filter(file -> ignoredBoard.workflowPath() == null
                             || !PathsEqual.samePath(file, ignoredBoard.workflowPath()))
                     .map(file -> workflowConfig.serverPort(
                             file, WorkflowEnvironmentResolver.resolver(environment, options.envPath())))
                     .flatMap(Optional::stream)
-                    .toList();
-            reserved.addAll(workflowPorts);
+                    .collect(toImmutableSet());
         } catch (IOException ignored) {
             // A config directory that cannot be listed leaves only the manifest and probe checks.
+            return Set.of();
         }
-        return reserved;
     }
 
     private Prerequisites prerequisites() {
