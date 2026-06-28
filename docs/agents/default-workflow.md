@@ -188,6 +188,10 @@ user explicitly chooses a spec carry-over.
   Commit titled. Use one commit for the user-visible feature or fix and separate commits only for
   directly supporting cleanup or refactoring that belongs to the same cohesive change; unrelated work
   still belongs in a separate branch or pull request.
+- When the user asks to "clean the git history", rewrite the branch into reviewable commits with one
+  commit per cohesive change. Keep refactors, formatting/tooling changes, documentation policy
+  changes, and product behavior changes in separate commits unless the user explicitly asks for a
+  single squashed commit.
 - When one pull request intentionally covers multiple GitHub issues, keep at least one focused commit
   per issue so each issue has its own reviewable unit. Combine multiple issues in one pull request
   only when the issues are cohesive or merging them together is materially easier. A single issue may
@@ -197,10 +201,12 @@ user explicitly chooses a spec carry-over.
   changes in a separate follow-up commit so the review delta is easy to inspect. Do not amend those
   changes into the existing PR commit unless the user explicitly asks. Run the Codex review/fix loop
   before pushing, reply on GitHub to every handled review comment or thread, and push the updated
-  branch. When a review reply says code changed, include a small snippet of the resulting code with
-  enough surrounding context that the reviewer can understand the change without hunting through the
-  diff. If the user also asks to squash the already-pushed PR commits first, squash them into one
-  base commit before adding the separate review-response commit.
+  branch. Do not resolve GitHub review threads after replying; leave them for the reviewer to resolve
+  unless the user explicitly asks you to resolve them. When a review reply says code changed, include
+  a small snippet of the resulting code with enough surrounding context that the reviewer can
+  understand the change without hunting through the diff. If the user also asks to squash the
+  already-pushed PR commits first, squash them into one base commit before adding the separate
+  review-response commit.
 - Keep `feat/issue-35-plan-b-onboarding` as a single commit on top of `main`; amend or squash and
   force-push when changing that branch.
 - Use closing keywords such as `Closes #123`, `Fixes #123`, or `Resolves #123` only when the PR or

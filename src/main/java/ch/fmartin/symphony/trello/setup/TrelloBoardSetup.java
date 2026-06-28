@@ -1570,9 +1570,9 @@ public final class TrelloBoardSetup {
                 each thread is resolved, review states and summaries, CI/check status, and Codex review issue comments
                 when present. Every actionable human, bot, or Codex review comment is blocking until it is addressed
                 with code, tests, docs, or PR metadata, or answered with a justified response in the right thread. Do
-                not decline correctness feedback without concrete validation. Resolve addressed GitHub review threads
-                when the authenticated GitHub user is allowed to resolve them; if a thread cannot be resolved because
-                of permissions, API limitations, or ambiguity, record that clearly and do not claim it was resolved.
+                not decline correctness feedback without concrete validation. Reply to addressed GitHub review threads
+                with enough context for the reviewer to verify the change, but leave thread resolution to the reviewer
+                unless the operator explicitly asks you to resolve threads.
 
                 Classify PR checks before deciding handoff:
                 - If a failing check is related to the card's changes, the current branch, or can be reproduced by
