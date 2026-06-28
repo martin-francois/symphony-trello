@@ -22,6 +22,7 @@ import java.util.function.BooleanSupplier;
 
 final class LocalHealthChecker {
     static final List<String> HTTP_PORT_ENVIRONMENT_NAMES = List.of("SYMPHONY_HTTP_PORT", "QUARKUS_HTTP_PORT");
+    static final String LOOPBACK_HOST = "127.0.0.1";
 
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final TypeReference<Map<String, Object>> JSON_MAP_TYPE = new TypeReference<>() {};
@@ -201,15 +202,15 @@ final class LocalHealthChecker {
     }
 
     static URI localStatusUri(int port) {
-        return URI.create("http://127.0.0.1:" + port + "/api/v1/local-status");
+        return URI.create(localServerUrl(port) + "/api/v1/local-status");
     }
 
     static String localStateUrl(int port) {
-        return "http://127.0.0.1:" + port + "/api/v1/state";
+        return localServerUrl(port) + "/api/v1/state";
     }
 
     static String localServerUrl(int port) {
-        return "http://127.0.0.1:" + port;
+        return "http://" + LOOPBACK_HOST + ":" + port;
     }
 
     private Optional<Integer> externalHttpPortOverride(Path envPath) {

@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
+import ch.fmartin.symphony.trello.TrelloEnvironment;
 import ch.fmartin.symphony.trello.config.EnvironmentReferences;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.TrelloCredentials;
@@ -32,13 +33,20 @@ final class TrelloCredentialStore {
     CredentialSelection loadOrPrompt(LocalSetup.Options options, Path envPath, Terminal terminal) throws IOException {
         Map<String, String> dotenv = LocalEnvironment.load(envPath);
         CredentialValue key = credentialValue(
-                "TRELLO_API_KEY", options.apiKey(), envValue("TRELLO_API_KEY"), dotenv.get("TRELLO_API_KEY"));
+                TrelloEnvironment.API_KEY,
+                options.apiKey(),
+                envValue(TrelloEnvironment.API_KEY),
+                dotenv.get(TrelloEnvironment.API_KEY));
         CredentialValue token = credentialValue(
-                "TRELLO_API_TOKEN", options.apiToken(), envValue("TRELLO_API_TOKEN"), dotenv.get("TRELLO_API_TOKEN"));
+                TrelloEnvironment.API_TOKEN,
+                options.apiToken(),
+                envValue(TrelloEnvironment.API_TOKEN),
+                dotenv.get(TrelloEnvironment.API_TOKEN));
         if ((blank(key) || blank(token)) && options.nonInteractive()) {
             throw new TrelloBoardSetupException(
                     "setup_missing_trello_credentials",
-                    "TRELLO_API_KEY and TRELLO_API_TOKEN are required in non-interactive setup.");
+                    TrelloEnvironment.API_KEY + " and " + TrelloEnvironment.API_TOKEN
+                            + " are required in non-interactive setup.");
         }
         if (blank(key)) {
             terminal.info("");
@@ -77,9 +85,15 @@ final class TrelloCredentialStore {
     CredentialSelection loadExisting(LocalSetup.Options options, Path envPath) {
         Map<String, String> dotenv = LocalEnvironment.load(envPath);
         CredentialValue key = credentialValue(
-                "TRELLO_API_KEY", options.apiKey(), envValue("TRELLO_API_KEY"), dotenv.get("TRELLO_API_KEY"));
+                TrelloEnvironment.API_KEY,
+                options.apiKey(),
+                envValue(TrelloEnvironment.API_KEY),
+                dotenv.get(TrelloEnvironment.API_KEY));
         CredentialValue token = credentialValue(
-                "TRELLO_API_TOKEN", options.apiToken(), envValue("TRELLO_API_TOKEN"), dotenv.get("TRELLO_API_TOKEN"));
+                TrelloEnvironment.API_TOKEN,
+                options.apiToken(),
+                envValue(TrelloEnvironment.API_TOKEN),
+                dotenv.get(TrelloEnvironment.API_TOKEN));
         return new CredentialSelection(key, token);
     }
 
@@ -141,10 +155,10 @@ final class TrelloCredentialStore {
         List<String> lines =
                 Files.isRegularFile(envPath) ? Files.readAllLines(envPath, StandardCharsets.UTF_8) : new ArrayList<>();
         if (credentials.persistApiKey()) {
-            lines = upsertEnv(lines, "TRELLO_API_KEY", credentials.apiKey());
+            lines = upsertEnv(lines, TrelloEnvironment.API_KEY, credentials.apiKey());
         }
         if (credentials.persistApiToken()) {
-            lines = upsertEnv(lines, "TRELLO_API_TOKEN", credentials.apiToken());
+            lines = upsertEnv(lines, TrelloEnvironment.API_TOKEN, credentials.apiToken());
         }
         return lines;
     }

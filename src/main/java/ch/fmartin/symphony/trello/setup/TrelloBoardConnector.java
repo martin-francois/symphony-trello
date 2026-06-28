@@ -416,7 +416,8 @@ final class TrelloBoardConnector {
         }
         if (boardSetup.portInUse(port)) {
             throw new TrelloBoardSetupException(
-                    "setup_server_port_conflict", "--server-port %d is already in use on 127.0.0.1.".formatted(port));
+                    "setup_server_port_conflict",
+                    "--server-port %d is already in use on %s.".formatted(port, LocalHealthChecker.LOOPBACK_HOST));
         }
         return port;
     }
@@ -474,7 +475,8 @@ final class TrelloBoardConnector {
             LocalSetup.Options options, ConnectedBoardManifest manifest, Path workflowPath, int port) {
         if (boardSetup.portInUse(port) && !canStopManagedWorkflow(options, manifest, workflowPath, port)) {
             throw new TrelloBoardSetupException(
-                    "setup_server_port_conflict", "--server-port %d is already in use on 127.0.0.1.".formatted(port));
+                    "setup_server_port_conflict",
+                    "--server-port %d is already in use on %s.".formatted(port, LocalHealthChecker.LOOPBACK_HOST));
         }
         return port;
     }
@@ -492,7 +494,8 @@ final class TrelloBoardConnector {
         }
         if (boardSetup.portInUse(port) && !canStopManagedWorkflow(options, manifest, workflowPath, port)) {
             throw new TrelloBoardSetupException(
-                    "setup_server_port_conflict", "--server-port %d is already in use on 127.0.0.1.".formatted(port));
+                    "setup_server_port_conflict",
+                    "--server-port %d is already in use on %s.".formatted(port, LocalHealthChecker.LOOPBACK_HOST));
         }
         return port;
     }

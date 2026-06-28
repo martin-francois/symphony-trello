@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
 import ch.fmartin.symphony.trello.CliExitCodes;
+import ch.fmartin.symphony.trello.TrelloEnvironment;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import ch.fmartin.symphony.trello.setup.SetupDiagnosticReporter.DiagnosticsRequest;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.GitHubIntegration;
@@ -934,12 +935,14 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
     static final class TrelloAuthOptions {
         @Option(
                 names = "--key",
-                description = "Trello API key. Defaults to TRELLO_API_KEY or the configured credential file.")
+                description = "Trello API key. Defaults to " + TrelloEnvironment.API_KEY
+                        + " or the configured credential file.")
         String key;
 
         @Option(
                 names = "--token",
-                description = "Trello API token. Defaults to TRELLO_API_TOKEN or the configured credential file.")
+                description = "Trello API token. Defaults to " + TrelloEnvironment.API_TOKEN
+                        + " or the configured credential file.")
         String token;
 
         TrelloCredentials credentials() {
@@ -957,7 +960,8 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
 
         TrelloCredentialStore.CredentialSelection credentialSelection(Path dotenv) {
             return new TrelloCredentialStore.CredentialSelection(
-                    credentialValue(key, "TRELLO_API_KEY", dotenv), credentialValue(token, "TRELLO_API_TOKEN", dotenv));
+                    credentialValue(key, TrelloEnvironment.API_KEY, dotenv),
+                    credentialValue(token, TrelloEnvironment.API_TOKEN, dotenv));
         }
 
         boolean hasDirectCredentials() {

@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
+import ch.fmartin.symphony.trello.TrelloEnvironment;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.config.EnvironmentReferences;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
@@ -507,8 +508,8 @@ final class LocalWorkerManager {
                 .trackerCredentialReferences(workflowPath)
                 .map(references -> workerCredentialUsage(
                         envPath,
-                        requiredEnvironmentCredential(references.apiKey(), "TRELLO_API_KEY"),
-                        requiredEnvironmentCredential(references.apiToken(), "TRELLO_API_TOKEN")));
+                        requiredEnvironmentCredential(references.apiKey(), TrelloEnvironment.API_KEY),
+                        requiredEnvironmentCredential(references.apiToken(), TrelloEnvironment.API_TOKEN)));
     }
 
     private WorkerCredentialUsage workerCredentialUsage(
@@ -584,8 +585,8 @@ final class LocalWorkerManager {
                 .map(usage -> exception
                         .withDotenvPath(usage.envPath())
                         .withTrelloCredentialEnvironmentNames(
-                                usage.apiKeyEnvironment().orElse("TRELLO_API_KEY"),
-                                usage.apiTokenEnvironment().orElse("TRELLO_API_TOKEN"))
+                                usage.apiKeyEnvironment().orElse(TrelloEnvironment.API_KEY),
+                                usage.apiTokenEnvironment().orElse(TrelloEnvironment.API_TOKEN))
                         .withTrelloCredentialSources(usage.apiKeySource(), usage.apiTokenSource()))
                 .orElse(exception);
     }
@@ -642,8 +643,8 @@ final class LocalWorkerManager {
         return new TrelloBoardSetupException(code, message)
                 .withDotenvPath(usage.envPath())
                 .withTrelloCredentialEnvironmentNames(
-                        usage.apiKeyEnvironment().orElse("TRELLO_API_KEY"),
-                        usage.apiTokenEnvironment().orElse("TRELLO_API_TOKEN"));
+                        usage.apiKeyEnvironment().orElse(TrelloEnvironment.API_KEY),
+                        usage.apiTokenEnvironment().orElse(TrelloEnvironment.API_TOKEN));
     }
 
     private static Optional<String> requiredEnvironmentCredential(
