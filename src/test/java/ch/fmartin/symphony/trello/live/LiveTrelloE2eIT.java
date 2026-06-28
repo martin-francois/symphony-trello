@@ -60,9 +60,9 @@ final class LiveTrelloE2eIT {
         // given
         assumeTrue(liveE2eEnabled(), "Set SYMPHONY_RUN_LIVE_E2E=1 to run live Trello E2E checks.");
         TrelloCredentials credentials = credentialsOrFail();
-        assertThat(Files.isRegularFile(QUARKUS_RUNNER))
+        assertThat(QUARKUS_RUNNER)
                 .as("Run this through Maven verify so the Quarkus runner exists.")
-                .isTrue();
+                .isRegularFile();
 
         String runId = "live-e2e-it-" + RUN_ID_FORMAT.format(now()) + "-"
                 + UUID.randomUUID().toString().substring(0, 8);
@@ -233,9 +233,9 @@ final class LiveTrelloE2eIT {
         // given
         assumeTrue(liveE2eEnabled(), "Set SYMPHONY_RUN_LIVE_E2E=1 to run live Trello E2E checks.");
         TrelloCredentials credentials = credentialsOrFail();
-        assertThat(Files.isRegularFile(QUARKUS_RUNNER))
+        assertThat(QUARKUS_RUNNER)
                 .as("Run this through Maven verify so the Quarkus runner exists.")
-                .isTrue();
+                .isRegularFile();
 
         String runId = "live-e2e-external-" + RUN_ID_FORMAT.format(now()) + "-"
                 + UUID.randomUUID().toString().substring(0, 8);
@@ -299,9 +299,9 @@ final class LiveTrelloE2eIT {
         assumeTrue(commandSucceeds("codex", "--version"), "Codex CLI must be available on PATH.");
         assumeTrue(commandSucceeds("docker", "version"), "Docker must be installed and usable by this user.");
         TrelloCredentials credentials = credentialsOrFail();
-        assertThat(Files.isRegularFile(QUARKUS_RUNNER))
+        assertThat(QUARKUS_RUNNER)
                 .as("Run this through Maven verify so the Quarkus runner exists.")
-                .isTrue();
+                .isRegularFile();
 
         String runId = "real-codex-docker-" + RUN_ID_FORMAT.format(now()) + "-"
                 + UUID.randomUUID().toString().substring(0, 8);
