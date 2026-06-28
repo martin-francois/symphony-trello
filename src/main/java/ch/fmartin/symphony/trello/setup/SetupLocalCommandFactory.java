@@ -9,6 +9,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Callable;
@@ -83,11 +84,7 @@ final class SetupLocalCommandFactory {
 
     @SafeVarargs
     private static List<String> optionNames(List<String>... groups) {
-        List<String> names = new ArrayList<>();
-        for (List<String> group : groups) {
-            names.addAll(group);
-        }
-        return List.copyOf(names);
+        return Arrays.stream(groups).flatMap(List::stream).toList();
     }
 
     static void hideUnsupportedSubcommandOptions(CommandLine commandLine) {
