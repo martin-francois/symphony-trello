@@ -720,9 +720,10 @@ final class LiveTrelloE2eIT {
         List<String> boardIds = new ArrayList<>(disposableBoardIds);
         List<Throwable> failures = new ArrayList<>();
         try {
-            trello.openBoardIdsByNamePrefix(workspaceId, runId).stream()
+            List<String> openDisposableBoardIds = trello.openBoardIdsByNamePrefix(workspaceId, runId).stream()
                     .filter(boardId -> !boardIds.contains(boardId))
-                    .forEach(boardIds::add);
+                    .toList();
+            boardIds.addAll(openDisposableBoardIds);
         } catch (AssertionError | RuntimeException e) {
             failures.add(e);
         }

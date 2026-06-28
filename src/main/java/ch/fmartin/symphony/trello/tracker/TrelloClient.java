@@ -119,11 +119,12 @@ public class TrelloClient implements TrackerClient {
                     config,
                     "lists/" + encodeSegment(listId) + "/cards",
                     Map.of("fields", CARD_FIELDS, "filter", "all"));
-            listCards.stream()
+            List<Card> archivedTerminalCards = listCards.stream()
                     .map(card -> normalize(card, context, config))
                     .flatMap(Optional::stream)
                     .filter(card -> isTerminal(card, config))
-                    .forEach(normalized::add);
+                    .toList();
+            normalized.addAll(archivedTerminalCards);
         }
 
         return normalized.stream()
