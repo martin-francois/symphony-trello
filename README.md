@@ -1157,9 +1157,10 @@ tracker:
 ```
 
 `agent.max_concurrent_agents` controls how many cards from one workflow may run at the same time.
-Generated workflows use `1`. Guided setup asks before raising it. Raise it only when the machine can
-run that many Codex sessions and their build/test commands in parallel. If cards depend on other
-cards, use prerequisite checklist items before moving the dependent cards into an active Trello list.
+Generated workflows use `1`. Guided setup asks for this value and keeps the current value when you
+press Enter. Raise it only when the machine can run that many Codex sessions and their build/test
+commands in parallel. If cards depend on other cards, use prerequisite checklist items before moving
+the dependent cards into an active Trello list.
 
 `agent.max_turns` limits how many Codex turns one worker session may take before Symphony stops that
 session and schedules normal continuation handling. Increase it only when long cards need more

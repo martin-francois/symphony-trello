@@ -965,7 +965,7 @@ public final class TrelloBoardSetup {
     private static void validatePreservedWorkflowMaxAgents(int maxConcurrentAgents) {
         if (maxConcurrentAgents < 1) {
             throw new TrelloBoardSetupException(
-                    "setup_invalid_max_agents", "agent.max_concurrent_agents must be positive.");
+                    "setup_invalid_max_agents", "agent.max_concurrent_agents must be at least 1.");
         }
     }
 

@@ -108,7 +108,9 @@ References.
   pattern, in two or more places during one change as that signal: stop and ask whether the
   duplicated shape should be refactored before continuing. If those places would likely have to
   change together again, centralize them into a shared helper or constant before finishing instead of
-  leaving parallel copies.
+  leaving parallel copies. Apply the same standard to review feedback: when a reviewer points out
+  duplicated edits or says two places must change together, treat that as an immediate refactoring
+  requirement in the current scope rather than leaving another parallel copy for a later pass.
 - Apply the same centralization rule to test scenario data. When a repeated literal appears across
   rows of one parameterized test, scenario factory, fake fixture, or state-machine table, assume it
   is one coupled concept unless the test names or scenario fields make it clear that each occurrence
