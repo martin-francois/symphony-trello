@@ -33,10 +33,10 @@ not modeled. How should setup protect users from accidentally configuring unsafe
 
 Chosen option: "Documented upper bound enforced by setup validation", because it keeps the CLI
 deterministic and non-interactive, avoids adding a positive flag that only restates intent, and a
-shared bound of `32` is far above any realistic single-host concurrency while still preventing
-accidental extreme values. The bound is validated centrally in the setup request records, so every
-setup path (`new-board`, `import-board`, `setup-local`, guided setup) rejects out-of-range values
-before any Trello request.
+shared bound of `99` prevents accidental three-digit typo values while still allowing large local
+machines to use high two-digit concurrency such as 64. The bound is validated centrally in the setup
+request records, so every setup path (`new-board`, `import-board`, `setup-local`, guided setup)
+rejects out-of-range values before any Trello request.
 
 ### Consequences
 
@@ -44,7 +44,7 @@ before any Trello request.
   actionable range in the message.
 - Good, because the limit and its rationale live in one constant
   (`TrelloBoardSetup.MAX_SETUP_CONCURRENT_AGENTS`).
-- Bad, because an operator with genuinely larger hardware cannot exceed `32` through setup and must
+- Bad, because an operator with genuinely larger hardware cannot exceed `99` through setup and must
   edit the workflow file directly (the runtime still only requires a positive value).
 
 ### Confirmation
@@ -57,7 +57,7 @@ Trello board is created, and the `--max-agents` help text documents the range.
 ### Documented upper bound enforced by setup validation
 
 Setup commands validate `--max-agents` against a fixed, documented range of 1 to
-`TrelloBoardSetup.MAX_SETUP_CONCURRENT_AGENTS` (32) inside the setup request records and reject
+`TrelloBoardSetup.MAX_SETUP_CONCURRENT_AGENTS` (99) inside the setup request records and reject
 out-of-range values with the expected `setup_invalid_max_agents` error before any Trello request.
 The bound applies to setup inputs only; a deliberately larger value remains possible by editing
 `agent.max_concurrent_agents` in the workflow file, which the runtime only requires to be positive.

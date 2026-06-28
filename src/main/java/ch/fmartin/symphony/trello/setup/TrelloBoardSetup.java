@@ -47,7 +47,7 @@ public final class TrelloBoardSetup {
     public static final int DEFAULT_MAX_CONCURRENT_AGENTS = ConfigDefaults.DEFAULT_SETUP_MAX_CONCURRENT_AGENTS;
     // Documented setup bound: each concurrent card runs its own Codex agent plus builds and tests,
     // so unbounded values can overload the host and make Trello ordering assumptions unsafe.
-    public static final int MAX_SETUP_CONCURRENT_AGENTS = 32;
+    public static final int MAX_SETUP_CONCURRENT_AGENTS = 99;
     public static final int DEFAULT_SERVER_PORT = ConfigDefaults.DEFAULT_SERVER_PORT;
     public static final String DEFAULT_CODEX_MODEL = "gpt-5.5";
     public static final String DEFAULT_CODEX_REASONING_EFFORT = "medium";
