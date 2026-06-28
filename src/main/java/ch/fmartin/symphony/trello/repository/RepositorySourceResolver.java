@@ -283,7 +283,8 @@ public final class RepositorySourceResolver {
         if (text == null || text.isBlank()) {
             return Stream.empty();
         }
-        return LINE_BREAK.splitAsStream(text)
+        return LINE_BREAK
+                .splitAsStream(text)
                 .map(LABELED_SOURCE::matcher)
                 .filter(Matcher::matches)
                 .map(labeled -> new Declaration(labeled.group(2), labelMode(labeled.group(1))));
