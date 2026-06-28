@@ -238,13 +238,14 @@ final class ConnectedBoardRepository {
     private static void requireServerPort(JsonNode board, String label, List<String> warnings) {
         JsonNode value = board.get("serverPort");
         if (value == null || !value.isIntegralNumber()) {
-            warnings.add("Connected-board manifest entry " + label
-                    + " field serverPort must be a JSON number from 1 to 65535.");
+            warnings.add("Connected-board manifest entry " + label + " field serverPort must be a JSON number from "
+                    + LocalPort.MIN + " to " + LocalPort.MAX + ".");
             return;
         }
         int port = value.asInt();
-        if (port < 1 || port > 65535) {
-            warnings.add("Connected-board manifest entry " + label + " field serverPort must be between 1 and 65535.");
+        if (!LocalPort.isValid(port)) {
+            warnings.add("Connected-board manifest entry " + label + " field serverPort must be between "
+                    + LocalPort.MIN + " and " + LocalPort.MAX + ".");
         }
     }
 

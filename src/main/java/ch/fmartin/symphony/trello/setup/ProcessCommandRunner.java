@@ -15,7 +15,7 @@ final class ProcessCommandRunner implements CommandRunner {
             return CommandResult.launchFailed(e.getMessage());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            return new CommandResult(130, e.getMessage());
+            return new CommandResult(CommandResult.INTERRUPTED_EXIT_CODE, e.getMessage());
         }
     }
 
@@ -28,7 +28,7 @@ final class ProcessCommandRunner implements CommandRunner {
             return CommandResult.launchFailed(e.getMessage());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            return new CommandResult(130, e.getMessage());
+            return new CommandResult(CommandResult.INTERRUPTED_EXIT_CODE, e.getMessage());
         }
     }
 }
