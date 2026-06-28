@@ -3,6 +3,7 @@ package ch.fmartin.symphony.trello.config;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,20 +39,14 @@ public final class LocalEnvironment {
     }
 
     public static Optional<String> firstPresent(Path dotenv, Map<String, String> environment, String... names) {
-        for (String name : names) {
-            String value = environment.get(name);
-            if (hasText(value)) {
-                return Optional.of(value);
-            }
-        }
-        Map<String, String> dotenvValues = load(dotenv);
-        for (String name : names) {
-            String value = dotenvValues.get(name);
-            if (hasText(value)) {
-                return Optional.of(value);
-            }
-        }
-        return Optional.empty();
+        return firstPresentValue(environment, names).or(() -> firstPresentValue(load(dotenv), names));
+    }
+
+    private static Optional<String> firstPresentValue(Map<String, String> values, String[] names) {
+        return Arrays.stream(names)
+                .map(values::get)
+                .filter(LocalEnvironment::hasText)
+                .findFirst();
     }
 
     public static Map<String, String> load(Path dotenv) {
