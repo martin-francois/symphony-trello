@@ -2,16 +2,22 @@ package ch.fmartin.symphony.trello;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 
 final class TestConventionTest {
+    private static final TypeReference<LinkedHashMap<String, Object>> JSON_OBJECT = new TypeReference<>() {};
+    private static final ObjectMapper JSON = new ObjectMapper();
     private static final Pattern SIMPLE_MANUAL_MOCK = Pattern.compile(
             "\\b(new\\s+AgentRunner\\s*\\(\\)|extends\\s+(SymphonyOrchestrator|CodexAppServerClient)|implements\\s+AgentRunner)");
     private static final Pattern TEST_ANNOTATION = Pattern.compile("^\\s*@(Test|ParameterizedTest)\\b");
@@ -58,6 +64,19 @@ final class TestConventionTest {
                 .isEmpty();
     }
 
+    @Test
+    void tesslJsonPinsJavaStyleSkills() throws IOException {
+        // given
+        Map<String, Object> tesslJson = JSON.readValue(Path.of("tessl.json").toFile(), JSON_OBJECT);
+
+        // when
+        Map<String, Object> dependencies = objectMap(tesslJson, "dependencies");
+
+        // then
+        assertThat(version(dependencies, "martinfrancois/java-optionals")).isEqualTo("1.0.0");
+        assertThat(version(dependencies, "martinfrancois/java-streams")).isEqualTo("1.1.4");
+    }
+
     private static void collectSimpleManualMockViolations(Path file, List<String> violations) throws IOException {
         List<String> lines = Files.readAllLines(file);
         for (int index = 0; index < lines.size(); index++) {
@@ -66,6 +85,17 @@ final class TestConventionTest {
                 violations.add("%s:%d: %s".formatted(file, index + 1, matcher.group()));
             }
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> objectMap(Map<String, Object> root, String key) {
+        Object value = root.get(key);
+        assertThat(value).as(key).isInstanceOf(Map.class);
+        return (Map<String, Object>) value;
+    }
+
+    private static String version(Map<String, Object> dependencies, String dependency) {
+        return String.valueOf(objectMap(dependencies, dependency).get("version"));
     }
 
     private static void collectTestSectionViolations(Path file, List<String> violations) throws IOException {
