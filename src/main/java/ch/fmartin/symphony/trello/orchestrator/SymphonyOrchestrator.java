@@ -920,7 +920,7 @@ public class SymphonyOrchestrator {
         }
         Set<String> cardLabels = card.labels().stream()
                 .map(StateNames::normalize)
-                // HashSet is intentional: dispatch checks use containsAll for label membership.
+                // HashSet is intentional: label order does not matter; we only check which labels are present.
                 .collect(Collectors.toCollection(HashSet::new));
         return cardLabels.containsAll(requiredLabels);
     }
