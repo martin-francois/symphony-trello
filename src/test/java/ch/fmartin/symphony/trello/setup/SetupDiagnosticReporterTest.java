@@ -1086,11 +1086,9 @@ final class SetupDiagnosticReporterTest {
         Optional<Path> second = scenario.reportFailure();
 
         // then
-        assertThat(first).isPresent();
-        assertThat(second).isPresent();
-        assertThat(second.get()).isNotEqualTo(first.get());
-        assertThat(first.get()).exists();
-        assertThat(second.get()).exists();
+        assertThat(first).hasValueSatisfying(path -> assertThat(path).exists());
+        assertThat(second).hasValueSatisfying(path -> assertThat(path).exists());
+        assertThat(second).isNotEqualTo(first);
     }
 
     @Test
