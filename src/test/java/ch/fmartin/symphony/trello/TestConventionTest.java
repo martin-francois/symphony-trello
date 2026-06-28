@@ -74,7 +74,7 @@ final class TestConventionTest {
 
         // then
         assertThat(version(dependencies, "martinfrancois/java-optionals")).isEqualTo("1.0.0");
-        assertThat(version(dependencies, "martinfrancois/java-streams")).isEqualTo("1.1.4");
+        assertThat(version(dependencies, "martinfrancois/java-streams")).isEqualTo("1.2.0");
     }
 
     private static void collectSimpleManualMockViolations(Path file, List<String> violations) throws IOException {
