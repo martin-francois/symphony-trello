@@ -38,7 +38,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.SequencedSet;
 import java.util.Set;
@@ -1852,14 +1851,16 @@ final class SetupDiagnosticReporter {
             ConnectedBoardManifest manifest, Optional<Path> selectedWorkflow, Path configDir, boolean scanConfigDir) {
         SequencedSet<Path> workflowPaths = new LinkedHashSet<>();
         Set<Path> canonicalIdentities = new HashSet<>();
-        manifest.boards().stream()
-                .map(ConnectedBoard::workflowPath)
-                .filter(Objects::nonNull)
-                .forEach(workflow -> addUniqueWorkflow(workflowPaths, canonicalIdentities, workflow));
+        for (ConnectedBoard board : manifest.boards()) {
+            if (board.workflowPath() != null) {
+                addUniqueWorkflow(workflowPaths, canonicalIdentities, board.workflowPath());
+            }
+        }
         selectedWorkflow.ifPresent(workflow -> addUniqueWorkflow(workflowPaths, canonicalIdentities, workflow));
         if (scanConfigDir) {
-            workflowFilesIfReadable(configDir)
-                    .forEach(workflow -> addUniqueWorkflow(workflowPaths, canonicalIdentities, workflow));
+            for (Path workflow : workflowFilesIfReadable(configDir)) {
+                addUniqueWorkflow(workflowPaths, canonicalIdentities, workflow);
+            }
         }
         return workflowPaths;
     }

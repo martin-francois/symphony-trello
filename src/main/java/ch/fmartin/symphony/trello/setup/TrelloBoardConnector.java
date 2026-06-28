@@ -225,7 +225,7 @@ final class TrelloBoardConnector {
         if (configuredWorkspaceId.isEmpty()) {
             return chooseWorkspaceId(workspaces, terminal, options.nonInteractive());
         }
-        return configuredWorkspaceId.orElseThrow();
+        return configuredWorkspaceId.get();
     }
 
     private static String chooseWorkspaceId(
@@ -441,11 +441,11 @@ final class TrelloBoardConnector {
                 options.force(),
                 workflowConfig,
                 name -> LocalEnvironment.get(name, options.envPath()));
-        if (options.serverPort().isEmpty()) {
+        Optional<Integer> serverPort = options.serverPort();
+        if (serverPort.isEmpty()) {
             return selectedImportServerPort(options, manifest, workflowPath, reservedPorts);
         }
-        return validatedRequestedServerPort(
-                options, manifest, workflowPath, options.serverPort().orElseThrow(), reservedPorts);
+        return validatedRequestedServerPort(options, manifest, workflowPath, serverPort.get(), reservedPorts);
     }
 
     private Integer selectedImportServerPort(
@@ -469,7 +469,7 @@ final class TrelloBoardConnector {
         if (existingPort.isEmpty()) {
             return Optional.empty();
         }
-        int port = existingPort.orElseThrow();
+        int port = existingPort.get();
         if (!boardSetup.portInUse(port)) {
             return Optional.of(port);
         }
