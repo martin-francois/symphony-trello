@@ -598,6 +598,69 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
+    void diagnosticsToolVersionUsesFirstOutputLine() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("first-tool-version-line-config");
+        Path stateHome = tempDir.resolve("first-tool-version-line-state");
+        Path toolDirectory = tempDir.resolve("first-tool-version-line-tools");
+        Path java = toolDirectory.resolve("java");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.createDirectories(toolDirectory);
+        Files.writeString(java, "", StandardCharsets.UTF_8);
+        java.toFile().setExecutable(true);
+        FakeCommandRunner commands = new FakeCommandRunner()
+                .returns(0, "openjdk version \"25\"\nopenjdk version \"26\"\n", java.toString(), "-version");
+        var reporter = new SetupDiagnosticReporter(Map.of("PATH", toolDirectory.toString()), commands);
+
+        // when
+        String report = renderGlobalDiagnostics(reporter, configDir, stateHome);
+
+        // then
+        assertThat(report)
+                .contains("| java | available | openjdk version \"25\" |")
+                .doesNotContain("openjdk version \"26\"");
+    }
+
+    @Test
+    void diagnosticsToolProbeUsesFirstExecutableInPathOrder() throws Exception {
+        // given
+        if (System.getProperty("os.name").startsWith("Windows")) {
+            abort("POSIX execute-bit behavior is not portable on Windows");
+        }
+        Path configDir = tempDir.resolve("path-order-config");
+        Path stateHome = tempDir.resolve("path-order-state");
+        Path firstDirectory = tempDir.resolve("path-order-first");
+        Path secondDirectory = tempDir.resolve("path-order-second");
+        Path firstCodex = firstDirectory.resolve("codex");
+        Path secondCodex = secondDirectory.resolve("codex");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.createDirectories(firstDirectory);
+        Files.createDirectories(secondDirectory);
+        Files.writeString(firstCodex, "", StandardCharsets.UTF_8);
+        Files.writeString(secondCodex, "", StandardCharsets.UTF_8);
+        if (!firstCodex.toFile().setExecutable(true) || !secondCodex.toFile().setExecutable(true)) {
+            abort("test filesystem does not support executable tool fixtures");
+        }
+        FakeCommandRunner commands = new FakeCommandRunner()
+                .returns(0, "codex-first\n", firstCodex.toString(), "--version")
+                .returns(0, "codex-second\n", secondCodex.toString(), "--version");
+        var reporter = new SetupDiagnosticReporter(
+                Map.of("PATH", firstDirectory + File.pathSeparator + secondDirectory),
+                commands,
+                Files::list,
+                Clock.fixed(Instant.EPOCH, ZoneOffset.UTC),
+                "Linux");
+
+        // when
+        String report = renderGlobalDiagnostics(reporter, configDir, stateHome);
+
+        // then
+        assertThat(report).contains("| codex | available | codex-first; login=not-probed |");
+    }
+
+    @Test
     void diagnosticsMarksMissingPosixToolWithoutLaunchingIt() throws Exception {
         // given
         Path configDir = tempDir.resolve("missing-posix-tool-config");
@@ -3650,7 +3713,14 @@ final class SetupDiagnosticReporterTest {
             // when
             Optional<Path> report = reporter.write(
                     new TrelloBoardSetupException("setup_lifecycle_failed", "setup failed"),
-                    List.of("start", "--config-dir", configDir.toString(), "--workflow", relativeWorkflow.toString()));
+                    List.of(
+                            "start",
+                            "--board",
+                            "setup-local",
+                            "--config-dir",
+                            configDir.toString(),
+                            "--workflow",
+                            relativeWorkflow.toString()));
 
             // then
             assertThat(report).hasValueSatisfying(path -> assertThat(path)

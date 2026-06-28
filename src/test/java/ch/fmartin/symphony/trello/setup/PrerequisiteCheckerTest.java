@@ -77,6 +77,22 @@ final class PrerequisiteCheckerTest {
                         javac 25.0.1
                         """,
                         true),
+                Arguments.of(
+                        "first Java version line is authoritative",
+                        """
+                        openjdk version "24.0.2"
+                        openjdk version "25.0.1"
+                        """,
+                        "javac 25.0.1",
+                        false),
+                Arguments.of(
+                        "first javac version line is authoritative",
+                        "openjdk version \"25.0.1\"",
+                        """
+                        javac 24.0.2
+                        javac 25.0.1
+                        """,
+                        false),
                 Arguments.of("newer java accepted", "openjdk version \"26.0.1\"", "javac 26.0.1", true));
     }
 

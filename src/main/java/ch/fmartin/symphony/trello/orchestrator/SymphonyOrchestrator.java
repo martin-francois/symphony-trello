@@ -920,7 +920,8 @@ public class SymphonyOrchestrator {
         }
         Set<String> cardLabels = card.labels().stream()
                 .map(StateNames::normalize)
-                // HashSet is intentional: label order does not matter; we only check which labels are present.
+                // HashSet gives fast label membership checks; toSet() is avoided because it does not
+                // specify the result type or mutability.
                 .collect(Collectors.toCollection(HashSet::new));
         return cardLabels.containsAll(requiredLabels);
     }

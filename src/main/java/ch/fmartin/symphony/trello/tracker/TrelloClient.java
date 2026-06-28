@@ -185,7 +185,7 @@ public class TrelloClient implements TrackerClient {
         Optional<BoardList> target = context.lists().values().stream()
                 .filter(list -> !list.closed())
                 .filter(list -> StateNames.normalize(list.name()).equals(StateNames.normalize(inProgressState)))
-                .findFirst();
+                .findAny();
         BoardList targetList = target.orElseThrow(() -> new TrelloException(
                 "trello_in_progress_list_not_found", "Configured in-progress list was not found on the Trello board"));
         if (!shouldMoveBeforeDispatch(config, card, targetList)) {
@@ -880,7 +880,7 @@ public class TrelloClient implements TrackerClient {
         return context.lists().values().stream()
                 .filter(list -> !list.closed())
                 .filter(list -> targetNames.contains(StateNames.normalize(list.name())))
-                .findFirst();
+                .findAny();
     }
 
     private Optional<Card> normalize(Map<String, Object> payload, BoardContext context, EffectiveConfig config) {

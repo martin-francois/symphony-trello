@@ -327,7 +327,7 @@ public class TrelloHandoffToolHandler {
                 ? openLists.stream().filter(list -> list.id().equals(listId)).findAny()
                 : openLists.stream()
                         .filter(list -> StateNames.normalize(list.name()).equals(StateNames.normalize(listName)))
-                        .findFirst();
+                        .findAny();
 
         return target.map(list -> allowedById(config, list) || allowedByName(config, list)
                         ? new BoardListMatch(list, null)
