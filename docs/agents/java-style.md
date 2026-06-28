@@ -24,6 +24,25 @@ References.
   than manual loop state. Do not replace a readable collection stream with a loop just to avoid an
   `Optional`, especially when the loop needs labeled `continue`, mutable sentinel flags beyond the
   natural state of the algorithm, or duplicated branch flow.
+- For stream chains with more than one operation after `stream()` or `parallelStream()`, keep
+  `.stream()` on the source line and put each following stream operation on its own continuation
+  line. A one-operation chain such as `items.stream().findFirst()` may stay on one line, and a bare
+  stream saved to a variable may stay on one line. `./mvnw -q spotless:apply` applies this wrapping
+  automatically as part of the Java Spotless pipeline.
+- Before using `collect(Collectors.toCollection(...))`, verify that the code truly needs the
+  requested collection implementation, such as mutability after collection, encounter-order
+  preservation, sorted ordering, or set membership performance. Prefer `toList()`, Guava immutable
+  collectors such as `toImmutableSet()`, `Collectors.toMap(...)`, or another simpler explicit
+  collector when the implementation type does not matter. Do not use ambiguous JDK collectors such
+  as `Collectors.toSet()` because the repository enforces Picnic's `CollectorMutability` check. When
+  `toCollection(...)` remains, add a short nearby comment explaining why that concrete collection
+  type is required.
+- Treat stream and Optional refactors as behavior-preserving by default. Before accepting a skill
+  suggestion, verify mutability, encounter order, duplicate handling, parser splitting, laziness,
+  exception behavior, nullability, prompt ordering, and side-effect boundaries. If a better-looking
+  refactor changes one of those properties, either keep the behavior-preserving shape or make the
+  behavior change explicit with the reason it is safe. When the context is insufficient, ask or leave
+  the behavior unchanged.
 - When refactoring Java code to make better use of streams, use the repo-local
   `java-streams-eval-capture` Codex skill. Capture the before, prompt, intermediate when present,
   and final code, then create or update the corresponding eval issue in
@@ -49,6 +68,55 @@ References.
   helper only to avoid this explicit branch unless the pattern becomes common enough to justify an
   ADR-level style decision. Keep `isPresent()` only when the boolean presence check is itself the
   clearest logic and the value is not immediately read.
+
+## Temporary Skill Overrides
+
+These rules override the installed Java Streams and Optional skills until the linked eval issues are
+closed. At most once per turn before applying one of these overrides, check the linked issue state on
+GitHub. If all linked issues for an override are closed, remove that override in the same change
+instead of following it.
+
+- Streams issue
+  [#40](https://github.com/martinfrancois/java-streams-skill/issues/40): when a stream must emit
+  zero, one, or several values per input element, consider `mapMulti(...)` or a result-producing
+  collector before using a stream `forEach(...)` that mutates an external collection.
+- Streams issues [#42](https://github.com/martinfrancois/java-streams-skill/issues/42) and
+  [#48](https://github.com/martinfrancois/java-streams-skill/issues/48): do not treat
+  `toList()` plus `addAll(...)` as an automatic improvement over an explicit append loop. Prefer
+  collecting directly to the final result when that preserves behavior; otherwise keep the explicit
+  loop when it avoids hidden side effects or extra per-batch allocation.
+- Streams issue
+  [#44](https://github.com/martinfrancois/java-streams-skill/issues/44): use
+  `Function.identity()` for identity value mappers in collectors instead of writing lambdas such as
+  `value -> value`.
+- Streams issue
+  [#45](https://github.com/martinfrancois/java-streams-skill/issues/45): when manually editing a
+  multi-operation stream chain, prefer keeping `.stream()` with the source expression and placing
+  following operations on separate lines when Spotless preserves it. Do not add custom formatting
+  tooling for this preference unless the formatter decision ADR changes.
+- Streams issue
+  [#46](https://github.com/martinfrancois/java-streams-skill/issues/46): every remaining
+  `Collectors.toCollection(...)` must have an obvious reason for the concrete collection type or a
+  nearby comment that explains it.
+- Streams issue
+  [#47](https://github.com/martinfrancois/java-streams-skill/issues/47): stream refactors must
+  preserve parser splitting semantics. Do not replace regex `\R` line splitting with
+  `String.lines()` unless the narrower line-break set is intentional and tested.
+- Streams issue
+  [#49](https://github.com/martinfrancois/java-streams-skill/issues/49): pure predicate loops that
+  only answer whether any element matches should usually become `anyMatch(...)`, with any terminal
+  side effect such as adding one warning kept outside the stream. Keep the loop when the body
+  performs IO, writes per-element output, mutates state for later steps, depends on an index, scans
+  characters, probes ports, or otherwise has side effects that are the point of the method.
+- Optional issues [#69](https://github.com/martinfrancois/java-optionals-skill/issues/69) and
+  [#70](https://github.com/martinfrancois/java-optionals-skill/issues/70): side-effecting
+  boundaries such as checked prompting, checked IO, Trello writes, or comment upserts may use an
+  explicit empty guard and one local value read. Do not force those branches into Optional lambdas or
+  generic checked-Optional helpers.
+- Optional issue
+  [#71](https://github.com/martinfrancois/java-optionals-skill/issues/71): when an Optional fallback
+  performs non-trivial work, preserve lazy fallback behavior and capture missed-trigger cases where
+  the installed Optional skill should have activated during the original implementation prompt.
 
 ## HTTP status codes
 

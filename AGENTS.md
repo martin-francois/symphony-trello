@@ -16,6 +16,9 @@ and follow it.
 When a user corrects a repeatable mistake or states a generally useful working preference, make the
 durable agent-doc update proactively in the same change; do not wait for the user to explicitly ask
 for persistence. If the right persistence scope is unclear, ask before finishing.
+When an installed skill eval issue captures bad or missing behavior, add or update the corresponding
+temporary repo-local override described in [Default workflow](docs/agents/default-workflow.md) and
+[Java style & design preferences](docs/agents/java-style.md).
 Before finishing a task where you made or explained a deliberate design tradeoff, or where the code
 does not make the meaning or rationale obvious, make the decision explicit in the code where
 possible and check whether
