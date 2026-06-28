@@ -122,19 +122,27 @@ public class TrelloClient implements TrackerClient {
                     config,
                     "lists/" + encodeSegment(listId) + "/cards",
                     Map.of("fields", CARD_FIELDS, "filter", "all"));
-            List<Card> archivedTerminalCards = listCards.stream()
-                    .map(card -> normalize(card, context, config))
-                    .flatMap(Optional::stream)
-                    .filter(card -> isTerminal(card, config))
-                    .toList();
-            normalized.addAll(archivedTerminalCards);
+            appendTerminalCards(normalized, listCards, context, config);
         }
 
+        // Preserve Trello encounter order while de-duplicating cards returned by board and archived-list endpoints.
         return normalized.stream()
                 .collect(Collectors.toMap(Card::id, Function.identity(), (left, right) -> left, LinkedHashMap::new))
                 .values()
                 .stream()
                 .toList();
+    }
+
+    private void appendTerminalCards(
+            List<Card> cards,
+            List<Map<String, Object>> payloads,
+            BoardContext context,
+            EffectiveConfig config) {
+        for (Map<String, Object> payload : payloads) {
+            normalize(payload, context, config)
+                    .filter(card -> isTerminal(card, config))
+                    .ifPresent(cards::add);
+        }
     }
 
     @Override
@@ -404,6 +412,7 @@ public class TrelloClient implements TrackerClient {
     private ResolvedPrerequisites resolvePrerequisites(
             EffectiveConfig config, Card card, PrerequisitePlan plan, Map<String, CardLookupResult> lookupResults) {
         List<Card.PrerequisiteProblem> problems = new ArrayList<>(plan.problems());
+        // Preserve prerequisite checklist order so generated blockers follow the operator-authored checklist.
         Map<String, BlockerRef> blockers = LinkedHashMap.newLinkedHashMap(
                 plan.items().size() + (plan.problems().isEmpty() ? 0 : 1));
         boolean continueChecklistSync = true;
@@ -532,22 +541,16 @@ public class TrelloClient implements TrackerClient {
         references.add("title", card.title());
         references.add("description", card.description());
         for (Card.Checklist checklist : card.checklists()) {
-            String source = "checklist:" + nullToEmpty(checklist.name());
-            for (Card.ChecklistItem item : checklist.items()) {
-                references.addExact(source, item.text());
-                references.add(source, item.text());
-            }
+            references.addChecklist(checklist);
         }
         for (Card.Comment comment : card.comments()) {
             references.add("comment", comment.text());
         }
         for (Card.Attachment attachment : card.attachments()) {
-            references.add("attachment", attachment.name());
-            references.add("attachment", attachment.url());
+            references.addAttachment(attachment);
         }
         for (TrelloChecklistClassifier.PrerequisiteItem item : plan.items()) {
-            TrelloCardReference reference = item.reference();
-            references.add("checklist", reference.url(), reference);
+            references.addPrerequisite(item.reference());
         }
         return references.asMap();
     }
@@ -682,14 +685,17 @@ public class TrelloClient implements TrackerClient {
         if (!card.blockedBy().isEmpty()) {
             lines.add("");
             lines.add("Waiting for:");
-            card.blockedBy().forEach(blocker -> lines.add("- " + waitingBlockerText(blocker)));
+            for (BlockerRef blocker : card.blockedBy()) {
+                lines.add("- " + waitingBlockerText(blocker));
+            }
         }
         if (!card.prerequisiteProblems().isEmpty()) {
             lines.add("");
             lines.add("Checklist cleanup needed:");
-            card.prerequisiteProblems()
-                    .forEach(problem -> lines.add("- " + problem.message()
-                            + (blank(problem.checklist()) ? "" : " Checklist: " + problem.checklist() + ".")));
+            for (Card.PrerequisiteProblem problem : card.prerequisiteProblems()) {
+                lines.add("- " + problem.message()
+                        + (blank(problem.checklist()) ? "" : " Checklist: " + problem.checklist() + "."));
+            }
         }
         lines.add("");
         lines.add(
@@ -1355,6 +1361,7 @@ public class TrelloClient implements TrackerClient {
     private record ReferencedText(String source, String text, TrelloCardReference reference) {}
 
     private static final class ReferenceAccumulator {
+        // Preserve first-seen reference order for stable prompt context and duplicate handling.
         private final Map<String, ReferencedText> references = new LinkedHashMap<>();
 
         void add(String source, String text) {
@@ -1369,6 +1376,23 @@ public class TrelloClient implements TrackerClient {
                 return;
             }
             TrelloCardReferenceParser.exactReference(text).ifPresent(reference -> add(source, text, reference));
+        }
+
+        void addChecklist(Card.Checklist checklist) {
+            String source = "checklist:" + nullToEmpty(checklist.name());
+            for (Card.ChecklistItem item : checklist.items()) {
+                addExact(source, item.text());
+                add(source, item.text());
+            }
+        }
+
+        void addAttachment(Card.Attachment attachment) {
+            add("attachment", attachment.name());
+            add("attachment", attachment.url());
+        }
+
+        void addPrerequisite(TrelloCardReference reference) {
+            add("checklist", reference.url(), reference);
         }
 
         void add(String source, String text, TrelloCardReference reference) {
