@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.StreamSupport;
 
 public final class CodexSandboxPolicy {
 
@@ -141,11 +142,13 @@ public final class CodexSandboxPolicy {
         if (!(value instanceof List<?> items)) {
             throw invalid(field + " must be a list of paths.");
         }
-        for (Object item : items) {
-            if (!(item instanceof String text) || text.isBlank()) {
-                throw invalid(field + " must contain only non-blank path strings.");
-            }
+        if (items.stream().anyMatch(CodexSandboxPolicy::invalidStringListItem)) {
+            throw invalid(field + " must contain only non-blank path strings.");
         }
+    }
+
+    private static boolean invalidStringListItem(Object item) {
+        return !(item instanceof String text) || text.isBlank();
     }
 
     private static void appendWritableRoots(ObjectNode policy, List<Path> roots) {
@@ -159,12 +162,7 @@ public final class CodexSandboxPolicy {
     }
 
     private static boolean containsText(ArrayNode values, String expected) {
-        for (JsonNode value : values) {
-            if (expected.equals(value.asText())) {
-                return true;
-            }
-        }
-        return false;
+        return StreamSupport.stream(values.spliterator(), false).anyMatch(value -> expected.equals(value.asText()));
     }
 
     private static InvalidPolicyException invalid(String message) {
