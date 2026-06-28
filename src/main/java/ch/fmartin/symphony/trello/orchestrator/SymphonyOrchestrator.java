@@ -48,6 +48,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
@@ -916,9 +917,8 @@ public class SymphonyOrchestrator {
         if (requiredLabels.stream().anyMatch(String::isBlank)) {
             return false;
         }
-        Set<String> cardLabels = card.labels().stream()
-                .map(StateNames::normalize)
-                .collect(java.util.stream.Collectors.toCollection(HashSet::new));
+        Set<String> cardLabels =
+                card.labels().stream().map(StateNames::normalize).collect(Collectors.toCollection(HashSet::new));
         return cardLabels.containsAll(requiredLabels);
     }
 
@@ -1053,11 +1053,9 @@ public class SymphonyOrchestrator {
     }
 
     private Map<String, Integer> runningCountsByState() {
-        Map<String, Integer> counts = new HashMap<>();
-        running.values().stream()
+        return running.values().stream()
                 .map(entry -> StateNames.normalize(entry.card.state()))
-                .forEach(state -> counts.merge(state, 1, Integer::sum));
-        return counts;
+                .collect(Collectors.toMap(state -> state, state -> 1, Integer::sum, HashMap::new));
     }
 
     private static final class DispatchBudget {

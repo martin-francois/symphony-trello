@@ -12,7 +12,6 @@ import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
@@ -21,6 +20,7 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.function.Function;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 @ApplicationScoped
 public class ConfigResolver {
@@ -379,17 +379,14 @@ public class ConfigResolver {
     }
 
     private List<Path> additionalWritableRoots(Path workflowDirectory, Map<String, Object> codex) {
-        List<Path> roots = new ArrayList<>();
-        list(codex, "additional_writable_roots", List.of()).stream()
-                .map(value -> path(workflowDirectory, value))
-                .forEach(roots::add);
-        environmentValue("SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS").stream()
+        Stream<Path> configuredRoots = list(codex, "additional_writable_roots", List.of()).stream()
+                .map(value -> path(workflowDirectory, value));
+        Stream<Path> environmentRoots = environmentValue("SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS").stream()
                 .flatMap(value -> Arrays.stream(value.split(Pattern.quote(File.pathSeparator))))
                 .map(String::trim)
                 .filter(value -> !value.isBlank())
-                .map(value -> path(workflowDirectory, value))
-                .forEach(roots::add);
-        return roots.stream().distinct().toList();
+                .map(value -> path(workflowDirectory, value));
+        return Stream.concat(configuredRoots, environmentRoots).distinct().toList();
     }
 
     private Path path(Path workflowDirectory, String value) {
