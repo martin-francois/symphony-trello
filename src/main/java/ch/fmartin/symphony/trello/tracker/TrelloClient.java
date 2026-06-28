@@ -542,9 +542,10 @@ public class TrelloClient implements TrackerClient {
             references.add("attachment", attachment.name());
             references.add("attachment", attachment.url());
         }
-        plan.items().stream()
-                .map(TrelloChecklistClassifier.PrerequisiteItem::reference)
-                .forEach(reference -> references.add("checklist", reference.url(), reference));
+        for (TrelloChecklistClassifier.PrerequisiteItem item : plan.items()) {
+            TrelloCardReference reference = item.reference();
+            references.add("checklist", reference.url(), reference);
+        }
         return references.asMap();
     }
 

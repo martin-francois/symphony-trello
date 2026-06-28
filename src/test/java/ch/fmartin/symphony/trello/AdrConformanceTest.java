@@ -95,10 +95,11 @@ final class AdrConformanceTest {
                         .add(file);
             }
         }
-        filesByNumber.entrySet().stream()
+        List<String> duplicateNumberViolations = filesByNumber.entrySet().stream()
                 .filter(entry -> entry.getValue().size() > 1)
-                .forEach(entry -> violations.add(
-                        "ADR number %s is used by multiple files: %s".formatted(entry.getKey(), entry.getValue())));
+                .map(entry -> "ADR number %s is used by multiple files: %s".formatted(entry.getKey(), entry.getValue()))
+                .toList();
+        violations.addAll(duplicateNumberViolations);
     }
 
     private static void assertAdrMetadata(Path file, List<String> lines, List<String> violations) {

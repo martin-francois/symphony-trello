@@ -599,13 +599,15 @@ public final class LocalSetup {
             return reserved;
         }
         try (var files = Files.list(configDir)) {
-            files.filter(Files::isRegularFile)
+            Set<Integer> workflowPorts = files.filter(Files::isRegularFile)
                     .filter(file -> PathNames.fileName(file).endsWith(".md"))
                     .filter(file -> ignoredBoard.workflowPath() == null
                             || !PathsEqual.samePath(file, ignoredBoard.workflowPath()))
-                    .forEach(file -> workflowConfig
-                            .serverPort(file, WorkflowEnvironmentResolver.resolver(environment, options.envPath()))
-                            .ifPresent(reserved::add));
+                    .map(file -> workflowConfig.serverPort(
+                            file, WorkflowEnvironmentResolver.resolver(environment, options.envPath())))
+                    .flatMap(Optional::stream)
+                    .collect(Collectors.toCollection(HashSet::new));
+            reserved.addAll(workflowPorts);
         } catch (IOException ignored) {
             // A config directory that cannot be listed leaves only the manifest and probe checks.
         }
@@ -663,14 +665,12 @@ public final class LocalSetup {
     }
 
     private TrelloBoardSetup boardSetupWithCodexModel(Options options) {
-        if (options.codexModelDefaults().isEmpty()) {
-            return boardSetup;
-        }
-        TrelloBoardSetup.CodexModelDefaults defaults =
-                options.codexModelDefaults().orElseThrow();
-        return options.hasExplicitCodexModelRequest()
-                ? boardSetup.withCodexModelOverrides(defaults, options.codexModel(), options.codexReasoningEffort())
-                : boardSetup.withCodexModelDefaults(defaults);
+        return options.codexModelDefaults()
+                .map(defaults -> options.hasExplicitCodexModelRequest()
+                        ? boardSetup.withCodexModelOverrides(
+                                defaults, options.codexModel(), options.codexReasoningEffort())
+                        : boardSetup.withCodexModelDefaults(defaults))
+                .orElse(boardSetup);
     }
 
     private static ExistingSetupAction existingSetupAction(
@@ -884,7 +884,7 @@ public final class LocalSetup {
         if (selector.isEmpty()) {
             return selectBoardForCodexAccessUpdateWithoutSelector(options, manifest, terminal);
         }
-        return selectedConnectedBoard(manifest, selector.orElseThrow());
+        return selectedConnectedBoard(manifest, selector.get());
     }
 
     private static ConnectedBoard selectBoardForCodexAccessUpdateWithoutSelector(
@@ -1110,7 +1110,7 @@ public final class LocalSetup {
         if (requested.isEmpty()) {
             return selectNonGithubBoardForUpgradeWithoutSelector(options, candidates, terminal);
         }
-        return nonGithubBoard(candidates, requested.orElseThrow());
+        return nonGithubBoard(candidates, requested.get());
     }
 
     private static List<ConnectedBoard> nonGithubBoards(ConnectedBoardManifest manifest) {
