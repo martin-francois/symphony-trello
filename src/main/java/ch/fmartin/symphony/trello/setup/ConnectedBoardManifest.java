@@ -1,9 +1,9 @@
 package ch.fmartin.symphony.trello.setup;
 
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 record ConnectedBoardManifest(List<ConnectedBoard> boards) {
     static final String FILE_NAME = "connected-boards.json";
@@ -13,11 +13,9 @@ record ConnectedBoardManifest(List<ConnectedBoard> boards) {
     }
 
     ConnectedBoardManifest withBoard(ConnectedBoard board) {
-        List<ConnectedBoard> updated = new ArrayList<>(boards.stream()
-                .filter(existing -> !sameBoardOrWorkflow(existing, board))
+        return new ConnectedBoardManifest(Stream.concat(
+                        boards.stream().filter(existing -> !sameBoardOrWorkflow(existing, board)), Stream.of(board))
                 .toList());
-        updated.add(board);
-        return new ConnectedBoardManifest(updated);
     }
 
     List<ConnectedBoard> boardsReplacedBy(ConnectedBoard board) {

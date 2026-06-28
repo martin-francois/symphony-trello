@@ -2070,7 +2070,7 @@ public final class TrelloBoardSetup {
     private static List<String> defaultActiveStates(List<String> openListNames) {
         return openListNames.stream()
                 .filter(name -> name.equalsIgnoreCase(RECOMMENDED_ACTIVE_STATE))
-                .findFirst()
+                .findAny()
                 .map(List::of)
                 .orElseGet(List::of);
     }
@@ -2078,7 +2078,7 @@ public final class TrelloBoardSetup {
     private static List<String> defaultTerminalStates(List<String> openListNames) {
         return openListNames.stream()
                 .filter(name -> name.equalsIgnoreCase("Done"))
-                .findFirst()
+                .findAny()
                 .map(List::of)
                 .orElseGet(List::of);
     }
@@ -2086,17 +2086,17 @@ public final class TrelloBoardSetup {
     private static String defaultReviewState(List<String> openListNames) {
         return openListNames.stream()
                 .filter(name -> name.equalsIgnoreCase(RECOMMENDED_REVIEW_STATE))
-                .findFirst()
+                .findAny()
                 .orElseGet(() -> openListNames.stream()
                         .filter(name -> name.equalsIgnoreCase(FALLBACK_REVIEW_STATE))
-                        .findFirst()
+                        .findAny()
                         .orElse(null));
     }
 
     private static String defaultInProgressState(List<String> openListNames) {
         return openListNames.stream()
                 .filter(name -> name.equalsIgnoreCase(RECOMMENDED_IN_PROGRESS_STATE))
-                .findFirst()
+                .findAny()
                 .orElse(null);
     }
 
@@ -2106,21 +2106,21 @@ public final class TrelloBoardSetup {
         }
         return openListNames.stream()
                 .filter(name -> name.equalsIgnoreCase(RECOMMENDED_MERGING_STATE))
-                .findFirst()
+                .findAny()
                 .orElse(null);
     }
 
     private static String defaultBlockedState(List<String> openListNames) {
         return openListNames.stream()
                 .filter(name -> name.equalsIgnoreCase(RECOMMENDED_BLOCKED_STATE))
-                .findFirst()
+                .findAny()
                 .orElse(null);
     }
 
     private static String landingDoneState(List<String> terminalStates) {
         return terminalStates.stream()
                 .filter(state -> state.equalsIgnoreCase("Done"))
-                .findFirst()
+                .findAny()
                 .orElseGet(() -> terminalStates.stream().findFirst().orElse(null));
     }
 

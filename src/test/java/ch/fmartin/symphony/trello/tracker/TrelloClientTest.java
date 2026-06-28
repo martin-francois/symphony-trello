@@ -738,6 +738,59 @@ final class TrelloClientTest {
     }
 
     @Test
+    void fetchCandidateCardsUpdatesFirstManagedPrerequisiteStatusCommentWhenSeveralExist() {
+        // given
+        trello.remove("/1/boards/board-1/cards/open");
+        trello.on("/1/boards/board-1/cards/open", exchange -> {
+            readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
+            respond(
+                    exchange,
+                    """
+                    [
+                      {"id":"no-prereq-card","name":"Ready","desc":"","idList":"list-todo","idBoard":"board-1","closed":false,"shortLink":"ready","shortUrl":"u","url":"u","labels":[],"badges":{"checkItems":0,"comments":2},"pos":1}
+                    ]
+                    """);
+        });
+        trello.on("/1/cards/no-prereq-card", exchange -> {
+            readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
+            respond(
+                    exchange,
+                    """
+                    {"id":"no-prereq-card","name":"Ready","desc":"","idList":"list-todo","idBoard":"board-1","closed":false,"shortLink":"ready","labels":[],"actions":[
+                      {"id":"waiting-comment-newest","date":"2026-02-25T20:12:12.000Z","data":{"text":"%s\\n\\nNewest waiting text"},"memberCreator":{"username":"codex"}},
+                      {"id":"waiting-comment-older","date":"2026-02-25T20:11:12.000Z","data":{"text":"%s\\n\\nOlder waiting text"},"memberCreator":{"username":"codex"}}
+                    ],"badges":{"checkItems":0,"comments":2},"pos":1}
+                    """
+                            .formatted(
+                                    TrelloClient.WAITING_COMMENT_MARKER,
+                                    TrelloClient.PREREQUISITE_STATUS_COMMENT_MARKER));
+        });
+        trello.on("/1/actions/waiting-comment-newest/text", exchange -> {
+            writeRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
+            respond(exchange, "{\"id\":\"waiting-comment-newest\"}");
+        });
+        trello.on("/1/actions/waiting-comment-older/text", exchange -> {
+            writeRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
+            respond(exchange, "{\"id\":\"waiting-comment-older\"}");
+        });
+        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var config =
+                config("input", Map.of("active_states", List.of("Todo"), "blocker_enforced_states", List.of("Todo")));
+
+        // when
+        List<Card> cards = client.fetchCandidateCards(config);
+
+        // then
+        assertThat(cards).singleElement().satisfies(card -> {
+            assertThat(card.blockedBy()).isEmpty();
+            assertThat(card.prerequisiteProblems()).isEmpty();
+        });
+        assertThat(writeRequests).singleElement().satisfies(request -> assertThat(request)
+                .startsWith("PUT /1/actions/waiting-comment-newest/text?"));
+        assertThat(writeRequests).noneMatch(request -> request.startsWith("PUT /1/actions/waiting-comment-older/text"));
+    }
+
+    @Test
     void resolvedPrerequisiteStatusCommentIsUpdatedInPlaceWhenCardBecomesBlockedAgain() throws Exception {
         // given
         configureDependencyBoard("Todo");

@@ -118,6 +118,23 @@ final class LocalEnvironmentTest {
     }
 
     @Test
+    void firstPresentUsesConfiguredNameOrderWithinTheSameSource() throws Exception {
+        // given
+        Path dotenv = tempDir.resolve(".env");
+        Files.writeString(dotenv, "");
+
+        // when
+        var port = LocalEnvironment.firstPresent(
+                dotenv,
+                Map.of("SYMPHONY_HTTP_PORT", "18080", "QUARKUS_HTTP_PORT", "19080"),
+                "SYMPHONY_HTTP_PORT",
+                "QUARKUS_HTTP_PORT");
+
+        // then
+        assertThat(port).contains("18080");
+    }
+
+    @Test
     void readsEscapedDoubleQuotedDotenvValues() throws Exception {
         // given
         Path dotenv = tempDir.resolve(".env");

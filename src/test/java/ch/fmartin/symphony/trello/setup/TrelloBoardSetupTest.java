@@ -184,6 +184,40 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
+    void newBoardTrelloStatusExceptionUsesFirstResponseLine() {
+        // given
+        trello.remove("/1/boards/");
+        trello.on("/1/boards/", exchange -> {
+            byte[] body = "first public line\nsecond diagnostic line".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(503, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        Path workflow = tempDir.resolve("multiline-status-workflow.md");
+
+        // when
+        Throwable thrown = catchThrowable(() -> setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "Multiline Failure Board",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                1,
+                false,
+                false)));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloBoardSetupException.class, failure -> {
+            assertThat(failure.getMessage()).doesNotContain("first public line", "second diagnostic line");
+            assertThat(failure.getCause())
+                    .hasMessageContaining("first public line")
+                    .hasMessageNotContaining("second diagnostic line");
+        });
+        assertThat(workflow).doesNotExist();
+    }
+
+    @Test
     void importBoardReportsActionableErrorForUnresolvableBoardSelector() {
         // given
         trello.on("/1/boards/notreal", exchange -> {

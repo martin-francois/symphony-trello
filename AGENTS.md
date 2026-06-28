@@ -24,8 +24,8 @@ does not make the meaning or rationale obvious, make the decision explicit in th
 possible and check whether
 [Specification & ADR discipline](docs/agents/specification-and-adr-discipline.md) requires an ADR.
 Add or update it before the user asks.
-For repeated literals, scenario-table values, or parallel edits that look coupled, apply the
-centralization and refactoring guidance in
+For repeated literals, scenario-table values, parallel edits that look coupled, and Java collection
+mutability defaults, apply the centralization and refactoring guidance in
 [Java style & design preferences](docs/agents/java-style.md).
 When adding or editing tests, apply the AssertJ and test-duplication guidance in
 [Testing](docs/agents/testing.md), including avoiding assertion loops or assertion streams when

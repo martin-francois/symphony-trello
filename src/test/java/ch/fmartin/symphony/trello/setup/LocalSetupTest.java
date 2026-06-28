@@ -14,7 +14,9 @@ import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.testsupport.SetupRunResult;
 import ch.fmartin.symphony.trello.testsupport.TestEnv;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
@@ -25,6 +27,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -4802,6 +4805,28 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void setupTutorialUsesFirstEligibleQueueAndTerminalState() throws Exception {
+        // given
+        var lists = new WorkflowListConfiguration(
+                List.of("In Progress", "First Queue", "Second Queue"),
+                List.of("First Done", "Second Done"),
+                Optional.of("In Progress"),
+                Optional.empty(),
+                false,
+                false);
+
+        // when
+        String tutorial = miniTutorial(false, lists);
+
+        // then
+        assertThat(tutorial)
+                .contains(
+                        "Create a Trello card with a clear task and move it to \"First Queue\".",
+                        "move it to \"First Done\".")
+                .doesNotContain("move it to \"Second Done\".", "move it to \"Second Queue\".");
+    }
+
+    @Test
     void setupKeepsExistingManifestWithoutFreshTrelloCredentials() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.saved-only.md");
@@ -6472,10 +6497,19 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         String marker = "Local server port selected for \"";
         return result.stdoutLines().stream()
                 .filter(line -> line.contains(marker))
-                .findFirst()
+                .findAny()
                 .map(line -> line.substring(line.lastIndexOf(':') + 1).trim())
                 .map(Integer::parseInt)
                 .orElseThrow(() -> new AssertionError("Expected server port selection line in setup output."));
+    }
+
+    private static String miniTutorial(boolean githubEnabled, WorkflowListConfiguration lists) throws Exception {
+        var output = new ByteArrayOutputStream();
+        var method = LocalSetup.class.getDeclaredMethod(
+                "printMiniTutorial", PrintStream.class, boolean.class, WorkflowListConfiguration.class);
+        method.setAccessible(true);
+        method.invoke(null, new PrintStream(output, true, StandardCharsets.UTF_8), githubEnabled, lists);
+        return output.toString(StandardCharsets.UTF_8);
     }
 
     private static boolean contains(int[] ports, int candidate) {

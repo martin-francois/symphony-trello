@@ -326,7 +326,7 @@ final class TrelloBoardConnector {
     private static Optional<String> detectedList(List<String> openListNames, String expectedName) {
         return openListNames.stream()
                 .filter(name -> name.equalsIgnoreCase(expectedName))
-                .findFirst();
+                .findAny();
     }
 
     private static List<String> promptCsv(Terminal terminal, String prompt) throws IOException {

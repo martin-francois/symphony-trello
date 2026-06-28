@@ -20,6 +20,12 @@ References.
 
 ## Streams and Optional
 
+- Prefer immutable collection results by default. Use `List.of`, `Set.of`, `Map.of`,
+  `Stream.toList()`, immutable collectors, and `List.copyOf`/`Set.copyOf`/`Map.copyOf` at API and
+  record boundaries when callers should not mutate the result. Use mutable collections when mutation
+  is part of the method's honest work or when a small builder makes the code easier to read than a
+  stream or immutable-builder expression; copy to an immutable result before returning unless the
+  contract requires mutability.
 - Prefer streams for real collection transformations and lookups when they make the code clearer
   than manual loop state. Do not replace a readable collection stream with a loop just to avoid an
   `Optional`, especially when the loop needs labeled `continue`, mutable sentinel flags beyond the
@@ -28,12 +34,14 @@ References.
   as `toList()`, a Guava immutable collector, or `Collectors.toMap(...)` states the result clearly
   enough. Keep `toCollection(...)` only when the chosen collection type matters, and explain that
   choice with the same non-default collection rule below. Do not use ambiguous JDK collectors such as
-  `Collectors.toSet()` because the repository enforces Picnic's `CollectorMutability` check.
+  `Collectors.toSet()` because it does not specify the result type or mutability, and the repository
+  enforces Picnic's `CollectorMutability` check.
 - When code directly chooses a non-default collection implementation such as `LinkedHashMap`,
   `LinkedHashSet`, `TreeMap`, `TreeSet`, `ArrayDeque`, a sequenced collection, or
   `Collectors.toCollection(...)`, make the reason obvious at the allocation site. Add a short
   comment when the surrounding names do not already explain the need for encounter order, sorted
-  order, deque semantics, mutability, duplicate handling, or fast membership checks.
+  order, deque semantics, mutability, duplicate handling, or fast membership checks. If the code
+  avoids an obvious API such as `toSet()`, state the specific reason that obvious API is not used.
 - Treat stream and Optional refactors as behavior-preserving by default. Before accepting a skill
   suggestion, verify mutability, encounter order, duplicate handling, parser splitting, laziness,
   exception behavior, nullability, prompt ordering, and side-effect boundaries. If a better-looking
@@ -53,7 +61,11 @@ References.
   part of the required behavior; use `findAny()` when any matching value is equivalent. Before adding
   or keeping `findFirst()`, temporarily switch that specific lookup to `findAny()` and run the narrow
   relevant test. If the test does not fail but encounter order is still semantically required, add or
-  update a realistic test that asserts the first-match contract, then keep `findFirst()`. If no
+  update a realistic test that asserts the first-match contract, then keep `findFirst()`. A sequential
+  stream may still return the first element from `findAny()`, so the minimum durable proof is an
+  executable first-match scenario with inputs where a later matching element would be wrong. If the
+  order contract is real but cannot be fully reproduced by a unit test, still preserve semantics with
+  `findFirst()` and make the reason clear in the owning test, method name, or nearby code. If no
   realistic order-dependent scenario exists, use `findAny()` instead. In those cases, still keep the
   resulting `Optional` as the control-flow boundary with whichever `Optional` API expresses the
   intent most clearly, such as `map`, `flatMap`, `filter`, `or`, `orElse`, `orElseGet`,
@@ -105,6 +117,19 @@ instead of following it.
   side effect such as adding one warning kept outside the stream. Keep the loop when the body
   performs IO, writes per-element output, mutates state for later steps, depends on an index, scans
   characters, probes ports, or otherwise has side effects that are the point of the method.
+- Streams issue
+  [#50](https://github.com/martinfrancois/java-streams-skill/issues/50): when code builds a mutable
+  append buffer only to pass it directly into an immutable-copying boundary, prefer a
+  result-producing immutable stream shape if it stays readable and preserves encounter order. Keep a
+  mutable builder when mutation is the method's honest work, the result must stay mutable, or
+  conditional construction is clearer that way.
+- Streams issue
+  [#51](https://github.com/martinfrancois/java-streams-skill/issues/51): use `findAny()` for
+  equivalent matches, but keep `findFirst()` when encounter order is part of the product contract.
+  When keeping `findFirst()`, make the first-match scenario executable in the owning test when the
+  behavior can be reproduced. If a sequential-stream test cannot force `findAny()` to choose a later
+  element, still preserve the ordered operation and document the first-match contract in the closest
+  realistic test, method name, or code comment.
 - Optional issues [#69](https://github.com/martinfrancois/java-optionals-skill/issues/69) and
   [#70](https://github.com/martinfrancois/java-optionals-skill/issues/70): side-effecting
   boundaries such as checked prompting, checked IO, Trello writes, or comment upserts may use an
@@ -114,6 +139,11 @@ instead of following it.
   [#71](https://github.com/martinfrancois/java-optionals-skill/issues/71): when an Optional fallback
   performs non-trivial work, preserve lazy fallback behavior and capture missed-trigger cases where
   the installed Optional skill should have activated during the original implementation prompt.
+- Optional issue
+  [#72](https://github.com/martinfrancois/java-optionals-skill/issues/72): choose `findFirst()` or
+  `findAny()` by the encounter-order contract, not by habit. Use `findAny()` for equivalent matches,
+  and keep `findFirst()` when first-match behavior is meaningful even if a sequential-stream test
+  cannot mechanically force `findAny()` to return a later element.
 
 ## HTTP status codes
 
