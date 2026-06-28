@@ -97,7 +97,7 @@ final class LocalSetupTestFixture implements AutoCloseable {
     }
 
     Path manifestPath() {
-        return configDir().resolve("connected-boards.json");
+        return configDir().resolve(ConnectedBoardManifest.FILE_NAME);
     }
 
     String endpoint() {

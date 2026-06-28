@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.Optional;
 
 record ConnectedBoardManifest(List<ConnectedBoard> boards) {
+    static final String FILE_NAME = "connected-boards.json";
+
     ConnectedBoardManifest {
         boards = boards == null ? List.of() : List.copyOf(boards);
     }

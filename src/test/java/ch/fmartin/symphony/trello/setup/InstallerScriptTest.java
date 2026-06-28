@@ -4426,7 +4426,7 @@ final class InstallerScriptTest {
         ProcessResult install = run(
                 environment, "bash", installScript.toString(), "--no-onboard", "--bin-dir", binDirectory.toString());
         Files.writeString(
-                symphonyHome.resolve("config/connected-boards.json"),
+                symphonyHome.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME),
                 """
                 {"boards":[{"boardId":"board-1","boardName":"Relative","workflowPath":"%s","envPath":"%s"}]}
                 """

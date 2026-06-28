@@ -56,7 +56,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     void dryRunReportsSelectedWorkflowManifestAndAccessPlan() {
         // given
         Path workflow = tempDir.resolve("custom workflow").resolve("WORKFLOW.dry-run.md");
-        Path manifest = tempDir.resolve("custom config").resolve("connected-boards.json");
+        Path manifest = tempDir.resolve("custom config").resolve(ConnectedBoardManifest.FILE_NAME);
         Path env = tempDir.resolve("custom env").resolve(".env");
 
         // when
@@ -561,7 +561,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path manifestDirectory = tempDir.resolve("manifest-directory");
         Path invalidManifestFile = tempDir.resolve("invalid-manifest.json");
         Path manifestParentFile = tempDir.resolve("manifest-parent-file");
-        Path manifestWithFileParent = manifestParentFile.resolve("connected-boards.json");
+        Path manifestWithFileParent = manifestParentFile.resolve(ConnectedBoardManifest.FILE_NAME);
         Files.writeString(configFile, "file", StandardCharsets.UTF_8);
         Files.createDirectories(manifestDirectory);
         Files.writeString(invalidManifestFile, "file", StandardCharsets.UTF_8);
@@ -2388,7 +2388,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // then
         result.assertSuccess();
         assertThat(workflow).content(StandardCharsets.UTF_8).contains(workspaceRoot.toString());
-        assertThat(tempDir.resolve("config").resolve("connected-boards.json"))
+        assertThat(tempDir.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME))
                 .content(StandardCharsets.UTF_8)
                 .contains(workspaceRoot.toString());
     }
@@ -2805,7 +2805,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     @Test
     void existingBoardImportSkipsServerPortsReservedByConnectedBoardManifest() throws Exception {
         // given
-        Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
+        Path manifest = tempDir.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME);
         Path reservedWorkflow = tempDir.resolve("other").resolve("WORKFLOW.reserved-default-port.md");
         Path reservedEnv = tempDir.resolve(".env.reserved-default-port");
         Path workflow = tempDir.resolve("WORKFLOW.import-manifest-reservation.md");
@@ -2846,7 +2846,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     @Test
     void newBoardSetupRejectsManifestReservedRequestedPortBeforeTrelloValidation() throws Exception {
         // given
-        Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
+        Path manifest = tempDir.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME);
         Path reservedWorkflow = tempDir.resolve("WORKFLOW.reserved-new-board.md");
         Path reservedEnv = tempDir.resolve(".env.reserved-new-board");
         Path workflow = tempDir.resolve("WORKFLOW.requested-conflict-new-board.md");
@@ -2892,7 +2892,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     @Test
     void existingBoardImportRejectsListeningRequestedPortBeforeTrelloBoardLookup() throws Exception {
         // given
-        Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
+        Path manifest = tempDir.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME);
         Path workflow = tempDir.resolve("WORKFLOW.requested-listening-import.md");
         Path env = tempDir.resolve(".env.requested-listening-import");
         Files.createDirectories(manifest.getParent());
@@ -2996,13 +2996,14 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         int expectedPort = ConfigDefaults.DEFAULT_SERVER_PORT + 1;
         result.assertSuccess().stdoutContains("Local server port selected for \"Imported Queue\": " + expectedPort);
         assertThatWorkflow(workflow).hasServerPort(expectedPort);
-        assertThatManifest(config.resolve("connected-boards.json")).hasBoardWithPort("Imported Queue", expectedPort);
+        assertThatManifest(config.resolve(ConnectedBoardManifest.FILE_NAME))
+                .hasBoardWithPort("Imported Queue", expectedPort);
     }
 
     @Test
     void forcedExistingBoardImportDoesNotPreserveEphemeralWorkflowServerPort() throws Exception {
         // given
-        Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
+        Path manifest = tempDir.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME);
         Path workflow = tempDir.resolve("WORKFLOW.import-ephemeral-port.md");
         Path env = tempDir.resolve(".env.import-ephemeral-port");
         // The scan runs in the production 18080+ range where live workers bind and release ports,
@@ -3476,7 +3477,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Files.createDirectories(config);
         Path workflow = config.resolve("WORKFLOW.shared.md");
         Files.writeString(workflow, "existing", StandardCharsets.UTF_8);
-        Path manifest = config.resolve("connected-boards.json");
+        Path manifest = config.resolve(ConnectedBoardManifest.FILE_NAME);
         writeOldBoardManifest(manifest, workflow);
         Path env = tempDir.resolve(".env");
         int updatedPort = availablePort();
@@ -3559,7 +3560,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // then
         result.assertSuccess().stdoutContains("Board connected: \"Imported Queue\"");
         assertThatWorkflow(workflow).hasServerPort(configuredPort);
-        assertThatManifest(config.resolve("connected-boards.json"))
+        assertThatManifest(config.resolve(ConnectedBoardManifest.FILE_NAME))
                 .hasBoardWithPort("Imported Queue", configuredPort)
                 .hasEnvPath("Imported Queue", env);
         assertThat(commands.commandEvents).containsExactly("stop:" + workflow);
@@ -3602,7 +3603,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 .stdoutDoesNotContain(
                         "Local server port selected for \"Imported Queue\": " + ConfigDefaults.DEFAULT_SERVER_PORT);
         assertThatWorkflow(workflow).hasServerPort(configuredPort);
-        assertThatManifest(config.resolve("connected-boards.json")).hasBoardWithPort("Imported Queue", configuredPort);
+        assertThatManifest(config.resolve(ConnectedBoardManifest.FILE_NAME))
+                .hasBoardWithPort("Imported Queue", configuredPort);
         assertThat(commands.commandEvents).containsExactly("stop:" + workflow);
     }
 
@@ -3642,7 +3644,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // then
         result.assertSuccess().stdoutContains("Board connected: \"Imported Queue\"");
         assertThatWorkflow(workflow).hasServerPort(configuredPort);
-        assertThatManifest(config.resolve("connected-boards.json")).hasBoardWithPort("Imported Queue", configuredPort);
+        assertThatManifest(config.resolve(ConnectedBoardManifest.FILE_NAME))
+                .hasBoardWithPort("Imported Queue", configuredPort);
         assertThat(commands.commandEvents).containsExactly("stop:" + workflow);
     }
 
@@ -3685,7 +3688,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "setup_failed code=setup_server_port_conflict",
                         "--server-port %d is already in use on 127.0.0.1.".formatted(configuredPort));
         assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo(originalWorkflow);
-        assertThatManifest(config.resolve("connected-boards.json"))
+        assertThatManifest(config.resolve(ConnectedBoardManifest.FILE_NAME))
                 .hasBoardCount(1)
                 .hasBoard("Unmanaged Live Import")
                 .hasBoardWithPort("Unmanaged Live Import", configuredPort);
@@ -3699,7 +3702,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Files.createDirectories(config);
         Path workflow = config.resolve("WORKFLOW.shared-no-start.md");
         Files.writeString(workflow, "existing", StandardCharsets.UTF_8);
-        Path manifest = config.resolve("connected-boards.json");
+        Path manifest = config.resolve(ConnectedBoardManifest.FILE_NAME);
         writeOldBoardManifest(manifest, workflow);
         Path env = tempDir.resolve(".env");
 
@@ -3972,7 +3975,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.repair-dry-run.md");
         Path env = tempDir.resolve(".env.repair-dry-run");
-        Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
+        Path manifest = tempDir.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME);
         SetupRunResult firstResult = runSetup(
                 "--non-interactive",
                 "--endpoint",
@@ -4020,7 +4023,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.repair-occupied.md");
         Path env = tempDir.resolve(".env.repair-occupied");
-        Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
+        Path manifest = tempDir.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME);
         int occupiedPort = firstAvailableManagedPort();
         SetupRunResult firstResult = runSetup(
                 "--non-interactive",
@@ -4094,7 +4097,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.stale-manifest-check.md");
         Path env = tempDir.resolve(".env.stale-manifest-check");
-        Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
+        Path manifest = tempDir.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME);
         int workflowPort = availablePort();
         writeWorkflow(workflow, "board-1", workflowPort);
         Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
@@ -4194,7 +4197,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_manifest_unavailable",
-                        "Repair or remove connected-boards.json, then rerun the command.")
+                        "Repair or remove " + ConnectedBoardManifest.FILE_NAME + ", then rerun the command.")
                 .stderrDoesNotContain(
                         "NullPointerException",
                         "Cannot invoke",
@@ -4262,7 +4265,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_manifest_unavailable",
-                        "Repair or remove connected-boards.json, then rerun the command.")
+                        "Repair or remove " + ConnectedBoardManifest.FILE_NAME + ", then rerun the command.")
                 .stderrDoesNotContain(
                         "NullPointerException",
                         "Cannot invoke",
@@ -4318,7 +4321,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.overlap-check.md");
         Path env = tempDir.resolve(".env.overlap-check");
-        Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
+        Path manifest = tempDir.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME);
         int port = availablePort();
         Files.writeString(
                 workflow,
@@ -4357,7 +4360,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.stale-manifest-repair.md");
         Path env = tempDir.resolve(".env.stale-manifest-repair");
-        Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
+        Path manifest = tempDir.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME);
         int workflowPort = availablePort();
         writeWorkflow(workflow, "board-1", workflowPort);
         Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
@@ -4389,7 +4392,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.stale-manifest-repair-actual.md");
         Path env = tempDir.resolve(".env.stale-manifest-repair-actual");
-        Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
+        Path manifest = tempDir.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME);
         int workflowPort = availablePort();
         writeWorkflow(workflow, "board-1", workflowPort);
         Files.writeString(env, TestEnv.trelloCredentials(), StandardCharsets.UTF_8);
@@ -4419,7 +4422,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path otherWorkflow = tempDir.resolve("WORKFLOW.other-port-owner.md");
         Path env = tempDir.resolve(".env.conflicting-stale-manifest-repair");
         Path otherEnv = tempDir.resolve(".env.other-port-owner");
-        Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
+        Path manifest = tempDir.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME);
         int conflictingPort = availablePort();
         // The board's own worker stays healthy on conflictingPort (real health server), but that
         // port is also reserved by Other Port Owner in the manifest, so repair must re-scan the
@@ -4506,7 +4509,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Path otherWorkflow = tempDir.resolve("WORKFLOW.dirty-name-port-owner.md");
         Path env = tempDir.resolve(".env.dirty-name-stop-failure");
         Path otherEnv = tempDir.resolve(".env.dirty-name-port-owner");
-        Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
+        Path manifest = tempDir.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME);
         int conflictingPort = availablePort();
         writeWorkflow(workflow, "board-1", conflictingPort);
         writeWorkflow(otherWorkflow, "board-2", conflictingPort);
@@ -4612,7 +4615,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.dotenv-repair-override.md");
         Path env = tempDir.resolve(".env.dotenv-repair-override");
-        Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
+        Path manifest = tempDir.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME);
         SetupRunResult firstResult = runSetup(
                 "--non-interactive",
                 "--endpoint",
@@ -4659,7 +4662,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.environment-repair-override.md");
         Path env = tempDir.resolve(".env.environment-repair-override");
-        Path manifest = tempDir.resolve("config").resolve("connected-boards.json");
+        Path manifest = tempDir.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME);
         SetupRunResult firstResult = runSetup(
                 "--non-interactive",
                 "--endpoint",
@@ -5637,7 +5640,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // then
         firstResult.assertSuccess();
         result.assertSuccess().stdoutContains("Symphony will stop managing \"Disconnect Without Codex Queue\"");
-        assertThatManifest(tempDir.resolve("config").resolve("connected-boards.json"))
+        assertThatManifest(tempDir.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME))
                 .hasBoardCount(0);
         assertThat(commands.codexLoginCommands).isEmpty();
         assertThat(commands.stoppedWorkflows).containsExactly(workflow.toString());

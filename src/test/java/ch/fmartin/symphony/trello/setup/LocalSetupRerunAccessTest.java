@@ -43,7 +43,7 @@ final class LocalSetupRerunAccessTest extends LocalSetupFixtureSupport {
         firstResult.assertSuccess();
         result.assertSuccess().stdoutContains("Updated workflow: " + workflow);
         assertThatWorkflow(workflow).hasAdditionalWritableRoot(allowedPath);
-        assertThatManifest(tempDir.resolve("config/connected-boards.json"))
+        assertThatManifest(tempDir.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME))
                 .hasAdditionalWritableRoot("Access Rerun Queue", allowedPath);
         assertThat(commands.stoppedWorkflows).containsExactly(workflow.toString());
         assertThat(commands.startedWorkflows).containsExactly(workflow.toString());
@@ -81,7 +81,7 @@ final class LocalSetupRerunAccessTest extends LocalSetupFixtureSupport {
         firstResult.assertSuccess();
         result.assertSuccess();
         assertThatWorkflow(workflow).hasAdditionalWritableRoot(allowedPath);
-        assertThatManifest(tempDir.resolve("config/connected-boards.json"))
+        assertThatManifest(tempDir.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME))
                 .hasGithubEnabled("GitHub Access Rerun Queue")
                 .hasAdditionalWritableRoot("GitHub Access Rerun Queue", allowedPath);
         assertThat(commands.stoppedWorkflows).containsExactly(workflow.toString());
@@ -154,7 +154,8 @@ final class LocalSetupRerunAccessTest extends LocalSetupFixtureSupport {
         firstResult.assertSuccess();
         result.assertSuccess().stdoutContains("danger-full-access disables Codex's command/filesystem sandbox");
         assertThatWorkflow(workflow).hasDangerFullAccess();
-        assertThatManifest(tempDir.resolve("config/connected-boards.json")).hasDangerFullAccess("Danger Rerun Queue");
+        assertThatManifest(tempDir.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME))
+                .hasDangerFullAccess("Danger Rerun Queue");
         assertThat(commands.stoppedWorkflows).containsExactly(workflow.toString());
         assertThat(commands.startedWorkflows).containsExactly(workflow.toString());
     }
@@ -192,7 +193,7 @@ final class LocalSetupRerunAccessTest extends LocalSetupFixtureSupport {
                         "Allow Codex to run without its command/filesystem sandbox for this workflow (danger-full-access)? [y/N] ");
         result.stdoutDoesNotContain("danger-full-access disables Codex's command/filesystem sandbox");
         assertThatWorkflow(workflow).hasNoDangerFullAccess();
-        assertThatManifest(tempDir.resolve("config/connected-boards.json"))
+        assertThatManifest(tempDir.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME))
                 .hasNoDangerFullAccess("Danger Confirmation Rerun Queue");
         assertThat(commands.stoppedWorkflows).containsExactly(workflow.toString());
         assertThat(commands.startedWorkflows).containsExactly(workflow.toString());
@@ -264,7 +265,7 @@ final class LocalSetupRerunAccessTest extends LocalSetupFixtureSupport {
                 .stdoutContains("Updated workflow: " + secondWorkflow, "Start Symphony for the updated workflow:");
         assertThatWorkflow(firstWorkflow).hasNoAdditionalWritableRoot(allowedPath);
         assertThatWorkflow(secondWorkflow).hasAdditionalWritableRoot(allowedPath);
-        assertThatManifest(tempDir.resolve("config/connected-boards.json"))
+        assertThatManifest(tempDir.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME))
                 .hasAdditionalWritableRoot("Docs Queue", allowedPath);
         assertThat(trello.boardLookups()).isEmpty();
         assertThat(commands.startedWorkflows).isEmpty();
@@ -302,7 +303,8 @@ final class LocalSetupRerunAccessTest extends LocalSetupFixtureSupport {
         result.assertSuccess();
         assertThatWorkflow(firstWorkflow).hasNoDangerFullAccess();
         assertThatWorkflow(secondWorkflow).hasDangerFullAccess();
-        assertThatManifest(tempDir.resolve("config/connected-boards.json")).hasDangerFullAccess("Second Danger");
+        assertThatManifest(tempDir.resolve("config").resolve(ConnectedBoardManifest.FILE_NAME))
+                .hasDangerFullAccess("Second Danger");
         assertThat(trello.boardLookups()).isEmpty();
         assertThat(commands.stoppedWorkflows).containsExactly(secondWorkflow.toString());
         assertThat(commands.startedWorkflows).containsExactly(secondWorkflow.toString());

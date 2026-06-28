@@ -340,14 +340,18 @@ public final class LocalSetup {
         boolean envUsable = true;
         if (board.workflowPath() == null) {
             warnings.add("Workflow path for " + DisplayNames.quotedName(board.boardName())
-                    + " is missing from connected-boards.json.");
+                    + " is missing from "
+                    + ConnectedBoardManifest.FILE_NAME
+                    + ".");
         } else if (Files.isDirectory(board.workflowPath())) {
             warnings.add("Workflow path for " + DisplayNames.quotedName(board.boardName())
                     + " must be a workflow file, but it is a directory: " + board.workflowPath());
         }
         if (board.workspaceRoot() == null) {
             warnings.add("Workspace root for " + DisplayNames.quotedName(board.boardName())
-                    + " is missing from connected-boards.json.");
+                    + " is missing from "
+                    + ConnectedBoardManifest.FILE_NAME
+                    + ".");
         } else if (Files.exists(board.workspaceRoot()) && !Files.isDirectory(board.workspaceRoot())) {
             warnings.add("Workspace root for " + DisplayNames.quotedName(board.boardName()) + " must be a directory: "
                     + board.workspaceRoot());
@@ -358,7 +362,9 @@ public final class LocalSetup {
         }
         if (board.envPath() == null) {
             warnings.add("Trello credential path for " + DisplayNames.quotedName(board.boardName())
-                    + " is missing from connected-boards.json.");
+                    + " is missing from "
+                    + ConnectedBoardManifest.FILE_NAME
+                    + ".");
             envUsable = false;
         } else if (Files.isDirectory(board.envPath())) {
             warnings.add("Trello credential path for " + DisplayNames.quotedName(board.boardName())
@@ -1546,7 +1552,7 @@ public final class LocalSetup {
             Path workflow = request.workflowPath().orElse(TrelloBoardSetup.DEFAULT_WORKFLOW_PATH);
             boolean workflowPathExplicit = request.workflowPath().isPresent();
             Path workspaceRoot = request.workspaceRoot().orElseGet(() -> defaultWorkspaceRoot(environment));
-            Path manifest = request.manifestPath().orElse(Path.of("connected-boards.json"));
+            Path manifest = request.manifestPath().orElse(Path.of(ConnectedBoardManifest.FILE_NAME));
             boolean manifestPathExplicit = request.manifestPath().isPresent();
             Path envPath = request.envPath().orElse(DEFAULT_ENV_PATH);
             List<Path> additionalWritableRoots = request.additionalWritableRoots().stream()

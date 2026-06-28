@@ -137,7 +137,7 @@ final class InstalledCliDefaultsTest {
                         "--workspace-root",
                         workspaceRoot.toString(),
                         "--manifest",
-                        configDir.resolve("connected-boards.json").toString(),
+                        configDir.resolve(ConnectedBoardManifest.FILE_NAME).toString(),
                         "--name",
                         "Synthetic Board");
     }

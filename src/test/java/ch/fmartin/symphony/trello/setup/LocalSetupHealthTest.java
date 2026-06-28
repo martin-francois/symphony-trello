@@ -446,8 +446,10 @@ final class LocalSetupHealthTest extends LocalSetupFixtureSupport {
                 .stdoutContains(
                         "Connected-board manifest entry \"Synthetic Board\" field workflowPath must be a non-blank string.",
                         "Connected-board manifest entry \"Synthetic Board\" field envPath must be a non-blank string.",
-                        "Workflow path for \"Synthetic Board\" is missing from connected-boards.json.",
-                        "Trello credential path for \"Synthetic Board\" is missing from connected-boards.json.")
+                        "Workflow path for \"Synthetic Board\" is missing from " + ConnectedBoardManifest.FILE_NAME
+                                + ".",
+                        "Trello credential path for \"Synthetic Board\" is missing from "
+                                + ConnectedBoardManifest.FILE_NAME + ".")
                 .stdoutDoesNotContain("NullPointerException", "Troubleshooting report written");
     }
 

@@ -97,7 +97,7 @@ final class InstalledCliDefaults {
         return Path.of(configDir)
                 .toAbsolutePath()
                 .normalize()
-                .resolve("connected-boards.json")
+                .resolve(ConnectedBoardManifest.FILE_NAME)
                 .toString();
     }
 

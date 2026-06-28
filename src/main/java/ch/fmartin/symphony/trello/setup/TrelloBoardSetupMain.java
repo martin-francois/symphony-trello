@@ -986,7 +986,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         if (configDir == null || configDir.isBlank()) {
             return Optional.empty();
         }
-        return Optional.of(Path.of(configDir).toAbsolutePath().normalize().resolve("connected-boards.json"));
+        return Optional.of(Path.of(configDir).toAbsolutePath().normalize().resolve(ConnectedBoardManifest.FILE_NAME));
     }
 
     private static Path defaultWorkflowPath() {

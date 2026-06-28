@@ -47,7 +47,7 @@ record LocalWorkerPaths(Path appHome, Path configDir, Path workspaceRoot, Path s
     }
 
     Path manifestPath() {
-        return configDir.resolve("connected-boards.json");
+        return configDir.resolve(ConnectedBoardManifest.FILE_NAME);
     }
 
     /**
@@ -60,7 +60,7 @@ record LocalWorkerPaths(Path appHome, Path configDir, Path workspaceRoot, Path s
                 .orElseGet(() -> Path.of("."))
                 .toAbsolutePath()
                 .normalize()
-                .resolve("connected-boards.json");
+                .resolve(ConnectedBoardManifest.FILE_NAME);
     }
 
     Path defaultEnvPath() {
