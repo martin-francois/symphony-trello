@@ -510,7 +510,8 @@ public final class LocalSetup {
                 && !serverPortReservedByOtherBoard(manifest, reconciledBoard)
                 && (health.kind() == BoardHealthKind.SAME_WORKFLOW || health.kind() == BoardHealthKind.STOPPED)) {
             out.println("  OK      No port repair needed. " + DisplayNames.quotedName(reconciledBoard.boardName())
-                    + " is already configured for an available port: http://127.0.0.1:" + reconciledBoard.serverPort());
+                    + " is already configured for an available port: "
+                    + LocalHealthChecker.localServerUrl(reconciledBoard.serverPort()));
             return 0;
         }
         boolean wasRunning = health.kind() == BoardHealthKind.SAME_WORKFLOW;
@@ -518,8 +519,8 @@ public final class LocalSetup {
         if (options.dryRun()) {
             out.println();
             out.println("Dry run");
-            out.println("  WOULD   update " + DisplayNames.quotedName(reconciledBoard.boardName())
-                    + " to use http://127.0.0.1:" + port);
+            out.println("  WOULD   update " + DisplayNames.quotedName(reconciledBoard.boardName()) + " to use "
+                    + LocalHealthChecker.localServerUrl(port));
             if (wasRunning) {
                 out.println("  WOULD   restart Symphony for " + DisplayNames.quotedName(reconciledBoard.boardName()));
             } else {
@@ -534,8 +535,8 @@ public final class LocalSetup {
         }
         workflowConfig.updateServerPort(reconciledBoard.workflowPath(), port);
         boards.save(manifest.withBoard(reconciledBoard.withServerPort(port)));
-        out.println("  OK      Updated " + DisplayNames.quotedName(reconciledBoard.boardName())
-                + " to use http://127.0.0.1:" + port);
+        out.println("  OK      Updated " + DisplayNames.quotedName(reconciledBoard.boardName()) + " to use "
+                + LocalHealthChecker.localServerUrl(port));
         if (wasRunning) {
             startBoard(options, reconciledBoard.withServerPort(port), out);
         } else {
@@ -568,13 +569,13 @@ public final class LocalSetup {
             out.println("Dry run");
             out.println(
                     "  WOULD   update connected-board manifest for " + DisplayNames.quotedName(staleBoard.boardName())
-                            + " to use http://127.0.0.1:" + reconciledBoard.serverPort());
+                            + " to use " + LocalHealthChecker.localServerUrl(reconciledBoard.serverPort()));
             out.println("          Workflow and running Symphony worker already use this port.");
             return 0;
         }
         boards.save(manifest.withBoard(reconciledBoard));
         out.println("  OK      Updated connected-board manifest for " + DisplayNames.quotedName(staleBoard.boardName())
-                + " to use http://127.0.0.1:" + reconciledBoard.serverPort());
+                + " to use " + LocalHealthChecker.localServerUrl(reconciledBoard.serverPort()));
         return 0;
     }
 

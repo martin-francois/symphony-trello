@@ -1,12 +1,13 @@
 package ch.fmartin.symphony.trello.process;
 
+import ch.fmartin.symphony.trello.TrelloEnvironment;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.Set;
 
 public final class ProcessEnvironment {
     private static final Set<String> DEFAULT_SECRET_ENVIRONMENT_VARIABLES =
-            Set.of("TRELLO_API_KEY", "TRELLO_API_TOKEN");
+            Set.of(TrelloEnvironment.API_KEY, TrelloEnvironment.API_TOKEN);
 
     private ProcessEnvironment() {}
 

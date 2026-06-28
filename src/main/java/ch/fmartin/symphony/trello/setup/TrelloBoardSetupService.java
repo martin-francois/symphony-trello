@@ -96,7 +96,8 @@ final class TrelloBoardSetupService {
                 && !canReuseLivePortForForcedWorkflowUpdate(manifestPath, replaceableBoard)) {
             throw new TrelloBoardSetupException(
                     "setup_server_port_conflict",
-                    "--server-port %d is already in use on 127.0.0.1.".formatted(requestedPort));
+                    "--server-port %d is already in use on %s."
+                            .formatted(requestedPort, LocalHealthChecker.LOOPBACK_HOST));
         }
     }
 

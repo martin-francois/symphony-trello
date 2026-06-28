@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.setup;
 
 import static com.google.common.base.Preconditions.checkArgument;
 
+import ch.fmartin.symphony.trello.TrelloEnvironment;
 import ch.fmartin.symphony.trello.codex.CodexSkillCatalog;
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
@@ -770,7 +771,8 @@ public final class TrelloBoardSetup {
         if (portInUse(requestedPort) && !canReuseReplaceableWorkflowServerPort(target, requestedPort, force, envPath)) {
             throw new TrelloBoardSetupException(
                     "setup_server_port_conflict",
-                    "--server-port %d is already in use on 127.0.0.1.".formatted(requestedPort));
+                    "--server-port %d is already in use on %s."
+                            .formatted(requestedPort, LocalHealthChecker.LOOPBACK_HOST));
         }
     }
 
@@ -988,8 +990,8 @@ public final class TrelloBoardSetup {
                 ---
                 tracker:
                   kind: trello
-                  api_key: $TRELLO_API_KEY
-                  api_token: $TRELLO_API_TOKEN
+                  api_key: $%s
+                  api_token: $%s
                   board_id: %s
                   active_states:
                 %s
@@ -1069,6 +1071,8 @@ public final class TrelloBoardSetup {
                 Card URL: {{ card.url }}
                 """
                 .formatted(
+                        TrelloEnvironment.API_KEY,
+                        TrelloEnvironment.API_TOKEN,
                         yamlScalar(boardId),
                         yamlList(activeStates),
                         optionalTrackerStateYaml("in_progress_state", inProgressState),

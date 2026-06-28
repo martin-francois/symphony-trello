@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.config;
 
+import ch.fmartin.symphony.trello.TrelloEnvironment;
 import ch.fmartin.symphony.trello.workflow.CodexSandboxPolicy;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -62,9 +63,10 @@ public class ConfigResolver {
 
         String trackerKind = string(tracker, "kind", null);
         String endpoint = string(tracker, "endpoint", "https://api.trello.com/1");
-        String apiKey = secret(workflow.path().getParent(), tracker, "api_key", "tracker.api_key", "TRELLO_API_KEY");
-        String apiToken =
-                secret(workflow.path().getParent(), tracker, "api_token", "tracker.api_token", "TRELLO_API_TOKEN");
+        String apiKey =
+                secret(workflow.path().getParent(), tracker, "api_key", "tracker.api_key", TrelloEnvironment.API_KEY);
+        String apiToken = secret(
+                workflow.path().getParent(), tracker, "api_token", "tracker.api_token", TrelloEnvironment.API_TOKEN);
         String boardId = environmentString(tracker, "board_id", null);
         String resolvedBoardId = environmentString(tracker, "resolved_board_id", boardId);
         List<Path> codexAdditionalWritableRoots = codexDangerFullAccess

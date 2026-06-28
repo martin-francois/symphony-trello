@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
+import ch.fmartin.symphony.trello.TrelloEnvironment;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import ch.fmartin.symphony.trello.config.WorkflowServerPortClassification;
@@ -374,7 +375,8 @@ final class SetupDiagnosticReporter {
     }
 
     private static String trelloCredentialHint(Path dotenvPath) {
-        return "Provide Trello credentials with --key and --token, set TRELLO_API_KEY and TRELLO_API_TOKEN, or add them to this .env credential file:\n  "
+        return "Provide Trello credentials with --key and --token, set " + TrelloEnvironment.API_KEY + " and "
+                + TrelloEnvironment.API_TOKEN + ", or add them to this .env credential file:\n  "
                 + displayPath(dotenvPath);
     }
 
@@ -387,8 +389,8 @@ final class SetupDiagnosticReporter {
     }
 
     private static List<String> workerCredentialAssignments(TrelloBoardSetupException exception) {
-        String apiKeyName = exception.trelloApiKeyEnvironmentName().orElse("TRELLO_API_KEY");
-        String apiTokenName = exception.trelloApiTokenEnvironmentName().orElse("TRELLO_API_TOKEN");
+        String apiKeyName = exception.trelloApiKeyEnvironmentName().orElse(TrelloEnvironment.API_KEY);
+        String apiTokenName = exception.trelloApiTokenEnvironmentName().orElse(TrelloEnvironment.API_TOKEN);
         return switch (exception.code()) {
             case "setup_worker_missing_api_key" -> List.of(credentialAssignment(apiKeyName, "your Trello API key"));
             case "setup_worker_missing_api_token" -> List.of(credentialAssignment(apiTokenName, "your Trello token"));
@@ -404,8 +406,8 @@ final class SetupDiagnosticReporter {
     }
 
     private static String trelloAuthFailureHint(TrelloBoardSetupException exception, Path dotenvPath) {
-        String apiKeyName = exception.trelloApiKeyEnvironmentName().orElse("TRELLO_API_KEY");
-        String apiTokenName = exception.trelloApiTokenEnvironmentName().orElse("TRELLO_API_TOKEN");
+        String apiKeyName = exception.trelloApiKeyEnvironmentName().orElse(TrelloEnvironment.API_KEY);
+        String apiTokenName = exception.trelloApiTokenEnvironmentName().orElse(TrelloEnvironment.API_TOKEN);
         return exception
                 .trelloApiKeyCredentialSource()
                 .flatMap(apiKeySource -> exception
@@ -1988,9 +1990,12 @@ final class SetupDiagnosticReporter {
     }
 
     private void appendProbe(StringBuilder body, int port, String path) {
-        body.append("\n### `http://127.0.0.1:").append(port).append(path).append("`\n\n");
+        body.append("\n### `")
+                .append(LocalHealthChecker.localServerUrl(port))
+                .append(path)
+                .append("`\n\n");
         try {
-            HttpRequest request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + path))
+            HttpRequest request = HttpRequest.newBuilder(URI.create(LocalHealthChecker.localServerUrl(port) + path))
                     .timeout(PROBE_TIMEOUT)
                     .GET()
                     .build();

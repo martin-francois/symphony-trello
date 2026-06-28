@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
 import ch.fmartin.symphony.trello.CliExitCodes;
+import ch.fmartin.symphony.trello.TrelloEnvironment;
 import ch.fmartin.symphony.trello.setup.LocalSetupRequest.Action;
 import java.io.BufferedReader;
 import java.io.PrintStream;
@@ -268,12 +269,14 @@ final class SetupLocalCommandFactory {
 
         @Option(
                 names = "--key",
-                description = "Trello API key. Defaults to TRELLO_API_KEY or the configured credential file.")
+                description = "Trello API key. Defaults to " + TrelloEnvironment.API_KEY
+                        + " or the configured credential file.")
         Optional<String> apiKey = Optional.empty();
 
         @Option(
                 names = "--token",
-                description = "Trello API token. Defaults to TRELLO_API_TOKEN or the configured credential file.")
+                description = "Trello API token. Defaults to " + TrelloEnvironment.API_TOKEN
+                        + " or the configured credential file.")
         Optional<String> apiToken = Optional.empty();
 
         @Option(names = "--board-name", description = "Trello board name when creating a board.")
