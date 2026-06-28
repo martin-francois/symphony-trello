@@ -150,10 +150,12 @@ public final class CodexSandboxPolicy {
 
     private static void appendWritableRoots(ObjectNode policy, List<Path> roots) {
         ArrayNode writableRoots = policy.withArray(WRITABLE_ROOTS);
-        roots.stream()
-                .map(Path::toString)
-                .filter(root -> !containsText(writableRoots, root))
-                .forEach(writableRoots::add);
+        for (Path root : roots) {
+            String text = root.toString();
+            if (!containsText(writableRoots, text)) {
+                writableRoots.add(text);
+            }
+        }
     }
 
     private static boolean containsText(ArrayNode values, String expected) {

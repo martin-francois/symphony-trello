@@ -8,10 +8,13 @@ import ch.fmartin.symphony.trello.domain.Card;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 
 final class RepositorySourceResolverTest {
     private final RepositorySourceResolver resolver = new RepositorySourceResolver();
@@ -234,6 +237,31 @@ final class RepositorySourceResolverTest {
         // then
         assertThat(selection.status()).isEqualTo(RepositorySourceSelection.Status.INVALID_SELECTED);
         assertThat(selection.problem().code()).isEqualTo("repository_source_missing");
+    }
+
+    @MethodSource("regexLineBreaks")
+    @ParameterizedTest(name = "{0}")
+    void recognizesRepositoryDeclarationsAfterRegexLineBreaks(String scenario, String lineBreak) {
+        // given
+        String expectedSource = "https://github.example/team/project.git";
+        String description = "prefix" + lineBreak + "Repository URL: " + expectedSource;
+        Card card = cardWithDescription(description);
+
+        // when
+        RepositorySourceSelection selection = resolver.select(card, noDefault());
+
+        // then
+        assertThat(selection.status()).isEqualTo(RepositorySourceSelection.Status.SELECTED);
+        assertThat(selection.source().value()).isEqualTo(expectedSource);
+    }
+
+    private static Stream<Arguments> regexLineBreaks() {
+        return Stream.of(
+                Arguments.of("next line", "\n"),
+                Arguments.of("CRLF", "\r\n"),
+                Arguments.of("NEL", "\u0085"),
+                Arguments.of("line separator", "\u2028"),
+                Arguments.of("paragraph separator", "\u2029"));
     }
 
     @Test

@@ -862,13 +862,12 @@ final class SetupDiagnosticReporter {
         boolean unconnectedFilesArePrimaryContext = !selected && !separateUnconnectedWorkflows;
         SequencedSet<Path> selectedWorkflowPaths = reportWorkflowPaths(
                 selectedManifest, selection.workflow(), paths.configDir(), unconnectedFilesArePrimaryContext);
-        SequencedSet<Path> unconnectedWorkflowPaths = new LinkedHashSet<>();
-        if (separateUnconnectedWorkflows) {
-            reportWorkflowPaths(selectedManifest, selection.workflow(), paths.configDir(), true).stream()
-                    .filter(workflow -> selectedWorkflowPaths.stream()
-                            .noneMatch(connected -> PathsEqual.samePath(connected, workflow)))
-                    .forEach(unconnectedWorkflowPaths::add);
-        }
+        SequencedSet<Path> unconnectedWorkflowPaths = separateUnconnectedWorkflows
+                ? reportWorkflowPaths(selectedManifest, selection.workflow(), paths.configDir(), true).stream()
+                        .filter(workflow -> selectedWorkflowPaths.stream()
+                                .noneMatch(connected -> PathsEqual.samePath(connected, workflow)))
+                        .collect(Collectors.toCollection(LinkedHashSet::new))
+                : new LinkedHashSet<>();
         return new DiagnosticsContext(
                 paths,
                 manifestPath,

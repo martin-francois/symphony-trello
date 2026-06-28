@@ -103,7 +103,9 @@ final class CodexModelDefaultsResolver {
                 JsonNode result = response.path("result");
                 JsonNode pageModels = result.path("data");
                 if (pageModels.isArray()) {
-                    pageModels.forEach(models::add);
+                    for (JsonNode pageModel : pageModels) {
+                        models.add(pageModel);
+                    }
                 }
                 cursor = result.path("nextCursor").asText(null);
                 if (blank(cursor)) {

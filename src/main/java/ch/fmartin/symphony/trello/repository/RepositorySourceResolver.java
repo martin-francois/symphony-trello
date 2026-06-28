@@ -6,15 +6,16 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 public final class RepositorySourceResolver {
     private static final Pattern LABELED_SOURCE = Pattern.compile(
             "(?i)^[\\t ]*(repository[\\t ]+(?:url|path)|repo[\\t ]+(?:url|path)|local[\\t ]+(?:checkout|path)|checkout|repository|repo)[\\t ]*:[\\t ]*(.*)$");
+    private static final Pattern LINE_BREAK = Pattern.compile("\\R");
     private static final Pattern URI_SCHEME = Pattern.compile("^([A-Za-z][A-Za-z0-9+.-]*):");
     private static final Pattern WINDOWS_DRIVE_PATH = Pattern.compile("^[A-Za-z]:[\\\\/].*");
     private static final String REPOSITORY_SOURCE_CONFLICT_CODE = "repository_source_conflict";
@@ -271,23 +272,21 @@ public final class RepositorySourceResolver {
     }
 
     private static List<Declaration> declarations(Card card) {
-        List<Declaration> declarations = new ArrayList<>();
-        addDeclarations(declarations, card.title());
-        addDeclarations(declarations, card.description());
-        card.comments().stream().map(Card.Comment::text).forEach(text -> addDeclarations(declarations, text));
-        return List.copyOf(declarations);
+        return Stream.concat(
+                        Stream.of(card.title(), card.description()),
+                        card.comments().stream().map(Card.Comment::text))
+                .flatMap(RepositorySourceResolver::declarations)
+                .toList();
     }
 
-    private static void addDeclarations(List<Declaration> declarations, String text) {
+    private static Stream<Declaration> declarations(String text) {
         if (text == null || text.isBlank()) {
-            return;
+            return Stream.empty();
         }
-        for (String line : text.split("\\R", -1)) {
-            Matcher labeled = LABELED_SOURCE.matcher(line);
-            if (labeled.matches()) {
-                declarations.add(new Declaration(labeled.group(2), labelMode(labeled.group(1))));
-            }
-        }
+        return LINE_BREAK.splitAsStream(text)
+                .map(LABELED_SOURCE::matcher)
+                .filter(Matcher::matches)
+                .map(labeled -> new Declaration(labeled.group(2), labelMode(labeled.group(1))));
     }
 
     private static boolean equivalent(RepositorySourceSelection expected, RepositorySourceSelection actual) {
