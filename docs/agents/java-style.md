@@ -145,6 +145,17 @@ instead of following it.
   and keep `findFirst()` when first-match behavior is meaningful even if a sequential-stream test
   cannot mechanically force `findAny()` to return a later element.
 
+## Nullness
+
+- Use JSpecify annotations for Java nullness contracts at reviewed API and integration boundaries.
+  Prefer `@NullMarked` at package level only after the whole package has been audited; otherwise use
+  type-level `@NullMarked` for a focused model, parser, configuration, or payload boundary.
+- Mark intentional null contracts with `@Nullable` on the type use that is nullable, including record
+  components, constructor parameters, method parameters, and return values. Do not rely on prose
+  comments alone when an annotated boundary accepts or returns `null`.
+- Do not add broad mechanical nullness churn or a blocking nullness checker unless an issue and ADR
+  define the baseline and expected noise level.
+
 ## HTTP status codes
 
 - Use named HTTP status constants or focused helper methods for production HTTP status handling.

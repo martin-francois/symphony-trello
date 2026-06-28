@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -75,6 +76,61 @@ final class TestConventionTest {
         // then
         assertThat(version(dependencies, "martinfrancois/java-optionals")).isEqualTo("1.0.0");
         assertThat(version(dependencies, "martinfrancois/java-streams")).isEqualTo("1.2.0");
+    }
+
+    @Test
+    void pomProvidesJSpecifyAnnotationsToProductionSources() throws IOException {
+        // given
+        String pom = Files.readString(Path.of("pom.xml"));
+
+        // when
+        String dependency =
+                """
+                <dependency>
+                      <groupId>org.jspecify</groupId>
+                      <artifactId>jspecify</artifactId>
+                      <version>${jspecify.version}</version>
+                    </dependency>
+                """
+                        .stripIndent()
+                        .trim();
+
+        // then
+        assertThat(pom).contains("<jspecify.version>1.0.0</jspecify.version>");
+        assertThat(pom).contains(dependency);
+        assertThat(pom).doesNotContain("<artifactId>jspecify</artifactId>%n      <scope>test</scope>".formatted());
+    }
+
+    @Test
+    void representativeJavaBoundariesUseJSpecifyAnnotations() throws IOException {
+        // given
+        List<Path> nullMarkedBoundaries = List.of(
+                Path.of("src/main/java/ch/fmartin/symphony/trello/repository/RepositorySource.java"),
+                Path.of("src/main/java/ch/fmartin/symphony/trello/repository/RepositorySourceSelection.java"),
+                Path.of("src/main/java/ch/fmartin/symphony/trello/config/EffectiveConfig.java"),
+                Path.of("src/main/java/ch/fmartin/symphony/trello/workflow/WorkflowDefinition.java"),
+                Path.of("src/main/java/ch/fmartin/symphony/trello/tracker/CardLookupResult.java"),
+                Path.of("src/main/java/ch/fmartin/symphony/trello/domain/BlockerRef.java"));
+
+        // when
+        Map<Path, String> sources = sourcesByPath(nullMarkedBoundaries);
+
+        // then
+        assertThat(sources).allSatisfy((boundary, source) -> assertThat(source)
+                .as("%s should document reviewed nullness defaults".formatted(boundary))
+                .contains("org.jspecify.annotations.NullMarked", "@NullMarked"));
+        assertThat(sources.get(Path.of("src/main/java/ch/fmartin/symphony/trello/repository/RepositorySource.java")))
+                .contains("@Nullable RepositoryIdentity identity", "@Nullable Path path");
+        assertThat(sources.get(Path.of("src/main/java/ch/fmartin/symphony/trello/config/EffectiveConfig.java")))
+                .contains("record RepositoryConfig(@Nullable String defaultUrl, @Nullable Path defaultPath)");
+    }
+
+    private static Map<Path, String> sourcesByPath(List<Path> paths) throws IOException {
+        Map<Path, String> sources = new HashMap<>();
+        for (Path path : paths) {
+            sources.put(path, Files.readString(path));
+        }
+        return sources;
     }
 
     private static void collectSimpleManualMockViolations(Path file, List<String> violations) throws IOException {

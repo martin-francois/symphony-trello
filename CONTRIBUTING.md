@@ -100,6 +100,9 @@ Before submitting changes:
   terminal transcript helpers.
 - Use imports instead of inline fully qualified Java type names in code. PMD enforces this so helpers
   like `java.util.Arrays.stream(...)` should be written as `Arrays.stream(...)` with an import.
+- Preserve JSpecify nullness annotations on annotated Java boundaries. Add `@Nullable` when a new or
+  changed boundary intentionally accepts or returns `null`, and use `@NullMarked` only for packages
+  or types whose nullness contracts have been reviewed.
 - Document non-obvious design choices in `docs/adr/`.
 - Keep refactors separate from behavior changes when practical.
 - Use a Conventional Commit PR title or squash commit title when the change is merged. CI checks

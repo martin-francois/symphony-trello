@@ -11,8 +11,11 @@ import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 @ApplicationScoped
+@NullMarked
 public class WorkflowLoader {
     private static final TypeReference<LinkedHashMap<String, Object>> YAML_MAP_TYPE = new TypeReference<>() {};
 
@@ -32,7 +35,7 @@ public class WorkflowLoader {
         return new WorkflowDefinition(absolute, config, parsed.body().trim());
     }
 
-    private Map<String, Object> parseYamlMap(String frontMatter) {
+    private Map<String, Object> parseYamlMap(@Nullable String frontMatter) {
         if (frontMatter == null) {
             return Map.of();
         }
@@ -69,5 +72,5 @@ public class WorkflowLoader {
         return new ParsedMarkdown(frontMatter, body);
     }
 
-    private record ParsedMarkdown(String frontMatter, String body) {}
+    private record ParsedMarkdown(@Nullable String frontMatter, String body) {}
 }

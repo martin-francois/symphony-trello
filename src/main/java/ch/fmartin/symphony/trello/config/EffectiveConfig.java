@@ -5,6 +5,8 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalInt;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 public record EffectiveConfig(
         Path workflowPath,
@@ -86,7 +88,8 @@ public record EffectiveConfig(
 
     public record WorkspaceConfig(Path root) {}
 
-    public record RepositoryConfig(String defaultUrl, Path defaultPath) {
+    @NullMarked
+    public record RepositoryConfig(@Nullable String defaultUrl, @Nullable Path defaultPath) {
         public DefaultSource selectedDefaultSource() {
             if (defaultUrl != null) {
                 return DefaultSource.URL;
