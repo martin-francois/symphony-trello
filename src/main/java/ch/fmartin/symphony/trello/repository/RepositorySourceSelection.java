@@ -2,7 +2,12 @@ package ch.fmartin.symphony.trello.repository;
 
 import static com.google.common.base.Preconditions.checkArgument;
 
-public record RepositorySourceSelection(Status status, RepositorySource source, RepositorySourceProblem problem) {
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
+
+@NullMarked
+public record RepositorySourceSelection(
+        Status status, @Nullable RepositorySource source, @Nullable RepositorySourceProblem problem) {
     public RepositorySourceSelection {
         checkArgument(status != null, "Repository source selection status is required");
         checkArgument(status != Status.SELECTED || source != null, "Selected repository source is required");

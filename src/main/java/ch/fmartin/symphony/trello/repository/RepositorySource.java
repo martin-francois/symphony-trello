@@ -3,8 +3,12 @@ package ch.fmartin.symphony.trello.repository;
 import static com.google.common.base.Preconditions.checkArgument;
 
 import java.nio.file.Path;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
-public record RepositorySource(Kind kind, Origin origin, String value, RepositoryIdentity identity, Path path) {
+@NullMarked
+public record RepositorySource(
+        Kind kind, Origin origin, String value, @Nullable RepositoryIdentity identity, @Nullable Path path) {
     public RepositorySource {
         checkArgument(kind != null, "Repository source kind is required");
         checkArgument(origin != null, "Repository source origin is required");

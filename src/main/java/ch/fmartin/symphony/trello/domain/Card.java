@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.jspecify.annotations.Nullable;
 
 public record Card(
         String id,
@@ -102,7 +103,7 @@ public record Card(
      * present and falling back to the full canonical URL. Returns {@code null} when neither is known
      * so snapshot rows can omit an unknown URL.
      */
-    public String cardUrl() {
+    public @Nullable String cardUrl() {
         if (notBlank(shortUrl)) {
             return shortUrl;
         }

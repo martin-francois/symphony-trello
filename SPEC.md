@@ -3792,6 +3792,8 @@ When this profile is used:
 - `./mvnw verify` runs deterministic tests, the Quarkus package build, Spotless checks, PMD's narrow
   source rule for unnecessary fully qualified Java type names, ArchUnit architecture checks, and the
   JaCoCo coverage gate
+- JSpecify annotations SHOULD document nullness contracts on reviewed Java package, type, and
+  integration boundaries
 - line coverage MUST stay at or above 80 percent
 - ArchUnit SHOULD reject circular dependencies between production top-level packages
 - Markdown and ADR linting SHOULD run in CI

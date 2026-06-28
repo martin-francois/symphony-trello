@@ -3,7 +3,10 @@ package ch.fmartin.symphony.trello.repository;
 import static com.google.common.base.Preconditions.checkArgument;
 
 import java.util.Locale;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
+@NullMarked
 public record RepositoryIdentity(String host, String repositoryPath) {
     public RepositoryIdentity {
         checkArgument(!blank(host), "Repository host is required");
@@ -36,7 +39,7 @@ public record RepositoryIdentity(String host, String repositoryPath) {
         return value.endsWith(".git") ? value.substring(0, value.length() - ".git".length()) : value;
     }
 
-    private static boolean blank(String value) {
+    private static boolean blank(@Nullable String value) {
         return value == null || value.isBlank();
     }
 }
