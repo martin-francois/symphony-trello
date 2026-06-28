@@ -24,11 +24,6 @@ References.
   than manual loop state. Do not replace a readable collection stream with a loop just to avoid an
   `Optional`, especially when the loop needs labeled `continue`, mutable sentinel flags beyond the
   natural state of the algorithm, or duplicated branch flow.
-- For stream chains with more than one operation after `stream()` or `parallelStream()`, keep
-  `.stream()` on the source line and put each following stream operation on its own continuation
-  line. A one-operation chain such as `items.stream().findFirst()` may stay on one line, and a bare
-  stream saved to a variable may stay on one line. `./mvnw -q spotless:apply` applies this wrapping
-  automatically as part of the Java Spotless pipeline.
 - Before using `collect(Collectors.toCollection(...))`, verify that the code truly needs the
   requested collection implementation, such as mutability after collection, encounter-order
   preservation, sorted ordering, or set membership performance. Prefer `toList()`, Guava immutable

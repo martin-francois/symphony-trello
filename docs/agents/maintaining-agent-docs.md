@@ -19,6 +19,11 @@
   prevented it, and check nearby rules for conflicts before finishing.
 - When a new user preference changes how these agent docs themselves should be maintained, review
   existing agent-added rules for conflicts with that new preference in the same turn.
+- Keep durable agent-doc rules only when they would change future agent behavior in a way the user
+  wants. If an existing formatter, lint rule, test, or other automated tool already enforces the
+  outcome, prefer the tool and avoid duplicating implementation details in agent docs. Add a concise
+  agent-doc note only when agents still need to choose, run, or interpret that tool correctly, or
+  when observed behavior shows agents make the wrong choice without the note.
 - When fixing a documentation pattern, search the relevant file or docs set for similar instances
   before committing instead of correcting only the one sentence the user pointed out.
 
