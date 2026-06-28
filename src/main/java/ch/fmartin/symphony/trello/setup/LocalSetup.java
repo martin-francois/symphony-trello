@@ -358,9 +358,9 @@ public final class LocalSetup {
             warnings.add("Workspace root for " + DisplayNames.quotedName(board.boardName()) + " must be a directory: "
                     + board.workspaceRoot());
         }
-        if (board.serverPort() < 1 || board.serverPort() > 65535) {
+        if (!LocalPort.isValid(board.serverPort())) {
             warnings.add("Connected board " + DisplayNames.quotedName(board.boardName()) + " has invalid server port "
-                    + board.serverPort() + "; expected 1 to 65535.");
+                    + board.serverPort() + "; expected " + LocalPort.MIN + " to " + LocalPort.MAX + ".");
         }
         if (board.envPath() == null) {
             warnings.add("Trello credential path for " + DisplayNames.quotedName(board.boardName())
@@ -593,7 +593,7 @@ public final class LocalSetup {
         // Local workflow files outside the manifest still reserve their ports, so a repaired
         // board cannot collide with a stale or disconnected workflow that may be started later.
         reserved.addAll(localWorkflowFilePortReservations(options, ignoredBoard));
-        for (int port = TrelloBoardSetup.DEFAULT_SERVER_PORT; port <= 65535; port++) {
+        for (int port = TrelloBoardSetup.DEFAULT_SERVER_PORT; port <= LocalPort.MAX; port++) {
             if (!reserved.contains(port) && !boardSetup.portInUse(port)) {
                 return port;
             }

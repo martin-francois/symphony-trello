@@ -8,6 +8,7 @@ record LocalPort(int value) {
     static final int MAX = 65_535;
     private static final String CLI_SERVER_PORT_RANGE =
             "--server-port must be between 1024 and 65535 for local HTTP status.";
+    private static final String WORKFLOW_SERVER_PORT_RANGE = "must be between 0 and " + MAX;
 
     LocalPort {
         checkArgument(isValid(value), "Local port must be between %s and %s: %s", MIN, MAX, value);
@@ -28,7 +29,7 @@ record LocalPort(int value) {
 
     static void validateWorkflowServerPort(int value, String label) {
         if (value < 0 || value > MAX) {
-            throw new TrelloBoardSetupException("setup_invalid_server_port", label + " must be between 0 and 65535");
+            throw new TrelloBoardSetupException("setup_invalid_server_port", label + " " + WORKFLOW_SERVER_PORT_RANGE);
         }
     }
 }

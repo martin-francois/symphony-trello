@@ -57,6 +57,9 @@ import org.jboss.logging.Logger;
 public class SymphonyOrchestrator {
     private static final Logger LOG = Logger.getLogger(SymphonyOrchestrator.class);
     private static final int IGNORED_WORKER_LIMIT = 1_000;
+    private static final long INITIAL_RETRY_BACKOFF_MILLIS = 10_000L;
+    private static final int MAX_RETRY_BACKOFF_SHIFT = 16;
+    private static final int RECENT_EVENT_LIMIT = 50;
     private static final Duration IGNORED_WORKER_TTL = Duration.ofMinutes(30);
     private static final Duration CONTINUATION_DELAY = Duration.ofSeconds(1);
 
@@ -1119,7 +1122,7 @@ public class SymphonyOrchestrator {
     }
 
     private Duration backoff(int attempt) {
-        long delay = 10_000L * (1L << Math.clamp(attempt - 1, 0, 16));
+        long delay = INITIAL_RETRY_BACKOFF_MILLIS * (1L << Math.clamp(attempt - 1, 0, MAX_RETRY_BACKOFF_SHIFT));
         return Duration.ofMillis(
                 Math.min(delay, config.agent().maxRetryBackoff().toMillis()));
     }
@@ -1136,7 +1139,7 @@ public class SymphonyOrchestrator {
         ArrayDeque<CardDebugDetails.EventInfo> events =
                 recentEvents.computeIfAbsent(cardId, ignored -> new ArrayDeque<>());
         events.addLast(event);
-        while (events.size() > 50) {
+        while (events.size() > RECENT_EVENT_LIMIT) {
             events.removeFirst();
         }
     }

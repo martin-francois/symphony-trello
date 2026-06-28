@@ -400,7 +400,7 @@ final class TrelloBoardConnector {
     }
 
     private int firstAvailableServerPort(Set<Integer> reservedPorts) {
-        for (int port = TrelloBoardSetup.DEFAULT_SERVER_PORT; port <= 65535; port++) {
+        for (int port = TrelloBoardSetup.DEFAULT_SERVER_PORT; port <= LocalPort.MAX; port++) {
             if (!reservedPorts.contains(port) && !boardSetup.portInUse(port)) {
                 return port;
             }

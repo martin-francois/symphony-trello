@@ -799,14 +799,14 @@ public final class TrelloBoardSetup {
             workflowServerPortReservation(candidate, envPath).ifPresent(reservedPorts::add);
         }
 
-        for (int port = DEFAULT_SERVER_PORT; port <= 65535; port++) {
+        for (int port = DEFAULT_SERVER_PORT; port <= LocalPort.MAX; port++) {
             if (!reservedPorts.contains(port) && !portInUse(port)) {
                 return port;
             }
         }
         throw new TrelloBoardSetupException(
                 "setup_server_port_unavailable",
-                "No workflow HTTP port is available between %d and 65535".formatted(DEFAULT_SERVER_PORT));
+                "No workflow HTTP port is available between %d and %d".formatted(DEFAULT_SERVER_PORT, LocalPort.MAX));
     }
 
     private static List<Path> siblingWorkflowFiles(Path workflowPath) {
