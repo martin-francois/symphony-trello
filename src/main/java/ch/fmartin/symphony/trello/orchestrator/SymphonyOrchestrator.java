@@ -48,6 +48,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
@@ -1055,7 +1056,7 @@ public class SymphonyOrchestrator {
     private Map<String, Integer> runningCountsByState() {
         return running.values().stream()
                 .map(entry -> StateNames.normalize(entry.card.state()))
-                .collect(Collectors.toMap(state -> state, state -> 1, Integer::sum, HashMap::new));
+                .collect(Collectors.toMap(Function.identity(), state -> 1, Integer::sum, HashMap::new));
     }
 
     private static final class DispatchBudget {

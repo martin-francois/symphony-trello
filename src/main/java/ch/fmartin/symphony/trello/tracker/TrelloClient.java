@@ -32,6 +32,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.jboss.logging.Logger;
@@ -126,7 +127,7 @@ public class TrelloClient implements TrackerClient {
         }
 
         return normalized.stream()
-                .collect(Collectors.toMap(Card::id, card -> card, (left, right) -> left, LinkedHashMap::new))
+                .collect(Collectors.toMap(Card::id, Function.identity(), (left, right) -> left, LinkedHashMap::new))
                 .values()
                 .stream()
                 .toList();
@@ -147,7 +148,8 @@ public class TrelloClient implements TrackerClient {
                 .toList();
         Map<String, Card> enriched =
                 enrichPrerequisites(config, foundCards, true, cardsWithComments(foundCards)).stream()
-                        .collect(Collectors.toMap(Card::id, card -> card, (left, right) -> left, LinkedHashMap::new));
+                        .collect(Collectors.toMap(
+                                Card::id, Function.identity(), (left, right) -> left, LinkedHashMap::new));
         Map<String, CardLookupResult> updated = new LinkedHashMap<>();
         results.forEach((cardId, result) -> {
             if (result instanceof CardLookupResult.Found found) {
@@ -802,7 +804,8 @@ public class TrelloClient implements TrackerClient {
         String boardId = requiredString(board, "id", "trello_unknown_payload");
         boolean boardClosed = bool(board.get("closed"));
         Map<String, BoardList> listMap = fetchBoardLists(config.withResolvedBoardId(boardId)).stream()
-                .collect(Collectors.toMap(BoardList::id, list -> list, (left, right) -> left, LinkedHashMap::new));
+                .collect(Collectors.toMap(
+                        BoardList::id, Function.identity(), (left, right) -> left, LinkedHashMap::new));
         return new BoardContext(boardId, boardClosed, listMap);
     }
 
