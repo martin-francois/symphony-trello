@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.StreamSupport;
 
 final class ConnectedBoardRepository {
     private final ObjectMapper json;
@@ -185,12 +186,7 @@ final class ConnectedBoardRepository {
 
     private static boolean hasNonObjectBoardRow(JsonNode root) {
         JsonNode boards = root.path("boards");
-        for (JsonNode board : boards) {
-            if (!board.isObject()) {
-                return true;
-            }
-        }
-        return false;
+        return StreamSupport.stream(boards.spliterator(), false).anyMatch(board -> !board.isObject());
     }
 
     private static List<String> manifestShapeWarnings(JsonNode root) {
@@ -262,12 +258,11 @@ final class ConnectedBoardRepository {
                     + " field additionalWritableRoots must be an array of path strings.");
             return;
         }
-        for (JsonNode root : roots) {
-            if (!root.isTextual() || root.asText().isBlank()) {
-                warnings.add("Connected-board manifest entry " + label
-                        + " field additionalWritableRoots must contain only non-blank path strings.");
-                return;
-            }
+        boolean hasInvalidRoot = StreamSupport.stream(roots.spliterator(), false)
+                .anyMatch(root -> !root.isTextual() || root.asText().isBlank());
+        if (hasInvalidRoot) {
+            warnings.add("Connected-board manifest entry " + label
+                    + " field additionalWritableRoots must contain only non-blank path strings.");
         }
     }
 
