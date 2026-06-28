@@ -72,6 +72,11 @@ commit and open pull requests. Topic-specific rules live in the pages linked und
   even though a rule already existed, do not conclude that no durable change is needed. Strengthen the
   wording, move the rule closer to the always-read workflow, or add a cross-link so the rule is more
   likely to be applied next time.
+- When an eval issue captures a bad or missing behavior in an installed skill, add or update a
+  temporary repo-local override in the relevant agent-docs page. Before applying a temporary override
+  in a turn, check each linked issue's GitHub state at most once; if all linked issues for that
+  override are closed, remove the override instead of following it. Do not query the same issue on
+  every individual code use inside one turn.
 
 ## Pre-Public Clean Breaks
 

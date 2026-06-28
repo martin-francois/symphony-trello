@@ -24,6 +24,14 @@ Codex to write that shape. The eval issue must make the trigger failure
 explicit: the Streams skill should have activated during the original
 implementation prompt, not only during the later stream-refactor request.
 
+When a stream refactor is later found to be non-equivalent, over-allocated,
+over-abstracted, or worse than the original code, capture the full correction
+chain. Include the original code, the prompt that produced the weaker stream
+code, the weaker code, the later correction/revert prompt, and the final code.
+The eval must teach the skill to preserve behavior by default, and to call out
+any mutability, ordering, laziness, parser, exception, allocation, or
+side-effect change explicitly before recommending it.
+
 ## When To Use
 
 Use this skill whenever you:
@@ -34,6 +42,8 @@ Use this skill whenever you:
   pipeline readability problems;
 - accept a user-provided streams refactor;
 - correct a streams refactor after review feedback.
+- revert or repair a stream refactor because it changed behavior, allocation,
+  mutability, ordering, laziness, parser semantics, or side-effect boundaries.
 
 Do not use this skill for unrelated Java edits that merely happen to touch a
 line containing `.stream()` without changing the stream design.
@@ -69,17 +79,33 @@ line containing `.stream()` without changing the stream design.
    that was produced before the better version, or the code the user/reviewer
    corrected.
 
-5. Capture the final preferred code.
+5. If the stream refactor changed behavior or was later judged worse, capture
+   the correction prompt and explain the equivalence failure. Include both:
 
-6. Search for an existing Java Streams skill issue for the same pattern:
+   - the behavior-preserving alternative the skill should have suggested first;
+   - any behavior-changing alternative only when the available context proves
+     the behavior change is safe or desirable.
+
+   If the context is insufficient to prove that a behavior-changing refactor is
+   safe, the desired eval behavior should reward asking for confirmation or
+   choosing the behavior-preserving shape.
+
+6. Capture the final preferred code.
+
+7. Search for an existing Java Streams skill issue for the same pattern:
 
    ```bash
    gh issue list --repo martinfrancois/java-streams-skill --state open --search '<pattern keywords>'
    ```
 
-   Update an existing matching issue instead of creating a duplicate.
+   Update an existing matching issue instead of creating a duplicate. If the
+   same pattern appears in a different code location, add a comment to the
+   existing issue with that occurrence's relevant before code, triggering
+   prompt, intermediate code when available, final code, and why the same eval
+   should cover it. Do not skip the capture merely because the issue already
+   exists for another file.
 
-7. Create or update the issue with a self-contained body. Do not include a
+8. Create or update the issue with a self-contained body. Do not include a
    "Repository context" section, and do not require the reader to open the
    source repository or pull request to understand the eval.
 
@@ -89,6 +115,17 @@ line containing `.stream()` without changing the stream design.
      --title 'Add eval for <stream pattern>' \
      --body-file /tmp/java-streams-eval-issue.md
    ```
+
+9. Add or update a temporary override in `docs/agents/java-style.md` or the
+   narrowest relevant agent-doc page for every eval issue that captures bad,
+   missing, or unreliable Streams-skill behavior observed in Symphony for
+   Trello. Link the issue from the override. The override must say to check the
+   linked issue state at most once per turn before applying it, and to remove
+   the override when the linked issue is closed. Do not leave agents relying
+   only on the future upstream skill fix when the current repo has already
+   observed the bad behavior. If an existing temporary override already covers
+   the issue, update that override or record in the eval comment which override
+   covers it instead of adding a duplicate.
 
 ## Issue Body Shape
 
@@ -123,7 +160,8 @@ but should not be the only eval trigger.
 ## Prompt-produced code before maintainer correction
 
 Use this section when an intermediate or rejected implementation exists.
-Explain that it may be correct but has a streams/readability/performance issue.
+Explain that it may be correct but has a streams/readability/performance issue,
+or that it is not behavior-equivalent.
 
 ```java
 // intermediate code
@@ -133,6 +171,14 @@ Explain that it may be correct but has a streams/readability/performance issue.
 
 Explain the concrete defect. For short-circuiting cases, state whether work
 happens inside or before the lazy stream pipeline.
+
+## Behavior-equivalence analysis
+
+Use this section when the refactor changes or might change mutability, ordering,
+allocation, laziness, parser semantics, exception behavior, or side-effect
+boundaries. State whether the behavior change is safe, unsafe, or not provable
+from local context. Include the behavior-preserving alternative when the final
+preferred code intentionally changes behavior.
 
 ## Maintainer-preferred code
 
@@ -153,10 +199,14 @@ short-circuiting, encounter order, allocation, collector choice, or readability.
   does not explicitly name the skill.
 - Reward the explanation that distinguishes correctness from maintainability.
 - Reward preservation of the product behavior.
+- Reward identifying behavior-changing stream suggestions and either choosing
+  the behavior-preserving implementation or explicitly justifying why the change
+  is safe.
 
 ## Anti-patterns the eval should reject
 
-- List misleading, over-eager, over-abstracted, or behavior-changing shapes.
+- List misleading, over-eager, over-abstracted, or unjustified
+  behavior-changing shapes.
 
 ## Suggested eval name
 
@@ -170,7 +220,14 @@ short-circuiting, encounter order, allocation, collector choice, or readability.
 - For missed-trigger cases, include both prompts: the original prompt that
   produced the weak stream code and the later refactor/review prompt that
   exposed it.
+- For non-equivalent refactors, include the full correction chain: original
+  code, prompt-produced weaker code, later correction/revert prompt, and final
+  code.
 - Explain why the weaker code is weaker even when it is functionally correct.
+- Explain behavior-equivalence explicitly. Do not treat `.toList()` mutability,
+  encounter order, duplicate handling, parser splitting, laziness, exception
+  behavior, or side effects as incidental unless the surrounding code proves the
+  change is harmless.
 - Prefer concrete stream mechanics over vague style claims.
 - Do not paste secrets, credentials, private host paths, Trello card ids, or
   deployment details.
