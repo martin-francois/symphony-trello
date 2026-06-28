@@ -1857,18 +1857,28 @@ final class SetupDiagnosticReporter {
             ConnectedBoardManifest manifest, Optional<Path> selectedWorkflow, Path configDir, boolean scanConfigDir) {
         SequencedSet<Path> workflowPaths = new LinkedHashSet<>();
         Set<Path> canonicalIdentities = new HashSet<>();
+        addManifestWorkflowPaths(workflowPaths, canonicalIdentities, manifest);
+        selectedWorkflow.ifPresent(workflow -> addUniqueWorkflow(workflowPaths, canonicalIdentities, workflow));
+        if (scanConfigDir) {
+            addUniqueWorkflows(workflowPaths, canonicalIdentities, workflowFilesIfReadable(configDir));
+        }
+        return workflowPaths;
+    }
+
+    private static void addManifestWorkflowPaths(
+            SequencedSet<Path> workflowPaths, Set<Path> canonicalIdentities, ConnectedBoardManifest manifest) {
         for (ConnectedBoard board : manifest.boards()) {
             if (board.workflowPath() != null) {
                 addUniqueWorkflow(workflowPaths, canonicalIdentities, board.workflowPath());
             }
         }
-        selectedWorkflow.ifPresent(workflow -> addUniqueWorkflow(workflowPaths, canonicalIdentities, workflow));
-        if (scanConfigDir) {
-            for (Path workflow : workflowFilesIfReadable(configDir)) {
-                addUniqueWorkflow(workflowPaths, canonicalIdentities, workflow);
-            }
+    }
+
+    private static void addUniqueWorkflows(
+            SequencedSet<Path> workflowPaths, Set<Path> canonicalIdentities, List<Path> workflows) {
+        for (Path workflow : workflows) {
+            addUniqueWorkflow(workflowPaths, canonicalIdentities, workflow);
         }
-        return workflowPaths;
     }
 
     /**

@@ -467,18 +467,16 @@ final class TrelloBoardConnector {
                 .serverPort(workflowPath, name -> LocalEnvironment.get(name, options.envPath()))
                 .filter(port -> port != 0)
                 .filter(port -> !reservedPorts.contains(port));
-        if (existingPort.isEmpty()) {
-            return Optional.empty();
+        return existingPort.map(port -> replaceableExistingPort(options, manifest, workflowPath, port));
+    }
+
+    private int replaceableExistingPort(
+            LocalSetup.Options options, ConnectedBoardManifest manifest, Path workflowPath, int port) {
+        if (boardSetup.portInUse(port) && !canStopManagedWorkflow(options, manifest, workflowPath, port)) {
+            throw new TrelloBoardSetupException(
+                    "setup_server_port_conflict", "--server-port %d is already in use on 127.0.0.1.".formatted(port));
         }
-        int port = existingPort.get();
-        if (!boardSetup.portInUse(port)) {
-            return Optional.of(port);
-        }
-        if (canStopManagedWorkflow(options, manifest, workflowPath, port)) {
-            return Optional.of(port);
-        }
-        throw new TrelloBoardSetupException(
-                "setup_server_port_conflict", "--server-port %d is already in use on 127.0.0.1.".formatted(port));
+        return port;
     }
 
     private int validatedRequestedServerPort(

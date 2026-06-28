@@ -37,6 +37,11 @@ References.
   as `Collectors.toSet()` because the repository enforces Picnic's `CollectorMutability` check. When
   `toCollection(...)` remains, add a short nearby comment explaining why that concrete collection
   type is required.
+- When code directly chooses a non-default collection implementation such as `LinkedHashMap`,
+  `LinkedHashSet`, `TreeMap`, `TreeSet`, `ArrayDeque`, or a sequenced collection, make the reason
+  obvious at the allocation site. Add a short comment when the surrounding names do not already
+  explain the need for encounter order, sorted order, deque semantics, mutability, or duplicate
+  handling.
 - Treat stream and Optional refactors as behavior-preserving by default. Before accepting a skill
   suggestion, verify mutability, encounter order, duplicate handling, parser splitting, laziness,
   exception behavior, nullability, prompt ordering, and side-effect boundaries. If a better-looking
