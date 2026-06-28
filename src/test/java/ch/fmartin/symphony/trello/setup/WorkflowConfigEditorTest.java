@@ -106,14 +106,14 @@ final class WorkflowConfigEditorTest {
         } catch (IOException | UnsupportedOperationException e) {
             assumeTrue(false, "symbolic links are not available: " + e.getMessage());
         }
-        assertThat(Files.isSymbolicLink(link)).isTrue();
+        assertThat(link).isSymbolicLink();
         WorkflowConfigEditor editor = new WorkflowConfigEditor();
 
         // when
         editor.updateServerPort(link, 18081);
 
         // then
-        assertThat(Files.isSymbolicLink(link)).isTrue();
+        assertThat(link).isSymbolicLink();
         assertThat(editor.serverPort(target)).contains(18081);
         assertThat(link).content(StandardCharsets.UTF_8).contains("port: 18081", "# Body");
         assertThat(target).content(StandardCharsets.UTF_8).contains("port: 18081", "# Body");

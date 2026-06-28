@@ -44,9 +44,9 @@ final class PackagedAppSmokeIT {
     @Test
     void packagedRunnerServesLocalStatusForMinimalWorkflow() throws Exception {
         // given
-        assertThat(Files.isRegularFile(QUARKUS_RUNNER))
+        assertThat(QUARKUS_RUNNER)
                 .as("Run through Maven verify so the Quarkus runner has been packaged.")
-                .isTrue();
+                .isRegularFile();
         int trelloPort = freePort();
         int appPort = freePortExcept(trelloPort);
         Path workflow = tempDir.resolve("WORKFLOW.smoke.md");
