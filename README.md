@@ -1357,6 +1357,10 @@ those allowed list names and update the pickup and final handoff instructions in
 active list such as `Ready for Codex` or `In Progress`; Symphony may treat the card as still
 eligible and run it again.
 
+If a destination list name matches more than one open Trello list, Symphony refuses the name-based
+move instead of guessing. Rename the duplicate lists or configure `trello_tools.allowed_move_list_ids`
+and tell Codex to move with `list_id`.
+
 The standardized generic `trello_rest` dynamic tool extension is documented in [SPEC.md](SPEC.md) but
 is not yet advertised to Codex by this Java implementation. The Java implementation currently uses
 the narrower handoff tools above.

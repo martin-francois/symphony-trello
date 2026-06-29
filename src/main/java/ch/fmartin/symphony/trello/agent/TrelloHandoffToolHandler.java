@@ -16,7 +16,6 @@ import jakarta.enterprise.context.ApplicationScoped;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 import org.jboss.logging.Logger;
 
@@ -301,8 +300,7 @@ public class TrelloHandoffToolHandler {
             return failure("missing_destination_list", "Provide list_name or list_id for the destination list.");
         }
 
-        BoardListMatch target = resolveAllowedTarget(config, listId, listName)
-                .orElseGet(() -> new BoardListMatch(null, "No configured open destination list matches the request."));
+        BoardListMatch target = resolveAllowedTarget(config, listId, listName);
         if (target.list() == null) {
             return failure("trello_move_not_allowed", target.error());
         }
@@ -319,22 +317,60 @@ public class TrelloHandoffToolHandler {
                 target.list().name()));
     }
 
-    private Optional<BoardListMatch> resolveAllowedTarget(EffectiveConfig config, String listId, String listName) {
+    private BoardListMatch resolveAllowedTarget(EffectiveConfig config, String listId, String listName) {
         List<TrelloClient.BoardList> lists = trello.fetchBoardLists(config);
         List<TrelloClient.BoardList> openLists =
                 lists.stream().filter(list -> !list.closed()).toList();
-        Optional<TrelloClient.BoardList> target = !blank(listId)
-                ? openLists.stream().filter(list -> list.id().equals(listId)).findAny()
-                : openLists.stream()
-                        .filter(list -> StateNames.normalize(list.name()).equals(StateNames.normalize(listName)))
-                        .findAny();
+        if (!blank(listId)) {
+            return openLists.stream()
+                    .filter(list -> list.id().equals(listId))
+                    .findAny()
+                    .map(list -> allowedTargetById(config, list, openLists))
+                    .orElseGet(() -> new BoardListMatch(null, "Destination list is not open on the configured board."));
+        }
 
-        return target.map(list -> allowedById(config, list) || allowedByName(config, list)
-                        ? new BoardListMatch(list, null)
-                        : new BoardListMatch(
-                                null, "Destination list is not included in the configured Trello move allowlist."))
-                .or(() ->
-                        Optional.of(new BoardListMatch(null, "Destination list is not open on the configured board.")));
+        List<TrelloClient.BoardList> nameMatches = openLists.stream()
+                .filter(list -> StateNames.normalize(list.name()).equals(StateNames.normalize(listName)))
+                .toList();
+        if (nameMatches.size() > 1) {
+            return new BoardListMatch(
+                    null,
+                    "Destination list name matches multiple open Trello lists. Rename the duplicate lists or move by list_id.");
+        }
+        if (nameMatches.isEmpty()) {
+            return new BoardListMatch(null, "Destination list is not open on the configured board.");
+        }
+        return allowedTarget(config, nameMatches.getFirst());
+    }
+
+    private BoardListMatch allowedTargetById(
+            EffectiveConfig config, TrelloClient.BoardList list, List<TrelloClient.BoardList> openLists) {
+        if (allowedById(config, list)) {
+            return new BoardListMatch(list, null);
+        }
+        if (allowedByName(config, list) && hasUniqueOpenListName(list, openLists)) {
+            return new BoardListMatch(list, null);
+        }
+        if (allowedByName(config, list)) {
+            return new BoardListMatch(
+                    null,
+                    "Destination list name matches multiple open Trello lists. Allow the exact list_id before moving by list_id.");
+        }
+        return new BoardListMatch(null, "Destination list is not included in the configured Trello move allowlist.");
+    }
+
+    private BoardListMatch allowedTarget(EffectiveConfig config, TrelloClient.BoardList list) {
+        return allowedById(config, list) || allowedByName(config, list)
+                ? new BoardListMatch(list, null)
+                : new BoardListMatch(null, "Destination list is not included in the configured Trello move allowlist.");
+    }
+
+    private boolean hasUniqueOpenListName(TrelloClient.BoardList list, List<TrelloClient.BoardList> openLists) {
+        String normalized = StateNames.normalize(list.name());
+        return openLists.stream()
+                        .filter(candidate -> normalized.equals(StateNames.normalize(candidate.name())))
+                        .count()
+                == 1;
     }
 
     private boolean allowedById(EffectiveConfig config, TrelloClient.BoardList list) {

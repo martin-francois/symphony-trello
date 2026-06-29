@@ -6060,6 +6060,53 @@ final class TrelloBoardSetupMainTest {
         assertThat(createdLists).isEmpty();
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"Human Review", "Review"})
+    void importBoardRejectsAmbiguousDefaultReviewListName(String reviewName) {
+        // given
+        boardListsResponse.set(
+                """
+                [
+                  {"id":"list-ready","name":"Ready for Codex","closed":false,"pos":1},
+                  {"id":"list-review-a","name":"%s","closed":false,"pos":2},
+                  {"id":"list-review-b","name":"%s","closed":false,"pos":3},
+                  {"id":"list-done","name":"Done","closed":false,"pos":4}
+                ]
+                """
+                        .formatted(reviewName, reviewName));
+        Path workflow = tempDir.resolve("ambiguous-default-review.WORKFLOW.md");
+        Path manifest = workflow.getParent().resolve(ConnectedBoardManifest.FILE_NAME);
+
+        // when
+        CliRunResult result = runCli(
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "https://trello.com/b/input/existing-board",
+                "--workflow",
+                workflow.toString(),
+                "--manifest",
+                tempDir.resolve(ConnectedBoardManifest.FILE_NAME).toString(),
+                "--no-github",
+                "--force");
+
+        // then
+        result.assertFailure(SETUP_FAILURE)
+                .stderrContains(
+                        "setup_failed code=setup_ambiguous_review_state",
+                        "Multiple open Trello lists match review list selector(s): \"" + reviewName + "\"")
+                .stderrDoesNotContain("Troubleshooting report written")
+                .stdoutDoesNotContain("Imported Trello board", "Wrote workflow");
+        assertThat(workflow).doesNotExist();
+        assertThat(manifest).doesNotExist();
+        assertThat(createdLists).isEmpty();
+    }
+
     @MethodSource("overlappingDirectImportListRoles")
     @ParameterizedTest(name = "{0}")
     void importBoardRejectsOverlappingListRoles(String name, List<String> roleArgs, String expectedMessage) {

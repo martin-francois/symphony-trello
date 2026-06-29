@@ -766,6 +766,8 @@ Fields:
   - Default: empty list.
   - Used only when `allowed_move_list_ids` is empty.
   - Implementations SHOULD prefer IDs over names because list names are mutable.
+  - Name-based moves MUST fail closed when the requested destination name matches multiple open
+    board lists. Implementations MUST NOT choose one of the duplicate lists implicitly.
 - `allow_comments` (boolean)
   - Default: true when `allow_writes == true`, otherwise false.
 - `allow_checklists` (boolean)
