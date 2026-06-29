@@ -9,6 +9,7 @@ final class RunningEntry {
     final String workerIdentity;
     final Instant startedAt;
     final Integer retryAttempt;
+    final Card dispatchSource;
     volatile Card card;
     volatile String sessionId;
     volatile String threadId;
@@ -25,8 +26,9 @@ final class RunningEntry {
     volatile Future<?> workerTask;
     int turnCount;
 
-    RunningEntry(Card card, String workerIdentity, Integer retryAttempt, Instant startedAt) {
+    RunningEntry(Card card, Card dispatchSource, String workerIdentity, Integer retryAttempt, Instant startedAt) {
         this.card = card;
+        this.dispatchSource = dispatchSource;
         this.cardId = card.id();
         this.workerIdentity = workerIdentity;
         this.retryAttempt = retryAttempt;

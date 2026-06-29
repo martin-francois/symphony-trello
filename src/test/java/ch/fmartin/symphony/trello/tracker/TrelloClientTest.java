@@ -606,6 +606,80 @@ final class TrelloClientTest {
     }
 
     @Test
+    void releaseFromDispatchReturnsToSourceStateListWhenSeveralQueuesPrecedeInProgress() {
+        // given
+        configureMultiQueueBoard();
+        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var config = config(
+                "input",
+                Map.of(
+                        "active_states",
+                        List.of("Normal Queue", "Priority Queue", "In Progress"),
+                        "in_progress_state",
+                        "In Progress"));
+        Card sourceCard =
+                card("000000000000000000000107", "TRELLO-pickup", "Normal Queue", "list-normal", null, BigDecimal.ONE);
+        Card inProgressCard =
+                card("000000000000000000000107", "TRELLO-pickup", "In Progress", "list-progress", null, BigDecimal.ONE);
+
+        // when
+        client.releaseFromDispatch(config, inProgressCard, sourceCard);
+
+        // then
+        assertThat(writeRequests).containsExactly("PUT /1/cards/000000000000000000000107/idList?value=list-normal");
+    }
+
+    @Test
+    void releaseFromDispatchReturnsToSourceListIdWhenSeveralConfiguredListsPrecedeInProgress() {
+        // given
+        configureMultiQueueBoard();
+        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var config = config(
+                "input",
+                Map.of(
+                        "active_states",
+                        List.of("Normal Queue", "Priority Queue", "In Progress"),
+                        "active_list_ids",
+                        List.of("list-normal", "list-priority", "list-progress"),
+                        "in_progress_state",
+                        "In Progress"));
+        Card sourceCard =
+                card("000000000000000000000107", "TRELLO-pickup", "Normal Queue", "list-normal", null, BigDecimal.ONE);
+        Card inProgressCard =
+                card("000000000000000000000107", "TRELLO-pickup", "In Progress", "list-progress", null, BigDecimal.ONE);
+
+        // when
+        client.releaseFromDispatch(config, inProgressCard, sourceCard);
+
+        // then
+        assertThat(writeRequests).containsExactly("PUT /1/cards/000000000000000000000107/idList?value=list-normal");
+    }
+
+    @Test
+    void releaseFromDispatchDoesNotPromoteWhenSourceListCannotBeResolved() {
+        // given
+        configureMultiQueueBoardWithoutNormalQueue();
+        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var config = config(
+                "input",
+                Map.of(
+                        "active_states",
+                        List.of("Normal Queue", "Priority Queue", "In Progress"),
+                        "in_progress_state",
+                        "In Progress"));
+        Card sourceCard =
+                card("000000000000000000000107", "TRELLO-pickup", "Normal Queue", "list-normal", null, BigDecimal.ONE);
+        Card inProgressCard =
+                card("000000000000000000000107", "TRELLO-pickup", "In Progress", "list-progress", null, BigDecimal.ONE);
+
+        // when
+        client.releaseFromDispatch(config, inProgressCard, sourceCard);
+
+        // then
+        assertThat(writeRequests).isEmpty();
+    }
+
+    @Test
     void fetchCandidateCardsPopulatesBlockersFromPrerequisiteChecklistAndWritesOneWaitingComment() {
         // given
         configureDependencyBoard("Todo");
@@ -1165,6 +1239,29 @@ final class TrelloClientTest {
         return new ConfigResolver()
                 .resolve(new WorkflowDefinition(tempDir.resolve("WORKFLOW.md"), Map.of("tracker", tracker), ""))
                 .withResolvedBoardId(boardId.equals("input") ? "board-1" : boardId);
+    }
+
+    private void configureMultiQueueBoard() {
+        trello.remove("/1/boards/board-1/lists");
+        trello.on(
+                "/1/boards/board-1/lists",
+                exchange -> respond(
+                        exchange,
+                        listsJson(
+                                trelloList("list-normal", "Normal Queue", 1),
+                                trelloList("list-priority", "Priority Queue", 2),
+                                trelloList("list-progress", "In Progress", 3))));
+    }
+
+    private void configureMultiQueueBoardWithoutNormalQueue() {
+        trello.remove("/1/boards/board-1/lists");
+        trello.on(
+                "/1/boards/board-1/lists",
+                exchange -> respond(
+                        exchange,
+                        listsJson(
+                                trelloList("list-priority", "Priority Queue", 2),
+                                trelloList("list-progress", "In Progress", 3))));
     }
 
     private void configureDependencyBoard(String prerequisiteState) {

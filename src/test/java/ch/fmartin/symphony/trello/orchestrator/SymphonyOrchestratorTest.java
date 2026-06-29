@@ -445,6 +445,51 @@ final class SymphonyOrchestratorTest {
     }
 
     @Test
+    void releasesFailedInProgressCardUsingDispatchSourceBeforeRetryBackoff() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                tracker:
+                  kind: trello
+                  api_key: key
+                  api_token: token
+                  board_id: board-1
+                  active_states: [Normal Queue, Priority Queue, In Progress]
+                  in_progress_state: In Progress
+                workspace:
+                  root: work
+                polling:
+                  interval_ms: 60000
+                agent:
+                  max_retry_backoff_ms: 60000
+                codex:
+                  command: fake
+                ---
+                {{ card.state }}
+                """);
+        FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Normal Queue")));
+        tracker.preparedCard = TestCards.card("card-1", "TRELLO-abc", "In Progress");
+        AgentRunner runner = mock();
+        when(runner.run(any())).thenReturn(AgentRunResult.fail("codex failed"));
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
+
+        // when
+        orchestrator.start();
+        waitUntil(() -> orchestrator.snapshot().counts().retrying() == 1);
+        RuntimeSnapshot snapshot = orchestrator.snapshot();
+        orchestrator.stop();
+
+        // then
+        assertThat(snapshot.retrying()).singleElement().satisfies(row -> assertThat(row.cardIdentifier())
+                .isEqualTo("TRELLO-abc"));
+        assertThat(tracker.releases).singleElement().isEqualTo(new ReleaseRecord("In Progress", "Normal Queue"));
+        assertThat(tracker.cardState("card-1").state()).isEqualTo("Normal Queue");
+    }
+
+    @Test
     void releasesCurrentCardWhenPrepareForDispatchFailsAfterPickupMove() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
@@ -1696,6 +1741,8 @@ final class SymphonyOrchestratorTest {
         assertThat(tracker.cardState("card-1").state()).isEqualTo("Todo");
     }
 
+    private record ReleaseRecord(String currentState, String sourceState) {}
+
     private static SymphonyOrchestrator orchestrator(Path workflow, TrackerClient tracker, AgentRunner runner) {
         return orchestrator(workflow, tracker, runner, new WorkspaceManager(new HookRunner()));
     }
@@ -1752,6 +1799,7 @@ final class SymphonyOrchestratorTest {
         private final AtomicInteger promptStateFetches = new AtomicInteger();
         private final AtomicInteger prepareForDispatchCalls = new AtomicInteger();
         private final List<String> releasedCards = new ArrayList<>();
+        private final List<ReleaseRecord> releases = new ArrayList<>();
         private volatile Card preparedCard;
         private volatile RuntimeException resolveBoardIdFailure;
         private volatile RuntimeException prepareForDispatchFailure;
@@ -1825,8 +1873,15 @@ final class SymphonyOrchestratorTest {
 
         @Override
         public void releaseFromDispatch(EffectiveConfig config, Card card) {
+            releaseFromDispatch(config, card, card);
+        }
+
+        @Override
+        public void releaseFromDispatch(EffectiveConfig config, Card card, Card dispatchSource) {
+            releases.add(new ReleaseRecord(card.state(), dispatchSource.state()));
             releasedCards.add(card.identifier());
-            setCardState(TestCards.card(card.id(), card.identifier(), "Todo"));
+            String releaseState = card.state().equals(dispatchSource.state()) ? "Todo" : dispatchSource.state();
+            setCardState(TestCards.card(card.id(), card.identifier(), releaseState));
         }
     }
 
