@@ -4071,6 +4071,7 @@ final class TrelloBoardSetupMainTest {
     void newBoardWritesExplicitCodexModelOverrides() {
         // given
         Path workflow = tempDir.resolve("explicit-new-board-model.WORKFLOW.md");
+        Path isolatedEnv = isolatedDirectCredentialEnv();
 
         // when
         CliRunResult result = runCli(
@@ -4099,6 +4100,15 @@ final class TrelloBoardSetupMainTest {
                 .content(StandardCharsets.UTF_8)
                 .contains("model: \"gpt-explicit\"", "reasoning_effort: \"high\"")
                 .doesNotContain("gpt-default");
+        assertThat(isolatedEnv)
+                .content(StandardCharsets.UTF_8)
+                .contains("TRELLO_API_KEY=key", "TRELLO_API_TOKEN=token");
+        assertThat(result.stdout())
+                .contains("Credentials saved: " + isolatedEnv.toAbsolutePath().normalize())
+                .doesNotContain(LocalEnvironment.defaultDotenv()
+                        .toAbsolutePath()
+                        .normalize()
+                        .toString());
     }
 
     @Test
@@ -6663,7 +6673,7 @@ final class TrelloBoardSetupMainTest {
     }
 
     private CliRunResult runCli(String... args) {
-        return runCli(() -> TrelloBoardSetup.CodexModelDefaults.fallback(), args);
+        return runCli(() -> TrelloBoardSetup.CodexModelDefaults.fallback(), withIsolatedDirectCredentialEnv(args));
     }
 
     private CliRunResult runCliWithoutTrelloCredentials(String... args) throws IOException, InterruptedException {
@@ -6672,6 +6682,7 @@ final class TrelloBoardSetupMainTest {
     }
 
     private CliRunResult runCli(Map<String, String> properties, String... args) {
+        args = withIsolatedDirectCredentialEnv(args);
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
         int exitCode = TrelloBoardSetupMain.run(
@@ -6824,6 +6835,7 @@ final class TrelloBoardSetupMainTest {
     }
 
     private CliRunResult runCli(TrelloBoardSetup setup, LocalWorkerManager workerManager, String... args) {
+        args = withIsolatedDirectCredentialEnv(args);
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
         int exitCode = TrelloBoardSetupMain.run(
@@ -6838,6 +6850,7 @@ final class TrelloBoardSetupMainTest {
     }
 
     private CliRunResult runCli(Supplier<TrelloBoardSetup.CodexModelDefaults> codexModelDefaults, String... args) {
+        args = withIsolatedDirectCredentialEnv(args);
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
         int exitCode = TrelloBoardSetupMain.run(
@@ -6851,6 +6864,7 @@ final class TrelloBoardSetupMainTest {
 
     private CliRunResult runCliWithSelectionDefaults(
             CodexModelSelectionDefaults codexModelSelectionDefaults, String... args) {
+        args = withIsolatedDirectCredentialEnv(args);
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
         TrelloBoardSetup setup = new TrelloBoardSetup(new ObjectMapper(), codexModelSelectionDefaults);
@@ -6863,6 +6877,36 @@ final class TrelloBoardSetupMainTest {
                 new PrintStream(stderr, true, StandardCharsets.UTF_8));
         return new CliRunResult(
                 exitCode, stdout.toString(StandardCharsets.UTF_8), stderr.toString(StandardCharsets.UTF_8));
+    }
+
+    private String[] withIsolatedDirectCredentialEnv(String... args) {
+        if (!isDirectSetupCommand(args) || !hasDirectCredentials(args) || hasEnvOption(args)) {
+            return args;
+        }
+        String[] isolatedArgs = Arrays.copyOf(args, args.length + 2);
+        isolatedArgs[args.length] = "--env";
+        isolatedArgs[args.length + 1] = isolatedDirectCredentialEnv().toString();
+        return isolatedArgs;
+    }
+
+    private Path isolatedDirectCredentialEnv() {
+        return tempDir.resolve(".env.direct-cli-fixture");
+    }
+
+    private static boolean isDirectSetupCommand(String[] args) {
+        return args.length > 0 && ("new-board".equals(args[0]) || "import-board".equals(args[0]));
+    }
+
+    private static boolean hasDirectCredentials(String[] args) {
+        return hasOption(args, "--key") || hasOption(args, "--token");
+    }
+
+    private static boolean hasEnvOption(String[] args) {
+        return hasOption(args, "--env");
+    }
+
+    private static boolean hasOption(String[] args, String option) {
+        return Arrays.stream(args).anyMatch(arg -> option.equals(arg) || arg.startsWith(option + "="));
     }
 
     private static Stream<Arguments> directCommandHelp() {
