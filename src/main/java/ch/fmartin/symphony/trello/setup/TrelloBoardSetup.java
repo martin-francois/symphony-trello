@@ -437,6 +437,7 @@ public final class TrelloBoardSetup {
         validateConfiguredLists("active", "active", activeStates, validationListNames);
         validateConfiguredLists("terminal", "terminal", terminalStates, openListNames);
         validateConfiguredList("blocked", "blocked", blockedState, openListNames);
+        validateConfiguredList("review", "review", reviewState, openListNames);
         validateConfiguredListRoleOverlaps(
                 withOptionalActiveState(activeStates, mergingState),
                 withSystemTerminalStates(terminalStates),

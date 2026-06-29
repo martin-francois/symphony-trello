@@ -593,21 +593,81 @@ final class TrelloHandoffToolHandlerTest {
     }
 
     @Test
+    void rejectsAmbiguousListNameMoveWithoutCallingTrelloWriteEndpoint() {
+        // given
+        replaceBoardLists(
+                trelloList("list-ready", "Ready for Codex", 1),
+                trelloList("list-duplicate-review", "Review", 2),
+                trelloList("list-review", "Review", 3));
+        TrelloHandoffToolHandler handler = handler();
+
+        // when
+        var result = handler.handle(
+                config(List.of("Review"), List.of()),
+                TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
+                json.createObjectNode()
+                        .put("tool", TrelloHandoffToolHandler.MOVE_CURRENT_CARD)
+                        .set("arguments", json.createObjectNode().put("list_name", "Review")));
+
+        // then
+        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("contentItems").get(0).path("text").asText())
+                .contains("trello_move_not_allowed", "matches multiple open Trello lists", "list_id");
+        assertThat(movedToListId.get()).isNull();
+    }
+
+    @Test
     void movesCurrentCardToAllowedListIdWhenNamesAreNotConfigured() {
         // given
         TrelloHandoffToolHandler handler = handler();
 
         // when
+        var result = moveToListId(handler, "list-review");
+
+        // then
+        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(movedToListId.get()).isEqualTo("list-review");
+    }
+
+    @Test
+    void movesCurrentCardToAllowedListIdWhenNamesAreDuplicated() {
+        // given
+        replaceBoardLists(
+                trelloList("list-ready", "Ready for Codex", 1),
+                trelloList("list-duplicate-review", "Review", 2),
+                trelloList("list-review", "Review", 3));
+        TrelloHandoffToolHandler handler = handler();
+
+        // when
+        var result = moveToListId(handler, "list-review");
+
+        // then
+        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(movedToListId.get()).isEqualTo("list-review");
+    }
+
+    @Test
+    void rejectsListIdMoveWhenOnlyDuplicateListNameIsAllowed() {
+        // given
+        replaceBoardLists(
+                trelloList("list-ready", "Ready for Codex", 1),
+                trelloList("list-duplicate-review", "Review", 2),
+                trelloList("list-review", "Review", 3));
+        TrelloHandoffToolHandler handler = handler();
+
+        // when
         var result = handler.handle(
-                config(List.of(), List.of("list-review")),
+                config(List.of("Review"), List.of()),
                 TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
                 json.createObjectNode()
                         .put("tool", TrelloHandoffToolHandler.MOVE_CURRENT_CARD)
                         .set("arguments", json.createObjectNode().put("list_id", "list-review")));
 
         // then
-        assertThat(result.path("success").asBoolean()).isTrue();
-        assertThat(movedToListId.get()).isEqualTo("list-review");
+        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("contentItems").get(0).path("text").asText())
+                .contains("trello_move_not_allowed", "matches multiple open Trello lists", "exact list_id");
+        assertThat(movedToListId.get()).isNull();
     }
 
     @Test
@@ -643,6 +703,20 @@ final class TrelloHandoffToolHandlerTest {
 
     private TrelloHandoffToolHandler handler() {
         return new TrelloHandoffToolHandler(json, new TrelloClient(json));
+    }
+
+    private JsonNode moveToListId(TrelloHandoffToolHandler handler, String listId) {
+        return handler.handle(
+                config(List.of(), List.of(listId)),
+                TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
+                json.createObjectNode()
+                        .put("tool", TrelloHandoffToolHandler.MOVE_CURRENT_CARD)
+                        .set("arguments", json.createObjectNode().put("list_id", listId)));
+    }
+
+    private void replaceBoardLists(FakeTrelloServer.TrelloListJson... lists) {
+        trello.remove("/1/boards/board-1/lists")
+                .on("/1/boards/board-1/lists", exchange -> respond(exchange, listsJson(lists)));
     }
 
     private JsonNode upsertWorkpad(TrelloHandoffToolHandler handler) {
