@@ -1299,13 +1299,16 @@ public final class TrelloBoardSetup {
     }
 
     private static String codexSandboxPolicyYaml(boolean githubEnabled) {
-        if (!githubEnabled) {
-            return "";
+        if (githubEnabled) {
+            return """
+                  turn_sandbox_policy:
+                    type: workspaceWrite
+                    networkAccess: true
+                """;
         }
         return """
                   turn_sandbox_policy:
                     type: workspaceWrite
-                    networkAccess: true
                 """;
     }
 
