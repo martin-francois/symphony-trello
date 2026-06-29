@@ -2972,6 +2972,97 @@ final class InstallerScriptTest {
     }
 
     @Test
+    void powershellUninstallerRejectsDefaultLocalDataCleanupWithCustomPrefixWhenAvailable() throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        assumeFalse(pwsh.isEmpty());
+        Path localAppData = temporaryDirectory.resolve("ps-custom-prefix-local-app-data");
+        Path defaultSymphonyHome = Path.of(localAppData + "\\SymphonyTrello");
+        CustomPrefixUninstallFixture fixture =
+                customPrefixUninstallFixture("ps-custom-prefix", defaultSymphonyHome, "symphony-trello.ps1");
+        Map<String, String> environment = new LinkedHashMap<>(nonWindowsPowerShellEnvironment());
+        environment.put("LOCALAPPDATA", localAppData.toString());
+        environment.put(
+                "HOME", temporaryDirectory.resolve("ps-custom-prefix-home").toString());
+        environment.put(
+                "USERPROFILE",
+                temporaryDirectory.resolve("ps-custom-prefix-profile").toString());
+
+        // when
+        ProcessResult result = run(
+                environment,
+                command(
+                                pwsh,
+                                "-NoProfile",
+                                "-File",
+                                "./uninstall.ps1",
+                                "--yes",
+                                "--yes-local-data",
+                                "--remove-all-local-data",
+                                "--prefix",
+                                fixture.app().toString(),
+                                "--bin-dir",
+                                fixture.bin().toString())
+                        .toArray(String[]::new));
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isEqualTo(2);
+        assertThat(result.output())
+                .contains(
+                        "Refusing to remove default local data while uninstalling a custom --prefix.",
+                        "CONFIG: set SYMPHONY_HOME or SYMPHONY_TRELLO_CONFIG_DIR",
+                        "WORKSPACES: set SYMPHONY_HOME or SYMPHONY_TRELLO_WORKSPACE_ROOT",
+                        "STATE/LOGS: set SYMPHONY_HOME or SYMPHONY_TRELLO_STATE_HOME");
+        assertCustomPrefixUninstallFixturePreserved(fixture, "symphony-trello.ps1");
+    }
+
+    @Test
+    void powershellUninstallerRejectsDefaultLocalDataCleanupWithCustomPrefixThroughScriptblockWhenAvailable()
+            throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        assumeFalse(pwsh.isEmpty());
+        Path localAppData = temporaryDirectory.resolve("ps-scriptblock-custom-prefix-local-app-data");
+        Path defaultSymphonyHome = Path.of(localAppData + "\\SymphonyTrello");
+        CustomPrefixUninstallFixture fixture = customPrefixUninstallFixture(
+                "ps-scriptblock-custom-prefix", defaultSymphonyHome, "symphony-trello.ps1");
+        Map<String, String> environment = new LinkedHashMap<>(nonWindowsPowerShellEnvironment());
+        environment.put("LOCALAPPDATA", localAppData.toString());
+        environment.put(
+                "HOME",
+                temporaryDirectory.resolve("ps-scriptblock-custom-prefix-home").toString());
+        environment.put(
+                "USERPROFILE",
+                temporaryDirectory
+                        .resolve("ps-scriptblock-custom-prefix-profile")
+                        .toString());
+
+        // when
+        ProcessResult result = run(
+                environment,
+                command(
+                                pwsh,
+                                "-NoProfile",
+                                "-Command",
+                                "& ([scriptblock]::Create((Get-Content -Raw './uninstall.ps1'))) "
+                                        + "--yes --yes-local-data --remove-all-local-data --prefix "
+                                        + powerShellLiteral(fixture.app().toString())
+                                        + " --bin-dir "
+                                        + powerShellLiteral(fixture.bin().toString()))
+                        .toArray(String[]::new));
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isEqualTo(2);
+        assertThat(result.output())
+                .contains(
+                        "Refusing to remove default local data while uninstalling a custom --prefix.",
+                        "CONFIG: set SYMPHONY_HOME or SYMPHONY_TRELLO_CONFIG_DIR",
+                        "WORKSPACES: set SYMPHONY_HOME or SYMPHONY_TRELLO_WORKSPACE_ROOT",
+                        "STATE/LOGS: set SYMPHONY_HOME or SYMPHONY_TRELLO_STATE_HOME");
+        assertCustomPrefixUninstallFixturePreserved(fixture, "symphony-trello.ps1");
+    }
+
+    @Test
     void powershellUninstallerRejectsBlankPathValuesThroughScriptblockWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
@@ -3285,6 +3376,40 @@ final class InstallerScriptTest {
         assertThat(result.exitCode()).isEqualTo(2);
         assertThat(result.output()).contains("matching confirmation flag");
         assertThat(symphonyHome.resolve("config/.env")).exists();
+    }
+
+    @Test
+    void posixUninstallerRejectsDefaultLocalDataCleanupWithCustomPrefix() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("custom-prefix-home");
+        Path defaultSymphonyHome = home.resolve(".local/share/symphony-trello");
+        CustomPrefixUninstallFixture fixture =
+                customPrefixUninstallFixture("custom-prefix", defaultSymphonyHome, "symphony-trello");
+        Map<String, String> environment = Map.of("HOME", home.toString());
+
+        // when
+        ProcessResult result = run(
+                environment,
+                "bash",
+                "uninstall.sh",
+                "--yes",
+                "--yes-local-data",
+                "--remove-all-local-data",
+                "--prefix",
+                fixture.app().toString(),
+                "--bin-dir",
+                fixture.bin().toString());
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isEqualTo(2);
+        assertThat(result.output())
+                .contains(
+                        "Refusing to remove default local data while uninstalling a custom --prefix.",
+                        "CONFIG: set SYMPHONY_HOME or SYMPHONY_TRELLO_CONFIG_DIR",
+                        "WORKSPACES: set SYMPHONY_HOME or SYMPHONY_TRELLO_WORKSPACE_ROOT",
+                        "STATE/LOGS: set SYMPHONY_HOME or SYMPHONY_TRELLO_STATE_HOME");
+        assertCustomPrefixUninstallFixturePreserved(fixture, "symphony-trello");
     }
 
     @Test
@@ -4530,6 +4655,33 @@ final class InstallerScriptTest {
         return text.replace("|", "").replaceAll("\\s+", " ");
     }
 
+    private CustomPrefixUninstallFixture customPrefixUninstallFixture(
+            String prefix, Path defaultSymphonyHome, String commandName) throws IOException {
+        Path app = temporaryDirectory.resolve(prefix + "-app");
+        Path bin = temporaryDirectory.resolve(prefix + "-bin");
+        Files.createDirectories(defaultSymphonyHome.resolve("config"));
+        Files.createDirectories(defaultSymphonyHome.resolve("workspaces"));
+        Files.createDirectories(defaultSymphonyHome.resolve("state"));
+        Files.createDirectories(app);
+        Files.createDirectories(bin);
+        Files.createFile(app.resolve(".symphony-trello-install"));
+        Files.writeString(
+                defaultSymphonyHome.resolve("config/.env"), "TRELLO_API_KEY=secret\n", StandardCharsets.UTF_8);
+        Files.writeString(defaultSymphonyHome.resolve("workspaces/card.txt"), "work\n", StandardCharsets.UTF_8);
+        Files.writeString(defaultSymphonyHome.resolve("state/worker.pid"), "123\n", StandardCharsets.UTF_8);
+        Files.writeString(bin.resolve(commandName), "launcher\n", StandardCharsets.UTF_8);
+        return new CustomPrefixUninstallFixture(defaultSymphonyHome, app, bin);
+    }
+
+    private static void assertCustomPrefixUninstallFixturePreserved(
+            CustomPrefixUninstallFixture fixture, String commandName) {
+        assertThat(fixture.app().resolve(".symphony-trello-install")).exists();
+        assertThat(fixture.bin().resolve(commandName)).exists();
+        assertThat(fixture.defaultSymphonyHome().resolve("config/.env")).exists();
+        assertThat(fixture.defaultSymphonyHome().resolve("workspaces/card.txt")).exists();
+        assertThat(fixture.defaultSymphonyHome().resolve("state/worker.pid")).exists();
+    }
+
     private static List<ProcessResult> runPosixAppPathCases(
             Map<String, String> environment,
             String script,
@@ -4822,6 +4974,8 @@ final class InstallerScriptTest {
             return name;
         }
     }
+
+    private record CustomPrefixUninstallFixture(Path defaultSymphonyHome, Path app, Path bin) {}
 
     private static List<String> powershellCommandForDifferentWorkingDirectory() {
         return powershellCommand().stream()

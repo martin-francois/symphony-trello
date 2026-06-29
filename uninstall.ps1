@@ -35,6 +35,10 @@ trap {
   exit 1
 }
 $ScriptBoundParameters = @{} + $PSBoundParameters
+$SymphonyHomeConfigured = -not [string]::IsNullOrWhiteSpace($env:SYMPHONY_HOME)
+$ConfigDirConfigured = -not [string]::IsNullOrWhiteSpace($env:SYMPHONY_TRELLO_CONFIG_DIR)
+$WorkspaceRootConfigured = -not [string]::IsNullOrWhiteSpace($env:SYMPHONY_TRELLO_WORKSPACE_ROOT)
+$StateHomeConfigured = -not [string]::IsNullOrWhiteSpace($env:SYMPHONY_TRELLO_STATE_HOME)
 $DefaultSymphonyHome = if ($env:SYMPHONY_HOME) { $env:SYMPHONY_HOME } else { "$env:LOCALAPPDATA\SymphonyTrello" }
 $DefaultPrefix = ""
 $DefaultBinDir = Join-Path $(if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }) (Join-Path ".local" "bin")
@@ -237,6 +241,7 @@ function Apply-PublicArgs([string[]]$Tokens) {
       { $_ -in @("-symphony-home", "--symphony-home") } {
         $i++
         Set-Variable -Name SymphonyHome -Value (Read-PublicPathOptionValue $Tokens $i $token) -Scope 1
+        Set-Variable -Name SymphonyHomeConfigured -Value $true -Scope 1
         break
       }
       default {
@@ -268,6 +273,8 @@ if (($positionalTokens | Where-Object { $_.StartsWith("-") } | Select-Object -Fi
 } else {
   if (Apply-PositionalFlag $SymphonyHome) {
     $SymphonyHome = $DefaultSymphonyHome
+  } elseif ($ScriptBoundParameters.ContainsKey("SymphonyHome")) {
+    $SymphonyHomeConfigured = $true
   }
   if (Apply-PositionalFlag $Prefix) {
     $Prefix = $DefaultPrefix
@@ -313,6 +320,7 @@ if ($RemoveAllLocalData) {
   $RemoveWorkspaces = $true
   $RemoveState = $true
 }
+$PrefixConfigured = -not [string]::IsNullOrWhiteSpace($Prefix)
 $RawPrefix = $Prefix
 $Prefix = [System.IO.Path]::GetFullPath($Prefix)
 $ConfigDir = [System.IO.Path]::GetFullPath($ConfigDir)
@@ -581,9 +589,34 @@ function Assert-RequestedRemovalPaths {
   }
 }
 
+function Assert-CustomPrefixLocalDataCleanup {
+  $defaultPrefixForHome = [System.IO.Path]::GetFullPath((Join-Path $SymphonyHome "app"))
+  if ((-not $PrefixConfigured) -or [string]::Equals($Prefix, $defaultPrefixForHome, [System.StringComparison]::OrdinalIgnoreCase)) {
+    return
+  }
+
+  $missing = @()
+  if ($RemoveConfig -and (-not $SymphonyHomeConfigured) -and (-not $ConfigDirConfigured)) {
+    $missing += "CONFIG: set SYMPHONY_HOME or SYMPHONY_TRELLO_CONFIG_DIR"
+  }
+  if ($RemoveWorkspaces -and (-not $SymphonyHomeConfigured) -and (-not $WorkspaceRootConfigured)) {
+    $missing += "WORKSPACES: set SYMPHONY_HOME or SYMPHONY_TRELLO_WORKSPACE_ROOT"
+  }
+  if ($RemoveState -and (-not $SymphonyHomeConfigured) -and (-not $StateHomeConfigured)) {
+    $missing += "STATE/LOGS: set SYMPHONY_HOME or SYMPHONY_TRELLO_STATE_HOME"
+  }
+  if ($missing.Count -eq 0) {
+    return
+  }
+
+  [Console]::Error.WriteLine("Refusing to remove default local data while uninstalling a custom --prefix.`n  $($missing -join "`n  ")`nSet SYMPHONY_HOME to the install home or set the listed local-data environment variables, then rerun.")
+  exit 2
+}
+
 Assert-AppPaths
 Assert-RequestedRemovalPaths
 Assert-CommandDirectory
+Assert-CustomPrefixLocalDataCleanup
 
 function Test-CommandLineArgument([string]$CommandLine, [string]$Argument) {
   $escaped = [regex]::Escape($Argument)
