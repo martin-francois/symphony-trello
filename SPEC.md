@@ -1315,6 +1315,11 @@ Distinct terminal reasons are important because retry logic and logs differ.
 ### 7.4 Idempotency and Recovery Rules
 
 - The orchestrator serializes state mutations through one authority to avoid duplicate dispatch.
+- A service process MUST hold an OS-released runtime lock for the resolved workflow file before it
+  resolves the Trello board or starts polling. The lock location MUST be derived from the resolved
+  workflow file so packaged and source-checkout processes contend for the same workflow namespace. If
+  the workflow-local lock cannot be acquired, startup MUST fail. A second local process for the same
+  workflow MUST fail startup instead of relying on Trello list state as a cross-process lease.
 - `claimed` and `running` checks are REQUIRED before launching any worker.
 - A card MUST be claimed before worker spawn begins.
 - A pending `running` entry with an orchestrator-generated per-spawn worker identity MUST be

@@ -16,18 +16,26 @@ import ch.fmartin.symphony.trello.tracker.CardLookupResult;
 import ch.fmartin.symphony.trello.tracker.TrackerClient;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
+import ch.fmartin.symphony.trello.workflow.WorkflowException;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import ch.fmartin.symphony.trello.workspace.WorkspaceManager;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import java.io.IOException;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
+import java.nio.channels.OverlappingFileLockException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.ClosedWatchServiceException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.StandardWatchEventKinds;
 import java.nio.file.WatchEvent;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -35,6 +43,7 @@ import java.util.ArrayDeque;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -106,6 +115,7 @@ public class SymphonyOrchestrator {
     private volatile Object rateLimits;
     private final AtomicBoolean refreshRequested = new AtomicBoolean();
     private final AtomicBoolean workflowReloadRequested = new AtomicBoolean();
+    private WorkflowProcessLock workflowProcessLock;
     private volatile boolean tickRunning;
     private boolean started;
 
@@ -149,12 +159,15 @@ public class SymphonyOrchestrator {
 
     public void start() {
         operationLock.lock();
+        boolean releaseLockOnFailure = false;
+        boolean startupComplete = false;
         try {
             synchronized (this) {
                 if (started) {
                     return;
                 }
             }
+            releaseLockOnFailure = true;
             reloadOrThrow();
             startWorkflowWatcher();
             startupTerminalWorkspaceCleanup();
@@ -162,8 +175,15 @@ public class SymphonyOrchestrator {
                 started = true;
                 scheduleTick(Duration.ZERO);
             }
+            startupComplete = true;
         } finally {
-            operationLock.unlock();
+            try {
+                if (releaseLockOnFailure && !startupComplete) {
+                    releaseWorkflowProcessLock();
+                }
+            } finally {
+                operationLock.unlock();
+            }
         }
     }
 
@@ -182,6 +202,7 @@ public class SymphonyOrchestrator {
             });
             scheduler.shutdownNow();
             workers.shutdownNow();
+            releaseWorkflowProcessLock();
         } finally {
             operationLock.unlock();
         }
@@ -315,6 +336,7 @@ public class SymphonyOrchestrator {
 
     private void reloadOrThrow() {
         workflow = workflowLoader.load(workflowPath);
+        acquireWorkflowProcessLock(workflow.path());
         config = resolveBoardScope(configResolver.resolve(workflow));
         configResolver.validateForDispatch(config);
         workflowLastModified = lastModified(workflow.path());
@@ -326,6 +348,23 @@ public class SymphonyOrchestrator {
             }
         }
         LOG.infof("workflow=%s outcome=loaded", workflow.path());
+    }
+
+    private void acquireWorkflowProcessLock(Path selectedWorkflowPath) {
+        if (workflowProcessLock == null) {
+            workflowProcessLock = WorkflowProcessLock.acquire(selectedWorkflowPath);
+        }
+    }
+
+    private void releaseWorkflowProcessLock() {
+        if (workflowProcessLock == null) {
+            return;
+        }
+        try {
+            workflowProcessLock.close();
+        } finally {
+            workflowProcessLock = null;
+        }
     }
 
     private EffectiveConfig resolveBoardScope(EffectiveConfig raw) {
@@ -1114,6 +1153,101 @@ public class SymphonyOrchestrator {
 
         private int limitFor(String state) {
             return maxByState.getOrDefault(state, maxTotal);
+        }
+    }
+
+    private static final class WorkflowProcessLock implements AutoCloseable {
+        private final FileChannel channel;
+        private final FileLock lock;
+
+        private WorkflowProcessLock(FileChannel channel, FileLock lock) {
+            this.channel = channel;
+            this.lock = lock;
+        }
+
+        static WorkflowProcessLock acquire(Path workflowPath) {
+            Path lockPath = lockPath(workflowPath);
+            Path lockDirectory = lockPath.getParent();
+            if (lockDirectory == null) {
+                throw new WorkflowException(
+                        "workflow_lock_unavailable",
+                        "Workflow runtime lock requires a configured state home or workflow directory.");
+            }
+            try {
+                Files.createDirectories(lockDirectory);
+                FileChannel channel = FileChannel.open(lockPath, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+                try {
+                    FileLock lock = tryWorkflowLock(channel);
+                    if (lock == null) {
+                        closeQuietly(channel);
+                        throw new WorkflowException(
+                                "workflow_already_running",
+                                "Another Symphony for Trello process is already using this workflow file.");
+                    }
+                    return new WorkflowProcessLock(channel, lock);
+                } catch (IOException e) {
+                    closeQuietly(channel);
+                    throw e;
+                }
+            } catch (IOException e) {
+                throw new WorkflowException(
+                        "workflow_lock_unavailable", "Workflow runtime lock cannot be acquired.", e);
+            }
+        }
+
+        private static Path lockPath(Path workflowPath) {
+            try {
+                Path canonicalWorkflowPath = workflowPath.toRealPath();
+                String digest = HexFormat.of().formatHex(sha256(canonicalWorkflowPath.toString()));
+                return fallbackLockDirectory(canonicalWorkflowPath).resolve(digest + ".lock");
+            } catch (IOException e) {
+                throw new WorkflowException(
+                        "workflow_lock_unavailable", "Workflow runtime lock cannot resolve the workflow file.", e);
+            }
+        }
+
+        private static Path fallbackLockDirectory(Path canonicalWorkflowPath) {
+            Path workflowParent = canonicalWorkflowPath.getParent();
+            if (workflowParent == null) {
+                throw new WorkflowException(
+                        "workflow_lock_unavailable",
+                        "Workflow runtime lock requires a configured state home or workflow directory.");
+            }
+            return workflowParent.resolve(".symphony-trello-locks");
+        }
+
+        private static byte[] sha256(String value) {
+            try {
+                return MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
+            } catch (NoSuchAlgorithmException e) {
+                throw new IllegalStateException("SHA-256 digest is unavailable", e);
+            }
+        }
+
+        private static FileLock tryWorkflowLock(FileChannel channel) throws IOException {
+            try {
+                return channel.tryLock();
+            } catch (OverlappingFileLockException e) {
+                return null;
+            }
+        }
+
+        private static void closeQuietly(FileChannel channel) {
+            try {
+                channel.close();
+            } catch (IOException ignored) {
+                // Startup is already failing, and the OS will reclaim the descriptor on exit.
+            }
+        }
+
+        @Override
+        public void close() {
+            try {
+                lock.release();
+            } catch (IOException e) {
+                LOG.warnf("workflow_runtime_lock outcome=release_failed reason=%s", e.getMessage());
+            }
+            closeQuietly(channel);
         }
     }
 

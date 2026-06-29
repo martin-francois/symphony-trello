@@ -1054,7 +1054,10 @@ different file. Each running process uses one workflow file. For Trello, that wo
 For multiple boards or projects, create one workflow per board and start one process per workflow.
 Give each process its own workflow path and HTTP port. The setup commands write a stable
 `server.port` for generated workflows and choose the next port automatically when other workflow
-files in the same folder already use earlier ports.
+files in the same folder already use earlier ports. If another local Symphony process is already
+using the same resolved workflow file, startup takes a workflow-local operating-system lock and fails
+before polling Trello. If that lock cannot be created, startup fails instead of using a weaker
+process-local fallback.
 
 [`WORKFLOW.example.md`](WORKFLOW.example.md) contains a complete starter. YAML front matter
 configures runtime behavior. The Markdown body becomes the prompt template for the card.
