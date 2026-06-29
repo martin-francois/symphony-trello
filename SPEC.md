@@ -1056,7 +1056,8 @@ When `import-board` reads an existing board, the Java implementation detects com
 `Ready for Codex` for queued work, `In Progress` for visible pickup, `Blocked` for blocked handoff,
 `Human Review` for review handoff (falling back to the common list name `Review` when no
 `Human Review` list exists), `Merging` for landing approval when a terminal list exists, and `Done`
-for terminal work. Explicit command options override detected list names.
+for terminal work. Explicit list-name options MUST match an open Trello list name exactly, including
+punctuation and whitespace. Repeating `--active` or `--terminal` selects multiple lists.
 
 ## 6. Configuration Specification
 

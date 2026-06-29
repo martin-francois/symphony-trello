@@ -288,33 +288,31 @@ final class SetupLocalCommandFactory {
         @Option(names = "--workspace-id", description = "Trello Workspace id for a new board.")
         Optional<String> workspaceId = Optional.empty();
 
+        @Option(
+                names = "--active",
+                description = "Existing-board queued-work list name. Repeat for multiple lists.",
+                preprocessor = TrelloBoardSetupMain.AttachedListSelectorPreprocessor.class)
         List<String> activeStates = new ArrayList<>();
 
         @Option(
-                names = "--active",
-                description = "Existing-board queued-work list name.",
-                parameterConsumer = TrelloBoardSetupMain.RawValueParameterConsumer.class)
-        void activeState(String value) {
-            activeStates.addAll(CliValueNormalizer.commaSeparatedValues(value));
-        }
-
+                names = "--terminal",
+                description = "Existing-board terminal list name. Repeat for multiple lists.",
+                preprocessor = TrelloBoardSetupMain.AttachedListSelectorPreprocessor.class)
         List<String> terminalStates = new ArrayList<>();
 
         @Option(
-                names = "--terminal",
-                description = "Existing-board terminal list name.",
-                parameterConsumer = TrelloBoardSetupMain.RawValueParameterConsumer.class)
-        void terminalState(String value) {
-            terminalStates.addAll(CliValueNormalizer.commaSeparatedValues(value));
-        }
-
-        @Option(names = "--in-progress", description = "Existing-board in-progress list name.")
+                names = "--in-progress",
+                description = "Existing-board in-progress list name.",
+                preprocessor = TrelloBoardSetupMain.AttachedListSelectorPreprocessor.class)
         String inProgressState;
 
         @Option(names = "--no-in-progress", description = "Do not configure an in-progress list.")
         boolean noInProgress;
 
-        @Option(names = "--blocked", description = "Existing-board blocked list name.")
+        @Option(
+                names = "--blocked",
+                description = "Existing-board blocked list name.",
+                preprocessor = TrelloBoardSetupMain.AttachedListSelectorPreprocessor.class)
         String blockedState;
 
         @Option(names = "--workflow", description = "Workflow file to write.")
@@ -437,11 +435,11 @@ final class SetupLocalCommandFactory {
                     boardName,
                     board,
                     workspaceId,
-                    CliValueNormalizer.nonBlankTrimmed(activeStates),
-                    CliValueNormalizer.nonBlankTrimmed(terminalStates),
-                    CliValueNormalizer.trimmedOrNull(inProgressState),
+                    CliValueNormalizer.nonBlank(activeStates),
+                    CliValueNormalizer.nonBlank(terminalStates),
+                    CliValueNormalizer.nullIfBlank(inProgressState),
                     detectInProgressState,
-                    CliValueNormalizer.trimmedOrNull(blockedState),
+                    CliValueNormalizer.nullIfBlank(blockedState),
                     workflowPath,
                     workspaceRoot,
                     configDir,

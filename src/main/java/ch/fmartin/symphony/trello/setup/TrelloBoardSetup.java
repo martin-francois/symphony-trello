@@ -2157,10 +2157,15 @@ public final class TrelloBoardSetup {
 
     private static void validateConfiguredLists(
             String label, String errorCodeSegment, List<String> configured, List<String> openListNames) {
-        Set<String> normalizedOpenNames =
-                openListNames.stream().map(StateNames::normalize).collect(Collectors.toUnmodifiableSet());
+        List<String> duplicates = duplicatedConfiguredListNames(configured);
+        if (!duplicates.isEmpty()) {
+            throw new TrelloBoardSetupException(
+                    "setup_duplicate_" + errorCodeSegment + "_state",
+                    "Duplicate " + label + " list selector(s): " + DisplayNames.quotedList(duplicates)
+                            + ". Pass each Trello list only once.");
+        }
         List<String> missing = configured.stream()
-                .filter(name -> !normalizedOpenNames.contains(StateNames.normalize(name)))
+                .filter(name -> !openListNames.contains(name))
                 .toList();
         if (!missing.isEmpty()) {
             throw new TrelloBoardSetupException(
@@ -2178,6 +2183,18 @@ public final class TrelloBoardSetup {
                             + DisplayNames.quotedList(ambiguous)
                             + ". Rename one of those Trello lists before running import-board.");
         }
+    }
+
+    private static List<String> duplicatedConfiguredListNames(List<String> configured) {
+        Map<String, String> firstByNormalizedName = new LinkedHashMap<>();
+        Set<String> duplicateNormalizedNames = new HashSet<>();
+        for (String name : configured) {
+            String normalizedName = StateNames.normalize(name);
+            if (firstByNormalizedName.putIfAbsent(normalizedName, name) != null) {
+                duplicateNormalizedNames.add(normalizedName);
+            }
+        }
+        return duplicateNormalizedNames.stream().map(firstByNormalizedName::get).toList();
     }
 
     private static boolean hasDuplicateMatchingOpenListName(String configured, List<String> openListNames) {

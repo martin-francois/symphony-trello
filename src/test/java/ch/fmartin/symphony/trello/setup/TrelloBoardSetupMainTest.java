@@ -1967,6 +1967,20 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
+    void listWorkspacesRejectsOptionTokenAsMissingKeyValueBeforeTrelloRequest() {
+        // given
+
+        // when
+        CliRunResult result = runCli("list-workspaces", "--endpoint", endpoint(), "--key", "--token=token");
+
+        // then
+        result.assertFailure(SETUP_FAILURE)
+                .stderrContains("setup_failed code=setup_invalid_arguments", "Expected parameter for option '--key'")
+                .stderrDoesNotContain("trello_api_request", "Troubleshooting report written");
+        assertThat(workspaceLookups).hasValue(0);
+    }
+
+    @Test
     void listWorkspacesTreatsMalformedTrelloPayloadAsUnexpectedFailureWithReport() {
         // given
         trello.remove("/1/members/me/organizations").on("/1/members/me/organizations", exchange -> {
@@ -4284,12 +4298,13 @@ final class TrelloBoardSetupMainTest {
     private static Stream<BlankDirectSetupOption> blankImportBoardSetupOptions() {
         return Stream.of(
                 blankImportBoardOption("active-empty", "--active", "--active", ""),
-                blankImportBoardOption("active-comma", "--active", "--active", ","),
-                blankImportBoardOption("active-middle-empty", "--active", "--active", "Ready for Codex, ,Inbox"),
+                blankImportBoardAttachedOption("active-attached-empty", "--active", "--active="),
                 blankImportBoardOption("terminal-empty", "--terminal", "--terminal", ""),
-                blankImportBoardOption("terminal-trailing-empty", "--terminal", "--terminal", "Done,   "),
+                blankImportBoardAttachedOption("terminal-attached-empty", "--terminal", "--terminal="),
                 blankImportBoardOption("in-progress", "--in-progress", "--in-progress", ""),
-                blankImportBoardOption("blocked", "--blocked", "--blocked", " "));
+                blankImportBoardAttachedOption("in-progress-attached-empty", "--in-progress", "--in-progress="),
+                blankImportBoardOption("blocked", "--blocked", "--blocked", " "),
+                blankImportBoardAttachedOption("blocked-attached-empty", "--blocked", "--blocked="));
     }
 
     private static BlankDirectSetupOption blankImportBoardOption(
@@ -4311,6 +4326,28 @@ final class TrelloBoardSetupMainTest {
             command.addAll(List.of("--terminal", "Released"));
         }
         command.addAll(List.of(option, value, "--workflow", "<workflow>", "--env", "<env>"));
+        return new BlankDirectSetupOption(name, optionName, command);
+    }
+
+    private static BlankDirectSetupOption blankImportBoardAttachedOption(
+            String name, String optionName, String option) {
+        List<String> command = new ArrayList<>(List.of(
+                "import-board",
+                "--endpoint",
+                "http://127.0.0.1:9",
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "input"));
+        if (!"--active".equals(optionName)) {
+            command.addAll(List.of("--active", "Queue for Codex"));
+        }
+        if (!"--terminal".equals(optionName)) {
+            command.addAll(List.of("--terminal", "Released"));
+        }
+        command.addAll(List.of(option, "--workflow", "<workflow>", "--env", "<env>"));
         return new BlankDirectSetupOption(name, optionName, command);
     }
 
@@ -4577,7 +4614,9 @@ final class TrelloBoardSetupMainTest {
                 "--board",
                 "https://trello.com/b/input/existing-board",
                 "--active",
-                "Queue for Codex,Doing",
+                "Queue for Codex",
+                "--active",
+                "Doing",
                 "--in-progress",
                 "Doing",
                 "--terminal",
@@ -4675,6 +4714,65 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
+    void importBoardAcceptsAttachedOptionLikeListSelectors() throws Exception {
+        // given
+        boardListsResponse.set(
+                """
+                [
+                  {"id":"list-option-like-active","name":"--terminal","closed":false,"pos":1},
+                  {"id":"list-active","name":"Doing","closed":false,"pos":2},
+                  {"id":"list-option-like-progress","name":"--active","closed":false,"pos":3},
+                  {"id":"list-terminal","name":"Released","closed":false,"pos":4},
+                  {"id":"list-option-like-blocked","name":"--in-progress","closed":false,"pos":5}
+                ]
+                """);
+        Path workflow = tempDir.resolve("option-like-list-selector.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.option-like-list-selector");
+
+        // when
+        CliRunResult result = runCli(
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "https://trello.com/b/input/existing-board",
+                "--active=--terminal",
+                "--active",
+                "Doing",
+                "--in-progress=--active",
+                "--terminal",
+                "Released",
+                "--blocked=--in-progress",
+                "--workflow",
+                workflow.toString(),
+                "--manifest",
+                tempDir.resolve(ConnectedBoardManifest.FILE_NAME).toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "Active lists: \"--terminal\", \"Doing\"",
+                        "In-progress list: \"--active\"",
+                        "Terminal lists: \"Released\"",
+                        "Blocked list: \"--in-progress\"");
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains(
+                        "- \"--terminal\"",
+                        "- \"Doing\"",
+                        "in_progress_state: \"--active\"",
+                        "- \"Released\"",
+                        "list_name \"--in-progress\"");
+    }
+
+    @Test
     void importBoardRejectsSeparateOptionTokenAsMissingListSelectorBeforeTrelloRequest() {
         // given
         Path workflow = tempDir.resolve("missing-list-selector.WORKFLOW.md");
@@ -4708,8 +4806,55 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
+    void importBoardRejectsSeparateOptionTokenAsMissingScalarListSelectorBeforeTrelloRequest() {
+        // given
+        Path workflow = tempDir.resolve("missing-scalar-list-selector.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.missing-scalar-list-selector");
+
+        // when
+        CliRunResult result = runCli(
+                "import-board",
+                "--endpoint",
+                "http://127.0.0.1:9",
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "input",
+                "--active",
+                "Queue",
+                "--terminal",
+                "Released",
+                "--blocked",
+                "--in-progress=Doing",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertFailure(SETUP_FAILURE)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments", "Expected parameter for option '--blocked'")
+                .stderrDoesNotContain("trello_api_request", "Troubleshooting report written");
+        assertThat(workflow).doesNotExist();
+        assertThat(env).doesNotExist();
+    }
+
+    @Test
     void importBoardPreservesWhitespaceInListSelectors() throws Exception {
         // given
+        boardListsResponse.set(
+                """
+                [
+                  {"id":"list-active","name":" Queue for Codex ","closed":false,"pos":1},
+                  {"id":"list-progress","name":" Doing ","closed":false,"pos":2},
+                  {"id":"list-terminal","name":" Released ","closed":false,"pos":3},
+                  {"id":"list-blocked","name":" Blocked ","closed":false,"pos":4}
+                ]
+                """);
         Path workflow = tempDir.resolve("imported-space-lists.WORKFLOW.md");
         Path env = tempDir.resolve(".env.imported-space");
 
@@ -4725,9 +4870,13 @@ final class TrelloBoardSetupMainTest {
                 "--board",
                 "https://trello.com/b/input/existing-board",
                 "--active",
-                " Queue for Codex ,Released ",
-                "--terminal",
+                " Queue for Codex ",
+                "--in-progress",
                 " Doing ",
+                "--terminal",
+                " Released ",
+                "--blocked",
+                " Blocked ",
                 "--workflow",
                 workflow.toString(),
                 "--manifest",
@@ -4740,9 +4889,145 @@ final class TrelloBoardSetupMainTest {
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("- \" Queue for Codex \"")
-                .contains("- \"Released \"")
-                .contains("- \" Doing \"");
+                .contains("in_progress_state: \" Doing \"")
+                .contains("- \" Released \"")
+                .contains("list_name \" Blocked \"");
         result.stdoutContains("Imported Trello board: \"Existing Board\"");
+    }
+
+    @Test
+    void importBoardRejectsWhitespaceChangedListSelectorsThatDoNotExist() {
+        // given
+        Path workflow = tempDir.resolve("unknown-space-list.WORKFLOW.md");
+        Path manifest = workflow.getParent().resolve(ConnectedBoardManifest.FILE_NAME);
+
+        // when
+        CliRunResult result = runCli(
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "https://trello.com/b/input/existing-board",
+                "--active",
+                "Queue for Codex ",
+                "--terminal",
+                "Released",
+                "--workflow",
+                workflow.toString(),
+                "--manifest",
+                manifest.toString(),
+                "--no-github",
+                "--force");
+
+        // then
+        result.assertFailure(SETUP_FAILURE)
+                .stderrContains(
+                        "setup_failed code=setup_unknown_active_state", "Unknown active list(s): \"Queue for Codex \"")
+                .stdoutDoesNotContain("Imported Trello board", "Wrote workflow");
+        assertThat(workflow).doesNotExist();
+        assertThat(manifest).doesNotExist();
+    }
+
+    @Test
+    void importBoardAcceptsCommaContainingListSelectors() throws Exception {
+        // given
+        boardListsResponse.set(
+                """
+                [
+                  {"id":"list-active","name":"Comma, Active Probe","closed":false,"pos":1},
+                  {"id":"list-progress","name":"Doing, Now","closed":false,"pos":2},
+                  {"id":"list-terminal","name":"Released, Done","closed":false,"pos":3},
+                  {"id":"list-blocked","name":"Blocked, Needs Help","closed":false,"pos":4}
+                ]
+                """);
+        Path workflow = tempDir.resolve("imported-comma-lists.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.imported-comma");
+
+        // when
+        CliRunResult result = runCli(
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "https://trello.com/b/input/existing-board",
+                "--active",
+                "Comma, Active Probe",
+                "--in-progress",
+                "Doing, Now",
+                "--terminal",
+                "Released, Done",
+                "--blocked",
+                "Blocked, Needs Help",
+                "--workflow",
+                workflow.toString(),
+                "--manifest",
+                tempDir.resolve(ConnectedBoardManifest.FILE_NAME).toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "Active lists: \"Comma, Active Probe\"",
+                        "In-progress list: \"Doing, Now\"",
+                        "Terminal lists: \"Released, Done\"",
+                        "Blocked list: \"Blocked, Needs Help\"");
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains(
+                        "- \"Comma, Active Probe\"",
+                        "in_progress_state: \"Doing, Now\"",
+                        "- \"Released, Done\"",
+                        "list_name \"Blocked, Needs Help\"");
+    }
+
+    @Test
+    void importBoardRejectsDuplicateListRoleSelectors() {
+        // given
+        Path workflow = tempDir.resolve("duplicate-list-selector.WORKFLOW.md");
+        Path manifest = workflow.getParent().resolve(ConnectedBoardManifest.FILE_NAME);
+
+        // when
+        CliRunResult result = runCli(
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "https://trello.com/b/input/existing-board",
+                "--active",
+                "Queue for Codex",
+                "--active",
+                "Queue  for Codex",
+                "--terminal",
+                "Released",
+                "--workflow",
+                workflow.toString(),
+                "--manifest",
+                manifest.toString(),
+                "--no-github",
+                "--force");
+
+        // then
+        result.assertFailure(SETUP_FAILURE)
+                .stderrContains(
+                        "setup_failed code=setup_duplicate_active_state",
+                        "Duplicate active list selector(s): \"Queue for Codex\"")
+                .stdoutDoesNotContain("Imported Trello board", "Wrote workflow");
+        assertThat(workflow).doesNotExist();
+        assertThat(manifest).doesNotExist();
     }
 
     @Test
@@ -5822,7 +6107,7 @@ final class TrelloBoardSetupMainTest {
         return Stream.of(
                 Arguments.of(
                         "overlapping-active-terminal",
-                        List.of("--active", "Queue for Codex", "--terminal", "Queue  for Codex"),
+                        List.of("--active", "Queue for Codex", "--terminal", "Queue for Codex"),
                         "active and terminal both use Queue for Codex"),
                 Arguments.of(
                         "overlapping-active-blocked",
