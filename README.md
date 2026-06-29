@@ -1185,9 +1185,9 @@ unrelated host files. Keep that default until a card needs another local file or
 During guided setup, you can add allowed host paths. In `WORKFLOW.md`, those become
 `codex.additional_writable_roots`. Relative paths resolve relative to the workflow file. The runtime
 adds those paths to a Codex `workspaceWrite` sandbox policy unless the workflow already uses
-`dangerFullAccess`. GitHub-enabled starter workflows also set `networkAccess: true` on the
-`workspaceWrite` policy so Codex can clone repositories and create pull requests while keeping the
-filesystem sandbox enabled.
+`dangerFullAccess`. Generated workflows use `workspaceWrite` so Codex can write inside each card's
+workspace. GitHub-enabled starter workflows also set `networkAccess: true` so Codex can clone
+repositories and create pull requests while keeping the filesystem sandbox enabled.
 
 Example:
 
@@ -1436,9 +1436,10 @@ credentials, and Codex approval/sandbox settings appropriate to the board's trus
 Approval and sandbox values are passed through from [`WORKFLOW.md`](#workflow-contract) to the
 installed Codex app-server schema. When additional writable roots are configured, this implementation
 adds them to a `workspaceWrite` turn sandbox policy unless the workflow already uses
-`dangerFullAccess`. GitHub-enabled starter workflows use `workspaceWrite` with network access so
-Codex can publish pull requests without disabling the filesystem sandbox. User-input and unsupported
-dynamic tool requests are answered without waiting indefinitely.
+`dangerFullAccess`. Generated workflows use `workspaceWrite` so Codex can write inside each card's
+workspace. GitHub-enabled starter workflows also enable network access so Codex can publish pull
+requests without disabling the filesystem sandbox. User-input and unsupported dynamic tool requests
+are answered without waiting indefinitely.
 
 ## Production Deployment
 

@@ -511,9 +511,10 @@ product migration code, historical generated-template detection, or automatic up
 pre-release workflow files; the private deployment is updated manually when the current contract
 changes.
 
-Generated GitHub workflows explicitly configure Codex with `workspaceWrite` and `networkAccess:
-true`. Generated non-GitHub workflows do not add network access by default. Hand-authored workflows
-keep their configured Codex sandbox policy and are validated through the current schema.
+Generated workflows explicitly configure Codex with `workspaceWrite`. Generated GitHub workflows
+also set `networkAccess: true`. Generated non-GitHub workflows do not add network access by
+default. Hand-authored workflows keep their configured Codex sandbox policy and are validated
+through the current schema.
 
 #### 5.3.1 `tracker` (object)
 
@@ -1039,9 +1040,10 @@ Generated workflows configure Codex for unattended runs. They write
 `codex.approval_policy: never` and rely on the documented approval and user-input handling posture
 in Section 10.5 plus the configured Codex sandbox policy, which keeps Codex's workspace sandbox
 enabled unless the operator explicitly opts into `dangerFullAccess` during setup. Generated
-GitHub workflows use a `workspaceWrite` turn sandbox policy with network access enabled so Codex can
-clone repositories and publish pull requests without disabling the filesystem sandbox. Generated
-write-capable workflows enable `trello_tools` with `allow_writes` and `allow_comments`, restrict
+workflows use a `workspaceWrite` turn sandbox policy so Codex can create and edit per-card
+workspace files without disabling the filesystem sandbox. GitHub workflows enable network access so
+Codex can clone repositories and publish pull requests. Generated write-capable workflows enable
+`trello_tools` with `allow_writes` and `allow_comments`, restrict
 `allowed_move_list_names` to the configured handoff lists, such as the visible pickup, review,
 blocked, and done lists, and leave checklist and URL attachment writes disabled. When no handoff
 lists are configured, generated workflows disable `trello_tools` entirely.
