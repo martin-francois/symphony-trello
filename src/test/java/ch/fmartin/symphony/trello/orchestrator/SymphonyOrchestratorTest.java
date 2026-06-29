@@ -3,6 +3,8 @@ package ch.fmartin.symphony.trello.orchestrator;
 import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
@@ -19,20 +21,28 @@ import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
 import ch.fmartin.symphony.trello.tracker.CardLookupResult;
 import ch.fmartin.symphony.trello.tracker.TrackerClient;
+import ch.fmartin.symphony.trello.workflow.WorkflowException;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import ch.fmartin.symphony.trello.workspace.HookRunner;
 import ch.fmartin.symphony.trello.workspace.WorkspaceManager;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -41,6 +51,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.parallel.ResourceLock;
+import org.junit.jupiter.api.parallel.Resources;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
@@ -754,6 +766,142 @@ final class SymphonyOrchestratorTest {
         orchestrator.stop();
     }
 
+    @Test
+    void duplicateWorkflowRuntimeFailsBeforeTrelloResolution() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        writeWorkflow(workflow, "60000");
+        FakeTracker ownerTracker = new FakeTracker(List.of());
+        SymphonyOrchestrator owner = orchestrator(workflow, ownerTracker, mock());
+        owner.start();
+
+        FakeTracker duplicateTracker = new FakeTracker(List.of());
+        SymphonyOrchestrator duplicate = orchestrator(workflow, duplicateTracker, mock());
+
+        try {
+
+            // when
+            Throwable failure = catchThrowable(duplicate::start);
+
+            // then
+            assertThat(failure).isInstanceOfSatisfying(WorkflowException.class, exception -> {
+                assertThat(exception.code()).isEqualTo("workflow_already_running");
+                assertThat(exception).hasMessageContaining("already using this workflow file");
+            });
+            assertThat(duplicateTracker.boardResolutions).hasValue(0);
+        } finally {
+            owner.stop();
+        }
+
+        FakeTracker restartedTracker = new FakeTracker(List.of());
+        SymphonyOrchestrator restarted = orchestrator(workflow, restartedTracker, mock());
+        restarted.start();
+        restarted.stop();
+        assertThat(restartedTracker.boardResolutions).hasValue(1);
+    }
+
+    @ResourceLock(Resources.SYSTEM_PROPERTIES)
+    @Test
+    void workflowRuntimeLockUsesWorkflowLocalNamespaceWhenRuntimeDirectoriesDiffer() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        writeWorkflow(workflow, "60000");
+        Path stateHome = tempDir.resolve("state");
+        Path firstTmp = tempDir.resolve("first-tmp");
+        Path secondTmp = tempDir.resolve("second-tmp");
+        Files.createDirectories(firstTmp);
+        Files.createDirectories(secondTmp);
+        String previousStateHome = System.getProperty("symphony.trello.installed.state.home");
+        String previousTmp = System.getProperty("java.io.tmpdir");
+        SymphonyOrchestrator owner = orchestrator(workflow, new FakeTracker(List.of()), mock());
+        try {
+            System.setProperty("symphony.trello.installed.state.home", stateHome.toString());
+            System.setProperty("java.io.tmpdir", firstTmp.toString());
+            owner.start();
+
+            FakeTracker duplicateTracker = new FakeTracker(List.of());
+            SymphonyOrchestrator duplicate = orchestrator(workflow, duplicateTracker, mock());
+
+            // when
+            System.clearProperty("symphony.trello.installed.state.home");
+            System.setProperty("java.io.tmpdir", secondTmp.toString());
+            Throwable failure = catchThrowable(duplicate::start);
+
+            // then
+            assertThat(failure).isInstanceOfSatisfying(WorkflowException.class, exception -> {
+                assertThat(exception.code()).isEqualTo("workflow_already_running");
+                assertThat(exception).hasMessageContaining("already using this workflow file");
+            });
+            assertThat(duplicateTracker.boardResolutions).hasValue(0);
+            assertThat(workflow.getParent().resolve(".symphony-trello-locks").resolve(workflowLockFileName(workflow)))
+                    .isRegularFile();
+            assertThat(stateHome.resolve("workflow-locks")).doesNotExist();
+            assertThat(firstTmp.resolve("symphony-trello-workflow-locks")).doesNotExist();
+            assertThat(secondTmp.resolve("symphony-trello-workflow-locks")).doesNotExist();
+        } finally {
+            owner.stop();
+            restoreProperty("symphony.trello.installed.state.home", previousStateHome);
+            restoreProperty("java.io.tmpdir", previousTmp);
+        }
+    }
+
+    @Test
+    void workflowRuntimeLockFailsWhenWorkflowLockDirectoryCannotBeCreated() throws Exception {
+        // given
+        Path workflowDirectory = tempDir.resolve("readonly-workflow");
+        Files.createDirectories(workflowDirectory);
+        Path workflow = workflowDirectory.resolve("WORKFLOW.md");
+        writeWorkflow(workflow, "60000");
+        Set<PosixFilePermission> originalPermissions;
+        try {
+            originalPermissions = Files.getPosixFilePermissions(workflowDirectory);
+        } catch (UnsupportedOperationException e) {
+            assumeTrue(false, "POSIX permissions are not available on this filesystem.");
+            return;
+        }
+        FakeTracker tracker = new FakeTracker(List.of());
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, mock());
+        try {
+            Files.setPosixFilePermissions(workflowDirectory, PosixFilePermissions.fromString("r-x------"));
+            assumeFalse(Files.isWritable(workflowDirectory), "The current user can still write to the test directory.");
+
+            // when
+            Throwable failure = catchThrowable(orchestrator::start);
+
+            // then
+            assertThat(failure).isInstanceOfSatisfying(WorkflowException.class, exception -> {
+                assertThat(exception.code()).isEqualTo("workflow_lock_unavailable");
+                assertThat(exception).hasMessageContaining("Workflow runtime lock cannot be acquired");
+            });
+            assertThat(tracker.boardResolutions).hasValue(0);
+        } finally {
+            Files.setPosixFilePermissions(workflowDirectory, originalPermissions);
+            orchestrator.stop();
+        }
+    }
+
+    @Test
+    void workflowRuntimeLockIsReleasedWhenStartupFailsAfterAcquiringIt() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        writeWorkflow(workflow, "60000");
+        FakeTracker failingTracker = new FakeTracker(List.of());
+        failingTracker.resolveBoardIdFailure = new IllegalStateException("board lookup failed");
+        SymphonyOrchestrator failing = orchestrator(workflow, failingTracker, mock());
+
+        // when
+        Throwable failure = catchThrowable(failing::start);
+
+        // then
+        assertThat(failure).isInstanceOf(IllegalStateException.class).hasMessageContaining("board lookup failed");
+
+        FakeTracker restartedTracker = new FakeTracker(List.of());
+        SymphonyOrchestrator restarted = orchestrator(workflow, restartedTracker, mock());
+        restarted.start();
+        restarted.stop();
+        assertThat(restartedTracker.boardResolutions).hasValue(1);
+    }
+
     /**
      * Gives a racing change that does not block (the old bug) time to complete while startup is
      * still latched; a correctly blocking change leaves the future incomplete and this returns
@@ -763,6 +911,27 @@ final class SymphonyOrchestratorTest {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
         while (System.nanoTime() < deadline && !future.isDone()) {
             pollDelayForBoundedConditionWait();
+        }
+    }
+
+    private static String workflowLockFileName(Path workflow) throws Exception {
+        String canonicalWorkflowPath = workflow.toRealPath().toString();
+        return HexFormat.of().formatHex(sha256(canonicalWorkflowPath)) + ".lock";
+    }
+
+    private static byte[] sha256(String value) {
+        try {
+            return MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 digest is unavailable", e);
+        }
+    }
+
+    private static void restoreProperty(String name, String value) {
+        if (value == null) {
+            System.clearProperty(name);
+        } else {
+            System.setProperty(name, value);
         }
     }
 
@@ -1578,11 +1747,13 @@ final class SymphonyOrchestratorTest {
         private volatile List<Card> candidates;
         private volatile Map<String, CardLookupResult> cardStates;
         private final AtomicInteger candidateFetches = new AtomicInteger();
+        private final AtomicInteger boardResolutions = new AtomicInteger();
         private final AtomicInteger stateFetches = new AtomicInteger();
         private final AtomicInteger promptStateFetches = new AtomicInteger();
         private final AtomicInteger prepareForDispatchCalls = new AtomicInteger();
         private final List<String> releasedCards = new ArrayList<>();
         private volatile Card preparedCard;
+        private volatile RuntimeException resolveBoardIdFailure;
         private volatile RuntimeException prepareForDispatchFailure;
 
         private FakeTracker(List<Card> candidates) {
@@ -1606,6 +1777,10 @@ final class SymphonyOrchestratorTest {
 
         @Override
         public String resolveBoardId(EffectiveConfig config) {
+            boardResolutions.incrementAndGet();
+            if (resolveBoardIdFailure != null) {
+                throw resolveBoardIdFailure;
+            }
             return "board-1";
         }
 

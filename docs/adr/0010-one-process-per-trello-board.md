@@ -49,10 +49,13 @@ processes.
 * Good, because per-board `max_concurrent_agents` is easy to explain and test.
 * Good, because cards dispatch in the board-local order defined by the spec: priority, configured
   active-list order, Trello card position, creation time, and stable identifiers.
+* Good, because startup takes an OS-released workflow-local lock for the resolved workflow file
+  before resolving the Trello board, so a duplicate local process for the same workflow fails before
+  it can dispatch the same card.
 * Bad, because operators must start one process per board instead of registering every board in one
   service instance.
-* Bad, because two processes pointed at the same board remain unsupported without an external claim
-  mechanism.
+* Bad, because two different workflow files pointed at the same board still remain unsupported
+  without an external claim mechanism.
 
 ### Confirmation
 
@@ -65,7 +68,9 @@ boards running through separate processes and ports.
 ### One process per workflow file and Trello board
 
 Start one Symphony process for each `WORKFLOW.md`. Each workflow resolves one Trello board and owns
-that board's scheduling state.
+that board's scheduling state. A workflow-local runtime lock rejects a second process using the same
+resolved workflow file. If that lock location cannot be used, startup fails; the lock is not a
+distributed board lease.
 
 * Good, because process boundaries match the workflow contract.
 * Good, because board-specific prompts, Trello list mappings, credentials, and Codex settings do not
