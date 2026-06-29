@@ -30,11 +30,10 @@ import java.util.function.Supplier;
 import picocli.CommandLine;
 import picocli.CommandLine.ArgGroup;
 import picocli.CommandLine.Command;
-import picocli.CommandLine.IParameterConsumer;
+import picocli.CommandLine.IParameterPreprocessor;
 import picocli.CommandLine.Mixin;
 import picocli.CommandLine.Model.ArgSpec;
 import picocli.CommandLine.Model.CommandSpec;
-import picocli.CommandLine.Model.OptionSpec;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.ParameterException;
 import picocli.CommandLine.ParentCommand;
@@ -271,33 +270,31 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         @Option(names = "--board", required = true, description = "Trello board URL, short link, or id.")
         String boardId;
 
+        @Option(
+                names = "--active",
+                description = "Queued-work Trello list name. Repeat for multiple lists.",
+                preprocessor = AttachedListSelectorPreprocessor.class)
         List<String> activeStates = new ArrayList<>();
 
         @Option(
-                names = "--active",
-                description = "Queued-work Trello list name.",
-                parameterConsumer = RawValueParameterConsumer.class)
-        void activeState(String value) {
-            activeStates.addAll(CliValueNormalizer.commaSeparatedValues(value));
-        }
-
+                names = "--terminal",
+                description = "Terminal Trello list name. Repeat for multiple lists.",
+                preprocessor = AttachedListSelectorPreprocessor.class)
         List<String> terminalStates = new ArrayList<>();
 
         @Option(
-                names = "--terminal",
-                description = "Terminal Trello list name.",
-                parameterConsumer = RawValueParameterConsumer.class)
-        void terminalState(String value) {
-            terminalStates.addAll(CliValueNormalizer.commaSeparatedValues(value));
-        }
-
-        @Option(names = "--in-progress", description = "In-progress Trello list name.")
+                names = "--in-progress",
+                description = "In-progress Trello list name.",
+                preprocessor = AttachedListSelectorPreprocessor.class)
         String inProgressState;
 
         @Option(names = "--no-in-progress", description = "Do not configure an in-progress list.")
         boolean noInProgress;
 
-        @Option(names = "--blocked", description = "Blocked Trello list name.")
+        @Option(
+                names = "--blocked",
+                description = "Blocked Trello list name.",
+                preprocessor = AttachedListSelectorPreprocessor.class)
         String blockedState;
 
         @Spec
@@ -805,9 +802,9 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                     boardId,
                     CliValueNormalizer.nonBlank(activeStates),
                     CliValueNormalizer.nonBlank(terminalStates),
-                    CliValueNormalizer.trimmedOrNull(inProgressState),
+                    CliValueNormalizer.nullIfBlank(inProgressState),
                     detectInProgressState,
-                    CliValueNormalizer.trimmedOrNull(blockedState),
+                    CliValueNormalizer.nullIfBlank(blockedState),
                     workflowPath,
                     workspaceRoot,
                     serverPort,
@@ -1091,23 +1088,30 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         return value == null || value.isBlank() ? "<none>" : DisplayNames.quotedName(value);
     }
 
-    public static final class RawValueParameterConsumer implements IParameterConsumer {
+    public static final class AttachedListSelectorPreprocessor implements IParameterPreprocessor {
         @Override
-        public void consumeParameters(Stack<String> args, ArgSpec argSpec, CommandSpec commandSpec) {
-            OptionSpec option = (OptionSpec) argSpec;
-            if (args.empty()) {
-                throw new ParameterException(
-                        commandSpec.commandLine(),
-                        "Missing required parameter for option '" + option.longestName() + "' (" + option.paramLabel()
-                                + ")");
+        @SuppressWarnings("unchecked")
+        public boolean preprocess(
+                Stack<String> args, CommandSpec commandSpec, ArgSpec argSpec, Map<String, Object> info) {
+            boolean attached = !" ".equals(info.get("separator"));
+            if (args.empty() && !attached) {
+                return false;
             }
-            String value = args.pop();
-            if (commandSpec.findOption(optionName(value)) != null) {
-                throw new ParameterException(
-                        commandSpec.commandLine(),
-                        "Expected parameter for option '" + option.longestName() + "' but found '" + value + "'");
+            if (!attached && isKnownOptionToken(commandSpec, args.peek())) {
+                return false;
             }
-            argSpec.setValue(value, commandSpec.commandLine());
+            String value = args.empty() ? "" : args.pop();
+            Object currentValue = argSpec.getValue();
+            if (currentValue instanceof List<?>) {
+                argSpec.<List<String>>getValue().add(value);
+            } else {
+                argSpec.setValue(value, commandSpec.commandLine());
+            }
+            return true;
+        }
+
+        private static boolean isKnownOptionToken(CommandSpec commandSpec, String value) {
+            return commandSpec.findOption(optionName(value)) != null;
         }
 
         private static String optionName(String value) {

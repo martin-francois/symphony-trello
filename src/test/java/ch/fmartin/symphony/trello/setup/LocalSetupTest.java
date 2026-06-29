@@ -163,12 +163,13 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "--board must not be empty. Provide a Trello board name, id, or short link, or omit --board to use the command's default scope."),
                 new BlankSetupLocalOption("--workspace-id", "--workspace-id", " "),
                 new BlankSetupLocalOption("--active", "--active", ""),
-                new BlankSetupLocalOption("--active", "--active", ","),
-                new BlankSetupLocalOption("--active", "--active", "Ready for Codex, ,Inbox"),
+                BlankSetupLocalOption.attached("--active", "--active="),
                 new BlankSetupLocalOption("--terminal", "--terminal", ""),
-                new BlankSetupLocalOption("--terminal", "--terminal", "Done,   "),
+                BlankSetupLocalOption.attached("--terminal", "--terminal="),
                 new BlankSetupLocalOption("--in-progress", "--in-progress", ""),
+                BlankSetupLocalOption.attached("--in-progress", "--in-progress="),
                 new BlankSetupLocalOption("--blocked", "--blocked", " "),
+                BlankSetupLocalOption.attached("--blocked", "--blocked="),
                 new BlankSetupLocalOption(
                         "--workflow",
                         "--workflow",
@@ -217,13 +218,23 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         assertThat(trello.createdLists()).isEmpty();
     }
 
-    private record BlankSetupLocalOption(String optionName, String option, String value, String expectedMessage) {
+    private record BlankSetupLocalOption(String optionName, List<String> optionTokens, String expectedMessage) {
         BlankSetupLocalOption(String optionName, String option, String value) {
             this(optionName, option, value, optionName + " must not be blank.");
         }
 
+        BlankSetupLocalOption(String optionName, String option, String value, String expectedMessage) {
+            this(optionName, List.of(option, value), expectedMessage);
+        }
+
+        static BlankSetupLocalOption attached(String optionName, String option) {
+            return new BlankSetupLocalOption(optionName, List.of(option), optionName + " must not be blank.");
+        }
+
         String[] commandArray() {
-            return new String[] {"--dry-run", "--non-interactive", "--no-start", option, value};
+            List<String> command = new ArrayList<>(List.of("--dry-run", "--non-interactive", "--no-start"));
+            command.addAll(optionTokens);
+            return command.toArray(String[]::new);
         }
     }
 
@@ -3105,7 +3116,9 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--board",
                 "board-1",
                 "--active",
-                "Build Next, Doing",
+                "Build Next",
+                "--active",
+                "Doing",
                 "--in-progress",
                 "Doing",
                 "--terminal",
@@ -3125,6 +3138,59 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 .contains(
                         "- \"Build Next\"", "in_progress_state: \"Doing\"", "- \"Shipped\"", "list_name \"Needs Help\"")
                 .doesNotContain("- \" Doing\"", "- \"\"");
+        assertThat(commands.startedWorkflows).containsExactly(workflow.toString());
+        assertThat(commands.startedEnvFiles).containsExactly(env.toString());
+    }
+
+    @Test
+    void nonInteractiveSetupAcceptsCommaContainingListSelectors() throws Exception {
+        // given
+        trello.givenRawBoardListsJson(
+                """
+                [
+                  {"id":"list-1","name":"Backlog","closed":false,"pos":1},
+                  {"id":"list-2","name":"Comma, Active Probe","closed":false,"pos":2},
+                  {"id":"list-3","name":"Doing, Now","closed":false,"pos":3},
+                  {"id":"list-4","name":"Released, Done","closed":false,"pos":4},
+                  {"id":"list-5","name":"Blocked, Needs Help","closed":false,"pos":5}
+                ]
+                """);
+        Path env = tempDir.resolve(".env");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "board-1",
+                "--active",
+                "Comma, Active Probe",
+                "--in-progress",
+                "Doing, Now",
+                "--terminal",
+                "Released, Done",
+                "--blocked",
+                "Blocked, Needs Help",
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        Path workflow = tempDir.resolve("config").resolve("WORKFLOW.imported-queue.md");
+        result.assertSuccess();
+        assertThat(trello.createdLists()).isEmpty();
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains(
+                        "- \"Comma, Active Probe\"",
+                        "in_progress_state: \"Doing, Now\"",
+                        "- \"Released, Done\"",
+                        "list_name \"Blocked, Needs Help\"");
         assertThat(commands.startedWorkflows).containsExactly(workflow.toString());
         assertThat(commands.startedEnvFiles).containsExactly(env.toString());
     }

@@ -335,6 +335,10 @@ Common setup command options:
   them from `.env` or environment variables.
 - `--workspace-id ID`: choose the Trello Workspace for a new board when your token can access more
   than one Workspace.
+- `--active NAME`: during `import-board`, choose an exact Trello list name that Symphony may poll
+  for ready work. Repeat `--active` for multiple active lists.
+- `--terminal NAME`: during `import-board`, choose an exact Trello list name that means work is done.
+  Repeat `--terminal` for multiple terminal lists.
 - `--in-progress NAME`: during `import-board`, choose the Trello list where Codex should move a
   card immediately after it is picked up. If you omit it, import uses `In Progress` when the board has
   that list. If no in-progress list is configured, the card stays in the active list while

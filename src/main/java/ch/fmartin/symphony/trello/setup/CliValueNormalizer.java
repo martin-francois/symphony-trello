@@ -42,4 +42,8 @@ final class CliValueNormalizer {
         String trimmed = value.trim();
         return trimmed.isBlank() ? null : trimmed;
     }
+
+    static String nullIfBlank(String value) {
+        return value == null || value.isBlank() ? null : value;
+    }
 }
