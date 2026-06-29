@@ -545,7 +545,7 @@ public class SymphonyOrchestrator {
             workspaces.removeForIdentifierIfPresent(entry.identifier(), config);
         }
         if (!suppressRetry) {
-            releaseCurrentFromDispatch(entry.card, reason);
+            releaseCurrentFromDispatch(entry.card, entry.dispatchSource, reason);
             scheduleRetry(
                     cardId, nextAttempt(entry.retryAttempt), entry.identifier(), entry.card.cardUrl(), reason, false);
         }
@@ -593,12 +593,12 @@ public class SymphonyOrchestrator {
             synchronized (this) {
                 claimed.remove(card.id());
             }
-            releaseCurrentFromDispatch(card, "prepare for dispatch failed");
+            releaseCurrentFromDispatch(card, card, "prepare for dispatch failed");
             scheduleRetry(card.id(), nextAttempt(attempt), card.identifier(), card.cardUrl(), e.getMessage(), false);
             return Optional.empty();
         }
         String workerIdentity = UUID.randomUUID().toString();
-        RunningEntry entry = new RunningEntry(dispatchCard, workerIdentity, attempt, clock.instant());
+        RunningEntry entry = new RunningEntry(dispatchCard, card, workerIdentity, attempt, clock.instant());
         synchronized (this) {
             running.put(dispatchCard.id(), entry);
         }
@@ -609,7 +609,7 @@ public class SymphonyOrchestrator {
             synchronized (this) {
                 running.remove(dispatchCard.id());
             }
-            releaseFromDispatch(dispatchCard, "prompt render failed");
+            releaseFromDispatch(dispatchCard, card, "prompt render failed");
             scheduleRetry(
                     dispatchCard.id(),
                     nextAttempt(attempt),
@@ -738,10 +738,10 @@ public class SymphonyOrchestrator {
 
     private void releaseAfterFailedWorkerExit(RunningEntry entry, WorkerExitState state, String reason) {
         if (state.card() == null) {
-            releaseCurrentFromDispatch(entry.card, reason);
+            releaseCurrentFromDispatch(entry.card, entry.dispatchSource, reason);
             return;
         }
-        releaseFromDispatch(state.card(), reason);
+        releaseFromDispatch(state.card(), entry.dispatchSource, reason);
     }
 
     private static void cancelWorkerTask(RunningEntry entry) {
@@ -1027,11 +1027,15 @@ public class SymphonyOrchestrator {
     }
 
     private void releaseFromDispatch(Card card, String reason) {
+        releaseFromDispatch(card, card, reason);
+    }
+
+    private void releaseFromDispatch(Card card, Card dispatchSource, String reason) {
         if (!isConfiguredInProgress(card)) {
             return;
         }
         try {
-            tracker.releaseFromDispatch(config, card);
+            tracker.releaseFromDispatch(config, card, dispatchSource);
             LOG.infof(
                     "card_id=%s card_identifier=%s outcome=released_from_in_progress reason=%s",
                     card.id(), card.identifier(), reason);
@@ -1042,7 +1046,7 @@ public class SymphonyOrchestrator {
         }
     }
 
-    private void releaseCurrentFromDispatch(Card card, String reason) {
+    private void releaseCurrentFromDispatch(Card card, Card dispatchSource, String reason) {
         if (blank(config.tracker().inProgressState())) {
             return;
         }
@@ -1050,7 +1054,7 @@ public class SymphonyOrchestrator {
             CardLookupResult result =
                     tracker.fetchCardStatesByIds(config, List.of(card.id())).get(card.id());
             if (result instanceof CardLookupResult.Found found) {
-                releaseFromDispatch(found.card(), reason);
+                releaseFromDispatch(found.card(), dispatchSource, reason);
             } else if (result instanceof CardLookupResult.Failed failed) {
                 LOG.warnf(
                         "card_id=%s card_identifier=%s outcome=release_from_in_progress_refresh_failed reason=%s",

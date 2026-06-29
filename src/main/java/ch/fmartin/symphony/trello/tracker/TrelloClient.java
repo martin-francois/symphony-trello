@@ -211,6 +211,11 @@ public class TrelloClient implements TrackerClient {
 
     @Override
     public void releaseFromDispatch(EffectiveConfig config, Card card) {
+        releaseFromDispatch(config, card, card);
+    }
+
+    @Override
+    public void releaseFromDispatch(EffectiveConfig config, Card card, Card dispatchSource) {
         String inProgressState = config.tracker().inProgressState();
         if (blank(inProgressState)
                 || !StateNames.normalize(inProgressState).equals(StateNames.normalize(card.state()))) {
@@ -218,7 +223,8 @@ public class TrelloClient implements TrackerClient {
         }
 
         BoardContext context = boardContext(config);
-        releaseTarget(config, card, context).ifPresent(target -> moveCardToList(config, card.id(), target.id()));
+        releaseTarget(config, card, dispatchSource, context)
+                .ifPresent(target -> moveCardToList(config, card.id(), target.id()));
     }
 
     private Map<String, CardLookupResult> fetchCardStatesByIds(
@@ -856,6 +862,53 @@ public class TrelloClient implements TrackerClient {
         int currentIndex = active.indexOf(StateNames.normalize(card.state()));
         int targetIndex = active.indexOf(StateNames.normalize(target.name()));
         return currentIndex >= 0 && targetIndex >= 0 && currentIndex < targetIndex;
+    }
+
+    private static Optional<BoardList> releaseTarget(
+            EffectiveConfig config, Card card, Card dispatchSource, BoardContext context) {
+        if (hasDispatchSource(config, dispatchSource)) {
+            return releaseTargetFromDispatchSource(config, card, dispatchSource, context);
+        }
+        return releaseTarget(config, card, context);
+    }
+
+    private static Optional<BoardList> releaseTargetFromDispatchSource(
+            EffectiveConfig config, Card card, Card dispatchSource, BoardContext context) {
+        if (dispatchSource.listId() != null) {
+            return Optional.ofNullable(context.lists().get(dispatchSource.listId()))
+                    .filter(list -> !list.closed())
+                    .filter(list -> !Objects.equals(list.id(), card.listId()))
+                    .filter(list -> isDispatchSourceList(config, dispatchSource, list));
+        }
+        String sourceState = StateNames.normalize(dispatchSource.state());
+        if (!isActiveState(config, sourceState)) {
+            return Optional.empty();
+        }
+        return context.lists().values().stream()
+                .filter(list -> !list.closed())
+                .filter(list -> sourceState.equals(StateNames.normalize(list.name())))
+                .findAny();
+    }
+
+    private static boolean hasDispatchSource(EffectiveConfig config, Card dispatchSource) {
+        String sourceState = StateNames.normalize(dispatchSource.state());
+        if (StateNames.normalize(config.tracker().inProgressState()).equals(sourceState)) {
+            return false;
+        }
+        return config.tracker().activeListIds().contains(dispatchSource.listId()) || isActiveState(config, sourceState);
+    }
+
+    private static boolean isDispatchSourceList(EffectiveConfig config, Card dispatchSource, BoardList list) {
+        if (!config.tracker().activeListIds().isEmpty()) {
+            return config.tracker().activeListIds().contains(list.id());
+        }
+        return isActiveState(config, StateNames.normalize(dispatchSource.state()));
+    }
+
+    private static boolean isActiveState(EffectiveConfig config, String normalizedState) {
+        return config.tracker().activeStates().stream()
+                .map(StateNames::normalize)
+                .anyMatch(normalizedState::equals);
     }
 
     private static Optional<BoardList> releaseTarget(EffectiveConfig config, Card card, BoardContext context) {
