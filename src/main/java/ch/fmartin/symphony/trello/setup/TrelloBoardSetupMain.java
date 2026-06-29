@@ -23,14 +23,18 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Stack;
 import java.util.concurrent.Callable;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 import picocli.CommandLine;
 import picocli.CommandLine.ArgGroup;
 import picocli.CommandLine.Command;
+import picocli.CommandLine.IParameterConsumer;
 import picocli.CommandLine.Mixin;
+import picocli.CommandLine.Model.ArgSpec;
 import picocli.CommandLine.Model.CommandSpec;
+import picocli.CommandLine.Model.OptionSpec;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.ParameterException;
 import picocli.CommandLine.ParentCommand;
@@ -267,19 +271,25 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         @Option(names = "--board", required = true, description = "Trello board URL, short link, or id.")
         String boardId;
 
-        @Option(names = "--active", description = "Queued-work Trello list name.")
+        List<String> activeStates = new ArrayList<>();
+
+        @Option(
+                names = "--active",
+                description = "Queued-work Trello list name.",
+                parameterConsumer = RawValueParameterConsumer.class)
         void activeState(String value) {
             activeStates.addAll(CliValueNormalizer.commaSeparatedValues(value));
         }
 
-        List<String> activeStates = new ArrayList<>();
+        List<String> terminalStates = new ArrayList<>();
 
-        @Option(names = "--terminal", description = "Terminal Trello list name.")
+        @Option(
+                names = "--terminal",
+                description = "Terminal Trello list name.",
+                parameterConsumer = RawValueParameterConsumer.class)
         void terminalState(String value) {
             terminalStates.addAll(CliValueNormalizer.commaSeparatedValues(value));
         }
-
-        List<String> terminalStates = new ArrayList<>();
 
         @Option(names = "--in-progress", description = "In-progress Trello list name.")
         String inProgressState;
@@ -1079,5 +1089,30 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
 
     private static String optionalListName(String value) {
         return value == null || value.isBlank() ? "<none>" : DisplayNames.quotedName(value);
+    }
+
+    public static final class RawValueParameterConsumer implements IParameterConsumer {
+        @Override
+        public void consumeParameters(Stack<String> args, ArgSpec argSpec, CommandSpec commandSpec) {
+            OptionSpec option = (OptionSpec) argSpec;
+            if (args.empty()) {
+                throw new ParameterException(
+                        commandSpec.commandLine(),
+                        "Missing required parameter for option '" + option.longestName() + "' (" + option.paramLabel()
+                                + ")");
+            }
+            String value = args.pop();
+            if (commandSpec.findOption(optionName(value)) != null) {
+                throw new ParameterException(
+                        commandSpec.commandLine(),
+                        "Expected parameter for option '" + option.longestName() + "' but found '" + value + "'");
+            }
+            argSpec.setValue(value, commandSpec.commandLine());
+        }
+
+        private static String optionName(String value) {
+            int separator = value.indexOf('=');
+            return separator < 0 ? value : value.substring(0, separator);
+        }
     }
 }

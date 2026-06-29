@@ -288,19 +288,25 @@ final class SetupLocalCommandFactory {
         @Option(names = "--workspace-id", description = "Trello Workspace id for a new board.")
         Optional<String> workspaceId = Optional.empty();
 
-        @Option(names = "--active", description = "Existing-board queued-work list name.")
+        List<String> activeStates = new ArrayList<>();
+
+        @Option(
+                names = "--active",
+                description = "Existing-board queued-work list name.",
+                parameterConsumer = TrelloBoardSetupMain.RawValueParameterConsumer.class)
         void activeState(String value) {
             activeStates.addAll(CliValueNormalizer.commaSeparatedValues(value));
         }
 
-        List<String> activeStates = new ArrayList<>();
+        List<String> terminalStates = new ArrayList<>();
 
-        @Option(names = "--terminal", description = "Existing-board terminal list name.")
+        @Option(
+                names = "--terminal",
+                description = "Existing-board terminal list name.",
+                parameterConsumer = TrelloBoardSetupMain.RawValueParameterConsumer.class)
         void terminalState(String value) {
             terminalStates.addAll(CliValueNormalizer.commaSeparatedValues(value));
         }
-
-        List<String> terminalStates = new ArrayList<>();
 
         @Option(names = "--in-progress", description = "Existing-board in-progress list name.")
         String inProgressState;

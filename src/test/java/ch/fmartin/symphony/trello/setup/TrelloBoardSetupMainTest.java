@@ -4632,6 +4632,82 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
+    void importBoardAcceptsRepeatedActiveAndTerminalListOptions() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("repeated-list-options.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.repeated-lists");
+
+        // when
+        CliRunResult result = runCli(
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "https://trello.com/b/input/existing-board",
+                "--active",
+                "Queue for Codex",
+                "--active",
+                "Doing",
+                "--in-progress",
+                "Doing",
+                "--terminal",
+                "Released",
+                "--terminal",
+                "Review",
+                "--workflow",
+                workflow.toString(),
+                "--manifest",
+                tempDir.resolve(ConnectedBoardManifest.FILE_NAME).toString(),
+                "--env",
+                env.toString());
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "Active lists: \"Queue for Codex\", \"Doing\"", "Terminal lists: \"Released\", \"Review\"");
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("- \"Queue for Codex\"", "- \"Doing\"", "- \"Released\"", "- \"Review\"");
+    }
+
+    @Test
+    void importBoardRejectsSeparateOptionTokenAsMissingListSelectorBeforeTrelloRequest() {
+        // given
+        Path workflow = tempDir.resolve("missing-list-selector.WORKFLOW.md");
+        Path env = tempDir.resolve(".env.missing-list-selector");
+
+        // when
+        CliRunResult result = runCli(
+                "import-board",
+                "--endpoint",
+                "http://127.0.0.1:9",
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "input",
+                "--active",
+                "--terminal=Released",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertFailure(SETUP_FAILURE)
+                .stderrContains("setup_failed code=setup_invalid_arguments", "Expected parameter for option '--active'")
+                .stderrDoesNotContain("trello_api_request", "Troubleshooting report written");
+        assertThat(workflow).doesNotExist();
+        assertThat(env).doesNotExist();
+    }
+
+    @Test
     void importBoardPreservesWhitespaceInListSelectors() throws Exception {
         // given
         Path workflow = tempDir.resolve("imported-space-lists.WORKFLOW.md");
