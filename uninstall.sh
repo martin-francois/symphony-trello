@@ -6,6 +6,14 @@ if [[ -z "$HOME" ]]; then
   echo "HOME must be set to a user home directory before running the uninstaller." >&2
   exit 2
 fi
+SYMPHONY_HOME_CONFIGURED=false
+CONFIG_DIR_CONFIGURED=false
+WORKSPACE_ROOT_CONFIGURED=false
+STATE_HOME_CONFIGURED=false
+[[ -n "${SYMPHONY_HOME:-}" ]] && SYMPHONY_HOME_CONFIGURED=true
+[[ -n "${SYMPHONY_TRELLO_CONFIG_DIR:-}" ]] && CONFIG_DIR_CONFIGURED=true
+[[ -n "${SYMPHONY_TRELLO_WORKSPACE_ROOT:-}" ]] && WORKSPACE_ROOT_CONFIGURED=true
+[[ -n "${SYMPHONY_TRELLO_STATE_HOME:-}" ]] && STATE_HOME_CONFIGURED=true
 SYMPHONY_HOME="${SYMPHONY_HOME:-$HOME/.local/share/symphony-trello}"
 APP_DIR="$SYMPHONY_HOME/app"
 CONFIG_DIR="${SYMPHONY_TRELLO_CONFIG_DIR:-$SYMPHONY_HOME/config}"
@@ -410,8 +418,36 @@ validate_requested_removal_paths() {
   fi
 }
 
+validate_custom_prefix_local_data_cleanup() {
+  local default_app_dir
+  default_app_dir="$(normalize_path "$SYMPHONY_HOME/app")"
+  if [[ "$PREFIX_CONFIGURED" != true || "$(normalize_path "$APP_DIR")" == "$default_app_dir" ]]; then
+    return
+  fi
+
+  local missing=()
+  if [[ "$REMOVE_CONFIG" == true && "$SYMPHONY_HOME_CONFIGURED" != true && "$CONFIG_DIR_CONFIGURED" != true ]]; then
+    missing+=("CONFIG: set SYMPHONY_HOME or SYMPHONY_TRELLO_CONFIG_DIR")
+  fi
+  if [[ "$REMOVE_WORKSPACES" == true && "$SYMPHONY_HOME_CONFIGURED" != true && "$WORKSPACE_ROOT_CONFIGURED" != true ]]; then
+    missing+=("WORKSPACES: set SYMPHONY_HOME or SYMPHONY_TRELLO_WORKSPACE_ROOT")
+  fi
+  if [[ "$REMOVE_STATE" == true && "$SYMPHONY_HOME_CONFIGURED" != true && "$STATE_HOME_CONFIGURED" != true ]]; then
+    missing+=("STATE/LOGS: set SYMPHONY_HOME or SYMPHONY_TRELLO_STATE_HOME")
+  fi
+  if ((${#missing[@]} == 0)); then
+    return
+  fi
+
+  echo "Refusing to remove default local data while uninstalling a custom --prefix." >&2
+  printf '  %s\n' "${missing[@]}" >&2
+  echo "Set SYMPHONY_HOME to the install home or set the listed local-data environment variables, then rerun." >&2
+  exit 2
+}
+
 validate_requested_removal_paths
 validate_command_directory
+validate_custom_prefix_local_data_cleanup
 
 remove_path() {
   local path
