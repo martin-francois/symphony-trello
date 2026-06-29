@@ -63,6 +63,8 @@ final class TrelloBoardSetupMainTest {
     private static final String CONFIG_DIR_PROPERTY = "symphony.trello.config.dir";
     private static final String SHELL_PROPERTY = "symphony.trello.shell";
     private static final String CLI_COMMAND_PROPERTY = "symphony.trello.command";
+    private static final List<String> TRELLO_CREDENTIAL_ENVIRONMENT_NAMES =
+            List.of("TRELLO_API_KEY", "TRELLO_API_TOKEN", "SYMPHONY_TRELLO_DOTENV");
 
     private FakeTrelloServer trello;
     private final List<String> createdLists = new ArrayList<>();
@@ -3142,6 +3144,32 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
+    void listWorkspacesWithoutCredentialsIgnoresAmbientDotenvSelector() throws Exception {
+        // given
+        Path ambientEnv = tempDir.resolve(".env.ambient");
+        Files.writeString(
+                ambientEnv, "TRELLO_API_KEY=ambient-key\nTRELLO_API_TOKEN=ambient-token\n", StandardCharsets.UTF_8);
+
+        // when
+        MainProcessResult result = runMainProcess(
+                tempDir,
+                Map.of("SYMPHONY_TRELLO_DOTENV", ambientEnv.toString()),
+                TRELLO_CREDENTIAL_ENVIRONMENT_NAMES,
+                "list-workspaces",
+                "--endpoint",
+                endpoint());
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isEqualTo(SETUP_FAILURE);
+        assertThat(result.stderr())
+                .contains("setup_failed code=setup_missing_api_key", "Missing Trello API key")
+                .doesNotContain("trello_auth_failed", "ambient-key", "ambient-token", ambientEnv.toString());
+        assertThat(workspaceAuthorization.get())
+                .as("ambient dotenv selection must be removed before setup can read it")
+                .isNull();
+    }
+
+    @Test
     void explicitEnvFileWinsOverConfigDirCredentials() throws Exception {
         // given
         Path configDir = tempDir.resolve("losing-config-dir");
@@ -3470,7 +3498,7 @@ final class TrelloBoardSetupMainTest {
         MainProcessResult result = runMainProcess(
                 workingDir,
                 Map.of(),
-                List.of("TRELLO_API_KEY", "TRELLO_API_TOKEN", "SYMPHONY_TRELLO_DOTENV"),
+                TRELLO_CREDENTIAL_ENVIRONMENT_NAMES,
                 "new-board",
                 "--endpoint",
                 endpoint(),
@@ -7042,7 +7070,7 @@ final class TrelloBoardSetupMainTest {
 
     private static MainProcessResult runMainProcessWithoutTrelloCredentials(Path workingDir, String... arguments)
             throws IOException, InterruptedException {
-        return runMainProcess(workingDir, Map.of(), List.of("TRELLO_API_KEY", "TRELLO_API_TOKEN"), arguments);
+        return runMainProcess(workingDir, Map.of(), TRELLO_CREDENTIAL_ENVIRONMENT_NAMES, arguments);
     }
 
     private MainProcessResult runStartWithoutTrelloCredentials(
@@ -7076,8 +7104,8 @@ final class TrelloBoardSetupMainTest {
         command.add(TrelloBoardSetupMain.class.getName());
         command.addAll(Arrays.asList(arguments));
         ProcessBuilder processBuilder = new ProcessBuilder(command).directory(workingDir.toFile());
-        environmentToRemove.forEach(processBuilder.environment()::remove);
         processBuilder.environment().putAll(environment);
+        environmentToRemove.forEach(processBuilder.environment()::remove);
         Process process = processBuilder.start();
         byte[] stdout;
         byte[] stderr;
