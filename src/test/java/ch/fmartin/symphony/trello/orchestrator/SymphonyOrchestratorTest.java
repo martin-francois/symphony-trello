@@ -10,6 +10,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import ch.fmartin.symphony.trello.Sha3;
 import ch.fmartin.symphony.trello.TestCards;
 import ch.fmartin.symphony.trello.agent.AgentEvent;
 import ch.fmartin.symphony.trello.agent.AgentRunResult;
@@ -27,18 +28,14 @@ import ch.fmartin.symphony.trello.workspace.HookRunner;
 import ch.fmartin.symphony.trello.workspace.WorkspaceManager;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -961,15 +958,7 @@ final class SymphonyOrchestratorTest {
 
     private static String workflowLockFileName(Path workflow) throws Exception {
         String canonicalWorkflowPath = workflow.toRealPath().toString();
-        return HexFormat.of().formatHex(sha256(canonicalWorkflowPath)) + ".lock";
-    }
-
-    private static byte[] sha256(String value) {
-        try {
-            return MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 digest is unavailable", e);
-        }
+        return Sha3.sha3_256(canonicalWorkflowPath) + ".lock";
     }
 
     private static void restoreProperty(String name, String value) {

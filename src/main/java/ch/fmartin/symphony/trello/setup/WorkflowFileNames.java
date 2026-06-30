@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
+import ch.fmartin.symphony.trello.Sha3;
 import java.util.Locale;
 
 final class WorkflowFileNames {

@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.orchestrator;
 
 import static com.google.common.base.Preconditions.checkState;
 
+import ch.fmartin.symphony.trello.Sha3;
 import ch.fmartin.symphony.trello.agent.AgentEvent;
 import ch.fmartin.symphony.trello.agent.AgentRunResult;
 import ch.fmartin.symphony.trello.agent.AgentRunner;
@@ -25,7 +26,6 @@ import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.nio.channels.OverlappingFileLockException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.ClosedWatchServiceException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -34,8 +34,6 @@ import java.nio.file.StandardWatchEventKinds;
 import java.nio.file.WatchEvent;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -43,7 +41,6 @@ import java.util.ArrayDeque;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -1202,7 +1199,7 @@ public class SymphonyOrchestrator {
         private static Path lockPath(Path workflowPath) {
             try {
                 Path canonicalWorkflowPath = workflowPath.toRealPath();
-                String digest = HexFormat.of().formatHex(sha256(canonicalWorkflowPath.toString()));
+                String digest = Sha3.sha3_256(canonicalWorkflowPath.toString());
                 return fallbackLockDirectory(canonicalWorkflowPath).resolve(digest + ".lock");
             } catch (IOException e) {
                 throw new WorkflowException(
@@ -1218,14 +1215,6 @@ public class SymphonyOrchestrator {
                         "Workflow runtime lock requires a configured state home or workflow directory.");
             }
             return workflowParent.resolve(".symphony-trello-locks");
-        }
-
-        private static byte[] sha256(String value) {
-            try {
-                return MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
-            } catch (NoSuchAlgorithmException e) {
-                throw new IllegalStateException("SHA-256 digest is unavailable", e);
-            }
         }
 
         private static FileLock tryWorkflowLock(FileChannel channel) throws IOException {

@@ -243,11 +243,18 @@ instead of following it.
   `--add-opens` flags to project code to reach them. Toolchain dependencies such as Error Prone that
   need those flags manage their own compiler arguments; that is not a precedent for application or
   test code.
-- For project-owned hashes, prefer SHA3-family algorithms. Use `HmacSHA3-256` for tokens that
-  represent private context and may appear in diagnostics, public issue reports, logs, or
-  user-facing troubleshooting output. Use `SHA3-256` for deterministic project-owned hashes that do
-  not need a key. Use `SHA-256` only when an external tool, API, file format, dependency, or
-  compatibility contract requires it; make that reason clear nearby when it is not obvious.
+- For Java/JVM project-owned hashes, use SHA3-family algorithms. Use `HmacSHA3-256` for
+  tokens that represent private context and may appear in diagnostics, public issue reports, logs,
+  or user-facing troubleshooting output. Use `SHA3-256` for deterministic project-owned hashes that
+  do not need a key. Use SHA-2 only when an external tool, API, file format, dependency, or
+  compatibility contract requires it; make that reason clear nearby when it is not obvious. Use
+  SHA-1 only for external interoperability such as existing object identifiers or protocol fields,
+  never as a new project-owned security hash.
+- Do not introduce broken or unsuitable hash algorithms for new Java/JVM project code. This includes
+  MD2, MD4, MD5, SHA-0, SHA-1 for collision-resistant use, original 128-bit RIPEMD, HAVAL,
+  GOST R 34.11-94, PANAMA, Snefru/Snefru-n, Tiger, Streebog-512, and the full ECRYPT broken-hash
+  catalog. If an external standard or jurisdiction strictly requires one of these algorithms, keep
+  that use isolated to the compatibility boundary and document the reason at the call site.
 - Use the SDKMAN-managed Azul Zulu Java 25 LTS default for local work. Do not hardcode temporary JDK
   paths or prefix Maven commands with custom `JAVA_HOME`/`PATH` assignments; `java`, `javac`, and
   `./mvnw` should resolve through the shell environment.

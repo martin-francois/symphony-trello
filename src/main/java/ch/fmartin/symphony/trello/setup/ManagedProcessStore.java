@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
+import ch.fmartin.symphony.trello.Sha3;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
