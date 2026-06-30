@@ -49,9 +49,10 @@ A draft is postable only when all of these are true:
   and human-review confirmation completed.
 - The draft is not a suspected vulnerability, leaked credential, credential-handling weakness, token
   exposure, authentication bypass, authorization bypass, or other report covered by `SECURITY.md`.
-- The body is sanitized and does not contain Trello API keys, Trello tokens, Codex auth files,
-  GitHub tokens, private Trello board links, account names, private host paths, deployment-specific
-  host paths, screenshots/logs containing those values, or unrelated host/private data.
+- The front matter, title, labels, duplicate-search queries, body, and any generated GitHub command
+  arguments are sanitized and do not contain Trello API keys, Trello tokens, Codex auth files, GitHub
+  tokens, private Trello board links, account names, private host paths, deployment-specific host
+  paths, screenshots/logs containing those values, or unrelated host/private data.
 
 Skip ineligible drafts and explain why in `publication-report.md`. For SECURITY.md-covered drafts,
 do not create a public issue and do not comment on a public issue; record that the operator must use
@@ -71,7 +72,7 @@ phrase was given.
 ## Duplicate search
 
 Before posting each eligible draft, search existing open and closed issues in `TARGET_REPO` using
-several focused queries. Include at least:
+several focused sanitized queries. Include at least:
 
 - exact error text or exception class
 - affected command, route, installer option, workflow key, or API endpoint
@@ -79,7 +80,9 @@ several focused queries. Include at least:
 - suspected root cause
 - affected `SPEC.md` section if known
 
-Use read-only issue search first.
+Use read-only issue search first. Do not pass raw draft front matter, raw private diagnostics, host
+paths, board names, or token-like text to `gh issue list --search`; rewrite or skip unsafe search
+terms and record the omission in `publication-report.md`.
 
 If no likely duplicate is found, create a new issue.
 
