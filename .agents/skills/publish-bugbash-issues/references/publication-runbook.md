@@ -45,6 +45,8 @@ A draft is postable only when all of these are true:
 - `labels_to_add` is present.
 - The issue body follows the current `.github/ISSUE_TEMPLATE/bug_report.yml` structure well enough
   for a maintainer to review it.
+- The issue body includes the template's AI-assistance fields with the AI-assisted issue disclosed
+  and human-review confirmation completed.
 - The draft is not a suspected vulnerability, leaked credential, credential-handling weakness, token
   exposure, authentication bypass, authorization bypass, or other report covered by `SECURITY.md`.
 - The body is sanitized and does not contain Trello API keys, Trello tokens, Codex auth files,
