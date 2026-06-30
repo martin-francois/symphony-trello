@@ -49,8 +49,8 @@ Before posting anything, read:
 
 1. `references/publication-runbook.md`
 2. `.github/ISSUE_TEMPLATE/bug_report.yml`
-3. `target/live-bugbash/<RUN_ID>/final-report.md`, if present
-4. all selected drafts under `target/live-bugbash/<RUN_ID>/issues`
+3. `$RUN_ROOT/final-report.md`, if present
+4. all selected drafts under the resolved `$DRAFT_DIR`
 
 ## Workflow
 
