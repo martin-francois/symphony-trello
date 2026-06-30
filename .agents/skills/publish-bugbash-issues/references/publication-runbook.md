@@ -19,6 +19,12 @@ PUBLISH_SELECTION=confirmed-only
 
 `RUN_ID` is required. Do not publish from an inferred run ID.
 
+Validate `RUN_ID` as one safe path segment before resolving paths. Resolve and normalize `RUN_ROOT`
+and `DRAFT_DIR` before reading drafts or writing reports; `DRAFT_DIR` must stay under `RUN_ROOT`, and
+default run roots must stay under `target/live-bugbash/`. Stop on path traversal, separators,
+controls, shell metacharacters, percent-encoded separators, or overrides outside the reviewed
+run-owned location.
+
 Posting requires both of these signals:
 
 1. An explicit posting instruction, such as `post`, `publish`, or `create GitHub issues`.
