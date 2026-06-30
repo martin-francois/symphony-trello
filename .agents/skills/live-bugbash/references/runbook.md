@@ -105,7 +105,15 @@ pwsh -File ./install.ps1 -Help
 pwsh -File ./uninstall.ps1 -Help
 ```
 
-Skip PowerShell-specific execution only when PowerShell is unavailable. Record it as a scoped blocker and still inspect source-level behavior.
+If native `pwsh` is unavailable, try the repository fallback before skipping:
+
+```bash
+./scripts/pwsh-docker.sh -File ./install.ps1 -Help
+./scripts/pwsh-docker.sh -File ./uninstall.ps1 -Help
+```
+
+Skip PowerShell-specific execution only when both native PowerShell and the Docker fallback are
+unavailable. Record it as a scoped blocker and still inspect source-level behavior.
 
 ## 5. Check external tooling according to modes
 
