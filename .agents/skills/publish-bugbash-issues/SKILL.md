@@ -94,7 +94,8 @@ When a reviewed confirmed draft appears to duplicate an existing issue:
   projects, edit workflows, change secrets, or change collaborators.
 - Never edit, relabel, close, reopen, delete, or assign existing issues.
 - Commenting on an existing issue is allowed only for likely duplicates of reviewed confirmed drafts
-  and only with sanitized reproduction details.
+  and only with a sanitized duplicate-comment body the operator already reviewed or explicitly
+  approved.
 - Never post speculative findings, unsanitized findings, private data, secrets, account names,
   private Trello links, private host paths, raw logs containing secrets, or drafts marked
   `needs_real_confirmation` or `needs_hardened_host_confirmation`. Confirm and review those drafts
