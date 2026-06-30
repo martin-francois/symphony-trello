@@ -142,7 +142,7 @@ gh auth status
 gh api user
 ```
 
-For real-integration hardened-host runs, do not hide already configured authentication behind an
+For real-integration runs, do not hide already configured authentication behind an
 unrelated isolated `HOME` when that would prevent live Trello, GitHub, or Codex coverage. Use
 run-owned app, state, workflow, workspace, manifest, and output paths. Prefer explicit auth-only
 credential/env paths when the tool supports that. If a copied run-scoped Codex or GitHub auth home is
@@ -250,7 +250,7 @@ For each service scenario:
 
 ## 11. Installer and lifecycle scenarios
 
-Test installer and uninstaller behavior with run-scoped `HOME`, `XDG_*`, `SYMPHONY_HOME`, prefixes, config dirs, manifests, workspaces, state homes, cache dirs, env files, and logs. In real-integration hardened-host runs, do not let that isolation hide existing Codex, GitHub, or Trello authentication. Prefer auth-only credentials over copied auth homes or env files. If a copied run-scoped `CODEX_HOME`, GitHub CLI config, or Trello env file is necessary, copy only the minimum required auth material, register it as sensitive cleanup-required state, and delete it before retaining artifacts unless the operator explicitly approves a secure-retention path.
+Test installer and uninstaller behavior with run-scoped `HOME`, `XDG_*`, `SYMPHONY_HOME`, prefixes, config dirs, manifests, workspaces, state homes, cache dirs, env files, and logs. In real-integration runs, do not let that isolation hide existing Codex, GitHub, or Trello authentication. Prefer auth-only credentials over copied auth homes or env files. If a copied run-scoped `CODEX_HOME`, GitHub CLI config, or Trello env file is necessary, copy only the minimum required auth material, register it as sensitive cleanup-required state, and delete it before retaining artifacts unless the operator explicitly approves a secure-retention path.
 
 - install with onboarding
 - install with no onboarding

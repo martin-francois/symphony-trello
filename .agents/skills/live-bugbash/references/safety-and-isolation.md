@@ -124,7 +124,7 @@ export SYMPHONY_HOME="$RUN_ROOT/installer-sandboxes/symphony-home"
 
 Also pass explicit run-scoped options where available: `--prefix`, `--bin-dir`, `--config-dir`, `--workspace-root`, `--manifest`, `--env`, `--state-home`, and workflow path.
 
-For real-integration hardened-host scenarios, this isolation must not accidentally remove live
+For real-integration scenarios, this isolation must not accidentally remove live
 authentication. If the installed worker, Codex CLI, or GitHub CLI needs existing auth material, pass
 auth-only credentials where possible. If a run-scoped auth home is necessary, copy only the minimum
 required auth material, register the copied auth path as sensitive cleanup-required state, and delete
