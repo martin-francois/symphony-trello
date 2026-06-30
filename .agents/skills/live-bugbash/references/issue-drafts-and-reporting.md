@@ -54,7 +54,7 @@ host_profile: standard | hardened
 hardened_host_opt_in: <none | natural language phrase | explicit parameter>
 real_integration_opt_in: <none | explicit parameter | natural language phrase>
 needs_real_confirmation: true | false
-requires_hardened_host_confirmation: true | false
+needs_hardened_host_confirmation: true | false
 duplicate_searches:
   - <query 1>
   - <query 2>
