@@ -17,7 +17,10 @@ In standard mode:
 
 ## Opt-in: `HOST_PROFILE=hardened`
 
-Set `HOST_PROFILE=hardened` when the goal contains one of these exact or equivalent signals:
+Set `HOST_PROFILE=hardened` only when the goal affirmatively contains one of these exact or
+equivalent signals. If the phrase appears inside a denial such as `not a hardened host`, `no
+dangerous host access`, or `do not run dangerous access on host`, keep `HOST_PROFILE=standard`. If
+intent remains ambiguous, keep `HOST_PROFILE=standard` and record the safer decision.
 
 - `HOST_PROFILE=hardened`
 - `hardened host`
