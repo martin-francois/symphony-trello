@@ -84,6 +84,26 @@ AI PRs are first-class citizens here. We just want transparency so reviewers kno
 <details>
 <summary>AI prompts / session logs (optional, but super helpful)</summary>
 
+<!--
+If AI assistance was used, include a concise sanitized trace that helps reviewers understand the
+agent session. Use whatever format is clearest for this PR. You do not have to include the full
+transcript.
+
+Include when relevant:
+- The user prompt(s) that caused the substantive changes in this PR. Fix typos only for readability
+  and preserve meaning.
+- Follow-up prompts that changed scope, constraints, or implementation.
+- A chronological trace of what happened between prompts, including relevant changes, decisions,
+  commands, checks, review findings, fixes, limits, and handoff state before the next prompt or final
+  handoff.
+- Verification evidence: what the agent checked, how it checked it, and what result it observed.
+- What was redacted, if anything.
+
+Always redact secrets, credentials, private paths, private board links, account names,
+deployment-specific details, and other private context. Keep this concise unless a longer trace
+materially helps review.
+-->
+
 ```text
 
 ```
