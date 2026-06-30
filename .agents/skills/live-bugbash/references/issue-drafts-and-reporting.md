@@ -37,9 +37,9 @@ Start with metadata:
 title: "bug: <concise title>"
 labels_to_add:
   - bug
-  - source: live-bugbash
-  - severity: high
-  - area: installer-onboarding
+  - "source: live-bugbash"
+  - "severity: high"
+  - "area: installer-onboarding"
 confidence: confirmed | intermittent | needs-real-confirmation | needs-triage
 run_id: <RUN_ID>
 target_repo: martin-francois/symphony-trello
