@@ -6,7 +6,8 @@ description: Explicit-only publisher for reviewed live-bugbash issue drafts. Cre
 # Publish bug-bash issues
 
 Use this skill only after a person has reviewed local issue drafts created by `$live-bugbash` and
-explicitly asks to post them to GitHub.
+explicitly asks to post them to GitHub. The reviewer must also complete each selected draft's
+`AI Assistance (if used)` human-review confirmation field before publication.
 
 Do not use this skill for bug discovery. Do not run Symphony. Do not create Trello boards. Do not run
 Codex app-server. Do not create GitHub sandbox repositories. This skill only reads local issue drafts
