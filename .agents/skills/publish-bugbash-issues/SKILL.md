@@ -42,13 +42,16 @@ under `target/live-bugbash/`. Stop if an override points outside the reviewed ru
 
 ## Publication guard
 
-Posting to `TARGET_REPO` is forbidden unless the goal contains both:
+Posting to `TARGET_REPO` is forbidden unless the goal affirmatively contains both:
 
-1. A clear posting instruction, such as `post`, `publish`, or `create GitHub issues`.
+1. A clear posting instruction, such as `post these drafts`, `publish these reviewed drafts`, or
+   `create GitHub issues from these drafts`.
 2. A human-review approval phrase, such as `I reviewed the drafts` or `I have reviewed the drafts`.
 
-If either is missing, do not publish, do not comment, and explain the exact command the operator can
-use after reviewing the drafts. Never infer approval from the existence of issue drafts.
+The skill name, default prompt text, or a denied phrase such as `do not publish`, `do not comment`,
+`preview only`, or `dry run` does not count as posting approval. If either signal is missing or
+negated, do not publish, do not comment, and explain the exact command the operator can use after
+reviewing the drafts. Never infer approval from the existence of issue drafts.
 
 ## Required references
 
