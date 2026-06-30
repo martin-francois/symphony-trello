@@ -361,6 +361,10 @@ After the run, review the drafts in:
 target/live-bugbash/<RUN_ID>/issues
 ```
 
+Before publishing, ensure each selected draft's `AI Assistance (if used)` section discloses the
+AI-assisted issue and confirms that a person reviewed and understands the report. The publisher skips
+drafts where that per-draft confirmation is missing.
+
 Then publish the reviewed drafts:
 
 ```text

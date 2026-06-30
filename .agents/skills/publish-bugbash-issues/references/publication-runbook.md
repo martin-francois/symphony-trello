@@ -33,6 +33,10 @@ Posting requires both of these signals:
 If either signal is missing, do not publish and do not comment. Explain the command the operator can
 use after reviewing the drafts.
 
+The human-review approval phrase is necessary but not sufficient for individual drafts. Each selected
+draft must also have its `AI Assistance (if used)` human-review confirmation completed in the body
+before publication.
+
 ## Draft eligibility
 
 A draft is postable only when all of these are true:
