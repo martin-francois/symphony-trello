@@ -111,12 +111,12 @@ Installer, uninstaller, onboarding, setup, repair, cleanup, and destructive loca
 Use run-scoped HOME, XDG, and SYMPHONY paths:
 
 ```bash
-export HOME="$PWD/target/live-bugbash/$RUN_ID/installer-sandboxes/home"
-export XDG_CONFIG_HOME="$PWD/target/live-bugbash/$RUN_ID/installer-sandboxes/xdg-config"
-export XDG_DATA_HOME="$PWD/target/live-bugbash/$RUN_ID/installer-sandboxes/xdg-data"
-export XDG_STATE_HOME="$PWD/target/live-bugbash/$RUN_ID/installer-sandboxes/xdg-state"
-export XDG_CACHE_HOME="$PWD/target/live-bugbash/$RUN_ID/installer-sandboxes/xdg-cache"
-export SYMPHONY_HOME="$PWD/target/live-bugbash/$RUN_ID/installer-sandboxes/symphony-home"
+export HOME="$RUN_ROOT/installer-sandboxes/home"
+export XDG_CONFIG_HOME="$RUN_ROOT/installer-sandboxes/xdg-config"
+export XDG_DATA_HOME="$RUN_ROOT/installer-sandboxes/xdg-data"
+export XDG_STATE_HOME="$RUN_ROOT/installer-sandboxes/xdg-state"
+export XDG_CACHE_HOME="$RUN_ROOT/installer-sandboxes/xdg-cache"
+export SYMPHONY_HOME="$RUN_ROOT/installer-sandboxes/symphony-home"
 ```
 
 Also pass explicit run-scoped options where available: `--prefix`, `--bin-dir`, `--config-dir`, `--workspace-root`, `--manifest`, `--env`, `--state-home`, and workflow path.
