@@ -38,11 +38,15 @@ A draft is postable only when all of these are true:
 - `labels_to_add` is present.
 - The issue body follows the current `.github/ISSUE_TEMPLATE/bug_report.yml` structure well enough
   for a maintainer to review it.
+- The draft is not a suspected vulnerability, leaked credential, credential-handling weakness, token
+  exposure, authentication bypass, authorization bypass, or other report covered by `SECURITY.md`.
 - The body is sanitized and does not contain Trello API keys, Trello tokens, Codex auth files,
   GitHub tokens, private Trello board links, account names, private host paths, deployment-specific
   host paths, screenshots/logs containing those values, or unrelated host/private data.
 
-Skip ineligible drafts and explain why in `publication-report.md`.
+Skip ineligible drafts and explain why in `publication-report.md`. For SECURITY.md-covered drafts,
+do not create a public issue and do not comment on a public issue; record that the operator must use
+the repository's private security-reporting route instead.
 
 ## Template validation
 
