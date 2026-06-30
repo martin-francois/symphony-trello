@@ -55,8 +55,9 @@ Before posting anything, read:
 
 1. `references/publication-runbook.md`
 2. `.github/ISSUE_TEMPLATE/bug_report.yml`
-3. `$RUN_ROOT/final-report.md`, if present
-4. all selected drafts under the resolved `$DRAFT_DIR`
+3. `SECURITY.md`
+4. `$RUN_ROOT/final-report.md`, if present
+5. all selected drafts under the resolved `$DRAFT_DIR`
 
 ## Workflow
 
