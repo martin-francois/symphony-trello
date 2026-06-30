@@ -55,8 +55,10 @@ Before posting, read `.github/ISSUE_TEMPLATE/bug_report.yml` from the current ch
 the source of truth for issue body expectations. Do not copy the template into this skill.
 
 For each draft, compare the recorded template SHA or hash to the current template. A mismatch does
-not automatically block posting, but Codex must check that the draft still satisfies the current
-required fields. If it does not, update the local draft before posting or skip it.
+not automatically block posting, but Codex must check that the already-reviewed draft still satisfies
+the current required fields. If it does not, skip it and record that the draft needs repair and a new
+human review before publication. Do not publish a draft that Codex modified after the approval
+phrase was given.
 
 ## Duplicate search
 
@@ -149,8 +151,8 @@ The local draft starts with YAML front matter followed by the issue body. For ne
 1. Keep the title from draft front matter.
 2. Strip the YAML front matter from the body file passed to `gh issue create`.
 3. Keep the issue-template field headings and answers from the draft body.
-4. Optionally append a short sanitized provenance note with `RUN_ID`, target commit, and local draft
-   filename when that information is not already present.
+4. Keep any sanitized provenance note that was already present in the reviewed draft. Do not add new
+   body text after approval unless the operator explicitly approves that exact generated body.
 5. Do not include local-only metadata that exposes private paths or private service links.
 6. Run `scripts/check-private-context --stdin --label github-body` on the exact body file before
    passing it to `gh issue create`.
