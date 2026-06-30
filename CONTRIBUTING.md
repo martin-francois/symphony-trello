@@ -312,8 +312,8 @@ This repository has two explicit Codex skills for maintainer QA:
 - `$live-bugbash` runs the bug bash and writes local issue drafts.
 - `$publish-bugbash-issues` publishes reviewed drafts to GitHub.
 
-Both skills are stored under `.agents/skills/` and can be invoked by mentioning the skill name in a
-Codex goal.
+Both skills are stored under `.agents/skills/` and exposed to Codex through `.codex/skills/`, so
+they can be invoked by mentioning the skill name in a Codex goal.
 
 ### Run the bug bash
 
