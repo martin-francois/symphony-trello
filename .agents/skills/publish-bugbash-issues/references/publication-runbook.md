@@ -25,13 +25,16 @@ default run roots must stay under `target/live-bugbash/`. Stop on path traversal
 controls, shell metacharacters, percent-encoded separators, or overrides outside the reviewed
 run-owned location.
 
-Posting requires both of these signals:
+Posting requires both of these affirmative signals:
 
-1. An explicit posting instruction, such as `post`, `publish`, or `create GitHub issues`.
+1. An explicit posting instruction, such as `post these drafts`, `publish these reviewed drafts`, or
+   `create GitHub issues from these drafts`.
 2. A human-review approval phrase, such as `I reviewed the drafts` or `I have reviewed the drafts`.
 
-If either signal is missing, do not publish and do not comment. Explain the command the operator can
-use after reviewing the drafts.
+The skill name, default prompt text, or a denied phrase such as `do not publish`, `do not comment`,
+`preview only`, or `dry run` does not count as posting approval. If either signal is missing or
+negated, do not publish and do not comment. Explain the command the operator can use after reviewing
+the drafts.
 
 The human-review approval phrase is necessary but not sufficient for individual drafts. Each selected
 draft must also have its `AI Assistance (if used)` human-review confirmation completed in the body
