@@ -85,7 +85,7 @@ Before posting anything, read:
 
 ## Duplicate comment policy
 
-When a reviewed confirmed draft appears to duplicate an existing issue:
+When a reviewed confirmed draft appears to duplicate an open existing issue:
 
 - Do not create a second issue.
 - Add one comment to the best matching existing issue.
@@ -99,6 +99,9 @@ When a reviewed confirmed draft appears to duplicate an existing issue:
 - Avoid duplicate comments from the same `RUN_ID`. If this run already commented on the issue, record
   that and skip the second comment.
 - Do not relabel, close, reopen, assign, edit, or otherwise modify the existing issue.
+
+When the best match is closed, follow the new-issue path and reference the closed issue in sanitized
+prose unless the operator explicitly instructs the publisher to comment on the closed issue instead.
 
 ## Safety rules
 
