@@ -62,7 +62,9 @@ Allowed mutations:
 
 Forbidden mutations and probes:
 
-- Do not remove, rewrite, chmod, chown, or recursively traverse broad paths such as `/`, `/tmp`, `/var`, `$HOME`, `$HOME/.codex`, `$HOME/.ssh`, `$HOME/.config`, the repository root, or parent directories of the run root.
+- Do not remove, rewrite, chmod, chown, or recursively traverse unrelated broad paths such as `/`,
+  `/tmp`, `/var`, `$HOME`, `$HOME/.codex`, `$HOME/.ssh`, `$HOME/.config`, or parent directories of
+  the run root. Reading, building, and source-inspecting the verified target checkout is allowed.
 - Do not run broad cleanup commands such as `rm -rf /`, `rm -rf ~`, `find / -delete`, `git clean -fdx` outside disposable clones, `docker system prune`, `killall`, package-manager cleanup, or service-manager cleanup.
 - Do not edit shell startup files, global Git config, OS service configuration, package-manager state, credential stores, SSH config, Codex auth files, Trello credential files, or GitHub auth files unless the file is a run-scoped copy under `RUN_ROOT`.
 - Do not scan unrelated host directories for secrets, tokens, private data, SSH keys, browser state, or credentials.
