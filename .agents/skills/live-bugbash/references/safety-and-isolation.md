@@ -88,7 +88,8 @@ Allowed in hardened profile:
 - Files and directories under `RUN_ROOT`.
 - Explicitly registered run-owned host directories listed in `owned-local-paths.txt`.
 - Run-scoped installer prefixes, config dirs, state homes, workspace roots, log dirs, env files, manifests, fake-service files, and disposable local Git repositories.
-- `setup-local --allow-all-paths` when used to test generated policy or when effective writes remain run-scoped.
+- `setup-local --add-path / --allow-all-paths` when used to test generated policy or when effective
+  writes remain run-scoped.
 - `setup-local --danger-full-access` with isolated HOME, XDG, SYMPHONY, prefix, state, cache, config, env, manifest, log, and workspace paths.
 - `SYMPHONY_CODEX_DANGER_FULL_ACCESS=true` for run-scoped workflow and service scenarios.
 - Workflow-authored `dangerFullAccess` for run-scoped workers.

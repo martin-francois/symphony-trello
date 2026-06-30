@@ -207,7 +207,7 @@ Balance major paths across these modes without exposing them as normal user-faci
 - default sandbox or workspace-write behavior
 - path-scoped additional writable roots, including multiple roots
 - `setup-local --add-path`
-- `setup-local --allow-all-paths` with actual writes still confined to run-owned paths
+- `setup-local --add-path / --allow-all-paths` with actual writes still confined to run-owned paths
 - workflow-authored `codex.additional_writable_roots`
 - workflow-authored `turn_sandbox_policy` with writable roots
 - workflow-authored or setup-authored `dangerFullAccess`

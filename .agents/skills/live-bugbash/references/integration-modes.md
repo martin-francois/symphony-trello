@@ -94,7 +94,8 @@ The operator has said the host is hardened for this run. This unlocks real host-
 
 Allowed:
 
-- `setup-local --allow-all-paths` when the effective target is run-owned or the test asserts broad access without mutating unrelated files.
+- `setup-local --add-path / --allow-all-paths` when the effective target is run-owned or the test
+  asserts broad access without mutating unrelated files.
 - `setup-local --danger-full-access` with isolated HOME, XDG, SYMPHONY, prefix, state, cache, config, manifest, env, log, and workspace paths.
 - `SYMPHONY_CODEX_DANGER_FULL_ACCESS=true` for run-scoped service scenarios.
 - Workflow-authored `dangerFullAccess` for run-scoped workspaces.
