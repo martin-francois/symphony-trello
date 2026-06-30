@@ -33,8 +33,8 @@ ambiguous.
 - `do a real live bugbash`
 - `run against real services`
 
-When the goal affirmatively says `without fakes`, `no fakes`, `REAL_INTEGRATIONS=all`, or `do a real
-live bugbash`, set:
+When the goal affirmatively says `without fakes`, `no fakes`, `REAL_INTEGRATIONS=all`, `do a real
+live bugbash`, or `run against real services`, set:
 
 ```text
 TRELLO_MODE=real
