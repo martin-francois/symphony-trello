@@ -65,7 +65,13 @@ external_isolation: <host-run-scoped | hardened-host-run-scoped | container | vm
 ---
 ```
 
-Then render the body according to the current issue template. Use the template's current field labels and required fields. Do not include secrets, account names, private Trello board links, private host paths, raw tokens, Codex auth files, or screenshots/logs containing private values.
+Then render the body according to the current issue template. Use the template's current field
+labels, required fields, and AI-assistance disclosure fields. Because this skill drafts the report,
+include the `AI Assistance (if used)` section with `AI-assisted issue` selected. Keep the human-review
+confirmation field present so the reviewer can approve it before publication; the publisher must not
+post a draft until the reviewed body confirms that a person understands and reviewed the report. Do
+not include secrets, account names, private Trello board links, private host paths, raw tokens, Codex
+auth files, or screenshots/logs containing private values.
 
 Suggested label vocabulary for local drafts:
 
