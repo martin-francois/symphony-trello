@@ -1,0 +1,6 @@
+interface:
+  display_name: "Publish bug-bash issues"
+  short_description: "Post reviewed live-bugbash issue drafts: create new issues for unique bugs and comment on duplicates."
+  default_prompt: "Use $publish-bugbash-issues for RUN_ID=<run id>. I reviewed the drafts and approve posting them to martin-francois/symphony-trello."
+policy:
+  allow_implicit_invocation: false

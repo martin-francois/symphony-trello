@@ -1,0 +1,115 @@
+---
+name: publish-bugbash-issues
+description: Explicit-only publisher for reviewed live-bugbash issue drafts. Creates new GitHub issues for unique confirmed findings and comments on duplicate issues with sanitized reproduction details. Never runs the bug bash.
+---
+
+# Publish bug-bash issues
+
+Use this skill only after a person has reviewed local issue drafts created by `$live-bugbash` and
+explicitly asks to post them to GitHub.
+
+Do not use this skill for bug discovery. Do not run Symphony. Do not create Trello boards. Do not run
+Codex app-server. Do not create GitHub sandbox repositories. This skill only reads local issue drafts
+and posts reviewed results to the target GitHub repository.
+
+Implicit invocation is disabled in `agents/openai.yaml`; do not select this skill accidentally.
+
+## Normal command
+
+```text
+/goal Use $publish-bugbash-issues for RUN_ID=live-bugbash-20260629T103000Z. I reviewed the drafts and approve posting them to martin-francois/symphony-trello.
+```
+
+## Defaults
+
+Unless explicitly overridden:
+
+```text
+TARGET_REPO=martin-francois/symphony-trello
+RUN_ROOT=target/live-bugbash/<RUN_ID>
+DRAFT_DIR=target/live-bugbash/<RUN_ID>/issues
+DUPLICATE_ACTION=comment-with-reproduction-details
+LABEL_POLICY=use-existing-labels-only
+PUBLISH_SELECTION=confirmed-only
+```
+
+## Publication guard
+
+Posting to `TARGET_REPO` is forbidden unless the goal contains both:
+
+1. A clear posting instruction, such as `post`, `publish`, or `create GitHub issues`.
+2. A human-review approval phrase, such as `I reviewed the drafts` or `I have reviewed the drafts`.
+
+If either is missing, do not publish, do not comment, and explain the exact command the operator can
+use after reviewing the drafts. Never infer approval from the existence of issue drafts.
+
+## Required references
+
+Before posting anything, read:
+
+1. `references/publication-runbook.md`
+2. `.github/ISSUE_TEMPLATE/bug_report.yml`
+3. `target/live-bugbash/<RUN_ID>/final-report.md`, if present
+4. all selected drafts under `target/live-bugbash/<RUN_ID>/issues`
+
+## Workflow
+
+1. Resolve `RUN_ID`, `TARGET_REPO`, `RUN_ROOT`, and `DRAFT_DIR`.
+2. Confirm the publication guard is satisfied.
+3. Read the current bug report issue template and record its current SHA or hash.
+4. Parse all selected local issue drafts.
+5. Validate draft eligibility, confidence, sanitation, template coverage, labels, and duplicate status.
+6. Search existing open and closed issues in `TARGET_REPO` for duplicates using read-only GitHub CLI
+   commands.
+7. For each unique eligible draft, create a new issue.
+8. For each likely duplicate eligible draft, add one concise sanitized comment to the best matching
+   issue saying the bug bash also reproduced it, with reproduction details and evidence that add
+   value.
+9. Apply only labels that already exist in the target repository. Do not create labels.
+10. Write `publication-report.md` and `published-issues.json`.
+11. Add created issue URLs, numbers, or duplicate-comment URLs to local publication metadata.
+
+## Duplicate comment policy
+
+When a reviewed confirmed draft appears to duplicate an existing issue:
+
+- Do not create a second issue.
+- Add one comment to the best matching existing issue.
+- The comment must say that the bug bash also reproduced the issue.
+- Include the target commit, sanitized environment, reproduction summary, expected and actual
+  behavior, and any additional logs or suspected code path that are not already obvious from the
+  issue.
+- Keep the comment concise and sanitized. Do not paste secrets, account names, private Trello board
+  links, private host paths, raw tokens, Codex auth files, or screenshots/logs containing private
+  values.
+- Avoid duplicate comments from the same `RUN_ID`. If this run already commented on the issue, record
+  that and skip the second comment.
+- Do not relabel, close, reopen, assign, edit, or otherwise modify the existing issue.
+
+## Safety rules
+
+- Never modify repository files in `TARGET_REPO`.
+- Never push branches, create pull requests, edit settings, create labels, modify milestones, modify
+  projects, edit workflows, change secrets, or change collaborators.
+- Never edit, relabel, close, reopen, delete, or assign existing issues.
+- Commenting on an existing issue is allowed only for likely duplicates of reviewed confirmed drafts
+  and only with sanitized reproduction details.
+- Never post speculative findings, unsanitized findings, private data, secrets, account names,
+  private Trello links, private host paths, raw logs containing secrets, or drafts marked
+  `needs_real_confirmation` unless the operator explicitly approved that exact exception.
+- If a command would exceed these permissions, stop that draft and record a scoped blocker.
+
+## Output standard
+
+The final response must include:
+
+- run ID and draft directory
+- number of drafts scanned
+- number eligible
+- number skipped and why
+- number of new issues created
+- number of duplicate issues commented on
+- created issue URLs
+- duplicate issue URLs and comment URLs
+- labels applied and labels skipped
+- path to `publication-report.md`

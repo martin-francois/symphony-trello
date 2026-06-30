@@ -305,6 +305,105 @@ Before marking a PR ready for review:
 - complete the GitHub CLA check when prompted;
 - enable maintainer edits when contributing from a fork.
 
+## Running a Codex live bug bash
+
+This repository has two explicit Codex skills for maintainer QA:
+
+- `$live-bugbash` runs the bug bash and writes local issue drafts.
+- `$publish-bugbash-issues` publishes reviewed drafts to GitHub.
+
+Both skills are stored under `.agents/skills/` and can be invoked by mentioning the skill name in a
+Codex goal.
+
+### Run the bug bash
+
+Safe run with fake Trello, fake Codex, and fake GitHub:
+
+```text
+/goal Use $live-bugbash until 2026-06-29T18:00:00+02:00.
+```
+
+Real run against Trello, Codex, and GitHub sandbox repositories:
+
+```text
+/goal Use $live-bugbash until 2026-06-29T18:00:00+02:00. Do a real live bugbash without fakes.
+```
+
+Real run on a hardened host, including dangerous access-mode coverage:
+
+```text
+/goal Use $live-bugbash until 2026-06-29T18:00:00+02:00. Do a real live bugbash on a hardened host.
+```
+
+Continue after an earlier run:
+
+```text
+/goal Use $live-bugbash until 2026-06-29T18:00:00+02:00. PREVIOUS_RUN_ID=live-bugbash-20260629T103000Z.
+```
+
+Useful output is written under:
+
+```text
+target/live-bugbash/<RUN_ID>/final-report.md
+target/live-bugbash/<RUN_ID>/cleanup-summary.md
+target/live-bugbash/<RUN_ID>/issues/
+```
+
+The active exploration window is not passive waiting time. Codex should keep testing, triaging,
+inspecting code, gathering evidence, cleaning up, or reporting while useful work remains. It should
+not sleep or poll timestamps just to consume the window.
+
+### Publish reviewed findings
+
+After the run, review the drafts in:
+
+```text
+target/live-bugbash/<RUN_ID>/issues
+```
+
+Then publish the reviewed drafts:
+
+```text
+/goal Use $publish-bugbash-issues for RUN_ID=live-bugbash-20260629T103000Z. I have reviewed the drafts and approve publishing them to martin-francois/symphony-trello.
+```
+
+The publishing skill creates new GitHub issues for unique confirmed bugs. If a draft matches an
+existing issue, it comments on that issue with a short sanitized note saying the bug was also
+reproduced during the bug-bash run. It does not edit, close, reopen, relabel, assign, milestone, or
+otherwise change existing issues.
+
+Publication results are written under:
+
+```text
+target/live-bugbash/<RUN_ID>/publication-report.md
+target/live-bugbash/<RUN_ID>/published-issues.json
+```
+
+### Safety notes
+
+- `$live-bugbash` is fake by default. It uses real Trello, real Codex, or real GitHub only when the
+  goal explicitly asks for a real run.
+- Real Trello data used by a bug bash must be disposable and run-scoped.
+- `$live-bugbash` must not write to existing GitHub repositories, issues, pull requests, settings,
+  secrets, collaborators, billing, releases, workflows, or organization settings. In real GitHub
+  mode it may write only to newly created private sandbox repositories whose names include the run
+  ID.
+- `$publish-bugbash-issues` writes to `martin-francois/symphony-trello` only after the drafts were
+  reviewed and the goal explicitly approves publishing. It may create new issues and add duplicate
+  reproduction comments. It must not perform other GitHub mutations.
+- Hardened host mode allows run-scoped dangerous access-mode tests, such as
+  `setup-local --danger-full-access`, `SYMPHONY_CODEX_DANGER_FULL_ACCESS=true`, workflow-authored
+  `dangerFullAccess`, `codex --sandbox danger-full-access --ask-for-approval never`, and Codex
+  `--dangerously-bypass-approvals-and-sandbox` or `--yolo` when real Codex is enabled and
+  supported.
+- Hardened host mode is not permission to trash the system. Codex must not intentionally damage,
+  wipe, stress, credential-scan, broad-delete, globally reconfigure, kill unrelated processes,
+  mutate unrelated host state, or inspect unrelated private data.
+- Installer, uninstaller, setup, and cleanup tests must use run-scoped HOME, XDG, SYMPHONY, prefix,
+  config, state, cache, workspace, manifest, env, and log paths.
+- `.github/ISSUE_TEMPLATE/bug_report.yml` remains the source of truth for issue body fields and must
+  not be copied into either skill.
+
 ## Local Trello Testing
 
 Use a disposable Trello board and token. Do not run real smoke tests against a production board until
