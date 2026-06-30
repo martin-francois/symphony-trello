@@ -93,11 +93,15 @@ terms and record the omission in `publication-report.md`.
 
 If no likely duplicate is found, create a new issue.
 
-If a likely duplicate is found, do not create a second issue. Add a concise sanitized comment to the
-best matching existing issue only when the exact duplicate-comment body was already reviewed by the
-operator or the operator explicitly approves that exact generated body before `gh issue comment`.
+If the best likely duplicate is open, do not create a second issue. Add a concise sanitized comment
+to the best matching open issue only when the exact duplicate-comment body was already reviewed by
+the operator or the operator explicitly approves that exact generated body before `gh issue comment`.
 The comment should say that this bug bash also reproduced the issue and include any useful new
 reproduction steps, target commit, environment, logs, or suspected code path from the draft.
+
+If the best likely duplicate is closed, do not treat it as a duplicate that suppresses a current
+confirmed finding. Create a new issue and reference the closed match in sanitized prose unless the
+operator explicitly decides to comment on the closed issue instead.
 
 Avoid duplicate comments from the same run. Before commenting, check existing issue comments when
 practical for the current `RUN_ID` or source draft filename. If the run already commented there,

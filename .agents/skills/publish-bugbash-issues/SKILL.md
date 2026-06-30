@@ -74,12 +74,14 @@ Before posting anything, read:
 6. Search existing open and closed issues in `TARGET_REPO` for duplicates using read-only GitHub CLI
    commands.
 7. For each unique eligible draft, create a new issue.
-8. For each likely duplicate eligible draft, prepare one concise sanitized comment for the best
-   matching issue. Post it only when the exact body was already reviewed or the operator explicitly
-   approves that exact body before `gh issue comment`.
-9. Apply only labels that already exist in the target repository. Do not create labels.
-10. Write `publication-report.md` and `published-issues.json`.
-11. Add created issue URLs, numbers, or duplicate-comment URLs to local publication metadata.
+8. For each likely duplicate eligible draft matching an open issue, prepare one concise sanitized
+   comment for the best matching issue. Post it only when the exact body was already reviewed or the
+   operator explicitly approves that exact body before `gh issue comment`.
+9. If the best match is closed, do not suppress the current finding. Create a new issue unless the
+   operator explicitly decides to comment on the closed issue instead.
+10. Apply only labels that already exist in the target repository. Do not create labels.
+11. Write `publication-report.md` and `published-issues.json`.
+12. Add created issue URLs, numbers, or duplicate-comment URLs to local publication metadata.
 
 ## Duplicate comment policy
 
