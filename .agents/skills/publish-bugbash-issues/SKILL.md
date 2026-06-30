@@ -58,7 +58,8 @@ Before posting anything, read:
 2. Confirm the publication guard is satisfied.
 3. Read the current bug report issue template and record its current SHA or hash.
 4. Parse all selected local issue drafts.
-5. Validate draft eligibility, confidence, sanitation, template coverage, labels, and duplicate status.
+5. Validate draft eligibility, confidence, security classification, sanitation, template coverage,
+   labels, and duplicate status.
 6. Search existing open and closed issues in `TARGET_REPO` for duplicates using read-only GitHub CLI
    commands.
 7. For each unique eligible draft, create a new issue.
@@ -97,6 +98,11 @@ When a reviewed confirmed draft appears to duplicate an existing issue:
 - Never post speculative findings, unsanitized findings, private data, secrets, account names,
   private Trello links, private host paths, raw logs containing secrets, or drafts marked
   `needs_real_confirmation` unless the operator explicitly approved that exact exception.
+- Never create a public issue or public duplicate comment for a draft that may describe a
+  vulnerability, leaked credential, credential-handling weakness, token exposure, authentication
+  bypass, authorization bypass, or other SECURITY.md report. Skip public publication for that draft,
+  record the private reporting route in `publication-report.md`, and tell the operator to follow
+  `SECURITY.md`.
 - If a command would exceed these permissions, stop that draft and record a scoped blocker.
 
 ## Output standard
