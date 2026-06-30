@@ -2,7 +2,7 @@
 
 ## 1. Parse the goal and resolve modes
 
-Extract the end time from the goal phrase, for example `until 2026-06-29T18:00:00+02:00`. Record:
+Extract the end time from the goal phrase, for example `until <future timestamp>`. Record:
 
 - raw goal text
 - parsed end time

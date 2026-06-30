@@ -320,25 +320,25 @@ Codex goal.
 Safe run with fake Trello, fake Codex, and fake GitHub:
 
 ```text
-/goal Use $live-bugbash until 2026-06-29T18:00:00+02:00.
+/goal Use $live-bugbash until <future timestamp>.
 ```
 
 Real run against Trello, Codex, and GitHub sandbox repositories:
 
 ```text
-/goal Use $live-bugbash until 2026-06-29T18:00:00+02:00. Do a real live bugbash without fakes.
+/goal Use $live-bugbash until <future timestamp>. Do a real live bugbash without fakes.
 ```
 
 Real run on a hardened host, including dangerous access-mode coverage:
 
 ```text
-/goal Use $live-bugbash until 2026-06-29T18:00:00+02:00. Do a real live bugbash on a hardened host.
+/goal Use $live-bugbash until <future timestamp>. Do a real live bugbash on a hardened host.
 ```
 
 Continue after an earlier run:
 
 ```text
-/goal Use $live-bugbash until 2026-06-29T18:00:00+02:00. PREVIOUS_RUN_ID=live-bugbash-20260629T103000Z.
+/goal Use $live-bugbash until <future timestamp>. PREVIOUS_RUN_ID=live-bugbash-20260629T103000Z.
 ```
 
 Useful output is written under:
