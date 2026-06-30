@@ -72,14 +72,14 @@ RUN_ID=live-bugbash-<UTC timestamp as YYYYMMDDTHHMMSSZ>
 RUN_ROOT=target/live-bugbash/<RUN_ID>
 ISSUE_DRAFT_DIR=target/live-bugbash/<RUN_ID>/issues
 GITHUB_SANDBOX_PREFIX=live-bugbash
-ACTIVE_EXPLORATION_MINUTES_WITHOUT_FINDINGS=120
+ACTIVE_EXPLORATION_MINUTES_WITHOUT_FINDINGS=60
 TRELLO_MODE=fake
 CODEX_MODE=fake
 GITHUB_MODE=fake
 HOST_PROFILE=standard
 ```
 
-Parse `until <time>` in the goal as `RUN_END_SYSTEM_TIME`. Prefer timezone-qualified timestamps. If the timestamp has no timezone, treat it as the Codex host local system time and record that assumption in `progress.md`. If only `HH:MM` is supplied, treat it as today's host-local time. If the parsed end time is already in the past, stop and ask for a future timestamp rather than silently rolling it to another day.
+Parse `until <time>` in the goal as `RUN_END_SYSTEM_TIME`. The end time is a work-until deadline, not just an upper bound for a quick smoke pass: keep actively bug-bashing until that time unless a stop condition below applies. Prefer timezone-qualified timestamps. If the timestamp has no timezone, treat it as the Codex host local system time and record that assumption in `progress.md`. If only `HH:MM` is supplied, treat it as today's host-local time. If the parsed end time is already in the past, stop and ask for a future timestamp rather than silently rolling it to another day.
 
 Before using `RUN_ID`, `RUN_ROOT`, `ISSUE_DRAFT_DIR`, or `PREVIOUS_RUN_ID` in any filesystem path,
 validate that each run ID is one safe path segment: ASCII letters, digits, `.`, `_`, and `-` only;
@@ -184,7 +184,7 @@ The safety model depends on the integration modes and host profile, but these ru
 - Never mutate existing GitHub repositories, issues, pull requests, settings, secrets, collaborators, billing, workflows, releases, or organization settings. This skill creates local issue drafts only.
 - Never read or write unrelated host data.
 - Never intentionally wipe, stress, credential-scan, broad-delete, globally reconfigure, change shell profiles, mutate package managers, change service managers, kill unrelated processes, chmod or chown unrelated paths, or inspect unrelated private data.
-- Installer, uninstaller, onboarding, cleanup, repair, and destructive local-data tests must isolate HOME, XDG, SYMPHONY, config, state, cache, workspace, prefix, bin, manifest, and env-file paths to run-owned locations.
+- Installer, uninstaller, onboarding, cleanup, repair, and destructive local-data tests must set `HOME`, `XDG_*`, `SYMPHONY_HOME`, app, config, state, cache, workspace, prefix, bin, manifest, and env-file paths to run-owned locations. In real-integration hardened-host runs, pass live auth through explicit auth-only credentials or minimal cleanup-required run-scoped auth copies; do not use the operator's normal homes to make live Trello/GitHub/Codex execution work.
 - Real Trello, when enabled, may create and archive only run-scoped disposable boards and cards.
 - Real GitHub, when enabled, may write only inside newly created private sandbox repositories whose names include `RUN_ID`.
 - Host `danger-full-access` and Codex `--dangerously-bypass-approvals-and-sandbox` or `--yolo` are allowed only when `HOST_PROFILE=hardened`. This is permission to exercise product access modes, not permission to damage the machine.
@@ -198,7 +198,7 @@ Stop at the earliest of:
 1. `RUN_END_SYSTEM_TIME`
 2. A non-recoverable global safety blocker after all safer alternatives are exhausted
 3. Full meaningful matrix coverage plus `ACTIVE_EXPLORATION_MINUTES_WITHOUT_FINDINGS` minutes of active exploration without finding a new unique confirmed issue
-4. Lack of useful remaining work
+4. Full meaningful matrix coverage plus documented exhaustion of useful follow-up work, evidence collection, cleanup verification, and reporting, but only after a deep follow-up pass; do not use this after a shallow first pass or when there are still meaningful edge cases to explore.
 
 Active exploration means useful bug-bash work, such as testing uncovered behavior, varying workflow parameters, reproducing or falsifying suspected issues, inspecting relevant source code, collecting evidence, deduplicating, writing issue drafts, cleaning run-scoped artifacts, or writing the final report.
 
@@ -206,7 +206,7 @@ Do not sleep, poll timestamps, run no-op commands, or keep a background terminal
 
 Short waits are allowed only when they are tied to concrete product behavior under test, such as Symphony poll intervals, fake or real Trello API consistency, fake or real Codex app-server startup, worker shutdown, retry backoff, rate-limit recovery, or log flushing. Record what condition is being waited for and continue as soon as the condition has been checked.
 
-If no meaningful testing, triage, evidence gathering, cleanup, or reporting remains, stop under `lack_of_useful_remaining_work` instead of waiting.
+Do not stop early just because the first planned matrix pass is complete. If the main matrix is covered before `RUN_END_SYSTEM_TIME`, keep doing active exploration: vary inputs, run edge cases, test failure paths, inspect source boundaries, exercise live installed paths, deduplicate possible issues, improve evidence, or clean and report. The normal early-success exit is the no-new-findings rule above, measured in active exploration time.
 
 ## Working loop
 

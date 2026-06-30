@@ -142,6 +142,16 @@ gh auth status
 gh api user
 ```
 
+For real-integration hardened-host runs, do not hide already configured authentication behind an
+unrelated isolated `HOME` when that would prevent live Trello, GitHub, or Codex coverage. Use
+run-owned app, state, workflow, workspace, manifest, and output paths. Prefer explicit auth-only
+credential/env paths when the tool supports that. If a copied run-scoped Codex or GitHub auth home is
+necessary, copy only the minimum required auth material from the existing authenticated context,
+register the copied auth path as sensitive cleanup-required state, and delete it before finishing
+unless the operator explicitly approves a secure-retention path. Do not point child tools at the normal Codex or GitHub home when
+they would write sessions, logs, caches, config, or history there. Treat source auth stores as
+read-only and record the choice in private evidence.
+
 In `GITHUB_MODE=fake`, do not call network `gh`. Use local Git repositories and a run-local fake `gh` wrapper if a scenario requires GitHub CLI behavior.
 
 If `codex --help` exposes `--dangerously-bypass-approvals-and-sandbox` or `--yolo`, include direct execution only when `CODEX_MODE=real` and `HOST_PROFILE=hardened`. In fake mode or standard-host mode, cover generated configuration, command construction, and source-level handling instead.
@@ -240,7 +250,7 @@ For each service scenario:
 
 ## 11. Installer and lifecycle scenarios
 
-Test installer and uninstaller behavior with run-scoped HOME/XDG/SYMPHONY paths, prefixes, config dirs, manifests, workspaces, and state homes. Include:
+Test installer and uninstaller behavior with run-scoped `HOME`, `XDG_*`, `SYMPHONY_HOME`, prefixes, config dirs, manifests, workspaces, state homes, cache dirs, env files, and logs. In real-integration hardened-host runs, do not let that isolation hide existing Codex, GitHub, or Trello authentication. Prefer auth-only credentials over copied auth homes or env files. If a copied run-scoped `CODEX_HOME`, GitHub CLI config, or Trello env file is necessary, copy only the minimum required auth material, register it as sensitive cleanup-required state, and delete it before retaining artifacts unless the operator explicitly approves a secure-retention path.
 
 - install with onboarding
 - install with no onboarding
@@ -273,7 +283,15 @@ At the start of each major area and after each issue draft:
 4. Prefer rows that combine several features safely.
 5. Continue only if there is enough time left to collect evidence and perform cleanup.
 
-When the matrix is meaningfully covered, continue active exploration for the configured active exploration period only if useful work remains. Do not wait to consume time. Stop immediately when useful work is exhausted.
+When the matrix is meaningfully covered before the end time, keep actively exploring until either
+`RUN_END_SYSTEM_TIME` arrives or the no-new-findings active-exploration threshold is reached. Do not
+wait to consume time, but also do not stop merely because the initial matrix is covered; switch to
+nearby edge cases, failure paths, source-boundary inspection, installed-wrapper coverage, cleanup
+verification, deduplication, and report strengthening.
+
+If all useful follow-up work, evidence collection, cleanup verification, and reporting are also
+exhausted after a deep pass, stop with an explicit exhaustion note rather than inventing no-op work.
+This is not available immediately after the first matrix pass.
 
 ## 13. Issue handling and reporting
 

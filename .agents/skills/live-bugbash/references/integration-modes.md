@@ -96,7 +96,7 @@ Allowed:
 
 - `setup-local --add-path / --allow-all-paths` when the effective target is run-owned or the test
   asserts broad access without mutating unrelated files.
-- `setup-local --danger-full-access` with isolated HOME, XDG, SYMPHONY, prefix, state, cache, config, manifest, env, log, and workspace paths.
+- `setup-local --danger-full-access` with run-owned prefix, state, cache, config, manifest, env, log, and workspace paths. Use isolated HOME/XDG/SYMPHONY for destructive local-data coverage, but prefer auth-only credentials or minimal cleanup-required run-scoped auth homes when the scenario needs live Codex, Trello, or GitHub.
 - `SYMPHONY_CODEX_DANGER_FULL_ACCESS=true` for run-scoped service scenarios.
 - Workflow-authored `dangerFullAccess` for run-scoped workspaces.
 - Direct Codex `--sandbox danger-full-access --ask-for-approval never` when `CODEX_MODE=real` and the installed CLI supports it.
@@ -172,7 +172,8 @@ Rules:
 
 - Capture `codex --version` and relevant `codex --help` output.
 - Use run-scoped workspaces.
-- Do not rely on broad host state.
+- Do not rely on broad host state, except for read-only source auth material needed to seed a minimal cleanup-required auth copy or pass auth-only credentials.
+- Use existing Codex authentication when needed for real live coverage on this machine through an auth-only mechanism if Codex provides one. If a run-scoped `CODEX_HOME` is necessary, copy only the required auth material, register the copy as sensitive cleanup-required state, and delete it before retaining artifacts unless the operator explicitly approves a secure-retention path. Do not point child Codex processes at the operator's normal `CODEX_HOME`, because Codex also writes sessions, logs, caches, config, and history there. Treat source auth stores as read-only and record the choice in private evidence.
 - When testing `danger-full-access`, `--dangerously-bypass-approvals-and-sandbox`, or `--yolo`, require `HOST_PROFILE=hardened` and use only run-owned files and directories.
 - Do not ask real Codex to wipe, stress, credential-scan, globally reconfigure, kill unrelated processes, or inspect unrelated private data.
 

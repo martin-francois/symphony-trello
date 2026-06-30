@@ -70,6 +70,7 @@ Allowed host mutations:
 - Files and directories under `RUN_ROOT`.
 - Explicitly registered run-owned host directories listed in `owned-local-paths.txt`.
 - Run-scoped installer prefixes, config dirs, state homes, workspace roots, log dirs, env files, manifests, fake-service files, and disposable local Git repositories.
+- Existing authenticated Codex, GitHub, and Trello credential contexts may be read to pass auth-only credentials or seed minimal run-scoped auth contexts for real-integration scenarios when the operator opted into real services. Treat source auth stores as read-only. Register any copied auth context as sensitive cleanup-required state and delete it before retaining artifacts unless the operator explicitly approves a secure-retention path.
 
 Forbidden in standard profile:
 
@@ -88,9 +89,10 @@ Allowed in hardened profile:
 - Files and directories under `RUN_ROOT`.
 - Explicitly registered run-owned host directories listed in `owned-local-paths.txt`.
 - Run-scoped installer prefixes, config dirs, state homes, workspace roots, log dirs, env files, manifests, fake-service files, and disposable local Git repositories.
+- Existing authenticated Codex, GitHub, and Trello credential contexts may be read to pass auth-only credentials or seed minimal run-scoped auth contexts when needed to prove the live installed path on this machine. Treat source auth stores as read-only; do not edit, rotate, delete, chmod, copy into published artifacts, or scan them beyond the command's normal authentication use. Register any copied auth context as sensitive cleanup-required state and delete it before retaining artifacts unless the operator explicitly approves a secure-retention path.
 - `setup-local --add-path / --allow-all-paths` when used to test generated policy or when effective
   writes remain run-scoped.
-- `setup-local --danger-full-access` with isolated HOME, XDG, SYMPHONY, prefix, state, cache, config, env, manifest, log, and workspace paths.
+- `setup-local --danger-full-access` with run-owned prefix, state, cache, config, env, manifest, log, and workspace paths; use isolated HOME/XDG/SYMPHONY for destructive local-data coverage, but prefer auth-only credentials or minimal cleanup-required run-scoped auth homes when the scenario needs live Codex, Trello, or GitHub.
 - `SYMPHONY_CODEX_DANGER_FULL_ACCESS=true` for run-scoped workflow and service scenarios.
 - Workflow-authored `dangerFullAccess` for run-scoped workers.
 - Direct Codex `--sandbox danger-full-access --ask-for-approval never` when `CODEX_MODE=real` and supported.
@@ -107,7 +109,7 @@ Forbidden in every host profile:
 
 ## Installer and uninstaller isolation
 
-Installer, uninstaller, onboarding, setup, repair, cleanup, and destructive local-data paths must run with isolated local state even when hardened-host danger mode is allowed.
+Installer, uninstaller, onboarding, setup, repair, cleanup, and destructive local-data paths must keep their mutable local state run-scoped even when hardened-host danger mode is allowed.
 
 Use run-scoped HOME, XDG, and SYMPHONY paths:
 
@@ -122,6 +124,15 @@ export SYMPHONY_HOME="$RUN_ROOT/installer-sandboxes/symphony-home"
 
 Also pass explicit run-scoped options where available: `--prefix`, `--bin-dir`, `--config-dir`, `--workspace-root`, `--manifest`, `--env`, `--state-home`, and workflow path.
 
+For real-integration hardened-host scenarios, this isolation must not accidentally remove live
+authentication. If the installed worker, Codex CLI, or GitHub CLI needs existing auth material, pass
+auth-only credentials where possible. If a run-scoped auth home is necessary, copy only the minimum
+required auth material, register the copied auth path as sensitive cleanup-required state, and delete
+it before finishing unless the operator explicitly approves a secure-retention path. Keep generated files, state, logs,
+manifests, workspaces, and env-file copies under `RUN_ROOT`. Do not point child tools at normal homes
+that also receive sessions, logs, caches, config, or history. Record the choice in private evidence
+and never publish the auth path or contents.
+
 If a script ignores isolation and attempts to touch default local data, stop that sub-scenario, preserve evidence, draft an issue, recover if safe, and continue other scenarios with stricter isolation.
 
 ## Registries
@@ -133,5 +144,7 @@ Create these before mutating anything:
 - `created-github-sandbox-repos.jsonl`
 - `started-workers.jsonl`
 - `owned-local-paths.txt`
+- `sensitive-cleanup-paths.txt`
 
 Before archiving, stopping, deleting, repairing, uninstalling, or cleaning, verify that the target is registered as run-owned. If not registered, do not mutate it.
+Before retaining artifacts, delete every path in `sensitive-cleanup-paths.txt` unless the operator explicitly approves a secure-retention path. Record every deletion or approved retention in the cleanup summary.

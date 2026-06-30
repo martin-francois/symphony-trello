@@ -9,7 +9,7 @@ Resolve the host profile before running installer, uninstaller, setup-local, acc
 In standard mode:
 
 - Use fake Trello, fake Codex, and fake/local GitHub unless the goal separately opts into real integrations.
-- Use run-scoped HOME, XDG, SYMPHONY, prefix, config, state, cache, workspace, manifest, env, and log paths for installer and lifecycle tests.
+- Use run-scoped `HOME`, `XDG_*`, `SYMPHONY_HOME`, prefix, config, state, cache, workspace, manifest, env, and log paths for installer and lifecycle tests. Keep real-service authentication available only through explicit auth-only credentials or minimal cleanup-required run-scoped auth copies when the goal explicitly enables real integrations.
 - Execute normal workspace-write and path-scoped writable-root tests when they remain inside run-owned locations.
 - Exercise dangerous modes mainly by inspecting source, validating generated workflow configuration, checking CLI parsing, using dry-run paths, using fake Codex app-server behavior, or asserting that the product refuses unsafe combinations.
 - Do not launch unrestricted host-level child Codex processes, and do not run Codex `--dangerously-bypass-approvals-and-sandbox` or `--yolo`.
@@ -58,6 +58,7 @@ Allowed mutations:
 - Files and directories under `RUN_ROOT`.
 - Paths listed in `owned-local-paths.txt` before mutation.
 - Run-scoped installer prefixes, wrapper bin dirs, config dirs, state dirs, cache dirs, workspace roots, log dirs, env files, manifests, fake services, local fake Git repos, and private GitHub sandbox clones.
+- Existing authenticated Codex, GitHub, and Trello contexts may be read to pass auth-only credentials or seed minimal run-scoped auth contexts when needed for real-integration coverage on this machine. Keep source auth stores read-only. Register any copied auth context as sensitive cleanup-required state and delete it before retaining artifacts unless the operator explicitly approves a secure-retention path.
 - Processes listed in `started-workers.jsonl` or child processes of those registered workers.
 
 Forbidden mutations and probes:
@@ -66,7 +67,7 @@ Forbidden mutations and probes:
   `/tmp`, `/var`, `$HOME`, `$HOME/.codex`, `$HOME/.ssh`, `$HOME/.config`, or parent directories of
   the run root. Reading, building, and source-inspecting the verified target checkout is allowed.
 - Do not run broad cleanup commands such as `rm -rf /`, `rm -rf ~`, `find / -delete`, `git clean -fdx` outside disposable clones, `docker system prune`, `killall`, package-manager cleanup, or service-manager cleanup.
-- Do not edit shell startup files, global Git config, OS service configuration, package-manager state, credential stores, SSH config, Codex auth files, Trello credential files, or GitHub auth files unless the file is a run-scoped copy under `RUN_ROOT`.
+- Do not edit shell startup files, global Git config, OS service configuration, package-manager state, credential stores, SSH config, Codex auth files, Trello credential files, or GitHub auth files unless the file is a minimal run-scoped copy under `RUN_ROOT` that is registered as sensitive cleanup-required state. Reading existing auth material to create a run-scoped auth context or pass auth-only credentials is allowed in real-integration mode; changing the source auth context is not.
 - Do not scan unrelated host directories for secrets, tokens, private data, SSH keys, browser state, or credentials.
 - Do not stress CPU, memory, disk, network, process tables, rate limits, or filesystem watchers.
 - Do not use dangerous access to bypass GitHub boundaries or Trello boundaries.
