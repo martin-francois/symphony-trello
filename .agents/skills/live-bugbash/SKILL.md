@@ -149,11 +149,11 @@ If the goal contains conflicting integration or host-profile instructions, prefe
 
 When this skill is used for an actual bug bash, read these files before starting mutable work:
 
-1. `AGENTS.md`
-2. `README.md`
-3. `SPEC.md`
-4. `.github/ISSUE_TEMPLATE/bug_report.yml`
-5. `CONTRIBUTING.md`
+1. `../../../AGENTS.md`
+2. `../../../README.md`
+3. `../../../SPEC.md`
+4. `../../../.github/ISSUE_TEMPLATE/bug_report.yml`
+5. `../../../CONTRIBUTING.md`
 6. `references/integration-modes.md`
 7. `references/host-profiles.md`
 8. `references/safety-and-isolation.md`
@@ -161,7 +161,11 @@ When this skill is used for an actual bug bash, read these files before starting
 10. `references/coverage-matrix.md`
 11. `references/issue-drafts-and-reporting.md`
 
-Also read these repository docs when present: `docs/live-e2e.md`, `docs/operations.md`, `docs/deployment.md`, `docs/agents/default-workflow.md`, and relevant ADRs found during the run. If a listed file does not exist, record that as a repository-shape observation and continue with the available equivalents.
+Also read these repository docs when present: `../../../docs/live-e2e.md`,
+`../../../docs/operations.md`, `../../../docs/deployment.md`,
+`../../../docs/agents/default-workflow.md`, and relevant ADRs found during the run. If a listed file
+does not exist, record that as a repository-shape observation and continue with the available
+equivalents.
 
 ## Goal
 
