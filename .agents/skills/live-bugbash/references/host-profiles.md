@@ -23,12 +23,18 @@ dangerous host access`, or `do not run dangerous access on host`, keep `HOST_PRO
 intent remains ambiguous, keep `HOST_PROFILE=standard` and record the safer decision.
 
 - `HOST_PROFILE=hardened`
+- `HARDENED_HOST=true`
 - `hardened host`
 - `hardened system`
 - `this host is hardened`
+- `host is hardened`
 - `this system is hardened`
 - `hardened runner`
 - `hardened machine`
+- `run dangerous access on host`
+- `exercise dangerous access on host`
+- `run the dangerously things on the host`
+- `safe to use danger full access on host`
 
 A hardened host is an operator assertion that this machine is hardened enough for run-scoped dangerous access-mode testing. It is not a real-service opt-in by itself. External-service modes are still resolved separately from `TRELLO_MODE`, `CODEX_MODE`, `GITHUB_MODE`, `REAL_INTEGRATIONS=all`, `without fakes`, or `do a real live bugbash`.
 
