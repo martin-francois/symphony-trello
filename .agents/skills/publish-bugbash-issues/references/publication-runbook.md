@@ -75,10 +75,11 @@ Use read-only issue search first.
 
 If no likely duplicate is found, create a new issue.
 
-If a likely duplicate is found, do not create a second issue. Add one concise sanitized comment to
-the best matching existing issue. The comment should say that this bug bash also reproduced the
-issue and include any useful new reproduction steps, target commit, environment, logs, or suspected
-code path from the draft.
+If a likely duplicate is found, do not create a second issue. Add a concise sanitized comment to the
+best matching existing issue only when the exact duplicate-comment body was already reviewed by the
+operator or the operator explicitly approves that exact generated body before `gh issue comment`.
+The comment should say that this bug bash also reproduced the issue and include any useful new
+reproduction steps, target commit, environment, logs, or suspected code path from the draft.
 
 Avoid duplicate comments from the same run. Before commenting, check existing issue comments when
 practical for the current `RUN_ID` or source draft filename. If the run already commented there,
@@ -157,7 +158,7 @@ The local draft starts with YAML front matter followed by the issue body. For ne
 6. Run `scripts/check-private-context --stdin --label github-body` on the exact body file before
    passing it to `gh issue create`.
 
-For duplicate comments, create a concise body such as:
+For duplicate comments, use a concise reviewed body such as:
 
 ```markdown
 This was also reproduced during live bug bash `<RUN_ID>` against commit `<commit SHA>`.
@@ -174,8 +175,10 @@ Additional evidence: ...
 ```
 
 Keep the comment shorter than the full issue draft unless the existing issue lacks essential
-reproduction details. Run `scripts/check-private-context --stdin --label github-body` on the exact
-comment file before passing it to `gh issue comment`.
+reproduction details. If Codex generates or changes this comment during publication, stop and ask the
+operator to approve the exact body before posting it. Run
+`scripts/check-private-context --stdin --label github-body` on the exact comment file before passing
+it to `gh issue comment`.
 
 ## Outputs
 
