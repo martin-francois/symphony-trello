@@ -81,7 +81,17 @@ HOST_PROFILE=standard
 
 Parse `until <time>` in the goal as `RUN_END_SYSTEM_TIME`. Prefer timezone-qualified timestamps. If the timestamp has no timezone, treat it as the Codex host local system time and record that assumption in `progress.md`. If only `HH:MM` is supplied, treat it as today's host-local time. If the parsed end time is already in the past, stop and ask for a future timestamp rather than silently rolling it to another day.
 
-`PREVIOUS_RUN_ID` is optional. When present, read only the previous run's final report, issue drafts, and coverage ledger to avoid duplicate testing and duplicate issue drafts. Do not inherit its mutable state.
+Before using `RUN_ID`, `RUN_ROOT`, `ISSUE_DRAFT_DIR`, or `PREVIOUS_RUN_ID` in any filesystem path,
+validate that each run ID is one safe path segment: ASCII letters, digits, `.`, `_`, and `-` only;
+not empty; not `.` or `..`; no slash, backslash, control character, shell metacharacter, or
+percent-encoded separator. Resolve and normalize `RUN_ROOT` and `ISSUE_DRAFT_DIR` before creating,
+reading, or deleting anything. `ISSUE_DRAFT_DIR` must stay under `RUN_ROOT`, and default run roots
+must stay under `target/live-bugbash/`. If an explicit path override does not normalize to a
+run-owned location, stop and ask for a corrected run-scoped path.
+
+`PREVIOUS_RUN_ID` is optional. When present, apply the same safe-segment validation, then read only
+the previous run's final report, issue drafts, and coverage ledger to avoid duplicate testing and
+duplicate issue drafts. Do not inherit its mutable state.
 
 ## Mode resolution
 

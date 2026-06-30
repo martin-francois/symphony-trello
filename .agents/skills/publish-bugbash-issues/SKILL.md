@@ -33,6 +33,12 @@ LABEL_POLICY=use-existing-labels-only
 PUBLISH_SELECTION=confirmed-only
 ```
 
+Before reading drafts or writing publication metadata, validate `RUN_ID` as one safe path segment:
+ASCII letters, digits, `.`, `_`, and `-` only; not empty; not `.` or `..`; no slash, backslash,
+control character, shell metacharacter, or percent-encoded separator. Resolve and normalize
+`RUN_ROOT` and `DRAFT_DIR`; `DRAFT_DIR` must stay under `RUN_ROOT`, and default run roots must stay
+under `target/live-bugbash/`. Stop if an override points outside the reviewed run-owned location.
+
 ## Publication guard
 
 Posting to `TARGET_REPO` is forbidden unless the goal contains both:
