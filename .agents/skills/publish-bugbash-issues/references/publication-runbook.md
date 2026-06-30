@@ -118,6 +118,10 @@ gh issue view "$ISSUE_NUMBER" \
 ```
 
 ```bash
+scripts/check-private-context --stdin --label github-body < "$PUBLISH_BODY_FILE"
+```
+
+```bash
 gh issue create \
   --repo "$TARGET_REPO" \
   --title "$TITLE" \
@@ -127,6 +131,10 @@ gh issue create \
 
 Add one `--label` flag for each additional existing label selected for publication. Do not include
 missing labels.
+
+```bash
+scripts/check-private-context --stdin --label github-body < "$DUPLICATE_COMMENT_FILE"
+```
 
 ```bash
 gh issue comment "$ISSUE_NUMBER" \
@@ -144,6 +152,8 @@ The local draft starts with YAML front matter followed by the issue body. For ne
 4. Optionally append a short sanitized provenance note with `RUN_ID`, target commit, and local draft
    filename when that information is not already present.
 5. Do not include local-only metadata that exposes private paths or private service links.
+6. Run `scripts/check-private-context --stdin --label github-body` on the exact body file before
+   passing it to `gh issue create`.
 
 For duplicate comments, create a concise body such as:
 
@@ -162,7 +172,8 @@ Additional evidence: ...
 ```
 
 Keep the comment shorter than the full issue draft unless the existing issue lacks essential
-reproduction details.
+reproduction details. Run `scripts/check-private-context --stdin --label github-body` on the exact
+comment file before passing it to `gh issue comment`.
 
 ## Outputs
 
