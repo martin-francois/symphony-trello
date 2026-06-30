@@ -2,7 +2,9 @@
 
 Use this as a minimum coverage model. Expand it from the current `SPEC.md`, `README.md`, installer help, CLI help, tests, and code discovered during the run.
 
-Record coverage in `coverage-ledger.md` with status values: `not-started`, `covered`, `weak`, `blocked`, `bug-drafted`, `needs-real-confirmation`, or `not-applicable`.
+Record coverage in `coverage-ledger.md` with status values: `not-started`, `covered`, `weak`,
+`blocked`, `bug-drafted`, `needs-real-confirmation`, `requires_hardened_host`, or
+`not-applicable`.
 
 Every row must record integration modes and host profile used: `TRELLO_MODE`, `CODEX_MODE`, `GITHUB_MODE`, and `HOST_PROFILE`.
 
@@ -21,7 +23,7 @@ Cover these before or during product scenarios:
 - no silent escalation from fake to real when fake support is incomplete
 - reporting of `needs_real_confirmation` for fake-only findings that depend on external-service fidelity
 - hardened-host opt-in detection and standard-host fallback for dangerous-access execution
-- reporting of `requires-hardened-host` for dangerous-access rows that cannot be executed on a standard host
+- reporting of `requires_hardened_host` for dangerous-access rows that cannot be executed on a standard host
 
 ## Workflow and config
 
