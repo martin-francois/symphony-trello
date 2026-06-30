@@ -99,7 +99,9 @@ Read `references/integration-modes.md`, `references/host-profiles.md`, and `refe
 
 The words `live-bugbash` or `$live-bugbash` by themselves do not opt into real external services or host dangerous access.
 
-Real integrations require one of these explicit signals in the goal:
+Real integrations require one of these affirmative explicit signals in the goal. Ignore the phrase
+when it appears inside a denial such as `do not use real Trello`, `without real services`, or `not a
+real run`; keep the affected mode fake when intent is ambiguous.
 
 - `REAL_INTEGRATIONS=all`
 - `TRELLO_MODE=real`, `CODEX_MODE=real`, or `GITHUB_MODE=real-sandbox`
@@ -110,7 +112,8 @@ Real integrations require one of these explicit signals in the goal:
 - `do a real live bugbash`
 - `run against real services`
 
-When the goal says `without fakes`, `no fakes`, `REAL_INTEGRATIONS=all`, or `do a real live bugbash`, set:
+When the goal affirmatively says `without fakes`, `no fakes`, `REAL_INTEGRATIONS=all`, `do a real
+live bugbash`, or `run against real services`, set:
 
 ```text
 TRELLO_MODE=real
@@ -118,7 +121,9 @@ CODEX_MODE=real
 GITHUB_MODE=real-sandbox
 ```
 
-Hardened-host dangerous access requires one of these explicit signals in the goal:
+Hardened-host dangerous access requires one of these affirmative explicit signals in the goal. Ignore
+the phrase when it appears inside a denial such as `not a hardened host`, `no dangerous host access`,
+or `do not run dangerous access on host`; keep `HOST_PROFILE=standard` when intent is ambiguous.
 
 - `HOST_PROFILE=hardened`
 - `HARDENED_HOST=true`
