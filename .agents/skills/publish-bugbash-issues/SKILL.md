@@ -97,7 +97,8 @@ When a reviewed confirmed draft appears to duplicate an existing issue:
   and only with sanitized reproduction details.
 - Never post speculative findings, unsanitized findings, private data, secrets, account names,
   private Trello links, private host paths, raw logs containing secrets, or drafts marked
-  `needs_real_confirmation` unless the operator explicitly approved that exact exception.
+  `needs_real_confirmation` or `requires_hardened_host_confirmation` unless the operator explicitly
+  approved that exact exception.
 - Never create a public issue or public duplicate comment for a draft that may describe a
   vulnerability, leaked credential, credential-handling weakness, token exposure, authentication
   bypass, authorization bypass, or other SECURITY.md report. Skip public publication for that draft,

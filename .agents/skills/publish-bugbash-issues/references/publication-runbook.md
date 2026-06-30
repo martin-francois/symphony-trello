@@ -35,6 +35,7 @@ A draft is postable only when all of these are true:
 - Its front matter parses successfully.
 - `confidence` is `confirmed` or the operator explicitly allowed another confidence value.
 - `needs_real_confirmation` is absent or false.
+- `requires_hardened_host_confirmation` is absent or false.
 - `labels_to_add` is present.
 - The issue body follows the current `.github/ISSUE_TEMPLATE/bug_report.yml` structure well enough
   for a maintainer to review it.
