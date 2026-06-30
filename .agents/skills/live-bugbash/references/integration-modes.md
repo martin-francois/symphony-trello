@@ -76,7 +76,7 @@ Rules:
 - Test dangerous access generation, validation, workflow output, CLI option parsing, and source-level behavior where possible.
 - Do not launch a child Codex process with `--sandbox danger-full-access`, `--dangerously-bypass-approvals-and-sandbox`, or `--yolo` on the host.
 - Do not run `setup-local --danger-full-access` or `SYMPHONY_CODEX_DANGER_FULL_ACCESS=true` in a way that can grant broad host access. Use dry-run, fake-mode, run-scoped paths, or source-level inspection instead.
-- If a coverage row requires real host dangerous access, mark it `needs-hardened-host` and continue.
+- If a coverage row requires real host dangerous access, mark it `requires_hardened_host` and continue.
 
 ### `HOST_PROFILE=hardened`
 
