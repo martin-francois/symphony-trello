@@ -16,49 +16,49 @@ Codex should not implicitly use this skill for ordinary implementation work. Thi
 Safe default with fakes and conservative host access:
 
 ```text
-/goal Use $live-bugbash until 2026-06-29T18:00:00+02:00.
+/goal Use $live-bugbash until <future timestamp>.
 ```
 
 Safe default with fakes but full hardened-host access-mode coverage:
 
 ```text
-/goal Use $live-bugbash until 2026-06-29T18:00:00+02:00. This is running on a hardened host.
+/goal Use $live-bugbash until <future timestamp>. This is running on a hardened host.
 ```
 
 Real run with all integrations enabled, but without hardened-host dangerous coverage:
 
 ```text
-/goal Use $live-bugbash until 2026-06-29T18:00:00+02:00. Do a real live bugbash without fakes.
+/goal Use $live-bugbash until <future timestamp>. Do a real live bugbash without fakes.
 ```
 
 Real run with all integrations enabled and hardened-host dangerous coverage:
 
 ```text
-/goal Use $live-bugbash until 2026-06-29T18:00:00+02:00. Do a real live bugbash on a hardened host.
+/goal Use $live-bugbash until <future timestamp>. Do a real live bugbash on a hardened host.
 ```
 
 Explicit real run equivalent:
 
 ```text
-/goal Use $live-bugbash until 2026-06-29T18:00:00+02:00. REAL_INTEGRATIONS=all HOST_PROFILE=hardened.
+/goal Use $live-bugbash until <future timestamp>. REAL_INTEGRATIONS=all HOST_PROFILE=hardened.
 ```
 
 Mixed integration run:
 
 ```text
-/goal Use $live-bugbash until 2026-06-29T18:00:00+02:00. TRELLO_MODE=real CODEX_MODE=fake GITHUB_MODE=fake.
+/goal Use $live-bugbash until <future timestamp>. TRELLO_MODE=real CODEX_MODE=fake GITHUB_MODE=fake.
 ```
 
 Continuation run:
 
 ```text
-/goal Use $live-bugbash until 2026-06-29T18:00:00+02:00. PREVIOUS_RUN_ID=live-bugbash-20260629T103000Z.
+/goal Use $live-bugbash until <future timestamp>. PREVIOUS_RUN_ID=live-bugbash-20260629T103000Z.
 ```
 
 Advanced override:
 
 ```text
-/goal Use $live-bugbash until 2026-06-29T18:00:00+02:00. RUN_ID=live-bugbash-manual-2 ACTIVE_EXPLORATION_MINUTES_WITHOUT_FINDINGS=60 REAL_INTEGRATIONS=all HOST_PROFILE=hardened.
+/goal Use $live-bugbash until <future timestamp>. RUN_ID=live-bugbash-manual-2 ACTIVE_EXPLORATION_MINUTES_WITHOUT_FINDINGS=60 REAL_INTEGRATIONS=all HOST_PROFILE=hardened.
 ```
 
 ## Defaults
