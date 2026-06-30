@@ -143,7 +143,7 @@ Cover available commands and options discovered at runtime:
 - `list-workspaces` single, multiple, empty, auth failure, permission failure, and fake endpoint responses
 - `setup-local`, `setup-local check`, `setup-local repair-port`, and `setup-local configure-github`
 - `setup-local --add-path`, multiple add paths, invalid paths, relative paths, duplicate paths, and path boundaries
-- `setup-local --allow-all-paths`, with actual writes still confined to run-owned paths
+- `setup-local --add-path / --allow-all-paths`, with actual writes still confined to run-owned paths
 - `setup-local --danger-full-access`, including standard-host config coverage and hardened-host execution coverage
 - `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS`
 - `SYMPHONY_CODEX_DANGER_FULL_ACCESS=true`, including standard-host config coverage and hardened-host execution coverage
