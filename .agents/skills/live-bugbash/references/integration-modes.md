@@ -19,7 +19,10 @@ The skill name contains `live` for historical and project vocabulary reasons. Th
 
 ## Real-service opt-in
 
-Enable real integrations only when the goal contains an explicit opt-in:
+Enable real integrations only when the goal contains an affirmative explicit opt-in. Do not enable
+real integrations from a phrase that appears inside a denial such as `do not use real Trello`,
+`without real services`, or `not a real run`; keep the affected service fake when intent is
+ambiguous.
 
 - `REAL_INTEGRATIONS=all`
 - `TRELLO_MODE=real`, `CODEX_MODE=real`, or `GITHUB_MODE=real-sandbox`
@@ -30,7 +33,8 @@ Enable real integrations only when the goal contains an explicit opt-in:
 - `do a real live bugbash`
 - `run against real services`
 
-When the goal says `without fakes`, `no fakes`, `REAL_INTEGRATIONS=all`, or `do a real live bugbash`, set:
+When the goal affirmatively says `without fakes`, `no fakes`, `REAL_INTEGRATIONS=all`, or `do a real
+live bugbash`, set:
 
 ```text
 TRELLO_MODE=real
@@ -44,7 +48,10 @@ If natural-language and key-value settings conflict, explicit key-value modes wi
 
 ## Hardened-host opt-in
 
-Enable hardened-host dangerous access only when the goal contains an explicit opt-in:
+Enable hardened-host dangerous access only when the goal contains an affirmative explicit opt-in. Do
+not enable it from a phrase that appears inside a denial such as `not a hardened host`,
+`no dangerous host access`, or `do not run dangerous access on host`; keep `HOST_PROFILE=standard`
+when intent is ambiguous.
 
 - `HOST_PROFILE=hardened`
 - `HARDENED_HOST=true`
@@ -58,7 +65,10 @@ Enable hardened-host dangerous access only when the goal contains an explicit op
 - `run the dangerously things on the host`
 - `safe to use danger full access on host`
 
-When the goal contains one of those phrases, set `HOST_PROFILE=hardened`. This enables host-level dangerous-access product scenarios under the no-trash guardrails in `safety-and-isolation.md` and `host-profiles.md`. Cover the full dangerous-access matrix unless the goal explicitly asks for a narrower pass.
+When the goal affirmatively contains one of those phrases, set `HOST_PROFILE=hardened`. This enables
+host-level dangerous-access product scenarios under the no-trash guardrails in
+`safety-and-isolation.md` and `host-profiles.md`. Cover the full dangerous-access matrix unless the
+goal explicitly asks for a narrower pass.
 
 `HOST_PROFILE=hardened` does not by itself enable real Trello, real Codex, or real GitHub. It only says the host may be used for run-scoped dangerous access-mode tests. Combine it with `do a real live bugbash without fakes` or `REAL_INTEGRATIONS=all` when real external services are intended.
 
