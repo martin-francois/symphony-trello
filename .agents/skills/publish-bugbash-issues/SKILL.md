@@ -58,8 +58,8 @@ reviewing the drafts. Never infer approval from the existence of issue drafts.
 Before posting anything, read:
 
 1. `references/publication-runbook.md`
-2. `.github/ISSUE_TEMPLATE/bug_report.yml`
-3. `SECURITY.md`
+2. `../../../.github/ISSUE_TEMPLATE/bug_report.yml`
+3. `../../../SECURITY.md`
 4. `$RUN_ROOT/final-report.md`, if present
 5. all selected drafts under the resolved `$DRAFT_DIR`
 
