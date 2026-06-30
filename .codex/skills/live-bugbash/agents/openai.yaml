@@ -1,0 +1,6 @@
+interface:
+  display_name: "Live Bug Bash"
+  short_description: "Safe-by-default Symphony for Trello bug bash using fake integrations unless real services are explicitly requested; understands hardened-host dangerous-access runs."
+  default_prompt: "/goal Use $live-bugbash until <RUN_END_SYSTEM_TIME>."
+policy:
+  allow_implicit_invocation: false
