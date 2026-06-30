@@ -55,7 +55,13 @@ Create initial empty registries and `progress.md`. Record the safety boundaries,
 
 ## 3. Sync and baseline
 
-Use the current repository checkout when already in `TARGET_REPO`. Otherwise clone or copy `TARGET_REPO`, check out `TARGET_BRANCH`, fetch latest main when network access is appropriate for the mode, and record the exact commit SHA.
+Use the current repository checkout only after confirming it is `TARGET_REPO` at the requested
+`TARGET_BRANCH` and intended commit. When network access is appropriate for the selected modes,
+fetch the target repository, check out `TARGET_BRANCH`, fast-forward or otherwise sync to the latest
+target commit, and record the exact commit SHA. If the current checkout is on a different branch,
+stale, dirty in a way that would affect the bug bash, or cannot be verified without disallowed
+network access, stop and ask whether to use the current checkout as an explicit override or to switch
+to a verified target checkout. Record that decision in `progress.md`.
 
 Read the current project instructions and docs. Run the baseline build when time allows:
 
