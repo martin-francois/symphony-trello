@@ -1103,7 +1103,7 @@ public final class TrelloBoardSetup {
                         maxAgents,
                         ConfigDefaults.DEFAULT_CODEX_COMMAND,
                         codexModelYaml(codexModelDefaults),
-                        codexSandboxPolicyYaml(githubEnabled),
+                        codexSandboxPolicyYaml(),
                         ConfigDefaults.DEFAULT_CODEX_TURN_TIMEOUT_MS,
                         ConfigDefaults.DEFAULT_CODEX_READ_TIMEOUT_MS,
                         ConfigDefaults.DEFAULT_CODEX_STALL_TIMEOUT_MS,
@@ -1315,18 +1315,12 @@ public final class TrelloBoardSetup {
         return yaml.toString();
     }
 
-    private static String codexSandboxPolicyYaml(boolean githubEnabled) {
-        if (githubEnabled) {
-            return """
-                  turn_sandbox_policy:
-                    type: workspaceWrite
-                    networkAccess: true
-                """;
-        }
+    private static String codexSandboxPolicyYaml() {
         return """
-                  turn_sandbox_policy:
-                    type: workspaceWrite
-                """;
+              turn_sandbox_policy:
+                type: workspaceWrite
+                networkAccess: true
+            """;
     }
 
     private static String workpadPrompt(boolean workpadToolEnabled) {

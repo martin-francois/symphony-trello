@@ -1275,7 +1275,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 .containsExactly("Inbox", "Ready for Codex", "In Progress", "Blocked", "Human Review", "Done");
         assertThat(env).content(StandardCharsets.UTF_8).contains("TRELLO_API_KEY=key", "TRELLO_API_TOKEN=token");
         assertOwnerOnlyWhenPosix(env);
-        assertThatWorkflow(workflow).hasNoGithubFlow().doesNotHaveMerging().hasNoNetworkEnabledWorkspaceSandbox();
+        assertThatWorkflow(workflow).hasNoGithubFlow().doesNotHaveMerging().hasNetworkEnabledWorkspaceSandbox();
         assertThat(commands.startedWorkflows).containsExactly(workflow.toString());
         assertThat(commands.startedEnvFiles).containsExactly(env.toString());
     }
@@ -1323,7 +1323,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 .hasNoGithubFlow()
                 .doesNotHaveMerging()
                 .hasNoInProgressState()
-                .hasNoNetworkEnabledWorkspaceSandbox();
+                .hasNetworkEnabledWorkspaceSandbox();
         assertThat(commands.startedWorkflows).containsExactly(workflow.toString());
         assertThat(commands.startedEnvFiles).containsExactly(env.toString());
     }
