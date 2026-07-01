@@ -86,7 +86,9 @@ repository source exists.
 The existing generated workflow direct-work exception is preserved: a selected local checkout is
 source context by default and should be cloned into the per-card workspace, but Codex may work
 directly in that checkout when the Trello card explicitly requests direct work, the checkout is
-writable, and deployment filesystem policy permits it.
+writable, and deployment filesystem policy permits it, including Git metadata writes when the task
+needs direct commits. `--add-path <checkout>` grants extra filesystem access but is not a
+direct-checkout commit guarantee.
 
 Phase 1 also preserves the existing agent-owned base-selection instruction for local sources: after
 cloning from a local checkout, Codex should not inherit the source checkout's current branch as the

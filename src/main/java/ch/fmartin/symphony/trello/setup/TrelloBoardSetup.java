@@ -1274,8 +1274,9 @@ public final class TrelloBoardSetup {
                 as the task base. Start new task work from the repository's default branch when it is discoverable unless
                 the Trello card clearly requests another base. Do not edit the shared checkout directly unless the Trello
                 card explicitly requests direct work, the checkout is writable, and deployment filesystem policy permits
-                it. Phase 1 adds no Java enforcement, locking, ownership metadata, transaction state, or recovery
-                guarantees for direct checkout.
+                it, including Git metadata writes when the card asks for direct commits. `--add-path <checkout>` only
+                adds the checkout as a writable root; it does not by itself guarantee that direct checkout commits can
+                update Git metadata.
 
                 If no source is selected or the selected source is missing, unreadable, unclonable, or lacks required
                 repository/auth context, %s
