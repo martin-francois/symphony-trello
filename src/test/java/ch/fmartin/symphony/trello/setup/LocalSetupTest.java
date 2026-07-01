@@ -56,6 +56,26 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void dryRunRejectsCustomInProgressForNewBoardBeforePlannedOutput() {
+        // given
+        String[] args = {"--dry-run", "--non-interactive", "--board-name", "No Pickup", "--in-progress", "Doing"};
+
+        // when
+        SetupRunResult result = runSetup(args);
+
+        // then
+        result.assertFailure(SETUP_FAILURE)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments",
+                        "--in-progress is only supported when connecting an existing Trello board.")
+                .stdoutDoesNotContain("Dry run", "WOULD write workflow");
+        assertThat(trello.memberLookups()).isEmpty();
+        assertThat(trello.workspaceLookups()).isEmpty();
+        assertThat(trello.boardLookups()).isEmpty();
+        assertThat(trello.createdLists()).isEmpty();
+    }
+
+    @Test
     void dryRunReportsSelectedWorkflowManifestAndAccessPlan() {
         // given
         Path workflow = tempDir.resolve("custom workflow").resolve("WORKFLOW.dry-run.md");
@@ -1258,6 +1278,125 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         assertThatWorkflow(workflow).hasNoGithubFlow().doesNotHaveMerging().hasNoNetworkEnabledWorkspaceSandbox();
         assertThat(commands.startedWorkflows).containsExactly(workflow.toString());
         assertThat(commands.startedEnvFiles).containsExactly(env.toString());
+    }
+
+    @Test
+    void nonInteractiveSetupLocalNoInProgressCreatesWorkflowWithoutPickupList() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.no-pickup.md");
+        Path env = tempDir.resolve(".env.no-pickup");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "No Pickup Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github",
+                "--no-in-progress");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("Board connected: \"No Pickup Queue\"")
+                .stdoutDoesNotContain("moves it to \"In Progress\"");
+        assertThat(trello.createdLists())
+                .containsExactly("Inbox", "Ready for Codex", "Blocked", "Human Review", "Done");
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("active_states:", "- \"Ready for Codex\"")
+                .doesNotContain(
+                        "in_progress_state:",
+                        "- \"In Progress\"",
+                        "list_name \"In Progress\"",
+                        "- No in-progress list:",
+                        "work currently running in Codex");
+        assertThatWorkflow(workflow)
+                .hasNoGithubFlow()
+                .doesNotHaveMerging()
+                .hasNoInProgressState()
+                .hasNoNetworkEnabledWorkspaceSandbox();
+        assertThat(commands.startedWorkflows).containsExactly(workflow.toString());
+        assertThat(commands.startedEnvFiles).containsExactly(env.toString());
+    }
+
+    @Test
+    void nonInteractiveSetupLocalRejectsCustomInProgressForNewBoardBeforeSideEffects() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.custom-pickup.md");
+        Path env = tempDir.resolve(".env.custom-pickup");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Custom Pickup Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github",
+                "--in-progress",
+                "Doing");
+
+        // then
+        result.assertFailure(SETUP_FAILURE)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments",
+                        "--in-progress is only supported when connecting an existing Trello board.");
+        assertThat(trello.createdLists()).isEmpty();
+        assertThat(workflow).doesNotExist();
+        assertThat(env).doesNotExist();
+        assertThat(commands.startedWorkflows).isEmpty();
+        assertThat(commands.startedEnvFiles).isEmpty();
+    }
+
+    @Test
+    void interactiveSetupLocalRejectsCustomInProgressWithoutBoardBeforeSideEffects() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.interactive-custom-pickup.md");
+        Path env = tempDir.resolve(".env.interactive-custom-pickup");
+
+        // when
+        SetupRunResult result = runSetup(
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github",
+                "--in-progress",
+                "Doing");
+
+        // then
+        result.assertFailure(SETUP_FAILURE)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_arguments",
+                        "--in-progress is only supported when connecting an existing Trello board.");
+        assertThat(trello.createdLists()).isEmpty();
+        assertThat(workflow).doesNotExist();
+        assertThat(env).doesNotExist();
+        assertThat(commands.startedWorkflows).isEmpty();
+        assertThat(commands.startedEnvFiles).isEmpty();
     }
 
     @Test
@@ -3471,6 +3610,43 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "move it to \"Finished\"")
                 .stdoutDoesNotContain(
                         "move it to \"Ready for Codex\"", "moves it to \"In Progress\"", "move it to \"Done\"");
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("- \"Queue\"", "in_progress_state: \"Working\"", "- \"Finished\"", "list_name \"Blocked\"");
+    }
+
+    @Test
+    void interactiveExistingBoardSetupAcceptsExplicitInProgressWithoutBoardArgument() throws Exception {
+        // given
+        trello.givenRawBoardListsJson(
+                """
+                [
+                  {"id":"list-1","name":"Queue","closed":false,"pos":1},
+                  {"id":"list-2","name":"Working","closed":false,"pos":2},
+                  {"id":"list-3","name":"Blocked","closed":false,"pos":3},
+                  {"id":"list-4","name":"Human Review","closed":false,"pos":4},
+                  {"id":"list-5","name":"Finished","closed":false,"pos":5}
+                ]
+                """);
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                "2\nboard-1\nQueue\nFinished\nBlocked\n\n\n\nn\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--in-progress",
+                "Working",
+                "--no-github");
+
+        // then
+        Path workflow = tempDir.resolve("config").resolve("WORKFLOW.imported-queue.md");
+        result.assertSuccess()
+                .stdoutContains("Choose board setup:", "Existing board lists", "moves it to \"Working\"")
+                .stdoutDoesNotContain("In-progress list name");
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("- \"Queue\"", "in_progress_state: \"Working\"", "- \"Finished\"", "list_name \"Blocked\"");

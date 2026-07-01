@@ -203,7 +203,7 @@ public final class TrelloBoardSetup {
 
         boolean githubEnabled = request.githubIntegration().enabled();
         List<String> createdLists = new ArrayList<>();
-        List<String> recommendedLists = githubEnabled ? RECOMMENDED_LISTS : RECOMMENDED_NON_GITHUB_LISTS;
+        List<String> recommendedLists = recommendedLists(githubEnabled, request.detectInProgressState());
         for (String listName : recommendedLists) {
             postMap(
                     request.endpoint(),
@@ -219,9 +219,9 @@ public final class TrelloBoardSetup {
                 request.force(),
                 workflowTemplate(
                         boardKey,
-                        githubEnabled ? RECOMMENDED_ACTIVE_STATES : RECOMMENDED_NON_GITHUB_ACTIVE_STATES,
+                        recommendedActiveStates(githubEnabled, request.detectInProgressState()),
                         RECOMMENDED_TERMINAL_STATES,
-                        RECOMMENDED_IN_PROGRESS_STATE,
+                        request.detectInProgressState() ? RECOMMENDED_IN_PROGRESS_STATE : null,
                         RECOMMENDED_REVIEW_STATE,
                         RECOMMENDED_BLOCKED_STATE,
                         githubEnabled ? RECOMMENDED_MERGING_STATE : null,
@@ -233,6 +233,22 @@ public final class TrelloBoardSetup {
 
         return new NewBoardResult(
                 boardId, boardKey, request.boardName(), boardUrl, createdLists, workflowPath, serverPort);
+    }
+
+    private static List<String> recommendedLists(boolean githubEnabled, boolean includeInProgress) {
+        List<String> lists = githubEnabled ? RECOMMENDED_LISTS : RECOMMENDED_NON_GITHUB_LISTS;
+        return includeInProgress ? lists : withoutRecommendedInProgress(lists);
+    }
+
+    private static List<String> recommendedActiveStates(boolean githubEnabled, boolean includeInProgress) {
+        List<String> activeStates = githubEnabled ? RECOMMENDED_ACTIVE_STATES : RECOMMENDED_NON_GITHUB_ACTIVE_STATES;
+        return includeInProgress ? activeStates : withoutRecommendedInProgress(activeStates);
+    }
+
+    private static List<String> withoutRecommendedInProgress(List<String> values) {
+        List<String> filtered = new ArrayList<>(values);
+        filtered.removeIf(RECOMMENDED_IN_PROGRESS_STATE::equals);
+        return List.copyOf(filtered);
     }
 
     private Map<String, Object> createBoard(NewBoardRequest request, String workspaceId) {
@@ -1780,7 +1796,10 @@ public final class TrelloBoardSetup {
         String pickupText = blank(inProgressState)
                 ? "work from the current active list because no in-progress list is configured"
                 : "move the card to " + quote(inProgressState) + " before active implementation";
-        String inProgressText = blank(inProgressState) ? "No in-progress list" : quote(inProgressState);
+        String inProgressRoute = blank(inProgressState)
+                ? ""
+                : "- " + quote(inProgressState)
+                        + ": work currently running in Codex; continue the existing execution flow.\n";
         String blockedText = blank(blockedState) ? "no configured blocked list" : quote(blockedState);
         String reviewText = blank(reviewState) ? "no configured human review list" : quote(reviewState);
         String mergingText = blank(mergingState) ? "No landing approval list" : quote(mergingState);
@@ -1794,7 +1813,7 @@ public final class TrelloBoardSetup {
                 Symphony only dispatches cards from configured active lists: %s.
 
                 - %s: queued work; %s.
-                - %s: work currently running in Codex; continue the existing execution flow.
+                %s
                 - %s: blocked work. Symphony does not dispatch it while this list is not configured as active.
                 - %s: human review. Do not code from this list unless a human moves the card back to an active list.
                 - %s: %s.
@@ -1805,7 +1824,7 @@ public final class TrelloBoardSetup {
                         activeText,
                         queueText,
                         pickupText,
-                        inProgressText,
+                        inProgressRoute,
                         blockedText,
                         reviewText,
                         mergingText,
@@ -2379,6 +2398,7 @@ public final class TrelloBoardSetup {
             boolean useBoardNameWorkflowFallback,
             GitHubIntegration githubIntegration,
             Path envPath,
+            boolean detectInProgressState,
             boolean preserveConfiguredMaxConcurrentAgents) {
         public NewBoardRequest(
                 URI endpoint,
@@ -2406,6 +2426,38 @@ public final class TrelloBoardSetup {
                     useBoardNameWorkflowFallback,
                     githubIntegration,
                     envPath,
+                    true,
+                    false);
+        }
+
+        public NewBoardRequest(
+                URI endpoint,
+                TrelloCredentials credentials,
+                String boardName,
+                String workspaceId,
+                Path workflowPath,
+                Path workspaceRoot,
+                Integer serverPort,
+                int maxConcurrentAgents,
+                boolean force,
+                boolean useBoardNameWorkflowFallback,
+                GitHubIntegration githubIntegration,
+                Path envPath,
+                boolean detectInProgressState) {
+            this(
+                    endpoint,
+                    credentials,
+                    boardName,
+                    workspaceId,
+                    workflowPath,
+                    workspaceRoot,
+                    serverPort,
+                    maxConcurrentAgents,
+                    force,
+                    useBoardNameWorkflowFallback,
+                    githubIntegration,
+                    envPath,
+                    detectInProgressState,
                     false);
         }
 

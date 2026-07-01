@@ -214,6 +214,8 @@ lists, `./workspaces` as the local workspace directory, a stable HTTP status por
 `max_concurrent_agents: 1`. With that default, Symphony starts one card at a time from this board.
 With `--no-github`, `Merging` is not created, the active lists are `Ready for Codex` and
 `In Progress`, and the workflow does not require PR publication or landing.
+During guided `setup-local`, `--no-in-progress` can create a local board without `In Progress`; in
+that case picked-up cards stay in the active list until they move to review or blocked.
 
 The first run writes `WORKFLOW.md`. If that file already exists and you did not pass `--workflow`,
 Symphony keeps the existing file and writes a board-specific file instead. For a board named
@@ -343,8 +345,9 @@ Common setup command options:
   card immediately after it is picked up. If you omit it, import uses `In Progress` when the board has
   that list. If no in-progress list is configured, the card stays in the active list while
   Codex works.
-- `--no-in-progress`: during `import-board`, do not configure pickup moves even when the board has an
-  `In Progress` list.
+- `--no-in-progress`: during guided `setup-local` or `import-board`, do not configure pickup moves
+  even when the board has an `In Progress` list. For a new guided local board, the `In Progress` list
+  is not created.
 - `--blocked NAME`: during `import-board`, choose the Trello list where Codex should move cards it
   cannot safely finish. If you omit it, import uses a list named `Blocked` when the board has one.
 

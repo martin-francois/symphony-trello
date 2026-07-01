@@ -955,6 +955,9 @@ The recommended board created by `new-board` uses these lists, in order:
 The generated workflow treats `Ready for Codex`, `In Progress`, and `Merging` as active lists,
 `Done` as terminal, `In Progress` as the visible pickup list, `Blocked` as the blocked handoff list,
 `Human Review` as the review handoff list, and `Merging` as the human approval list for landing.
+When guided `setup-local` creates a local board with `--no-in-progress`, it MUST omit the `In
+Progress` list, omit `tracker.in_progress_state`, and leave picked-up cards in the active list until
+the agent moves them to review or blocked. Direct `new-board` keeps the recommended list set above.
 When the generated workflow receives repository work, it tells Codex to select repository source
 context in this order: an explicit Trello card repository URL or local checkout path, workflow
 `repository.default_url`, workflow `repository.default_path`, and finally no selected repository.
