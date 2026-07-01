@@ -1173,7 +1173,7 @@ public final class TrelloBoardSetup {
 
                 Trello card references found on this card:
                 {% for reference in card.trello_references %}
-                - source={{ reference.source }} status={{ reference.status }} terminal={{ reference.terminal }} identifier={{ reference.identifier }} state={{ reference.state }} title={{ reference.title }} url={{ reference.url }} text={{ reference.text }}
+                - source={{ reference.source }} status={{ reference.status }} terminal={{ reference.terminal }} identifier={{ reference.identifier }} state={{ reference.state }} title={{ reference.title }} url={{ reference.url }} text={{ reference.text }}{{ "\n" }}
                 {% endfor %}
 
                 Before editing, review this context for credible missed prerequisites. If the description, a Trello

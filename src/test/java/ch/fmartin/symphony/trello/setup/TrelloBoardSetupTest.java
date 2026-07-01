@@ -13,9 +13,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
+import ch.fmartin.symphony.trello.TestCards;
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
+import ch.fmartin.symphony.trello.domain.Card;
+import ch.fmartin.symphony.trello.prompt.PromptRenderer;
 import ch.fmartin.symphony.trello.testsupport.FakeTrelloServer;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -2635,6 +2638,58 @@ final class TrelloBoardSetupTest {
         assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo("keep me");
         assertThat(firstGeneratedWorkflow).content(StandardCharsets.UTF_8).isEqualTo("keep me too");
         assertThat(generatedWorkflow).content(StandardCharsets.UTF_8).contains("board_id: \"abc123\"");
+    }
+
+    @Test
+    void generatedPromptRendersTrelloReferencesAsSeparateBullets() {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.references.md");
+        setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "Reference Prompt Board",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                1,
+                false,
+                false));
+        Card card = TestCards.card("card-1", "TRELLO-123", "Ready for Codex")
+                .withRelationships(
+                        List.of(),
+                        List.of(
+                                new Card.TrelloReference(
+                                        "description",
+                                        "See https://trello.com/c/DESC123",
+                                        "DESC123",
+                                        "TRELLO-desc",
+                                        "Description reference",
+                                        "Done",
+                                        "https://trello.com/c/DESC123",
+                                        "found",
+                                        true),
+                                new Card.TrelloReference(
+                                        "comment",
+                                        "See https://trello.com/c/COMM123",
+                                        "COMM123",
+                                        "TRELLO-comment",
+                                        "Comment reference",
+                                        "Ready for Codex",
+                                        "https://trello.com/c/COMM123",
+                                        "found",
+                                        false)),
+                        List.of(),
+                        List.of());
+
+        // when
+        String prompt =
+                new PromptRenderer().render(new WorkflowLoader().load(workflow).promptTemplate(), card, null);
+
+        // then
+        assertThat(prompt.lines().filter(line -> line.startsWith("- source=")).toList())
+                .containsExactly(
+                        "- source=description status=found terminal=true identifier=TRELLO-desc state=Done title=Description reference url=https://trello.com/c/DESC123 text=See https://trello.com/c/DESC123",
+                        "- source=comment status=found terminal=false identifier=TRELLO-comment state=Ready for Codex title=Comment reference url=https://trello.com/c/COMM123 text=See https://trello.com/c/COMM123");
     }
 
     @Test
