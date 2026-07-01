@@ -90,6 +90,7 @@
   "packageRules": [
     {
       "matchPackageNames": ["tessl-labs/good-oss-citizen"],
+      "minimumReleaseAge": "7 days",
       "automerge": false,
       "dependencyDashboardApproval": true,
       "addLabels": ["tessl"],
