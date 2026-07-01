@@ -762,8 +762,7 @@ final class TrelloBoardSetupTest {
                 .contains("## Non-GitHub Review Feedback")
                 .contains("reread the full card description and new Trello comments")
                 .contains("This workflow has no GitHub landing flow configured")
-                .contains("turn_sandbox_policy:", "type: workspaceWrite")
-                .doesNotContain("networkAccess: true")
+                .contains("turn_sandbox_policy:", "type: workspaceWrite", "networkAccess: true")
                 .doesNotContain("Merging")
                 .doesNotContain("## Pull Request Publication")
                 .doesNotContain("linked PR comments")
@@ -771,7 +770,8 @@ final class TrelloBoardSetupTest {
                 .doesNotContain("## Landing From \"Merging\"");
         EffectiveConfig config = resolve(workflow);
         assertThat(config.tracker().activeStates()).containsExactly("Ready for Codex", "In Progress");
-        assertThat(config.codex().turnSandboxPolicy()).isEqualTo(Map.of("type", "workspaceWrite"));
+        assertThat(config.codex().turnSandboxPolicy())
+                .isEqualTo(Map.of("type", "workspaceWrite", "networkAccess", true));
         assertThat(config.trelloTools().allowedMoveListNames())
                 .containsExactly("in progress", "human review", "blocked", "done");
     }

@@ -511,10 +511,10 @@ product migration code, historical generated-template detection, or automatic up
 pre-release workflow files; the private deployment is updated manually when the current contract
 changes.
 
-Generated workflows explicitly configure Codex with `workspaceWrite`. Generated GitHub workflows
-also set `networkAccess: true`. Generated non-GitHub workflows do not add network access by
-default. Hand-authored workflows keep their configured Codex sandbox policy and are validated
-through the current schema.
+Generated workflows explicitly configure Codex with `workspaceWrite` and `networkAccess: true` so
+selected repository URLs can be cloned while keeping filesystem writes limited to the workspace and
+configured roots. Hand-authored workflows keep their configured Codex sandbox policy and are
+validated through the current schema.
 
 #### 5.3.1 `tracker` (object)
 
