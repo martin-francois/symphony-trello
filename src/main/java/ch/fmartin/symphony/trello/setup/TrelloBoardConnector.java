@@ -37,22 +37,43 @@ final class TrelloBoardConnector {
     }
 
     LocalSetup.SetupResult createOrConnectBoard(
+            BoardSetupChoice choice,
             LocalSetup.Options options,
             TrelloCredentials credentials,
             GitHubIntegration githubIntegration,
             ConnectedBoardManifest manifest,
             Terminal terminal)
             throws IOException {
-        BoardSetupChoice choice = boardSetupChoice(options, terminal);
         if (choice == BoardSetupChoice.EXISTING) {
             return importExistingBoard(options, credentials, githubIntegration, manifest, terminal);
         }
         return createRecommendedBoard(options, credentials, githubIntegration, manifest, terminal);
     }
 
+    BoardSetupChoice chooseBoardSetup(LocalSetup.Options options, Terminal terminal) throws IOException {
+        BoardSetupChoice choice = boardSetupChoice(options, terminal);
+        rejectNewBoardInProgress(options, choice);
+        return choice;
+    }
+
     void preflightRequestedServerPort(LocalSetup.Options options, ConnectedBoardManifest manifest) {
         options.serverPort().ifPresent(ignored -> preflightWorkflowPath(options)
                 .ifPresent(workflowPath -> localSetupServerPort(options, manifest, workflowPath)));
+    }
+
+    void rejectDryRunNewBoardInProgress(LocalSetup.Options options) {
+        BoardSetupChoice dryRunChoice = options.existingBoardId()
+                .map(ignored -> BoardSetupChoice.EXISTING)
+                .orElse(BoardSetupChoice.NEW);
+        rejectNewBoardInProgress(options, dryRunChoice);
+    }
+
+    private static void rejectNewBoardInProgress(LocalSetup.Options options, BoardSetupChoice choice) {
+        if (choice == BoardSetupChoice.NEW && !blank(options.inProgressState())) {
+            throw new TrelloBoardSetupException(
+                    "setup_invalid_arguments",
+                    "--in-progress is only supported when connecting an existing Trello board.");
+        }
     }
 
     private static Optional<Path> preflightWorkflowPath(LocalSetup.Options options) {
@@ -160,6 +181,7 @@ final class TrelloBoardConnector {
                         !options.workflowPathExplicit(),
                         githubIntegration,
                         options.envPath(),
+                        options.detectInProgressState(),
                         maxAgents.preservedFromWorkflow())));
     }
 
@@ -594,7 +616,7 @@ final class TrelloBoardConnector {
             String blockedState,
             boolean createMissingGithubLists) {}
 
-    private enum BoardSetupChoice {
+    enum BoardSetupChoice {
         NEW,
         EXISTING
     }

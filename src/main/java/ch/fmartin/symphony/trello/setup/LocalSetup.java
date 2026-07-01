@@ -144,6 +144,7 @@ public final class LocalSetup {
             }
             if (options.dryRun()) {
                 rejectInvalidUnconnectedBoardSelector(connectedBoardsUnchecked(options), options);
+                boardConnector.rejectDryRunNewBoardInProgress(options);
                 preflightLocalWorkflowWrite(options);
                 printDryRun(out, options, prerequisites);
                 return 0;
@@ -176,6 +177,7 @@ public final class LocalSetup {
                     }
                 }
             }
+            TrelloBoardConnector.BoardSetupChoice boardSetupChoice = boardConnector.chooseBoardSetup(options, terminal);
             boardConnector.preflightRequestedServerPort(options, manifest);
             codexAuthFlow.ensureAuthenticated(prerequisites, options, terminal);
 
@@ -199,8 +201,8 @@ public final class LocalSetup {
             }
 
             GitHubIntegration githubIntegration = resolveGitHubIntegration(options, prerequisites, terminal);
-            SetupResult result =
-                    boardConnector.createOrConnectBoard(options, credentials, githubIntegration, manifest, terminal);
+            SetupResult result = boardConnector.createOrConnectBoard(
+                    boardSetupChoice, options, credentials, githubIntegration, manifest, terminal);
             options = configureCodexAccess(options, terminal);
             applyCodexAccess(options, result.workflowPath());
             ConnectedBoard connectedBoard = ConnectedBoard.from(result, options, githubIntegration);
