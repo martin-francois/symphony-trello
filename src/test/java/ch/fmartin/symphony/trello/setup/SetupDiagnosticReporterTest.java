@@ -1917,6 +1917,82 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
+    void privateContextLookupResolvesPathTokensEmittedFromSystemAndInstallerContext() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("lookup-installer-context-config");
+        Path workspaceRoot = tempDir.resolve("lookup-installer-context-workspaces");
+        Path stateHome = tempDir.resolve("lookup-installer-context-state");
+        Path shell = tempDir.resolve("tools").resolve("bash");
+        Path wrapperShell = tempDir.resolve("wrapper").resolve("bash");
+        Path binDir = tempDir.resolve("installed").resolve("bin");
+        Path codexNpmPrefix = tempDir.resolve("installed").resolve("codex-npm");
+        Path installedWorkspaceRoot = tempDir.resolve("installed").resolve("workspaces");
+        Files.createDirectories(configDir);
+        Files.createDirectories(stateHome);
+        Files.writeString(
+                stateHome.resolve("install-context.properties"),
+                """
+                bin_dir=%s
+                codex_npm_prefix=%s
+                workspace_root=%s
+                """
+                        .formatted(binDir, codexNpmPrefix, installedWorkspaceRoot),
+                StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(
+                Map.of("SHELL", shell.toString(), "SYMPHONY_TRELLO_WRAPPER_SHELL", wrapperShell.toString()),
+                new FakeCommandRunner());
+
+        // when
+        String report = renderDefaultDiagnostics(reporter, configDir, workspaceRoot, stateHome);
+        byte[] diagnosticsKey = diagnosticsKey(configDir);
+        Map<String, Path> emittedTokens = Map.of(
+                pathToken(diagnosticsKey, shell), shell,
+                pathToken(diagnosticsKey, wrapperShell), wrapperShell,
+                pathToken(diagnosticsKey, binDir), binDir,
+                pathToken(diagnosticsKey, codexNpmPrefix), codexNpmPrefix,
+                pathToken(diagnosticsKey, installedWorkspaceRoot), installedWorkspaceRoot);
+
+        // then
+        assertThat(report)
+                .contains(
+                        "- **shell:** " + pathToken(diagnosticsKey, shell),
+                        "- **wrapper_shell:** " + pathToken(diagnosticsKey, wrapperShell),
+                        "bin_dir=" + pathToken(diagnosticsKey, binDir),
+                        "codex_npm_prefix=" + pathToken(diagnosticsKey, codexNpmPrefix),
+                        "workspace_root=" + pathToken(diagnosticsKey, installedWorkspaceRoot))
+                .doesNotContain(
+                        shell.toString(),
+                        wrapperShell.toString(),
+                        binDir.toString(),
+                        codexNpmPrefix.toString(),
+                        installedWorkspaceRoot.toString());
+        for (Map.Entry<String, Path> emittedToken : emittedTokens.entrySet()) {
+            String lookup = reporter.renderReport(
+                    new SetupDiagnosticReporter.DiagnosticsRequest(
+                            Optional.empty(),
+                            Optional.empty(),
+                            false,
+                            false,
+                            Optional.empty(),
+                            Optional.of(configDir),
+                            Optional.of(workspaceRoot),
+                            Optional.of(stateHome),
+                            Optional.empty(),
+                            Optional.empty(),
+                            Optional.of(emittedToken.getKey())),
+                    true);
+
+            assertThat(lookup)
+                    .contains(
+                            "## Lookup",
+                            "- **lookup_token:** " + emittedToken.getKey(),
+                            "- **lookup_status:** found",
+                            "| " + emittedToken.getKey() + " | " + emittedToken.getValue() + " |")
+                    .doesNotContain("lookup_status:** not_found");
+        }
+    }
+
+    @Test
     void privateContextLookupResolvesManagedPidToken() throws Exception {
         // given
         Path configDir = tempDir.resolve("lookup-pid-config");

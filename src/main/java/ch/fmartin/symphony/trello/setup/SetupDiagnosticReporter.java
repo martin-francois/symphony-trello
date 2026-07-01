@@ -8,6 +8,7 @@ import ch.fmartin.symphony.trello.time.ApplicationClock;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Ascii;
 import com.google.common.base.CharMatcher;
+import com.google.common.base.Splitter;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
@@ -103,6 +104,7 @@ final class SetupDiagnosticReporter {
     private static final Pattern WINDOWS_PATH = Pattern.compile("(?i)\\b[A-Z]:\\\\[^\\r\\n:'\"<>|]+");
     private static final Pattern PRIVATE_CONTEXT_LOOKUP_TOKEN = Pattern.compile("(?:[0-9a-f]{12}|<path:[0-9a-f]{12}>)");
     private static final Pattern TRELLO_OBJECT_ID = Pattern.compile("\\b[0-9a-f]{24}\\b", Pattern.CASE_INSENSITIVE);
+    private static final Splitter LINE_BREAK_SPLITTER = Splitter.onPattern("\\R");
     private static final CharMatcher POSIX_PATH_START = CharMatcher.is('/');
     private static final CharMatcher URL_AUTHORITY_TERMINATOR =
             CharMatcher.whitespace().or(CharMatcher.anyOf("/?#")).precomputed();
@@ -688,7 +690,9 @@ final class SetupDiagnosticReporter {
 
     private List<PrivateContextMapping> privateContextMappings(DiagnosticsContext context) {
         List<PrivateContextMapping> mappings = new ArrayList<>();
+        addSystemMappings(mappings);
         addLocalPathMappings(mappings, context.paths(), context.manifestPath());
+        addInstallerContextMappings(mappings, context.paths());
         addManifestMappings(
                 mappings,
                 context.selectedManifest(),
@@ -700,6 +704,13 @@ final class SetupDiagnosticReporter {
         addProcessStateMappings(
                 mappings, context.paths().stateHome(), context.selectedWorkflowPaths(), context.selected());
         return mappings;
+    }
+
+    private void addSystemMappings(List<PrivateContextMapping> mappings) {
+        Optional.ofNullable(environment.getOrDefault("SHELL", environment.get("ComSpec")))
+                .filter(value -> !value.isBlank())
+                .filter(SetupDiagnosticReporter::looksLikeAbsolutePath)
+                .ifPresent(value -> addMapping(mappings, "system", "shell", pathToken(value), value));
     }
 
     private void addLocalPathMappings(List<PrivateContextMapping> mappings, LocalWorkerPaths paths, Path manifestPath) {
@@ -732,6 +743,36 @@ final class SetupDiagnosticReporter {
         Optional.ofNullable(environment.get("SYMPHONY_TRELLO_COMMAND"))
                 .filter(value -> !value.isBlank())
                 .ifPresent(value -> addMapping(mappings, "local_path", "command", pathToken(value), value));
+    }
+
+    private void addInstallerContextMappings(List<PrivateContextMapping> mappings, LocalWorkerPaths paths) {
+        Optional.ofNullable(environment.get("SYMPHONY_TRELLO_WRAPPER_SHELL"))
+                .filter(value -> !value.isBlank())
+                .filter(SetupDiagnosticReporter::looksLikeAbsolutePath)
+                .ifPresent(
+                        value -> addMapping(mappings, "installer_context", "wrapper_shell", pathToken(value), value));
+
+        readInstallContextContent(paths.stateHome().resolve("install-context.properties"))
+                .ifPresent(content -> addInstallerContextMappings(mappings, content));
+    }
+
+    private void addInstallerContextMappings(List<PrivateContextMapping> mappings, String content) {
+        for (String line : LINE_BREAK_SPLITTER.split(content)) {
+            installerContextEntry(line)
+                    .filter(entry -> looksLikeAbsolutePath(entry.value()))
+                    .ifPresent(entry -> addMapping(
+                            mappings, "installer_context", entry.key(), pathToken(entry.value()), entry.value()));
+        }
+    }
+
+    private static Optional<InstallerContextEntry> installerContextEntry(String line) {
+        int separator = line.indexOf('=');
+        if (separator < 0) {
+            return Optional.empty();
+        }
+        String key = line.substring(0, separator).strip();
+        String value = line.substring(separator + 1).strip();
+        return key.isBlank() || value.isBlank() ? Optional.empty() : Optional.of(new InstallerContextEntry(key, value));
     }
 
     private void addManifestMappings(
@@ -3062,6 +3103,8 @@ final class SetupDiagnosticReporter {
     private record SecretFileMapping(Path workflow, String credential, Path path) {}
 
     private record PrivateContextMapping(String category, String name, String token, String value) {}
+
+    private record InstallerContextEntry(String key, String value) {}
 
     record DiagnosticsRequest(
             Optional<String> board,
