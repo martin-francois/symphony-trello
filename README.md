@@ -718,8 +718,10 @@ before implementation. After cloning from a local checkout, do not inherit the s
 current branch as the task base. Start new task work from the repository's default branch when it is
 discoverable unless the Trello card clearly requests another base. Do not edit the shared checkout
 directly unless the Trello card explicitly requests direct work, the checkout is writable, and
-deployment filesystem policy permits it. Phase 1 adds no Java enforcement, locking, ownership
-metadata, transaction state, or recovery guarantees for direct checkout.
+deployment filesystem policy permits it, including Git metadata writes when the task needs direct
+commits. `--add-path <checkout>` grants extra filesystem access, but it is not a direct-checkout
+commit guarantee. If Git metadata is not writable, clone into the workspace, leave a patch, or block
+with path-safe guidance.
 
 If no source is selected or the selected source is missing, unreadable, unclonable, or lacks required
 repository/auth context, move the Trello card to the configured blocker or review fallback with
@@ -956,8 +958,10 @@ before implementation. After cloning from a local checkout, do not inherit the s
 current branch as the task base. Start new task work from the repository's default branch when it is
 discoverable unless the Trello card clearly requests another base. Do not edit the shared checkout
 directly unless the Trello card explicitly requests direct work, the checkout is writable, and
-deployment filesystem policy permits it. Phase 1 adds no Java enforcement, locking, ownership
-metadata, transaction state, or recovery guarantees for direct checkout.
+deployment filesystem policy permits it, including Git metadata writes when the task needs direct
+commits. `--add-path <checkout>` grants extra filesystem access, but it is not a direct-checkout
+commit guarantee. If Git metadata is not writable, clone into the workspace, leave a patch, or block
+with path-safe guidance.
 
 If no source is selected or the selected source is missing, unreadable, unclonable, or lacks required
 repository/auth context, move the Trello card to the configured blocker or review fallback with
@@ -1194,6 +1198,12 @@ adds those paths to a Codex `workspaceWrite` sandbox policy unless the workflow 
 `dangerFullAccess`. Generated workflows use `workspaceWrite` so Codex can write inside each card's
 workspace, and they set `networkAccess: true` so selected repository URLs can be cloned while
 keeping the filesystem sandbox enabled.
+
+`--add-path <checkout>` gives Codex filesystem access to that checkout as an additional writable
+root. It may be enough for source-file edits, but it does not by itself guarantee that direct work in
+a Git checkout can create commits. Direct commits also need writable Git metadata for that checkout.
+If you need direct checkout commits, use a deployment policy that grants both the checkout files and
+Git metadata, or let Codex clone into the per-card workspace and commit there.
 
 Example:
 

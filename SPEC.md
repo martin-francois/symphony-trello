@@ -736,6 +736,9 @@ expose them.
     merged into its writable roots. When `dangerFullAccess` is configured or forced, the roots are
     ignored. Any other configured policy type fails configuration with a sandbox policy conflict
     error.
+  - Additional writable roots can grant source-file access to a selected local checkout, but they do
+    not by themselves guarantee direct Git commits. Direct checkout commits require deployment
+    filesystem policy that also permits Git metadata writes for that checkout.
   - The Java implementation also supports the `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS`
     environment value for deployment-managed allowed host paths.
 - `turn_timeout_ms` (integer)
@@ -982,11 +985,13 @@ Codex not to inherit the source checkout's current branch as the task base after
 local checkout. New task work starts from the repository's default branch when it is discoverable
 unless the Trello card clearly requests another base. It tells Codex not to edit the shared checkout
 directly unless the Trello card explicitly requests direct work, the checkout is writable, and
-deployment filesystem policy permits it. Phase 1 adds no Java enforcement, locking, ownership
-metadata, transaction state, or recovery guarantees for direct checkout. If no source is selected or
-the selected source is missing, unreadable, unclonable, or lacks required repository/auth context,
-the generated workflow tells Codex to use the configured blocker or review fallback with path-safe
-guidance, or to record a path-safe blocker when no move destination is configured.
+deployment filesystem policy permits it, including Git metadata writes when direct commits are
+required. `--add-path <checkout>` is not a direct-checkout commit guarantee. If Git metadata is not
+writable, the generated workflow tells Codex to clone into the workspace, leave a patch, or block
+with path-safe guidance. If no source is selected or the selected source is missing, unreadable,
+unclonable, or lacks required repository/auth context, the generated workflow
+tells Codex to use the configured blocker or review fallback with path-safe guidance, or to record a
+path-safe blocker when no move destination is configured.
 The generated workflow treats unavailable push credentials as blocking only when a card, repository
 policy, or human requires a push or pull request. For repository-changing work in the recommended
 workflow, `Human Review` means a pull request is available for review unless the card explicitly asks
@@ -3667,11 +3672,11 @@ implementation. After cloning from a local checkout, the agent should not inheri
 checkout's current branch as the task base. New task work should start from the repository's default
 branch when it is discoverable unless the Trello card clearly requests another base. The agent should
 not edit the shared checkout directly unless the Trello card explicitly requests direct work, the
-checkout is writable, and deployment filesystem policy permits it. Phase 1 does not add Java
-enforcement, locking, ownership metadata, transaction state, or recovery guarantees for direct
-checkout. This preserves the security default while still allowing cards to use existing host
-repositories as source context when an operator has allowed access, and it keeps the workspace root
-available for runtime-managed metadata such as Codex skills.
+checkout is writable, and deployment filesystem policy permits it, including Git metadata writes
+when direct commits are required. `--add-path <checkout>` is not a direct-checkout commit guarantee.
+This preserves the security default while still allowing cards to use existing host repositories as
+source context when an operator has allowed access, and it keeps the workspace root available for
+runtime-managed metadata such as Codex skills.
 
 ### 19.4 Opt-In Java Live E2E Harness
 

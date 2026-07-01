@@ -68,8 +68,10 @@ from a local checkout, Codex should not inherit the source checkout's current br
 base; new task work should start from the repository's default branch when it is discoverable unless
 the Trello card clearly requests another base. The existing generated workflow exception remains:
 Codex may work directly in the selected checkout only when the Trello card explicitly requests
-direct work, the checkout is writable, and deployment filesystem policy permits it. Cross-owner Git
-trust, direct-checkout ownership metadata, locking, transaction state, recovery, and managed
+direct work, the checkout is writable, and deployment filesystem policy permits it, including Git
+metadata writes when the task needs direct commits. `--add-path <checkout>` grants extra filesystem
+access but is not a direct-checkout commit guarantee. Cross-owner Git trust, direct-checkout
+ownership metadata, locking, transaction state, recovery, and managed
 checkout enforcement are future issue #33 phases, not part of this ADR's filesystem access decision.
 
 The generated workflow does not treat missing push credentials as a blocker when a Trello card only

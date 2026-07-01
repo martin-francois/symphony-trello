@@ -167,8 +167,10 @@ before implementation. After cloning from a local checkout, do not inherit the s
 current branch as the task base. Start new task work from the repository's default branch when it is
 discoverable unless the Trello card clearly requests another base. Do not edit the shared checkout
 directly unless the Trello card explicitly requests direct work, the checkout is writable, and
-deployment filesystem policy permits it. Phase 1 adds no Java enforcement, locking, ownership
-metadata, transaction state, or recovery guarantees for direct checkout.
+deployment filesystem policy permits it, including Git metadata writes when the task needs direct
+commits. `--add-path <checkout>` grants extra filesystem access, but it is not a direct-checkout
+commit guarantee. If Git metadata is not writable, clone into the workspace, leave a patch, or block
+with path-safe guidance.
 
 If no source is selected or the selected source is missing, unreadable, unclonable, or lacks required
 repository/auth context, move the Trello card to `Blocked` with path-safe guidance instead of
