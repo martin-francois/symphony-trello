@@ -35,12 +35,14 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 final class TrelloClientTest {
     private static final String TRELLO_CARD_URL_PREFIX = "https://trello.com/c/";
 
     private FakeTrelloServer trello;
     private final AtomicReference<String> authorization = new AtomicReference<>();
+    private final AtomicReference<String> attachmentResponse = new AtomicReference<>("[{\"id\":\"write-attachment\"}]");
     private final List<String> readRequests = new ArrayList<>();
     private final List<String> writeRequests = new ArrayList<>();
 
@@ -189,6 +191,23 @@ final class TrelloClientTest {
         trello.on("/1/cards/write-card/idList", exchange -> {
             writeRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
             respond(exchange, "{\"id\":\"write-card\"}");
+        });
+        trello.on("/1/cards/write-card/checklists", exchange -> {
+            if ("GET".equals(exchange.getRequestMethod())) {
+                readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
+                respond(exchange, "[]");
+                return;
+            }
+            writeRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
+            respond(exchange, "{\"id\":\"write-checklist\"}");
+        });
+        trello.on("/1/checklists/write-checklist/checkItems", exchange -> {
+            writeRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
+            respond(exchange, "{\"id\":\"write-check-item\"}");
+        });
+        trello.on("/1/cards/write-card/attachments", exchange -> {
+            writeRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
+            respond(exchange, attachmentResponse.get());
         });
         trello.on("/1/actions/comment-1/text", exchange -> {
             writeRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
@@ -539,17 +558,98 @@ final class TrelloClientTest {
         client.addComment(config, "write-card", "Ready for review");
         client.updateComment(config, "comment-1", "Updated workpad");
         client.moveCardToList(config, "write-card", "review-list");
+        client.upsertChecklistItem(config, "write-card", "Release tasks", "Publish release", true);
+        TrelloClient.UrlAttachmentWrite attachment = client.addUrlAttachment(
+                config, "write-card", "https://github.com/example/project/pull/12", "Pull request");
         Throwable thrown = catchThrowable(() -> client.addComment(config, "rate-limited-card", "Retry me"));
 
         // then
+        assertThat(attachment.attachmentId()).isEqualTo("write-attachment");
         assertThat(writeRequests)
                 .containsExactly(
                         "POST /1/cards/write-card/actions/comments?text=Ready+for+review",
                         "PUT /1/actions/comment-1/text?value=Updated+workpad",
                         "PUT /1/cards/write-card/idList?value=review-list",
+                        "POST /1/cards/write-card/checklists?name=Release+tasks",
+                        "POST /1/checklists/write-checklist/checkItems?name=Publish+release&checked=true",
+                        "POST /1/cards/write-card/attachments?url=https%3A%2F%2Fgithub.com%2Fexample%2Fproject%2Fpull%2F12&name=Pull+request",
                         "POST /1/cards/rate-limited-card/actions/comments?text=Retry+me");
         assertThat(thrown).isInstanceOfSatisfying(TrelloException.class, exception -> assertThat(exception.code())
                 .isEqualTo("trello_api_rate_limited"));
+    }
+
+    @Test
+    void upsertChecklistItemRejectsDuplicateChecklistsWithoutMutation() {
+        // given
+        configureWriteCardChecklists(
+                """
+                [
+                  {"id":"checklist-1","name":"Release tasks","checkItems":[]},
+                  {"id":"checklist-2","name":"Release tasks","checkItems":[]}
+                ]
+                """);
+        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var config = config("input", Map.of());
+
+        // when
+        Throwable thrown = catchThrowable(
+                () -> client.upsertChecklistItem(config, "write-card", "Release tasks", "Publish release", true));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloException.class, exception -> assertThat(exception.code())
+                .isEqualTo("trello_checklist_ambiguous"));
+        assertWriteCardChecklistsRead();
+        assertThat(writeRequests).isEmpty();
+    }
+
+    @Test
+    void upsertChecklistItemRejectsDuplicateCheckItemsWithoutMutation() {
+        // given
+        configureWriteCardChecklists(
+                """
+                [
+                  {
+                    "id":"checklist-1",
+                    "name":"Release tasks",
+                    "checkItems":[
+                      {"id":"item-1","name":"Publish release","state":"incomplete"},
+                      {"id":"item-2","name":"Publish release","state":"incomplete"}
+                    ]
+                  }
+                ]
+                """);
+        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var config = config("input", Map.of());
+
+        // when
+        Throwable thrown = catchThrowable(
+                () -> client.upsertChecklistItem(config, "write-card", "Release tasks", "Publish release", true));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloException.class, exception -> assertThat(exception.code())
+                .isEqualTo("trello_check_item_ambiguous"));
+        assertWriteCardChecklistsRead();
+        assertThat(writeRequests).isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "[]", "[{}]", "{}", "\"not-an-attachment\""})
+    void urlAttachmentWriteRejectsInvalidSuccessfulAttachmentPayloads(String responseBody) {
+        // given
+        attachmentResponse.set(responseBody);
+        TrelloClient client = new TrelloClient(new ObjectMapper());
+        var config = config("input", Map.of());
+
+        // when
+        Throwable thrown = catchThrowable(() ->
+                client.addUrlAttachment(config, "write-card", "https://github.com/example/project/pull/12", null));
+
+        // then
+        assertThat(thrown).isInstanceOfSatisfying(TrelloException.class, exception -> assertThat(exception.code())
+                .isEqualTo("trello_unknown_payload"));
+        assertThat(writeRequests)
+                .containsExactly(
+                        "POST /1/cards/write-card/attachments?url=https%3A%2F%2Fgithub.com%2Fexample%2Fproject%2Fpull%2F12");
     }
 
     @Test
@@ -1460,6 +1560,22 @@ final class TrelloClientTest {
                     """
                             .formatted(cardUrl("WAITING1"), cardUrl("WAITING1"), textJson));
         });
+    }
+
+    private void configureWriteCardChecklists(String response) {
+        trello.remove("/1/cards/write-card/checklists");
+        trello.on("/1/cards/write-card/checklists", exchange -> {
+            readRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
+            assertThat(exchange.getRequestMethod()).isEqualTo("GET");
+            respond(exchange, response);
+        });
+    }
+
+    private void assertWriteCardChecklistsRead() {
+        assertThat(readRequests).singleElement().satisfies(request -> assertThat(request)
+                .startsWith("GET /1/cards/write-card/checklists?")
+                .contains("fields=id%2Cname")
+                .contains("checkItem_fields=id%2Cname%2Cstate"));
     }
 
     private static void assertWaitingBlockedWithoutProblems(List<Card> cards) {

@@ -3373,7 +3373,8 @@ These checks are REQUIRED when the workflow expects the agent to perform Trello 
 - Agent-requested checklist writes are allowed only when `trello_tools.allow_checklists` permits
   them. The Java implementation's service-owned prerequisite checklist sync is a separate tracker
   extension, not a generic agent checklist tool.
-- URL attachment writes are allowed only when `trello_tools.allow_url_attachments` permits them.
+- URL attachment writes are allowed only when `trello_tools.allow_url_attachments` permits them, and
+  the attached URL is an HTTP(S) URL without credentials, query string, or fragment.
 - Destructive operations are disabled unless explicitly configured.
 - Startup validates write capability or emits an operator-visible warning when verification is not
   possible without side effects.
@@ -3451,7 +3452,8 @@ Required when the workflow expects the agent to perform Trello handoff transitio
 - Ability to add or update checklist items on the current card when the workflow asks for checklist
   writes and `trello_tools.allow_checklists` permits it.
 - Ability to add policy-enabled URL attachments, such as GitHub PR links, when the workflow asks for
-  URL attachment writes and `trello_tools.allow_url_attachments` permits it.
+  URL attachment writes, the URL has no credentials, query string, or fragment, and
+  `trello_tools.allow_url_attachments` permits it.
 - Write operations are scoped to the configured board and current card unless explicitly allowlisted.
 - If generic `trello_rest` is implemented, writes are classified and unclassified writes fail with
   structured policy errors.
@@ -3480,9 +3482,6 @@ Required when the workflow expects the agent to perform Trello handoff transitio
 - TODO: Persist retry queue and session metadata across process restarts.
 - TODO: Make observability settings configurable in workflow front matter without prescribing UI
   implementation details.
-- TODO: Consider additional typed Trello write tools, such as checklist and URL attachment helpers,
-  while keeping workflow-specific mutation decisions in either the agent toolchain or explicit
-  workflow configuration rather than implicit orchestrator policy.
 - TODO: Add pluggable tracker adapters beyond Trello.
 
 ### 18.4 Operational Validation Before Production (RECOMMENDED)

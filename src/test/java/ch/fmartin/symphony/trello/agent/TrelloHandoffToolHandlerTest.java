@@ -15,6 +15,8 @@ import ch.fmartin.symphony.trello.tracker.TrelloClient;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sun.net.httpserver.HttpExchange;
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -24,10 +26,14 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 final class TrelloHandoffToolHandlerTest {
     private final ObjectMapper json = new ObjectMapper();
@@ -35,7 +41,15 @@ final class TrelloHandoffToolHandlerTest {
     private final AtomicReference<String> updatedCommentText = new AtomicReference<>();
     private final List<String> deletedActionIds = new CopyOnWriteArrayList<>();
     private final List<String> workpadCallOrder = new CopyOnWriteArrayList<>();
+    private final List<String> checklistRequests = new CopyOnWriteArrayList<>();
     private final AtomicReference<String> movedToListId = new AtomicReference<>();
+    private final AtomicReference<String> createdChecklistName = new AtomicReference<>();
+    private final AtomicReference<String> createdChecklistItemName = new AtomicReference<>();
+    private final AtomicReference<String> createdChecklistItemChecked = new AtomicReference<>();
+    private final AtomicReference<String> updatedChecklistItemState = new AtomicReference<>();
+    private final AtomicReference<String> attachmentUrl = new AtomicReference<>();
+    private final AtomicReference<String> attachmentName = new AtomicReference<>();
+    private final AtomicReference<String> attachmentResponse = new AtomicReference<>("[{\"id\":\"attachment-1\"}]");
     private final AtomicReference<String> cardResponse = new AtomicReference<>();
     private final AtomicReference<Integer> cardStatus = new AtomicReference<>();
     private final AtomicReference<Integer> updateStatus = new AtomicReference<>(200);
@@ -94,6 +108,35 @@ final class TrelloHandoffToolHandlerTest {
             movedToListId.set(query(exchange).get("value"));
             respond(exchange, "{\"id\":\"card-1\"}");
         });
+        trello.on("/1/cards/card-1/checklists", exchange -> {
+            checklistRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
+            if ("GET".equals(exchange.getRequestMethod())) {
+                respond(exchange, "[]");
+                return;
+            }
+            assertThat(exchange.getRequestMethod()).isEqualTo("POST");
+            createdChecklistName.set(query(exchange).get("name"));
+            respond(exchange, "{\"id\":\"checklist-created\"}");
+        });
+        trello.on("/1/checklists/checklist-created/checkItems", exchange -> {
+            assertThat(exchange.getRequestMethod()).isEqualTo("POST");
+            checklistRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
+            createdChecklistItemName.set(query(exchange).get("name"));
+            createdChecklistItemChecked.set(query(exchange).get("checked"));
+            respond(exchange, "{\"id\":\"item-created\"}");
+        });
+        trello.on("/1/cards/card-1/checkItem/item-existing", exchange -> {
+            assertThat(exchange.getRequestMethod()).isEqualTo("PUT");
+            checklistRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
+            updatedChecklistItemState.set(query(exchange).get("state"));
+            respond(exchange, "{\"id\":\"item-existing\"}");
+        });
+        trello.on("/1/cards/card-1/attachments", exchange -> {
+            assertThat(exchange.getRequestMethod()).isEqualTo("POST");
+            attachmentUrl.set(query(exchange).get("url"));
+            attachmentName.set(query(exchange).get("name"));
+            respond(exchange, attachmentResponse.get());
+        });
         cardResponse.set(cardJson("[]"));
         cardStatus.set(200);
         trello.startEmpty();
@@ -105,12 +148,33 @@ final class TrelloHandoffToolHandlerTest {
     }
 
     @Test
-    void advertisesCommentAndMoveToolsWhenWritesAreEnabledAndMoveAllowlistExists() {
+    void advertisesPolicyEnabledWriteToolsWhenWritesAreEnabledAndMoveAllowlistExists() {
         // given
         TrelloHandoffToolHandler handler = handler();
 
         // when
         var tools = handler.toolSpecs(config(List.of("Review"), List.of()));
+
+        // then
+        assertThat(tools)
+                .extracting(tool -> tool.path("name").asText())
+                .containsExactly(
+                        TrelloHandoffToolHandler.ADD_COMMENT,
+                        TrelloHandoffToolHandler.UPSERT_WORKPAD,
+                        TrelloHandoffToolHandler.UPSERT_CHECKLIST_ITEM,
+                        TrelloHandoffToolHandler.ADD_URL_ATTACHMENT,
+                        TrelloHandoffToolHandler.MOVE_CURRENT_CARD);
+        assertThat(tools.get(2).path("inputSchema").path("required").toString())
+                .isEqualTo("[\"checklist_name\",\"item_name\",\"complete\"]");
+    }
+
+    @Test
+    void withholdsChecklistAndAttachmentToolsWhenTheirFlagsAreDisabled() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+
+        // when
+        var tools = handler.toolSpecs(configWithChecklistAndAttachmentWrites(false, false));
 
         // then
         assertThat(tools)
@@ -157,6 +221,228 @@ final class TrelloHandoffToolHandlerTest {
         // then
         assertThat(result.path("success").asBoolean()).isTrue();
         assertThat(commentText.get()).isEqualTo("- \\#2076: Fixed\nSee #2077 for follow-up");
+    }
+
+    @Test
+    void upsertsChecklistItemOnCurrentCardWhenChecklistWritesAreAllowed() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+
+        // when
+        var result = upsertChecklistItem(handler, config(List.of("Review"), List.of()));
+
+        // then
+        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("contentItems").get(0).path("text").asText())
+                .contains("checklist_item_created", "card-1", "checklist-created", "item-created");
+        assertThat(createdChecklistName.get()).isEqualTo("Release tasks");
+        assertThat(createdChecklistItemName.get()).isEqualTo("Publish release");
+        assertThat(createdChecklistItemChecked.get()).isEqualTo("true");
+    }
+
+    @Test
+    void updatesExistingChecklistItemOnCurrentCardWhenChecklistWritesAreAllowed() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        trello.remove("/1/cards/card-1/checklists").on("/1/cards/card-1/checklists", exchange -> {
+            checklistRequests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI());
+            assertThat(exchange.getRequestMethod()).isEqualTo("GET");
+            respond(
+                    exchange,
+                    """
+                                    [
+                                      {
+                                        "id":"checklist-existing",
+                                        "name":"Release tasks",
+                                        "checkItems":[{"id":"item-existing","name":"Publish release","state":"incomplete"}]
+                                      }
+                                    ]
+                                    """);
+        });
+
+        // when
+        var result = upsertChecklistItem(handler, config(List.of("Review"), List.of()));
+
+        // then
+        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("contentItems").get(0).path("text").asText())
+                .contains("checklist_item_updated", "card-1", "checklist-existing", "item-existing");
+        assertThat(updatedChecklistItemState.get()).isEqualTo("complete");
+        assertThat(createdChecklistName.get()).isNull();
+    }
+
+    @Test
+    void rejectsChecklistToolWhenDisabledBeforeTrelloMutation() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+
+        // when
+        var result = upsertChecklistItem(handler, configWithChecklistAndAttachmentWrites(false, true));
+
+        // then
+        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("contentItems").get(0).path("text").asText()).contains("trello_checklists_disabled");
+        assertThat(checklistRequests).isEmpty();
+        assertThat(createdChecklistName.get()).isNull();
+    }
+
+    @Test
+    void rejectsChecklistToolWithoutCompletionStateBeforeTrelloMutation() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+
+        // when
+        var result = handler.handle(
+                config(List.of("Review"), List.of()),
+                TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
+                json.createObjectNode()
+                        .put("tool", TrelloHandoffToolHandler.UPSERT_CHECKLIST_ITEM)
+                        .set(
+                                "arguments",
+                                json.createObjectNode()
+                                        .put("checklist_name", "Release tasks")
+                                        .put("item_name", "Publish release")));
+
+        // then
+        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("contentItems").get(0).path("text").asText()).contains("complete");
+        assertThat(checklistRequests).isEmpty();
+        assertThat(createdChecklistName.get()).isNull();
+    }
+
+    @MethodSource("nonStringToolStringArguments")
+    @ParameterizedTest(name = "{0}")
+    void rejectsNonStringToolStringArgumentsBeforeTrelloMutation(
+            String scenario, String tool, JsonNode arguments, String argumentName) {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+
+        // when
+        var result = handler.handle(
+                config(List.of("Review"), List.of()),
+                TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
+                json.createObjectNode().put("tool", tool).set("arguments", arguments));
+
+        // then
+        assertThat(result.path("success").asBoolean()).as(scenario).isFalse();
+        assertThat(result.path("contentItems").get(0).path("text").asText())
+                .contains("Argument " + argumentName + " must be a string");
+        assertThat(commentText.get()).isNull();
+        assertThat(updatedCommentText.get()).isNull();
+        assertThat(checklistRequests).isEmpty();
+        assertThat(createdChecklistName.get()).isNull();
+        assertThat(createdChecklistItemName.get()).isNull();
+        assertThat(attachmentUrl.get()).isNull();
+    }
+
+    @Test
+    void addsUrlAttachmentToCurrentCardWhenUrlAttachmentsAreAllowed() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+
+        // when
+        var result = handler.handle(
+                config(List.of("Review"), List.of()),
+                TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
+                json.createObjectNode()
+                        .put("tool", TrelloHandoffToolHandler.ADD_URL_ATTACHMENT)
+                        .set(
+                                "arguments",
+                                json.createObjectNode()
+                                        .put("url", "https://github.com/example/project/pull/12")
+                                        .put("name", "Pull request")));
+
+        // then
+        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("contentItems").get(0).path("text").asText())
+                .contains("url_attachment_added", "card-1", "attachment-1");
+        assertThat(attachmentUrl.get()).isEqualTo("https://github.com/example/project/pull/12");
+        assertThat(attachmentName.get()).isEqualTo("Pull request");
+    }
+
+    @Test
+    void reportsUnknownPayloadWhenUrlAttachmentResponseHasNoAttachmentId() {
+        // given
+        attachmentResponse.set("[]");
+        TrelloHandoffToolHandler handler = handler();
+
+        // when
+        var result = handler.handle(
+                config(List.of("Review"), List.of()),
+                TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
+                json.createObjectNode()
+                        .put("tool", TrelloHandoffToolHandler.ADD_URL_ATTACHMENT)
+                        .set(
+                                "arguments",
+                                json.createObjectNode()
+                                        .put("url", "https://github.com/example/project/pull/12")
+                                        .put("name", "Pull request")));
+
+        // then
+        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("contentItems").get(0).path("text").asText())
+                .contains("trello_unknown_payload")
+                .doesNotContain("url_attachment_added");
+        assertThat(attachmentUrl.get()).isEqualTo("https://github.com/example/project/pull/12");
+        assertThat(attachmentName.get()).isEqualTo("Pull request");
+    }
+
+    @Test
+    void rejectsUrlAttachmentToolWhenDisabledBeforeTrelloMutation() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+
+        // when
+        var result = handler.handle(
+                configWithChecklistAndAttachmentWrites(true, false),
+                TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
+                json.createObjectNode()
+                        .put("tool", TrelloHandoffToolHandler.ADD_URL_ATTACHMENT)
+                        .set(
+                                "arguments",
+                                json.createObjectNode().put("url", "https://github.com/example/project/pull/12")));
+
+        // then
+        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("contentItems").get(0).path("text").asText())
+                .contains("trello_url_attachments_disabled");
+        assertThat(attachmentUrl.get()).isNull();
+    }
+
+    @Test
+    void rejectsCredentialBearingUrlAttachmentBeforeTrelloMutation() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+
+        // when
+        var result = addUrlAttachment(handler, "https://token:secret@example.invalid/private");
+
+        // then
+        assertUnsafeUrlAttachmentRejected(result);
+    }
+
+    @Test
+    void rejectsQueryStringUrlAttachmentBeforeTrelloMutation() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+
+        // when
+        var result = addUrlAttachment(handler, "https://example.invalid/private?access_token=secret-token");
+
+        // then
+        assertUnsafeUrlAttachmentRejected(result);
+    }
+
+    @Test
+    void rejectsFragmentUrlAttachmentBeforeTrelloMutation() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+
+        // when
+        var result = addUrlAttachment(handler, "https://example.invalid/private#secret-token");
+
+        // then
+        assertUnsafeUrlAttachmentRejected(result);
     }
 
     @Test
@@ -719,6 +1005,20 @@ final class TrelloHandoffToolHandlerTest {
                 .on("/1/boards/board-1/lists", exchange -> respond(exchange, listsJson(lists)));
     }
 
+    private JsonNode upsertChecklistItem(TrelloHandoffToolHandler handler, EffectiveConfig config) {
+        return handler.handle(
+                config,
+                TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
+                json.createObjectNode()
+                        .put("tool", TrelloHandoffToolHandler.UPSERT_CHECKLIST_ITEM)
+                        .set(
+                                "arguments",
+                                json.createObjectNode()
+                                        .put("checklist_name", "Release tasks")
+                                        .put("item_name", "Publish release")
+                                        .put("complete", true)));
+    }
+
     private JsonNode upsertWorkpad(TrelloHandoffToolHandler handler) {
         return handler.handle(
                 config(List.of("Review"), List.of()),
@@ -736,14 +1036,107 @@ final class TrelloHandoffToolHandlerTest {
         return config(allowWrites, List.of("Review"), List.of(), false);
     }
 
+    private EffectiveConfig configWithChecklistAndAttachmentWrites(
+            boolean allowChecklists, boolean allowUrlAttachments) {
+        return config(true, List.of("Review"), List.of(), allowChecklists, allowUrlAttachments, false);
+    }
+
     private EffectiveConfig configWithDestructiveOperations() {
         return config(true, List.of("Review"), List.of(), true);
+    }
+
+    private static Stream<Arguments> nonStringToolStringArguments() {
+        return Stream.of(
+                Arguments.of(
+                        "comment text object",
+                        TrelloHandoffToolHandler.ADD_COMMENT,
+                        objectArgument("text", JsonNodeFactory.instance.objectNode()),
+                        "text"),
+                Arguments.of(
+                        "workpad text array",
+                        TrelloHandoffToolHandler.UPSERT_WORKPAD,
+                        objectArgument(
+                                "text", JsonNodeFactory.instance.arrayNode().add("Plan")),
+                        "text"),
+                Arguments.of(
+                        "checklist name number",
+                        TrelloHandoffToolHandler.UPSERT_CHECKLIST_ITEM,
+                        checklistArguments(
+                                JsonNodeFactory.instance.numberNode(42),
+                                JsonNodeFactory.instance.textNode("Publish release")),
+                        "checklist_name"),
+                Arguments.of(
+                        "checklist item object",
+                        TrelloHandoffToolHandler.UPSERT_CHECKLIST_ITEM,
+                        checklistArguments(
+                                JsonNodeFactory.instance.textNode("Release tasks"),
+                                JsonNodeFactory.instance.objectNode()),
+                        "item_name"),
+                Arguments.of(
+                        "URL attachment URL number",
+                        TrelloHandoffToolHandler.ADD_URL_ATTACHMENT,
+                        objectArgument("url", JsonNodeFactory.instance.numberNode(12)),
+                        "url"),
+                Arguments.of(
+                        "URL attachment name object",
+                        TrelloHandoffToolHandler.ADD_URL_ATTACHMENT,
+                        urlAttachmentArguments(JsonNodeFactory.instance.objectNode()),
+                        "name"));
+    }
+
+    private static ObjectNode objectArgument(String key, JsonNode value) {
+        ObjectNode arguments = JsonNodeFactory.instance.objectNode();
+        arguments.set(key, value);
+        return arguments;
+    }
+
+    private static ObjectNode checklistArguments(JsonNode checklistName, JsonNode itemName) {
+        ObjectNode arguments = JsonNodeFactory.instance.objectNode();
+        arguments.set("checklist_name", checklistName);
+        arguments.set("item_name", itemName);
+        arguments.put("complete", true);
+        return arguments;
+    }
+
+    private static ObjectNode urlAttachmentArguments(JsonNode name) {
+        ObjectNode arguments = JsonNodeFactory.instance.objectNode();
+        arguments.put("url", "https://github.com/example/project/pull/12");
+        arguments.set("name", name);
+        return arguments;
+    }
+
+    private ObjectNode addUrlAttachment(TrelloHandoffToolHandler handler, String url) {
+        return handler.handle(
+                config(List.of("Review"), List.of()),
+                TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
+                json.createObjectNode()
+                        .put("tool", TrelloHandoffToolHandler.ADD_URL_ATTACHMENT)
+                        .set("arguments", json.createObjectNode().put("url", url)));
+    }
+
+    private void assertUnsafeUrlAttachmentRejected(ObjectNode result) {
+        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("contentItems").get(0).path("text").asText())
+                .contains("invalid_url_attachment")
+                .doesNotContain("token")
+                .doesNotContain("secret");
+        assertThat(attachmentUrl.get()).isNull();
     }
 
     private EffectiveConfig config(
             boolean allowWrites,
             List<String> allowedMoveListNames,
             List<String> allowedMoveListIds,
+            boolean allowDestructiveOperations) {
+        return config(allowWrites, allowedMoveListNames, allowedMoveListIds, true, true, allowDestructiveOperations);
+    }
+
+    private EffectiveConfig config(
+            boolean allowWrites,
+            List<String> allowedMoveListNames,
+            List<String> allowedMoveListIds,
+            boolean allowChecklists,
+            boolean allowUrlAttachments,
             boolean allowDestructiveOperations) {
         return new ConfigResolver()
                 .resolve(new WorkflowDefinition(
@@ -771,6 +1164,10 @@ final class TrelloHandoffToolHandlerTest {
                                         allowedMoveListNames,
                                         "allowed_move_list_ids",
                                         allowedMoveListIds,
+                                        "allow_checklists",
+                                        allowChecklists,
+                                        "allow_url_attachments",
+                                        allowUrlAttachments,
                                         "allow_destructive_operations",
                                         allowDestructiveOperations)),
                         ""))

@@ -1354,12 +1354,20 @@ The recommended workflow gives Codex three scoped Trello handoff tools:
 - `trello_move_current_card`: move the current card to a configured board-local list such as
   `In Progress`, `Human Review`, or `Blocked`.
 
+Hand-authored workflows can enable two more current-card tools:
+
+- `trello_upsert_checklist_item`: create or update one checklist item when
+  `trello_tools.allow_checklists=true`.
+- `trello_add_url_attachment`: attach one HTTP or HTTPS URL without credentials, query string, or
+  fragment when `trello_tools.allow_url_attachments=true`.
+
 The move tool uses argument names such as `list_name` and `list_id` because Trello calls these board
 lanes lists.
 
 Symphony advertises those tools when `trello_tools.enabled=true` and
-`trello_tools.allow_writes=true`. For a read-only scheduler deployment, set
-`trello_tools.allow_writes: false` and move cards manually.
+`trello_tools.allow_writes=true`; each write type is controlled by its own allow flag. The generated
+workflow keeps checklist and URL attachment tools disabled unless you edit those flags. For a
+read-only scheduler deployment, set `trello_tools.allow_writes: false` and move cards manually.
 
 If the API token is read-only or Trello rejects writes, Codex still runs, but handoff tool calls fail
 and the failures are visible in the Codex session events.
