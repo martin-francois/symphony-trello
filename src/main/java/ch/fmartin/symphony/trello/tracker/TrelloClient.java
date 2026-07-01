@@ -10,6 +10,7 @@ import ch.fmartin.symphony.trello.config.WholeNumbers.Kind;
 import ch.fmartin.symphony.trello.domain.BlockerRef;
 import ch.fmartin.symphony.trello.domain.Card;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.ws.rs.core.Response.Status;
@@ -35,6 +36,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.jboss.logging.Logger;
@@ -44,6 +46,7 @@ public class TrelloClient implements TrackerClient {
     private static final Logger LOG = Logger.getLogger(TrelloClient.class);
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
     private static final TypeReference<List<Map<String, Object>>> LIST_MAP_TYPE = new TypeReference<>() {};
+    private static final TypeReference<JsonNode> JSON_TYPE = new TypeReference<>() {};
     private static final String CARD_FIELDS =
             "id,name,desc,idList,idBoard,closed,idShort,shortLink,shortUrl,url,labels,dateLastActivity,due,dueComplete,pos,badges";
     private static final String COMMENT_ACTION_FIELDS = "data,date,memberCreator";
@@ -722,8 +725,9 @@ public class TrelloClient implements TrackerClient {
         return identifier + " (" + state + ")";
     }
 
-    private void updateCheckItemState(EffectiveConfig config, String cardId, String checkItemId, boolean complete) {
-        putMap(
+    private Map<String, Object> updateCheckItemState(
+            EffectiveConfig config, String cardId, String checkItemId, boolean complete) {
+        return putMap(
                 config,
                 "cards/" + encodeSegment(cardId) + "/checkItem/" + encodeSegment(checkItemId),
                 Map.of("state", complete ? "complete" : "incomplete"));
@@ -848,6 +852,74 @@ public class TrelloClient implements TrackerClient {
 
     public Map<String, Object> moveCardToList(EffectiveConfig config, String cardId, String listId) {
         return putMap(config, "cards/" + encodeSegment(cardId) + "/idList", Map.of("value", listId));
+    }
+
+    public ChecklistItemWrite upsertChecklistItem(
+            EffectiveConfig config, String cardId, String checklistName, String itemName, boolean complete) {
+        Card.Checklist checklist = singleChecklistByName(fetchChecklists(config, cardId), checklistName);
+        if (checklist == null) {
+            checklist = createChecklist(config, cardId, checklistName);
+        }
+
+        Card.ChecklistItem item = singleCheckItemByName(checklist, itemName);
+        if (item == null) {
+            // Preserve query parameter order for deterministic request logs and tests.
+            Map<String, String> query = new LinkedHashMap<>();
+            query.put("name", itemName);
+            query.put("checked", Boolean.toString(complete));
+            Map<String, Object> created =
+                    postMap(config, "checklists/" + encodeSegment(checklist.id()) + "/checkItems", query);
+            return new ChecklistItemWrite(
+                    checklist.id(), requiredString(created, "id", "trello_unknown_payload"), complete, "created");
+        }
+        if (item.complete() == complete) {
+            return new ChecklistItemWrite(checklist.id(), item.id(), complete, "unchanged");
+        }
+        updateCheckItemState(config, cardId, item.id(), complete);
+        return new ChecklistItemWrite(checklist.id(), item.id(), complete, "updated");
+    }
+
+    public UrlAttachmentWrite addUrlAttachment(EffectiveConfig config, String cardId, String url, String name) {
+        // Keep the URL first so request logs mirror the documented Trello attachment call.
+        Map<String, String> query = new LinkedHashMap<>();
+        query.put("url", url);
+        if (!blank(name)) {
+            query.put("name", name);
+        }
+        JsonNode created = postJson(config, "cards/" + encodeSegment(cardId) + "/attachments", query);
+        return new UrlAttachmentWrite(attachmentId(created));
+    }
+
+    private Card.Checklist createChecklist(EffectiveConfig config, String cardId, String checklistName) {
+        Map<String, Object> created =
+                postMap(config, "cards/" + encodeSegment(cardId) + "/checklists", Map.of("name", checklistName));
+        return new Card.Checklist(requiredString(created, "id", "trello_unknown_payload"), checklistName, List.of());
+    }
+
+    private static Card.Checklist singleChecklistByName(List<Card.Checklist> checklists, String checklistName) {
+        return singleMatching(
+                checklists,
+                checklist -> Objects.equals(checklist.name(), checklistName),
+                "trello_checklist_ambiguous",
+                "Multiple Trello checklists match the requested checklist_name.");
+    }
+
+    private static Card.ChecklistItem singleCheckItemByName(Card.Checklist checklist, String itemName) {
+        return singleMatching(
+                checklist.items(),
+                item -> Objects.equals(item.text(), itemName),
+                "trello_check_item_ambiguous",
+                "Multiple Trello checklist items match the requested item_name.");
+    }
+
+    private static <T> T singleMatching(
+            List<T> values, Predicate<? super T> predicate, String duplicateCode, String duplicateMessage) {
+        List<T> matches = values.stream().filter(predicate).limit(2).toList();
+        return switch (matches.size()) {
+            case 0 -> null;
+            case 1 -> matches.getFirst();
+            default -> throw new TrelloException(duplicateCode, duplicateMessage);
+        };
     }
 
     private static boolean shouldMoveBeforeDispatch(EffectiveConfig config, Card card, BoardList target) {
@@ -1110,6 +1182,19 @@ public class TrelloClient implements TrackerClient {
         return request("POST", config, path, query, MAP_TYPE, false);
     }
 
+    private JsonNode postJson(EffectiveConfig config, String path, Map<String, String> query) {
+        // Do not automatically retry writes; a network failure after Trello applied a write could duplicate it.
+        String body = requestBody("POST", config, path, query, false);
+        if (blank(body)) {
+            throw new TrelloException("trello_unknown_payload", "Trello attachment payload is empty");
+        }
+        try {
+            return json.readValue(body, JSON_TYPE);
+        } catch (IOException e) {
+            throw new TrelloException("trello_unknown_payload", "Trello attachment payload could not be parsed", e);
+        }
+    }
+
     private Map<String, Object> putMap(EffectiveConfig config, String path, Map<String, String> query) {
         return request("PUT", config, path, query, MAP_TYPE, false);
     }
@@ -1121,6 +1206,16 @@ public class TrelloClient implements TrackerClient {
             Map<String, String> query,
             TypeReference<T> type,
             boolean retry) {
+        String body = requestBody(method, config, path, query, retry);
+        try {
+            return json.readValue(body, type);
+        } catch (IOException e) {
+            throw new TrelloException("trello_api_request", "Trello request failed", e);
+        }
+    }
+
+    private String requestBody(
+            String method, EffectiveConfig config, String path, Map<String, String> query, boolean retry) {
         URI uri = uri(config, path, query);
         int maxAttempts = retry ? Math.max(1, config.tracker().maxApiRetries() + 1) : 1;
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -1142,7 +1237,7 @@ public class TrelloClient implements TrackerClient {
                         };
                 HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
                 if (isSuccessfulStatus(response.statusCode())) {
-                    return json.readValue(response.body(), type);
+                    return response.body();
                 }
                 if (isRateLimited(response.statusCode()) && attempt < maxAttempts) {
                     LOG.warn(rateLimitWarning(config));
@@ -1376,6 +1471,24 @@ public class TrelloClient implements TrackerClient {
         return value;
     }
 
+    private static String attachmentId(JsonNode payload) {
+        JsonNode attachment = payload;
+        if (payload.isArray()) {
+            if (payload.isEmpty()) {
+                throw new TrelloException("trello_unknown_payload", "Trello attachment payload is empty");
+            }
+            attachment = payload.get(0);
+        }
+        if (!attachment.isObject()) {
+            throw new TrelloException("trello_unknown_payload", "Trello attachment payload is not an object");
+        }
+        String id = attachment.path("id").asText("");
+        if (blank(id)) {
+            throw new TrelloException("trello_unknown_payload", "Trello attachment payload is missing id");
+        }
+        return id;
+    }
+
     private static String string(Object value) {
         return value == null ? null : value.toString();
     }
@@ -1399,6 +1512,10 @@ public class TrelloClient implements TrackerClient {
     private record BoardContext(String boardId, boolean boardClosed, Map<String, BoardList> lists) {}
 
     public record BoardList(String id, String name, boolean closed) {}
+
+    public record ChecklistItemWrite(String checklistId, String checkItemId, boolean complete, String status) {}
+
+    public record UrlAttachmentWrite(String attachmentId) {}
 
     private record PrerequisitePlan(
             List<TrelloChecklistClassifier.PrerequisiteItem> items, List<Card.PrerequisiteProblem> problems) {}

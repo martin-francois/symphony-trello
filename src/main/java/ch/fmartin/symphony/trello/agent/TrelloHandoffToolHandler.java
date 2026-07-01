@@ -13,6 +13,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.enterprise.context.ApplicationScoped;
+import java.net.URI;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,6 +27,8 @@ public class TrelloHandoffToolHandler {
     static final String ADD_COMMENT = "trello_add_comment";
     static final String UPSERT_WORKPAD = "trello_upsert_workpad";
     static final String MOVE_CURRENT_CARD = "trello_move_current_card";
+    static final String UPSERT_CHECKLIST_ITEM = "trello_upsert_checklist_item";
+    static final String ADD_URL_ATTACHMENT = "trello_add_url_attachment";
     static final String WORKPAD_MARKER = TrelloClient.WORKPAD_MARKER;
     static final String DUPLICATE_WORKPADS_NOTE_PREFIX = "> Duplicate Codex workpads found: ";
 
@@ -66,6 +69,33 @@ public class TrelloHandoffToolHandler {
                                             "Full Markdown workpad body. Symphony ensures it starts with ## Codex Workpad.")),
                             List.of("text"))));
         }
+        if (config.trelloTools().allowChecklists()) {
+            tools.add(tool(
+                    UPSERT_CHECKLIST_ITEM,
+                    "Create or update one checklist item on the current Trello card. The current card is fixed by Symphony; do not include a card id.",
+                    objectSchema(
+                            Map.of(
+                                    "checklist_name",
+                                    stringSchema("Exact checklist name on the current Trello card."),
+                                    "item_name",
+                                    stringSchema("Exact checklist item text to create or update."),
+                                    "complete",
+                                    booleanSchema("Whether the checklist item should be complete.")),
+                            List.of("checklist_name", "item_name", "complete"))));
+        }
+        if (config.trelloTools().allowUrlAttachments()) {
+            tools.add(tool(
+                    ADD_URL_ATTACHMENT,
+                    "Attach one http or https URL without credentials, query string, or fragment to the current Trello card. The current card is fixed by Symphony; do not include a card id.",
+                    objectSchema(
+                            Map.of(
+                                    "url",
+                                    stringSchema(
+                                            "HTTP or HTTPS URL without credentials, query string, or fragment to attach to the current Trello card."),
+                                    "name",
+                                    stringSchema("Optional attachment display name.")),
+                            List.of("url"))));
+        }
         if (moveAllowlistConfigured(config)) {
             tools.add(tool(
                     MOVE_CURRENT_CARD,
@@ -83,7 +113,11 @@ public class TrelloHandoffToolHandler {
 
     public ObjectNode handle(EffectiveConfig config, Card card, JsonNode params) {
         String tool = params.path("tool").asText("");
-        if (!ADD_COMMENT.equals(tool) && !UPSERT_WORKPAD.equals(tool) && !MOVE_CURRENT_CARD.equals(tool)) {
+        if (!ADD_COMMENT.equals(tool)
+                && !UPSERT_WORKPAD.equals(tool)
+                && !MOVE_CURRENT_CARD.equals(tool)
+                && !UPSERT_CHECKLIST_ITEM.equals(tool)
+                && !ADD_URL_ATTACHMENT.equals(tool)) {
             return failure("unsupported_tool", "Unsupported Trello handoff tool: " + tool);
         }
         if (!config.trelloTools().enabled()) {
@@ -101,6 +135,8 @@ public class TrelloHandoffToolHandler {
                 case ADD_COMMENT -> addComment(config, card, params.path("arguments"));
                 case UPSERT_WORKPAD -> upsertWorkpad(config, card, params.path("arguments"));
                 case MOVE_CURRENT_CARD -> moveCurrentCard(config, card, params.path("arguments"));
+                case UPSERT_CHECKLIST_ITEM -> upsertChecklistItem(config, card, params.path("arguments"));
+                case ADD_URL_ATTACHMENT -> addUrlAttachment(config, card, params.path("arguments"));
                 default -> throw new IllegalStateException("unreachable");
             };
         } catch (TrelloException e) {
@@ -117,6 +153,57 @@ public class TrelloHandoffToolHandler {
         String text = TrelloMarkdown.escapeLeadingHashtags(requiredText(arguments, "text"));
         trello.addComment(config, card.id(), text);
         return success(Map.of("status", "comment_added", "card_id", card.id()));
+    }
+
+    private ObjectNode upsertChecklistItem(EffectiveConfig config, Card card, JsonNode arguments) {
+        if (!config.trelloTools().allowChecklists()) {
+            return failure(
+                    "trello_checklists_disabled", "Trello checklists are disabled by trello_tools.allow_checklists.");
+        }
+        String checklistName = requiredText(arguments, "checklist_name").strip();
+        String itemName = requiredText(arguments, "item_name").strip();
+        if (unsafeToolLine(checklistName) || unsafeToolLine(itemName)) {
+            return failure("invalid_checklist_item", "Checklist names and item names must be one non-control line.");
+        }
+
+        TrelloClient.ChecklistItemWrite result = trello.upsertChecklistItem(
+                config, card.id(), checklistName, itemName, requiredBoolean(arguments, "complete"));
+        return success(Map.of(
+                "status",
+                "checklist_item_" + result.status(),
+                "card_id",
+                card.id(),
+                "checklist_id",
+                result.checklistId(),
+                "check_item_id",
+                result.checkItemId(),
+                "complete",
+                Boolean.toString(result.complete())));
+    }
+
+    private ObjectNode addUrlAttachment(EffectiveConfig config, Card card, JsonNode arguments) {
+        if (!config.trelloTools().allowUrlAttachments()) {
+            return failure(
+                    "trello_url_attachments_disabled",
+                    "Trello URL attachments are disabled by trello_tools.allow_url_attachments.");
+        }
+        String url = requiredText(arguments, "url").strip();
+        if (!validAttachmentUrl(url)) {
+            return failure(
+                    "invalid_url_attachment",
+                    "Provide an http or https URL without credentials, query string, or fragment.");
+        }
+        String name = text(arguments, "name");
+        if (name != null) {
+            name = name.strip();
+        }
+        if (unsafeToolLine(name)) {
+            return failure("invalid_url_attachment_name", "Attachment names must be one non-control line.");
+        }
+
+        TrelloClient.UrlAttachmentWrite result = trello.addUrlAttachment(config, card.id(), url, name);
+        return success(
+                Map.of("status", "url_attachment_added", "card_id", card.id(), "attachment_id", result.attachmentId()));
     }
 
     private ObjectNode upsertWorkpad(EffectiveConfig config, Card card, JsonNode arguments) {
@@ -408,6 +495,10 @@ public class TrelloHandoffToolHandler {
         return object("type", "string", "minLength", 1, "description", description);
     }
 
+    private ObjectNode booleanSchema(String description) {
+        return object("type", "boolean", "description", description);
+    }
+
     private ObjectNode success(Map<String, String> payload) {
         ObjectNode result = object("success", true);
         result.set("contentItems", json.createArrayNode().add(inputText(toJson(payload))));
@@ -453,9 +544,50 @@ public class TrelloHandoffToolHandler {
         return value;
     }
 
+    private static boolean requiredBoolean(JsonNode node, String key) {
+        JsonNode value = node.path(key);
+        checkArgument(!value.isMissingNode() && !value.isNull(), "Missing required argument: %s", key);
+        checkArgument(value.isBoolean(), "Argument %s must be a boolean", key);
+        return value.asBoolean();
+    }
+
     private static String text(JsonNode node, String key) {
         JsonNode value = node.path(key);
-        return value.isMissingNode() || value.isNull() ? null : value.asText();
+        if (value.isMissingNode() || value.isNull()) {
+            return null;
+        }
+        checkArgument(value.isTextual(), "Argument %s must be a string", key);
+        return value.textValue();
+    }
+
+    private static boolean validAttachmentUrl(String value) {
+        if (unsafeToolLine(value)) {
+            return false;
+        }
+        try {
+            URI uri = URI.create(value);
+            String scheme = uri.getScheme();
+            return ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))
+                    && !blank(uri.getHost())
+                    && uri.getRawUserInfo() == null
+                    && uri.getRawQuery() == null
+                    && uri.getRawFragment() == null;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    private static boolean unsafeToolLine(String value) {
+        if (value == null) {
+            return false;
+        }
+        for (int index = 0; index < value.length(); index++) {
+            char c = value.charAt(index);
+            if (c < ' ' || c == 0x7F) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean blank(String value) {
