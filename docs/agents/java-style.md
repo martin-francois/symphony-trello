@@ -83,7 +83,10 @@ References.
 These rules override the installed Java Streams and Optional skills until the linked eval issues are
 closed. At most once per turn before applying one of these overrides, check the linked issue state on
 GitHub. If all linked issues for an override are closed, remove that override in the same change
-instead of following it.
+instead of following it. When using the Java Streams or Optional skills, do not treat reading this
+section as enough; compare the specific skill recommendation or refactor against the applicable
+still-open overrides before editing, and follow the override when it narrows or contradicts the
+skill's advice.
 
 - Streams issue
   [#40](https://github.com/martinfrancois/java-streams-skill/issues/40): when a stream must emit
@@ -130,6 +133,12 @@ instead of following it.
   behavior can be reproduced. If a sequential-stream test cannot force `findAny()` to choose a later
   element, still preserve the ordered operation and document the first-match contract in the closest
   realistic test, method name, or code comment.
+- Streams issue
+  [#53](https://github.com/martinfrancois/java-streams-skill/issues/53): when lookup code must
+  return missing, exactly one match, or a duplicate/conflict error, do not replace it with
+  `findFirst()` unless duplicates are equivalent. Prefer a bounded shape such as
+  `filter(...).limit(2).toList()` with an explicit zero/one/ambiguous branch when that preserves the
+  existing conflict behavior and avoids collecting every duplicate.
 - Optional issues [#69](https://github.com/martinfrancois/java-optionals-skill/issues/69) and
   [#70](https://github.com/martinfrancois/java-optionals-skill/issues/70): side-effecting
   boundaries such as checked prompting, checked IO, Trello writes, or comment upserts may use an
@@ -144,6 +153,11 @@ instead of following it.
   `findAny()` by the encounter-order contract, not by habit. Use `findAny()` for equivalent matches,
   and keep `findFirst()` when first-match behavior is meaningful even if a sequential-stream test
   cannot mechanically force `findAny()` to return a later element.
+- Optional issue
+  [#74](https://github.com/martinfrancois/java-optionals-skill/issues/74): when an Optional's
+  presence only selects between two simple values, prefer `optional.map(...).orElse(...)` over
+  `optional.isPresent() ? presentValue : absentValue` if the present branch has no checked exception
+  or side effect. Use `orElseGet(...)` instead when the absent branch performs non-trivial work.
 
 ## Nullness
 
