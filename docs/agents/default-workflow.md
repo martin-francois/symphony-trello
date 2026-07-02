@@ -78,10 +78,14 @@ commit and open pull requests. Topic-specific rules live in the pages linked und
   wording, move the rule closer to the always-read workflow, or add a cross-link so the rule is more
   likely to be applied next time.
 - When an eval issue captures a bad or missing behavior in an installed skill, add or update a
-  temporary repo-local override in the relevant agent-docs page. Before applying a temporary override
-  in a turn, check each linked issue's GitHub state at most once; if all linked issues for that
-  override are closed, remove the override instead of following it. Do not query the same issue on
-  every individual code use inside one turn.
+  temporary repo-local override in the relevant agent-docs page. Before applying an installed skill
+  in an area covered by temporary overrides, use those overrides as a checklist: check each linked
+  issue's GitHub state at most once for the turn, compare the planned change with every still-open
+  matching override, and follow the override when it is stricter than the skill's normal advice. If
+  all linked issues for an override are closed, remove that override in the same change instead of
+  following it. Do not query the same issue on every individual code use inside one turn.
+  Discovering after the fact that an override was missed is itself a durable-instructions failure;
+  strengthen or move the relevant override guidance before finishing the task.
 
 ## Pre-Public Clean Breaks
 
