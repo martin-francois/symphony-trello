@@ -5,9 +5,9 @@ not enough, and you want a clear board that shows what Codex should do, what is 
 ready for review.
 
 <p align="center">
-  <video src="docs/assets/readme-demo.mp4" poster="docs/assets/readme-demo-poster.png" width="900" controls muted playsinline>
-    <a href="docs/assets/readme-demo.mp4">Watch the Symphony for Trello demo video.</a>
-  </video>
+  <a href="docs/assets/readme-demo.mp4">
+    <img src="docs/assets/readme-demo-poster.png" alt="Watch the Symphony for Trello demo video" width="900">
+  </a>
 </p>
 
 Use it when you want to:
