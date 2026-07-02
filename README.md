@@ -4,6 +4,10 @@ Symphony for Trello lets Codex work from Trello cards. Use it when prompts and t
 not enough, and you want a clear board that shows what Codex should do, what is running, and what is
 ready for review.
 
+<p align="center">
+  <img src="docs/assets/readme-demo.gif" alt="Animated demo of a Trello card moving through Symphony for Trello, Codex work, and Human Review" width="900">
+</p>
+
 Use it when you want to:
 
 - Plan Codex work in Trello.
