@@ -59,7 +59,9 @@ prompts, and product terminology. Deployment steps and installer lifecycle testi
 
 - Use "Symphony for Trello" as the human-facing product name. Use `symphony-trello` only for
   technical identifiers such as artifact IDs, service names, application names, and other places
-  where spaces or title case are not suitable.
+  where spaces or title case are not suitable. Keep the README's independent-project disclaimer near
+  the explanation of the project's relationship to OpenAI's Symphony and Trello. Do not imply that
+  the project is affiliated with, endorsed by, or sponsored by OpenAI, Atlassian, or Trello.
 - Use **connect/disconnect/manage** for the relationship between Symphony and Trello boards in
   user-facing docs, CLI output, generated workflow prompts, GitHub issues, and tests. Use **connect**
   / **disconnect** for setup and configuration actions: users connect a Trello board to Symphony or

@@ -24,6 +24,9 @@ for Trello. The original Symphony spec uses Linear; this project keeps the same 
 and maps it to Trello boards, lists, and cards. In Trello, a list is the board column that contains
 cards, for example `Ready for Codex` or `In Progress`.
 
+Symphony for Trello is an independent project. It is not affiliated with, endorsed by, or sponsored
+by OpenAI, Atlassian, or Trello.
+
 Symphony for Trello is preview automation for trusted environments. Start with a disposable board or
 a small low-risk project, then expand once the workflow matches how you review and land work.
 

@@ -2,7 +2,7 @@
 status: accepted
 date: 2026-05-05
 decision-makers: [François Martin, Codex]
-consulted: [SPEC.md]
+consulted: [SPEC.md, README.md, OpenAI brand guidelines, Atlassian trademark guidelines]
 informed: [Future maintainers]
 ---
 
@@ -23,6 +23,7 @@ How should the project name and Java namespace communicate that relationship cle
 * Preserve the connection to the Symphony concept from the adapted specification.
 * Keep technical identifiers suitable for Maven, repository names, and service names.
 * Keep future open-source publication straightforward.
+* Avoid implying endorsement or sponsorship by OpenAI, Atlassian, or Trello.
 
 ## Considered Options
 
@@ -33,14 +34,17 @@ How should the project name and Java namespace communicate that relationship cle
 ## Decision Outcome
 
 Chosen option: "Human-facing name 'Symphony for Trello' with technical name `symphony-trello`",
-because it makes the Trello adaptation obvious while avoiding an official-OpenAI namespace.
+because it makes the Trello adaptation obvious while avoiding an official-OpenAI namespace. The
+README carries an explicit disclaimer that the project is independent and is not affiliated with,
+endorsed by, or sponsored by OpenAI, Atlassian, or Trello.
 
 ### Consequences
 
 * Good, because README and setup docs can speak plainly about the Trello use case.
 * Good, because `ch.fmartin.symphony.trello` and the Maven group id avoid implying OpenAI ownership.
 * Good, because `symphony-trello` remains usable where spaces and title case are not.
-* Bad, because the relationship to upstream Symphony must still be explained in docs.
+* Good, because the README now states the third-party relationship explicitly.
+* Bad, because the relationship to upstream Symphony and Trello must still be explained in docs.
 * Bad, because future upstream alignment work must account for package-name differences.
 
 ### Confirmation
@@ -58,7 +62,7 @@ identifiers.
 * Good, because users immediately see the Trello focus.
 * Good, because technical names remain conventional.
 * Good, because the Java namespace can reflect the maintainer rather than OpenAI.
-* Neutral, because docs must mention that this is adapted from Symphony.
+* Neutral, because docs must mention that this is adapted from Symphony and integrates with Trello.
 * Bad, because it is slightly longer than a single short project name.
 
 ### Keep `com.openai.symphony` as the Java namespace
@@ -80,4 +84,6 @@ Rename the project to avoid the Symphony name entirely.
 ## More Information
 
 The README should explain that this project is a Trello-oriented variant of OpenAI's Symphony, but
-not as the first thing a new user must understand before seeing the product value.
+not as the first thing a new user must understand before seeing the product value. The README should
+also keep the independent-project disclaimer near that relationship explanation so readers do not
+mistake the project for an official OpenAI, Atlassian, or Trello product.
