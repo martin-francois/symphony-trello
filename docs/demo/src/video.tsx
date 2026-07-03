@@ -10,6 +10,7 @@ type SceneProps = {
 
 type CaptureProps = {
   src: string;
+  fit?: CSSProperties["objectFit"];
   scale?: number;
   x?: number;
   y?: number;
@@ -91,13 +92,20 @@ function TaskAndMobile({ progress }: { progress: number }) {
 
   return (
     <SceneShell caption="Start from Trello on your phone or laptop.">
-      <div style={styles.split}>
-        <div style={{ ...styles.panel, flex: 1.28, transform: `scale(${laptopScale})` }}>
-          <Capture src="trello-card-task.jpg" scale={1.16} />
+      <div style={styles.taskScene}>
+        <div style={{ ...styles.taskLaptop, transform: `scale(${laptopScale})` }}>
+          <div style={styles.taskCaptureFrame}>
+            <Capture src="trello-card-task.jpg" fit="contain" radius={18} shadow={false} />
+          </div>
+          <div style={styles.taskSummary}>
+            <span style={styles.taskSummaryLabel}>Example Trello task</span>
+            <strong style={styles.taskSummaryTitle}>Clarify missing Trello token error</strong>
+            <p style={styles.taskSummaryText}>Improve the missing-token error so it says what failed and which command to run next.</p>
+          </div>
           <Label top={28} left={34}>Real Trello card</Label>
         </div>
         <div style={{ ...styles.phoneFrame, transform: `translateY(${phoneLift}px)` }}>
-          <Capture src="trello-mobile-card.jpg" scale={1.04} radius={38} shadow={false} />
+          <Capture src="trello-mobile-card.jpg" fit="contain" radius={38} shadow={false} />
         </div>
       </div>
     </SceneShell>
@@ -119,45 +127,23 @@ function BoardScene({
   status: string;
   detail: string;
 }) {
-  const zoom = interpolate(ease(progress), [0, 1], [1.03, 1.08]);
-  const cardLift = interpolate(ease(progress), [0, 1], [42, 0]);
+  const panelLift = interpolate(ease(progress), [0, 1], [34, 0]);
 
   return (
     <SceneShell caption={caption}>
-      <div style={styles.browserCard}>
-        <Capture
-          src={image}
-          scale={zoom}
-          style={{
-            filter: "saturate(0.86) blur(1.4px)",
-            opacity: 0.46,
-          }}
-        />
-        <BoardChrome />
-        <div style={styles.boardOverlay}>
-          <div style={styles.laneStrip}>
-            {lanes.map((lane) => {
-              const active = lane === activeLane;
-
-              return (
-                <div key={lane} style={{ ...styles.laneCard, ...(active ? styles.activeLaneCard : {}) }}>
-                  <div style={{ ...styles.laneTitle, ...(active ? styles.activeLaneTitle : {}) }}>{lane}</div>
-                  {active ? (
-                    <div style={{ ...styles.taskCard, transform: `translateY(${cardLift}px)` }}>
-                      <strong>Clarify missing Trello token error</strong>
-                      <span style={styles.taskCardStatus}>{status}</span>
-                    </div>
-                  ) : (
-                    <div style={styles.emptyLaneHint} />
-                  )}
-                </div>
-              );
-            })}
+      <div style={styles.realBoardScene}>
+        <div style={styles.realBoardFrame}>
+          <Capture src={image} fit="contain" radius={24} shadow={false} />
+          <div style={laneHighlight(activeLane, progress)} />
+          <div style={boardTaskCard(activeLane, progress)}>
+            <strong>Clarify missing Trello token error</strong>
+            <span style={styles.boardTaskCardStatus}>{activeLane}</span>
           </div>
-          <div style={styles.boardStatus}>
-            <span style={styles.boardStatusLabel}>{status}</span>
-            <p style={styles.boardStatusText}>{detail}</p>
-          </div>
+        </div>
+        <div style={{ ...styles.boardInfoPanel, transform: `translateY(${panelLift}px)` }}>
+          <span style={styles.boardStatusLabel}>{status}</span>
+          <h3 style={styles.boardInfoTitle}>{activeLane}</h3>
+          <p style={styles.boardInfoText}>{detail}</p>
         </div>
       </div>
     </SceneShell>
@@ -197,9 +183,14 @@ function GithubReview({ progress }: { progress: number }) {
   return (
     <SceneShell caption="Review the PR and leave one clear comment.">
       <div style={styles.githubFrame}>
-        <Capture src="github-review-diff.jpg" scale={interpolate(ease(progress), [0, 1], [1.02, 1.08])} y={interpolate(ease(progress), [0, 1], [0, -70])} />
+        <Capture
+          src="github-review-diff.jpg"
+          fit="contain"
+          scale={interpolate(ease(progress), [0, 1], [0.98, 1])}
+          shadow={false}
+        />
         <Label top={30} left={34}>Real GitHub PR diff and review thread</Label>
-        <Callout top={690} left={230} width={930}>The comment is tied to the actual code Codex produced.</Callout>
+        <Callout top={685} left={250} width={890}>The comment is tied to the actual code Codex produced.</Callout>
       </div>
     </SceneShell>
   );
@@ -209,7 +200,12 @@ function GithubResolved({ progress }: { progress: number }) {
   return (
     <SceneShell caption="Comment answered. Checks green.">
       <div style={styles.githubFrame}>
-        <Capture src="github-comment-resolved.jpg" scale={interpolate(ease(progress), [0, 1], [1.02, 1.1])} y={interpolate(ease(progress), [0, 1], [-10, -110])} />
+        <Capture
+          src="github-comment-resolved.jpg"
+          fit="contain"
+          scale={interpolate(ease(progress), [0, 1], [0.98, 1])}
+          shadow={false}
+        />
         <Label top={30} left={34}>Same PR after rework</Label>
         <Callout top={705} left={270} width={980}>Codex replies with what changed and the validation it ran.</Callout>
       </div>
@@ -225,11 +221,11 @@ function MergeScene({ progress }: { progress: number }) {
     <SceneShell caption="Move it to Merging. Symphony merges the PR.">
       <div style={styles.mergeGrid}>
         <div style={{ ...styles.panel, transform: `translateX(${boardX}px)` }}>
-          <Capture src="trello-board-merging.jpg" scale={1.18} x={-80} />
+          <Capture src="trello-board-merging.jpg" fit="contain" shadow={false} />
           <Label top={28} left={34}>Trello: Merging</Label>
         </div>
         <div style={{ ...styles.panel, transform: `translateX(${githubX}px)` }}>
-          <Capture src="github-pr-merged.jpg" scale={1.08} y={-10} />
+          <Capture src="github-pr-merged.jpg" fit="contain" shadow={false} />
           <Label top={28} left={34}>GitHub: merged</Label>
         </div>
       </div>
@@ -243,13 +239,17 @@ function FinalHero({ progress }: { progress: number }) {
   return (
     <AbsoluteFill style={styles.finalHero}>
       <div style={styles.finalMedia}>
-        <div style={styles.finalPanel}>
-          <Capture src="trello-done-lane.jpg" scale={1} />
-          <Label top={26} left={30}>Trello card: Done</Label>
+        <div style={styles.finalTile}>
+          <div style={styles.finalPanel}>
+            <FinalTrelloSummary />
+          </div>
+          <div style={styles.finalPanelCaption}>Trello board</div>
         </div>
-        <div style={styles.finalPanel}>
-          <Capture src="github-pr-merged.jpg" scale={1.08} />
-          <Label top={26} left={30}>Pull request: Merged</Label>
+        <div style={styles.finalTile}>
+          <div style={styles.finalPanel}>
+            <Capture src="github-pr-merged.jpg" fit="contain" shadow={false} />
+          </div>
+          <div style={styles.finalPanelCaption}>Pull request: Merged</div>
         </div>
       </div>
       <div style={{ ...styles.finalCopy, transform: `translateY(${lift}px)` }}>
@@ -257,6 +257,32 @@ function FinalHero({ progress }: { progress: number }) {
         <p style={styles.finalTagline}>From phone to laptop, from card to merged PR. No IDE required. No CLI babysitting.</p>
       </div>
     </AbsoluteFill>
+  );
+}
+
+function FinalTrelloSummary() {
+  return (
+    <div style={styles.finalTrelloSummary}>
+      <div style={styles.finalMiniBoard}>
+        {lanes.map((lane) => {
+          const done = lane === "Done";
+
+          return (
+            <div key={lane} style={{ ...styles.finalMiniLane, ...(done ? styles.finalMiniDoneLane : {}) }}>
+              <span style={styles.finalMiniLaneTitle}>{lane}</span>
+              {done ? (
+                <div style={styles.finalMiniTaskCard}>
+                  <strong>Clarify missing Trello token error</strong>
+                  <span style={styles.finalMiniStatus}>Merged PR</span>
+                </div>
+              ) : (
+                <div style={styles.finalMiniEmptyCard} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -286,14 +312,14 @@ function WorkpadCard({ progress, title, bullets }: { progress: number; title: st
   );
 }
 
-function Capture({ src, scale = 1, x = 0, y = 0, radius = 22, shadow = true, style }: CaptureProps) {
+function Capture({ src, fit = "cover", scale = 1, x = 0, y = 0, radius = 22, shadow = true, style }: CaptureProps) {
   return (
     <Img
       src={staticFile(`captures/${src}`)}
       style={{
         width: "100%",
         height: "100%",
-        objectFit: "cover",
+        objectFit: fit,
         borderRadius: radius,
         boxShadow: shadow ? "0 28px 80px rgba(8, 40, 58, 0.28)" : undefined,
         transform: `translate(${x}px, ${y}px) scale(${scale})`,
@@ -327,6 +353,31 @@ function Label({ children, top, left }: { children: ReactNode; top: number; left
 
 function Callout({ children, top, left, width }: { children: ReactNode; top: number; left: number; width: number }) {
   return <div style={{ ...styles.callout, top, left, width }}>{children}</div>;
+}
+
+function laneHighlight(activeLane: string, progress: number): CSSProperties {
+  const index = Math.max(0, lanes.indexOf(activeLane));
+  const laneWidth = 100 / lanes.length;
+
+  return {
+    ...styles.realBoardHighlight,
+    left: `${index * laneWidth + 0.7}%`,
+    width: `${laneWidth - 1.4}%`,
+    opacity: interpolate(ease(progress), [0, 0.25, 1], [0, 1, 1]),
+  };
+}
+
+function boardTaskCard(activeLane: string, progress: number): CSSProperties {
+  const index = Math.max(0, lanes.indexOf(activeLane));
+  const laneWidth = 100 / lanes.length;
+
+  return {
+    ...styles.boardTaskOverlay,
+    left: `${index * laneWidth + 2.1}%`,
+    width: `${laneWidth - 4.2}%`,
+    opacity: interpolate(ease(progress), [0, 0.2, 1], [0, 1, 1]),
+    transform: `translateY(${interpolate(ease(progress), [0, 1], [28, 0])}px)`,
+  };
 }
 
 function BoardChrome({ compact = false }: { compact?: boolean }) {
@@ -397,6 +448,76 @@ const styles: Record<string, CSSProperties> = {
     background: "white",
     border: "1px solid rgba(15, 107, 154, 0.18)",
     boxShadow: "0 34px 90px rgba(8, 40, 58, 0.22)",
+  },
+  realBoardScene: {
+    position: "relative",
+    height: 820,
+    display: "grid",
+    gridTemplateRows: "1fr auto",
+    gap: 24,
+  },
+  realBoardFrame: {
+    position: "relative",
+    minHeight: 0,
+    borderRadius: 28,
+    overflow: "hidden",
+    background: "white",
+    border: "1px solid rgba(15, 107, 154, 0.16)",
+    boxShadow: "0 34px 90px rgba(8, 40, 58, 0.2)",
+  },
+  realBoardHighlight: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    borderRadius: 22,
+    border: `5px solid ${green}`,
+    background: "rgba(22, 163, 74, 0.08)",
+    boxShadow: "0 20px 48px rgba(22, 163, 74, 0.3)",
+    pointerEvents: "none",
+  },
+  boardTaskOverlay: {
+    position: "absolute",
+    top: 94,
+    borderRadius: 14,
+    padding: "16px 16px 14px",
+    background: "white",
+    color: ink,
+    fontSize: 22,
+    lineHeight: 1.18,
+    boxShadow: "0 18px 42px rgba(8, 40, 58, 0.28)",
+    border: "1px solid rgba(8, 40, 58, 0.12)",
+  },
+  boardTaskCardStatus: {
+    display: "block",
+    marginTop: 10,
+    color: blue,
+    fontSize: 18,
+    fontWeight: 800,
+  },
+  boardInfoPanel: {
+    display: "grid",
+    gridTemplateColumns: "auto auto 1fr",
+    gap: 22,
+    alignItems: "center",
+    borderRadius: 24,
+    padding: "22px 30px",
+    background: "rgba(8, 40, 58, 0.94)",
+    color: "white",
+    boxShadow: "0 24px 58px rgba(8, 40, 58, 0.22)",
+  },
+  boardInfoTitle: {
+    margin: 0,
+    color: "white",
+    fontSize: 36,
+    lineHeight: 1.1,
+    letterSpacing: 0,
+  },
+  boardInfoText: {
+    margin: 0,
+    color: "rgba(255,255,255,0.9)",
+    fontSize: 28,
+    lineHeight: 1.25,
+    fontWeight: 680,
   },
   boardChrome: {
     position: "absolute",
@@ -495,24 +616,66 @@ const styles: Record<string, CSSProperties> = {
   },
   caption: {
     position: "absolute",
-    left: 92,
-    right: 92,
-    bottom: 60,
-    padding: "24px 34px",
-    borderRadius: 20,
+    left: 120,
+    right: 120,
+    bottom: 44,
+    padding: "18px 30px",
+    borderRadius: 18,
     background: "rgba(8, 40, 58, 0.86)",
     color: "white",
-    fontSize: 44,
+    fontSize: 38,
     lineHeight: 1.18,
     fontWeight: 720,
     textAlign: "center",
     boxShadow: "0 22px 52px rgba(8, 40, 58, 0.25)",
   },
-  split: {
+  taskScene: {
     display: "flex",
     gap: 48,
     height: 800,
     alignItems: "center",
+  },
+  taskLaptop: {
+    position: "relative",
+    flex: 1.28,
+    height: "100%",
+    minWidth: 0,
+    display: "grid",
+    gridTemplateRows: "1fr auto",
+    gap: 24,
+    borderRadius: 28,
+    overflow: "hidden",
+    background: "white",
+    boxShadow: "0 34px 90px rgba(8, 40, 58, 0.2)",
+  },
+  taskCaptureFrame: {
+    minHeight: 0,
+    padding: "76px 30px 0",
+    background: "#f8fafc",
+  },
+  taskSummary: {
+    padding: "26px 42px 34px",
+    borderTop: "1px solid rgba(15, 107, 154, 0.14)",
+    background: "white",
+    color: deep,
+  },
+  taskSummaryLabel: {
+    display: "block",
+    color: blue,
+    fontSize: 24,
+    fontWeight: 760,
+  },
+  taskSummaryTitle: {
+    display: "block",
+    marginTop: 10,
+    fontSize: 42,
+    lineHeight: 1.08,
+  },
+  taskSummaryText: {
+    margin: "14px 0 0",
+    fontSize: 29,
+    lineHeight: 1.28,
+    fontWeight: 680,
   },
   panel: {
     position: "relative",
@@ -595,6 +758,12 @@ const styles: Record<string, CSSProperties> = {
     gap: 36,
     height: 570,
   },
+  finalTile: {
+    minHeight: 0,
+    display: "grid",
+    gridTemplateRows: "1fr auto",
+    gap: 16,
+  },
   finalPanel: {
     position: "relative",
     borderRadius: 28,
@@ -602,15 +771,75 @@ const styles: Record<string, CSSProperties> = {
     background: "white",
     boxShadow: "0 34px 90px rgba(0,0,0,0.28)",
   },
+  finalTrelloSummary: {
+    height: "100%",
+    padding: 28,
+    background: "linear-gradient(135deg, #f1f8fb, #ffffff)",
+  },
+  finalMiniBoard: {
+    height: "100%",
+    display: "grid",
+    gridTemplateColumns: "repeat(5, 0.82fr) 1.34fr",
+    gap: 12,
+  },
+  finalMiniLane: {
+    minWidth: 0,
+    borderRadius: 18,
+    padding: "18px 12px",
+    background: "rgba(15, 107, 154, 0.09)",
+    border: "1px solid rgba(15, 107, 154, 0.14)",
+  },
+  finalMiniDoneLane: {
+    background: "rgba(22, 163, 74, 0.14)",
+    border: `3px solid ${green}`,
+    boxShadow: "0 18px 42px rgba(22, 163, 74, 0.18)",
+  },
+  finalMiniLaneTitle: {
+    display: "block",
+    color: deep,
+    fontSize: 20,
+    lineHeight: 1.1,
+    fontWeight: 800,
+  },
+  finalMiniTaskCard: {
+    marginTop: 18,
+    borderRadius: 14,
+    padding: "16px 14px",
+    background: "white",
+    color: deep,
+    fontSize: 20,
+    lineHeight: 1.18,
+    boxShadow: "0 16px 34px rgba(8, 40, 58, 0.14)",
+  },
+  finalMiniStatus: {
+    display: "block",
+    marginTop: 10,
+    color: green,
+    fontSize: 18,
+    fontWeight: 820,
+  },
+  finalMiniEmptyCard: {
+    marginTop: 22,
+    height: 68,
+    borderRadius: 14,
+    background: "rgba(255,255,255,0.58)",
+  },
+  finalPanelCaption: {
+    color: "white",
+    fontSize: 26,
+    fontWeight: 760,
+    letterSpacing: 0,
+    textAlign: "center",
+  },
   finalCopy: {
     marginTop: 54,
     textAlign: "center",
   },
   finalHeadline: {
     margin: "0 auto",
-    maxWidth: 1320,
+    maxWidth: 1560,
     color: "white",
-    fontSize: 52,
+    fontSize: 48,
     lineHeight: 1.16,
     letterSpacing: 0,
   },
