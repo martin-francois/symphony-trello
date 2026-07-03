@@ -58,6 +58,7 @@ a small low-risk project, then expand once the workflow matches how you review a
 - [Operations](#operations)
 - [Safety Posture](#safety-posture)
 - [Production Deployment](#production-deployment)
+- [Building 1.0.0 by the Numbers](#building-100-by-the-numbers)
 - [Contributing and Security](#contributing-and-security)
 
 ## What You Get
@@ -1477,6 +1478,24 @@ are answered without waiting indefinitely.
 For a server deployment with one or more workflow files, use the manual systemd guide in
 [docs/deployment.md](docs/deployment.md). The primary public setup path remains the installer and
 managed local worker; manual systemd deployment is the advanced server path.
+
+## Building 1.0.0 by the Numbers
+
+A lot went into getting Symphony for Trello 1.0.0 ready.
+
+Across the audited AI-assisted development sessions, the build footprint was approximately:
+
+- **15.13 billion** total tokens
+- **$13,240.24** in API/API-equivalent token cost
+- **2,041** human prompts and follow-ups, totaling **72,542** words, roughly the length of Mary
+  Shelley's _Frankenstein_
+- **96,825+** agent/model turns
+- **107,796+** tool/function calls
+- **82,242+** shell executions
+
+These are historical development metrics, not runtime requirements. Running Symphony for Trello does
+not require this token volume or cost. They are included to make the scale of iteration, validation,
+and review behind the 1.0.0 release visible.
 
 ## Contributing and Security
 
