@@ -33,20 +33,20 @@ export function ReadmeDemo() {
     <AbsoluteFill style={styles.stage}>
       <Scene start={0} duration={110}>{(progress) => <Intro progress={progress} />}</Scene>
       <Scene start={110} duration={120}>{(progress) => <BoardScene image="trello-board-inbox.jpg" progress={progress} caption="Plan work where your team already plans work." activeLane="Inbox" status="New work request" detail="A Trello card starts the whole workflow." />}</Scene>
-      <Scene start={230} duration={150}>{(progress) => <BoardScene image="trello-board-ready.jpg" progress={progress} caption="Move the card to Ready for Codex." activeLane="Ready for Codex" fromLane="Inbox" showCursor status="Human handoff" detail="One move tells Symphony this task is ready." />}</Scene>
-      <Scene start={380} duration={150}>{(progress) => <BoardScene image="trello-board-in-progress.jpg" progress={progress} caption="Symphony picks it up automatically." activeLane="In Progress" fromLane="Ready for Codex" status="Automated pickup" detail="Symphony starts Codex and moves the same card forward." />}</Scene>
-      <Scene start={530} duration={210}>{(progress) => <WorkpadScene progress={progress} phase="initial" />}</Scene>
-      <Scene start={740} duration={130}>{(progress) => <BoardScene image="trello-board-human-review-staged.jpg" progress={progress} caption="The PR is ready for review." activeLane="Human Review" fromLane="In Progress" status="Review handoff" detail="The Trello card now points reviewers to the pull request." />}</Scene>
-      <Scene start={870} duration={220}>{(progress) => <GithubReview progress={progress} />}</Scene>
-      <Scene start={1090} duration={130}>{(progress) => <BoardScene image="trello-board-ready.jpg" progress={progress} caption="Move the card back and Codex continues." activeLane="Ready for Codex" fromLane="Human Review" showCursor status="Review feedback queued" detail="A review comment becomes the next Codex task." />}</Scene>
-      <Scene start={1220} duration={140}>{(progress) => <BoardScene image="trello-board-in-progress.jpg" progress={progress} caption="Codex reopens the same task context." activeLane="In Progress" fromLane="Ready for Codex" status="Rework running" detail="The worker reads the review thread and updates the PR." />}</Scene>
-      <Scene start={1360} duration={210}>{(progress) => <WorkpadScene progress={progress} phase="rework" />}</Scene>
-      <Scene start={1570} duration={130}>{(progress) => <BoardScene image="trello-board-human-review-staged.jpg" progress={progress} caption="Symphony brings the updated PR back for review." activeLane="Human Review" fromLane="In Progress" status="Updated PR" detail="The same card carries the rework and validation context." />}</Scene>
-      <Scene start={1700} duration={170}>{(progress) => <GithubResolved progress={progress} />}</Scene>
-      <Scene start={1870} duration={140}>{(progress) => <MergeScene progress={progress} />}</Scene>
-      <Scene start={2010} duration={120}>{(progress) => <BoardScene image="trello-board-done.jpg" progress={progress} caption="The card lands in Done." activeLane="Done" fromLane="Merging" status="Merged and complete" detail="The PR is merged and the board shows the task as finished." />}</Scene>
-      <Scene start={2130} duration={130}>{(progress) => <AnywhereScene progress={progress} />}</Scene>
-      <Scene start={2260} duration={150}>{(progress) => <FinalHero progress={progress} />}</Scene>
+      <Scene start={230} duration={180}>{(progress) => <BoardScene image="trello-board-ready.jpg" progress={progress} caption="Move the card to Ready for Codex." activeLane="Ready for Codex" fromLane="Inbox" showCursor status="Human handoff" detail="One move tells Symphony this task is ready." />}</Scene>
+      <Scene start={410} duration={180}>{(progress) => <BoardScene image="trello-board-in-progress.jpg" progress={progress} caption="Symphony picks it up automatically." activeLane="In Progress" fromLane="Ready for Codex" status="Automated pickup" detail="Symphony starts Codex and moves the same card forward." />}</Scene>
+      <Scene start={590} duration={300}>{(progress) => <WorkpadScene progress={progress} phase="initial" />}</Scene>
+      <Scene start={890} duration={130}>{(progress) => <BoardScene image="trello-board-human-review-staged.jpg" progress={progress} caption="The PR is ready for review." activeLane="Human Review" fromLane="In Progress" status="Review handoff" detail="The Trello card now points reviewers to the pull request." />}</Scene>
+      <Scene start={1020} duration={220}>{(progress) => <GithubReview progress={progress} />}</Scene>
+      <Scene start={1240} duration={150}>{(progress) => <BoardScene image="trello-board-ready.jpg" progress={progress} caption="Move the card back and Codex continues." activeLane="Ready for Codex" fromLane="Human Review" showCursor status="Review feedback queued" detail="A review comment becomes the next Codex task." />}</Scene>
+      <Scene start={1390} duration={150}>{(progress) => <BoardScene image="trello-board-in-progress.jpg" progress={progress} caption="Codex reopens the same task context." activeLane="In Progress" fromLane="Ready for Codex" status="Rework running" detail="The worker reads the review thread and updates the PR." />}</Scene>
+      <Scene start={1540} duration={240}>{(progress) => <WorkpadScene progress={progress} phase="rework" />}</Scene>
+      <Scene start={1780} duration={130}>{(progress) => <BoardScene image="trello-board-human-review-staged.jpg" progress={progress} caption="Symphony brings the updated PR back for review." activeLane="Human Review" fromLane="In Progress" status="Updated PR" detail="The same card carries the rework and validation context." />}</Scene>
+      <Scene start={1910} duration={170}>{(progress) => <GithubResolved progress={progress} />}</Scene>
+      <Scene start={2080} duration={140}>{(progress) => <MergeScene progress={progress} />}</Scene>
+      <Scene start={2220} duration={120}>{(progress) => <BoardScene image="trello-board-done.jpg" progress={progress} caption="The card lands in Done." activeLane="Done" fromLane="Merging" status="Merged and complete" detail="The PR is merged and the board shows the task as finished." />}</Scene>
+      <Scene start={2340} duration={130}>{(progress) => <AnywhereScene progress={progress} />}</Scene>
+      <Scene start={2470} duration={150}>{(progress) => <FinalHero progress={progress} />}</Scene>
     </AbsoluteFill>
   );
 }
@@ -138,8 +138,7 @@ function BoardScene({
       <div style={styles.realBoardScene}>
         <div style={styles.realBoardFrame}>
           <Capture src={image} fit="cover" radius={24} shadow={false} style={styles.boardBackgroundCapture} />
-          <StoryBoard activeLane={activeLane} fromLane={fromLane} progress={progress} />
-          {moving && !showCursor ? <AutomationMove fromLane={sourceLane} toLane={activeLane} progress={progress} /> : null}
+          <StoryBoard activeLane={activeLane} fromLane={fromLane} progress={progress} automaticMove={moving && !showCursor} />
           {moving && showCursor ? <CursorDrag fromLane={sourceLane} toLane={activeLane} progress={progress} /> : null}
         </div>
       </div>
@@ -151,19 +150,24 @@ function StoryBoard({
   activeLane,
   fromLane,
   progress,
+  automaticMove = false,
 }: {
   activeLane: string;
   fromLane?: string;
   progress: number;
+  automaticMove?: boolean;
 }) {
+  const moving = fromLane !== undefined && fromLane !== activeLane;
+
   return (
     <div style={styles.storyBoard}>
       {lanes.map((lane) => {
-        const active = lane === activeLane;
-        const source = lane === fromLane && lane !== activeLane;
+        const active = lane === activeLane && !moving;
+        const target = lane === activeLane && moving;
+        const source = lane === fromLane && !moving;
 
         return (
-          <div key={lane} style={{ ...styles.storyLane, ...(active ? styles.storyLaneActive : {}) }}>
+          <div key={lane} style={{ ...styles.storyLane, ...(active || target ? styles.storyLaneActive : {}) }}>
             <div style={styles.storyLaneHeader}>
               <span>{lane}</span>
               <span>{active ? "1" : "0"}</span>
@@ -171,7 +175,7 @@ function StoryBoard({
             {active || source ? (
               <div style={storyTaskCard(lane, activeLane, progress, fromLane)}>
                 <strong>Clarify missing Trello token error</strong>
-                <span style={styles.storyTaskMeta}>{active ? activeLane : "moving"}</span>
+                <span style={styles.storyTaskMeta}>{active ? "Current card" : "Moving"}</span>
               </div>
             ) : (
               <div style={styles.storyEmptyLane} />
@@ -179,7 +183,40 @@ function StoryBoard({
           </div>
         );
       })}
+      {moving ? <MovingStoryCard fromLane={fromLane} toLane={activeLane} progress={progress} automaticMove={automaticMove} /> : null}
     </div>
+  );
+}
+
+function MovingStoryCard({
+  fromLane,
+  toLane,
+  progress,
+  automaticMove,
+}: {
+  fromLane: string;
+  toLane: string;
+  progress: number;
+  automaticMove: boolean;
+}) {
+  const left = interpolate(dragProgress(progress), [0, 1], [laneCardLeft(fromLane), laneCardLeft(toLane)]);
+  const top = interpolate(dragProgress(progress), [0, 1], [116, 124]);
+
+  return (
+    <>
+      {automaticMove ? <AutomationMove fromLane={fromLane} toLane={toLane} progress={progress} /> : null}
+      <div
+        style={{
+          ...styles.movingTaskCard,
+          left: `calc(${left}% + 10px)`,
+          top,
+          width: `calc(${laneWidth()}% - 26px)`,
+        }}
+      >
+        <strong>Clarify missing Trello token error</strong>
+        <span style={styles.storyTaskMeta}>Moving card</span>
+      </div>
+    </>
   );
 }
 
@@ -202,7 +239,7 @@ function WorkpadScene({ progress, phase }: { progress: number; phase: "initial" 
   return (
     <SceneShell
       caption={isRework ? "Codex reads the review and updates the implementation." : "Progress stays visible on the Trello card."}
-      subcaption={isRework ? "The rework starts from the review comment and keeps the same PR alive." : "The workpad tells reviewers what Codex is doing before the PR is ready."}
+      subcaption={isRework ? "The rework starts from the review comment and keeps the same PR alive." : "The workpad shows you what Codex is doing before the PR is ready."}
     >
       <div style={styles.workpadLayout}>
         <WorkpadCard progress={progress} title={isRework ? "Codex Workpad - rework" : "Codex Workpad"} bullets={bullets} />
@@ -212,7 +249,7 @@ function WorkpadScene({ progress, phase }: { progress: number; phase: "initial" 
           <p style={styles.contextText}>
             {isRework
               ? "Codex keeps the same card and PR, then records what changed."
-              : "Reviewers see the plan, progress, and validation without opening host logs."}
+              : "You can see the plan, progress, and validation without opening host logs."}
           </p>
         </div>
       </div>
@@ -222,7 +259,7 @@ function WorkpadScene({ progress, phase }: { progress: number; phase: "initial" 
 
 function GithubReview({ progress }: { progress: number }) {
   return (
-    <SceneShell caption="Review the PR and leave one clear comment." subcaption="The video zooms into the actual diff and the review comment, not the whole page chrome.">
+    <SceneShell caption="Review the PR and leave one clear comment." subcaption="You review the actual code and leave one small, actionable comment.">
       <div style={styles.githubFrame}>
         <Capture
           src="github-review-diff.jpg"
@@ -446,19 +483,19 @@ function AutomationMove({ fromLane, toLane, progress }: { fromLane: string; toLa
 
 function CursorDrag({ fromLane, toLane, progress }: { fromLane: string; toLane: string; progress: number }) {
   const left = interpolate(dragProgress(progress), [0, 1], [laneCenter(fromLane), laneCenter(toLane)]);
-  const top = interpolate(dragProgress(progress), [0, 1], [260, 238]);
+  const top = interpolate(dragProgress(progress), [0, 1], [314, 322]);
 
   return (
     <div style={{ ...styles.cursorDrag, left: `${left}%`, top, opacity: moveVisibility(progress) }}>
-      <svg width="54" height="64" viewBox="0 0 54 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <svg width="70" height="82" viewBox="0 0 70 82" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path
-          d="M10 5L44 39L29 42L22 58L10 5Z"
+          d="M12 8L56 53L36 57L27 76L12 8Z"
           fill="white"
           stroke={deep}
-          strokeWidth="4"
+          strokeWidth="5"
           strokeLinejoin="round"
         />
-        <path d="M28 43L39 58" stroke={deep} strokeWidth="5" strokeLinecap="round" />
+        <path d="M36 58L51 76" stroke={deep} strokeWidth="6" strokeLinecap="round" />
       </svg>
     </div>
   );
@@ -483,6 +520,10 @@ function moveVisibility(progress: number) {
 
 function laneCenter(lane: string) {
   return laneLeft(lane, laneWidth() / 2);
+}
+
+function laneCardLeft(lane: string) {
+  return laneLeft(lane, 0);
 }
 
 function laneLeft(lane: string, inset: number) {
@@ -570,8 +611,8 @@ const styles: Record<string, CSSProperties> = {
     boxShadow: "0 34px 90px rgba(8, 40, 58, 0.2)",
   },
   boardBackgroundCapture: {
-    opacity: 0.2,
-    filter: "saturate(0.72)",
+    opacity: 0.09,
+    filter: "saturate(0.56) blur(2px)",
   },
   storyBoard: {
     position: "absolute",
@@ -612,8 +653,20 @@ const styles: Record<string, CSSProperties> = {
     color: ink,
     fontSize: 25,
     lineHeight: 1.22,
-    boxShadow: "0 22px 50px rgba(8, 40, 58, 0.22)",
-    border: "1px solid rgba(8, 40, 58, 0.12)",
+    boxShadow: "0 22px 50px rgba(8, 40, 58, 0.24)",
+    border: `3px solid ${deep}`,
+  },
+  movingTaskCard: {
+    position: "absolute",
+    zIndex: 6,
+    borderRadius: 18,
+    padding: "22px 20px",
+    background: "white",
+    color: ink,
+    fontSize: 25,
+    lineHeight: 1.22,
+    boxShadow: "0 26px 56px rgba(8, 40, 58, 0.3)",
+    border: `4px solid ${deep}`,
   },
   storyTaskMeta: {
     display: "block",
@@ -661,9 +714,9 @@ const styles: Record<string, CSSProperties> = {
   },
   automationMove: {
     position: "absolute",
-    zIndex: 5,
-    top: 248,
-    height: 72,
+    zIndex: 7,
+    top: 320,
+    height: 54,
     pointerEvents: "none",
   },
   automationLine: {
@@ -689,7 +742,7 @@ const styles: Record<string, CSSProperties> = {
   automationBadge: {
     position: "absolute",
     left: "50%",
-    top: 46,
+    top: 0,
     transform: "translateX(-50%)",
     padding: "10px 16px",
     borderRadius: 999,
@@ -703,10 +756,10 @@ const styles: Record<string, CSSProperties> = {
   },
   cursorDrag: {
     position: "absolute",
-    zIndex: 6,
-    width: 54,
-    height: 64,
-    transform: "translate(-8px, -6px)",
+    zIndex: 8,
+    width: 70,
+    height: 82,
+    transform: "translate(18px, 6px)",
     filter: "drop-shadow(0 14px 20px rgba(8, 40, 58, 0.32))",
     pointerEvents: "none",
   },
@@ -987,21 +1040,21 @@ const styles: Record<string, CSSProperties> = {
     border: "1px solid rgba(15, 107, 154, 0.16)",
   },
   workpadHeader: {
-    fontSize: 58,
+    fontSize: 48,
     lineHeight: 1.1,
     fontWeight: 760,
     color: deep,
   },
   workpadSection: {
     marginTop: 28,
-    fontSize: 30,
+    fontSize: 28,
     color: blue,
     fontWeight: 760,
   },
   workpadList: {
     margin: "34px 0 0",
     paddingLeft: 34,
-    fontSize: 36,
+    fontSize: 34,
     lineHeight: 1.46,
   },
   workpadContextPanel: {
