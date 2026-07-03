@@ -1,0 +1,26 @@
+{
+  "name": "symphony-trello-readme-demo",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Remotion project that renders the Symphony for Trello README demo video and poster from real Trello and GitHub screen captures.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "render": "remotion render src/index.ts ReadmeDemo ../assets/readme-demo.mp4 --codec=h264 --muted",
+    "poster": "remotion still src/index.ts Poster ../assets/readme-demo-poster.png --frame=0",
+    "build": "pnpm run typecheck && pnpm run render && pnpm run poster"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.484",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "remotion": "4.0.484"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "@types/react": "19.0.1",
+    "typescript": "5.7.2"
+  }
+}
