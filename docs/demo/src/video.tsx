@@ -268,8 +268,8 @@ function GithubReview({ progress }: { progress: number }) {
           shadow={false}
           style={{ objectPosition: "50% 42%" }}
         />
-        <Label top={28} left={34}>Real GitHub PR diff and review thread</Label>
-        <Callout top={92} left={34} width={910}>The comment is tied to the actual code Codex produced.</Callout>
+        <Label bottom={128} left={34}>Real GitHub PR diff and review thread</Label>
+        <Callout bottom={34} left={34} width={910}>The comment is tied to the actual code Codex produced.</Callout>
       </div>
     </SceneShell>
   );
@@ -286,8 +286,8 @@ function GithubResolved({ progress }: { progress: number }) {
           shadow={false}
           style={{ objectPosition: "50% 42%" }}
         />
-        <Label top={30} left={34}>Same PR after rework</Label>
-        <Callout top={92} left={34} width={980}>Codex replies with what changed and the validation it ran.</Callout>
+        <Label bottom={128} left={34}>Same PR after rework</Label>
+        <Callout bottom={34} left={34} width={980}>Codex replies with what changed and the validation it ran.</Callout>
       </div>
     </SceneShell>
   );
@@ -302,11 +302,11 @@ function MergeScene({ progress }: { progress: number }) {
       <div style={styles.mergeGrid}>
         <div style={{ ...styles.panel, transform: `translateX(${boardX}px)` }}>
           <Capture src="trello-board-merging.jpg" fit="contain" shadow={false} />
-          <Label top={28} left={34}>Trello: Merging</Label>
+          <Label bottom={34} left={34}>Trello: Merging</Label>
         </div>
         <div style={{ ...styles.panel, transform: `translateX(${githubX}px)` }}>
           <Capture src="github-pr-merged.jpg" fit="contain" shadow={false} />
-          <Label top={28} left={34}>GitHub: merged</Label>
+          <Label bottom={34} left={34}>GitHub: merged</Label>
         </div>
       </div>
     </SceneShell>
@@ -318,6 +318,10 @@ function FinalHero({ progress }: { progress: number }) {
 
   return (
     <AbsoluteFill style={styles.finalHero}>
+      <div style={{ ...styles.finalCopy, transform: `translateY(${lift}px)` }}>
+        <h2 style={styles.finalHeadline}>You plan work in Trello. Codex implements it. Symphony keeps everything moving.</h2>
+        <p style={styles.finalTagline}>From phone to laptop, from card to merged PR. No IDE required. No CLI babysitting.</p>
+      </div>
       <div style={styles.finalMedia}>
         <div style={styles.finalTile}>
           <div style={styles.finalPanel}>
@@ -331,10 +335,6 @@ function FinalHero({ progress }: { progress: number }) {
           </div>
           <div style={styles.finalPanelCaption}>Pull request: Merged</div>
         </div>
-      </div>
-      <div style={{ ...styles.finalCopy, transform: `translateY(${lift}px)` }}>
-        <h2 style={styles.finalHeadline}>You plan work in Trello. Codex implements it. Symphony keeps everything moving.</h2>
-        <p style={styles.finalTagline}>From phone to laptop, from card to merged PR. No IDE required. No CLI babysitting.</p>
       </div>
     </AbsoluteFill>
   );
@@ -443,16 +443,16 @@ function Caption({ children, eyebrow, subcaption }: { children: ReactNode; eyebr
   );
 }
 
-function Label({ children, top, left }: { children: ReactNode; top: number; left: number }) {
+function Label({ children, top, left, bottom, right }: { children: ReactNode; top?: number; left?: number; bottom?: number; right?: number }) {
   return (
-    <div style={{ ...styles.label, top, left }}>
+    <div style={{ ...styles.label, top, left, bottom, right }}>
       {children}
     </div>
   );
 }
 
-function Callout({ children, top, left, width }: { children: ReactNode; top: number; left: number; width: number }) {
-  return <div style={{ ...styles.callout, top, left, width }}>{children}</div>;
+function Callout({ children, top, left, bottom, right, width }: { children: ReactNode; top?: number; left?: number; bottom?: number; right?: number; width: number }) {
+  return <div style={{ ...styles.callout, top, left, bottom, right, width }}>{children}</div>;
 }
 
 function AutomationMove({ fromLane, toLane, progress }: { fromLane: string; toLane: string; progress: number }) {
@@ -1189,7 +1189,7 @@ const styles: Record<string, CSSProperties> = {
     textAlign: "center",
   },
   finalCopy: {
-    marginTop: 54,
+    marginBottom: 64,
     textAlign: "center",
   },
   finalHeadline: {
