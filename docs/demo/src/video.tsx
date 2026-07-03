@@ -71,24 +71,24 @@ function Scene({ start, duration, children }: SceneProps) {
 }
 
 function Intro({ progress }: { progress: number }) {
-  const lift = interpolate(ease(progress), [0, 1], [30, 0]);
+  const lift = interpolate(ease(progress), [0, 1], [24, 0]);
 
   return (
     <AbsoluteFill style={styles.intro}>
-      <div style={{ ...styles.introContent, transform: `translateY(${lift}px)` }}>
-        <div style={styles.brandPill}>Symphony for Trello</div>
-        <h1 style={styles.title}>
-          From Trello card<br />to merged pull request
-        </h1>
-        <p style={styles.subtitle}>A real run: Trello plans the work, Codex implements it, and Symphony keeps the handoff moving.</p>
-      </div>
+      <div style={{ ...styles.brandPill, transform: `translateY(${lift}px)` }}>Symphony for Trello</div>
+      <h1 style={{ ...styles.title, transform: `translateY(${lift}px)` }}>
+        From Trello card
+        <br />
+        to merged pull request
+      </h1>
+      <p style={styles.subtitle}>A real run: Trello plans the work, Codex implements it, and Symphony keeps the handoff moving.</p>
     </AbsoluteFill>
   );
 }
 
 function AnywhereScene({ progress }: { progress: number }) {
   const phoneLift = interpolate(ease(progress), [0, 1], [80, 0]);
-  const boardScale = interpolate(ease(progress), [0, 1], [0.98, 1]);
+  const boardScale = interpolate(ease(progress), [0, 1], [0.96, 1]);
 
   return (
     <SceneShell
@@ -97,11 +97,12 @@ function AnywhereScene({ progress }: { progress: number }) {
     >
       <div style={styles.anywhereLayout}>
         <MacWindow style={{ ...styles.anywhereBoardFrame, transform: `scale(${boardScale})` }}>
-          <Capture src="trello-board-done.jpg" fit="cover" shadow={false} style={{ opacity: 1 }} />
+          <Capture src="trello-board-done.jpg" fit="cover" radius={24} shadow={false} style={styles.boardBackgroundCapture} />
+          <StoryBoard activeLane="Done" progress={1} />
         </MacWindow>
         <div style={styles.anywherePhoneColumn}>
           <div style={{ ...styles.phoneFrame, transform: `translateY(${phoneLift}px)` }}>
-            <Capture src="trello-mobile-card.jpg" fit="cover" radius={38} shadow={false} />
+            <Capture src="trello-mobile-card.jpg" fit="contain" radius={38} shadow={false} />
           </div>
           <div style={styles.anywhereNote}>Plan, review, and track the same work from anywhere.</div>
         </div>
@@ -109,7 +110,6 @@ function AnywhereScene({ progress }: { progress: number }) {
     </SceneShell>
   );
 }
-
 
 
 function MacWindow({ children, style, title }: { children: React.ReactNode; style?: React.CSSProperties; title?: string }) {
@@ -127,7 +127,6 @@ function MacWindow({ children, style, title }: { children: React.ReactNode; styl
     </div>
   );
 }
-
 
 function BoardScene({
   image,
@@ -155,16 +154,88 @@ function BoardScene({
     <SceneShell caption={caption} eyebrow={status} subcaption={detail}>
       <div style={styles.realBoardScene}>
         <MacWindow style={styles.realBoardFrame}>
-          <Capture src={image} fit="cover" shadow={false} style={{ opacity: 1 }} />
+          <Capture src={image} fit="cover" shadow={false} style={styles.boardBackgroundCapture} />
+          <StoryBoard activeLane={activeLane} fromLane={fromLane} progress={progress} automaticMove={moving && !showCursor} />
           {moving && showCursor ? <CursorDrag fromLane={sourceLane} toLane={activeLane} progress={progress} /> : null}
-          {moving && !showCursor ? <AutomationMove fromLane={sourceLane} toLane={activeLane} progress={progress} /> : null}
         </MacWindow>
       </div>
     </SceneShell>
   );
 }
 
+function StoryBoard({
+  activeLane,
+  fromLane,
+  progress,
+  automaticMove = false,
+}: {
+  activeLane: string;
+  fromLane?: string;
+  progress: number;
+  automaticMove?: boolean;
+}) {
+  const moving = fromLane !== undefined && fromLane !== activeLane;
 
+  return (
+    <div style={styles.storyBoard}>
+      {lanes.map((lane) => {
+        const active = lane === activeLane && !moving;
+        const target = lane === activeLane && moving;
+        const source = lane === fromLane && !moving;
+
+        return (
+          <div key={lane} style={{ ...styles.storyLane, ...(active || target ? styles.storyLaneActive : {}) }}>
+            <div style={styles.storyLaneHeader}>
+              <span>{lane}</span>
+              <span>{active ? "1" : "0"}</span>
+            </div>
+            {active || source ? (
+              <div style={storyTaskCard(lane, activeLane, progress, fromLane)}>
+                <strong>Clarify missing Trello token error</strong>
+                <span style={styles.storyTaskMeta}>{active ? "Current card" : "Moving"}</span>
+              </div>
+            ) : (
+              <div style={styles.storyEmptyLane} />
+            )}
+          </div>
+        );
+      })}
+      {moving ? <MovingStoryCard fromLane={fromLane} toLane={activeLane} progress={progress} automaticMove={automaticMove} /> : null}
+    </div>
+  );
+}
+
+function MovingStoryCard({
+  fromLane,
+  toLane,
+  progress,
+  automaticMove,
+}: {
+  fromLane: string;
+  toLane: string;
+  progress: number;
+  automaticMove: boolean;
+}) {
+  const left = interpolate(dragProgress(progress), [0, 1], [laneCardLeft(fromLane), laneCardLeft(toLane)]);
+  const top = interpolate(dragProgress(progress), [0, 1], [116, 124]);
+
+  return (
+    <>
+      {automaticMove ? <AutomationMove fromLane={fromLane} toLane={toLane} progress={progress} /> : null}
+      <div
+        style={{
+          ...styles.movingTaskCard,
+          left: `calc(${left}% + 10px)`,
+          top,
+          width: `calc(${laneWidth()}% - 26px)`,
+        }}
+      >
+        <strong>Clarify missing Trello token error</strong>
+        <span style={styles.storyTaskMeta}>Moving card</span>
+      </div>
+    </>
+  );
+}
 
 function WorkpadScene({ progress, phase }: { progress: number; phase: "initial" | "rework" }) {
   const isRework = phase === "rework";
@@ -188,9 +259,7 @@ function WorkpadScene({ progress, phase }: { progress: number; phase: "initial" 
       subcaption={isRework ? "The rework starts from the review comment and keeps the same PR alive." : "The workpad shows you what Codex is doing before the PR is ready."}
     >
       <div style={styles.workpadLayout}>
-        <WorkpadCard progress={progress} title={isRework ? "Codex Workpad - rework" : "Codex Workpad"} bullets={bullets} />
         <div style={styles.workpadContextPanel}>
-          <span style={styles.contextPill}>Live Trello status</span>
           <h3 style={styles.contextTitle}>{isRework ? "Review feedback is being handled" : "Implementation is in progress"}</h3>
           <p style={styles.contextText}>
             {isRework
@@ -198,6 +267,17 @@ function WorkpadScene({ progress, phase }: { progress: number; phase: "initial" 
               : "You can see the plan, progress, and validation without opening host logs."}
           </p>
         </div>
+        <MacWindow style={{ height: "100%" }} title="codex-worker — bash">
+          <div style={{ padding: "40px 50px" }}>
+            <div style={styles.workpadHeader}>{isRework ? "Codex Workpad - rework" : "Codex Workpad"}</div>
+            <div style={styles.workpadSection}>Plan / Progress / Validation</div>
+            <ul style={styles.workpadList}>
+              {bullets.map((b, i) => (
+                <li key={i} style={{ marginBottom: 12, opacity: progress > (i * 0.1) ? 1 : 0 }}>{b}</li>
+              ))}
+            </ul>
+          </div>
+        </MacWindow>
       </div>
     </SceneShell>
   );
@@ -210,11 +290,12 @@ function GithubReview({ progress }: { progress: number }) {
         <Capture
           src="github-review-diff.jpg"
           fit="cover"
-          scale={interpolate(ease(progress), [0, 1], [1.02, 1.06])}
+          scale={interpolate(ease(progress), [0, 1], [1.16, 1.22])}
           shadow={false}
           style={{ objectPosition: "50% 42%" }}
         />
-        <Label top={24} right={24}>Real GitHub PR diff and review thread</Label>
+        <Label bottom={128} left={34}>Real GitHub PR diff and review thread</Label>
+        <Callout bottom={34} left={34} width={910}>The comment is tied to the actual code Codex produced.</Callout>
       </MacWindow>
     </SceneShell>
   );
@@ -227,11 +308,12 @@ function GithubResolved({ progress }: { progress: number }) {
         <Capture
           src="github-comment-resolved.jpg"
           fit="cover"
-          scale={interpolate(ease(progress), [0, 1], [1.02, 1.06])}
+          scale={interpolate(ease(progress), [0, 1], [1.16, 1.22])}
           shadow={false}
           style={{ objectPosition: "50% 42%" }}
         />
-        <Label top={24} right={24}>Same PR after rework</Label>
+        <Label bottom={128} left={34}>Same PR after rework</Label>
+        <Callout bottom={34} left={34} width={980}>Codex replies with what changed and the validation it ran.</Callout>
       </MacWindow>
     </SceneShell>
   );
@@ -244,14 +326,14 @@ function MergeScene({ progress }: { progress: number }) {
   return (
     <SceneShell caption="Move it to Merging. Symphony merges the PR." subcaption="Trello remains the control surface while GitHub records the merged code.">
       <div style={styles.mergeGrid}>
-        <div style={{ ...styles.panel, transform: `translateX(${boardX}px)` }}>
+        <MacWindow style={{ ...styles.panel, transform: `translateX(${boardX}px)` }}>
           <Capture src="trello-board-merging.jpg" fit="contain" shadow={false} />
           <Label bottom={34} left={34}>Trello: Merging</Label>
-        </div>
-        <div style={{ ...styles.panel, transform: `translateX(${githubX}px)` }}>
+        </MacWindow>
+        <MacWindow style={{ ...styles.panel, transform: `translateX(${githubX}px)` }}>
           <Capture src="github-pr-merged.jpg" fit="contain" shadow={false} />
           <Label bottom={34} left={34}>GitHub: merged</Label>
-        </div>
+        </MacWindow>
       </div>
     </SceneShell>
   );
@@ -269,13 +351,13 @@ function FinalHero({ progress }: { progress: number }) {
       <div style={styles.finalMedia}>
         <div style={styles.finalTile}>
           <MacWindow style={styles.finalPanel}>
-            <Capture src="trello-board-done.jpg" fit="cover" shadow={false} />
+            <FinalTrelloSummary />
           </MacWindow>
           <div style={styles.finalPanelCaption}>Trello board</div>
         </div>
         <div style={styles.finalTile}>
           <MacWindow style={styles.finalPanel}>
-            <Capture src="github-pr-merged.jpg" fit="cover" shadow={false} />
+            <Capture src="github-pr-merged.jpg" fit="contain" shadow={false} />
           </MacWindow>
           <div style={styles.finalPanelCaption}>Pull request: Merged</div>
         </div>
@@ -284,6 +366,31 @@ function FinalHero({ progress }: { progress: number }) {
   );
 }
 
+function FinalTrelloSummary() {
+  return (
+    <div style={styles.finalTrelloSummary}>
+      <div style={styles.finalMiniBoard}>
+        {lanes.map((lane) => {
+          const done = lane === "Done";
+
+          return (
+            <div key={lane} style={{ ...styles.finalMiniLane, ...(done ? styles.finalMiniDoneLane : {}) }}>
+              <span style={styles.finalMiniLaneTitle}>{lane}</span>
+              {done ? (
+                <div style={styles.finalMiniTaskCard}>
+                  <strong>Clarify missing Trello token error</strong>
+                  <span style={styles.finalMiniStatus}>Merged PR</span>
+                </div>
+              ) : (
+                <div style={styles.finalMiniEmptyCard} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function WorkpadCard({ progress, title, bullets }: { progress: number; title: string; bullets: string[] }) {
   return (
@@ -459,67 +566,11 @@ function laneWidth() {
 
 const styles: Record<string, CSSProperties> = {
   stage: {
-    background: "#f4f5f7", // Light mode background matching Trello/GitHub
-    color: "#0f172a",
-    fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    background: "#f8fafc",
+    color: ink,
+    fontFamily:
+      'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
     overflow: "hidden",
-  },
-  scene: {
-    display: "grid",
-    gridTemplateRows: "auto 1fr",
-    gap: 40,
-    padding: "50px 80px 60px",
-    background: "transparent",
-  },
-  sceneContent: {
-    position: "relative",
-    minHeight: 0,
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  introContent: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    textAlign: 'center',
-  },
-  intro: {
-    justifyContent: "center",
-    padding: "0 150px",
-    background: "#f4f5f7",
-    color: "#0f172a",
-  },
-  brandPill: {
-    width: "fit-content",
-    border: "1px solid rgba(0, 0, 0, 0.1)",
-    borderRadius: 999,
-    padding: "12px 28px",
-    fontSize: 22,
-    letterSpacing: "0.08em",
-    background: "white",
-    color: "#0f172a",
-    fontWeight: 800,
-    textTransform: "uppercase",
-    boxShadow: "0 10px 30px rgba(0,0,0,0.05)",
-  },
-  title: {
-    margin: "44px 0 0",
-    fontSize: 104,
-    lineHeight: 1.05,
-    letterSpacing: "-0.03em",
-    fontWeight: 900,
-    maxWidth: 1200,
-    color: "#0f172a",
-    filter: "drop-shadow(0 4px 20px rgba(0,0,0,0.02))",
-  },
-  subtitle: {
-    marginTop: 34,
-    maxWidth: 980,
-    fontSize: 34,
-    lineHeight: 1.35,
-    color: "#475569",
-    fontWeight: 500,
   },
   macWindow: {
     display: "flex",
@@ -528,12 +579,12 @@ const styles: Record<string, CSSProperties> = {
     overflow: "hidden",
     background: "white",
     border: "1px solid rgba(0,0,0,0.1)",
-    boxShadow: "0 25px 80px rgba(0, 0, 0, 0.1), 0 0 80px rgba(0, 0, 0, 0.02)",
+    boxShadow: "0 25px 80px rgba(0, 0, 0, 0.1)",
     width: "100%",
   },
   macChrome: {
     height: 44,
-    background: "#eef2f5",
+    background: "#f1f5f9",
     display: "flex",
     alignItems: "center",
     padding: "0 16px",
@@ -560,87 +611,173 @@ const styles: Record<string, CSSProperties> = {
     minHeight: 0,
     background: "white",
   },
+  scene: {
+    display: "grid",
+    gridTemplateRows: "auto 1fr",
+    gap: 30,
+    padding: "40px 60px 50px",
+    background: "#f8fafc",
+  },
+  sceneContent: {
+    position: "relative",
+    minHeight: 0,
+  },
+  intro: {
+    justifyContent: "center",
+    padding: "0 150px",
+    background: "#f8fafc",
+    color: deep,
+  },
+  brandPill: {
+    width: "fit-content",
+    border: "1px solid rgba(8, 40, 58, 0.15)",
+    borderRadius: 999,
+    padding: "12px 24px",
+    fontSize: 24,
+    letterSpacing: 0,
+    background: "white",
+    fontWeight: 600,
+    boxShadow: "0 4px 12px rgba(8, 40, 58, 0.05)",
+  },
+  title: {
+    margin: "38px 0 0",
+    fontSize: 96,
+    lineHeight: 1.05,
+    letterSpacing: "-0.02em",
+    fontWeight: 800,
+    maxWidth: 1200,
+  },
+  subtitle: {
+    marginTop: 30,
+    maxWidth: 980,
+    fontSize: 32,
+    lineHeight: 1.35,
+    color: "rgba(8, 40, 58, 0.6)",
+    fontWeight: 400,
+  },
+  browserCard: {
+    position: "relative",
+    height: 820,
+    borderRadius: 20,
+    overflow: "hidden",
+    background: "white",
+    border: "1px solid rgba(8, 40, 58, 0.1)",
+    boxShadow: "0 20px 60px rgba(8, 40, 58, 0.08)",
+  },
   realBoardScene: {
     position: "relative",
     height: "100%",
-    width: "100%",
   },
   realBoardFrame: {
     position: "relative",
     height: "100%",
-    width: "100%",
+    minHeight: 0,
+    borderRadius: 20,
+    overflow: "hidden",
+    background: "white",
+    border: "1px solid rgba(8, 40, 58, 0.1)",
+    boxShadow: "0 20px 60px rgba(8, 40, 58, 0.08)",
   },
   boardBackgroundCapture: {
-    opacity: 0.12,
-    filter: "blur(2px)",
+    opacity: 0.15,
+    filter: "saturate(0.5) blur(1px)",
   },
   storyBoard: {
     position: "absolute",
     inset: "52px 22px 42px",
     display: "grid",
-    gridTemplateColumns: "repeat(5, 0.82fr) 1.34fr",
+    gridTemplateColumns: "repeat(6, 1fr)",
     gap: 16,
   },
-  lane: {
+  storyLane: {
     minWidth: 0,
-    borderRadius: 12,
-    padding: "16px 12px",
-    background: "#f1f2f4",
-    border: "1px solid rgba(0,0,0,0.03)",
+    borderRadius: 16,
+    padding: "18px 16px",
+    background: "rgba(255,255,255,0.6)",
+    border: "1px solid rgba(8, 40, 58, 0.05)",
   },
-  doneLane: {
-    background: "rgba(16, 185, 129, 0.05)",
-    border: "2px solid #10b981",
+  storyLaneActive: {
+    background: "rgba(255,255,255,0.95)",
+    border: `2px solid ${green}`,
+    boxShadow: "0 10px 30px rgba(22, 163, 74, 0.1)",
   },
-  laneHeader: {
+  storyLaneHeader: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-  },
-  laneTitle: {
-    color: "#172b4d",
-    fontSize: 20,
-    lineHeight: 1.1,
+    gap: 12,
+    minHeight: 48,
+    color: deep,
+    fontSize: 22,
+    lineHeight: 1.08,
     fontWeight: 700,
   },
-  laneCount: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    minWidth: 24,
-    height: 24,
-    borderRadius: 12,
-    background: "rgba(0,0,0,0.08)",
-    color: "#172b4d",
-    fontSize: 14,
-    fontWeight: 600,
-  },
-  taskCardContainer: {
-    position: "relative",
+  storyTaskCard: {
     marginTop: 20,
-  },
-  taskCard: {
-    borderRadius: 10,
-    padding: "16px 14px",
+    borderRadius: 12,
+    padding: "18px 16px",
     background: "white",
-    color: "#172b4d",
-    fontSize: 20,
+    color: ink,
+    fontSize: 22,
     lineHeight: 1.25,
-    boxShadow: "0 4px 12px rgba(0,0,0,0.06)",
-    border: "1px solid rgba(0,0,0,0.05)",
+    boxShadow: "0 8px 20px rgba(8, 40, 58, 0.08)",
+    border: "1px solid rgba(8, 40, 58, 0.1)",
   },
-  statusIndicator: {
+  movingTaskCard: {
+    position: "absolute",
+    zIndex: 6,
+    borderRadius: 12,
+    padding: "18px 16px",
+    background: "white",
+    color: ink,
+    fontSize: 22,
+    lineHeight: 1.25,
+    boxShadow: "0 15px 35px rgba(8, 40, 58, 0.15)",
+    border: `1.5px solid ${deep}`,
+  },
+  storyTaskMeta: {
     display: "block",
-    marginTop: 10,
-    color: "#10b981",
-    fontSize: 16,
+    marginTop: 12,
+    color: blue,
+    fontSize: 18,
     fontWeight: 700,
   },
-  emptyCard: {
+  storyEmptyLane: {
     marginTop: 20,
     height: 80,
-    borderRadius: 10,
-    background: "rgba(0,0,0,0.04)",
+    borderRadius: 12,
+    background: "rgba(8, 40, 58, 0.04)",
+  },
+  realBoardHighlight: {
+    position: "absolute",
+    zIndex: 1,
+    top: 0,
+    bottom: 0,
+    borderRadius: 22,
+    border: `5px solid ${green}`,
+    background: "rgba(22, 163, 74, 0.08)",
+    boxShadow: "0 20px 48px rgba(22, 163, 74, 0.3)",
+    pointerEvents: "none",
+  },
+  boardTaskOverlay: {
+    position: "absolute",
+    zIndex: 4,
+    top: 94,
+    borderRadius: 14,
+    padding: "16px 16px 14px",
+    background: "white",
+    color: ink,
+    fontSize: 22,
+    lineHeight: 1.18,
+    boxShadow: "0 18px 42px rgba(8, 40, 58, 0.28)",
+    border: "1px solid rgba(8, 40, 58, 0.12)",
+  },
+  boardTaskCardStatus: {
+    display: "block",
+    marginTop: 10,
+    color: blue,
+    fontSize: 18,
+    fontWeight: 800,
   },
   automationMove: {
     position: "absolute",
@@ -654,158 +791,340 @@ const styles: Record<string, CSSProperties> = {
     left: 12,
     right: 12,
     top: "50%",
-    height: 4,
+    height: 3,
     borderRadius: 999,
-    background: "#10b981",
-    boxShadow: "0 0 16px rgba(16, 185, 129, 0.4)",
+    background: green,
   },
   automationArrow: {
     position: "absolute",
     top: "50%",
     width: 0,
     height: 0,
-    borderTop: "10px solid transparent",
-    borderBottom: "10px solid transparent",
-    borderLeft: `16px solid #10b981`,
-    filter: "drop-shadow(0 0 10px rgba(16, 185, 129, 0.4))",
+    borderTop: "8px solid transparent",
+    borderBottom: "8px solid transparent",
+    borderLeft: `14px solid ${green}`,
   },
   automationBadge: {
     position: "absolute",
     left: "50%",
-    top: -6,
+    top: 0,
     transform: "translateX(-50%)",
-    padding: "10px 18px",
+    padding: "8px 12px",
     borderRadius: 999,
-    background: "#10b981",
-    color: "white",
-    fontSize: 18,
-    fontWeight: 800,
+    background: "white",
+    color: deep,
+    fontSize: 16,
+    fontWeight: 700,
     lineHeight: 1,
     whiteSpace: "nowrap",
-    boxShadow: "0 12px 30px rgba(16, 185, 129, 0.3)",
+    boxShadow: "0 4px 12px rgba(8, 40, 58, 0.1)",
+    border: "1px solid rgba(8, 40, 58, 0.1)",
   },
   cursorDrag: {
     position: "absolute",
     zIndex: 8,
-    width: 56,
-    height: 64,
+    width: 48,
+    height: 56,
     transform: "translate(18px, 6px)",
-    filter: "drop-shadow(0 16px 32px rgba(0, 0, 0, 0.3))",
+    filter: "drop-shadow(0 8px 12px rgba(8, 40, 58, 0.2))",
     pointerEvents: "none",
+  },
+  boardInfoPanel: {
+    display: "grid",
+    gridTemplateColumns: "auto auto 1fr",
+    gap: 22,
+    alignItems: "center",
+    borderRadius: 24,
+    padding: "22px 30px",
+    background: "rgba(8, 40, 58, 0.94)",
+    color: "white",
+    boxShadow: "0 24px 58px rgba(8, 40, 58, 0.22)",
+  },
+  boardInfoTitle: {
+    margin: 0,
+    color: "white",
+    fontSize: 36,
+    lineHeight: 1.1,
+    letterSpacing: 0,
+  },
+  boardInfoText: {
+    margin: 0,
+    color: "rgba(255,255,255,0.9)",
+    fontSize: 28,
+    lineHeight: 1.25,
+    fontWeight: 680,
+  },
+  boardChrome: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    display: "flex",
+    gap: 24,
+    alignItems: "center",
+    padding: "0 32px",
+    background: "rgba(8,40,58,0.96)",
+    color: "white",
+    fontSize: 22,
+  },
+  boardOverlay: {
+    position: "absolute",
+    inset: "132px 46px 46px",
+    display: "grid",
+    gridTemplateRows: "1fr auto",
+    gap: 34,
+  },
+  laneStrip: {
+    display: "grid",
+    gridTemplateColumns: "repeat(6, 1fr)",
+    gap: 18,
+    alignItems: "stretch",
+  },
+  laneCard: {
+    borderRadius: 24,
+    padding: "22px 18px",
+    background: "rgba(255,255,255,0.7)",
+    border: "1px solid rgba(15, 107, 154, 0.16)",
+    boxShadow: "0 18px 44px rgba(8, 40, 58, 0.12)",
+  },
+  activeLaneCard: {
+    background: "rgba(255,255,255,0.96)",
+    border: "3px solid rgba(22, 163, 74, 0.78)",
+    boxShadow: "0 26px 68px rgba(8, 40, 58, 0.24)",
+  },
+  laneTitle: {
+    minHeight: 72,
+    color: "rgba(8, 40, 58, 0.58)",
+    fontSize: 25,
+    lineHeight: 1.15,
+    fontWeight: 780,
+  },
+  activeLaneTitle: {
+    color: deep,
+  },
+  taskCard: {
+    marginTop: 26,
+    borderRadius: 18,
+    padding: "22px 20px",
+    background: "white",
+    border: "1px solid rgba(8, 40, 58, 0.1)",
+    boxShadow: "0 20px 48px rgba(8, 40, 58, 0.2)",
+    fontSize: 26,
+    lineHeight: 1.24,
+  },
+  emptyLaneHint: {
+    marginTop: 34,
+    height: 84,
+    borderRadius: 16,
+    background: "rgba(15, 107, 154, 0.08)",
+  },
+  boardStatus: {
+    display: "flex",
+    alignItems: "center",
+    gap: 26,
+    borderRadius: 22,
+    padding: "24px 30px",
+    background: "rgba(8, 40, 58, 0.9)",
+    color: "white",
+    fontSize: 30,
+    lineHeight: 1.25,
+    boxShadow: "0 24px 58px rgba(8, 40, 58, 0.22)",
+  },
+  taskCardStatus: {
+    display: "block",
+    marginTop: 12,
+    color: blue,
+    fontSize: 22,
+    fontWeight: 760,
+  },
+  boardStatusLabel: {
+    flexShrink: 0,
+    borderRadius: 999,
+    padding: "12px 18px",
+    background: green,
+    fontSize: 24,
+    fontWeight: 820,
+  },
+  boardStatusText: {
+    margin: 0,
+    fontWeight: 700,
   },
   caption: {
     position: "relative",
     display: "grid",
     gridTemplateColumns: "auto 1fr",
-    columnGap: 24,
-    rowGap: 12,
+    columnGap: 20,
+    rowGap: 8,
     alignItems: "center",
-    color: "#0f172a",
-    fontSize: 48,
+    minHeight: 80,
+    padding: "0 10px",
+    color: deep,
+    fontSize: 42,
     lineHeight: 1.15,
-    fontWeight: 800,
+    fontWeight: 700,
     textAlign: "left",
   },
   captionEyebrow: {
     gridRow: "1 / span 2",
     alignSelf: "center",
     borderRadius: 999,
-    padding: "14px 24px",
-    background: "rgba(59, 130, 246, 0.1)",
-    border: "1px solid rgba(59, 130, 246, 0.2)",
-    color: "#2563eb",
-    fontSize: 22,
+    padding: "10px 16px",
+    background: "rgba(22, 163, 74, 0.12)",
+    color: green,
+    fontSize: 20,
     lineHeight: 1,
     fontWeight: 800,
     whiteSpace: "nowrap",
-    textTransform: "uppercase",
-    letterSpacing: "0.06em",
   },
   captionSubtext: {
     gridColumn: "2",
-    color: "#475569",
-    fontSize: 30,
-    lineHeight: 1.3,
+    color: "rgba(8, 40, 58, 0.6)",
+    fontSize: 26,
+    lineHeight: 1.25,
     fontWeight: 500,
   },
   taskScene: {
     display: "flex",
-    gap: 60,
-    height: "100%",
-    width: "100%",
+    gap: 48,
+    height: 800,
     alignItems: "center",
-    justifyContent: "center",
+  },
+  taskLaptop: {
+    position: "relative",
+    flex: 1.28,
+    height: "100%",
+    minWidth: 0,
+    display: "grid",
+    gridTemplateRows: "1fr auto",
+    gap: 24,
+    borderRadius: 20,
+    overflow: "hidden",
+    background: "white",
+    boxShadow: "0 20px 60px rgba(8, 40, 58, 0.08)",
+  },
+  taskCaptureFrame: {
+    minHeight: 0,
+    padding: "76px 30px 0",
+    background: "#f8fafc",
+  },
+  taskSummary: {
+    padding: "26px 42px 34px",
+    borderTop: "1px solid rgba(8, 40, 58, 0.1)",
+    background: "white",
+    color: deep,
+  },
+  taskSummaryLabel: {
+    display: "block",
+    color: blue,
+    fontSize: 24,
+    fontWeight: 760,
+  },
+  taskSummaryTitle: {
+    display: "block",
+    marginTop: 10,
+    fontSize: 42,
+    lineHeight: 1.08,
+  },
+  taskSummaryText: {
+    margin: "14px 0 0",
+    fontSize: 29,
+    lineHeight: 1.28,
+    fontWeight: 680,
+  },
+  panel: {
+    position: "relative",
+    height: "100%",
+    minWidth: 0,
+    borderRadius: 20,
+    overflow: "hidden",
+    background: "white",
+    border: "1px solid rgba(8, 40, 58, 0.1)",
+    boxShadow: "0 20px 60px rgba(8, 40, 58, 0.08)",
   },
   phoneFrame: {
     width: 360,
-    height: 720,
-    padding: 12,
-    borderRadius: 50,
-    background: "white",
-    border: "4px solid #cbd5e1",
-    boxShadow: "0 30px 80px rgba(0,0,0,0.1), inset 0 0 10px rgba(0,0,0,0.05)",
-    flexShrink: 0,
+    height: 620,
+    padding: 16,
+    borderRadius: 44,
+    background: "#1e1e1e",
+    boxShadow: "0 20px 60px rgba(8, 40, 58, 0.15)",
   },
   anywhereLayout: {
     display: "grid",
     gridTemplateColumns: "1fr 410px",
-    gap: 60,
+    gap: 44,
     height: "100%",
-    width: "100%",
     alignItems: "stretch",
   },
   anywhereBoardFrame: {
     position: "relative",
-    height: "100%",
-    width: "100%",
+    minWidth: 0,
+    borderRadius: 20,
+    overflow: "hidden",
+    background: "white",
+    border: "1px solid rgba(8, 40, 58, 0.1)",
+    boxShadow: "0 20px 60px rgba(8, 40, 58, 0.08)",
   },
   anywherePhoneColumn: {
     display: "grid",
     gridTemplateRows: "1fr auto",
-    gap: 40,
+    gap: 22,
     justifyItems: "center",
     alignItems: "center",
   },
   anywhereNote: {
     borderRadius: 16,
-    padding: "24px 30px",
+    padding: "20px 24px",
     background: "white",
-    border: "1px solid rgba(0,0,0,0.1)",
-    color: "#1e293b",
-    fontSize: 26,
+    border: "1px solid rgba(8, 40, 58, 0.1)",
+    color: deep,
+    fontSize: 22,
     lineHeight: 1.35,
     fontWeight: 600,
     textAlign: "center",
-    boxShadow: "0 10px 30px rgba(0,0,0,0.05)",
+    boxShadow: "0 10px 30px rgba(8, 40, 58, 0.05)",
   },
   workpadLayout: {
     display: "grid",
-    gridTemplateColumns: "1.35fr 0.65fr",
-    gap: 50,
+    gridTemplateColumns: "0.65fr 1.35fr",
+    gap: 38,
     height: "100%",
-    width: "100%",
     alignItems: "stretch",
   },
+  boardPeek: {
+    position: "relative",
+    borderRadius: 20,
+    overflow: "hidden",
+    background: "white",
+    boxShadow: "0 20px 60px rgba(8, 40, 58, 0.08)",
+  },
+  workpadCard: {
+    borderRadius: 20,
+    background: "white",
+    padding: "50px 60px",
+    boxShadow: "0 15px 50px rgba(8, 40, 58, 0.05)",
+    border: "1px solid rgba(8, 40, 58, 0.1)",
+  },
   workpadHeader: {
-    fontSize: 48,
+    fontSize: 64,
     lineHeight: 1.1,
-    fontWeight: 800,
+    fontWeight: 700,
     color: "#0f172a",
   },
   workpadSection: {
     marginTop: 24,
-    fontSize: 20,
-    color: "#2563eb",
-    fontWeight: 800,
+    fontSize: 24,
+    color: "rgba(8, 40, 58, 0.6)",
+    fontWeight: 600,
     textTransform: "uppercase",
-    letterSpacing: "0.1em",
+    letterSpacing: "0.05em",
   },
   workpadList: {
     margin: "30px 0 0",
     paddingLeft: 30,
-    fontSize: 28,
-    lineHeight: 1.6,
-    color: "#334155",
+    fontSize: 22,
+    lineHeight: 1.5,
+    color: "#1e1e1e",
     fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
   },
   workpadContextPanel: {
@@ -813,99 +1132,153 @@ const styles: Record<string, CSSProperties> = {
     display: "flex",
     flexDirection: "column",
     justifyContent: "center",
-    borderRadius: 24,
-    padding: "50px",
+    borderRadius: 20,
+    padding: "40px 46px",
     background: "white",
-    border: "1px solid rgba(0,0,0,0.1)",
-    boxShadow: "0 25px 80px rgba(0,0,0,0.08)",
+    border: "1px solid rgba(8, 40, 58, 0.1)",
+    boxShadow: "0 15px 50px rgba(8, 40, 58, 0.05)",
   },
   contextPill: {
     width: "fit-content",
     borderRadius: 999,
-    padding: "12px 20px",
-    background: "rgba(16, 185, 129, 0.1)",
-    border: "1px solid rgba(16, 185, 129, 0.2)",
-    color: "#059669",
+    padding: "10px 16px",
+    background: "rgba(22, 163, 74, 0.12)",
+    color: green,
     fontSize: 18,
     lineHeight: 1,
-    fontWeight: 800,
-    textTransform: "uppercase",
-    letterSpacing: "0.08em",
+    fontWeight: 700,
   },
   contextTitle: {
-    margin: "32px 0 0",
-    fontSize: 42,
+    margin: "28px 0 0",
+    fontSize: 38,
     lineHeight: 1.15,
-    color: "#0f172a",
-    fontWeight: 800,
+    color: deep,
   },
   contextText: {
-    margin: "24px 0 0",
-    fontSize: 28,
-    lineHeight: 1.4,
-    color: "#475569",
+    margin: "20px 0 0",
+    fontSize: 26,
+    lineHeight: 1.35,
+    color: "rgba(8, 40, 58, 0.7)",
     fontWeight: 500,
   },
   githubFrame: {
     position: "relative",
     height: "100%",
-    width: "100%",
+    borderRadius: 20,
+    overflow: "hidden",
+    background: "white",
+    border: "1px solid rgba(8, 40, 58, 0.1)",
+    boxShadow: "0 20px 60px rgba(8, 40, 58, 0.08)",
   },
   mergeGrid: {
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
-    gap: 50,
+    gap: 44,
     height: "100%",
-    width: "100%",
   },
   finalHero: {
     padding: "80px 100px",
-    background: "#f4f5f7",
-    color: "#0f172a",
+    background: "#f8fafc",
+    color: deep,
   },
   finalMedia: {
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
-    gap: 60,
-    height: 600,
-    marginTop: 40,
+    gap: 36,
+    height: 570,
   },
   finalTile: {
     minHeight: 0,
     display: "grid",
     gridTemplateRows: "1fr auto",
-    gap: 24,
+    gap: 16,
   },
   finalPanel: {
     position: "relative",
+    borderRadius: 20,
+    overflow: "hidden",
+    background: "white",
+    border: "1px solid rgba(8, 40, 58, 0.1)",
+    boxShadow: "0 20px 60px rgba(8, 40, 58, 0.08)",
+  },
+  finalTrelloSummary: {
     height: "100%",
-    width: "100%",
+    padding: 28,
+    background: "white",
+  },
+  finalMiniBoard: {
+    height: "100%",
+    display: "grid",
+    gridTemplateColumns: "repeat(5, 0.82fr) 1.34fr",
+    gap: 12,
+  },
+  finalMiniLane: {
+    minWidth: 0,
+    borderRadius: 12,
+    padding: "16px 12px",
+    background: "#f5f7f9",
+    border: "1px solid rgba(8, 40, 58, 0.05)",
+  },
+  finalMiniDoneLane: {
+    background: "rgba(22, 163, 74, 0.05)",
+    border: `2px solid ${green}`,
+  },
+  finalMiniLaneTitle: {
+    display: "block",
+    color: deep,
+    fontSize: 18,
+    lineHeight: 1.1,
+    fontWeight: 700,
+  },
+  finalMiniTaskCard: {
+    marginTop: 16,
+    borderRadius: 10,
+    padding: "14px 12px",
+    background: "white",
+    color: deep,
+    fontSize: 18,
+    lineHeight: 1.2,
+    boxShadow: "0 8px 20px rgba(8, 40, 58, 0.08)",
+    border: "1px solid rgba(8, 40, 58, 0.1)",
+  },
+  finalMiniStatus: {
+    display: "block",
+    marginTop: 8,
+    color: green,
+    fontSize: 16,
+    fontWeight: 700,
+  },
+  finalMiniEmptyCard: {
+    marginTop: 20,
+    height: 60,
+    borderRadius: 10,
+    background: "rgba(8, 40, 58, 0.03)",
   },
   finalPanelCaption: {
-    color: "#64748b",
-    fontSize: 28,
+    color: "rgba(8, 40, 58, 0.6)",
+    fontSize: 22,
     fontWeight: 600,
     letterSpacing: 0,
     textAlign: "center",
   },
   finalCopy: {
-    marginBottom: 0,
+    marginBottom: 64,
     textAlign: "center",
   },
   finalHeadline: {
     margin: "0 auto",
-    maxWidth: 1600,
-    fontSize: 56,
+    maxWidth: 1560,
+    color: deep,
+    fontSize: 48,
     lineHeight: 1.16,
-    letterSpacing: "-0.02em",
-    fontWeight: 900,
-    color: "#0f172a",
+    letterSpacing: 0,
+    fontWeight: 800,
   },
   finalTagline: {
-    margin: "24px auto 0",
-    maxWidth: 1200,
-    color: "#475569",
-    fontSize: 34,
+    margin: "20px auto 0",
+    maxWidth: 1180,
+    color: "rgba(8, 40, 58, 0.7)",
+    fontSize: 30,
     lineHeight: 1.3,
     letterSpacing: 0,
   },
@@ -913,14 +1286,25 @@ const styles: Record<string, CSSProperties> = {
     position: "absolute",
     display: "flex",
     alignItems: "center",
-    gap: 12,
-    padding: "16px 24px",
-    borderRadius: 16,
+    gap: 10,
+    padding: "10px 14px",
+    borderRadius: 10,
     background: "white",
-    border: "1px solid rgba(0,0,0,0.1)",
-    color: "#0f172a",
+    border: "1px solid rgba(8, 40, 58, 0.1)",
+    color: deep,
+    fontSize: 20,
+    fontWeight: 600,
+    boxShadow: "0 10px 30px rgba(8, 40, 58, 0.1)",
+  },
+  callout: {
+    position: "absolute",
+    padding: "14px 18px",
+    borderRadius: 12,
+    background: deep,
+    color: "white",
     fontSize: 22,
-    fontWeight: 700,
-    boxShadow: "0 20px 50px rgba(0,0,0,0.1)",
+    lineHeight: 1.3,
+    fontWeight: 500,
+    boxShadow: "0 12px 35px rgba(8, 40, 58, 0.15)",
   },
 };
