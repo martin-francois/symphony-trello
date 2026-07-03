@@ -43,7 +43,7 @@ export function ReadmeDemo() {
       <Scene start={1540} duration={240}>{(progress) => <WorkpadScene progress={progress} phase="rework" />}</Scene>
       <Scene start={1780} duration={130}>{(progress) => <BoardScene image="trello-board-human-review-staged.jpg" progress={progress} caption="Symphony brings the updated PR back for review." activeLane="Human Review" fromLane="In Progress" status="Updated PR" detail="The same card carries the rework and validation context." />}</Scene>
       <Scene start={1910} duration={170}>{(progress) => <GithubResolved progress={progress} />}</Scene>
-      <Scene start={2080} duration={140}>{(progress) => <BoardScene image="trello-board-merging.jpg" progress={progress} caption="Merge the PR and move the card." activeLane="Merging" fromLane="Human Review" showCursor status="Merging" detail="The human merges the PR and moves the card to Merging." />}</Scene>
+      <Scene start={2080} duration={140}>{(progress) => <BoardScene image="trello-board-merging.jpg" progress={progress} caption="Move the card to Merging." activeLane="Merging" fromLane="Human Review" showCursor status="Trigger merge" detail="Dropping the card here tells Symphony to merge the code." />}</Scene>
       <Scene start={2220} duration={140}>{(progress) => <MergeScene progress={progress} />}</Scene>
       <Scene start={2360} duration={120}>{(progress) => <BoardScene image="trello-board-done.jpg" progress={progress} caption="The card lands in Done." activeLane="Done" fromLane="Merging" status="Merged and complete" detail="The PR is merged and the board shows the task as finished." />}</Scene>
       <Scene start={2480} duration={130}>{(progress) => <AnywhereScene progress={progress} />}</Scene>
@@ -331,7 +331,7 @@ function MergeScene({ progress }: { progress: number }) {
   const githubX = interpolate(ease(progress), [0, 1], [40, 0]);
 
   return (
-    <SceneShell caption="Move it to Merging. Symphony merges the PR." subcaption="Trello remains the control surface while GitHub records the merged code.">
+    <SceneShell caption="Symphony merges the pull request automatically." subcaption="Trello remains the control surface while GitHub records the merged code.">
       <div style={styles.mergeGrid}>
         <MacWindow style={{ ...styles.panel, transform: `translateX(${boardX}px)` }}>
           <Capture src="trello-board-merging.jpg" fit="contain" shadow={false} />
@@ -339,7 +339,7 @@ function MergeScene({ progress }: { progress: number }) {
         </MacWindow>
         <MacWindow style={{ ...styles.panel, transform: `translateX(${githubX}px)` }}>
           <Capture src="github-pr-merged.jpg" fit="contain" shadow={false} />
-          <Label bottom={34} left={34}>GitHub: merged</Label>
+          <Label bottom={34} left={34}>GitHub: Merged</Label>
         </MacWindow>
       </div>
     </SceneShell>
@@ -360,7 +360,7 @@ function FinalHero({ progress }: { progress: number }) {
           <MacWindow style={styles.finalPanel}>
             <FinalTrelloSummary />
           </MacWindow>
-          <div style={styles.finalPanelCaption}>Trello board</div>
+          <div style={styles.finalPanelCaption}>Trello Board</div>
         </div>
         <div style={styles.finalTile}>
           <MacWindow style={styles.finalPanel}>
