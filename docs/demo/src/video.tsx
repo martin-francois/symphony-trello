@@ -459,7 +459,7 @@ function laneWidth() {
 
 const styles: Record<string, CSSProperties> = {
   stage: {
-    background: "radial-gradient(circle at 50% 0%, #1a1f35 0%, #080a0f 70%)",
+    background: "#0d0f17",
     color: "white",
     fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
     overflow: "hidden",
@@ -487,7 +487,7 @@ const styles: Record<string, CSSProperties> = {
   intro: {
     justifyContent: "center",
     padding: "0 150px",
-    background: "radial-gradient(circle at 50% 50%, #1a1f35 0%, #080a0f 60%)",
+    background: "#0d0f17",
     color: "white",
   },
   brandPill: {
@@ -497,7 +497,7 @@ const styles: Record<string, CSSProperties> = {
     padding: "12px 28px",
     fontSize: 22,
     letterSpacing: "0.08em",
-    background: "linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.03) 100%)",
+    background: "rgba(255,255,255,0.05)",
     color: "#fff",
     fontWeight: 800,
     textTransform: "uppercase",
@@ -510,9 +510,7 @@ const styles: Record<string, CSSProperties> = {
     letterSpacing: "-0.03em",
     fontWeight: 900,
     maxWidth: 1200,
-    background: "-webkit-linear-gradient(#fff, #9ca3af)",
-    WebkitBackgroundClip: "text",
-    WebkitTextFillColor: "transparent",
+    color: "white",
     filter: "drop-shadow(0 4px 20px rgba(255,255,255,0.1))",
   },
   subtitle: {
@@ -535,7 +533,7 @@ const styles: Record<string, CSSProperties> = {
   },
   macChrome: {
     height: 44,
-    background: "linear-gradient(180deg, #3a3a3a 0%, #2a2a2a 100%)",
+    background: "#2d2d2d",
     display: "flex",
     alignItems: "center",
     padding: "0 16px",
@@ -745,7 +743,7 @@ const styles: Record<string, CSSProperties> = {
     justifyContent: "center",
     borderRadius: 24,
     padding: "50px",
-    background: "linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 100%)",
+    background: "rgba(255,255,255,0.05)",
     border: "1px solid rgba(255,255,255,0.2)",
     boxShadow: "0 30px 80px rgba(0,0,0,0.6)",
     backdropFilter: "blur(20px)",
@@ -791,7 +789,7 @@ const styles: Record<string, CSSProperties> = {
   },
   finalHero: {
     padding: "80px 100px",
-    background: "radial-gradient(circle at 50% 50%, #1a1f35 0%, #080a0f 80%)",
+    background: "#0d0f17",
     color: "white",
   },
   finalMedia: {
