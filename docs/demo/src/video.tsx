@@ -34,18 +34,18 @@ export function ReadmeDemo() {
       <Scene start={0} duration={120}>{(progress) => <Intro progress={progress} />}</Scene>
       <Scene start={120} duration={120}>{(progress) => <BoardScene image="trello-board-inbox.jpg" progress={progress} caption="Plan work where your team already plans work." activeLane="Inbox" status="New work request" detail="A real Trello card starts in the team's planning board." />}</Scene>
       <Scene start={240} duration={120}>{(progress) => <TaskAndMobile progress={progress} />}</Scene>
-      <Scene start={360} duration={150}>{(progress) => <BoardScene image="trello-board-ready.jpg" progress={progress} caption="Move the card to Ready for Codex." activeLane="Ready for Codex" status="Human handoff" detail="The card is ready; no extra repo instructions are needed on the card." />}</Scene>
-      <Scene start={510} duration={150}>{(progress) => <BoardScene image="trello-board-in-progress.jpg" progress={progress} caption="Symphony picks it up automatically." activeLane="In Progress" status="Automated pickup" detail="Symphony starts a Codex worker and moves the same card forward." />}</Scene>
+      <Scene start={360} duration={150}>{(progress) => <BoardScene image="trello-board-ready.jpg" progress={progress} caption="Move the card to Ready for Codex." activeLane="Ready for Codex" fromLane="Inbox" showCursor status="Human handoff" detail="The card is ready; no extra repo instructions are needed on the card." />}</Scene>
+      <Scene start={510} duration={150}>{(progress) => <BoardScene image="trello-board-in-progress.jpg" progress={progress} caption="Symphony picks it up automatically." activeLane="In Progress" fromLane="Ready for Codex" status="Automated pickup" detail="Symphony starts a Codex worker and moves the same card forward." />}</Scene>
       <Scene start={660} duration={210}>{(progress) => <WorkpadScene progress={progress} phase="initial" />}</Scene>
-      <Scene start={870} duration={120}>{(progress) => <BoardScene image="trello-board-human-review-staged.jpg" progress={progress} caption="The PR is ready for review." activeLane="Human Review" status="Review handoff" detail="The card links to the pull request and waits for a reviewer." />}</Scene>
+      <Scene start={870} duration={120}>{(progress) => <BoardScene image="trello-board-human-review-staged.jpg" progress={progress} caption="The PR is ready for review." activeLane="Human Review" fromLane="In Progress" status="Review handoff" detail="The card links to the pull request and waits for a reviewer." />}</Scene>
       <Scene start={990} duration={210}>{(progress) => <GithubReview progress={progress} />}</Scene>
-      <Scene start={1200} duration={120}>{(progress) => <BoardScene image="trello-board-ready.jpg" progress={progress} caption="Move the card back and Codex continues." activeLane="Ready for Codex" status="Review feedback queued" detail="The reviewer asks for one small change, then returns the card to Codex." />}</Scene>
-      <Scene start={1320} duration={150}>{(progress) => <BoardScene image="trello-board-in-progress.jpg" progress={progress} caption="Codex reopens the same task context." activeLane="In Progress" status="Rework running" detail="The worker reads the review thread and updates the existing PR." />}</Scene>
+      <Scene start={1200} duration={120}>{(progress) => <BoardScene image="trello-board-ready.jpg" progress={progress} caption="Move the card back and Codex continues." activeLane="Ready for Codex" fromLane="Human Review" showCursor status="Review feedback queued" detail="The reviewer asks for one small change, then returns the card to Codex." />}</Scene>
+      <Scene start={1320} duration={150}>{(progress) => <BoardScene image="trello-board-in-progress.jpg" progress={progress} caption="Codex reopens the same task context." activeLane="In Progress" fromLane="Ready for Codex" status="Rework running" detail="The worker reads the review thread and updates the existing PR." />}</Scene>
       <Scene start={1470} duration={210}>{(progress) => <WorkpadScene progress={progress} phase="rework" />}</Scene>
-      <Scene start={1680} duration={130}>{(progress) => <BoardScene image="trello-board-human-review-staged.jpg" progress={progress} caption="Symphony brings the updated PR back for review." activeLane="Human Review" status="Updated PR" detail="The same Trello card carries the implementation, validation, and review context." />}</Scene>
+      <Scene start={1680} duration={130}>{(progress) => <BoardScene image="trello-board-human-review-staged.jpg" progress={progress} caption="Symphony brings the updated PR back for review." activeLane="Human Review" fromLane="In Progress" status="Updated PR" detail="The same Trello card carries the implementation, validation, and review context." />}</Scene>
       <Scene start={1810} duration={150}>{(progress) => <GithubResolved progress={progress} />}</Scene>
       <Scene start={1960} duration={140}>{(progress) => <MergeScene progress={progress} />}</Scene>
-      <Scene start={2100} duration={120}>{(progress) => <BoardScene image="trello-board-done.jpg" progress={progress} caption="The card lands in Done." activeLane="Done" status="Merged and complete" detail="The pull request is merged and the Trello board shows the task as finished." />}</Scene>
+      <Scene start={2100} duration={120}>{(progress) => <BoardScene image="trello-board-done.jpg" progress={progress} caption="The card lands in Done." activeLane="Done" fromLane="Merging" status="Merged and complete" detail="The pull request is merged and the Trello board shows the task as finished." />}</Scene>
       <Scene start={2220} duration={150}>{(progress) => <FinalHero progress={progress} />}</Scene>
     </AbsoluteFill>
   );
@@ -65,7 +65,7 @@ function Scene({ start, duration, children }: SceneProps) {
 
   return (
     <Sequence from={start} durationInFrames={duration}>
-      <AbsoluteFill style={{ opacity: fade(progress) }}>{children(progress)}</AbsoluteFill>
+      <AbsoluteFill>{children(progress)}</AbsoluteFill>
     </Sequence>
   );
 }
@@ -117,6 +117,8 @@ function BoardScene({
   progress,
   caption,
   activeLane,
+  fromLane,
+  showCursor = false,
   status,
   detail,
 }: {
@@ -124,10 +126,14 @@ function BoardScene({
   progress: number;
   caption: string;
   activeLane: string;
+  fromLane?: string;
+  showCursor?: boolean;
   status: string;
   detail: string;
 }) {
   const panelLift = interpolate(ease(progress), [0, 1], [34, 0]);
+  const moving = fromLane !== undefined && fromLane !== activeLane;
+  const sourceLane = fromLane ?? activeLane;
 
   return (
     <SceneShell caption={caption}>
@@ -135,10 +141,12 @@ function BoardScene({
         <div style={styles.realBoardFrame}>
           <Capture src={image} fit="contain" radius={24} shadow={false} />
           <div style={laneHighlight(activeLane, progress)} />
-          <div style={boardTaskCard(activeLane, progress)}>
+          {moving && !showCursor ? <AutomationMove fromLane={sourceLane} toLane={activeLane} progress={progress} /> : null}
+          <div style={boardTaskCard(activeLane, progress, fromLane)}>
             <strong>Clarify missing Trello token error</strong>
             <span style={styles.boardTaskCardStatus}>{activeLane}</span>
           </div>
+          {moving && showCursor ? <CursorDrag fromLane={sourceLane} toLane={activeLane} progress={progress} /> : null}
         </div>
         <div style={{ ...styles.boardInfoPanel, transform: `translateY(${panelLift}px)` }}>
           <span style={styles.boardStatusLabel}>{status}</span>
@@ -355,29 +363,95 @@ function Callout({ children, top, left, width }: { children: ReactNode; top: num
   return <div style={{ ...styles.callout, top, left, width }}>{children}</div>;
 }
 
-function laneHighlight(activeLane: string, progress: number): CSSProperties {
-  const index = Math.max(0, lanes.indexOf(activeLane));
-  const laneWidth = 100 / lanes.length;
+function AutomationMove({ fromLane, toLane, progress }: { fromLane: string; toLane: string; progress: number }) {
+  const start = laneCenter(fromLane);
+  const end = laneCenter(toLane);
+  const forward = end >= start;
+  const left = Math.min(start, end);
+  const width = Math.abs(end - start);
+  const arrowStyle: CSSProperties = {
+    ...styles.automationArrow,
+    transform: `translateY(-50%) rotate(${forward ? 0 : 180}deg)`,
+  };
 
+  if (forward) {
+    arrowStyle.right = -10;
+  } else {
+    arrowStyle.left = -10;
+  }
+
+  return (
+    <div style={{ ...styles.automationMove, left: `${left}%`, width: `${width}%`, opacity: moveVisibility(progress) }}>
+      <div style={styles.automationLine} />
+      <div style={arrowStyle} />
+      <div style={styles.automationBadge}>Symphony moves it</div>
+    </div>
+  );
+}
+
+function CursorDrag({ fromLane, toLane, progress }: { fromLane: string; toLane: string; progress: number }) {
+  const left = interpolate(dragProgress(progress), [0, 1], [laneCenter(fromLane), laneCenter(toLane)]);
+  const top = interpolate(dragProgress(progress), [0, 1], [238, 216]);
+
+  return (
+    <div style={{ ...styles.cursorDrag, left: `${left}%`, top, opacity: moveVisibility(progress) }}>
+      <svg width="54" height="64" viewBox="0 0 54 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path
+          d="M10 5L44 39L29 42L22 58L10 5Z"
+          fill="white"
+          stroke={deep}
+          strokeWidth="4"
+          strokeLinejoin="round"
+        />
+        <path d="M28 43L39 58" stroke={deep} strokeWidth="5" strokeLinecap="round" />
+      </svg>
+    </div>
+  );
+}
+
+function laneHighlight(activeLane: string, progress: number): CSSProperties {
   return {
     ...styles.realBoardHighlight,
-    left: `${index * laneWidth + 0.7}%`,
-    width: `${laneWidth - 1.4}%`,
+    left: `${laneLeft(activeLane, 0.7)}%`,
+    width: `${laneWidth() - 1.4}%`,
     opacity: interpolate(ease(progress), [0, 0.25, 1], [0, 1, 1]),
   };
 }
 
-function boardTaskCard(activeLane: string, progress: number): CSSProperties {
-  const index = Math.max(0, lanes.indexOf(activeLane));
-  const laneWidth = 100 / lanes.length;
+function boardTaskCard(activeLane: string, progress: number, fromLane?: string): CSSProperties {
+  const left = interpolate(dragProgress(progress), [0, 1], [laneLeft(fromLane ?? activeLane, 2.1), laneLeft(activeLane, 2.1)]);
 
   return {
     ...styles.boardTaskOverlay,
-    left: `${index * laneWidth + 2.1}%`,
-    width: `${laneWidth - 4.2}%`,
-    opacity: interpolate(ease(progress), [0, 0.2, 1], [0, 1, 1]),
+    left: `${left}%`,
+    width: `${laneWidth() - 4.2}%`,
+    opacity: fromLane === undefined ? interpolate(ease(progress), [0, 0.2, 1], [0, 1, 1]) : 1,
     transform: `translateY(${interpolate(ease(progress), [0, 1], [28, 0])}px)`,
   };
+}
+
+function dragProgress(progress: number) {
+  return ease(clamp((progress - 0.08) / 0.5));
+}
+
+function moveVisibility(progress: number) {
+  return clamp((progress - 0.04) / 0.08) * clamp((0.78 - progress) / 0.12);
+}
+
+function laneCenter(lane: string) {
+  return laneLeft(lane, laneWidth() / 2);
+}
+
+function laneLeft(lane: string, inset: number) {
+  return laneIndex(lane) * laneWidth() + inset;
+}
+
+function laneIndex(lane: string) {
+  return Math.max(0, lanes.indexOf(lane));
+}
+
+function laneWidth() {
+  return 100 / lanes.length;
 }
 
 function BoardChrome({ compact = false }: { compact?: boolean }) {
@@ -392,10 +466,6 @@ function BoardChrome({ compact = false }: { compact?: boolean }) {
       <span>Done</span>
     </div>
   );
-}
-
-function fade(progress: number) {
-  return interpolate(progress, [0, 0.08, 0.92, 1], [0, 1, 1, 0]);
 }
 
 const styles: Record<string, CSSProperties> = {
@@ -467,6 +537,7 @@ const styles: Record<string, CSSProperties> = {
   },
   realBoardHighlight: {
     position: "absolute",
+    zIndex: 1,
     top: 0,
     bottom: 0,
     borderRadius: 22,
@@ -477,6 +548,7 @@ const styles: Record<string, CSSProperties> = {
   },
   boardTaskOverlay: {
     position: "absolute",
+    zIndex: 4,
     top: 94,
     borderRadius: 14,
     padding: "16px 16px 14px",
@@ -493,6 +565,57 @@ const styles: Record<string, CSSProperties> = {
     color: blue,
     fontSize: 18,
     fontWeight: 800,
+  },
+  automationMove: {
+    position: "absolute",
+    zIndex: 5,
+    top: 248,
+    height: 72,
+    pointerEvents: "none",
+  },
+  automationLine: {
+    position: "absolute",
+    left: 12,
+    right: 12,
+    top: "50%",
+    height: 6,
+    borderRadius: 999,
+    background: `linear-gradient(90deg, rgba(22, 163, 74, 0.2), ${green})`,
+    boxShadow: "0 12px 26px rgba(22, 163, 74, 0.24)",
+  },
+  automationArrow: {
+    position: "absolute",
+    top: "50%",
+    width: 0,
+    height: 0,
+    borderTop: "12px solid transparent",
+    borderBottom: "12px solid transparent",
+    borderLeft: `20px solid ${green}`,
+    filter: "drop-shadow(0 8px 12px rgba(22, 163, 74, 0.28))",
+  },
+  automationBadge: {
+    position: "absolute",
+    left: "50%",
+    top: 46,
+    transform: "translateX(-50%)",
+    padding: "10px 16px",
+    borderRadius: 999,
+    background: "rgba(8, 40, 58, 0.92)",
+    color: "white",
+    fontSize: 20,
+    fontWeight: 820,
+    lineHeight: 1,
+    whiteSpace: "nowrap",
+    boxShadow: "0 14px 30px rgba(8, 40, 58, 0.18)",
+  },
+  cursorDrag: {
+    position: "absolute",
+    zIndex: 6,
+    width: 54,
+    height: 64,
+    transform: "translate(-8px, -6px)",
+    filter: "drop-shadow(0 14px 20px rgba(8, 40, 58, 0.32))",
+    pointerEvents: "none",
   },
   boardInfoPanel: {
     display: "grid",
