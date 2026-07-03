@@ -467,10 +467,9 @@ function SceneShell({
 function Caption({ children, eyebrow, subcaption }: { children: ReactNode; eyebrow?: string; subcaption?: string }) {
   return (
     <div style={styles.caption}>
-      {eyebrow ? <span style={styles.captionEyebrow}>{eyebrow}</span> : null}
-      <strong style={{ gridColumn: eyebrow ? "2" : "1 / -1" }}>{children}</strong>
+      <strong style={{ gridColumn: "1 / -1" }}>{children}</strong>
       {subcaption ? (
-        <span style={{ ...styles.captionSubtext, gridColumn: eyebrow ? "2" : "1 / -1" }}>{subcaption}</span>
+        <span style={{ ...styles.captionSubtext, gridColumn: "1 / -1" }}>{subcaption}</span>
       ) : null}
     </div>
   );
