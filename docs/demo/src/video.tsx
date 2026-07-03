@@ -470,7 +470,7 @@ function BoardChrome({ compact = false }: { compact?: boolean }) {
 
 const styles: Record<string, CSSProperties> = {
   stage: {
-    background: `linear-gradient(135deg, ${deep} 0%, #0b4d6c 46%, #eaf7fb 100%)`,
+    background: "#eff8fb",
     color: ink,
     fontFamily:
       'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
@@ -478,12 +478,12 @@ const styles: Record<string, CSSProperties> = {
   },
   scene: {
     padding: 74,
-    background: "linear-gradient(135deg, #eaf7fb 0%, #f8fafc 44%, #eaf1ff 100%)",
+    background: "#eff8fb",
   },
   intro: {
     justifyContent: "center",
     padding: "0 150px",
-    background: `radial-gradient(circle at 76% 18%, rgba(22, 163, 74, 0.24), transparent 28%), linear-gradient(135deg, ${deep}, ${blue})`,
+    background: deep,
     color: "white",
   },
   brandPill: {
@@ -580,7 +580,7 @@ const styles: Record<string, CSSProperties> = {
     top: "50%",
     height: 6,
     borderRadius: 999,
-    background: `linear-gradient(90deg, rgba(22, 163, 74, 0.2), ${green})`,
+    background: green,
     boxShadow: "0 12px 26px rgba(22, 163, 74, 0.24)",
   },
   automationArrow: {
@@ -651,7 +651,7 @@ const styles: Record<string, CSSProperties> = {
     gap: 24,
     alignItems: "center",
     padding: "0 32px",
-    background: "linear-gradient(90deg, rgba(8,40,58,0.96), rgba(15,107,154,0.92))",
+    background: "rgba(8,40,58,0.96)",
     color: "white",
     fontSize: 22,
   },
@@ -729,7 +729,7 @@ const styles: Record<string, CSSProperties> = {
     flexShrink: 0,
     borderRadius: 999,
     padding: "12px 18px",
-    background: `linear-gradient(135deg, ${green}, #22c55e)`,
+    background: green,
     fontSize: 24,
     fontWeight: 820,
   },
@@ -872,7 +872,7 @@ const styles: Record<string, CSSProperties> = {
   },
   finalHero: {
     padding: 74,
-    background: `linear-gradient(135deg, ${deep}, #0f5f85 56%, #eaf7fb)`,
+    background: deep,
     color: "white",
   },
   finalMedia: {
@@ -897,7 +897,7 @@ const styles: Record<string, CSSProperties> = {
   finalTrelloSummary: {
     height: "100%",
     padding: 28,
-    background: "linear-gradient(135deg, #f1f8fb, #ffffff)",
+    background: "#f8fbfd",
   },
   finalMiniBoard: {
     height: "100%",
@@ -991,7 +991,7 @@ const styles: Record<string, CSSProperties> = {
     position: "absolute",
     padding: "20px 24px",
     borderRadius: 18,
-    background: `linear-gradient(135deg, ${green}, #22c55e)`,
+    background: green,
     color: "white",
     fontSize: 28,
     lineHeight: 1.25,
