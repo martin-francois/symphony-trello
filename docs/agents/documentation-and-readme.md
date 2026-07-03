@@ -10,6 +10,9 @@ prompts, and product terminology. Deployment steps and installer lifecycle testi
 
 - Keep the project open-source-ready even while private: clear README, usable CONTRIBUTING, useful
   ADRs, no committed secrets, and reviewable history.
+- For rendered README videos and poster images, avoid generated gradients in backgrounds, overlays,
+  and callouts. Use solid fills, borders, shadows, and real UI imagery instead so encoded videos do
+  not show gradient banding.
 - Lead the README with who the project is for, why they should use it, and the practical benefits
   before implementation details. Move technical mechanics into supporting sections once the value is
   clear.
