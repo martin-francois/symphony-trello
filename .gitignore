@@ -1,5 +1,8 @@
 .DS_Store
 target/
+node_modules/
+docs/demo/out/
+docs/demo/.remotion/
 .idea/
 .vscode/
 *.iml
