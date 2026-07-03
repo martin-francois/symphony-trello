@@ -1039,13 +1039,6 @@ const styles: Record<string, CSSProperties> = {
   },
   panel: {
     position: "relative",
-    height: "100%",
-    minWidth: 0,
-    borderRadius: 20,
-    overflow: "hidden",
-    background: "white",
-    border: "1px solid rgba(8, 40, 58, 0.1)",
-    boxShadow: "0 20px 60px rgba(8, 40, 58, 0.08)",
   },
   phoneFrame: {
     width: 360,
@@ -1169,12 +1162,9 @@ const styles: Record<string, CSSProperties> = {
   },
   githubFrame: {
     position: "relative",
-    height: "100%",
-    borderRadius: 20,
-    overflow: "hidden",
-    background: "white",
-    border: "1px solid rgba(8, 40, 58, 0.1)",
-    boxShadow: "0 20px 60px rgba(8, 40, 58, 0.08)",
+    width: 1400,
+    height: 720,
+    margin: "0 auto",
   },
   mergeGrid: {
     display: "grid",
@@ -1201,11 +1191,8 @@ const styles: Record<string, CSSProperties> = {
   },
   finalPanel: {
     position: "relative",
-    borderRadius: 20,
-    overflow: "hidden",
-    background: "white",
-    border: "1px solid rgba(8, 40, 58, 0.1)",
-    boxShadow: "0 20px 60px rgba(8, 40, 58, 0.08)",
+    flex: 1,
+    minHeight: 0,
   },
   finalTrelloSummary: {
     height: "100%",
