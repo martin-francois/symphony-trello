@@ -637,7 +637,7 @@ const styles: Record<string, CSSProperties> = {
   brandPill: {
     width: "fit-content",
     border: "1px solid rgba(8, 40, 58, 0.15)",
-    borderRadius: 999,
+    borderRadius: 12,
     padding: "12px 24px",
     fontSize: 24,
     letterSpacing: 0,
@@ -815,7 +815,7 @@ const styles: Record<string, CSSProperties> = {
     top: -54,
     left: "50%",
     transform: "translateX(-50%)",
-    borderRadius: 999,
+    borderRadius: 12,
     padding: "10px 20px",
     background: "white",
     border: `2px solid ${blue}`,
@@ -944,7 +944,7 @@ const styles: Record<string, CSSProperties> = {
   },
   boardStatusLabel: {
     flexShrink: 0,
-    borderRadius: 999,
+    borderRadius: 12,
     padding: "12px 18px",
     background: green,
     fontSize: 24,
@@ -972,7 +972,7 @@ const styles: Record<string, CSSProperties> = {
   captionEyebrow: {
     gridRow: "1 / span 2",
     alignSelf: "center",
-    borderRadius: 999,
+    borderRadius: 12,
     padding: "10px 16px",
     background: "rgba(22, 163, 74, 0.12)",
     color: green,
@@ -1138,7 +1138,7 @@ const styles: Record<string, CSSProperties> = {
   },
   contextPill: {
     width: "fit-content",
-    borderRadius: 999,
+    borderRadius: 12,
     padding: "10px 16px",
     background: "rgba(22, 163, 74, 0.12)",
     color: green,
