@@ -1487,8 +1487,9 @@ Across the audited AI-assisted development sessions, the build footprint was app
 
 - **15.13 billion** total tokens
 - **$13,240.24** in API/API-equivalent token cost
-- **2,041** human prompts and follow-ups, totaling **72,542** words, roughly the length of Mary
-  Shelley's _Frankenstein_
+- **2,041** human prompts and follow-ups, totaling **72,542** words,
+  roughly the length of Mary Shelley's _Frankenstein_, or about **8 hours**
+  as an audiobook
 - **96,825+** agent/model turns
 - **107,796+** tool/function calls
 - **82,242+** shell executions
