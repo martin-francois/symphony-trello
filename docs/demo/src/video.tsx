@@ -43,10 +43,11 @@ export function ReadmeDemo() {
       <Scene start={1540} duration={240}>{(progress) => <WorkpadScene progress={progress} phase="rework" />}</Scene>
       <Scene start={1780} duration={130}>{(progress) => <BoardScene image="trello-board-human-review-staged.jpg" progress={progress} caption="Symphony brings the updated PR back for review." activeLane="Human Review" fromLane="In Progress" status="Updated PR" detail="The same card carries the rework and validation context." />}</Scene>
       <Scene start={1910} duration={170}>{(progress) => <GithubResolved progress={progress} />}</Scene>
-      <Scene start={2080} duration={140}>{(progress) => <MergeScene progress={progress} />}</Scene>
-      <Scene start={2220} duration={120}>{(progress) => <BoardScene image="trello-board-done.jpg" progress={progress} caption="The card lands in Done." activeLane="Done" fromLane="Merging" status="Merged and complete" detail="The PR is merged and the board shows the task as finished." />}</Scene>
-      <Scene start={2340} duration={130}>{(progress) => <AnywhereScene progress={progress} />}</Scene>
-      <Scene start={2470} duration={150}>{(progress) => <FinalHero progress={progress} />}</Scene>
+      <Scene start={2080} duration={140}>{(progress) => <BoardScene image="trello-board-merging.jpg" progress={progress} caption="Merge the PR and move the card." activeLane="Merging" fromLane="Human Review" showCursor status="Merging" detail="The human merges the PR and moves the card to Merging." />}</Scene>
+      <Scene start={2220} duration={140}>{(progress) => <MergeScene progress={progress} />}</Scene>
+      <Scene start={2360} duration={120}>{(progress) => <BoardScene image="trello-board-done.jpg" progress={progress} caption="The card lands in Done." activeLane="Done" fromLane="Merging" status="Merged and complete" detail="The PR is merged and the board shows the task as finished." />}</Scene>
+      <Scene start={2480} duration={130}>{(progress) => <AnywhereScene progress={progress} />}</Scene>
+      <Scene start={2610} duration={150}>{(progress) => <FinalHero progress={progress} />}</Scene>
     </AbsoluteFill>
   );
 }
@@ -155,8 +156,7 @@ function BoardScene({
       <div style={styles.realBoardScene}>
         <MacWindow style={styles.realBoardFrame}>
           <Capture src={image} fit="cover" shadow={false} style={styles.boardBackgroundCapture} />
-          <StoryBoard activeLane={activeLane} fromLane={fromLane} progress={progress} automaticMove={moving && !showCursor} />
-          {moving && showCursor ? <CursorDrag fromLane={sourceLane} toLane={activeLane} progress={progress} /> : null}
+          <StoryBoard activeLane={activeLane} fromLane={fromLane} progress={progress} automaticMove={moving && !showCursor} showCursor={moving && showCursor} />
         </MacWindow>
       </div>
     </SceneShell>
@@ -168,11 +168,13 @@ function StoryBoard({
   fromLane,
   progress,
   automaticMove = false,
+  showCursor = false,
 }: {
   activeLane: string;
   fromLane?: string;
   progress: number;
   automaticMove?: boolean;
+  showCursor?: boolean;
 }) {
   const moving = fromLane !== undefined && fromLane !== activeLane;
 
@@ -186,8 +188,12 @@ function StoryBoard({
         return (
           <div key={lane} style={{ ...styles.storyLane, ...(active || target ? styles.storyLaneActive : {}) }}>
             <div style={styles.storyLaneHeader}>
-              <span>{lane}</span>
-              <span>{active ? "1" : "0"}</span>
+              {active || target ? (
+                <>
+                  <span>{lane}</span>
+                  <span>{active ? "1" : "0"}</span>
+                </>
+              ) : null}
             </div>
             {active || source ? (
               <div style={storyTaskCard(lane, activeLane, progress, fromLane)}>
@@ -201,6 +207,7 @@ function StoryBoard({
         );
       })}
       {moving ? <MovingStoryCard fromLane={fromLane} toLane={activeLane} progress={progress} automaticMove={automaticMove} /> : null}
+      {showCursor && fromLane ? <CursorDrag fromLane={fromLane} toLane={activeLane} progress={progress} /> : null}
     </div>
   );
 }
@@ -693,8 +700,8 @@ const styles: Record<string, CSSProperties> = {
     minWidth: 0,
     borderRadius: 16,
     padding: "18px 16px",
-    background: "rgba(255,255,255,0.6)",
-    border: "1px solid rgba(8, 40, 58, 0.05)",
+    background: "transparent",
+    border: "1px solid transparent",
   },
   storyLaneActive: {
     background: "rgba(255,255,255,0.95)",
@@ -720,7 +727,7 @@ const styles: Record<string, CSSProperties> = {
     color: ink,
     fontSize: 22,
     lineHeight: 1.25,
-    boxShadow: "0 8px 20px rgba(8, 40, 58, 0.08)",
+    boxShadow: "0 12px 28px rgba(0, 0, 0, 0.2)",
     border: "1px solid rgba(8, 40, 58, 0.1)",
   },
   movingTaskCard: {
@@ -732,8 +739,8 @@ const styles: Record<string, CSSProperties> = {
     color: ink,
     fontSize: 22,
     lineHeight: 1.25,
-    boxShadow: "0 15px 35px rgba(8, 40, 58, 0.15)",
-    border: `1.5px solid ${deep}`,
+    boxShadow: "0 20px 45px rgba(0, 0, 0, 0.35)",
+    border: `2px solid ${deep}`,
   },
   storyTaskMeta: {
     display: "block",

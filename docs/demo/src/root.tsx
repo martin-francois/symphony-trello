@@ -5,7 +5,7 @@ import { Poster, ReadmeDemo } from "./video";
 export const VIDEO_WIDTH = 1920;
 export const VIDEO_HEIGHT = 1080;
 export const FPS = 30;
-export const DURATION_IN_FRAMES = 2620;
+export const DURATION_IN_FRAMES = 2760;
 
 export function Root() {
   return (
