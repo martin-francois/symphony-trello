@@ -426,14 +426,6 @@ function WorkpadCard({ progress, title, bullets }: { progress: number; title: st
 }
 
 function Capture({ src, fit = "cover", scale = 1, x = 0, y = 0, radius = 22, shadow = true, style }: CaptureProps) {
-  const isTrello = src.startsWith("trello");
-  
-  // Combine Trello light-mode conversion filter with any explicitly passed filter (like blur/saturate)
-  const baseFilter = isTrello ? "invert(1) hue-rotate(180deg) contrast(1.1) brightness(1.05)" : "";
-  // @ts-ignore - style is a generic React.CSSProperties
-  const explicitFilter = style?.filter || "";
-  const finalFilter = [baseFilter, explicitFilter].filter(Boolean).join(" ");
-
   return (
     <Img
       src={staticFile(`captures/${src}`)}
@@ -446,7 +438,6 @@ function Capture({ src, fit = "cover", scale = 1, x = 0, y = 0, radius = 22, sha
         transform: `translate(${x}px, ${y}px) scale(${scale})`,
         transformOrigin: "center center",
         ...style,
-        filter: finalFilter || undefined,
       }}
     />
   );
