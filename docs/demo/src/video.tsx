@@ -402,7 +402,7 @@ function FinalTrelloSummary() {
 function WorkpadCard({ progress, title, bullets }: { progress: number; title: string; bullets: string[] }) {
   return (
     <div style={styles.workpadCard}>
-      <div style={styles.workpadHeader}>## {title}</div>
+      <div style={styles.workpadHeader}>{title}</div>
       <div style={styles.workpadSection}>Plan / Progress / Validation</div>
       <ul style={styles.workpadList}>
         {bullets.map((bullet, index) => {
