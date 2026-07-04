@@ -636,9 +636,8 @@ commit.
    Codex-author commit.
 5. After the fix, wait until the card reaches `Human Review`, then inspect the PR with
    `gh pr view --json commits`.
-6. Verify every PR commit author is the authenticated GitHub user, for example
-   `martinfrancois <f.martin@fastmail.com>`, and no commit is authored as
-   `Codex <codex@openai.com>`.
+6. Verify every PR commit author matches the authenticated GitHub user identity reported by the
+   workflow's author check, and no commit is authored as `Codex <codex@openai.com>`.
 7. Verify the Trello workpad or handoff comment records that the PR branch author range was checked
    or rewritten, and `/api/v1/state` reaches zero running and retrying entries.
 8. Close the temporary PR and delete the temporary branch after recording the result.
