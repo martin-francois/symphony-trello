@@ -63,7 +63,7 @@ export function ReadmeDemo() {
         )}
       </Scene>
       <Scene start={2220} duration={140}>{(progress) => <GithubMergedScene progress={progress} />}</Scene>
-      <Scene start={2360} duration={120}>{(progress) => <BoardScene image="trello-board-done.jpg" progress={progress} caption="The card lands in Done." activeLane="Done" fromLane="Human Review" status="Merged and complete" detail="The PR is merged and the board shows the task as finished." />}</Scene>
+      <Scene start={2360} duration={120}>{(progress) => <BoardScene image="trello-board-done.jpg" progress={progress} caption="The card lands in Done." activeLane="Done" fromLane="Merging" status="Merged and complete" detail="The PR is merged and the board shows the task as finished." />}</Scene>
       <Scene start={2480} duration={130}>{(progress) => <AnywhereScene progress={progress} />}</Scene>
       <Scene start={2610} duration={300}>{(progress) => <FinalHero progress={progress} />}</Scene>
     </AbsoluteFill>
