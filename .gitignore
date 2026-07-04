@@ -14,6 +14,10 @@ target/
 .claude/skills/tessl:*
 .codex/skills/tessl__*
 .codex/skills/tessl:*
+.cursor/rules/tessl__*
+.cursor/rules/tessl:*
+.cursor/skills/tessl__*
+.cursor/skills/tessl:*
 .github/skills/tessl__*
 .github/skills/tessl:*
 
