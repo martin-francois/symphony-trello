@@ -1,6 +1,11 @@
 import type { CSSProperties, ReactNode } from "react";
-
 import { AbsoluteFill, Easing, Img, interpolate, Sequence, staticFile, useCurrentFrame } from "remotion";
+import { loadFont } from "@remotion/google-fonts/Inter";
+
+const { fontFamily: interFontFamily } = loadFont("normal", {
+  weights: ["400", "600"],
+  subsets: ["latin"],
+});
 
 type SceneProps = {
   start: number;
@@ -551,7 +556,7 @@ const styles: Record<string, CSSProperties> = {
     background: "#f8fafc",
     color: ink,
     fontFamily:
-      'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      `${interFontFamily}, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`,
     overflow: "hidden",
   },
   macWindow: {
