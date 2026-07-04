@@ -28,6 +28,9 @@ prompts, and product terminology. Deployment steps and installer lifecycle testi
   sections that apply to all contributors, including security and maintainer process sections. Do not
   put AI-only setup instructions in the middle where a human reader might assume the remaining
   document is only for agents and stop reading.
+- For pull requests, use "merge", "merged", or "merge flow" instead of "land", "landed", or
+  "landing". Keep existing technical identifiers such as the `land` skill path only where renaming
+  the identifier would be a product change.
 
 ## Prose style
 

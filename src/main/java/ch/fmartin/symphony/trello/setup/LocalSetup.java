@@ -1041,7 +1041,7 @@ public final class LocalSetup {
                     && !PromptSupport.yesDefaultTrue(terminal, "Create the missing GitHub list now? [Y/n] ")) {
                 throw new TrelloBoardSetupException(
                         "setup_github_upgrade_list_declined",
-                        "GitHub workflow upgrade needs a Merging list for landing approval.");
+                        "GitHub workflow upgrade needs a Merging list for merge approval.");
             }
         }
 
@@ -1437,7 +1437,7 @@ public final class LocalSetup {
                         + "; Symphony will re-check it, merge it, and move the Trello card to " + doneTarget + ".");
             } else {
                 out.println(
-                        "Landing stays manual until a `Merging` Trello list and terminal Trello list are configured in the workflow.");
+                        "The merge step stays manual until a `Merging` Trello list and terminal Trello list are configured in the workflow.");
             }
             printConcurrencyHint(out);
         } else {

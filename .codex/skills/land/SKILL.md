@@ -1,27 +1,27 @@
 ---
 name: land
 description: >
-  Land a pull request after a Trello card has been moved to Merging. Use only
-  for human-approved work where the workflow explicitly allows landing.
+  Merge an approved pull request after a Trello card has been moved to Merging. Use only
+  for human-approved work where the workflow explicitly allows merging from Merging.
 ---
 
 # Land
 
 ## Goals
 
-- Land only after a human moves the Trello card to `Merging`.
+- Merge only after a human moves the Trello card to `Merging`.
 - Refuse to merge while checks, mergeability, review feedback, or auth are
   unclear.
 - Use the repository's merge policy instead of assuming one merge mode.
 - Do not enable auto-merge unless the repository policy explicitly requires it.
-- Update the Trello workpad and move the card to the configured landing
-  completion list after a successful landing. The recommended workflow uses
+- Update the Trello workpad and move the card to the configured merge
+  completion list after a successful merge. The recommended workflow uses
   `Done`.
 
 ## Preconditions
 
 - The current Trello list is `Merging` or the workflow explicitly names the
-  current list as the landing list.
+  current list as the merge approval list.
 - `gh` is installed and authenticated.
 - The working tree is clean or changes are intentionally committed.
 - A PR can be identified for the current branch or Trello card.
@@ -30,7 +30,7 @@ description: >
 
 1. Use `review-sweep` and address all actionable feedback.
    Reply to addressed GitHub review threads, but leave thread resolution to the
-   reviewer unless the user explicitly asks you to resolve them. Keep landing
+   reviewer unless the user explicitly asks you to resolve them. Keep merging
    eligible only when the feedback is otherwise addressed and the workpad records
    any thread still awaiting reviewer resolution.
 2. Run local validation required by `AGENTS.md` and the Trello card.
@@ -58,37 +58,37 @@ description: >
 8. After merging:
    - update the workpad with merge evidence,
    - add a short Trello comment if useful,
-   - move the card to the configured landing completion list.
+   - move the card to the configured merge completion list.
 
-## Blocked Landing
+## Blocked Merge
 
-If landing cannot proceed, use `trello-handoff` to move the card to `Blocked`
+If merging cannot proceed, use `trello-handoff` to move the card to `Blocked`
 with a concise explanation. Include the exact class of blocker: auth, merge
 conflict, failing checks, outstanding feedback, missing PR, or unclear policy.
 
-## Landing Decision Table
+## Merge Decision Table
 
-- Move to the configured landing completion list only after the PR merged
+- Move to the configured merge completion list only after the PR merged
   successfully.
 - If a human moved the card from the configured review handoff list to the
-  landing approval list without adding new feedback, treat that as approval to
-  land when the PR is identifiable, checks and mergeability are clean, required
+  merge approval list without adding new feedback, treat that as approval to
+  merge when the PR is identifiable, checks and mergeability are clean, required
   reviews are satisfied, and policy is clear.
-- If precise, unambiguous feedback was added before the landing approval list,
+- If precise, unambiguous feedback was added before the merge approval list,
   and the feedback was addressed exactly with current validation and clean
-  checks, land to the configured landing completion list.
-- If final work in the landing approval list required material fixups, broad
+  checks, merge to the configured merge completion list.
+- If final work in the merge approval list required material fixups, broad
   interpretation, or unverifiable changes, move back to the configured review
   handoff list with the exact reason and ask for renewed approval.
 - If actionable feedback, required reviews, mergeability, checks, auth, or
   repository policy remain unresolved, move to the configured blocked
   destination with the exact blocker class and next human action.
-- Do not leave the Trello card parked in `Merging` after a failed landing
+- Do not leave the Trello card parked in `Merging` after a failed merge
   attempt.
 
 ## Stop Conditions
 
-- The card is in the configured review handoff list rather than the landing
+- The card is in the configured review handoff list rather than the merge
   approval list.
 - The PR cannot be identified.
 - CI/checks are failing, pending beyond a reasonable wait, or unavailable when

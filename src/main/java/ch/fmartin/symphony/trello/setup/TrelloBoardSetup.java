@@ -1482,7 +1482,7 @@ public final class TrelloBoardSetup {
                     ## Local And Non-GitHub Repository Work
 
                     This workflow does not have GitHub PR integration configured. Do not create pull requests,
-                    do not require GitHub auth, and do not refer to a landing approval list. For repository-changing work,
+                    do not require GitHub auth, and do not refer to a merge approval list. For repository-changing work,
                     make the smallest maintainable local commit when a Git repository is available, run relevant
                     validation, and record the branch, commit, workspace context without absolute paths, and validation evidence in %s before
                     moving the card to %s.
@@ -1583,7 +1583,7 @@ public final class TrelloBoardSetup {
 
                 If the Trello description, Trello comments, current branch, repository context, or open PR list
                 identifies an associated pull request, use `%s` before moving the
-                card to %s or landing from Merging. Cards without PR context do not need GitHub review checks.
+                card to %s or merging from Merging. Cards without PR context do not need GitHub review checks.
 
                 The sweep must check top-level PR comments, inline review comments, GitHub review threads and whether
                 each thread is resolved, review states and summaries, CI/check status, and Codex review issue comments
@@ -1611,8 +1611,8 @@ public final class TrelloBoardSetup {
                   flaky, or unrelated check caveat in %s.
 
                 After feedback-driven changes, rerun the relevant validation and repeat the sweep until no
-                actionable feedback remains. For landing from Merging, exact and unambiguous feedback that was
-                added before the card entered %s and addressed with clean checks may land without returning to
+                actionable feedback remains. For merging from Merging, exact and unambiguous feedback that was
+                added before the card entered %s and addressed with clean checks may merge without returning to
                 %s; material fixups, ambiguity, or unverifiable changes require renewed %s. If GitHub auth, PR
                 discovery, or review data are
                 unavailable for a PR-backed card and no documented fallback can provide the required signal, %s
@@ -1708,9 +1708,9 @@ public final class TrelloBoardSetup {
             boolean githubEnabled) {
         if (!githubEnabled) {
             return """
-                    ## Landing
+                    ## Merge
 
-                    This workflow has no GitHub landing flow configured. Do not merge remote branches or land pull
+                    This workflow has no GitHub merge flow configured. Do not merge remote branches or pull
                     requests from this workflow. Move completed local/non-GitHub work to the configured review or done
                     destination described in the handoff rules.
                     """
@@ -1719,10 +1719,10 @@ public final class TrelloBoardSetup {
         String reviewHandoff = blank(reviewState) ? "human review" : quote(reviewState);
         if (blank(mergingState)) {
             return """
-                    ## Landing
+                    ## Merge
 
-                    This workflow has no landing approval list configured. Do not merge or land from %s.
-                    A human must land outside Symphony or add a Merging-style list to the workflow active lists
+                    This workflow has no merge approval list configured. Do not merge from %s.
+                    A human must merge outside Symphony or add a Merging-style list to the workflow active lists
                     and Trello move allowlist.
                     """
                     .formatted(reviewHandoff)
@@ -1733,31 +1733,31 @@ public final class TrelloBoardSetup {
                 ? "block with a visible Codex response because no blocked destination is configured"
                 : "move the card to " + quote(blockedDestination) + " with a concise blocker";
         String fixupDecision = blank(reviewState)
-                ? "If landing required material fixups, broad interpretation, or unverifiable changes, update the "
+                ? "If merging required material fixups, broad interpretation, or unverifiable changes, update the "
                         + "workpad and " + blockedText + "."
-                : "If final work in the landing approval list required material fixups, broad interpretation, or "
+                : "If final work in the merge approval list required material fixups, broad interpretation, or "
                         + "unverifiable changes, move back to\n  " + quote(reviewState)
                         + " with the reason and ask for renewed approval.";
         return """
-                ## Landing From %s
+                ## Merge From %s
 
-                %s is human approval for landing. Only run landing when the current Trello list is %s. Do not
+                %s is human approval for merging. Only run the merge helper when the current Trello list is %s. Do not
                 merge from %s, and do not call `gh pr merge` directly from the workflow prompt. Open
                 `%s` and follow it.
 
-                Before landing, identify the PR, run the PR feedback sweep, run current card-specific validation,
+                Before merging, identify the PR, run the PR feedback sweep, run current card-specific validation,
                 check mergeability, branch state, required reviews, and CI/check status, and follow the repository's
                 merge policy. Do not enable auto-merge unless the repository policy explicitly requires it.
 
-                Deterministic landing decisions:
-                - If the card moved from %s to %s with no new feedback and the PR is clean, land it.
+                Deterministic merge decisions:
+                - If the card moved from %s to %s with no new feedback and the PR is clean, merge it.
                 - If exact, unambiguous feedback added before the card entered %s was addressed with current
-                  validation and clean checks, land it.
+                  validation and clean checks, merge it.
                 - %s
                 - If PR discovery, checks, auth, branch state, merge policy, required reviews, or actionable review
                   feedback is unresolved, update the workpad and %s.
 
-                After successful landing, update the workpad with merge evidence, add a concise completion comment
+                After successful merge, update the workpad with merge evidence, add a concise completion comment
                 when useful, and move the card to %s.
                 """
                 .formatted(
@@ -1797,10 +1797,10 @@ public final class TrelloBoardSetup {
                         + ": work currently running in Codex; continue the existing execution flow.\n";
         String blockedText = blank(blockedState) ? "no configured blocked list" : quote(blockedState);
         String reviewText = blank(reviewState) ? "no configured human review list" : quote(reviewState);
-        String mergingText = blank(mergingState) ? "No landing approval list" : quote(mergingState);
+        String mergingText = blank(mergingState) ? "No merge approval list" : quote(mergingState);
         String landingText = blank(mergingState)
-                ? "landing automation is disabled until one is configured"
-                : "human approval for landing. Run landing only from this list";
+                ? "merge automation is disabled until one is configured"
+                : "human approval for merging. Run the merge helper only from this list";
         String terminalText = terminalStates.isEmpty() ? "configured terminal lists" : quotedList(terminalStates);
         return """
                 ## Trello List Routing
@@ -1840,7 +1840,7 @@ public final class TrelloBoardSetup {
                         When the work is ready for human review, leave the workspace in a reviewable state and summarize the status in the Codex response. Trello handoff tools are disabled in this starter workflow until you configure trello_tools.allowed_move_list_names.
                         If the work is blocked, summarize the blocker in the Codex response; an operator must move the card out of the active list manually. Leaving blocked work active can make Symphony run it again.
                         If a human returns a reviewed card to an active list, reread the card, the Trello comments rendered above, and linked PR feedback when available before changing code again.
-                        A Merging list, when configured, is a human approval signal for a landing flow; do not merge from human review.
+                        A Merging list, when configured, is a human approval signal for a merge flow; do not merge from human review.
                         %s"""
                         .formatted(FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION)
                         .stripTrailing();
@@ -1849,7 +1849,7 @@ public final class TrelloBoardSetup {
                     When the work is ready for human review, update the workpad with the final summary and validation evidence, leave the workspace in a reviewable state, and summarize the status in the Codex response. No review or blocked destination list is configured, so do not move the card for handoff.
                     If the work is blocked, update the workpad with the blocker and summarize the blocker in the Codex response; an operator must move the card out of the active list manually. Leaving blocked work active can make Symphony run it again.
                     If a human returns a reviewed card to an active list, reread the card, the Trello comments rendered above, and linked PR feedback when available before changing code again.
-                    A Merging list, when configured, is a human approval signal for a landing flow; do not merge from human review.
+                    A Merging list, when configured, is a human approval signal for a merge flow; do not merge from human review.
                     %s"""
                     .formatted(FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION)
                     .stripTrailing();
@@ -1860,7 +1860,7 @@ public final class TrelloBoardSetup {
                     If the work is blocked or unsafe to hand off, update the workpad with the blocker, call trello_add_comment with the blocker, then call
                     trello_move_current_card with list_name %s.
                     If a human returns a reviewed card to an active list, reread the card, the Trello comments rendered above, and linked PR feedback when available before changing code again.
-                    A Merging list, when configured, is a human approval signal for a landing flow; do not merge from human review. %s"""
+                    A Merging list, when configured, is a human approval signal for a merge flow; do not merge from human review. %s"""
                     .formatted(quote(blockedDestination), FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION);
         }
         if (blank(blockedState)) {
@@ -1871,7 +1871,7 @@ public final class TrelloBoardSetup {
                     trello_move_current_card with list_name %s so the card leaves the active list. Do not leave
                     blocked work in an active list; Symphony may run it again.
                     If a human returns a reviewed card to an active list, treat it as rework: reread the card, the Trello comments rendered above, and linked PR feedback when available before changing code again.
-                    A Merging list, when configured, is a human approval signal for a landing flow; do not merge from human review. %s"""
+                    A Merging list, when configured, is a human approval signal for a merge flow; do not merge from human review. %s"""
                     .formatted(quote(reviewState), quote(blockedDestination), FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION);
         }
         return """
@@ -1880,7 +1880,7 @@ public final class TrelloBoardSetup {
                 blocked or unsafe to hand off, update the workpad with the blocker, add a Trello comment explaining the blocker, then call
                 trello_move_current_card with list_name %s.
                 If a human returns a reviewed card to an active list, treat it as rework: reread the card, the Trello comments rendered above, and linked PR feedback when available before changing code again.
-                A Merging list, when configured, is a human approval signal for a landing flow; do not merge from human review. %s"""
+                A Merging list, when configured, is a human approval signal for a merge flow; do not merge from human review. %s"""
                 .formatted(quote(reviewState), quote(blockedDestination), FILESYSTEM_BLOCKER_COMMENT_INSTRUCTION);
     }
 
@@ -1943,7 +1943,7 @@ public final class TrelloBoardSetup {
         if (blank(inProgressState)) {
             String landingException = blank(mergingState)
                     ? ""
-                    : " If the card is in " + quote(mergingState) + ", follow the landing section instead.";
+                    : " If the card is in " + quote(mergingState) + ", follow the merge section instead.";
             return ("""
                     This workflow has no in-progress list configured. Leave the card in its current active list
                     while working, then move it to the configured handoff list when the work is ready or blocked."""

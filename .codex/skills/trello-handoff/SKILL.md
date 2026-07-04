@@ -3,7 +3,7 @@ name: trello-handoff
 description: >
   Move the current Trello card through the configured Symphony-for-Trello
   lifecycle. Use when picking up work, handing off for human review, marking a
-  blocker, or completing landing.
+  blocker, or completing a merge.
 ---
 
 # Trello Handoff
@@ -57,7 +57,7 @@ Before moving to `Human Review`:
 3. Add one concise visible handoff comment.
 4. Move the card to `Human Review`.
 
-Do not attempt landing from `Human Review`; that list is for a person.
+Do not merge from `Human Review`; that list is for a person.
 
 ## Rework
 
@@ -120,7 +120,7 @@ operator to the allowed-host-path settings.
 ## Merging And Done
 
 Use `Merging` only when a human has approved the work and the workflow enables a
-landing flow. After successful landing, update the workpad, add a concise
+merge flow. After successful merge, update the workpad, add a concise
 completion comment when useful, and move to `Done`.
 
 ## Stop Conditions

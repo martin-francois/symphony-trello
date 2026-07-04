@@ -464,11 +464,11 @@ final class TrelloBoardSetupTest {
                 .contains("- \"Done\"")
                 .contains("Symphony moves cards from \"Ready for Codex\" to \"In Progress\" before Codex starts")
                 .contains("list_name \"Human Review\"")
-                .contains("## Landing From \"Merging\"")
-                .contains("Only run landing when the current Trello list is \"Merging\"")
+                .contains("## Merge From \"Merging\"")
+                .contains("Only run the merge helper when the current Trello list is \"Merging\"")
                 .contains("If the card moved from \"Human Review\" to \"Merging\" with no new feedback")
                 .contains("If exact, unambiguous feedback added before the card entered \"Merging\"")
-                .contains("If final work in the landing approval list required material fixups")
+                .contains("If final work in the merge approval list required material fixups")
                 .contains("Do not enable auto-merge")
                 .contains("move the card to \"Blocked\" with a concise blocker")
                 .contains("move the card to \"Done\"")
@@ -549,7 +549,7 @@ final class TrelloBoardSetupTest {
                         "If GitHub auth, push permission, branch protection, or repository policy prevents a required PR")
                 .contains("## Pull Request Feedback Sweep")
                 .contains("before moving the")
-                .contains("card to \"Human Review\" or landing from Merging")
+                .contains("card to \"Human Review\" or merging from Merging")
                 .contains("top-level PR comments")
                 .contains("inline review comments")
                 .contains("GitHub review threads")
@@ -577,7 +577,7 @@ final class TrelloBoardSetupTest {
                 .contains("\"In Progress\": work currently running in Codex")
                 .contains("\"Blocked\": blocked work")
                 .contains("\"Human Review\": human review")
-                .contains("\"Merging\": human approval for landing")
+                .contains("\"Merging\": human approval for merging")
                 .contains("## Repository Skills")
                 .contains(".codex/skills/symphony-trello-trello-workpad/SKILL.md")
                 .contains(".codex/skills/symphony-trello-trello-handoff/SKILL.md")
@@ -763,13 +763,13 @@ final class TrelloBoardSetupTest {
                 .contains("do not require GitHub auth")
                 .contains("## Non-GitHub Review Feedback")
                 .contains("reread the full card description and new Trello comments")
-                .contains("This workflow has no GitHub landing flow configured")
+                .contains("This workflow has no GitHub merge flow configured")
                 .contains("turn_sandbox_policy:", "type: workspaceWrite", "networkAccess: true")
                 .doesNotContain("Merging")
                 .doesNotContain("## Pull Request Publication")
                 .doesNotContain("linked PR comments")
                 .doesNotContain("PR feedback sweep")
-                .doesNotContain("## Landing From \"Merging\"");
+                .doesNotContain("## Merge From \"Merging\"");
         EffectiveConfig config = resolve(workflow);
         assertThat(config.tracker().activeStates()).containsExactly("Ready for Codex", "In Progress");
         assertThat(config.codex().turnSandboxPolicy())
@@ -925,8 +925,8 @@ final class TrelloBoardSetupTest {
                 .contains(".codex/skills/symphony-trello-push-pr/SKILL.md")
                 .contains("tracker.in_progress_state is configured")
                 .contains("list_name \"Human Review\"")
-                .contains("## Landing From \"Merging\"")
-                .contains("Only run landing when the current Trello list is \"Merging\"")
+                .contains("## Merge From \"Merging\"")
+                .contains("Only run the merge helper when the current Trello list is \"Merging\"")
                 .contains("If exact, unambiguous feedback added before the card entered \"Merging\"")
                 .contains("## Completion Bar Before \"Human Review\"")
                 .contains("move the card to \"Done\"")
@@ -1367,7 +1367,7 @@ final class TrelloBoardSetupTest {
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("This workflow has no in-progress list configured")
-                .contains("If the card is in \"Merging\", follow the landing section instead")
+                .contains("If the card is in \"Merging\", follow the merge section instead")
                 .doesNotContain("list_name \"In Progress\"");
         EffectiveConfig config = resolve(workflow);
         assertThat(config.tracker().activeStates()).containsExactly("Ready for Codex", "Merging");
@@ -1439,9 +1439,9 @@ final class TrelloBoardSetupTest {
                 .contains("does not by itself guarantee that direct checkout commits can\nupdate Git metadata")
                 .contains("move the Trello card to \"Needs Help\" with path-safe guidance instead of guessing")
                 .contains("Do not move the card to \"Review\"")
-                .contains("card to \"Review\" or landing from Merging")
+                .contains("card to \"Review\" or merging from Merging")
                 .contains("Before returning the card to \"Review\"")
-                .contains("This workflow has no landing approval list configured");
+                .contains("This workflow has no merge approval list configured");
     }
 
     @Test
@@ -1478,7 +1478,7 @@ final class TrelloBoardSetupTest {
         assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("review", "blocked", "released");
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
-                .contains("## Landing From \"Merging\"")
+                .contains("## Merge From \"Merging\"")
                 .contains("merge from \"Review\"")
                 .contains("renewed \"Review\"")
                 .contains("move back to\n  \"Review\" with the reason")
@@ -1521,9 +1521,9 @@ final class TrelloBoardSetupTest {
         assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("blocked", "done");
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
-                .contains("## Landing From \"Merging\"")
+                .contains("## Merge From \"Merging\"")
                 .contains("If exact, unambiguous feedback added before the card entered \"Merging\"")
-                .contains("If landing required material fixups")
+                .contains("If merging required material fixups")
                 .contains("move the card to \"Blocked\" with a concise blocker")
                 .doesNotContain("renewed human review")
                 .doesNotContain("move back to\n  human review")
@@ -1565,8 +1565,8 @@ final class TrelloBoardSetupTest {
                 .containsExactly("in progress", "human review", "blocked");
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
-                .contains("This workflow has no landing approval list configured")
-                .doesNotContain("## Landing From \"Merging\"")
+                .contains("This workflow has no merge approval list configured")
+                .doesNotContain("## Merge From \"Merging\"")
                 .doesNotContain("move the card to \"Done\"");
     }
 
@@ -1603,8 +1603,8 @@ final class TrelloBoardSetupTest {
         assertThat(createdLists).isEmpty();
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
-                .contains("This workflow has no landing approval list configured")
-                .doesNotContain("## Landing From \"Merging\"");
+                .contains("This workflow has no merge approval list configured")
+                .doesNotContain("## Merge From \"Merging\"");
     }
 
     @Test

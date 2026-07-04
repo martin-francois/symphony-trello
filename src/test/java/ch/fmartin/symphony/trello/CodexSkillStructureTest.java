@@ -239,18 +239,18 @@ final class CodexSkillStructureTest {
 
         // then
         assertThat(body)
-                .contains("Land only after a human moves the Trello card to `Merging`")
+                .contains("Merge only after a human moves the Trello card to `Merging`")
                 .contains("Do not enable auto-merge unless the repository policy explicitly requires it")
                 .contains("mergeability")
                 .contains("review feedback")
                 .contains("required checks are green")
                 .contains("leave thread resolution to the\n   reviewer")
-                .contains("configured review handoff list to the\n  landing approval list")
+                .contains("configured review handoff list to the\n  merge approval list")
                 .contains("precise, unambiguous feedback")
                 .contains("material fixups, broad\n  interpretation, or unverifiable changes")
-                .contains("move the card to the configured landing completion list")
+                .contains("move the card to the configured merge completion list")
                 .contains("configured blocked\n  destination")
-                .contains("configured review handoff list rather than the landing\n  approval list");
+                .contains("configured review handoff list rather than the merge\n  approval list");
     }
 
     private SkillMetadata readSkillMetadata(Path file) {

@@ -190,7 +190,7 @@ token.
 - A card in `In Progress` was picked up by Codex and remains active.
 - A card in `Blocked` needs human or environment action before Symphony should try again.
 - A card in `Human Review` is ready for a person and is not dispatched.
-- A card in `Merging` is approved for landing when the workflow configures landing.
+- A card in `Merging` is approved for merging when the workflow configures a merge flow.
 - A card in `Done` is terminal and eligible for workspace cleanup.
 
 If your workflow uses different list names, read `routing` in `/api/v1/state`; it is the runtime

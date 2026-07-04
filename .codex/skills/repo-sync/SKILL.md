@@ -2,7 +2,7 @@
 name: repo-sync
 description: >
   Sync a feature branch with the default branch and resolve conflicts. Use when
-  the branch is stale, a push is rejected, CI needs the latest main, or landing
+  the branch is stale, a push is rejected, CI needs the latest main, or merging
   needs a conflict-free branch.
 ---
 

@@ -28,7 +28,7 @@ Symphony for Trello is an independent project. It is not affiliated with, endors
 by OpenAI, Atlassian, or Trello.
 
 Symphony for Trello is preview automation for trusted environments. Start with a disposable board or
-a small low-risk project, then expand once the workflow matches how you review and land work.
+a small low-risk project, then expand once the workflow matches how you review and merge work.
 
 ## How It Works
 
@@ -222,7 +222,7 @@ It also writes a workflow that:
 - Sets `max_concurrent_agents: 1`, so Symphony starts one card at a time from this board.
 
 With `--no-github`, `Merging` is not created. The active lists are `Ready for Codex` and
-`In Progress`, and the workflow does not require PR publication or landing.
+`In Progress`, and the workflow does not require PR publication or merging.
 During guided `setup-local`, `--no-in-progress` can create a local board without `In Progress`; in
 that case picked-up cards stay in the active list until they move to review or blocked.
 
@@ -269,12 +269,12 @@ Use the generated board like this:
    Codex treats that as rework: it rereads the updated card, new Trello comments, the existing
    workpad, and linked PR feedback before changing code again. It normally updates the existing PR
    instead of starting over.
-9. If the work is accepted and should be landed by Codex, a human moves the card to `Merging`.
-   Codex treats `Merging` as the approval signal, runs the landing skill, checks PR feedback and CI,
+9. If the work is accepted and should be merged by Codex, a human moves the card to `Merging`.
+   Codex treats `Merging` as the approval signal, runs the merge helper skill, checks PR feedback and CI,
    resolves addressed GitHub review threads when GitHub allows it, follows the repository's merge
-   policy, and moves successful landed work to `Done`.
-10. If you land outside Codex instead, move the card to `Done` yourself after the work is accepted and
-   landed.
+   policy, and moves successfully merged work to `Done`.
+10. If you merge outside Codex instead, move the card to `Done` yourself after the work is accepted and
+   merged.
 
 ### Fast Path: Import An Existing Board
 
@@ -289,7 +289,7 @@ Use this path when you already have a Trello board and want Symphony to write a 
 symphony-trello import-board --board SYNTH001 --active "Ready for Codex" --in-progress "In Progress" --terminal Done --blocked Blocked
 ```
 
-Add `--no-github` when the imported board should not use GitHub PR publication or landing:
+Add `--no-github` when the imported board should not use GitHub PR publication or merging:
 
 ```bash
 symphony-trello import-board --board SYNTH001 --active "Ready for Codex" --in-progress "In Progress" --terminal Done --blocked Blocked --no-github
@@ -319,9 +319,9 @@ write-disabled workflow with blocked cards left in `Ready for Codex` unless you 
 manually; they can be picked up again.
 
 When the imported board has a list named `Merging` and a terminal list such as `Done`, the
-starter workflow treats `Merging` as the human approval list for landing and allows Codex to move
-landed work to the terminal list. Boards without `Merging`, or without a terminal list, still
-work for implementation and human review; landing stays a manual step unless you add both lists to
+starter workflow treats `Merging` as the human approval list for merging and allows Codex to move
+merged work to the terminal list. Boards without `Merging`, or without a terminal list, still
+work for implementation and human review; merging stays a manual step unless you add both lists to
 the workflow.
 
 Common setup command options:
@@ -507,7 +507,7 @@ The installer checks a Java 25+ JDK, Codex CLI auth, Trello credentials, and opt
 auth. It checks Git only when you install from a source checkout. When a required local tool is
 missing, the installer offers a concrete install command before it continues.
 
-GitHub is not required unless you want Symphony to create and land GitHub pull requests. If GitHub is
+GitHub is not required unless you want Symphony to create and merge GitHub pull requests. If GitHub is
 not configured, setup creates a Trello board without the GitHub-specific `Merging` list and writes a
 non-GitHub starter workflow. If you enable GitHub while importing an existing board, setup creates
 the missing `Merging` list when needed.
@@ -823,7 +823,7 @@ Recommended meaning:
   card back to the queue list when it can.
 - `Blocked`: cards Codex could not safely finish. Symphony ignores this list.
 - `Human Review`: work produced by Codex that needs human review. Symphony ignores this list.
-- `Merging`: human-approved work that is ready for the landing flow.
+- `Merging`: human-approved work that is ready for the merge flow.
 - `Done`: finished cards. Symphony treats this as terminal.
 
 For each task card, use a title that reads like a pull request title, then put the useful details in
@@ -998,10 +998,10 @@ If a human moves a reviewed card from "Human Review" back to "Ready for Codex" o
 treat the next run as rework. Reread the card, new Trello comments, existing workpad, and linked PR
 feedback before changing code again.
 
-Only land work when the card is in "Merging". Before landing, sweep PR comments, review threads, and
+Only merge work when the card is in "Merging". Before merging, sweep PR comments, review threads, and
 checks, resolve addressed GitHub review threads when GitHub allows it, run the card-specific
-validation, follow the repository's merge policy, and move successful landed work to "Done". If
-landing cannot safely proceed, move the card to "Blocked" with a concise blocker.
+validation, follow the repository's merge policy, and move successfully merged work to "Done". If
+the merge cannot safely proceed, move the card to "Blocked" with a concise blocker.
 
 For repository-changing work, "Human Review" means there is a pull request ready for a person.
 Commit the change, push the branch, create or update the PR, and include the PR URL in the workpad
@@ -1053,7 +1053,7 @@ List routing for the recommended board:
 - `Blocked`: work that needs a human or environment fix. Symphony ignores it until a human moves it
   back to an active list.
 - `Human Review`: work ready for a person. Symphony does not code from this list.
-- `Merging`: human approval for landing. Codex can land only from this list when it is configured
+- `Merging`: human approval for merging. Codex can merge only from this list when it is configured
   as active.
 - `Done`: terminal work. Symphony treats it as complete and removes matching workspaces during
   terminal cleanup.
@@ -1336,9 +1336,9 @@ The most common skills are:
   and create or update the pull request. Repository-changing work creates a ready-for-review PR by
   default, and PR bodies preserve the target repository's pull request template when one exists.
   Cards that need a draft PR must ask for one explicitly.
-- `.codex/skills/symphony-trello-land/SKILL.md`: land an approved PR only from `Merging`, resolve
+- `.codex/skills/symphony-trello-land/SKILL.md`: merge approved work only from `Merging`, resolve
   addressed review threads when possible, then move successful work to the configured completion list
-  or blocked landing attempts to `Blocked`.
+  or blocked merge attempts to `Blocked`.
 - `.codex/skills/symphony-trello-debug/SKILL.md`: diagnose stuck, retrying, blocked, or failed runs.
 
 These files are instructions for Codex. Symphony copies them into the workspace but does not execute
