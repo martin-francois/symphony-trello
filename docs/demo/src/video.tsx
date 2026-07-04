@@ -798,6 +798,7 @@ const styles: Record<string, CSSProperties> = {
     marginTop: 60,
   },
   finalTile: {
+    position: "relative",
     minHeight: 0,
     display: "grid",
     gridTemplateRows: "1fr auto",
