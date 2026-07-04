@@ -112,7 +112,6 @@ function AnywhereScene({ progress }: { progress: number }) {
       <div style={styles.anywhereLayout}>
         <MacWindow style={{ ...styles.anywhereBoardFrame, transform: `scale(${boardScale})` }}>
           <Capture src="trello-board-done.jpg" fit="cover" radius={24} shadow={false} style={styles.boardBackgroundCapture} />
-          <StoryBoard activeLane="Done" progress={1} />
         </MacWindow>
         <div style={styles.anywherePhoneColumn}>
           <div style={{ ...styles.phoneFrame, transform: `translateY(${phoneLift}px)` }}>
@@ -162,93 +161,77 @@ function BoardScene({
   detail: string;
 }) {
   const moving = fromLane !== undefined && fromLane !== activeLane;
-  const sourceLane = fromLane ?? activeLane;
 
   return (
     <SceneShell caption={caption} eyebrow={status} subcaption={detail}>
       <div style={styles.realBoardScene}>
         <MacWindow style={styles.realBoardFrame}>
           <Capture src={image} fit="cover" shadow={false} style={styles.boardBackgroundCapture} />
-          <StoryBoard activeLane={activeLane} fromLane={fromLane} progress={progress} automaticMove={moving && !showCursor} showCursor={moving && showCursor} />
+          <StoryBoard activeLane={activeLane} fromLane={fromLane} moving={moving} progress={progress} />
+          {showCursor && fromLane ? <CursorDrag fromLane={fromLane} toLane={activeLane} progress={progress} /> : null}
         </MacWindow>
       </div>
     </SceneShell>
   );
 }
 
-function StoryBoard({
-  activeLane,
-  fromLane,
-  progress,
-  automaticMove = false,
-  showCursor = false,
-}: {
-  activeLane: string;
-  fromLane?: string;
-  progress: number;
-  automaticMove?: boolean;
-  showCursor?: boolean;
-}) {
-  const moving = fromLane !== undefined && fromLane !== activeLane;
+function GhostPatch({ lane }: { lane: string }) {
+  return (
+    <div style={{
+      position: "absolute",
+      left: `${laneCenter(lane)}%`,
+      top: 92,
+      transform: "translateX(-50%)",
+      width: `calc(${laneWidth()}% - 22px)`,
+      height: 94,
+      background: "#f1f2f4",
+      borderRadius: 8,
+      zIndex: 2,
+    }} />
+  );
+}
+
+function MovingStoryCard({ fromLane, toLane, progress }: { fromLane: string; toLane: string; progress: number }) {
+  const left = interpolate(dragProgress(progress), [0, 1], [laneCenter(fromLane), laneCenter(toLane)]);
+  const top = interpolate(dragProgress(progress), [0, 1], [92, 92]);
 
   return (
-    <div style={styles.storyBoard}>
-      {lanes.map((lane) => {
-        const active = lane === activeLane && !moving;
-        const target = lane === activeLane && moving;
-        const source = lane === fromLane && !moving;
-
-        return (
-          <div key={lane} style={{ ...styles.storyLane, ...(active || target ? styles.storyLaneActive : {}) }}>
-            <div style={styles.storyLaneHeader}>
-              <span>{lane}</span>
-            </div>
-            {active || source ? (
-              <div style={storyTaskCard(lane, activeLane, progress, fromLane)}>
-                <strong>Clarify missing Trello token error</strong>
-                <span style={styles.storyTaskMeta}>{active ? "Current card" : "Moving"}</span>
-              </div>
-            ) : (
-              <div style={styles.storyEmptyLane} />
-            )}
-          </div>
-        );
-      })}
-      {moving ? <MovingStoryCard fromLane={fromLane} toLane={activeLane} progress={progress} automaticMove={automaticMove} /> : null}
-      {showCursor && fromLane ? <CursorDrag fromLane={fromLane} toLane={activeLane} progress={progress} /> : null}
+    <div style={{
+      position: "absolute",
+      zIndex: 6,
+      left: `${left}%`,
+      top,
+      transform: "translateX(-50%)",
+      width: `calc(${laneWidth()}% - 22px)`,
+      borderRadius: 12,
+      padding: "18px 16px",
+      background: "white",
+      border: "1px solid rgba(8, 40, 58, 0.12)",
+      boxShadow: "0 18px 42px rgba(8, 40, 58, 0.28)",
+      color: ink,
+      fontSize: 22,
+      lineHeight: 1.18,
+    }}>
+      <strong>Clarify missing Trello token error</strong>
+      <span style={{
+        display: "block",
+        marginTop: 10,
+        color: blue,
+        fontSize: 18,
+        fontWeight: 800,
+      }}>Moving</span>
     </div>
   );
 }
 
-function MovingStoryCard({
-  fromLane,
-  toLane,
-  progress,
-  automaticMove,
-}: {
-  fromLane: string;
-  toLane: string;
-  progress: number;
-  automaticMove: boolean;
-}) {
-  const left = interpolate(dragProgress(progress), [0, 1], [laneCardLeft(fromLane), laneCardLeft(toLane)]);
-  const top = interpolate(dragProgress(progress), [0, 1], [116, 124]);
-
+function StoryBoard({ activeLane, fromLane, moving, progress }: { activeLane: string; fromLane?: string; moving: boolean; progress: number }) {
+  if (!moving || !fromLane) return null;
   return (
-    <>
-      {automaticMove ? <AutomationMove fromLane={fromLane} toLane={toLane} progress={progress} /> : null}
-      <div
-        style={{
-          ...styles.movingTaskCard,
-          left: `calc(${left}% + 10px)`,
-          top,
-          width: `calc(${laneWidth()}% - 26px)`,
-        }}
-      >
-        <strong>Clarify missing Trello token error</strong>
-        <span style={styles.storyTaskMeta}>Moving card</span>
-      </div>
-    </>
+    <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+      <GhostPatch lane={fromLane} />
+      <GhostPatch lane={activeLane} />
+      <MovingStoryCard fromLane={fromLane} toLane={activeLane} progress={progress} />
+    </div>
   );
 }
 
@@ -268,17 +251,46 @@ function WorkpadScene({ progress, phase }: { progress: number; phase: "initial" 
         "Validation passed: npm run typecheck; npm test.",
       ];
 
+  if (isRework) {
+    return (
+      <SceneShell
+        caption="Codex reads the review and updates the implementation."
+        subcaption="The rework starts from the review comment and keeps the same PR alive."
+      >
+        <div style={styles.workpadLayout}>
+          <WorkpadCard progress={progress} title="Codex Workpad - rework" bullets={bullets} />
+          <div style={styles.workpadContextPanel}>
+            <h3 style={styles.contextTitle}>Review feedback is being handled</h3>
+            <p style={styles.contextText}>Codex keeps the same card and PR, then records what changed.</p>
+          </div>
+        </div>
+      </SceneShell>
+    );
+  }
+
   return (
     <SceneShell
-      caption="Codex reads the review and updates the implementation."
-      subcaption="The rework starts from the review comment and keeps the same PR alive."
+      caption="Progress stays visible on the Trello card."
+      subcaption="The workpad shows you what Codex is doing before the PR is ready."
     >
       <div style={styles.workpadLayout}>
-        <WorkpadCard progress={progress} title="Codex Workpad - rework" bullets={bullets} />
         <div style={styles.workpadContextPanel}>
-          <h3 style={styles.contextTitle}>Review feedback is being handled</h3>
-          <p style={styles.contextText}>Codex keeps the same card and PR, then records what changed.</p>
+          <h3 style={styles.contextTitle}>Implementation is in progress</h3>
+          <p style={styles.contextText}>
+            You can see the plan, progress, and validation without opening host logs.
+          </p>
         </div>
+        <MacWindow style={{ height: "100%" }} title="codex-worker — bash">
+          <div style={{ padding: "40px 50px" }}>
+            <div style={styles.workpadHeader}>Codex Workpad</div>
+            <div style={styles.workpadSection}>Plan / Progress / Validation</div>
+            <ul style={styles.workpadList}>
+              {bullets.map((b, i) => (
+                <li key={i} style={{ marginBottom: 12, opacity: progress > (i * 0.1) ? 1 : 0 }}>{b}</li>
+              ))}
+            </ul>
+          </div>
+        </MacWindow>
       </div>
     </SceneShell>
   );
@@ -428,6 +440,10 @@ function WorkpadCard({ progress, title, bullets }: { progress: number; title: st
 }
 
 function Capture({ src, fit = "cover", scale = 1, x = 0, y = 0, radius = 22, shadow = true, style }: CaptureProps) {
+  const isTrello = src.startsWith("trello");
+  
+  const finalFilter = style?.filter || "";
+
   return (
     <Img
       src={staticFile(`captures/${src}`)}
@@ -440,6 +456,7 @@ function Capture({ src, fit = "cover", scale = 1, x = 0, y = 0, radius = 22, sha
         transform: `translate(${x}px, ${y}px) scale(${scale})`,
         transformOrigin: "center center",
         ...style,
+        filter: finalFilter || undefined,
       }}
     />
   );
@@ -489,32 +506,6 @@ function Callout({ children, top, left, bottom, right, width }: { children: Reac
   return <div style={{ ...styles.callout, top, left, bottom, right, width }}>{children}</div>;
 }
 
-function AutomationMove({ fromLane, toLane, progress }: { fromLane: string; toLane: string; progress: number }) {
-  const start = laneCenter(fromLane);
-  const end = laneCenter(toLane);
-  const forward = end >= start;
-  const left = Math.min(start, end);
-  const width = Math.abs(end - start);
-  const arrowStyle: CSSProperties = {
-    ...styles.automationArrow,
-    transform: `translateY(-50%) rotate(${forward ? 0 : 180}deg)`,
-  };
-
-  if (forward) {
-    arrowStyle.right = -10;
-  } else {
-    arrowStyle.left = -10;
-  }
-
-  return (
-    <div style={{ ...styles.automationMove, left: `${left}%`, width: `${width}%`, opacity: moveVisibility(progress) }}>
-      <div style={styles.automationLine} />
-      <div style={arrowStyle} />
-      <div style={styles.automationBadge}>Symphony moves it</div>
-    </div>
-  );
-}
-
 function CursorDrag({ fromLane, toLane, progress }: { fromLane: string; toLane: string; progress: number }) {
   const left = interpolate(dragProgress(progress), [0, 1], [laneCenter(fromLane), laneCenter(toLane)]);
   const top = interpolate(dragProgress(progress), [0, 1], [140, 150]);
@@ -536,15 +527,6 @@ function CursorDrag({ fromLane, toLane, progress }: { fromLane: string; toLane: 
   );
 }
 
-function storyTaskCard(lane: string, activeLane: string, progress: number, fromLane?: string): CSSProperties {
-  const source = lane === fromLane && lane !== activeLane;
-  return {
-    ...styles.storyTaskCard,
-    opacity: source ? 0.42 * (1 - dragProgress(progress)) : 1,
-    transform: `translateY(${source ? 0 : interpolate(ease(progress), [0, 1], [12, 0])}px)`,
-  };
-}
-
 function dragProgress(progress: number) {
   return ease(clamp((progress - 0.08) / 0.5));
 }
@@ -555,10 +537,6 @@ function moveVisibility(progress: number) {
 
 function laneCenter(lane: string) {
   return laneLeft(lane, laneWidth() / 2);
-}
-
-function laneCardLeft(lane: string) {
-  return laneLeft(lane, 0);
 }
 
 function laneLeft(lane: string, inset: number) {
@@ -587,7 +565,7 @@ const styles: Record<string, CSSProperties> = {
     borderRadius: 14,
     overflow: "hidden",
     background: "white",
-    border: "1px solid rgba(0,0,0,0.2)",
+    border: "1px solid rgba(0,0,0,0.25)",
     boxShadow: "0 25px 80px rgba(0, 0, 0, 0.3)",
     width: "100%",
   },
@@ -679,8 +657,7 @@ const styles: Record<string, CSSProperties> = {
     boxShadow: "0 20px 60px rgba(8, 40, 58, 0.25)",
   },
   boardBackgroundCapture: {
-    opacity: 0.15,
-    filter: "saturate(0.5) blur(1px)",
+    opacity: 1,
   },
   storyBoard: {
     position: "absolute",
@@ -688,105 +665,6 @@ const styles: Record<string, CSSProperties> = {
     display: "grid",
     gridTemplateColumns: "repeat(6, 1fr)",
     gap: 16,
-  },
-  storyLane: {
-    minWidth: 0,
-    borderRadius: 16,
-    padding: "18px 16px",
-    background: "#f1f2f4",
-    border: "1px solid rgba(0,0,0,0.05)",
-  },
-  storyLaneActive: {
-    background: "rgba(255,255,255,0.95)",
-    border: `2px solid ${green}`,
-    boxShadow: "0 10px 30px rgba(22, 163, 74, 0.1)",
-  },
-  storyLaneHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 12,
-    minHeight: 48,
-    color: deep,
-    fontSize: 22,
-    lineHeight: 1.08,
-    fontWeight: 700,
-  },
-  storyTaskCard: {
-    marginTop: 20,
-    borderRadius: 12,
-    padding: "18px 16px",
-    background: "white",
-    color: ink,
-    fontSize: 22,
-    lineHeight: 1.25,
-    boxShadow: "0 12px 28px rgba(0, 0, 0, 0.2)",
-    border: "1px solid rgba(8, 40, 58, 0.1)",
-  },
-  movingTaskCard: {
-    position: "absolute",
-    zIndex: 6,
-    borderRadius: 12,
-    padding: "18px 16px",
-    background: "white",
-    color: ink,
-    fontSize: 22,
-    lineHeight: 1.25,
-    boxShadow: "0 20px 45px rgba(0, 0, 0, 0.35)",
-    border: `2px solid ${deep}`,
-  },
-  storyTaskMeta: {
-    display: "block",
-    marginTop: 12,
-    color: blue,
-    fontSize: 18,
-    fontWeight: 700,
-  },
-  storyEmptyLane: {
-    marginTop: 20,
-    height: 80,
-    borderRadius: 12,
-    background: "rgba(8, 40, 58, 0.04)",
-  },
-  automationMove: {
-    position: "absolute",
-    zIndex: 7,
-    top: 320,
-    height: 54,
-    pointerEvents: "none",
-  },
-  automationLine: {
-    position: "absolute",
-    left: 12,
-    right: 12,
-    top: "50%",
-    height: 3,
-    borderRadius: 999,
-    background: green,
-  },
-  automationArrow: {
-    position: "absolute",
-    top: "50%",
-    width: 0,
-    height: 0,
-    borderTop: "8px solid transparent",
-    borderBottom: "8px solid transparent",
-    borderLeft: `14px solid ${green}`,
-  },
-  automationBadge: {
-    position: "absolute",
-    top: -54,
-    left: "50%",
-    transform: "translateX(-50%)",
-    borderRadius: 12,
-    padding: "10px 20px",
-    background: "white",
-    border: `2px solid ${blue}`,
-    color: blue,
-    fontSize: 20,
-    fontWeight: 800,
-    whiteSpace: "nowrap",
-    boxShadow: "0 8px 24px rgba(8, 40, 58, 0.12)",
   },
   cursorDrag: {
     position: "absolute",
@@ -796,31 +674,6 @@ const styles: Record<string, CSSProperties> = {
     transform: "translate(18px, 6px)",
     filter: "drop-shadow(0 8px 12px rgba(8, 40, 58, 0.2))",
     pointerEvents: "none",
-  },
-  caption: {
-    position: "relative",
-    display: "grid",
-    gridTemplateColumns: "auto 1fr",
-    columnGap: 20,
-    rowGap: 8,
-    alignItems: "center",
-    minHeight: 80,
-    padding: "0 10px",
-    color: deep,
-    fontSize: 42,
-    lineHeight: 1.15,
-    fontWeight: 700,
-    textAlign: "left",
-  },
-  captionSubtext: {
-    gridColumn: "2",
-    color: "rgba(8, 40, 58, 0.6)",
-    fontSize: 26,
-    lineHeight: 1.25,
-    fontWeight: 500,
-  },
-  panel: {
-    position: "relative",
   },
   phoneFrame: {
     width: 360,
@@ -867,8 +720,8 @@ const styles: Record<string, CSSProperties> = {
   },
   workpadLayout: {
     display: "grid",
-    gridTemplateColumns: "1fr 360px",
-    gap: 44,
+    gridTemplateColumns: "0.65fr 1.35fr",
+    gap: 38,
     height: "100%",
     alignItems: "stretch",
   },
@@ -880,7 +733,7 @@ const styles: Record<string, CSSProperties> = {
     border: "1px solid rgba(8, 40, 58, 0.1)",
   },
   workpadHeader: {
-    fontSize: 48,
+    fontSize: 64,
     lineHeight: 1.1,
     fontWeight: 700,
     color: "#0f172a",
@@ -896,27 +749,28 @@ const styles: Record<string, CSSProperties> = {
   workpadList: {
     listStyle: "none",
     padding: 0,
-    margin: "30px 0 0",
+    margin: 0,
     fontSize: 22,
     lineHeight: 1.6,
     color: ink,
     fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
   },
   workpadContextPanel: {
+    width: 320,
     display: "flex",
     flexDirection: "column",
     justifyContent: "flex-start",
     padding: "40px 20px",
   },
   contextTitle: {
-    margin: "0",
-    fontSize: 32,
+    margin: "28px 0 0",
+    fontSize: 38,
     lineHeight: 1.15,
     color: deep,
   },
   contextText: {
     margin: "20px 0 0",
-    fontSize: 24,
+    fontSize: 26,
     lineHeight: 1.35,
     color: "rgba(8, 40, 58, 0.7)",
     fontWeight: 500,
@@ -935,33 +789,15 @@ const styles: Record<string, CSSProperties> = {
   },
   finalLayout: {
     textAlign: "center",
-    marginBottom: 64,
-  },
-  finalHeadline: {
-    margin: "0 auto",
-    maxWidth: 1560,
-    color: deep,
-    fontSize: 48,
-    lineHeight: 1.16,
-    letterSpacing: 0,
-    fontWeight: 800,
-  },
-  finalSubtext: {
-    margin: "20px auto 0",
-    maxWidth: 1180,
-    color: "rgba(8, 40, 58, 0.7)",
-    fontSize: 30,
-    lineHeight: 1.3,
-    letterSpacing: 0,
   },
   finalMedia: {
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
     gap: 36,
     height: 570,
+    marginTop: 60,
   },
   finalTile: {
-    position: "relative",
     minHeight: 0,
     display: "grid",
     gridTemplateRows: "1fr auto",
@@ -1035,6 +871,23 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 700,
     letterSpacing: 0,
     textAlign: "center",
+  },
+  finalHeadline: {
+    margin: "0 auto",
+    maxWidth: 1560,
+    color: deep,
+    fontSize: 48,
+    lineHeight: 1.16,
+    letterSpacing: 0,
+    fontWeight: 800,
+  },
+  finalSubtext: {
+    margin: "20px auto 0",
+    maxWidth: 1180,
+    color: "rgba(8, 40, 58, 0.7)",
+    fontSize: 30,
+    lineHeight: 1.3,
+    letterSpacing: 0,
   },
   label: {
     position: "absolute",
