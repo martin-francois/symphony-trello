@@ -93,8 +93,8 @@ function Intro({ progress }: { progress: number }) {
 
   return (
     <AbsoluteFill style={styles.intro}>
-      <div style={{ ...styles.brandPill, translate: interpolate(ease(progress), [0, 1], ["0px 24px", "0px 0px"]) }}>Symphony for Trello</div>
-      <h1 style={{ ...styles.title, translate: interpolate(ease(progress), [0, 1], ["0px 24px", "0px 0px"]) }}>
+      <div style={{ ...styles.brandPill, translate: interpolate(progress, [0, 1], ["0px 24px", "0px 0px"], { easing: ease }) }}>Symphony for Trello</div>
+      <h1 style={{ ...styles.title, translate: interpolate(progress, [0, 1], ["0px 24px", "0px 0px"], { easing: ease }) }}>
         From Trello card
         <br />
         to merged pull request
@@ -112,11 +112,11 @@ function AnywhereScene({ progress }: { progress: number }) {
       subcaption="The board stays familiar: plan, review, and track work where your team already looks."
     >
       <div style={styles.anywhereLayout}>
-        <MacWindow style={{ ...styles.anywhereBoardFrame, scale: interpolate(ease(progress), [0, 1], [0.96, 1]) }}>
+        <MacWindow style={{ ...styles.anywhereBoardFrame, scale: interpolate(progress, [0, 1], [0.96, 1], { easing: ease }) }}>
           <Capture src="trello-board-done.jpg" fit="cover" radius={24} shadow={false} style={styles.boardBackgroundCapture} />
         </MacWindow>
         <div style={styles.anywherePhoneColumn}>
-          <div style={{ ...styles.phoneFrame, translate: interpolate(ease(progress), [0, 1], ["0px 80px", "0px 0px"]) }}>
+          <div style={{ ...styles.phoneFrame, translate: interpolate(progress, [0, 1], ["0px 80px", "0px 0px"], { easing: ease }) }}>
             <Capture src="trello-mobile-card.jpg" fit="contain" radius={38} shadow={false} />
           </div>
           <div style={styles.anywhereNote}>Plan, review, and track the same work from anywhere.</div>
@@ -304,7 +304,7 @@ function GithubReview({ progress }: { progress: number }) {
         <Capture
           src="github-review-diff.jpg"
           fit="cover"
-          scale={interpolate(ease(progress), [0, 1], [1.35, 1.45])}
+          scale={interpolate(progress, [0, 1], [1.35, 1.45], { easing: ease })}
           shadow={false}
           style={{ objectPosition: "50% 42%" }}
         />
@@ -322,7 +322,7 @@ function GithubResolved({ progress }: { progress: number }) {
         <Capture
           src="github-comment-resolved.jpg"
           fit="cover"
-          scale={interpolate(ease(progress), [0, 1], [1.35, 1.45])}
+          scale={interpolate(progress, [0, 1], [1.35, 1.45], { easing: ease })}
           shadow={false}
           style={{ objectPosition: "50% 70%" }}
         />
@@ -336,7 +336,7 @@ function GithubResolved({ progress }: { progress: number }) {
 function GithubMergedScene({ progress }: { progress: number }) {
   return (
     <SceneShell caption="Symphony merges the pull request automatically.">
-      <MacWindow style={{...styles.realBoardFrame, scale: interpolate(ease(progress), [0, 1], [0.95, 1])}}>
+      <MacWindow style={{...styles.realBoardFrame, scale: interpolate(progress, [0, 1], [0.95, 1], { easing: ease })}}>
         <Capture src="github-pr-merged.jpg" fit="cover" shadow={false} style={{ objectPosition: "left top" }} />
       </MacWindow>
     </SceneShell>
@@ -348,11 +348,11 @@ function MergeScene({ progress }: { progress: number }) {
   return (
     <SceneShell caption="Symphony merges the pull request automatically." subcaption="Trello remains the control surface while GitHub records the merged code.">
       <div style={styles.mergeGrid}>
-        <MacWindow style={{ ...styles.panel, translate: interpolate(ease(progress), [0, 1], ["-40px 0px", "0px 0px"]) }}>
+        <MacWindow style={{ ...styles.panel, translate: interpolate(progress, [0, 1], ["-40px 0px", "0px 0px"], { easing: ease }) }}>
           <Capture src="trello-board-merging.jpg" fit="contain" shadow={false} />
           <Label bottom={34} left={34}>Trello: Merging</Label>
         </MacWindow>
-        <MacWindow style={{ ...styles.panel, translate: interpolate(ease(progress), [0, 1], ["40px 0px", "0px 0px"]) }}>
+        <MacWindow style={{ ...styles.panel, translate: interpolate(progress, [0, 1], ["40px 0px", "0px 0px"], { easing: ease }) }}>
           <Capture src="github-pr-merged.jpg" fit="contain" shadow={false} />
           <Label bottom={34} left={34}>GitHub: Merged</Label>
         </MacWindow>
@@ -363,7 +363,7 @@ function MergeScene({ progress }: { progress: number }) {
 
 function FinalHero({ progress }: { progress: number }) {
   return (
-    <AbsoluteFill style={{ ...styles.scene, opacity: ease(progress), justifyContent: "center" }}>
+    <AbsoluteFill style={{ ...styles.scene, opacity: interpolate(progress, [0, 1], [0, 1], { easing: ease }), justifyContent: "center" }}>
       <div style={styles.finalLayout}>
         <h2 style={styles.finalHeadline}>You plan work in Trello. Codex implements it. Symphony keeps everything moving.</h2>
         <p style={styles.finalSubtext}>From phone to laptop, from card to merged PR.<br/><strong style={{color: green}}>No IDE required. No CLI babysitting.</strong></p>
@@ -426,7 +426,7 @@ function WorkpadCard({ progress, title, bullets }: { progress: number; title: st
               key={bullet}
               style={{
                 opacity: visible,
-                translate: interpolate(ease(visible), [0, 1], ["0px 18px", "0px 0px"]),
+                translate: interpolate(visible, [0, 1], ["0px 18px", "0px 0px"], { easing: ease }),
               }}
             >
               {bullet}
@@ -528,7 +528,7 @@ function CursorDrag({ fromLane, toLane, progress }: { fromLane: string; toLane: 
 }
 
 function dragProgress(progress: number) {
-  return ease(clamp((progress - 0.08) / 0.5));
+  return interpolate(clamp((progress - 0.08) / 0.5), [0, 1], [0, 1], { easing: ease });
 }
 
 function moveVisibility(progress: number) {
