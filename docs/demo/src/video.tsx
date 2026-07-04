@@ -89,8 +89,8 @@ function Intro({ progress }: { progress: number }) {
 
   return (
     <AbsoluteFill style={styles.intro}>
-      <div style={{ ...styles.brandPill, transform: `translateY(${lift}px)` }}>Symphony for Trello</div>
-      <h1 style={{ ...styles.title, transform: `translateY(${lift}px)` }}>
+      <div style={{ ...styles.brandPill, translate: `0 ${lift}px` }}>Symphony for Trello</div>
+      <h1 style={{ ...styles.title, translate: `0 ${lift}px` }}>
         From Trello card
         <br />
         to merged pull request
@@ -110,11 +110,11 @@ function AnywhereScene({ progress }: { progress: number }) {
       subcaption="The board stays familiar: plan, review, and track work where your team already looks."
     >
       <div style={styles.anywhereLayout}>
-        <MacWindow style={{ ...styles.anywhereBoardFrame, transform: `scale(${boardScale})` }}>
+        <MacWindow style={{ ...styles.anywhereBoardFrame, scale: boardScale }}>
           <Capture src="trello-board-done.jpg" fit="cover" radius={24} shadow={false} style={styles.boardBackgroundCapture} />
         </MacWindow>
         <div style={styles.anywherePhoneColumn}>
-          <div style={{ ...styles.phoneFrame, transform: `translateY(${phoneLift}px)` }}>
+          <div style={{ ...styles.phoneFrame, translate: `0 ${phoneLift}px` }}>
             <Capture src="trello-mobile-card.jpg" fit="contain" radius={38} shadow={false} />
           </div>
           <div style={styles.anywhereNote}>Plan, review, and track the same work from anywhere.</div>
@@ -181,7 +181,7 @@ function GhostPatch({ lane }: { lane: string }) {
       position: "absolute",
       left: `${laneCenter(lane)}%`,
       top: 92,
-      transform: "translateX(-50%)",
+      translate: "-50% 0",
       width: `calc(${laneWidth()}% - 22px)`,
       height: 94,
       background: "#f1f2f4",
@@ -201,7 +201,7 @@ function MovingStoryCard({ fromLane, toLane, progress }: { fromLane: string; toL
       zIndex: 6,
       left: `${left}%`,
       top,
-      transform: "translateX(-50%)",
+      translate: "-50% 0",
       width: `calc(${laneWidth()}% - 22px)`,
       borderRadius: 12,
       padding: "18px 16px",
@@ -335,7 +335,7 @@ function GithubResolved({ progress }: { progress: number }) {
 function GithubMergedScene({ progress }: { progress: number }) {
   return (
     <SceneShell caption="Symphony merges the pull request automatically.">
-      <MacWindow style={{...styles.realBoardFrame, transform: `scale(${interpolate(ease(progress), [0, 1], [0.95, 1])})`}}>
+      <MacWindow style={{...styles.realBoardFrame, scale: interpolate(ease(progress), [0, 1], [0.95, 1])}}>
         <Capture src="github-pr-merged.jpg" fit="cover" shadow={false} style={{ objectPosition: "left top" }} />
       </MacWindow>
     </SceneShell>
@@ -349,11 +349,11 @@ function MergeScene({ progress }: { progress: number }) {
   return (
     <SceneShell caption="Symphony merges the pull request automatically." subcaption="Trello remains the control surface while GitHub records the merged code.">
       <div style={styles.mergeGrid}>
-        <MacWindow style={{ ...styles.panel, transform: `translateX(${boardX}px)` }}>
+        <MacWindow style={{ ...styles.panel, translate: `${boardX}px 0` }}>
           <Capture src="trello-board-merging.jpg" fit="contain" shadow={false} />
           <Label bottom={34} left={34}>Trello: Merging</Label>
         </MacWindow>
-        <MacWindow style={{ ...styles.panel, transform: `translateX(${githubX}px)` }}>
+        <MacWindow style={{ ...styles.panel, translate: `${githubX}px 0` }}>
           <Capture src="github-pr-merged.jpg" fit="contain" shadow={false} />
           <Label bottom={34} left={34}>GitHub: Merged</Label>
         </MacWindow>
@@ -427,7 +427,7 @@ function WorkpadCard({ progress, title, bullets }: { progress: number; title: st
               key={bullet}
               style={{
                 opacity: visible,
-                transform: `translateY(${interpolate(ease(visible), [0, 1], [18, 0])}px)`,
+                translate: `0 ${interpolate(ease(visible), [0, 1], [18, 0])}px`,
               }}
             >
               {bullet}
@@ -453,7 +453,8 @@ function Capture({ src, fit = "cover", scale = 1, x = 0, y = 0, radius = 22, sha
         objectFit: fit,
         borderRadius: radius,
         boxShadow: shadow ? "0 28px 80px rgba(8, 40, 58, 0.28)" : undefined,
-        transform: `translate(${x}px, ${y}px) scale(${scale})`,
+        translate: `${x}px ${y}px`,
+        scale,
         transformOrigin: "center center",
         ...style,
         filter: finalFilter || undefined,
@@ -586,7 +587,7 @@ const styles: Record<string, CSSProperties> = {
   macTitle: {
     position: "absolute",
     left: "50%",
-    transform: "translateX(-50%)",
+    translate: "-50% 0",
     color: "#64748b",
     fontSize: 15,
     fontWeight: 600,
@@ -671,7 +672,7 @@ const styles: Record<string, CSSProperties> = {
     zIndex: 8,
     width: 48,
     height: 56,
-    transform: "translate(18px, 6px)",
+    translate: "18px 6px",
     filter: "drop-shadow(0 8px 12px rgba(8, 40, 58, 0.2))",
     pointerEvents: "none",
   },
