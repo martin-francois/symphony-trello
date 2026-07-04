@@ -41,7 +41,7 @@ a small low-risk project, then expand once the workflow matches how you review a
    `In Progress`, `Human Review`, `Blocked`, `Merging`, or `Done` when the workflow says to.
 6. Symphony keeps the same Codex session going while the card remains active, then stops when the
    card reaches a review, blocked, terminal, or otherwise inactive list.
-7. You watch running and retrying cards with `symphony-trello status`, the local status page, or
+7. You check running and retrying cards with `symphony-trello status`, the local status page, or
    JSON API.
 
 ## Table of Contents
@@ -104,7 +104,7 @@ Trello has three concepts that matter for Symphony:
 - A **Workspace** groups boards and is also where Trello lets you create a custom Power-Up for API
   access.
 - A **Board** is the project or queue Symphony polls.
-- **Lists** are the lanes on the board that contain cards. `WORKFLOW.md` and tool fields use names
+- **Lists** are the board columns that contain cards. `WORKFLOW.md` and tool fields use names
   like `active_list_ids`, `allowed_move_list_names`, `list_id`, and `list_name`.
 
 Symphony reads cards, creates local Codex workspaces, and runs Codex. When GitHub integration is
@@ -212,11 +212,16 @@ The command creates this Trello board layout:
 6. `Merging`
 7. `Done`
 
-It also writes a workflow with `Ready for Codex`, `In Progress`, and `Merging` as active lists,
-`Done` as the terminal list, `In Progress`, `Human Review`, `Blocked`, and `Done` as allowed move
-lists, `./workspaces` as the local workspace directory, a stable HTTP status port, and
-`max_concurrent_agents: 1`. With that default, Symphony starts one card at a time from this board.
-With `--no-github`, `Merging` is not created, the active lists are `Ready for Codex` and
+It also writes a workflow that:
+
+- Dispatches from `Ready for Codex`, `In Progress`, and `Merging`.
+- Treats `Done` as the terminal list.
+- Lets Codex move cards to `In Progress`, `Human Review`, `Blocked`, and `Done`.
+- Uses `./workspaces` as the local workspace directory.
+- Chooses a stable HTTP status port.
+- Sets `max_concurrent_agents: 1`, so Symphony starts one card at a time from this board.
+
+With `--no-github`, `Merging` is not created. The active lists are `Ready for Codex` and
 `In Progress`, and the workflow does not require PR publication or landing.
 During guided `setup-local`, `--no-in-progress` can create a local board without `In Progress`; in
 that case picked-up cards stay in the active list until they move to review or blocked.
@@ -290,14 +295,17 @@ Add `--no-github` when the imported board should not use GitHub PR publication o
 symphony-trello import-board --board SYNTH001 --active "Ready for Codex" --in-progress "In Progress" --terminal Done --blocked Blocked --no-github
 ```
 
-You may omit `--active` when the board already has a list named `Ready for Codex`. You may omit
-`--in-progress` when the board already has a list named `In Progress`. You may omit `--terminal`
-when the board already has a list named `Done`. You may omit `--blocked` when the board already has
-a list named `Blocked`. If your board has no in-progress list, Codex leaves picked-up cards in
-the active list until it moves them to review or blocked. If your board has no blocked list,
-import falls back to the review handoff list, so blocked cards still leave the active list.
-Create a blocked list or pass
-`--blocked` when you want blocked work separated from reviewable work.
+You may omit list options when the board already uses the default list names:
+
+- Omit `--active` when the board has `Ready for Codex`.
+- Omit `--in-progress` when the board has `In Progress`.
+- Omit `--terminal` when the board has `Done`.
+- Omit `--blocked` when the board has `Blocked`.
+
+If your board has no in-progress list, Codex leaves picked-up cards in the active list until it moves
+them to review or blocked. If your board has no blocked list, import falls back to the review handoff
+list, so blocked cards still leave the active list. Create a blocked list or pass `--blocked` when
+you want blocked work separated from reviewable work.
 
 For an existing team board, be deliberate about `--active`: every open card in that list is eligible
 for Codex work. A conservative import starts with a new list named `Ready for Codex` and only moves
@@ -785,8 +793,8 @@ Operationally, use the board like this:
 1. Put new ideas wherever your team normally triages work.
 2. Move a card to `Ready for Codex` only when the title and description are clear enough for an
    engineer to start.
-3. Watch the card move to `In Progress` after Codex picks it up.
-4. Watch Symphony at `http://127.0.0.1:18080/`; see [Operations](#operations) for the available
+3. Check that the card moves to `In Progress` after Codex picks it up.
+4. Open Symphony at `http://127.0.0.1:18080/`; see [Operations](#operations) for the available
    status endpoints.
 5. Review the card after Codex moves it to `Human Review` or `Blocked`.
 6. Move the card out of active lists if you want to pause or prevent further retries.
@@ -1366,7 +1374,7 @@ Hand-authored workflows can enable two more current-card tools:
   fragment when `trello_tools.allow_url_attachments=true`.
 
 The move tool uses argument names such as `list_name` and `list_id` because Trello calls these board
-lanes lists.
+columns lists.
 
 Symphony advertises those tools when `trello_tools.enabled=true` and
 `trello_tools.allow_writes=true`; each write type is controlled by its own allow flag. The generated
@@ -1386,9 +1394,8 @@ If a destination list name matches more than one open Trello list, Symphony refu
 move instead of guessing. Rename the duplicate lists or configure `trello_tools.allowed_move_list_ids`
 and tell Codex to move with `list_id`.
 
-The standardized generic `trello_rest` dynamic tool extension is documented in [SPEC.md](SPEC.md) but
-is not yet advertised to Codex by this Java implementation. The Java implementation currently uses
-the narrower handoff tools above.
+The standardized generic `trello_rest` dynamic tool extension is documented in [SPEC.md](SPEC.md).
+This Java implementation advertises the narrower handoff tools above.
 
 ## Operations
 
