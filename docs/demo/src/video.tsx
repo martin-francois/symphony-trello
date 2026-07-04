@@ -300,7 +300,7 @@ function WorkpadScene({ progress, phase }: { progress: number; phase: "initial" 
 function GithubReview({ progress }: { progress: number }) {
   return (
     <SceneShell caption="Review the PR, leaving comments as usual.">
-      <div style={styles.githubFrame}>
+      <MacWindow style={styles.githubFrame}>
         <Capture
           src="github-review-diff.jpg"
           fit="cover"
@@ -310,7 +310,7 @@ function GithubReview({ progress }: { progress: number }) {
         />
         <Label bottom={128} right={34}>Real GitHub PR diff and review thread</Label>
         <Callout bottom={34} right={34} width={500}>The comment is tied to the actual code Codex produced.</Callout>
-      </div>
+      </MacWindow>
     </SceneShell>
   );
 }
@@ -715,6 +715,8 @@ const styles: Record<string, CSSProperties> = {
   },
   anywhereBoardFrame: {
     position: "relative",
+    height: "100%",
+    minHeight: 0,
     minWidth: 0,
     borderRadius: 20,
     overflow: "hidden",
