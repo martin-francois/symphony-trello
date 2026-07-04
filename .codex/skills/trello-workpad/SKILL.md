@@ -3,7 +3,7 @@ name: trello-workpad
 description: >
   Maintain the single Codex workpad comment on the current Trello card. Use
   during implementation, retry, rework, review handoff, blocked handoff, or
-  landing.
+  merge handoff.
 ---
 
 # Trello Workpad

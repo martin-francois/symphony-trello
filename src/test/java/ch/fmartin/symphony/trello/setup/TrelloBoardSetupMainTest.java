@@ -4595,7 +4595,7 @@ final class TrelloBoardSetupMainTest {
                 .content(StandardCharsets.UTF_8)
                 .contains("## Local And Non-GitHub Repository Work")
                 .contains("This workflow does not have GitHub PR integration configured")
-                .doesNotContain("## Landing From \"Merging\"")
+                .doesNotContain("## Merge From \"Merging\"")
                 .doesNotContain("## Pull Request Publication")
                 .doesNotContain("Merging");
     }

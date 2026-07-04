@@ -87,14 +87,14 @@ The direct `new-board` and `import-board` commands now accept `--github` and `--
 default remains GitHub-enabled for compatibility with existing documented PR workflows, while
 `setup-local` can choose the non-GitHub path for users who do not have or do not want GitHub
 integration. Non-GitHub generated boards omit `Merging`, and their workflow prompt describes local
-or non-GitHub repository work instead of requiring PR publication and landing.
+or non-GitHub repository work instead of requiring PR publication and merging.
 
 ### Consequences
 
 * Good, because the public first-run path is now a one-liner instead of a Maven-first flow.
 * Good, because setup behavior is testable in Java instead of split across shell and PowerShell.
 * Good, because GitHub is optional in the generated board/workflow path.
-* Good, because non-GitHub workflows no longer include `Merging` or PR landing requirements.
+* Good, because non-GitHub workflows no longer include `Merging` or PR merge requirements.
 * Good, because uninstall does not delete or archive Trello boards or local user data by default.
 * Bad, because the first installer still builds from source and therefore needs Java 25 and Git.
 * Bad, because assisted prerequisite installation depends on the host package manager and can still

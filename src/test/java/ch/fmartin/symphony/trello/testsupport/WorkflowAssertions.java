@@ -140,9 +140,9 @@ public final class WorkflowAssertions {
         return this;
     }
 
-    public WorkflowAssertions hasNoPullRequestPublicationOrLandingRequirements() {
+    public WorkflowAssertions hasNoPullRequestPublicationOrMergeRequirements() {
         assertThat(content)
-                .doesNotContain("## Pull Request Publication", "## Landing From \"Merging\"", "linked PR comments");
+                .doesNotContain("## Pull Request Publication", "## Merge From \"Merging\"", "linked PR comments");
         return this;
     }
 }

@@ -957,7 +957,7 @@ The recommended board created by `new-board` uses these lists, in order:
 
 The generated workflow treats `Ready for Codex`, `In Progress`, and `Merging` as active lists,
 `Done` as terminal, `In Progress` as the visible pickup list, `Blocked` as the blocked handoff list,
-`Human Review` as the review handoff list, and `Merging` as the human approval list for landing.
+`Human Review` as the review handoff list, and `Merging` as the human approval list for merging.
 When guided `setup-local` creates a local board with `--no-in-progress`, it MUST omit the `In
 Progress` list, omit `tracker.in_progress_state`, and leave picked-up cards in the active list until
 the agent moves them to review or blocked. Direct `new-board` keeps the recommended list set above.
@@ -1027,18 +1027,18 @@ blocking on any non-green check:
 - The workpad and visible Trello handoff comment MUST record the check state, local commands used
   when local validation was required, and any unavailable, flaky, or unrelated check caveat.
 
-When a human moves the Trello card to `Merging`, generated workflows use this deterministic landing
+When a human moves the Trello card to `Merging`, generated workflows use this deterministic merge
 policy:
 
 - merge and move to `Done` only after the PR merged successfully
-- `Human Review` -> `Merging` with no new feedback and a clean PR is approval to land
+- `Human Review` -> `Merging` with no new feedback and a clean PR is approval to merge
 - exact, unambiguous feedback added before the card entered `Merging` that Codex addressed with
-  current validation and clean checks can land without another human review
+  current validation and clean checks can merge without another human review
 - material fixups, broad interpretation, or unverifiable changes return the card to `Human Review`
   with the reason and a request for renewed approval
 - unresolved actionable feedback, required reviews, mergeability, checks, auth, or repository policy
   move the card to `Blocked` with the blocker class and next human action
-- the workflow SHOULD NOT leave the card parked in `Merging` after a failed landing attempt
+- the workflow SHOULD NOT leave the card parked in `Merging` after a failed merge attempt
 
 When `new-board` would otherwise write `WORKFLOW.md` and that file already exists, the Java
 implementation writes a board-specific file named `WORKFLOW.<slugified-board-name>.md`. If that file
@@ -1067,7 +1067,7 @@ workflow files MAY use `server.port: 0` for temporary local runs that should use
 When `import-board` reads an existing board, the Java implementation detects common list names:
 `Ready for Codex` for queued work, `In Progress` for visible pickup, `Blocked` for blocked handoff,
 `Human Review` for review handoff (falling back to the common list name `Review` when no
-`Human Review` list exists), `Merging` for landing approval when a terminal list exists, and `Done`
+`Human Review` list exists), `Merging` for merge approval when a terminal list exists, and `Done`
 for terminal work. Explicit list-name options MUST match an open Trello list name exactly, including
 punctuation and whitespace. Repeating `--active` or `--terminal` selects multiple lists.
 
@@ -3527,7 +3527,7 @@ When this profile is used:
   other deployment secrets
 
 This Java repository ships skills for Trello workpad updates, Trello handoff, PR feedback sweeps,
-repository sync, commits, push/PR preparation, landing from `Merging`, and live-run debugging. The
+repository sync, commits, push/PR preparation, merge flow from `Merging`, and live-run debugging. The
 runtime packages those skills and refreshes them under a per-card workspace's
 `.codex/skills/symphony-trello-*` directories before starting Codex when the rendered prompt
 references them. The recommended generated workflow references those skills only as supporting
@@ -3593,16 +3593,16 @@ GitHub pull request publication extension:
 - if multiple directory template candidates exist and no Trello card or repository instruction
   selects exactly one, generated workflows SHOULD block or ask for human input instead of guessing
 
-GitHub landing extension:
+GitHub merge extension:
 
-- before landing from `Merging`, generated workflows SHOULD sweep top-level PR comments, inline
+- before merging from `Merging`, generated workflows SHOULD sweep top-level PR comments, inline
   review comments, review states, review threads, Codex review comments, and checks
 - generated workflows SHOULD resolve addressed GitHub review threads when the authenticated GitHub
   user can resolve them
 - generated workflows MUST NOT merge while actionable feedback, required reviews, mergeability,
   required checks, auth, or repository policy remain unresolved
 - if a review thread cannot be resolved because of permissions or API limitations but the feedback is
-  otherwise addressed, generated workflows MAY land only when the unresolved thread and reason are
+  otherwise addressed, generated workflows MAY merge only when the unresolved thread and reason are
   recorded clearly
 
 ### 19.2 Manual systemd Deployment Profile
@@ -3754,9 +3754,9 @@ When this profile is used:
 - GitHub-enabled existing-board import MAY create a missing `Merging` list after the user has
   selected or requested GitHub integration. `setup-local configure-github` MUST be able to upgrade
   an existing connected non-GitHub board in place instead of forcing a new board connection
-- GitHub-enabled generated boards include `Merging` and PR publication/landing workflow guidance
+- GitHub-enabled generated boards include `Merging` and PR publication/merge workflow guidance
 - non-GitHub generated boards MUST NOT create `Merging`, include it in active states, or require PR
-  publication/landing before `Human Review`
+  publication/merging before `Human Review`
 - setup MUST write ignored local Trello credentials after the user provides them directly and MUST
   redact secret values in terminal output. Credentials already supplied through real environment
   variables or an existing dotenv file MUST NOT be copied into another dotenv file.

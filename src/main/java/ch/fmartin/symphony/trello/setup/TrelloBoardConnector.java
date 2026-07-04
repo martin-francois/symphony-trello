@@ -332,7 +332,7 @@ final class TrelloBoardConnector {
                 if (!createMissingGithubLists) {
                     throw new TrelloBoardSetupException(
                             "setup_github_import_list_declined",
-                            "GitHub workflow import needs a Merging list for landing approval.");
+                            "GitHub workflow import needs a Merging list for merge approval.");
                 }
             }
         }

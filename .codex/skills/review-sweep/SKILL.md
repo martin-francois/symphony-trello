@@ -1,7 +1,7 @@
 ---
 name: review-sweep
 description: >
-  Gather and resolve pull request feedback before Trello handoff or landing.
+  Gather and resolve pull request feedback before Trello handoff or merging.
   Use when a Trello card links to a PR, a branch has a PR, or work is being
   moved to Human Review or Merging.
 ---
@@ -176,7 +176,7 @@ match the work actually completed, update the PR metadata before handoff.
 
 ## Trello Handoff
 
-Before moving a card to `Human Review` or landing from `Merging`, update the
+Before moving a card to `Human Review` or merging from `Merging`, update the
 workpad with:
 
 - PR URL, if one exists.

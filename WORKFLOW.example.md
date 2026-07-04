@@ -116,7 +116,7 @@ Symphony only dispatches cards from configured active lists: `Todo`, `In Progres
   active.
 - `Human Review`: human review. Do not code from this list unless a human moves the card back to
   an active list.
-- `Merging`: human approval for landing. Run landing only from this list.
+- `Merging`: human approval for merging. Run the merge helper only from this list.
 - `Done`: terminal work. Symphony cleans up matching workspaces for terminal cards.
 - Any other list: out of scope for this Symphony process unless it is added to `active_states` or
   `terminal_states`.
@@ -266,7 +266,7 @@ of moving to Human Review.
 
 If the Trello description, Trello comments, current branch, repository context, or open PR list
 identifies an associated pull request, use `.codex/skills/symphony-trello-review-sweep/SKILL.md`
-before moving the card to Human Review or landing from Merging. Cards without PR context do not need
+before moving the card to Human Review or merging from Merging. Cards without PR context do not need
 GitHub review checks.
 
 The sweep must check top-level PR comments, inline review comments, review states and summaries,
@@ -313,18 +313,18 @@ Before returning the card to Human Review, rerun the card-specific validation an
 update the existing workpad with the rework evidence, and add one concise handoff comment. Do not
 create duplicate progress summary comments when the workpad already contains the details.
 
-## Landing From Merging
+## Merge From Merging
 
-`Merging` is human approval for landing. Only run landing when the current Trello list is
+`Merging` is human approval for merging. Only run the merge helper when the current Trello list is
 `Merging`. Do not merge from Human Review, and do not call `gh pr merge` directly from the workflow
 prompt. Open `.codex/skills/symphony-trello-land/SKILL.md` and follow it.
 
-Before landing, identify the PR, run the PR feedback sweep, run current card-specific validation,
+Before merging, identify the PR, run the PR feedback sweep, run current card-specific validation,
 check mergeability, branch state, required reviews, and CI/check status, and follow the repository's
 merge policy. Do not enable auto-merge unless the repository policy explicitly requires it.
 
 If PR discovery, checks, auth, branch state, merge policy, or outstanding review feedback is unclear,
-update the workpad and move the card to `Blocked` with a concise blocker. After successful landing,
+update the workpad and move the card to `Blocked` with a concise blocker. After successful merge,
 update the workpad with merge evidence, add a concise completion comment when useful, and move the
 card to `Done`.
 
