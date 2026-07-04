@@ -486,6 +486,9 @@ function SceneShell({
 function Caption({ children, eyebrow, subcaption }: { children: ReactNode; eyebrow?: string; subcaption?: string }) {
   return (
     <div style={styles.caption}>
+      {eyebrow ? (
+        <span style={{ ...styles.eyebrow, gridColumn: "1 / -1" }}>{eyebrow}</span>
+      ) : null}
       <strong style={{ gridColumn: "1 / -1" }}>{children}</strong>
       {subcaption ? (
         <span style={{ ...styles.captionSubtext, gridColumn: "1 / -1" }}>{subcaption}</span>
@@ -641,6 +644,26 @@ const styles: Record<string, CSSProperties> = {
     lineHeight: 1.35,
     color: "rgba(8, 40, 58, 0.6)",
     fontWeight: 400,
+  },
+  caption: {
+    display: "grid",
+    gap: 8,
+    fontSize: 42,
+    letterSpacing: "-0.02em",
+    lineHeight: 1.1,
+  },
+  captionSubtext: {
+    fontSize: 28,
+    color: "rgba(8, 40, 58, 0.6)",
+    fontWeight: 500,
+    letterSpacing: "0",
+  },
+  eyebrow: {
+    fontSize: 18,
+    fontWeight: 700,
+    textTransform: "uppercase",
+    letterSpacing: "0.06em",
+    color: "#0284c7", // nice subtle blue
   },
   realBoardScene: {
     position: "relative",
