@@ -65,7 +65,7 @@ export function ReadmeDemo() {
       <Scene start={2220} duration={140}>{(progress) => <GithubMergedScene progress={progress} />}</Scene>
       <Scene start={2360} duration={120}>{(progress) => <BoardScene image="trello-board-done.jpg" progress={progress} caption="The card lands in Done." activeLane="Done" fromLane="Merging" status="Merged and complete" detail="The PR is merged and the board shows the task as finished." />}</Scene>
       <Scene start={2480} duration={130}>{(progress) => <AnywhereScene progress={progress} />}</Scene>
-      <Scene start={2610} duration={150}>{(progress) => <FinalHero progress={progress} />}</Scene>
+      <Scene start={2610} duration={300}>{(progress) => <FinalHero progress={progress} />}</Scene>
     </AbsoluteFill>
   );
 }
@@ -363,7 +363,7 @@ function MergeScene({ progress }: { progress: number }) {
 
 function FinalHero({ progress }: { progress: number }) {
   return (
-    <AbsoluteFill style={{ ...styles.scene, opacity: interpolate(progress, [0, 1], [0, 1], { easing: ease }), justifyContent: "center" }}>
+    <AbsoluteFill style={{ ...styles.scene, opacity: interpolate(progress, [0, 0.5], [0, 1], { easing: ease, extrapolateRight: "clamp" }), justifyContent: "center" }}>
       <div style={styles.finalLayout}>
         <h2 style={styles.finalHeadline}>You plan work in Trello. Codex implements it. Symphony keeps everything moving.</h2>
         <p style={styles.finalSubtext}>From phone to laptop, from card to merged PR.<br/><strong style={{color: green}}>No IDE required. No CLI babysitting.</strong></p>
