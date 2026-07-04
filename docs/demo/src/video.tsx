@@ -363,23 +363,25 @@ function MergeScene({ progress }: { progress: number }) {
 
 function FinalHero({ progress }: { progress: number }) {
   return (
-    <AbsoluteFill style={{ ...styles.scene, opacity: interpolate(progress, [0, 0.5], [0, 1], { easing: ease, extrapolateRight: "clamp" }), justifyContent: "center" }}>
-      <div style={styles.finalLayout}>
-        <h2 style={styles.finalHeadline}>You plan work in Trello. Codex implements it. Symphony keeps everything moving.</h2>
-        <p style={styles.finalSubtext}>From phone to laptop, from card to merged PR.<br/><strong style={{color: green}}>No IDE required. No CLI babysitting.</strong></p>
-      </div>
-      <div style={styles.finalMedia}>
-        <div style={styles.finalTile}>
-          <MacWindow style={styles.finalPanel}>
-            <Capture src="trello-board-done.jpg" fit="cover" shadow={false} style={{ objectPosition: "left top" }} />
-          </MacWindow>
-          <div style={styles.finalPanelCaption}>Trello: Done</div>
+    <AbsoluteFill style={{ ...styles.scene, justifyContent: "center" }}>
+      <div style={{ opacity: interpolate(progress, [0, 0.5], [0, 1], { easing: ease, extrapolateRight: "clamp" }), height: "100%", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+        <div style={styles.finalLayout}>
+          <h2 style={styles.finalHeadline}>You plan work in Trello. Codex implements it. Symphony keeps everything moving.</h2>
+          <p style={styles.finalSubtext}>From phone to laptop, from card to merged PR.<br/><strong style={{color: green}}>No IDE required. No CLI babysitting.</strong></p>
         </div>
-        <div style={styles.finalTile}>
-          <MacWindow style={styles.finalPanel}>
-            <Capture src="github-pr-merged.jpg" fit="contain" shadow={false} />
-          </MacWindow>
-          <div style={styles.finalPanelCaption}>Pull request: Merged</div>
+        <div style={styles.finalMedia}>
+          <div style={styles.finalTile}>
+            <MacWindow style={styles.finalPanel}>
+              <Capture src="trello-board-done.jpg" fit="cover" shadow={false} style={{ objectPosition: "left top" }} />
+            </MacWindow>
+            <div style={styles.finalPanelCaption}>Trello: Done</div>
+          </div>
+          <div style={styles.finalTile}>
+            <MacWindow style={styles.finalPanel}>
+              <Capture src="github-pr-merged.jpg" fit="contain" shadow={false} />
+            </MacWindow>
+            <div style={styles.finalPanelCaption}>Pull request: Merged</div>
+          </div>
         </div>
       </div>
     </AbsoluteFill>
