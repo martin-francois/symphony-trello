@@ -252,44 +252,23 @@ function WorkpadScene({ progress, phase }: { progress: number; phase: "initial" 
         "Validation passed: npm run typecheck; npm test.",
       ];
 
-  if (isRework) {
-    return (
-      <SceneShell
-        caption="Codex reads the review and updates the implementation."
-        subcaption="The rework starts from the review comment and keeps the same PR alive."
-      >
-        <div style={styles.workpadLayout}>
-          <WorkpadCard progress={progress} title="Codex Workpad - rework" bullets={bullets} />
-          <div style={styles.workpadContextPanel}>
-            <h3 style={styles.contextTitle}>Review feedback is being handled</h3>
-            <p style={styles.contextText}>Codex keeps the same card and PR, then records what changed.</p>
-          </div>
-        </div>
-      </SceneShell>
-    );
-  }
-
   return (
     <SceneShell
-      caption="Progress stays visible on the Trello card."
-      subcaption="The workpad shows you what Codex is doing before the PR is ready."
+      caption={isRework ? "Codex reads the review and updates the implementation." : "Progress stays visible on the Trello card."}
+      subcaption={isRework ? "The rework starts from the review comment and keeps the same PR alive." : "The workpad shows you what Codex is doing before the PR is ready."}
     >
       <div style={styles.workpadLayout}>
         <div style={styles.workpadContextPanel}>
-          <h3 style={styles.contextTitle}>Implementation is in progress</h3>
+          <h3 style={styles.contextTitle}>{isRework ? "Review feedback is being handled" : "Implementation is in progress"}</h3>
           <p style={styles.contextText}>
-            You can see the plan, progress, and validation without opening host logs.
+            {isRework 
+              ? "Codex keeps the same card and PR, then records what changed." 
+              : "You can see the plan, progress, and validation without opening host logs."}
           </p>
         </div>
         <MacWindow style={{ height: "100%" }} title="codex-worker — bash">
           <div style={{ padding: "40px 50px" }}>
-            <div style={styles.workpadHeader}>Codex Workpad</div>
-            <div style={styles.workpadSection}>Plan / Progress / Validation</div>
-            <ul style={styles.workpadList}>
-              {bullets.map((b, i) => (
-                <li key={i} style={{ marginBottom: 12, opacity: progress > (i * 0.1) ? 1 : 0 }}>{b}</li>
-              ))}
-            </ul>
+            <WorkpadCard progress={progress} title={isRework ? "Codex Workpad - rework" : "Codex Workpad"} bullets={bullets} />
           </div>
         </MacWindow>
       </div>
@@ -388,35 +367,9 @@ function FinalHero({ progress }: { progress: number }) {
   );
 }
 
-function FinalTrelloSummary() {
-  return (
-    <div style={styles.finalTrelloSummary}>
-      <div style={styles.finalMiniBoard}>
-        {lanes.map((lane) => {
-          const done = lane === "Done";
-
-          return (
-            <div key={lane} style={{ ...styles.finalMiniLane, ...(done ? styles.finalMiniDoneLane : {}) }}>
-              <span style={styles.finalMiniLaneTitle}>{lane}</span>
-              {done ? (
-                <div style={styles.finalMiniTaskCard}>
-                  <strong>Clarify missing Trello token error</strong>
-                  <span style={styles.finalMiniStatus}>Merged PR</span>
-                </div>
-              ) : (
-                <div style={styles.finalMiniEmptyCard} />
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 function WorkpadCard({ progress, title, bullets }: { progress: number; title: string; bullets: string[] }) {
   return (
-    <div style={styles.workpadCard}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <div style={styles.workpadHeader}>{title}</div>
       <div style={styles.workpadSection}>Plan / Progress / Validation</div>
       <ul style={styles.workpadList}>
@@ -429,6 +382,7 @@ function WorkpadCard({ progress, title, bullets }: { progress: number; title: st
               style={{
                 opacity: visible,
                 translate: interpolate(visible, [0, 1], ["0px 18px", "0px 0px"], { easing: ease }),
+                marginBottom: 12,
               }}
             >
               {bullet}
@@ -840,11 +794,6 @@ const styles: Record<string, CSSProperties> = {
     border: "1px solid rgba(8, 40, 58, 0.25)",
     boxShadow: "0 20px 60px rgba(8, 40, 58, 0.25)",
   },
-  finalTrelloSummary: {
-    height: "100%",
-    padding: 28,
-    background: "white",
-  },
   finalMiniBoard: {
     height: "100%",
     display: "grid",
@@ -869,30 +818,7 @@ const styles: Record<string, CSSProperties> = {
     lineHeight: 1.1,
     fontWeight: 700,
   },
-  finalMiniTaskCard: {
-    marginTop: 16,
-    borderRadius: 10,
-    padding: "14px 12px",
-    background: "white",
-    color: deep,
-    fontSize: 18,
-    lineHeight: 1.2,
-    boxShadow: "0 8px 20px rgba(8, 40, 58, 0.08)",
-    border: "1px solid rgba(8, 40, 58, 0.1)",
-  },
-  finalMiniStatus: {
-    display: "block",
-    marginTop: 8,
-    color: green,
-    fontSize: 16,
-    fontWeight: 700,
-  },
-  finalMiniEmptyCard: {
-    marginTop: 20,
-    height: 60,
-    borderRadius: 10,
-    background: "rgba(8, 40, 58, 0.03)",
-  },
+
   finalPanelCaption: {
     color: "rgba(8, 40, 58, 0.6)",
     fontSize: 32,
