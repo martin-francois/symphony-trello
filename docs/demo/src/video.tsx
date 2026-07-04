@@ -308,8 +308,8 @@ function GithubReview({ progress }: { progress: number }) {
           shadow={false}
           style={{ objectPosition: "50% 42%" }}
         />
-        <Label bottom={128} left={34}>Real GitHub PR diff and review thread</Label>
-        <Callout bottom={34} left={34} width={910}>The comment is tied to the actual code Codex produced.</Callout>
+        <Label bottom={128} right={34}>Real GitHub PR diff and review thread</Label>
+        <Callout bottom={34} right={34} width={500}>The comment is tied to the actual code Codex produced.</Callout>
       </div>
     </SceneShell>
   );
@@ -326,8 +326,8 @@ function GithubResolved({ progress }: { progress: number }) {
           shadow={false}
           style={{ objectPosition: "50% 70%" }}
         />
-        <Label bottom={128} left={34}>Same PR after rework</Label>
-        <Callout bottom={34} left={34} width={980}>Codex replies with what changed and the validation it ran.</Callout>
+        <Label bottom={128} right={34}>Same PR after rework</Label>
+        <Callout bottom={34} right={34} width={500}>Codex replies with what changed and the validation it ran.</Callout>
       </MacWindow>
     </SceneShell>
   );
