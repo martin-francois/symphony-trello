@@ -36,6 +36,11 @@ this repository.
   for one specific commit. Never run `codex review --uncommitted "prompt"`,
   `codex review "prompt" --uncommitted`, `printf "prompt" | codex review --uncommitted -`, bare
   `codex review`, or a mismatched scope and then correct it later.
+- After a Codex review pass reports justified findings, fix them and rerun Codex review directly.
+  Do not run the repository's normal local verification gate between review iterations only to check
+  each repair. Once the Codex review loop is clean, run the required verification once for the final
+  tree. If that final verification fails, fix the failure, rerun the Codex review loop, and only then
+  run final verification again.
 
 ## References
 
