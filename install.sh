@@ -1274,7 +1274,9 @@ collect_missing_transactional_packages() {
   if [[ "$NO_ONBOARD" == false ]] && ! codex_authenticated && ! need codex && ! need npm; then
     packages+=("node")
   fi
-  printf '%s\n' "${packages[@]}"
+  if ((${#packages[@]} > 0)); then
+    printf '%s\n' "${packages[@]}"
+  fi
 }
 
 explain_transactional_reboot_and_exit() {
