@@ -1,0 +1,239 @@
+name: Continuous Fuzzing
+
+on:
+  schedule:
+    # GitHub schedules run from the default branch. Avoid minute 0, where scheduled jobs are more
+    # likely to be delayed or dropped under GitHub Actions load.
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      duration_minutes:
+        description: "Total active fuzzing minutes across all targets, max 330."
+        required: false
+        default: "330"
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: continuous-fuzzing-main
+  cancel-in-progress: false
+
+jobs:
+  fuzz:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      DEFAULT_FUZZ_MINUTES: "330"
+      MAX_FUZZ_MINUTES: "330"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+
+      - name: Run scheduled Jazzer fuzzing
+        id: fuzz
+        continue-on-error: true
+        env:
+          REQUESTED_FUZZ_MINUTES: ${{ inputs.duration_minutes }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p target/continuous-fuzzing/logs target/continuous-fuzzing/findings
+
+          duration_minutes="${REQUESTED_FUZZ_MINUTES:-$DEFAULT_FUZZ_MINUTES}"
+          if ! [[ "$duration_minutes" =~ ^[0-9]+$ ]]; then
+            echo "duration_minutes must be a positive integer: $duration_minutes" >&2
+            exit 1
+          fi
+          if ((duration_minutes < 5 || duration_minutes > MAX_FUZZ_MINUTES)); then
+            echo "duration_minutes must be between 5 and $MAX_FUZZ_MINUTES." >&2
+            exit 1
+          fi
+
+          targets=(
+            'RepositorySourceResolverFuzzTest#labelledRepositorySourceValueCannotBreakSelectionInvariants'
+            'RepositorySourceResolverFuzzTest#cardTextDeclarationScanCannotBreakSelectionInvariants'
+            'TrelloCardReferenceParserFuzzTest#trelloReferenceParsingKeepsLookupIdsAndUrlsStable'
+            'TrelloCardReferenceParserFuzzTest#checklistClassificationNeverEmitsPrerequisitesWithProblems'
+            'WorkflowLoaderFuzzTest#workflowLoaderHandlesArbitraryWorkflowBytes'
+          )
+
+          target_count="${#targets[@]}"
+          per_target_minutes="$((duration_minutes / target_count))"
+          if ((per_target_minutes < 1)); then
+            per_target_minutes=1
+          fi
+
+          {
+            echo "duration_minutes=$duration_minutes"
+            echo "per_target_minutes=$per_target_minutes"
+            echo "target_count=$target_count"
+          } >> "$GITHUB_OUTPUT"
+
+          for target in "${targets[@]}"; do
+            safe_name="${target//#/-}"
+            safe_name="${safe_name//./-}"
+            log="target/continuous-fuzzing/logs/${safe_name}.log"
+            command=(
+              env
+              JAZZER_FUZZ=1
+              ./mvnw
+              -q
+              -Pfuzzing
+              -Djacoco.skip=true
+              "-Djazzer.max_duration=${per_target_minutes}m"
+              -Djazzer.max_executions=0
+              "-Dtest=$target"
+              test
+            )
+
+            {
+              printf 'Running target %s for %s minutes\n' "$target" "$per_target_minutes"
+              printf 'Command:'
+              printf ' %q' "${command[@]}"
+              printf '\n'
+            } | tee "$log"
+
+            set +e
+            "${command[@]}" >> "$log" 2>&1
+            status="$?"
+            set -e
+
+            if ((status != 0)); then
+              printf '%s\n' "$target" > target/continuous-fuzzing/findings/failed-target.txt
+              printf '%s\n' "$status" > target/continuous-fuzzing/findings/exit-status.txt
+              {
+                printf '%q ' "${command[@]}"
+                printf '\n'
+              } > target/continuous-fuzzing/findings/reproduction-command.txt
+              tail -n 250 "$log" > target/continuous-fuzzing/findings/log-tail.txt
+              find . -maxdepth 5 \
+                \( -name 'crash-*' -o -name 'timeout-*' -o -name 'oom-*' -o -name 'leak-*' \) \
+                -type f -print | sort > target/continuous-fuzzing/findings/generated-artifacts.txt
+
+              {
+                echo "failed=true"
+                echo "target=$target"
+                echo "status=$status"
+              } >> "$GITHUB_OUTPUT"
+
+              exit "$status"
+            fi
+          done
+
+          echo "failed=false" >> "$GITHUB_OUTPUT"
+
+      - name: Upload fuzz failure artifact
+        if: steps.fuzz.outputs.failed == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: continuous-fuzzing-failure-${{ github.run_id }}
+          path: target/continuous-fuzzing/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Create or update fuzz failure issue
+        if: steps.fuzz.outputs.failed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FAILED_TARGET: ${{ steps.fuzz.outputs.target }}
+          EXIT_STATUS: ${{ steps.fuzz.outputs.status }}
+          DURATION_MINUTES: ${{ steps.fuzz.outputs.duration_minutes }}
+          PER_TARGET_MINUTES: ${{ steps.fuzz.outputs.per_target_minutes }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          labels="$(gh label list --limit 200 --json name --jq '.[].name')"
+          if ! grep -Fxq "bug" <<< "$labels"; then
+            gh label create bug --color d73a4a --description "Something is not working"
+          fi
+          if ! grep -Fxq "fuzzed" <<< "$labels"; then
+            gh label create fuzzed --color c5def5 --description "Found by fuzzing"
+          fi
+
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          artifact_name="continuous-fuzzing-failure-$GITHUB_RUN_ID"
+          reproduction_command="$(cat target/continuous-fuzzing/findings/reproduction-command.txt)"
+          log_tail="$(cat target/continuous-fuzzing/findings/log-tail.txt)"
+          generated_artifacts="$(cat target/continuous-fuzzing/findings/generated-artifacts.txt)"
+          fingerprint_source="$FAILED_TARGET
+          $reproduction_command
+          $log_tail"
+          fingerprint="$(
+            printf '%s' "$fingerprint_source" \
+              | openssl dgst -sha3-256 -r \
+              | awk '{print $1}'
+          )"
+          short_fingerprint="${fingerprint:0:12}"
+          issue_title="Fuzz failure: ${FAILED_TARGET:-unknown target} (${short_fingerprint})"
+          body_file="target/continuous-fuzzing/findings/github-issue.md"
+
+          {
+            echo "A scheduled Jazzer fuzzing run failed on main."
+            echo
+            echo "## Failure"
+            echo
+            echo "- Target: \`${FAILED_TARGET:-unknown target}\`"
+            echo "- Exit status: \`${EXIT_STATUS:-unknown}\`"
+            echo "- Commit: \`$GITHUB_SHA\`"
+            echo "- Run: $run_url"
+            echo "- Active fuzzing budget: ${DURATION_MINUTES:-unknown} minutes total,"
+            echo "  ${PER_TARGET_MINUTES:-unknown} minutes per target"
+            echo "- Artifact: \`$artifact_name\`"
+            echo "- Fuzz fingerprint: \`$fingerprint\`"
+            echo
+            echo "## Reproduce"
+            echo
+            echo '```bash'
+            echo "$reproduction_command"
+            echo '```'
+            echo
+            echo "Download the failure artifact for logs and any generated Jazzer crash input:"
+            echo
+            echo '```bash'
+            echo "gh run download $GITHUB_RUN_ID --name $artifact_name"
+            echo '```'
+            echo
+            echo "## Generated Artifacts"
+            echo
+            if [ -n "$generated_artifacts" ]; then
+              echo '```text'
+              echo "$generated_artifacts"
+              echo '```'
+            else
+              echo "No Jazzer crash, timeout, OOM, or leak artifact was found in the workspace scan."
+            fi
+            echo
+            echo "## Log Tail"
+            echo
+            echo '```text'
+            echo "$log_tail"
+            echo '```'
+          } > "$body_file"
+
+          existing_issue="$(
+            gh issue list \
+              --state open \
+              --label fuzzed \
+              --search "$fingerprint in:body" \
+              --json number \
+              --jq '.[0].number // ""'
+          )"
+
+          if [ -n "$existing_issue" ]; then
+            gh issue comment "$existing_issue" --body-file "$body_file"
+          else
+            gh issue create --title "$issue_title" --body-file "$body_file" --label bug --label fuzzed
+          fi
+
+      - name: Fail after reporting fuzz failure
+        if: steps.fuzz.outcome == 'failure'
+        run: exit 1
