@@ -55,6 +55,9 @@ format; the curated workflow seeds stay as deterministic parameterized regressio
 those fuzz tests and the chaos tests through the normal `verify` job. Active fuzzing remains opt-in
 through `JAZZER_FUZZ=1` and a Maven `fuzzing` profile that disables JUnit parallel execution because
 Jazzer fuzzing mode runs one target per JVM.
+Scheduled coverage-guided fuzzing from `main` is handled separately by
+[ADR 0062](0062-github-actions-continuous-fuzzing.md) so long-running fuzzing does not become part of
+required pull request CI.
 
 OSS-Fuzz entry points live under `src/test/java/ch/fmartin/symphony/trello/fuzz` so they compile with
 the same code and dependencies as the tests. These standalone `fuzzerTestOneInput` classes are the
@@ -98,6 +101,8 @@ network access and assert that writes are not retried or performed when validati
 * Good, because normal Maven verification and CI now include deterministic fuzz regression coverage.
 * Good, because active local fuzzing has documented 15- to 30-minute and longer-run commands without
   making continuous fuzzing a contributor requirement.
+* Good, because [ADR 0062](0062-github-actions-continuous-fuzzing.md) defines the interim
+  GitHub-hosted scheduled fuzzing loop until OSS-Fuzz is active.
 * Good, because OSS-Fuzz readiness is reviewable before an external `google/oss-fuzz` pull request.
 * Good, because OSS-Fuzz validation uses the same helper path that upstream reviewers use, not only a
   direct Docker build.

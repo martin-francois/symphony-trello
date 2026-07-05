@@ -188,10 +188,12 @@ rerun.
 Fuzzing and deterministic chaos tests cover parser and external-boundary failure modes that are hard
 to exhaust with example-based tests. CI runs the Jazzer fuzz tests in deterministic regression mode
 and runs the chaos tests so parser and boundary regressions are caught during pull request checks.
-Contributors do not need to run continuous fuzzing before every pull request, but should use the
-15- to 30-minute active fuzzing commands in [Fuzzing](docs/fuzzing.md) when changing parser,
-prompt-line safety, workflow loading, or Trello reference/checklist parsing logic. The same page also
-documents longer agent-requested fuzzing runs and the OSS-Fuzz project files.
+The repository also has a maintainer-owned scheduled GitHub Actions workflow that runs active Jazzer
+fuzzing from `main` and files `bug` + `fuzzed` issues when it finds failures. Contributors do not
+need to run continuous fuzzing before every pull request, but should use the 15- to 30-minute active
+fuzzing commands in [Fuzzing](docs/fuzzing.md) when changing parser, prompt-line safety, workflow
+loading, or Trello reference/checklist parsing logic. The same page also documents longer
+agent-requested fuzzing runs, scheduled fuzzing behavior, and the OSS-Fuzz project files.
 
 GitHub Secret Scanning with repository custom patterns is the primary protection for
 GitHub-hosted issue, pull request, review, and comment text. Private-context scanning uses
