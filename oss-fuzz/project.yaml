@@ -13,6 +13,7 @@
 homepage: "https://github.com/martin-francois/symphony-trello"
 main_repo: "https://github.com/martin-francois/symphony-trello.git"
 primary_contact: "oss-fuzz@fmartin.ch"
+file_github_issue: true
 language: jvm
 fuzzing_engines:
   - libfuzzer

@@ -66,6 +66,12 @@ this repository, installs and selects a Java 25 JDK, and then runs the wrapper w
 OSS-Fuzz JVM builder image. OSS-Fuzz builders are external to this repository's normal developer
 workflow; contributors should still use `./mvnw` in this checkout.
 
+The prepared OSS-Fuzz project metadata uses `file_github_issue: true` so OSS-Fuzz findings are
+mirrored to GitHub issues for project visibility. Those GitHub issues are not the source of the full
+private crash report; maintainers still need OSS-Fuzz tracker access for details. The configured
+primary contact, `oss-fuzz@fmartin.ch`, must be a real Google account rather than only a mail alias
+because ClusterFuzz and the OSS-Fuzz tracker require Google-account authentication.
+
 The OSS-Fuzz wrapper follows the standalone JVM target pattern from the OSS-Fuzz JVM guide: generated
 launchers call OSS-Fuzz's `jazzer_driver` with `jazzer_agent_deploy.jar`, the computed classpath, and
 `LD_LIBRARY_PATH` including `JVM_LD_LIBRARY_PATH`. This matches the current pure Java wrapper pattern

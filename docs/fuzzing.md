@@ -67,6 +67,12 @@ the compiled Maven test fuzzers from `src/test/java/ch/fmartin/symphony/trello/f
 wrappers. The files are kept here so the project can review and test them before they are copied into
 the upstream `google/oss-fuzz` repository.
 
+The prepared `project.yaml` uses `primary_contact: "oss-fuzz@fmartin.ch"` and
+`file_github_issue: true`. The contact address must be a real Google account, not only a forwarding
+alias, so the maintainer can access ClusterFuzz and OSS-Fuzz issue details. GitHub issue mirroring is
+enabled for project visibility, but detailed crash reports still live in the OSS-Fuzz tracker and may
+require OSS-Fuzz access.
+
 The JUnit fuzz tests and standalone OSS-Fuzz targets are related but separate:
 
 - `RepositorySourceResolverFuzzTest`, `TrelloCardReferenceParserFuzzTest`, and
