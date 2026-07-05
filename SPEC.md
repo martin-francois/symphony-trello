@@ -3724,6 +3724,10 @@ When this profile is used:
   CLI first and otherwise fall back to a user-local Codex npm install under `SYMPHONY_HOME`. Node/npm
   MAY be reused from `PATH` or installed through the platform package manager. The installer MUST ask
   before privileged or system-wide commands and print the exact install steps first
+- on immutable Linux systems that use `transactional-update`, the installer MUST combine missing
+  package-manager prerequisites it can know up front into one `transactional-update` package command,
+  stop after that command succeeds, and tell the operator to reboot and rerun the installer. It MUST
+  NOT continue as if newly scheduled packages were already available in the current system snapshot
 - if Codex CLI authentication is missing, the installer MUST ask whether the machine can open a
   browser before choosing `codex login` or `codex login --device-auth`
 - `setup-local` is the Java-owned setup/check command for local onboarding

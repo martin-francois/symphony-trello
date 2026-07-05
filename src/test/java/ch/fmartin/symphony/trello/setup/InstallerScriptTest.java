@@ -2029,6 +2029,224 @@ final class InstallerScriptTest {
     }
 
     @Test
+    void posixInstallerGroupsMissingMicroOsPackagesBeforeOneReboot() throws Exception {
+        // given
+        assumeTrue(Files.exists(Path.of("/bin/bash")));
+        assumeTrue(commandExists("script"));
+        Path installScript = Path.of("install.sh").toAbsolutePath();
+        Path fakeBin = temporaryDirectory.resolve("microos-transactional-bin");
+        Files.createDirectories(fakeBin);
+        writeCommandProxy(fakeBin, "bash", "/bin/bash");
+        Path commandLog = temporaryDirectory.resolve("microos-transactional.log");
+        writeExecutable(
+                fakeBin.resolve("sudo"),
+                """
+                #!/bin/bash
+                set -euo pipefail
+                echo "sudo $*" >> "${SYMPHONY_FAKE_LOG:?}"
+                "$@"
+                """);
+        writeExecutable(
+                fakeBin.resolve("transactional-update"),
+                """
+                #!/bin/bash
+                set -euo pipefail
+                echo "transactional-update $*" >> "${SYMPHONY_FAKE_LOG:?}"
+                """);
+        Map<String, String> environment = Map.of(
+                "PATH", fakeBin.toString(),
+                "SYMPHONY_FAKE_LOG", commandLog.toString(),
+                "SYMPHONY_TRELLO_TEST_EUID", "1000",
+                "SYMPHONY_TRELLO_TEST_OS", "Linux",
+                "SYMPHONY_TRELLO_TEST_OS_PRETTY_NAME", "openSUSE MicroOS",
+                "SYMPHONY_TRELLO_TEST_OS_ID", "opensuse-microos",
+                "SYMPHONY_TRELLO_TEST_ARCH", "x86_64");
+
+        // when
+        ProcessResult result = runWithPseudoTerminal(
+                environment, "y\n", "/bin/bash " + shellQuote(installScript.toString()) + " --from-source");
+
+        // then
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.output())
+                .contains(
+                        "Detected openSUSE MicroOS amd64",
+                        "Missing prerequisites need OS package installation:",
+                        "  - Git",
+                        "  - Java 25+ JDK",
+                        "  - Node.js/npm for Codex CLI installation",
+                        "Proposed install command:",
+                        "  sudo transactional-update --non-interactive pkg install git java-25-openjdk-devel nodejs npm",
+                        "Package installation was scheduled with transactional-update.",
+                        "Reboot this machine so the new system snapshot becomes active, then rerun this installer.")
+                .doesNotContain(
+                        "zypper install",
+                        "Codex CLI install:",
+                        "Open a new terminal with Java 25+ on PATH",
+                        "Open a new terminal with npm on PATH");
+        assertThat(Files.readString(commandLog, StandardCharsets.UTF_8))
+                .isEqualTo(
+                        "sudo transactional-update --non-interactive pkg install git java-25-openjdk-devel nodejs npm\n"
+                                + "transactional-update --non-interactive pkg install git java-25-openjdk-devel nodejs npm\n");
+    }
+
+    @Test
+    void posixInstallerDryRunGroupsMissingMicroOsPackages() throws Exception {
+        // given
+        assumeTrue(Files.exists(Path.of("/bin/bash")));
+        Path fakeBin = temporaryDirectory.resolve("microos-dry-run-bin");
+        Files.createDirectories(fakeBin);
+        String success = """
+                #!/bin/bash
+                exit 0
+                """;
+        writeExecutable(fakeBin.resolve("sudo"), success);
+        writeExecutable(fakeBin.resolve("transactional-update"), success);
+        Map<String, String> environment = Map.of(
+                "PATH", fakeBin.toString(),
+                "SYMPHONY_TRELLO_TEST_EUID", "1000",
+                "SYMPHONY_TRELLO_TEST_OS", "Linux",
+                "SYMPHONY_TRELLO_TEST_OS_PRETTY_NAME", "openSUSE MicroOS",
+                "SYMPHONY_TRELLO_TEST_OS_ID", "opensuse-microos",
+                "SYMPHONY_TRELLO_TEST_ARCH", "x86_64");
+
+        // when
+        ProcessResult result = run(environment, "/bin/bash", "install.sh", "--dry-run", "--from-source");
+
+        // then
+        assertThat(result.exitCode()).isZero();
+        assertThat(result.output())
+                .contains(
+                        "WOULD offer to install missing OS packages:",
+                        "          - Git",
+                        "          - Java 25+ JDK",
+                        "          - Node.js/npm for Codex CLI installation",
+                        "          Command: sudo transactional-update --non-interactive pkg install git java-25-openjdk-devel nodejs npm",
+                        "WOULD stop after transactional-update and ask you to reboot, then rerun this installer.")
+                .doesNotContain(
+                        "WOULD offer to install Git",
+                        "WOULD offer to install Java 25+ JDK",
+                        "WOULD offer to install Codex CLI with Symphony-managed npm:",
+                        "WOULD clone or update:",
+                        "WOULD build packaged Quarkus app with Maven wrapper",
+                        "WOULD install command:",
+                        "WOULD run guided setup and start Symphony automatically.");
+    }
+
+    @Test
+    void posixInstallerUsesTransactionalUpdateForOpenSuseAeonSystems() throws Exception {
+        // given
+        assumeTrue(Files.exists(Path.of("/bin/bash")));
+        Path fakeBin = temporaryDirectory.resolve("aeon-transactional-bin");
+        Files.createDirectories(fakeBin);
+        String success = """
+                #!/bin/bash
+                exit 0
+                """;
+        writeExecutable(fakeBin.resolve("sudo"), success);
+        writeExecutable(fakeBin.resolve("transactional-update"), success);
+        writeExecutable(fakeBin.resolve("zypper"), success);
+        Map<String, String> environment = Map.of(
+                "PATH", fakeBin.toString(),
+                "SYMPHONY_TRELLO_TEST_EUID", "1000",
+                "SYMPHONY_TRELLO_TEST_OS", "Linux",
+                "SYMPHONY_TRELLO_TEST_OS_PRETTY_NAME", "openSUSE Aeon",
+                "SYMPHONY_TRELLO_TEST_OS_ID", "opensuse-aeon",
+                "SYMPHONY_TRELLO_TEST_ARCH", "x86_64");
+
+        // when
+        ProcessResult result = run(environment, "/bin/bash", "install.sh", "--dry-run", "--from-source");
+
+        // then
+        assertThat(result.exitCode()).isZero();
+        assertThat(result.output())
+                .contains(
+                        "          Command: sudo transactional-update --non-interactive pkg install git java-25-openjdk-devel nodejs npm",
+                        "WOULD stop after transactional-update and ask you to reboot, then rerun this installer.")
+                .doesNotContain(
+                        "zypper install",
+                        "WOULD clone or update:",
+                        "WOULD build packaged Quarkus app with Maven wrapper",
+                        "WOULD install command:",
+                        "WOULD run guided setup and start Symphony automatically.");
+    }
+
+    @Test
+    void posixInstallerUsesOutOfPathTransactionalUpdateForLeapMicroSystems() throws Exception {
+        // given
+        assumeTrue(Files.exists(Path.of("/bin/bash")));
+        Path fakeBin = temporaryDirectory.resolve("leap-micro-bin");
+        Files.createDirectories(fakeBin);
+        Path sbin = temporaryDirectory.resolve("leap-micro-sbin");
+        Files.createDirectories(sbin);
+        Path transactionalUpdate = sbin.resolve("transactional-update");
+        String success = """
+                #!/bin/bash
+                exit 0
+                """;
+        writeExecutable(fakeBin.resolve("sudo"), success);
+        writeExecutable(fakeBin.resolve("zypper"), success);
+        writeExecutable(transactionalUpdate, success);
+        Map<String, String> environment = Map.of(
+                "PATH", fakeBin.toString(),
+                "SYMPHONY_TRELLO_TEST_EUID", "1000",
+                "SYMPHONY_TRELLO_TEST_OS", "Linux",
+                "SYMPHONY_TRELLO_TEST_OS_PRETTY_NAME", "openSUSE Leap Micro 6.0",
+                "SYMPHONY_TRELLO_TEST_OS_ID", "opensuse-leap-micro",
+                "SYMPHONY_TRELLO_TEST_TRANSACTIONAL_UPDATE", transactionalUpdate.toString(),
+                "SYMPHONY_TRELLO_TEST_ARCH", "x86_64");
+
+        // when
+        ProcessResult result = run(environment, "/bin/bash", "install.sh", "--dry-run", "--from-source");
+
+        // then
+        assertThat(result.exitCode()).isZero();
+        assertThat(result.output())
+                .contains(
+                        "          Command: sudo "
+                                + transactionalUpdate
+                                + " --non-interactive pkg install git java-25-openjdk-devel nodejs npm",
+                        "WOULD stop after transactional-update and ask you to reboot, then rerun this installer.")
+                .doesNotContain(
+                        "zypper install",
+                        "WOULD clone or update:",
+                        "WOULD build packaged Quarkus app with Maven wrapper",
+                        "WOULD install command:",
+                        "WOULD run guided setup and start Symphony automatically.");
+    }
+
+    @Test
+    void posixInstallerKeepsZypperForMutableOpenSuseSystems() throws Exception {
+        // given
+        assumeTrue(Files.exists(Path.of("/bin/bash")));
+        Path fakeBin = temporaryDirectory.resolve("opensuse-zypper-bin");
+        Files.createDirectories(fakeBin);
+        String success = """
+                #!/bin/bash
+                exit 0
+                """;
+        writeExecutable(fakeBin.resolve("sudo"), success);
+        writeExecutable(fakeBin.resolve("transactional-update"), success);
+        writeExecutable(fakeBin.resolve("zypper"), success);
+        Map<String, String> environment = Map.of(
+                "PATH", fakeBin.toString(),
+                "SYMPHONY_TRELLO_TEST_EUID", "1000",
+                "SYMPHONY_TRELLO_TEST_OS", "Linux",
+                "SYMPHONY_TRELLO_TEST_OS_PRETTY_NAME", "openSUSE Leap 15.6",
+                "SYMPHONY_TRELLO_TEST_OS_ID", "opensuse-leap",
+                "SYMPHONY_TRELLO_TEST_ARCH", "x86_64");
+
+        // when
+        ProcessResult result = run(environment, "/bin/bash", "install.sh", "--dry-run", "--no-onboard");
+
+        // then
+        assertThat(result.exitCode()).isZero();
+        assertThat(result.output())
+                .contains("WOULD offer to install Java 25+ JDK with: sudo zypper install -y java-25-openjdk-devel")
+                .doesNotContain("transactional-update --non-interactive pkg install");
+    }
+
+    @Test
     void posixInstallerOffersSingleCodexCommandWhenNodeIsMissing() throws Exception {
         // given
         assumeTrue(Files.exists(Path.of("/bin/bash")));

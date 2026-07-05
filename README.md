@@ -534,6 +534,11 @@ The installer checks a Java 25+ JDK, Codex CLI auth, Trello credentials, and opt
 auth. It checks Git only when you install from a source checkout. When a required local tool is
 missing, the installer offers a concrete install command before it continues.
 
+On immutable Linux systems that use `transactional-update`, such as openSUSE MicroOS, Leap Micro,
+Aeon, or Kalpa, package installs only become active after a reboot. If Git, Java, or Node.js/npm is
+missing, the installer combines the missing OS packages into one `transactional-update` command,
+stops, and tells you to reboot and rerun the installer.
+
 GitHub is not required unless you want Symphony to create and merge GitHub pull requests. If GitHub is
 not configured, setup creates a Trello board without the GitHub-specific `Merging` list and writes a
 non-GitHub starter workflow. If you enable GitHub while importing an existing board, setup creates

@@ -29,6 +29,7 @@ STATE_HOME="${SYMPHONY_TRELLO_STATE_HOME:-$SYMPHONY_HOME/state}"
 BIN_DIR="$HOME/.local/bin"
 PREFIX_CONFIGURED=false
 DRY_RUN=false
+DRY_RUN_STOPS_AFTER_PREREQUISITES=false
 NO_ONBOARD=false
 SKIP_PATH_SETUP=false
 OS_NAME=""
@@ -949,7 +950,9 @@ platform_name() {
   Darwin) printf 'macOS %s\n' "$arch" ;;
   Linux)
     distro="Linux"
-    if [[ -r /etc/os-release ]]; then
+    if [[ -n "${SYMPHONY_TRELLO_TEST_OS_PRETTY_NAME:-}" ]]; then
+      distro="$SYMPHONY_TRELLO_TEST_OS_PRETTY_NAME"
+    elif [[ -r /etc/os-release ]]; then
       # shellcheck disable=SC1091
       . /etc/os-release
       distro="${PRETTY_NAME:-${NAME:-Linux}}"
@@ -996,6 +999,8 @@ prompt_yes_no() {
 detected_package_manager() {
   if [[ "$OS_NAME" == "Darwin" ]] && need brew; then
     echo brew
+  elif transactional_package_system; then
+    echo transactional-update
   elif need apt-get; then
     echo apt-get
   elif need dnf; then
@@ -1009,6 +1014,79 @@ detected_package_manager() {
   else
     echo none
   fi
+}
+
+os_release_id() {
+  if [[ -n "${SYMPHONY_TRELLO_TEST_OS_ID:-}" ]]; then
+    printf '%s\n' "$SYMPHONY_TRELLO_TEST_OS_ID"
+    return
+  fi
+  if [[ -r /etc/os-release ]]; then
+    local ID=""
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    printf '%s\n' "$ID"
+  fi
+}
+
+os_release_id_like() {
+  if [[ -n "${SYMPHONY_TRELLO_TEST_OS_ID_LIKE:-}" ]]; then
+    printf '%s\n' "$SYMPHONY_TRELLO_TEST_OS_ID_LIKE"
+    return
+  fi
+  if [[ -r /etc/os-release ]]; then
+    local ID_LIKE=""
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    printf '%s\n' "$ID_LIKE"
+  fi
+}
+
+os_release_pretty_name() {
+  if [[ -n "${SYMPHONY_TRELLO_TEST_OS_PRETTY_NAME:-}" ]]; then
+    printf '%s\n' "$SYMPHONY_TRELLO_TEST_OS_PRETTY_NAME"
+    return
+  fi
+  if [[ -r /etc/os-release ]]; then
+    local NAME="" PRETTY_NAME=""
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    printf '%s\n' "${PRETTY_NAME:-${NAME:-}}"
+  fi
+}
+
+transactional_update_command() {
+  if [[ -n "${SYMPHONY_TRELLO_TEST_TRANSACTIONAL_UPDATE:-}" ]]; then
+    [[ -x "$SYMPHONY_TRELLO_TEST_TRANSACTIONAL_UPDATE" ]] || return 1
+    printf '%s\n' "$SYMPHONY_TRELLO_TEST_TRANSACTIONAL_UPDATE"
+    return 0
+  fi
+  if need transactional-update; then
+    printf 'transactional-update\n'
+    return 0
+  fi
+  if [[ -x /usr/sbin/transactional-update ]]; then
+    printf '/usr/sbin/transactional-update\n'
+    return 0
+  fi
+  if [[ -x /sbin/transactional-update ]]; then
+    printf '/sbin/transactional-update\n'
+    return 0
+  fi
+  return 1
+}
+
+transactional_package_system() {
+  [[ "$OS_NAME" == "Linux" ]] || return 1
+  transactional_update_command >/dev/null || return 1
+  local id id_like pretty
+  id="$(os_release_id)"
+  id_like="$(os_release_id_like)"
+  pretty="$(os_release_pretty_name)"
+  case " $id $id_like $pretty " in
+  *[Mm]icro[Oo][Ss]* | *[Ll]eap-[Mm]icro* | *[Ll]eap\ [Mm]icro* | *[Aa]eon* | *[Kk]alpa* | *"SLE Micro"* | *"SUSE Linux Enterprise Micro"*) return 0 ;;
+  *) return 1 ;;
+  esac
 }
 
 effective_uid() {
@@ -1031,8 +1109,39 @@ privileged_command_prefix() {
   return 1
 }
 
+transactional_package_install_root_command() {
+  local transactional_update
+  transactional_update="$(transactional_update_command)" || return
+  local -a package_names=()
+  local package
+  for package in "$@"; do
+    case "$package" in
+    git) package_names+=("git") ;;
+    java) package_names+=("java-25-openjdk-devel") ;;
+    node) package_names+=("nodejs" "npm") ;;
+    gh) package_names+=("gh") ;;
+    esac
+  done
+  if [[ "${#package_names[@]}" -eq 0 ]]; then
+    return
+  fi
+  printf '%s --non-interactive pkg install' "$transactional_update"
+  printf ' %s' "${package_names[@]}"
+  printf '\n'
+}
+
 package_install_root_command() {
-  local package="$1"
+  local -a packages=("$@")
+  local package="${packages[0]:-}"
+  if [[ "${#packages[@]}" -eq 0 ]]; then
+    return
+  fi
+  if [[ "${#packages[@]}" -gt 1 ]]; then
+    if transactional_package_system; then
+      transactional_package_install_root_command "${packages[@]}"
+    fi
+    return
+  fi
   if [[ "$OS_NAME" == "Darwin" ]]; then
     if need brew; then
       case "$package" in
@@ -1044,7 +1153,9 @@ package_install_root_command() {
     fi
     return
   fi
-  if need apt-get; then
+  if transactional_package_system; then
+    transactional_package_install_root_command "$package"
+  elif need apt-get; then
     local apt_prefix=""
     if [[ "$APT_UPDATED" == false ]]; then
       apt_prefix="apt-get update && "
@@ -1087,9 +1198,8 @@ package_install_root_command() {
 }
 
 package_install_command() {
-  local package="$1"
   local command root_prefix
-  command="$(package_install_root_command "$package")"
+  command="$(package_install_root_command "$@")"
   [[ -z "$command" ]] && return
   if [[ "$OS_NAME" == "Darwin" ]]; then
     printf '%s\n' "$command"
@@ -1139,6 +1249,87 @@ mark_package_command_completed() {
   fi
 }
 
+package_command_requires_reboot() {
+  [[ "$1" == *"transactional-update "* ]]
+}
+
+transactional_package_label() {
+  case "$1" in
+  git) printf 'Git\n' ;;
+  java) printf 'Java 25+ JDK\n' ;;
+  node) printf 'Node.js/npm for Codex CLI installation\n' ;;
+  gh) printf 'GitHub CLI\n' ;;
+  *) printf '%s\n' "$1" ;;
+  esac
+}
+
+collect_missing_transactional_packages() {
+  local -a packages=()
+  if [[ "$INSTALL_SOURCE" == "source-checkout" ]] && ! need git; then
+    packages+=("git")
+  fi
+  if ! jdk_compatible; then
+    packages+=("java")
+  fi
+  if [[ "$NO_ONBOARD" == false ]] && ! codex_authenticated && ! need codex && ! need npm; then
+    packages+=("node")
+  fi
+  printf '%s\n' "${packages[@]}"
+}
+
+explain_transactional_reboot_and_exit() {
+  echo
+  echo "Package installation was scheduled with transactional-update."
+  echo "Reboot this machine so the new system snapshot becomes active, then rerun this installer."
+  exit 2
+}
+
+install_missing_transactional_packages_or_exit() {
+  local -a packages=()
+  local package command root_command answer
+  while IFS= read -r package; do
+    [[ -n "$package" ]] && packages+=("$package")
+  done < <(collect_missing_transactional_packages)
+  if [[ "${#packages[@]}" -eq 0 ]]; then
+    return
+  fi
+  command="$(package_install_command "${packages[@]}" || true)"
+  if [[ -z "$command" ]]; then
+    root_command="$(package_install_root_command "${packages[@]}")"
+    if [[ -n "$root_command" && "$(effective_uid)" != "0" ]]; then
+      echo
+      echo "Missing prerequisites need OS package installation:"
+      for package in "${packages[@]}"; do
+        echo "  - $(transactional_package_label "$package")"
+      done
+      echo "Automatic install requires root, sudo, or doas."
+      echo "Run this command as root:"
+      echo "  $root_command"
+      echo "Then reboot this machine and rerun this installer."
+      exit 2
+    fi
+    return
+  fi
+  echo
+  echo "Missing prerequisites need OS package installation:"
+  for package in "${packages[@]}"; do
+    echo "  - $(transactional_package_label "$package")"
+  done
+  echo "Proposed install command:"
+  echo "  $command"
+  prompt_yes_no \
+    answer \
+    "Run this command now? [y/N] " \
+    "This step needs an interactive terminal. Rerun the installer from a terminal or install the missing prerequisites manually first."
+  if [[ "$answer" != true ]]; then
+    echo "Install the missing prerequisites, reboot if you used transactional-update, then rerun this installer."
+    exit 2
+  fi
+  run_shell_command "$command"
+  mark_package_command_completed "$command"
+  explain_transactional_reboot_and_exit
+}
+
 install_package_or_exit() {
   local label="$1"
   local package="$2"
@@ -1176,6 +1367,9 @@ install_package_or_exit() {
   fi
   run_shell_command "$command"
   mark_package_command_completed "$command"
+  if package_command_requires_reboot "$command"; then
+    explain_transactional_reboot_and_exit
+  fi
 }
 
 codex_authenticated() {
@@ -1189,6 +1383,9 @@ install_codex_with_user_local_npm() {
     [[ -z "$node_command" ]] && explain_manual_node_install_and_exit
     run_shell_command "$node_command"
     mark_package_command_completed "$node_command"
+    if package_command_requires_reboot "$node_command"; then
+      explain_transactional_reboot_and_exit
+    fi
     if ! need npm; then
       echo "Node.js/npm was installed, but npm is not available in this shell yet." >&2
       echo "Open a new terminal with npm on PATH, then rerun this installer." >&2
@@ -1273,6 +1470,9 @@ install_codex_or_exit() {
 }
 
 ensure_prerequisites() {
+  if transactional_package_system; then
+    install_missing_transactional_packages_or_exit
+  fi
   if [[ "$INSTALL_SOURCE" == "source-checkout" ]] && ! need git; then
     install_package_or_exit "Git" "git" "Install Git from https://git-scm.com/downloads or your OS package manager."
   fi
@@ -1303,6 +1503,30 @@ print_dry_run_package_offer() {
   mark_package_command_completed "$command"
 }
 
+print_dry_run_transactional_package_plan() {
+  local -a packages=()
+  local package command root_command
+  while IFS= read -r package; do
+    [[ -n "$package" ]] && packages+=("$package")
+  done < <(collect_missing_transactional_packages)
+  if [[ "${#packages[@]}" -eq 0 ]]; then
+    return 1
+  fi
+  command="$(package_install_command "${packages[@]}" || true)"
+  root_command="$(package_install_root_command "${packages[@]}")"
+  echo "  WOULD offer to install missing OS packages:"
+  for package in "${packages[@]}"; do
+    echo "          - $(transactional_package_label "$package")"
+  done
+  if [[ -n "$command" ]]; then
+    echo "          Command: $command"
+  elif [[ -n "$root_command" ]]; then
+    echo "          Run as root: $root_command"
+  fi
+  echo "  WOULD stop after transactional-update and ask you to reboot, then rerun this installer."
+  return 0
+}
+
 print_dry_run_codex_plan() {
   local npm_status
   if need npm; then
@@ -1317,6 +1541,10 @@ print_dry_run_codex_plan() {
 }
 
 print_dry_run_prerequisite_plan() {
+  if transactional_package_system && print_dry_run_transactional_package_plan; then
+    DRY_RUN_STOPS_AFTER_PREREQUISITES=true
+    return
+  fi
   if [[ "$INSTALL_SOURCE" == "source-checkout" ]] && ! need git; then
     print_dry_run_package_offer "Git" git
   fi
@@ -1394,6 +1622,9 @@ if [[ "$DRY_RUN" == true ]]; then
   echo
   echo "Dry run: no files changed."
   print_dry_run_prerequisite_plan
+  if [[ "$DRY_RUN_STOPS_AFTER_PREREQUISITES" == true ]]; then
+    exit 0
+  fi
   if [[ "$INSTALL_SOURCE" == "source-checkout" ]]; then
     echo "  WOULD clone or update: $APP_DIR"
     echo "  WOULD build packaged Quarkus app with Maven wrapper"
