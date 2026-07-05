@@ -22,6 +22,10 @@ prompts, and product terminology. Deployment steps and installer lifecycle testi
   `CONTRIBUTING.md`, `AGENTS.md`, or focused developer docs. Before adding README content, ask
   whether a first-time user or operator needs it to succeed with the product; if not, put it
   elsewhere.
+- Avoid embedding full generated workflow prompts or other long generated blocks in the README when
+  the CLI normally creates them. Prefer a short, searchable config excerpt plus a link to the
+  complete generated example or reference file, so README search results stay focused on human
+  guidance rather than repeated prompt internals.
 - Put detailed workflow mechanics, such as process-to-workflow-to-board mapping, in the workflow
   contract section instead of the README opening.
 - In human contributor docs and GitHub templates, keep AI-agent-only guidance at the bottom after
