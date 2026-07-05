@@ -64,6 +64,15 @@ parallel safety. Live end-to-end and deployed-verification rules live in
   test that would have failed before the fix. Prefer writing that test before the fix when practical.
   If the fix already exists, temporarily revert or otherwise disable the fix when feasible to confirm
   the regression test fails for the original bug, then restore the fix and make the test pass.
+- Fuzz tests are regression tests in normal Maven runs. When changing parser, prompt-line safety,
+  workflow loading, or Trello reference/checklist parsing logic, run the focused fuzzing and chaos
+  regression command from [Fuzzing](../fuzzing.md). If the user asks for active or continuous
+  fuzzing, run one Jazzer target per Maven process with `JAZZER_FUZZ=1`, the `fuzzing` Maven profile,
+  `-Djacoco.skip=true`, an explicit `-Djazzer.max_duration=...` window, and
+  `-Djazzer.max_executions=0` so the requested duration is not cut short by a method-level
+  regression cap. Use the 15- to 30-minute loop in [Fuzzing](../fuzzing.md) for a short pass, or a
+  longer duration such as `-Djazzer.max_duration=6h` when the user asks for a continuous run. Do not
+  treat continuous fuzzing as a contributor requirement unless the issue or user asks for it.
 
 ## Reducing duplication
 

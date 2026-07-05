@@ -1,0 +1,2 @@
+src/test/resources/**/*FuzzTestInputs/** binary
+src/test/resources/**/*FuzzerInputs/** binary

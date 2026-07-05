@@ -65,7 +65,7 @@ jobs:
           cache: maven
       - name: Formatting
         run: ./mvnw spotless:check
-      - name: Test and coverage, including installer lifecycle
+      - name: Test and coverage, including fuzz, chaos, and installer lifecycle
         run: ./mvnw -Djunit.parallel.enabled=true -Djunit.parallel.config.fixed.parallelism=2 verify
 
   windows-powershell:

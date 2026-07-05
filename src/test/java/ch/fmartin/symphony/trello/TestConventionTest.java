@@ -15,13 +15,15 @@ import java.util.Map;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 final class TestConventionTest {
     private static final TypeReference<LinkedHashMap<String, Object>> JSON_OBJECT = new TypeReference<>() {};
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final Pattern SIMPLE_MANUAL_MOCK = Pattern.compile(
             "\\b(new\\s+AgentRunner\\s*\\(\\)|extends\\s+(SymphonyOrchestrator|CodexAppServerClient)|implements\\s+AgentRunner)");
-    private static final Pattern TEST_ANNOTATION = Pattern.compile("^\\s*@(Test|ParameterizedTest)\\b");
+    private static final Pattern TEST_ANNOTATION = Pattern.compile("^\\s*@(FuzzTest|ParameterizedTest|Test)\\b");
+    private static final Pattern METHOD_BODY_START = Pattern.compile("\\)\\s*(?:throws\\s+[\\w.,\\s]+)?\\{");
 
     @Test
     void methodsUseGivenWhenThenSections() throws IOException {
@@ -42,6 +44,31 @@ final class TestConventionTest {
                         "JUnit test methods should use // given, // when, and // then sections with blank lines between sections:%n%s",
                         String.join(System.lineSeparator(), violations))
                 .isEmpty();
+    }
+
+    @Test
+    void methodsUseGivenWhenThenSectionsForWrappedFuzzSignatures(@TempDir Path tempDir) throws IOException {
+        // given
+        Path source = tempDir.resolve("WrappedFuzzSignatureTest.java");
+        List<String> fixtureLines = List.of(
+                "class WrappedFuzzSignatureTest {",
+                "    @FuzzTest",
+                "    void fuzz(",
+                "            @NotNull String input) {",
+                "        // " + "when",
+                "        input.length();",
+                "",
+                "        // " + "then",
+                "        input.isBlank();",
+                "    }",
+                "}");
+        Files.writeString(source, String.join(System.lineSeparator(), fixtureLines));
+
+        // when
+        List<String> violations = testSectionViolations(source);
+
+        // then
+        assertThat(violations).singleElement().asString().contains("expected // given");
     }
 
     @Test
@@ -189,7 +216,7 @@ final class TestConventionTest {
 
     private static int findMethodStart(List<String> lines, List<String> codeLines, int start) {
         for (int index = start; index < lines.size(); index++) {
-            if (lines.get(index).stripLeading().startsWith("@")) {
+            if (isStandaloneAnnotationLine(lines.get(index), codeLines.get(index))) {
                 continue;
             }
             if (codeLines.get(index).contains("{")) {
@@ -197,6 +224,11 @@ final class TestConventionTest {
             }
         }
         return -1;
+    }
+
+    private static boolean isStandaloneAnnotationLine(String line, String codeLine) {
+        return line.stripLeading().startsWith("@")
+                && !METHOD_BODY_START.matcher(codeLine).find();
     }
 
     private static int findMethodEnd(List<String> codeLines, int methodStart) {

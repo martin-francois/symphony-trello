@@ -1,5 +1,6 @@
 .DS_Store
 target/
+.cifuzz-corpus/
 .idea/
 .vscode/
 *.iml
