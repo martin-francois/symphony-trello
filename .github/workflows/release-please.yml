@@ -60,6 +60,11 @@ jobs:
               echo "release does not exist: $RELEASE_TAG" >&2
               exit 2
             fi
+            release_draft="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')"
+            if [ "$release_draft" != "true" ]; then
+              echo "release must be draft before asset upload so immutable releases publish with complete assets." >&2
+              exit 2
+            fi
             {
               echo "upload_assets=true"
               echo "version=$RELEASE_VERSION"
@@ -151,3 +156,11 @@ jobs:
               exit 2
             fi
           done
+      - name: Publish release
+        if: ${{ steps.release-assets.outputs.upload_assets == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.release-assets.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest

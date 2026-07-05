@@ -30,6 +30,8 @@ final class ReleaseWorkflowTest {
                         "release tag does not match release version.",
                         "gh release view \"$RELEASE_TAG\" --repo \"$GITHUB_REPOSITORY\"",
                         "release does not exist: $RELEASE_TAG",
+                        "release_draft=\"$(gh release view \"$RELEASE_TAG\" --repo \"$GITHUB_REPOSITORY\" --json isDraft --jq '.isDraft')\"",
+                        "release must be draft before asset upload so immutable releases publish with complete assets.",
                         "checkout_ref=refs/tags/$RELEASE_TAG",
                         "source_root=$GITHUB_WORKSPACE/target/release-source",
                         "asset_dir=$GITHUB_WORKSPACE/target/release-source/dist/release-assets",
@@ -43,7 +45,9 @@ final class ReleaseWorkflowTest {
                         "grep -Fx -- \"$asset\" <<<\"$existing_assets\"",
                         "release already contains expected public assets; refusing same-tag asset reuse",
                         "gh release upload \"$RELEASE_TAG\" \"${upload_assets[@]}\"",
-                        "Verify release assets")
+                        "Verify release assets",
+                        "Publish release",
+                        "gh release edit \"$RELEASE_TAG\" --repo \"$GITHUB_REPOSITORY\" --draft=false --latest")
                 .contains("if: ${{ github.event_name == 'push' }}")
                 .doesNotContain(
                         "workflow_dispatch:",
@@ -59,6 +63,22 @@ final class ReleaseWorkflowTest {
         assertAppearsBefore(
                 source, "gh release view \"$RELEASE_TAG\" --repo \"$GITHUB_REPOSITORY\"", "Build release assets");
         assertAppearsBefore(source, "Upload release assets", "Verify release assets");
+        assertAppearsBefore(source, "Verify release assets", "Publish release");
+    }
+
+    @Test
+    void releasePleaseConfigsCreateDraftReleasesForImmutableAssetPublication() throws IOException {
+        // given
+        Path normalConfig = Path.of("release-please-config.json");
+        Path baselineConfig = Path.of("release-please-public-baseline-config.json");
+
+        // when
+        String normalSource = Files.readString(normalConfig);
+        String baselineSource = Files.readString(baselineConfig);
+
+        // then
+        assertThat(normalSource).contains("\"draft\": true", "\"force-tag-creation\": true");
+        assertThat(baselineSource).contains("\"draft\": true", "\"force-tag-creation\": true");
     }
 
     @Test

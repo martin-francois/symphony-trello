@@ -46,12 +46,14 @@ The installer still needs a source-checkout mode for development and release tes
 Chosen option: publish GitHub Release archives and make the stable installer URL install those
 archives by default.
 
-Release Please remains the release automation entry point. When it creates a GitHub release, the
-release workflow checks out the new tag as the release source, runs the packaging script from that
-tag, builds the packaged Quarkus app, packages Linux and Windows archives, uploads installer and
-uninstaller scripts, and uploads `checksums.txt`. Release assets are built from tag-local source,
-scripts, and installer templates. Private pre-release test tags that predate the packaging script
-are not supported by the public release asset workflow.
+Release Please remains the release automation entry point. When it creates a GitHub release, it
+creates a draft release and forces tag creation. The release workflow checks out the new tag as the
+release source, runs the packaging script from that tag, builds the packaged Quarkus app, packages
+Linux and Windows archives, uploads installer and uninstaller scripts, and uploads `checksums.txt`
+while the release is still a draft. It verifies every expected asset and then publishes the release.
+Release assets are built from tag-local source, scripts, and installer templates. Private
+pre-release test tags that predate the packaging script are not supported by the public release
+asset workflow.
 
 Release asset uploads do not clobber existing assets. If a public release is wrong or incomplete,
 publish a new patch release instead of replacing assets on the existing release. The workflow still
@@ -79,6 +81,7 @@ signing evaluation.
 * Good, because normal users no longer need Git or Maven for installation.
 * Good, because the README can show stable one-line install commands.
 * Good, because release artifacts are built from the exact tag that Release Please created.
+* Good, because assets are uploaded and verified before immutable release publication.
 * Good, because public release assets are not replaced in place.
 * Good, because source-checkout installation is still available when needed.
 * Bad, because private-repository release asset downloads cannot be tested exactly like public
