@@ -41,7 +41,11 @@ public class WorkflowLoader {
         }
         try {
             LinkedHashMap<String, Object> parsed = yaml.readValue(frontMatter, YAML_MAP_TYPE);
-            return parsed == null ? Map.of() : parsed;
+            if (parsed == null) {
+                return Map.of();
+            }
+            rejectNullTopLevelEntries(parsed);
+            return parsed;
         } catch (JsonProcessingException e) {
             if (e.getMessage() != null && e.getMessage().contains("Cannot deserialize")) {
                 throw new WorkflowException(
@@ -49,6 +53,17 @@ public class WorkflowLoader {
             }
             throw new WorkflowException("workflow_parse_error", "Workflow front matter is invalid YAML", e);
         }
+    }
+
+    private static void rejectNullTopLevelEntries(LinkedHashMap<String, Object> parsed) {
+        if (parsed.entrySet().stream().anyMatch(WorkflowLoader::hasNullKeyOrValue)) {
+            throw new WorkflowException(
+                    "workflow_parse_error", "Workflow front matter top-level keys and values must not be null");
+        }
+    }
+
+    private static boolean hasNullKeyOrValue(Map.Entry<String, Object> entry) {
+        return entry.getKey() == null || entry.getValue() == null;
     }
 
     private static ParsedMarkdown splitFrontMatter(List<String> lines) {
