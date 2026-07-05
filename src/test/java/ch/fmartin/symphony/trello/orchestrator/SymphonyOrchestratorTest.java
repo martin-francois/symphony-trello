@@ -1227,11 +1227,12 @@ final class SymphonyOrchestratorTest {
                 "60000",
                 """
                 agent:
-                  max_retry_backoff_ms: 10
+                  max_retry_backoff_ms: 500
                 """);
         Card card = TestCards.card("card-1", "TRELLO-abc", "Todo");
         FakeTracker tracker = new FakeTracker(List.of(card));
         AtomicInteger runs = new AtomicInteger();
+        AtomicReference<RuntimeSnapshot> retryingSnapshot = new AtomicReference<>();
         AgentRunner runner = mock();
         doAnswer(invocation ->
                         runs.incrementAndGet() == 1 ? AgentRunResult.fail("temporary failure") : AgentRunResult.ok())
@@ -1240,10 +1241,21 @@ final class SymphonyOrchestratorTest {
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
 
         // when
-        orchestrator.start();
-        waitUntil(() -> runs.get() >= 2);
-        RuntimeSnapshot snapshot = orchestrator.snapshot();
-        orchestrator.stop();
+        try {
+            orchestrator.start();
+            waitUntil(() -> {
+                RuntimeSnapshot current = orchestrator.snapshot();
+                if (containsRetryingCard(current, "TRELLO-abc")) {
+                    retryingSnapshot.set(current);
+                    return true;
+                }
+                return false;
+            });
+            waitUntil(() -> runs.get() >= 2);
+        } finally {
+            orchestrator.stop();
+        }
+        RuntimeSnapshot snapshot = retryingSnapshot.get();
 
         // then
         assertThat(runs.get()).isGreaterThanOrEqualTo(2);
@@ -1764,6 +1776,10 @@ final class SymphonyOrchestratorTest {
             pollDelayForBoundedConditionWait();
         }
         throw new AssertionError("Condition was not met before timeout");
+    }
+
+    private static boolean containsRetryingCard(RuntimeSnapshot snapshot, String cardIdentifier) {
+        return snapshot.retrying().stream().anyMatch(row -> row.cardIdentifier().equals(cardIdentifier));
     }
 
     private static void pollDelayForBoundedConditionWait() throws InterruptedException {

@@ -175,6 +175,11 @@ user explicitly chooses a spec carry-over.
   `SYMPHONY_TRELLO_TEST_PWSH=./scripts/pwsh-docker.sh` for Java tests that support a configurable
   PowerShell command, or run `./scripts/pwsh-docker.sh` directly for script checks. Do not report
   PowerShell as skipped only because `pwsh` is missing if Docker is available.
+- Keep the full required pull request CI pipeline fast: the target is about 5 minutes end to end, not
+  5 minutes per job or step. If a useful check would make total CI slower, first consider parallel
+  jobs, narrower focused commands, splitting the gate, or keeping it as a documented manual/periodic
+  command. Do not put continuous fuzzing or long soak tests in required CI; CI fuzzing should stay a
+  deterministic regression gate with a short timeout.
 
 ## Committing and pull requests
 
