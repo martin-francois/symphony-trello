@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.workflow;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -8,6 +9,8 @@ import java.nio.file.Path;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 final class WorkflowLoaderTest {
     @TempDir
@@ -87,9 +90,51 @@ final class WorkflowLoaderTest {
         assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo(original);
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"~:\n", "repository:\n"})
+    void rejectsNullTopLevelFrontMatterEntries(String frontMatter) throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.null-top-level.md");
+        Files.writeString(workflow, workflowWithExtraFrontMatter(frontMatter, "Body"), StandardCharsets.UTF_8);
+
+        // when
+        WorkflowException failure = catchThrowableOfType(() -> loader.load(workflow), WorkflowException.class);
+
+        // then
+        assertThat(failure.code()).isEqualTo("workflow_parse_error");
+        assertThat(failure).hasMessage("Workflow front matter top-level keys and values must not be null");
+        assertThat(workflow).content(StandardCharsets.UTF_8).contains(frontMatter);
+    }
+
+    @Test
+    void preservesNestedNullConfigValues() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.nested-null.md");
+        String original = workflowWithExtraFrontMatter(
+                """
+                repository:
+                  default_url: null
+                  default_path: null
+                """,
+                "Body");
+        Files.writeString(workflow, original, StandardCharsets.UTF_8);
+
+        // when
+        WorkflowDefinition loaded = loader.load(workflow);
+
+        // then
+        assertThat(repository(loaded)).containsEntry("default_url", null).containsEntry("default_path", null);
+        assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo(original);
+    }
+
     @SuppressWarnings("unchecked")
     private static Map<String, Object> codex(WorkflowDefinition loaded) {
         return (Map<String, Object>) loaded.config().get("codex");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> repository(WorkflowDefinition loaded) {
+        return (Map<String, Object>) loaded.config().get("repository");
     }
 
     private static String workflowWithBody(String body) {
