@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.1.0](https://github.com/martin-francois/symphony-trello/compare/v1.0.2...v1.1.0) (2026-07-06)
+
+
+### Features
+
+* install managed local worker autostart ([ad9cda4](https://github.com/martin-francois/symphony-trello/commit/ad9cda458c52e120eb1a925eabc34d086c52ff2a)), closes [#523](https://github.com/martin-francois/symphony-trello/issues/523)
+
+
+### Documentation
+
+* add breaking-change declaration workflow and labeling ([f4b6221](https://github.com/martin-francois/symphony-trello/commit/f4b62214208a5dbdcbbfea57e4b7985fd66842a7))
+* assign issues when implementation starts ([407a66a](https://github.com/martin-francois/symphony-trello/commit/407a66a26ca239778e5327fd65dff31cc7a9fce3))
+* clarify needs human review issue triage ([8f61725](https://github.com/martin-francois/symphony-trello/commit/8f61725b6ec61002d753fcdb352972fefb25e721))
+* document GitHub secret scanning baseline ([3ed6978](https://github.com/martin-francois/symphony-trello/commit/3ed6978b8c4ef0e0d0711a8d3d7366b58b1b6473))
+* remove manual systemd deployment path ([ccee6b3](https://github.com/martin-francois/symphony-trello/commit/ccee6b3800d21dcebcec8e171bc0369f493ade0a))
+* remove stale pre-public release wording ([d33af92](https://github.com/martin-francois/symphony-trello/commit/d33af92217bb5eb9147fc73f0b716f932fad3e9b))
+
 ## [1.0.2](https://github.com/martin-francois/symphony-trello/compare/v1.0.1...v1.0.2) (2026-07-06)
 
 
