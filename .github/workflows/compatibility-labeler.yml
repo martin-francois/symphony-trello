@@ -1,0 +1,72 @@
+name: compatibility-labeler
+# Uses pull_request_target so repository admins can approve fork PR runs when needed.
+# Execution is limited to metadata reads and label API calls; no checkout is performed.
+
+on:
+  pull_request_target:
+    types: [opened, edited, reopened, synchronize]
+  issues:
+    types: [opened, edited]
+
+jobs:
+  sync-breaking-label:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+      contents: read
+    steps:
+      - name: Apply breaking change label from template selection
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const node = context.payload.pull_request ?? context.payload.issue;
+            if (!node || !node.number) {
+              return;
+            }
+
+            const body = (node.body || "").toLowerCase();
+            const isBreaking = /- \[x\]\s*could break existing usage/i.test(body)
+              || /\#\#\#\s*affects existing users\?\s+may break existing usage/i.test(body);
+
+            const label = "breaking change";
+            const { owner, repo } = context.repo;
+
+            let hasLabel = false;
+            try {
+              hasLabel = (await github.paginate(github.rest.issues.listLabelsOnIssue, {
+                owner,
+                repo,
+                issue_number: node.number,
+              })).some((item) => item.name === label);
+            } catch (error) {
+              core.warning(`Unable to read labels for #${node.number}: ${error}`);
+              return;
+            }
+
+            if (isBreaking && !hasLabel) {
+              try {
+                await github.rest.issues.addLabels({
+                  owner,
+                  repo,
+                  issue_number: node.number,
+                  labels: [label],
+                });
+              } catch (error) {
+                core.warning(`Unable to add ${label} label for #${node.number}: ${error}`);
+              }
+              return;
+            }
+
+            if (!isBreaking && hasLabel) {
+              try {
+                await github.rest.issues.removeLabel({
+                  owner,
+                  repo,
+                  issue_number: node.number,
+                  name: label,
+                });
+              } catch (error) {
+                core.warning(`Unable to remove ${label} label for #${node.number}: ${error}`);
+              }
+            }

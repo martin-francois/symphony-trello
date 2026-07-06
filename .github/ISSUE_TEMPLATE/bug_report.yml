@@ -124,28 +124,49 @@ body:
       label: Workaround
       description: If you found a temporary workaround, describe exactly what you did. If not, write "None known".
   - type: dropdown
-    id: compatibility-decision
+    id: compatibility-impact
     attributes:
-      label: Compatibility or breaking-change decision
-      description: >-
-        Maintainers can update this during triage. Contract-changing fixes default to breaking
-        unless the issue deliberately chooses compatibility.
+      label: Affects existing users?
+      description: Pick one option.
       options:
-        - Preserve the current user-facing contract
-        - Breaking change is acceptable; document the migration path
-        - Compatible change with temporary migration or legacy support
-        - Permanent compatibility contract
-        - Needs maintainer decision before implementation
+        - No visible impact
+        - May break existing usage
+        - Not sure
+    validations:
+      required: true
   - type: textarea
-    id: migration-path
+    id: compatibility-impact-details
     attributes:
-      label: Migration path or compatibility cleanup
-      description: >-
-        If breaking, explain why the break is necessary and how users/operators move to the new
-        contract; the squash commit body or retained commit must carry that guidance in a BREAKING
-        CHANGE footer for the changelog. If compatible, define when the migration logic is removed
-        and where cleanup is tracked. If permanent compatibility is requested, name the SPEC or ADR
-        home. If no contract change, write N/A or "not sure".
+      label: What breaks?
+      description: |
+        Fill only if "Affects existing users?" is "May break existing usage".
+        If you are unsure, provide what you know.
+      placeholder: |
+        Breaks: ...
+    validations:
+      required: false
+  - type: textarea
+    id: compatibility-migration
+    attributes:
+      label: Migration path
+      description: |
+        Optional. Fill only if this likely breaks existing usage.
+        If you are unsure, provide what you know.
+      placeholder: |
+        Migration: ...
+    validations:
+      required: false
+  - type: textarea
+    id: compatibility-alternative
+    attributes:
+      label: Alternative workaround
+      description: |
+        Optional. Fill only if this likely breaks existing usage.
+        If you are unsure, provide what you know.
+      placeholder: |
+        Alternative: ...
+    validations:
+      required: false
   - type: textarea
     id: additional-context
     attributes:
