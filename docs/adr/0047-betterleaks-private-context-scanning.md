@@ -6,10 +6,14 @@ consulted:
   - "[GitHub issue #340](https://github.com/martin-francois/symphony-trello/issues/340)"
   - "[GitHub issue #344](https://github.com/martin-francois/symphony-trello/issues/344)"
   - "[GitHub issue #346](https://github.com/martin-francois/symphony-trello/issues/346)"
+  - "[GitHub issue #362](https://github.com/martin-francois/symphony-trello/issues/362)"
   - "[GitHub PR #350](https://github.com/martin-francois/symphony-trello/pull/350)"
   - "[GitHub PR #351](https://github.com/martin-francois/symphony-trello/pull/351)"
   - "[GitHub PR #352](https://github.com/martin-francois/symphony-trello/pull/352)"
   - "[GitHub PR #353](https://github.com/martin-francois/symphony-trello/pull/353)"
+  - "[GitHub PR #521](https://github.com/martin-francois/symphony-trello/pull/521)"
+  - "[GitHub Secret Scanning custom pattern documentation](https://docs.github.com/code-security/secret-scanning/defining-custom-patterns-for-secret-scanning)"
+  - "[GitHub Secret Protection docs](https://docs.github.com/en/get-started/learning-about-github/about-github-advanced-security)"
   - "[BetterLeaks](https://github.com/betterleaks/betterleaks)"
   - "[Kingfisher](https://github.com/mongodb/kingfisher)"
   - "[Gitleaks](https://github.com/gitleaks/gitleaks)"
@@ -27,10 +31,13 @@ fixtures, and pull request branches that can contain private Trello context. Tha
 always a credential. It can be a Trello board short link, a Trello card URL, a 24-character Trello
 id, a private host path, or a token-shaped value copied from local output.
 
-GitHub Secret Scanning with repository custom patterns is configured as the primary protection for
-GitHub-hosted issue, pull request, review, and comment text. The repository still needs a local and
-CI guardrail for content before it is committed, pushed for review, or manually posted from copied
-diagnostic output.
+After open-sourcing, GitHub Secret Scanning is the hosted safety net for repository history and
+GitHub-hosted issue, pull request, review, and comment text that matches GitHub-supported patterns.
+The repository should keep built-in GitHub Secret Scanning and push protection enabled. The expected
+GitHub Free organization plan does not provide repository custom patterns for Symphony-specific
+private context, and the project does not expect to depend on a paid GitHub Secret Protection plan.
+The repository still needs a local and CI guardrail for content before it is committed, pushed for
+review, or manually posted from copied diagnostic output.
 
 The first implementation direction used repository-owned shell logic for this scanning. The user
 rejected that direction and asked whether the project should use a maintained scanner instead. The
@@ -46,7 +53,8 @@ CI?
 * Prefer a maintained scanner over hand-rolled secret-detection logic.
 * Support local file, stdin, worktree, and commit-range checks.
 * Support repository-specific rules for private context that is not always a credential.
-* Complement GitHub Secret Scanning instead of replacing hosted-text alerting and push protection.
+* Complement GitHub Secret Scanning instead of replacing built-in hosted-text alerting and push
+  protection.
 * Keep scan output redacted so a failed check does not leak the matched value again.
 * Run deterministically in CI and locally without a hosted account.
 * Keep the tool version pinned and Renovate-managed.
@@ -83,13 +91,15 @@ Renovate. The accepted private-context rules live in `config/betterleaks/private
 * worktree scans; and
 * commit-range scans.
 
-GitHub Secret Scanning remains the primary protection for GitHub-hosted issue, pull request,
-review, and comment text. The repository deliberately does not maintain a generic `gh` safety
-wrapper or a GitHub event-content scanner. That approach was considered and rejected after review
-found that GitHub CLI parsing includes generated bodies, editor and web modes, API payloads,
-short-flag clusters, files, stdin, and future behavior that this repository should not mirror.
-Contributors and agents should scan exact text manually when they have copied diagnostic content to
-post:
+GitHub Secret Scanning remains the hosted protection for repository history and GitHub-hosted issue,
+pull request, review, and comment text that matches GitHub-supported patterns. The hosted baseline
+is documented in [`docs/security/github-secret-scanning.md`](../security/github-secret-scanning.md).
+Symphony-specific custom patterns are not part of the expected GitHub Free-plan setup. The repository
+deliberately does not maintain a generic `gh` safety wrapper or a GitHub event-content scanner. That
+approach was considered and rejected after review found that GitHub CLI parsing includes generated
+bodies, editor and web modes, API payloads, short-flag clusters, files, stdin, and future behavior
+that this repository should not mirror. Contributors and agents should scan exact text manually when
+they have copied diagnostic content to post:
 
 ```bash
 printf '%s\n' 'text to post' | scripts/check-private-context --stdin --label github-body
@@ -134,8 +144,10 @@ scanner behavior on this repository instead of using a maintained engine.
   matching.
 * Good, because repository-specific Trello and host-path rules remain reviewable in the repository.
 * Good, because agents can run the same checks locally and in CI.
-* Good, because the repository complements GitHub Secret Scanning without duplicating hosted-text
-  alerting.
+* Good, because the repository complements GitHub's built-in Secret Scanning without duplicating
+  hosted-text alerting.
+* Good, because the docs now state that GitHub custom patterns are not expected on the project's
+  Free organization plan.
 * Good, because pull request scans run trusted scanner code and config against untrusted pull
   request content.
 * Good, because the BetterLeaks image pin is visible to Renovate.
@@ -144,8 +156,10 @@ scanner behavior on this repository instead of using a maintained engine.
 * Bad, because CI now depends on another external Docker image.
 * Bad, because BetterLeaks behavior can change when the pinned version is updated.
 * Bad, because the wrapper still owns glue code for local modes and redacted reporting.
+* Bad, because GitHub-hosted scanning does not cover Symphony-specific private context without
+  custom patterns.
 * Bad, because manually posted GitHub text relies on contributors scanning exact copied text before
-  posting or on GitHub Secret Scanning after creation.
+  posting when the value is not covered by GitHub's supported hosted patterns.
 * Bad, because broad platform scanning and live validation remain out of scope for this PR.
 
 ### Confirmation
@@ -164,9 +178,19 @@ Run the full project validation:
 ```
 
 Confirm the pull request checks include passing `private-context`, `semgrep`, `lint`, `test`,
-`windows-powershell`, `renovate`, and `commitlint` jobs. GitHub-hosted text is protected by the
-repository's configured GitHub Secret Scanning custom patterns, not by repository-owned event
-scanner code.
+`windows-powershell`, `renovate`, and `commitlint` jobs. GitHub-hosted text is protected by GitHub
+Secret Scanning where those hosted repository settings are enabled, not by repository-owned event
+scanner code. Maintainers can verify the hosted state with:
+
+```bash
+gh api repos/martin-francois/symphony-trello \
+  --jq '.visibility, .private, .security_and_analysis'
+```
+
+Use [GitHub Secret Scanning](../security/github-secret-scanning.md) when auditing the hosted
+baseline. Do not document GitHub custom patterns as active unless the GitHub plan supports them and
+the hosted settings can be verified. If GitHub exposes secret-scanning alerts through the repository
+UI or REST API for the current plan and token, confirm there are no unresolved alerts there.
 
 For pull requests, confirm the `private-context` job runs `scanner/scripts/check-private-context`
 from the trusted checkout while its working directory is the pull request source checkout.
@@ -224,15 +248,15 @@ Wrap supported `gh` text writes and scan GitHub event payloads in repository-own
 
 * Good, because it can catch some copied text before `gh` sends it.
 * Good, because it can scan hosted text through a repository-controlled path.
-* Bad, because GitHub Secret Scanning with custom patterns already owns hosted issue, pull request,
-  review, and comment text.
+* Bad, because GitHub Secret Scanning already owns hosted repository history and GitHub text for
+  GitHub-supported patterns where the hosted settings are enabled.
 * Bad, because a dependable wrapper must model GitHub CLI command grammar, API payloads,
   generated-body modes, editor and web modes, file and stdin inputs, short-flag clusters, and future
   CLI behavior.
 * Bad, because partial parsing can create a false sense of safety by scanning one clean field while
   forwarding another text-bearing payload uninspected.
-* Bad, because this repository only needs a small local and CI complement to managed GitHub Secret
-  Scanning.
+* Bad, because this repository only needs a small local and CI complement to GitHub's built-in Secret
+  Scanning baseline.
 
 ### Use Semgrep Custom Rules as the Primary Scanner
 

@@ -1,8 +1,9 @@
 # Private Context Scanning
 
-GitHub Secret Scanning with repository custom patterns is the primary protection for
-GitHub-hosted issue, pull request, review, and comment text. It owns hosted-text alerting, push
-protection, and secret-scanning workflows where those features are configured.
+GitHub Secret Scanning is the hosted safety net for repository history, pull requests, issues,
+reviews, and comments. The public repository should keep built-in secret scanning and push
+protection enabled. Symphony-specific custom patterns are not part of the expected GitHub Free-plan
+setup; see [GitHub Secret Scanning](github-secret-scanning.md) for the hosted baseline.
 
 Symphony for Trello complements that with a local and CI BetterLeaks guardrail for content that can
 be checked before it reaches GitHub-hosted text or repository history. The repository-specific rules
@@ -46,5 +47,7 @@ diagnostic output:
 printf '%s\n' 'text to post' | scripts/check-private-context --stdin --label github-body
 ```
 
-GitHub Secret Scanning remains the primary post-create safety net for hosted issue, pull request,
-review, and comment text.
+GitHub Secret Scanning remains the post-create safety net for hosted issue, pull request, review,
+and comment text that matches GitHub-supported patterns. The local scanner remains required for
+exact text copied from diagnostics before a contributor or agent posts it, and for
+Symphony-specific private context that GitHub's Free-plan scanner does not cover.

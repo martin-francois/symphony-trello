@@ -193,10 +193,13 @@ Contributors do not need to run continuous fuzzing before every pull request, bu
 prompt-line safety, workflow loading, or Trello reference/checklist parsing logic. The same page also
 documents longer agent-requested fuzzing runs and the OSS-Fuzz project files.
 
-GitHub Secret Scanning with repository custom patterns is the primary protection for
-GitHub-hosted issue, pull request, review, and comment text. Private-context scanning uses
-BetterLeaks plus repository-specific rules under `config/betterleaks` as a local and CI complement.
-Run it before committing files or manually posting copied diagnostic text:
+GitHub Secret Scanning is the hosted safety net for repository history, pull requests, issues,
+reviews, and comments. Maintainers should keep built-in secret scanning and push protection enabled.
+Symphony-specific custom patterns are not part of the expected GitHub Free-plan setup; use
+[GitHub Secret Scanning](docs/security/github-secret-scanning.md) for the hosted baseline.
+Private-context scanning uses BetterLeaks plus repository-specific rules under `config/betterleaks`
+as the local and CI complement. Run it before committing files or manually posting copied diagnostic
+text:
 
 ```bash
 scripts/check-private-context --worktree
@@ -206,8 +209,8 @@ printf '%s\n' 'text to post' | scripts/check-private-context --stdin --label git
 
 If the scanner reports Trello-shaped values that are only test data, make them clearly synthetic
 rather than suppressing the finding. See
-[Private Context Scanning](docs/security/private-context-scanning.md) for the local commands and
-the GitHub Secret Scanning responsibility split.
+[Private Context Scanning](docs/security/private-context-scanning.md) for the local commands and the
+GitHub Secret Scanning responsibility split.
 
 PowerShell installer tests use native `pwsh` automatically on Windows. CI runs the PowerShell
 installer checks on a native Windows runner. On Linux, set `SYMPHONY_TRELLO_TEST_PWSH` when you
