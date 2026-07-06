@@ -12,13 +12,13 @@ param(
   [Alias("-bin-dir", "bin-dir", "--bin-dir")]
   [string]$BinDir = $(Join-Path $(if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }) (Join-Path ".local" "bin")),
   [Alias("-version", "--version")]
-  [string]$Version = $(if ($env:SYMPHONY_TRELLO_VERSION) { $env:SYMPHONY_TRELLO_VERSION } else { "1.0.1" }), # x-release-please-version
+  [string]$Version = $(if ($env:SYMPHONY_TRELLO_VERSION) { $env:SYMPHONY_TRELLO_VERSION } else { "1.0.2" }), # x-release-please-version
   [Alias("-from-source", "from-source", "--from-source")]
   [switch]$FromSource,
   [Alias("-repo", "--repo")]
   [string]$Repo = $(if ($env:SYMPHONY_TRELLO_REPO_URL) { $env:SYMPHONY_TRELLO_REPO_URL } else { "https://github.com/martin-francois/symphony-trello.git" }),
   [Alias("-ref", "--ref")]
-  [string]$Ref = $(if ($env:SYMPHONY_TRELLO_REF) { $env:SYMPHONY_TRELLO_REF } else { "v1.0.1" }), # x-release-please-version
+  [string]$Ref = $(if ($env:SYMPHONY_TRELLO_REF) { $env:SYMPHONY_TRELLO_REF } else { "v1.0.2" }), # x-release-please-version
   [switch]$Help,
   [Parameter(ValueFromRemainingArguments = $true)]
   [string[]]$RemainingArgs = @()
@@ -39,7 +39,7 @@ $OriginalPath = $env:PATH
 $DefaultSymphonyHome = if ($env:SYMPHONY_HOME) { $env:SYMPHONY_HOME } else { "$env:LOCALAPPDATA\SymphonyTrello" }
 $DefaultPrefix = ""
 $DefaultBinDir = Join-Path $(if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }) (Join-Path ".local" "bin")
-$DefaultVersion = "1.0.1" # x-release-please-version
+$DefaultVersion = "1.0.2" # x-release-please-version
 $DefaultRepo = "https://github.com/martin-francois/symphony-trello.git"
 $DefaultRef = "v$DefaultVersion"
 $ReleaseBaseUrl = if ($env:SYMPHONY_TRELLO_RELEASE_BASE_URL) {
