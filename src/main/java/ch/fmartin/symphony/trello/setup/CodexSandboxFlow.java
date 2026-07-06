@@ -4,7 +4,7 @@ import java.io.IOException;
 
 final class CodexSandboxFlow {
     static final String DANGER_FULL_ACCESS_WARNING =
-            "danger-full-access disables Codex's command/filesystem sandbox for this workflow; model-driven commands run with the same permissions as the Symphony app/service; they can affect files, processes, and network destinations the app/service can access; they can delete or overwrite data; this does not grant root/admin privileges and does not bypass OS permissions or stricter service-manager restrictions such as systemd ReadWritePaths.";
+            "danger-full-access disables Codex's command/filesystem sandbox for this workflow; model-driven commands run with the same permissions as the Symphony app/service; they can affect files, processes, and network destinations the app/service can access; they can delete or overwrite data; this does not grant root/admin privileges and does not bypass OS permissions or stricter service-manager restrictions.";
 
     boolean resolve(LocalSetup.Options options, Terminal terminal) throws IOException {
         if (options.nonInteractive()) {

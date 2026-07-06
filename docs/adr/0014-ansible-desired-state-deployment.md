@@ -102,6 +102,7 @@ Keep only the manual deployment guide.
 ## More Information
 
 The Ansible guide and playbook were removed before the OSS release. The manual systemd guide remains
-in [docs/deployment.md](../deployment.md). The removal decision is tracked by
+only as a historical decision after [ADR 0062](0062-remove-manual-systemd-deployment-path.md). The
+Ansible removal decision is tracked by
 [GitHub issue #115](https://github.com/martin-francois/symphony-trello/issues/115) and
 [ADR 0036](0036-remove-ansible-deployment-before-oss-release.md).

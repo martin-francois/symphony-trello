@@ -353,9 +353,9 @@ access problem, the Trello comment must explain that the requested file or folde
 because deployed Symphony blocks undeclared host paths by default for security reasons, so Trello
 cards cannot make Codex read or edit unrelated host files. Tell the operator to use files already
 available in the per-card workspace or ask an operator to allow the needed file or folder with the
-manual deployment settings `BindPaths`, `ReadWritePaths`, and
-`SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS`, as documented in
-`docs/deployment.md#allow-host-path-access`. Do not copy absolute host paths, per-card workspace
+setup or workflow settings such as `--add-path`, `codex.additional_writable_roots`, or
+`SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS`, as documented in the README's
+"Allowed Host Paths And Sandbox" section. Do not copy absolute host paths, per-card workspace
 locations, account names, or deployment-specific paths into Trello comments or the workpad; use
 labels such as "the requested path" and "the per-card workspace" instead.
 

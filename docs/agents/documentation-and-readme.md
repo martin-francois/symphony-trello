@@ -177,6 +177,13 @@ prompts, and product terminology. Deployment steps and installer lifecycle testi
   move optional modes, safety knobs, and advanced configuration into later sections.
 - Keep deployment instructions focused on operating a prepared version. Do not put contributor or CI
   verification commands such as formatting, linting, or full test runs into deployment steps.
+- Do not add or preserve a separate manual server deployment path only because the application can be
+  run that way. Prefer the installer and managed local worker as the supported public operation path.
+  Add another deployment runbook only when an issue and ADR explicitly accept the maintenance cost.
+- Do not treat removal of a manual service-manager runbook as removal of the product goal that
+  installed workers survive logout and system restart. If installer-managed autostart is not
+  implemented yet, link the issue that owns it and make the ADR clear that the reliability goal is
+  still intentional.
 - For docs with multiple setup paths, read the flow once from each path's perspective and avoid
   wording that assumes the reader chose a different path.
 - Put "who this path is for" guidance next to the commands for that path. Do not make readers remember

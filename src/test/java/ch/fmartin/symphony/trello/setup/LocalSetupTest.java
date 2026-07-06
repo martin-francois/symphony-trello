@@ -6155,8 +6155,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
             if (scenario.expectedRootPersisted()) {
                 assertThatWorkflow(workflow).hasAdditionalWritableRoot(Path.of("/"));
             } else {
-                assertThat(Files.readString(workflow, StandardCharsets.UTF_8))
-                        .doesNotContain("additional_writable_roots");
+                assertThatWorkflow(workflow).hasNoAdditionalWritableRoots();
             }
         } else {
             result.assertFailure(scenario.expectedExitCode()).stderrContains("setup_broad_path_requires_confirmation");

@@ -68,8 +68,7 @@ body:
       description: List only the setup details not already covered by diagnostics output. If you edited config files manually, include only the smallest redacted file or setting needed to reproduce it.
       placeholder: |
         Install/run context, if relevant:
-        - one-line installer, manual systemd deployment, Docker/container, VM, WSL, source checkout,
-          or other:
+        - one-line installer, Docker/container, VM, WSL, source checkout, or other:
 
         Setup choices, if relevant:
         - new board or existing Trello board:
@@ -102,7 +101,6 @@ body:
         - One-line installer
         - Source checkout
         - Docker/container
-        - Manual systemd deployment
         - Other
         - Not sure
     validations:

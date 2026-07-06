@@ -59,6 +59,11 @@ commit and open pull requests. Topic-specific rules live in the pages linked und
 - When you notice a potential improvement that is outside the current task scope, keep the current
   work focused and create or suggest a GitHub issue instead of adding "future improvement",
   "convenience gap", or similar sections to user-facing documentation.
+- When a user raises a concrete task, follow-up, or correction that remains actionable but the
+  conversation is redirected before it is finished, record it immediately in a durable place instead
+  of relying on chat memory. Prefer a GitHub issue for product work, a checked-in checklist file when
+  the user explicitly asks for one, or a short workpad/PR note for active branch work. Do this before
+  switching to the new task, and mention where it was recorded.
 - When you investigate a real improvement but decide not to implement it because no option satisfies
   the current constraints, create or suggest a GitHub issue before finishing. The issue must state
   the desired outcome, the options checked, why each option is not good enough right now, what a
@@ -245,6 +250,10 @@ user explicitly chooses a spec carry-over.
   limitations, linked issues, or deployment/live evidence changed. Update the PR description when it
   would otherwise be stale or incomplete, and report whether you updated it. For PRs authored by
   someone else, do not edit the PR description unless the user explicitly asks.
+- When waiting for pull request checks, wait for GitHub Actions and other required CI checks to
+  finish, but do not block only on a pending CodeRabbit status context. Treat CodeRabbit as
+  asynchronous review feedback: address it when it posts actionable comments or requested changes,
+  and report if it is still pending after the actual CI checks are green.
 
 ## References
 

@@ -54,7 +54,7 @@ public final class WorkflowAssertions {
     }
 
     public WorkflowAssertions hasNoAdditionalWritableRoots() {
-        assertThat(content).doesNotContain("additional_writable_roots");
+        assertThat(content).doesNotContain("  additional_writable_roots:");
         return this;
     }
 

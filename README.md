@@ -79,7 +79,6 @@ If the card does not move or the workpad comment does not appear, run `symphony-
 - [Advanced Configuration](#advanced-configuration)
 - [Operations](#operations)
 - [Safety Posture](#safety-posture)
-- [Production Deployment](#production-deployment)
 - [Building 1.0.0 by the Numbers](#building-100-by-the-numbers)
 - [Contributing and Security](#contributing-and-security)
 
@@ -482,7 +481,9 @@ access for trusted boards and machines only. Configure extra write access with
 You can connect more than one Trello board. This is useful when different projects or teams should
 have separate queues, workspace roots, GitHub behavior, or status ports. The installer and lifecycle
 commands understand connected boards, so you can check, start, stop, inspect logs, and run diagnostics
-for all boards or for one selected board.
+for all boards or for one selected board. To add another board after the first setup, run
+`symphony-trello setup-local` again and choose to connect another board, or use `new-board` or
+`import-board` directly.
 
 If your workflow has required labels, Symphony only starts cards that have those labels. For
 example, a card in `Ready for Codex` will wait until it has every required label. This is useful on
@@ -546,7 +547,10 @@ the missing `Merging` list when needed.
 
 With WSL2, browser login may open in Windows; if that is awkward, choose device login when setup asks
 whether the machine can open a browser. The managed `start`, `stop`, `status`, and `logs` commands
-are lightweight per-user processes, not a Windows service or systemd unit.
+are the public lifecycle controls for connected boards. OpenClaw-style managed autostart across
+logout and reboot is tracked in
+[issue #523](https://github.com/martin-francois/symphony-trello/issues/523); until that is
+implemented, run `symphony-trello start --all` after a system restart.
 
 Setup saves Trello credentials that you type or pass directly. If credentials already come from real
 environment variables or an existing `.env` file, setup uses them without copying them into another
@@ -1177,10 +1181,8 @@ Important environment variables:
 For local runs, the same names can be placed in ignored `.env`; real environment variables take
 precedence.
 
-For server deployments, workflow values can also read root-managed secret files with `file:/path`.
-The deployment guides use `file:$CREDENTIALS_DIRECTORY/trello-api-key` and
-`file:$CREDENTIALS_DIRECTORY/trello-api-token` with systemd credentials so Trello secrets are not
-placed in the service environment.
+Workflow values can also read secret files with `file:/path`. Use this when an operator manages
+secrets outside the workflow file and does not want Trello secrets in the service environment.
 
 ## Safety Posture
 
@@ -1197,12 +1199,6 @@ adds them to a `workspaceWrite` turn sandbox policy unless the workflow already 
 workspace, and they enable network access so Codex can clone selected repository URLs or publish
 pull requests without disabling the filesystem sandbox. User-input and unsupported dynamic tool requests
 are answered without waiting indefinitely.
-
-## Production Deployment
-
-For a server deployment with one or more workflow files, use the manual systemd guide in
-[docs/deployment.md](docs/deployment.md). The primary public setup path remains the installer and
-managed local worker; manual systemd deployment is the advanced server path.
 
 ## Building 1.0.0 by the Numbers
 
