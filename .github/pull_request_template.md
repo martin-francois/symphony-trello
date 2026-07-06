@@ -29,20 +29,23 @@ user-visible change, write `None`.
 
 ## Compatibility Decision
 
-Choose one and explain the choice. Contract changes default to a documented breaking change unless
-the linked issue, `SPEC.md`, or an ADR deliberately chooses compatibility.
+### What changes for existing users?
+- [ ] No visible change
+- [ ] Could break existing usage
+- [ ] Unsure
 
-- [ ] Breaking change
-- [ ] Compatible change with temporary migration or legacy support
-- [ ] Permanent compatibility contract
-- [ ] No user-facing contract change
-- [ ] N/A docs, tests, or internal-only change
+If this may break existing usage (or if you are unsure), fill these fields:
 
-- Chosen path:
-- What breaks or stays compatible:
-- Migration path for breaking changes:
-- `BREAKING CHANGE:` footer text for the squash commit body or retained commit, if breaking:
-- Removal condition and cleanup tracking for temporary compatibility logic:
+What breaks:
+`Breaks: ...`
+
+Migration path:
+`Migration: ...`
+
+Alternative:
+`Alternative: ...`
+
+If this is not a breaking change, you can leave all three fields blank.
 
 ## Root Cause And Guardrail
 

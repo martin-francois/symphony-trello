@@ -242,8 +242,9 @@ user explicitly chooses a spec carry-over.
   before pushing, reply on GitHub to every handled review comment or thread, and push the updated
   branch. Do not resolve GitHub review threads after replying; leave them for the reviewer to resolve
   unless the user explicitly asks you to resolve them. When a review reply says code changed, include
-  a small snippet of the resulting code with enough surrounding context that the reviewer can
-  understand the change without hunting through the diff. If the user also asks to squash the
+  the final code in a fenced code block with enough surrounding context that the reviewer can
+  understand the change without hunting through the diff. This requirement applies to all review comment
+  handling in this repository. If the user also asks to squash the
   already-pushed PR commits first, squash them into one base commit before adding the separate
   review-response commit.
 - Keep `feat/issue-35-plan-b-onboarding` as a single commit on top of `main`; amend or squash and
