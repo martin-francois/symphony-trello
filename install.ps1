@@ -42,6 +42,11 @@ $DefaultBinDir = Join-Path $(if ($env:USERPROFILE) { $env:USERPROFILE } else { $
 $DefaultVersion = "1.0.2" # x-release-please-version
 $DefaultRepo = "https://github.com/martin-francois/symphony-trello.git"
 $DefaultRef = "v$DefaultVersion"
+$ScheduledTaskName = "Symphony for Trello"
+$WindowsUserProfile = if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }
+$WindowsProfileRoot = if ($env:APPDATA) { $env:APPDATA } else { Join-Path $WindowsUserProfile "AppData\Roaming" }
+$StartupFolder = Join-Path $WindowsProfileRoot "Microsoft\Windows\Start Menu\Programs\Startup"
+$StartupCommandPath = Join-Path $StartupFolder "Symphony for Trello.cmd"
 $ReleaseBaseUrl = if ($env:SYMPHONY_TRELLO_RELEASE_BASE_URL) {
   $env:SYMPHONY_TRELLO_RELEASE_BASE_URL
 } else {
@@ -584,6 +589,8 @@ $WorkspaceRoot = [System.IO.Path]::GetFullPath($WorkspaceRoot)
 $StateHome = [System.IO.Path]::GetFullPath($StateHome)
 $RawBinDir = $BinDir
 $BinDir = [System.IO.Path]::GetFullPath($BinDir)
+$AutostartEnvironmentPath = Join-Path $ConfigDir "autostart-env.ps1"
+$AutostartScriptPath = Join-Path $BinDir "symphony-trello-autostart.ps1"
 $CodexNpmPrefix = Join-Path $SymphonyHome "npm"
 $InstallContextFile = Join-Path $StateHome "install-context.properties"
 Assert-AppPaths
@@ -693,6 +700,150 @@ function Write-InstallContext {
   } catch {
     return
   }
+}
+
+function Test-AutostartEnvironmentName([string]$Name) {
+  if (-not [regex]::IsMatch($Name, "^[A-Za-z_][A-Za-z0-9_]*$")) {
+    return $false
+  }
+  return $Name.StartsWith("TRELLO_") -or
+    $Name.StartsWith("SYMPHONY_") -or
+    $Name.StartsWith("CODEX_") -or
+    $Name.StartsWith("GITHUB_") -or
+    $Name.StartsWith("GH_") -or
+    $Name.StartsWith("OPENAI_") -or
+    $Name.StartsWith("ANTHROPIC_") -or
+    $Name.StartsWith("QUARKUS_")
+}
+
+function Write-AutostartEnvironmentFile {
+  if ($DryRun) {
+    Write-Host "  WOULD write autostart environment snapshot: $AutostartEnvironmentPath"
+    return
+  }
+  New-Item -ItemType Directory -Force -Path $ConfigDir | Out-Null
+  $lines = @(
+    "# Installer-managed Symphony for Trello autostart environment.",
+    "# Contains only prefixed runtime variables from the installer session."
+  )
+  Get-ChildItem Env: |
+    Sort-Object Name |
+    Where-Object {
+      (Test-AutostartEnvironmentName $_.Name) -and
+        (-not [string]::IsNullOrEmpty($_.Value)) -and
+        (-not [regex]::IsMatch($_.Value, "\p{Cc}"))
+    } |
+    ForEach-Object {
+      $lines += "`$env:$($_.Name) = $(ConvertTo-PowerShellLiteral $_.Value)"
+    }
+  $lines | Set-Content -Encoding UTF8 -Path $AutostartEnvironmentPath
+  Protect-PrivateFile $AutostartEnvironmentPath
+}
+
+function Protect-PrivateFile([string]$Path) {
+  $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+  $acl = New-Object System.Security.AccessControl.FileSecurity
+  $rule = New-Object System.Security.AccessControl.FileSystemAccessRule($identity, "FullControl", "Allow")
+  $acl.SetAccessRuleProtection($true, $false)
+  $acl.AddAccessRule($rule)
+  Set-Acl -LiteralPath $Path -AclObject $acl
+}
+
+function Write-AutostartLauncher {
+  Write-AutostartEnvironmentFile
+  if ($DryRun) {
+    Write-Host "  WOULD write Windows autostart launcher: $AutostartScriptPath"
+    return
+  }
+  New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
+  $environmentPathLiteral = ConvertTo-PowerShellLiteral $AutostartEnvironmentPath
+  $wrapperLiteral = ConvertTo-PowerShellLiteral (Join-Path $BinDir "symphony-trello.ps1")
+@"
+`$ErrorActionPreference = "Stop"
+if (Test-Path -LiteralPath $environmentPathLiteral) {
+  . $environmentPathLiteral
+}
+& $wrapperLiteral start --all
+exit `$LASTEXITCODE
+"@ | Set-Content -Encoding UTF8 -Path $AutostartScriptPath
+}
+
+function Get-StartAllCommand {
+  return "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$AutostartScriptPath`""
+}
+
+function Install-StartupFolderCommand {
+  Write-AutostartLauncher
+  $startCommand = Get-StartAllCommand
+  if ($DryRun) {
+    Write-Host "  WOULD write Windows Startup command: $StartupCommandPath"
+    return $true
+  }
+  New-Item -ItemType Directory -Force -Path $StartupFolder | Out-Null
+@"
+@echo off
+$startCommand
+"@ | Set-Content -Encoding ASCII $StartupCommandPath
+  Write-Host "  OK  Windows Startup command installed: $StartupCommandPath"
+  return $true
+}
+
+function Install-ScheduledTaskAutostart {
+  if (-not (Get-Command Register-ScheduledTask -ErrorAction SilentlyContinue)) {
+    return "ScheduledTasks module is not available."
+  }
+  try {
+    $action = New-ScheduledTaskAction `
+      -Execute "powershell.exe" `
+      -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$AutostartScriptPath`""
+    $trigger = New-ScheduledTaskTrigger -AtLogOn
+    Register-ScheduledTask `
+      -TaskName $ScheduledTaskName `
+      -Action $action `
+      -Trigger $trigger `
+      -Description "Start Symphony for Trello connected boards at user logon." `
+      -Force | Out-Null
+    return ""
+  } catch {
+    return $_.Exception.Message
+  }
+}
+
+function Enable-WindowsAutostart {
+  Write-AutostartLauncher
+  if ($DryRun) {
+    Write-Host "  WOULD create Windows Scheduled Task: $ScheduledTaskName"
+    Write-Host "  WOULD start managed workers through Windows Scheduled Task"
+    return $true
+  }
+  $createResult = Install-ScheduledTaskAutostart
+  if ([string]::IsNullOrWhiteSpace($createResult)) {
+    Write-Host "  OK  Windows Scheduled Task installed: $ScheduledTaskName"
+    try {
+      Start-ScheduledTask -TaskName $ScheduledTaskName
+      Write-Host "  OK  Windows Scheduled Task started managed workers."
+      return $true
+    } catch {
+      Write-Host "  NOTE  Scheduled Task was installed but could not be started immediately. It will run at the next user logon."
+      Invoke-Step "$BinDir\symphony-trello.ps1 start --all" { & "$BinDir\symphony-trello.ps1" start --all }
+      return $true
+    }
+  }
+  Write-Host "  NOTE  Could not create Windows Scheduled Task: $createResult"
+  if (Install-StartupFolderCommand) {
+    Invoke-Step "$BinDir\symphony-trello.ps1 start --all" { & "$BinDir\symphony-trello.ps1" start --all }
+    return $true
+  }
+  return $false
+}
+
+function Start-ManagedWorkers {
+  Write-Host "Starting managed workers..."
+  if (Enable-WindowsAutostart) {
+    return
+  }
+  Write-Host "  NOTE  Autostart was not configured. Use '$BinDir\symphony-trello.ps1 start --all' after reboot or login."
+  Invoke-Step "$BinDir\symphony-trello.ps1 start --all" { & "$BinDir\symphony-trello.ps1" start --all }
 }
 
 function Test-Command([string]$Name) {
@@ -1337,17 +1488,13 @@ if (-not $NoOnboard) {
   Write-Host "Starting setup..."
   if ($DryRun) {
     Write-Host "  WOULD run: $BinDir\symphony-trello.ps1 setup-local"
-    if ($RestartManagedWorkers) {
-      Write-Host "  WOULD run: $BinDir\symphony-trello.ps1 start --all"
-    }
+    Start-ManagedWorkers
   } else {
     Invoke-Step "$BinDir\symphony-trello.ps1 setup-local" { & "$BinDir\symphony-trello.ps1" setup-local }
-    if ($RestartManagedWorkers) {
-      Invoke-Step "$BinDir\symphony-trello.ps1 start --all" { & "$BinDir\symphony-trello.ps1" start --all }
-    }
+    Start-ManagedWorkers
   }
 } elseif ($RestartManagedWorkers) {
   Write-Host
   Write-Host "Restarting managed workers after update..."
-  Invoke-Step "$BinDir\symphony-trello.ps1 start --all" { & "$BinDir\symphony-trello.ps1" start --all }
+  Start-ManagedWorkers
 }

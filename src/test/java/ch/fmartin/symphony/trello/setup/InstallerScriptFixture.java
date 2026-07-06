@@ -310,6 +310,32 @@ final class InstallerScriptFixture {
                 exit 0
                 """);
         writeExecutable(
+                fakeBin.resolve("systemctl"),
+                """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                echo "systemctl $*" >> "${SYMPHONY_FAKE_LOG:?}"
+                service_file="$HOME/.config/systemd/user/symphony-trello.service"
+                command_path=""
+                if [[ -f "$service_file" ]]; then
+                  command_path="$(sed -n 's/^ExecStart="\\([^"]*symphony-trello\\)" .*/\\1/p' "$service_file" | head -1)"
+                fi
+                if [[ "$*" == "--user restart symphony-trello.service" && -n "$command_path" ]]; then
+                  "$command_path" start --all
+                elif [[ "$*" == "--user disable --now symphony-trello.service" && -n "$command_path" ]]; then
+                  "$command_path" stop
+                fi
+                exit 0
+                """);
+        writeExecutable(
+                fakeBin.resolve("loginctl"),
+                """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                echo "loginctl $*" >> "${SYMPHONY_FAKE_LOG:?}"
+                exit 0
+                """);
+        writeExecutable(
                 fakeBin.resolve("java"),
                 """
                 #!/usr/bin/env bash
@@ -572,7 +598,12 @@ final class InstallerScriptFixture {
 	                      ;;
 	                    stop)
 	                      if [[ -f "$pid_file" ]]; then
-	                        kill "$(cat "$pid_file")" >/dev/null 2>&1 || true
+	                        worker_pid="$(cat "$pid_file")"
+	                        kill "$worker_pid" >/dev/null 2>&1 || true
+	                        for _ in {1..50}; do
+	                          kill -0 "$worker_pid" >/dev/null 2>&1 || break
+	                          sleep 0.1
+	                        done
 	                        rm -f "$pid_file"
 	                      fi
 	                      echo "Stopped $display_name"

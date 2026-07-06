@@ -42,6 +42,11 @@ $StateHomeConfigured = -not [string]::IsNullOrWhiteSpace($env:SYMPHONY_TRELLO_ST
 $DefaultSymphonyHome = if ($env:SYMPHONY_HOME) { $env:SYMPHONY_HOME } else { "$env:LOCALAPPDATA\SymphonyTrello" }
 $DefaultPrefix = ""
 $DefaultBinDir = Join-Path $(if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }) (Join-Path ".local" "bin")
+$ScheduledTaskName = "Symphony for Trello"
+$WindowsUserProfile = if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }
+$WindowsProfileRoot = if ($env:APPDATA) { $env:APPDATA } else { Join-Path $WindowsUserProfile "AppData\Roaming" }
+$StartupFolder = Join-Path $WindowsProfileRoot "Microsoft\Windows\Start Menu\Programs\Startup"
+$StartupCommandPath = Join-Path $StartupFolder "Symphony for Trello.cmd"
 
 function Apply-PositionalFlag([string]$Token) {
   switch ($Token) {
@@ -327,6 +332,8 @@ $ConfigDir = [System.IO.Path]::GetFullPath($ConfigDir)
 $WorkspaceRoot = [System.IO.Path]::GetFullPath($WorkspaceRoot)
 $BinDir = [System.IO.Path]::GetFullPath($BinDir)
 $StateHome = [System.IO.Path]::GetFullPath($StateHome)
+$AutostartEnvironmentPath = Join-Path $ConfigDir "autostart-env.ps1"
+$AutostartScriptPath = Join-Path $BinDir "symphony-trello-autostart.ps1"
 $CodexHome = [System.IO.Path]::GetFullPath((Join-Path $SymphonyHome "codex"))
 $CodexNpmPrefix = [System.IO.Path]::GetFullPath((Join-Path $SymphonyHome "npm"))
 
@@ -689,6 +696,52 @@ function Stop-ManagedProcesses {
   }
 }
 
+function Remove-WindowsAutostart {
+  $hasStartupCommand = Test-Path -LiteralPath $StartupCommandPath
+  $hasAutostartScript = Test-Path -LiteralPath $AutostartScriptPath
+  $hasAutostartEnvironment = Test-Path -LiteralPath $AutostartEnvironmentPath
+  if ($DryRun) {
+    Write-Host "  WOULD remove Windows Scheduled Task: $ScheduledTaskName"
+    if ($hasStartupCommand) {
+      Write-Host "  WOULD remove Windows Startup command: $StartupCommandPath"
+    }
+    if ($hasAutostartScript) {
+      Write-Host "  WOULD remove Windows autostart launcher: $AutostartScriptPath"
+    }
+    if ($hasAutostartEnvironment) {
+      Write-Host "  WOULD remove autostart environment snapshot: $AutostartEnvironmentPath"
+    }
+    return
+  }
+  if (Get-Command schtasks.exe -ErrorAction SilentlyContinue) {
+    Write-Host "  STOP  Windows Scheduled Task: $ScheduledTaskName"
+    & schtasks.exe /End /TN $ScheduledTaskName *> $null
+    & schtasks.exe /Delete /TN $ScheduledTaskName /F *> $null
+  }
+  if ($hasStartupCommand) {
+    Remove-ManagedPath $StartupCommandPath
+  }
+  if ($hasAutostartScript) {
+    Remove-ManagedPath $AutostartScriptPath
+  }
+  if ($hasAutostartEnvironment) {
+    Remove-ManagedPath $AutostartEnvironmentPath
+  }
+}
+
+function Write-WindowsAutostartRemovalPlan {
+  Write-Host "  SCHEDULED TASK  $ScheduledTaskName"
+  if (Test-Path -LiteralPath $StartupCommandPath) {
+    Write-Host "  STARTUP COMMAND $StartupCommandPath"
+  }
+  if (Test-Path -LiteralPath $AutostartScriptPath) {
+    Write-Host "  AUTOSTART       $AutostartScriptPath"
+  }
+  if (Test-Path -LiteralPath $AutostartEnvironmentPath) {
+    Write-Host "  AUTOSTART ENV   $AutostartEnvironmentPath"
+  }
+}
+
 Write-Host "Symphony for Trello uninstall"
 Write-Host
 Write-Host "App checkout: $Prefix"
@@ -701,6 +754,7 @@ if ($DryRun) {
 Write-Host "Will remove if present:"
 Write-Host "  APP FILES       $Prefix"
 Write-Host "  CLI EXECUTABLE  $(Join-Path $BinDir "symphony-trello.ps1")"
+Write-WindowsAutostartRemovalPlan
 Write-ManagedCodexRemovalPlan
 Write-Host "  WORKERS         Managed Symphony workers are stopped before removal"
 if ($RemoveConfig) { Write-Host "  CONFIG          $ConfigDir" }
@@ -720,6 +774,7 @@ if (Confirm-Step "Remove installer-managed app files and CLI executable?" $Yes) 
   }
   Assert-AppRemovalPreservesCurrentData
   Stop-ManagedProcesses
+  Remove-WindowsAutostart
   Remove-ManagedPath "$BinDir\symphony-trello.ps1"
   Remove-ManagedPath "$BinDir\symphony-trello.cmd"
   Remove-ManagedCodexArtifacts

@@ -547,15 +547,20 @@ the missing `Merging` list when needed.
 
 With WSL2, browser login may open in Windows; if that is awkward, choose device login when setup asks
 whether the machine can open a browser. The managed `start`, `stop`, `status`, and `logs` commands
-are the public lifecycle controls for connected boards. OpenClaw-style managed autostart across
-logout and reboot is tracked in
-[issue #523](https://github.com/martin-francois/symphony-trello/issues/523); until that is
-implemented, run `symphony-trello start --all` after a system restart.
+are the public lifecycle controls for connected boards. On Linux hosts with user systemd, the
+installer registers a user service that runs `symphony-trello start --all` for connected boards on
+login or reboot when user lingering can be enabled. On macOS it registers a per-user LaunchAgent. On
+Windows it creates a per-user Scheduled Task, falling back to a Startup-folder command if task
+creation is denied. If the host does not support managed autostart, run
+`symphony-trello start --all` after a system restart or login.
 
 Setup saves Trello credentials that you type or pass directly. If credentials already come from real
 environment variables or an existing `.env` file, setup uses them without copying them into another
-file. Workflows, connected-board metadata, workspaces, and logs live under `SYMPHONY_HOME` by
-default, separate from the installer-managed app checkout.
+file for setup. For managed autostart, the installer writes a private autostart environment snapshot
+with only Symphony/Trello/Codex/GitHub/OpenAI/Anthropic/Quarkus-prefixed variables from the installer
+session, then removes that snapshot during uninstall. Workflows, connected-board metadata,
+workspaces, and logs live under `SYMPHONY_HOME` by default, separate from the installer-managed app
+checkout.
 
 The installer writes the command to `$HOME/.local/bin/symphony-trello` on macOS, Linux, and WSL2, or
 `$HOME\.local\bin\symphony-trello.ps1` on native Windows PowerShell. If that directory is not on
