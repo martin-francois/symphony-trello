@@ -17,26 +17,13 @@ jobs:
     steps:
       - name: Checkout release workflow source
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      - name: Choose release automation config
-        if: ${{ github.event_name == 'push' }}
-        id: release-config
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Before v1.0.0 exists, seed the first public release from the curated baseline changelog.
-          # After v1.0.0 exists, use the normal config so later releases append generated notes.
-          if gh release view v1.0.0 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "config_file=release-please-config.json" >> "$GITHUB_OUTPUT"
-          else
-            echo "config_file=release-please-public-baseline-config.json" >> "$GITHUB_OUTPUT"
-          fi
       - name: Release Please
         if: ${{ github.event_name == 'push' }}
         id: release
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0; packages release-please ^17.6.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          config-file: ${{ steps.release-config.outputs.config_file }}
+          config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
       - name: Resolve release asset upload target
         id: release-assets
