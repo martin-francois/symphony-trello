@@ -36,30 +36,24 @@ repository hacks?
 
 ## Decision Outcome
 
-Chosen option: "Maven 3 wrapper and Mockito's documented Maven Java-agent pattern", because it
-preserves the Maven 3 choice while keeping test warning handling maintainable and avoids
-repository-wide JVM options that break GitHub's generated dependency-submission job.
+Chosen option: "Maven 3 wrapper, `.mvn/jvm.config`, and Mockito's documented Maven Java-agent pattern", because it preserves the Maven 3 choice while keeping test warning handling maintainable and allows us to globally configure Java 25 options.
+
+Generated Automatic Dependency Submission is disabled in repository settings. Dependency submission is handled by the repository-owned workflow, which explicitly uses Java 25. Restoring `.mvn/jvm.config` is safe because the generated Java 21 caller is no longer active.
 
 ### Consequences
 
 * Good, because Maven starts through a current generated wrapper script.
+* Good, because `.mvn/jvm.config` suppresses Java 25 Unsafe warnings globally.
 * Good, because Mockito uses a startup `-javaagent` instead of dynamic self-attachment.
 * Good, because `maven-dependency-plugin:properties` resolves the Mockito jar path without a
   brittle local repository expression.
 * Bad, because the build has additional Surefire and dependency-plugin configuration.
-* Bad, because Maven's Java 25 Unsafe warning is tolerated until Maven 3 or its embedded dependency
-  stack no longer emits it.
 
 ### Confirmation
 
 Run `./mvnw -q -v`, `./mvnw -q -Dtest=LocalAgentRunnerTest test`, and
 `./mvnw -q spotless:check verify`. These commands should not emit the old Maven Jansi warning,
-Mockito self-attachment warning, dynamic agent loading warning, or CDS warning. A Maven/Guice Unsafe
-warning may still appear under Java 25 while the project remains on Maven 3.
-
-GitHub's generated Automatic Dependency Submission (Maven) check must also be able to start Maven
-under GitHub's selected Java runtime. The repository therefore must not use `.mvn/jvm.config` for a
-Java-version-specific option.
+Mockito self-attachment warning, dynamic agent loading warning, CDS warning, or Maven/Guice Unsafe warning.
 
 ## Pros and Cons of the Options
 
@@ -87,8 +81,6 @@ configure Surefire with `maven-dependency-plugin:properties` plus
 * Good, because it does not require developers to prefix commands with custom `JAVA_HOME` or
   `MAVEN_OPTS`.
 * Neutral, because the build file includes one extra plugin for agent path resolution.
-* Bad, because `.mvn/jvm.config` applies before Maven can inspect the project and can break generated
-  GitHub Actions jobs that invoke Maven with an older Java runtime.
 * Bad, because future Maven or Mockito changes may let us remove some configuration.
 
 ### Maven 4 to avoid Maven 3 dependency warnings

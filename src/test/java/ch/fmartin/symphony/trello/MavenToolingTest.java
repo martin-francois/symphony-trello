@@ -8,17 +8,18 @@ import org.junit.jupiter.api.Test;
 final class MavenToolingTest {
 
     @Test
-    void repositoryDoesNotUseGlobalMavenJvmConfig() {
+    void repositoryUsesGlobalMavenJvmConfigForJava25() {
         // given
         Path globalJvmConfig = Path.of(".mvn/jvm.config");
 
         // when
-        boolean exists = globalJvmConfig.toFile().exists();
 
         // then
         assertThat(globalJvmConfig)
-                .as("GitHub generated dependency submission may run Maven under a different Java version")
-                .doesNotExist();
-        assertThat(exists).isFalse();
+                .as(
+                        "Repository must configure Maven's Java 25 runtime flag globally because generated Automatic Dependency Submission is disabled")
+                .exists()
+                .content()
+                .isEqualTo("--sun-misc-unsafe-memory-access=allow\n");
     }
 }
