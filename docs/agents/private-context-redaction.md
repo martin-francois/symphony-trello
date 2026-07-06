@@ -15,14 +15,15 @@ summaries, and how to use the local diagnostics tooling for private investigatio
   messages, or new issue text. When a Trello-shaped value is needed, replace it with a clearly
   synthetic same-shape value such as `SYNTH001` for an 8-character short link or
   `000000000000000000000001` for a 24-character board id, and use synthetic URLs such as
-  `https://trello.com/b/SYNTH001/synthetic-board`. GitHub Secret Scanning with repository custom
-  patterns is the primary protection for GitHub-hosted issue, pull request, review, and comment text.
-  Use `scripts/check-private-context` before committing files or manually posting copied diagnostic
-  text from live reproduction work, logs, or local setup output. The scanner delegates to BetterLeaks
-  plus repository-specific private-context rules. For manual GitHub posts where the exact text is
-  available, scan it first with `scripts/check-private-context --stdin --label <safe-label>`. When
-  the scanner reports Trello-shaped test data, make the fixture clearly synthetic rather than
-  suppressing the finding.
+  `https://trello.com/b/SYNTH001/synthetic-board`. GitHub Secret Scanning is the hosted safety net
+  for repository history and hosted GitHub text that matches GitHub-supported patterns. Do not rely
+  on GitHub custom patterns for Symphony-specific private context unless the GitHub plan explicitly
+  supports them and the docs are updated. Use `scripts/check-private-context` before committing files
+  or manually posting copied diagnostic text from live reproduction work, logs, or local setup
+  output. The scanner delegates to BetterLeaks plus repository-specific private-context rules. For
+  manual GitHub posts where the exact text is available, scan it first with
+  `scripts/check-private-context --stdin --label <safe-label>`. When the scanner reports
+  Trello-shaped test data, make the fixture clearly synthetic rather than suppressing the finding.
 
 ## Diagnostics tooling
 
