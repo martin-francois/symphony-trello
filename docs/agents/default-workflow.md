@@ -29,6 +29,10 @@ commit and open pull requests. Topic-specific rules live in the pages linked und
 
 - Prefer TDD when the behavior can be isolated. If TDD is impractical, make sure the final tests
   would have failed for the bug or missing behavior.
+- When starting implementation work for a specific GitHub issue, assign that issue to the
+  authenticated account if permissions allow. Do this when work on that individual issue actually
+  starts, not when merely planning or listing several future issues. If assignment fails because of
+  permissions or repository settings, continue without blocking the implementation.
 - Keep changes narrowly scoped. Each branch or pull request should cover one cohesive change. If a
   feature or bug fix needs directly related cleanup or refactoring to make that change correct or
   maintainable, keep the cleanup/refactoring focused on that change. Put unrelated cleanup,
