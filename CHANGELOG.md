@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.0.2](https://github.com/martin-francois/symphony-trello/compare/v1.0.1...v1.0.2) (2026-07-06)
+
+
+### Bug Fixes
+
+* guard empty transactional package list ([fb1faf3](https://github.com/martin-francois/symphony-trello/commit/fb1faf354cf077e823530945c2f166bd6dd597a6))
+* support MicroOS transactional installs ([d602ec5](https://github.com/martin-francois/symphony-trello/commit/d602ec5af63116d3c49ac6f44af1efdf58ce97fa))
+
+
+### Documentation
+
+* clarify Codex review loop verification timing ([fb727db](https://github.com/martin-francois/symphony-trello/commit/fb727db2289a80967895f489a1c4d70b453b0a7c))
+* clarify workflow repository defaults ([598a447](https://github.com/martin-francois/symphony-trello/commit/598a4478017e7a5fe80b38ec7780301f89dcc67d))
+
 ## [1.0.1](https://github.com/martin-francois/symphony-trello/compare/v1.0.0...v1.0.1) (2026-07-05)
 
 
