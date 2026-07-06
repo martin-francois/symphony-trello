@@ -41,6 +41,28 @@ body:
     attributes:
       label: Current workaround
       description: If there is a workaround today, describe it and why it is clumsy or incomplete.
+  - type: dropdown
+    id: compatibility-decision
+    attributes:
+      label: Compatibility or breaking-change decision
+      description: >-
+        Contract changes default to breaking unless this issue deliberately chooses compatibility.
+      options:
+        - Breaking change is acceptable; document the migration path
+        - Compatible change with temporary migration or legacy support
+        - Permanent compatibility contract
+        - No user-facing contract change expected
+        - Needs maintainer decision before implementation
+  - type: textarea
+    id: migration-path
+    attributes:
+      label: Migration path or compatibility cleanup
+      description: >-
+        If breaking, explain why the break is necessary and how users/operators move to the new
+        contract; the squash commit body or retained commit must carry that guidance in a BREAKING
+        CHANGE footer for the changelog. If compatible, define when the migration logic is removed
+        and where cleanup is tracked. If permanent compatibility is requested, name the SPEC or ADR
+        home. If no contract change, write N/A.
   - type: textarea
     id: additional-context
     attributes:

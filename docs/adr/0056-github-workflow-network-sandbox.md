@@ -13,8 +13,8 @@ informed: [Future maintainers, Contributors]
 ## Context and Problem Statement
 
 Generated GitHub workflows tell Codex to clone repositories, push branches, and create or update
-pull requests. A live private-repository test showed that the workflow could reach the Trello card
-and start Codex, but Codex blocked before creating a branch or pull request because shell GitHub
+pull requests. A live authenticated-repository test showed that the workflow could reach the Trello
+card and start Codex, but Codex blocked before creating a branch or pull request because shell GitHub
 network access was unavailable.
 
 The workflow still should not disable Codex's filesystem sandbox by default. Users can opt into
@@ -52,7 +52,7 @@ that need it.
 
 ### Consequences
 
-* Good, because remote repository defaults and private-repository GitHub PR tasks can use the
+* Good, because remote repository defaults and authenticated-repository GitHub PR tasks can use the
   generated happy path.
 * Good, because the default still limits filesystem writes to the workspace and configured roots.
 * Good, because the requirement is visible in generated workflow front matter.
@@ -69,10 +69,10 @@ codex:
     networkAccess: true
 ```
 
-The project had no public users when this behavior changed, so Symphony does not carry a runtime
-migration path or historical generated-template detector. Existing private workflows were updated
-manually once. Runtime code parses the workflow it is given and validates the current schema; it does
-not infer generated ownership or backfill network access for older private files.
+The previous generated workflow shape was never part of the supported compatibility contract, so
+Symphony does not carry a runtime migration path or historical generated-template detector. Runtime
+code parses the workflow it is given and validates the current schema; it does not infer generated
+ownership or backfill network access for unsupported historical files.
 
 Run the focused tests:
 
@@ -88,7 +88,8 @@ Do not add Codex network access to generated workflows.
 
 * Good, because the generated sandbox policy would stay narrower.
 * Bad, because HTTPS repository defaults can block before Codex can clone the selected source.
-* Bad, because private-repository PR work can block before Codex creates a branch or pull request.
+* Bad, because authenticated-repository PR work can block before Codex creates a branch or pull
+  request.
 * Bad, because users would need to diagnose a generated workflow that cannot perform its documented
   repository or GitHub task.
 
@@ -121,7 +122,7 @@ Keep shell network access disabled and use only a GitHub connector for branch an
 ## More Information
 
 [GitHub issue #426](https://github.com/martin-francois/symphony-trello/issues/426) describes the
-live failure that showed generated private-repository workflows needed network access.
+live failure that showed generated authenticated-repository workflows needed network access.
 [GitHub issue #496](https://github.com/martin-francois/symphony-trello/issues/496) describes the
 live failure that showed generated Trello-only workflows also need network access for selected HTTPS
 repository defaults.

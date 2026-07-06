@@ -37,7 +37,7 @@ adopting redundant or too-broad packs, or a hosted account requirement?
   or can be made clean with narrow rule exclusions.
 * Reject registry packs that only duplicate stronger local analyzers, are irrelevant to this
   repository, or are too broad for a deterministic blocking gate.
-* Keep private-repository runs local and disable Semgrep metrics.
+* Keep local and CI runs deterministic and disable Semgrep metrics.
 * Make accepted rules blocking in CI once the baseline is clean.
 * Pin the Semgrep runtime version and make the pin Renovate-managed.
 
@@ -104,7 +104,7 @@ mode when metrics are disabled:
 Cannot create auto config when metrics are off. Please allow metrics or run with a specific config.
 ```
 
-That makes `--config auto` unsuitable for this private-repository workflow. The project must not
+That makes `--config auto` unsuitable for this metrics-disabled workflow. The project must not
 require Semgrep metrics or hosted Semgrep login for local checks.
 
 The explicit registry pack `p/default` was also evaluated with:
@@ -262,7 +262,7 @@ Document a report-only registry command but do not enforce it.
 * Good, because maintainers could rerun broader scans occasionally.
 * Bad, because it creates another non-blocking command whose findings can go stale.
 * Bad, because the measured `p/default` result did not identify actionable work.
-* Bad, because `--config auto` cannot satisfy the private metrics-off requirement.
+* Bad, because `--config auto` cannot satisfy the metrics-disabled requirement.
 
 ### Add Only a Documented Local Semgrep Command
 

@@ -48,7 +48,8 @@ because it hardens CI and keeps automation behavior explicit only where it diffe
   manifest.
 * Good, because CI checks the pull request title that usually becomes the squash commit title for
   release automation and checks pull request commit messages for rebase-merge or intentionally
-  multi-commit paths.
+  multi-commit paths. The commit-message check uses a stricter config so breaking commits need both
+  the visible `!` marker and the `BREAKING CHANGE:` footer that feeds generated changelog guidance.
 * Good, because major updates require dashboard approval and do not automerge.
 * Bad, because SHA-pinned actions are less readable than tag-only action references.
 * Bad, because the regex manager must stay aligned with the workflow command text.
@@ -72,6 +73,7 @@ and one package rule for major updates.
 * Good, because Renovate still keeps the pins current.
 * Good, because commitlint enforces the Conventional Commit title that release automation reads
   after squash merges and the retained commit messages release automation reads after rebase merges.
+  The retained-commit path additionally enforces complete breaking-change notation.
 * Good, because the config remains short enough to understand.
 * Neutral, because Renovate needs custom regexes for workflow command pins.
 * Bad, because readers must know that some behavior comes from presets.
@@ -103,4 +105,6 @@ Spell out automerge, release age, grouping, and dashboard behavior in multiple p
 ## More Information
 
 The workflows use pnpm only for Renovate config validation and commitlint validation of PR titles
-and PR commit ranges. Java dependencies and build verification remain Maven-based.
+and PR commit ranges. PR title linting uses the base config because titles cannot contain footers;
+commit-range linting uses the stricter message config so breaking commits include both `!` and a
+`BREAKING CHANGE:` footer. Java dependencies and build verification remain Maven-based.

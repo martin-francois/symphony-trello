@@ -54,9 +54,10 @@ auditing that may create issues lives in
 
 ## Triage labels
 
-- During issue triage, check every open issue for breaking-change risk, especially before the first
-  public release when incompatible changes are cheaper to make. Add the `breaking change` label when
-  the accepted implementation may intentionally change or invalidate current user-facing contracts:
+- During issue triage, check every open issue for breaking-change risk, especially while the
+  affected contract is still small enough to change deliberately. Add the `breaking change` label
+  when the accepted implementation may intentionally change or invalidate current user-facing
+  contracts:
   CLI arguments, exit codes, config keys or values, environment precedence, workflow schema,
   generated workflow behavior, Trello interpretation rules, installer version syntax, release
   artifact contracts, or other behavior that scripts or operators could reasonably rely on. Do not
@@ -73,6 +74,19 @@ auditing that may create issues lives in
   comment instead of rewriting the reporter's issue body. Determine the current account from the
   active GitHub tool or CLI authentication; do not hardcode a personal username in this rule or in
   triage automation.
+- During issue triage, ensure every issue records a compatibility decision before it is considered
+  ready for implementation. The recorded decision must say whether the issue chooses a breaking
+  change, a compatible change with temporary migration or legacy support, a permanent compatibility
+  contract, or no user-facing contract change. For documentation, tests, or internal-only work,
+  record no user-facing contract change instead of leaving the decision implicit. For breaking
+  changes, include the affected contract, why the break is necessary, and the migration path. Also
+  note that the implementing squash commit body or retained commit must use a Conventional Commit
+  `BREAKING CHANGE:` footer so release automation puts the reason and migration guidance in the
+  generated changelog. For
+  temporary compatibility or migration logic, include the removal condition and where cleanup is
+  tracked, such as a follow-up issue. If the issue template did not capture this clearly, edit issues
+  opened by the authenticated account, or comment on issues opened by another account, so the
+  decision is explicit before work starts.
 - During issue triage, add `needs human review` when an issue cannot be implemented as written until
   a maintainer decision, owner-only repository action, external account/form submission, secret
   provisioning, external prerequisite, or explicit human review happens. Issues with

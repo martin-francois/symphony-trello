@@ -73,9 +73,9 @@ commit and open pull requests. Topic-specific rules live in the pages linked und
   the desired outcome, the options checked, why each option is not good enough right now, what a
   future acceptable solution would need to provide, and any ADR or PR that records the current
   decision. Use the `idea` label when the work is exploratory rather than ready to implement.
-- Until the first public release, apply [pre-public clean breaks](#pre-public-clean-breaks): implement
-  only the canonical current contract and update private deployments manually when private
-  pre-release files need a one-time edit.
+- Apply [compatibility discipline](#compatibility-discipline): default to the current documented
+  contract, make breaking-vs-compatible choices explicit in issues and pull requests, and add
+  compatibility behavior only when the issue, specification, or ADR deliberately chooses it.
 - When the user states a generally useful working preference or corrects a repeatable pattern,
   proactively persist it in the same change by updating the most relevant agent-docs page; do not
   wait for the user to explicitly ask for durable guidance. If the right persistence scope is
@@ -96,22 +96,43 @@ commit and open pull requests. Topic-specific rules live in the pages linked und
   Discovering after the fact that an override was missed is itself a durable-instructions failure;
   strengthen or move the relevant override guidance before finishing the task.
 
-## Pre-Public Clean Breaks
+## Compatibility Discipline
 
-- Until the first public release, do not add or retain product migrations, legacy-shape support,
-  backward-compatibility shims, old-template fingerprints, old-private-state fallbacks, or automatic
-  upgrade code for private pre-release files, manifests, generated output, state, or release
-  destinations.
-- Implement and test only the canonical current contract. If private deployed files or generated
-  workflows are stale, update them manually once outside product code.
+- Treat the current documented contract as the default implementation target. When a change alters a
+  user-facing contract, prefer a documented breaking change unless the user, issue, specification, or
+  ADR explicitly chooses compatibility.
+- Every issue and pull request must record the compatibility decision: breaking change, compatible
+  change with temporary migration or legacy support, permanent compatibility contract, or no
+  user-facing contract change. For documentation, tests, or internal-only work, record that there is
+  no user-facing contract change instead of leaving the decision implicit. If the answer is not
+  clear, mark the issue or PR as needing a maintainer decision before implementation proceeds.
+- For a breaking change, write down what breaks and the migration path operators, contributors, or
+  users should follow. Do not add hidden compatibility fallbacks merely to soften the break.
+- Breaking changes must use both Conventional Commit markers in the message that reaches `main`: `!`
+  before the colon in the type or scope, and a `BREAKING CHANGE:` footer. The `!` makes the break
+  visible in commit-title-only views, and the footer lets release automation include the reason and
+  migration path in the generated changelog. For squash-merged PRs, put `!` in the PR title and put
+  the footer in the squash commit body. For rebase-merged or intentionally multi-commit PRs, put
+  both markers in the retained commit that owns the breaking change. The footer must explain why the
+  break is necessary, what changed, and how users or operators migrate. Commitlint rejects breaking
+  messages that have only one marker.
+- Do not add or retain product migrations, legacy-shape support, backward-compatibility shims,
+  old-template fingerprints, historical-state fallbacks, or automatic upgrade code unless an
+  explicit issue, specification change, or ADR defines the supported public contract.
+- When temporary migration or compatibility behavior is accepted, define how long it stays or the
+  exact condition that removes it. Track that cleanup in the issue, PR, ADR, or a dedicated follow-up
+  issue before merging the compatibility logic.
+- Keep accepted temporary compatibility logic narrow, named, and easy to find and delete later.
+  Cover it with tests that explain the old shape it preserves and, where practical, keep those tests
+  grouped so the cleanup can remove the code and tests together.
+- Permanent compatibility contracts, such as deliberately supported aliases, must be stated in
+  `SPEC.md` or an ADR rather than being left as incidental migration code.
 - Do not add compatibility tests whose only purpose is to prove behavior for private historical
   shapes. Test current behavior, current validation, and current failure modes instead.
-- Do not add generated-output version markers solely to support upgrades of private pre-release
-  generated files.
+- Do not add generated-output version markers solely to support uncommitted or unsupported generated
+  files.
 - Do not commit private paths, credentials, Trello board links, account names, deployment details, or
-  private backup contents when doing a one-time private edit.
-- After the first public release, compatibility decisions require an explicit issue, specification
-  change, or ADR that defines the supported public contract.
+  private backup contents when doing local recovery or one-off maintenance.
 
 ## Upstream Symphony Rebase
 
@@ -241,12 +262,15 @@ user explicitly chooses a spec carry-over.
   ```
 
   For a PR that may be rebase-merged or intentionally keeps multiple commits, also lint the commit
-  range:
+  range with the stricter message config:
 
   ```bash
-  pnpm dlx --package @commitlint/cli@21.0.1 --package @commitlint/config-conventional@21.0.1 commitlint --config commitlint.config.cjs --from origin/main --to HEAD --verbose
+  pnpm dlx --package @commitlint/cli@21.0.1 --package @commitlint/config-conventional@21.0.1 commitlint --config commitlint.message.config.cjs --from origin/main --to HEAD --verbose
   ```
 
+- For a breaking change, verify the exact PR title and squash commit body, or the retained commit
+  message, use both `!` and a `BREAKING CHANGE:` footer. The footer must include the reason and
+  migration path because it feeds the generated changelog.
 - When the user asks for a concrete repo change, commit and push the completed change unless they
   explicitly ask not to.
 - When a branch already has a pull request authored by the authenticated GitHub user, check before

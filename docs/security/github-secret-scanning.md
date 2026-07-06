@@ -3,10 +3,10 @@
 GitHub Secret Scanning and push protection are hosted repository settings. They are not represented
 by committed files in this repository.
 
-For this project, treat GitHub's built-in public-repository secret scanning and push protection as
-the hosted safety net. Do not rely on GitHub repository custom patterns for Symphony-specific private
-context. Custom patterns require GitHub Secret Protection or another supported paid plan, and the
-project does not expect to depend on that plan.
+For this project, treat GitHub's built-in secret scanning and push protection for public
+repositories as the hosted safety net. Do not rely on GitHub repository custom patterns for
+Symphony-specific private context. Custom patterns require GitHub Secret Protection or another
+supported paid plan, and the project does not expect to depend on that plan.
 
 ## Verify Hosted Settings
 

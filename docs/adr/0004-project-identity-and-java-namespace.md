@@ -22,7 +22,7 @@ How should the project name and Java namespace communicate that relationship cle
 * Avoid implying OpenAI ownership or employment through package names.
 * Preserve the connection to the Symphony concept from the adapted specification.
 * Keep technical identifiers suitable for Maven, repository names, and service names.
-* Keep future open-source publication straightforward.
+* Keep public distribution straightforward.
 * Avoid implying endorsement or sponsorship by OpenAI, Atlassian, or Trello.
 
 ## Considered Options

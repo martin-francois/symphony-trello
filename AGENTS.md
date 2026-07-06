@@ -31,10 +31,11 @@ When adding or editing tests, apply the AssertJ and test-duplication guidance in
 [Testing](docs/agents/testing.md), including avoiding assertion loops or assertion streams when
 AssertJ can express the expectation directly.
 
-Until the first public release, implement only the canonical current contract. Do not add or retain
-product migration, legacy-shape support, backward-compatibility shims, old-private-state fallbacks,
-or automatic upgrade code for private pre-release data; update the private deployment manually once.
-See [Pre-public clean breaks](docs/agents/default-workflow.md#pre-public-clean-breaks).
+Implement the current documented contract by default. When a change alters a user-facing contract,
+prefer an explicitly documented breaking change unless an issue, SPEC change, or ADR chooses
+compatibility; every issue and PR must record that choice. Compatibility or migration logic must
+state its removal condition and cleanup tracking. See
+[Compatibility discipline](docs/agents/default-workflow.md#compatibility-discipline).
 
 For normal code changes, run `./mvnw -q spotless:check verify` before finishing (use
 `spotless:apply` first when formatting changed). Static-analysis and lint gates must be clean; give

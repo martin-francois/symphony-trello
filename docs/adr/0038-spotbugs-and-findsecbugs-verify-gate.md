@@ -105,7 +105,7 @@ Rely on a hosted code-scanning dashboard or GitHub security feature.
 
 * Good, because hosted tools can aggregate findings and history.
 * Bad, because contributors and agents would not get the same local fix-and-rerun loop.
-* Bad, because private-repository hosted scanning may need extra setup or public availability.
+* Bad, because hosted scanning may need extra setup and does not provide the same local loop.
 
 ### Defer Bytecode and Security Analysis
 

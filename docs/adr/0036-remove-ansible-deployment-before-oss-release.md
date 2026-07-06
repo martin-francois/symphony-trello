@@ -42,8 +42,8 @@ support work for a deployment model that has no current user-demand signal.
 ## Decision Outcome
 
 Chosen option: "Remove Ansible before OSS release", because the repository could support installer
-and direct CLI paths without carrying another operational model before users ask for managed
-deployment automation. ADR 0062 later removed the manual systemd path as well.
+and direct CLI paths without carrying another operational model into a public release and making its
+later removal a breaking change. ADR 0062 later removed the manual systemd path as well.
 
 ### Consequences
 
