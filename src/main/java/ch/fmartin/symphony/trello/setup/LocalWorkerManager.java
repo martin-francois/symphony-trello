@@ -27,6 +27,10 @@ import java.util.function.Function;
 
 final class LocalWorkerManager {
     private static final int STARTUP_LOG_BYTE_LIMIT = 128 * 1024;
+    private static final String SYSTEMD_SERVICE_NAME = "symphony-trello.service";
+    private static final String LAUNCH_AGENT_LABEL = "ch.fmartin.symphony-trello";
+    private static final String WINDOWS_SCHEDULED_TASK_NAME = "Symphony for Trello";
+    private static final String WINDOWS_STARTUP_COMMAND_NAME = "Symphony for Trello.cmd";
     private static final Striped<Lock> PROCESS_LOCKS = Striped.lazyWeakLock(1024);
 
     private final Map<String, String> environment;
@@ -35,6 +39,7 @@ final class LocalWorkerManager {
     private final ManagedProcessPlatform platform;
     private final LocalLogTailer logTailer;
     private final TrelloCredentialPreflight credentialPreflight;
+    private final CommandRunner commandRunner;
 
     /**
      * Verifies resolved Trello credentials against the configured endpoint before a worker launch.
@@ -58,7 +63,8 @@ final class LocalWorkerManager {
                 new LocalHealthChecker(environment, workflowConfig),
                 platformForCurrentOs(),
                 new LocalLogTailer(),
-                defaultCredentialPreflight());
+                defaultCredentialPreflight(),
+                new ProcessCommandRunner());
     }
 
     LocalWorkerManager(
@@ -68,12 +74,31 @@ final class LocalWorkerManager {
             ManagedProcessPlatform platform,
             LocalLogTailer logTailer,
             TrelloCredentialPreflight credentialPreflight) {
+        this(
+                environment,
+                workflowConfig,
+                healthChecker,
+                platform,
+                logTailer,
+                credentialPreflight,
+                new ProcessCommandRunner());
+    }
+
+    LocalWorkerManager(
+            Map<String, String> environment,
+            WorkflowConfigEditor workflowConfig,
+            LocalHealthChecker healthChecker,
+            ManagedProcessPlatform platform,
+            LocalLogTailer logTailer,
+            TrelloCredentialPreflight credentialPreflight,
+            CommandRunner commandRunner) {
         this.environment = Map.copyOf(environment);
         this.workflowConfig = workflowConfig;
         this.healthChecker = healthChecker;
         this.platform = platform;
         this.logTailer = logTailer;
         this.credentialPreflight = credentialPreflight;
+        this.commandRunner = commandRunner;
     }
 
     private static TrelloCredentialPreflight defaultCredentialPreflight() {
@@ -833,6 +858,7 @@ final class LocalWorkerManager {
         List<ConnectedBoard> boards =
                 selectForStatus(manifest, request.board(), request.workflow(), paths.defaultEnvPath());
         boards = withDefaultEnvForExplicitWorkflow(paths, request.workflow(), boards);
+        out.println(serviceManagerStatus());
         if (boards.isEmpty()) {
             printPidFileStatus(paths, out);
             return 0;
@@ -876,6 +902,83 @@ final class LocalWorkerManager {
             }
         }
         return 0;
+    }
+
+    private String serviceManagerStatus() {
+        String osName = environment.getOrDefault("SYMPHONY_TRELLO_TEST_OS", System.getProperty("os.name", ""));
+        String normalized = osName.toLowerCase(Locale.ROOT);
+        Path home = Path.of(environment.getOrDefault("SYMPHONY_TRELLO_TEST_HOME", System.getProperty("user.home", "")));
+        if (normalized.contains("linux")) {
+            return linuxServiceManagerStatus(home);
+        }
+        if (normalized.contains("mac") || normalized.contains("darwin")) {
+            return macosServiceManagerStatus(home);
+        }
+        if (normalized.contains("windows")) {
+            return windowsServiceManagerStatus();
+        }
+        return "autostart unsupported platform=" + osName + " manual_recovery=\"symphony-trello start --all\"";
+    }
+
+    private String linuxServiceManagerStatus(Path home) {
+        Path servicePath = home.resolve(".config/systemd/user").resolve(SYSTEMD_SERVICE_NAME);
+        String installed = Files.isRegularFile(servicePath) ? "installed" : "not_installed";
+        String enabled = commandRunner
+                        .run("systemctl", "--user", "is-enabled", SYSTEMD_SERVICE_NAME)
+                        .success()
+                ? "enabled"
+                : "not_enabled_or_unavailable";
+        String active = commandRunner
+                        .run("systemctl", "--user", "is-active", SYSTEMD_SERVICE_NAME)
+                        .success()
+                ? "active"
+                : "not_active_or_unavailable";
+        return "autostart linux_user_systemd service=" + SYSTEMD_SERVICE_NAME + " unit=" + installed + " enabled="
+                + enabled + " active=" + active + " path=" + servicePath;
+    }
+
+    private String macosServiceManagerStatus(Path home) {
+        Path launchAgent = home.resolve("Library/LaunchAgents").resolve(LAUNCH_AGENT_LABEL + ".plist");
+        String installed = Files.isRegularFile(launchAgent) ? "installed" : "not_installed";
+        String loaded = commandRunner
+                        .run("launchctl", "print", "gui/" + currentUserId() + "/" + LAUNCH_AGENT_LABEL)
+                        .success()
+                ? "loaded"
+                : "not_loaded_or_unavailable";
+        return "autostart macos_launchagent label=" + LAUNCH_AGENT_LABEL + " plist=" + installed + " loaded=" + loaded
+                + " path=" + launchAgent;
+    }
+
+    private String windowsServiceManagerStatus() {
+        String task = commandRunner
+                        .run("schtasks.exe", "/Query", "/TN", WINDOWS_SCHEDULED_TASK_NAME)
+                        .success()
+                ? "installed"
+                : "not_installed_or_unavailable";
+        Path startupCommand = windowsStartupCommandPath();
+        String startup = Files.isRegularFile(startupCommand) ? "installed" : "not_installed";
+        return "autostart windows task=\"" + WINDOWS_SCHEDULED_TASK_NAME + "\" scheduled_task=" + task
+                + " startup_command=" + startup + " startup_path=" + startupCommand;
+    }
+
+    private String currentUserId() {
+        String configured = environment.get("SYMPHONY_TRELLO_TEST_UID");
+        if (configured != null && !configured.isBlank()) {
+            return configured;
+        }
+        return commandRunner.run("id", "-u").output().trim();
+    }
+
+    private Path windowsStartupCommandPath() {
+        String appData = environment.get("APPDATA");
+        Path profileRoot = appData == null || appData.isBlank()
+                ? Path.of(environment.getOrDefault(
+                                "USERPROFILE", environment.getOrDefault("SYMPHONY_TRELLO_TEST_HOME", "")))
+                        .resolve("AppData/Roaming")
+                : Path.of(appData);
+        return profileRoot
+                .resolve("Microsoft/Windows/Start Menu/Programs/Startup")
+                .resolve(WINDOWS_STARTUP_COMMAND_NAME);
     }
 
     private static Set<String> duplicateBoardNames(List<ConnectedBoard> boards) {

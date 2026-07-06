@@ -918,6 +918,97 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
+    void statusReportsLinuxUserSystemdAutostartState() throws Exception {
+        // given
+        Path home = tempDir.resolve("linux-home");
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(
+                tempDir, Map.of("SYMPHONY_TRELLO_TEST_OS", "Linux", "SYMPHONY_TRELLO_TEST_HOME", home.toString()));
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        Path service = home.resolve(".config/systemd/user/symphony-trello.service");
+        Files.createDirectories(service.getParent());
+        Files.writeString(service, "[Unit]\n", StandardCharsets.UTF_8);
+        when(fixture.commandRunner.run("systemctl", "--user", "is-enabled", "symphony-trello.service"))
+                .thenReturn(new CommandResult(0, "enabled\n"));
+        when(fixture.commandRunner.run("systemctl", "--user", "is-active", "symphony-trello.service"))
+                .thenReturn(new CommandResult(0, "active\n"));
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "autostart linux_user_systemd",
+                        "service=symphony-trello.service",
+                        "unit=installed",
+                        "enabled=enabled",
+                        "active=active",
+                        service.toString());
+    }
+
+    @Test
+    void statusReportsMacosLaunchAgentAutostartState() throws Exception {
+        // given
+        Path home = tempDir.resolve("mac-home");
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(
+                tempDir,
+                Map.of(
+                        "SYMPHONY_TRELLO_TEST_OS",
+                        "Darwin",
+                        "SYMPHONY_TRELLO_TEST_HOME",
+                        home.toString(),
+                        "SYMPHONY_TRELLO_TEST_UID",
+                        "501"));
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        Path plist = home.resolve("Library/LaunchAgents/ch.fmartin.symphony-trello.plist");
+        Files.createDirectories(plist.getParent());
+        Files.writeString(plist, "<plist/>\n", StandardCharsets.UTF_8);
+        when(fixture.commandRunner.run("launchctl", "print", "gui/501/ch.fmartin.symphony-trello"))
+                .thenReturn(new CommandResult(0, "loaded\n"));
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "autostart macos_launchagent",
+                        "label=ch.fmartin.symphony-trello",
+                        "plist=installed",
+                        "loaded=loaded",
+                        plist.toString());
+    }
+
+    @Test
+    void statusReportsWindowsScheduledTaskAndStartupFallbackState() throws Exception {
+        // given
+        Path appData = tempDir.resolve("windows-appdata");
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(
+                tempDir, Map.of("SYMPHONY_TRELLO_TEST_OS", "Windows 11", "APPDATA", appData.toString()));
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        Path startupCommand = appData.resolve("Microsoft/Windows/Start Menu/Programs/Startup/Symphony for Trello.cmd");
+        Files.createDirectories(startupCommand.getParent());
+        Files.writeString(startupCommand, "@echo off\n", StandardCharsets.UTF_8);
+        when(fixture.commandRunner.run("schtasks.exe", "/Query", "/TN", "Symphony for Trello"))
+                .thenReturn(new CommandResult(0, "TaskName: Symphony for Trello\n"));
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "autostart windows",
+                        "task=\"Symphony for Trello\"",
+                        "scheduled_task=installed",
+                        "startup_command=installed",
+                        startupCommand.toString());
+    }
+
+    @Test
     void stopEscapesEmbeddedQuotesInBoardNamesWhenSkippingStalePids() throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);

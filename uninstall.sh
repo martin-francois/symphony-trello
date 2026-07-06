@@ -30,6 +30,13 @@ REMOVE_WORKSPACES=false
 REMOVE_STATE=false
 PATH_BLOCK_START="# >>> Symphony for Trello PATH >>>"
 PATH_BLOCK_END="# <<< Symphony for Trello PATH <<<"
+SYSTEMD_USER_DIR="$HOME/.config/systemd/user"
+SYSTEMD_SERVICE_NAME="symphony-trello.service"
+SYSTEMD_SERVICE_PATH="$SYSTEMD_USER_DIR/$SYSTEMD_SERVICE_NAME"
+AUTOSTART_ENV_PATH="$HOME/.config/symphony-trello/autostart.env"
+LAUNCH_AGENT_DIR="$HOME/Library/LaunchAgents"
+LAUNCH_AGENT_LABEL="ch.fmartin.symphony-trello"
+LAUNCH_AGENT_PATH="$LAUNCH_AGENT_DIR/$LAUNCH_AGENT_LABEL.plist"
 
 usage() {
   cat <<'USAGE'
@@ -654,6 +661,50 @@ stop_managed_processes() {
   done
 }
 
+remove_user_systemd_service() {
+  if [[ ! -e "$SYSTEMD_SERVICE_PATH" && ! -L "$SYSTEMD_SERVICE_PATH" ]]; then
+    return
+  fi
+  if [[ "$DRY_RUN" == true ]]; then
+    echo "  WOULD disable user systemd service: $SYSTEMD_SERVICE_NAME"
+    echo "  WOULD remove user systemd service: $SYSTEMD_SERVICE_PATH"
+    return
+  fi
+  if command -v systemctl >/dev/null 2>&1; then
+    echo "  STOP  user systemd service: $SYSTEMD_SERVICE_NAME"
+    systemctl --user disable --now "$SYSTEMD_SERVICE_NAME" >/dev/null 2>&1 || true
+    systemctl --user daemon-reload >/dev/null 2>&1 || true
+  fi
+  remove_path "$SYSTEMD_SERVICE_PATH"
+}
+
+remove_launch_agent() {
+  if [[ ! -e "$LAUNCH_AGENT_PATH" && ! -L "$LAUNCH_AGENT_PATH" ]]; then
+    return
+  fi
+  if [[ "$DRY_RUN" == true ]]; then
+    echo "  WOULD disable macOS LaunchAgent: $LAUNCH_AGENT_LABEL"
+    echo "  WOULD remove macOS LaunchAgent: $LAUNCH_AGENT_PATH"
+    return
+  fi
+  if command -v launchctl >/dev/null 2>&1; then
+    echo "  STOP  macOS LaunchAgent: $LAUNCH_AGENT_LABEL"
+    launchctl bootout "gui/$(id -u)" "$LAUNCH_AGENT_PATH" >/dev/null 2>&1 || true
+  fi
+  remove_path "$LAUNCH_AGENT_PATH"
+}
+
+remove_autostart_environment_file() {
+  if [[ ! -e "$AUTOSTART_ENV_PATH" && ! -L "$AUTOSTART_ENV_PATH" ]]; then
+    return
+  fi
+  if [[ "$DRY_RUN" == true ]]; then
+    echo "  WOULD remove autostart environment snapshot: $AUTOSTART_ENV_PATH"
+    return
+  fi
+  remove_path "$AUTOSTART_ENV_PATH"
+}
+
 remove_managed_codex_artifacts() {
   local codex_command="$BIN_DIR/codex"
   if [[ -L "$codex_command" ]]; then
@@ -686,6 +737,18 @@ print_managed_codex_removal_plan() {
   fi
 }
 
+print_user_systemd_removal_plan() {
+  if [[ -e "$SYSTEMD_SERVICE_PATH" || -L "$SYSTEMD_SERVICE_PATH" ]]; then
+    echo "  USER SERVICE    $SYSTEMD_SERVICE_PATH"
+  fi
+}
+
+print_launch_agent_removal_plan() {
+  if [[ -e "$LAUNCH_AGENT_PATH" || -L "$LAUNCH_AGENT_PATH" ]]; then
+    echo "  LAUNCH AGENT    $LAUNCH_AGENT_PATH"
+  fi
+}
+
 echo "Symphony for Trello uninstall"
 echo
 echo "App checkout: $APP_DIR"
@@ -698,6 +761,8 @@ fi
 echo "Will remove if present:"
 echo "  APP FILES       $APP_DIR"
 echo "  CLI EXECUTABLE  $BIN_DIR/symphony-trello"
+print_user_systemd_removal_plan
+print_launch_agent_removal_plan
 print_managed_codex_removal_plan
 echo "  WORKERS         Managed Symphony workers are stopped before removal"
 if [[ "$REMOVE_CONFIG" == true ]]; then
@@ -731,6 +796,9 @@ if confirm "Remove installer-managed app files and CLI executable?" "$YES"; then
   fi
   assert_app_removal_preserves_current_data
   stop_managed_processes
+  remove_user_systemd_service
+  remove_launch_agent
+  remove_autostart_environment_file
   remove_path "$BIN_DIR/symphony-trello"
   remove_managed_codex_artifacts
   remove_path "$APP_DIR"

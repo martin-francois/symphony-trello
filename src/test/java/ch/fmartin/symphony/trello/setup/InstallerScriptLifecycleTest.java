@@ -37,16 +37,23 @@ final class InstallerScriptLifecycleTest {
         Path uninstallScript = Path.of("uninstall.sh").toAbsolutePath();
         Path sourceRepository = createSourceRepository(temporaryDirectory);
         Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path homeDirectory = temporaryDirectory.resolve("installer-home");
         Path symphonyHome = temporaryDirectory.resolve("home");
         Path installPrefix = symphonyHome.resolve("app");
         Path configDirectory = symphonyHome.resolve("config");
         Path workspaceRoot = symphonyHome.resolve("workspaces");
         Path binDirectory = temporaryDirectory.resolve("bin");
         Path stateHome = symphonyHome.resolve("state");
+        Path userService = homeDirectory.resolve(".config/systemd/user/symphony-trello.service");
+        Path autostartEnvironment = homeDirectory.resolve(".config/symphony-trello/autostart.env");
         Path fakeLog = temporaryDirectory.resolve("fake-tools.log");
         Map<String, String> environment = Map.of(
                 "PATH",
                 fakeBin + System.getProperty("path.separator") + System.getenv("PATH"),
+                "HOME",
+                homeDirectory.toString(),
+                "USER",
+                "symphony-test",
                 "SYMPHONY_TRELLO_REPO_URL",
                 sourceRepository.toUri().toString(),
                 "SYMPHONY_TRELLO_REF",
@@ -56,13 +63,19 @@ final class InstallerScriptLifecycleTest {
                 "SYMPHONY_FAKE_LOG",
                 fakeLog.toString(),
                 "SYMPHONY_FAKE_SLOW_TERM",
-                "true");
+                "true",
+                "TRELLO_API_KEY",
+                "runtime-key-100%",
+                "TRELLO_API_TOKEN",
+                "runtime-token");
 
         // when
         ProcessResult install = runWithPseudoTerminal(
                 environment,
                 "n\napi-key\napi-token\nLifecycle Board\n",
                 "bash " + shellQuote(installScript.toString()) + " --bin-dir " + shellQuote(binDirectory.toString()));
+        String userServiceContentAfterInstall = Files.readString(userService, StandardCharsets.UTF_8);
+        String autostartEnvironmentAfterInstall = Files.readString(autostartEnvironment, StandardCharsets.UTF_8);
         Path installedCommand = binDirectory.resolve("symphony-trello");
         Path callerDirectory = temporaryDirectory.resolve("posix caller");
         Files.createDirectories(callerDirectory);
@@ -162,6 +175,8 @@ final class InstallerScriptLifecycleTest {
                 "--workflow",
                 configDirectory.resolve("WORKFLOW.lifecycle-board.md").toString());
         ProcessResult restart = run(environment, installedCommand.toString(), "start");
+        int fakeLogLengthBeforeUninstall =
+                Files.readString(fakeLog, StandardCharsets.UTF_8).length();
         Path restartedPidFile = singleFile(stateHome, ".pid");
         long restartedManagedPid = Long.parseLong(
                 Files.readString(restartedPidFile, StandardCharsets.UTF_8).trim());
@@ -176,8 +191,31 @@ final class InstallerScriptLifecycleTest {
                         "Can this machine open a browser for Codex login?",
                         "RUN  codex login --device-auth",
                         "Starting setup...",
-                        "Command installed")
+                        "Command installed",
+                        "User systemd service installed: " + userService,
+                        "User systemd service enabled: symphony-trello.service",
+                        "User lingering enabled for reboot autostart.")
                 .doesNotContain("Device auth");
+        assertThat(userServiceContentAfterInstall)
+                .contains(
+                        "Description=Symphony for Trello managed local workers",
+                        "Type=oneshot",
+                        "RemainAfterExit=yes",
+                        "Environment=\"PATH=",
+                        "EnvironmentFile=-%h/.config/symphony-trello/autostart.env",
+                        "symphony-trello\" start --all",
+                        "symphony-trello\" stop",
+                        "Restart=on-failure",
+                        "RestartSec=10s",
+                        "StartLimitBurst=12",
+                        "StartLimitIntervalSec=300");
+        assertThat(autostartEnvironmentAfterInstall)
+                .contains(
+                        "Installer-managed Symphony for Trello autostart environment.",
+                        "SYMPHONY_HOME=\"" + symphonyHome + "\"",
+                        "TRELLO_API_KEY=\"runtime-key-100%\"",
+                        "TRELLO_API_TOKEN=\"runtime-token\"")
+                .doesNotContain("\nHOME=", "\nUSER=");
         assertThat(picocliHelpResults).allSatisfy(result -> {
             assertThat(result.exitCode()).as(result.output()).isZero();
             assertThat(result.output()).containsAnyOf("Usage: symphony-trello", "symphony-trello test");
@@ -218,7 +256,16 @@ final class InstallerScriptLifecycleTest {
         assertThat(restart.exitCode()).isZero();
         assertThat(restart.output()).contains("Started Symphony for Trello");
         assertThat(uninstall.exitCode()).isZero();
-        assertThat(uninstall.output()).contains("STOP", "REMOVE  " + binDirectory.resolve("symphony-trello"));
+        assertThat(uninstall.output())
+                .contains("STOP", "REMOVE  " + binDirectory.resolve("symphony-trello"), "REMOVE  " + userService);
+        String fakeLogAfterUninstall = Files.readString(fakeLog, StandardCharsets.UTF_8);
+        String fakeLogDuringUninstall = fakeLogAfterUninstall.substring(fakeLogLengthBeforeUninstall);
+        assertThat(fakeLogDuringUninstall)
+                .contains("jar-stopped", "systemctl --user disable --now symphony-trello.service");
+        assertThat(fakeLogDuringUninstall.indexOf("jar-stopped"))
+                .isLessThan(fakeLogDuringUninstall.indexOf("systemctl --user disable --now symphony-trello.service"));
+        assertThat(userService).doesNotExist();
+        assertThat(autostartEnvironment).doesNotExist();
         assertThat(processStopsWithin(restartedManagedPid, 5)).isTrue();
         assertThat(installPrefix).doesNotExist();
         assertThat(binDirectory.resolve("symphony-trello")).doesNotExist();
@@ -255,6 +302,12 @@ final class InstallerScriptLifecycleTest {
                 .contains(
                         "codex login --device-auth",
                         "setup-local key=api-key token=api-token board=Lifecycle Board",
+                        "systemctl --user show-environment",
+                        "systemctl --user daemon-reload",
+                        "systemctl --user enable symphony-trello.service",
+                        "systemctl --user restart symphony-trello.service",
+                        "loginctl enable-linger",
+                        "systemctl --user disable --now symphony-trello.service",
                         "setup-cli",
                         "setup-cli cwd=" + callerDirectory,
                         "-Dsymphony.trello.config.dir=" + configDirectory,

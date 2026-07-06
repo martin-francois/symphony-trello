@@ -3823,6 +3823,8 @@ final class InstallerScriptTest {
 
         // when
         var commandNames = List.of("setup-local", "start", "stop", "status", "logs");
+        String powershellAppRemovalBlock = powershellUninstaller.substring(
+                powershellUninstaller.indexOf("\n  Assert-AppRemovalPreservesCurrentData\n"));
 
         // then
         assertThat(commandNames)
@@ -3856,6 +3858,16 @@ final class InstallerScriptTest {
                         "Stopping managed workers before update",
                         "Restarting managed workers after update",
                         "start --all",
+                        "systemctl --user show-environment",
+                        "symphony-trello.service",
+                        "autostart.env",
+                        "EnvironmentFile=-",
+                        "loginctl enable-linger",
+                        "Library/LaunchAgents",
+                        "ch.fmartin.symphony-trello",
+                        "launchctl bootstrap",
+                        "EnvironmentVariables",
+                        "autostart_environment_name",
                         "pid_command_line",
                         "is_live_managed_pid",
                         "-Dsymphony.trello.managed.app_home",
@@ -3895,7 +3907,20 @@ final class InstallerScriptTest {
                         "Stopping managed workers before update",
                         "Restarting managed workers after update",
                         "start --all",
+                        "Scheduled Task",
+                        "Register-ScheduledTask",
+                        "New-ScheduledTaskAction",
+                        "Start-ScheduledTask",
+                        "Protect-PrivateFile",
+                        "SetAccessRuleProtection($true, $false)",
+                        "symphony-trello-autostart.ps1",
+                        "autostart-env.ps1",
+                        "Test-AutostartEnvironmentName",
+                        "Scheduled Task was installed but could not be started immediately",
+                        "if (Install-StartupFolderCommand) {",
+                        "Microsoft\\Windows\\Start Menu\\Programs\\Startup",
                         "Invoke-Step \"$BinDir\\symphony-trello.ps1 setup-local\"",
+                        "Invoke-Step \"$BinDir\\symphony-trello.ps1 start --all\"",
                         "`$InstalledConfigDir",
                         "`$InstalledWorkspaceRoot",
                         "`$InstalledStateHome",
@@ -3936,6 +3961,10 @@ final class InstallerScriptTest {
                         "wait_for_exit",
                         "absolutize_path",
                         "SKIP  stale pid does not belong to this install: $(worker_label \"$pid_file\")",
+                        "symphony-trello.service",
+                        "autostart.env",
+                        "launchctl bootout",
+                        "ch.fmartin.symphony-trello",
                         "--remove-config",
                         "--remove-workspaces",
                         "--remove-state",
@@ -3959,6 +3988,11 @@ final class InstallerScriptTest {
                         "YesLocalData",
                         ".symphony-trello-install",
                         "SKIP  stale pid does not belong to this install: $(Get-WorkerLabel $pidFile.BaseName)",
+                        "Remove-WindowsAutostart",
+                        "schtasks.exe /Delete",
+                        "Microsoft\\Windows\\Start Menu\\Programs\\Startup",
+                        "symphony-trello-autostart.ps1",
+                        "autostart-env.ps1",
                         "Stop-AndWaitManagedProcess",
                         "Stop-Process",
                         "Wait-Process",
@@ -3978,6 +4012,9 @@ final class InstallerScriptTest {
                         "Remove-ManagedPath \"$BinDir\\codex.exe\"",
                         "Remove-ManagedPath \"$BinDir\\codex.cmd\"",
                         "Remove-ManagedPath \"$BinDir\\codex.ps1\"");
+        assertThat(powershellAppRemovalBlock).contains("Stop-ManagedProcesses", "Remove-WindowsAutostart");
+        assertThat(powershellAppRemovalBlock.indexOf("Stop-ManagedProcesses"))
+                .isLessThan(powershellAppRemovalBlock.indexOf("Remove-WindowsAutostart"));
     }
 
     @Test

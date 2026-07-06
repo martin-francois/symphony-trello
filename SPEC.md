@@ -3754,8 +3754,17 @@ When this profile is used:
   explicit skip option is used
 - the local CLI invoked through the managed-run wrapper MUST provide status, logs, start, and stop
   commands through Java lifecycle services
-- OpenClaw-style service-manager autostart across logout and reboot is a planned installer-managed
-  lifecycle capability tracked by issue #523, not a manual deployment runbook requirement.
+- on Linux hosts with user systemd, setup SHOULD register an installer-managed user service that
+  starts connected boards with `start --all` on login or reboot when the host allows user lingering
+- on macOS hosts, setup SHOULD register an installer-managed per-user LaunchAgent that starts
+  connected boards with `start --all` when the user session loads
+- on native Windows hosts, setup SHOULD register an installer-managed per-user Scheduled Task that
+  starts connected boards with `start --all` at user logon, and MAY fall back to a per-user
+  Startup-folder command when task creation is denied
+- installer-managed autostart SHOULD preserve prefixed runtime environment variables needed by
+  connected workflows without copying them into the user's `.env` credential file
+- hosts without supported service-manager autostart MUST keep `start --all` as the manual recovery
+  path after restart or login
 - local uninstall MUST stop managed processes before deleting installer-managed files
 - local uninstall MUST preserve local credentials, workflows, connected-board metadata, workspaces,
   state/logs, Codex auth, GitHub auth, and Trello boards by default

@@ -39,6 +39,13 @@ CODEX_NPM_PREFIX="$SYMPHONY_HOME/npm"
 APT_UPDATED=false
 PATH_BLOCK_START="# >>> Symphony for Trello PATH >>>"
 PATH_BLOCK_END="# <<< Symphony for Trello PATH <<<"
+SYSTEMD_USER_DIR="$HOME/.config/systemd/user"
+SYSTEMD_SERVICE_NAME="symphony-trello.service"
+SYSTEMD_SERVICE_PATH="$SYSTEMD_USER_DIR/$SYSTEMD_SERVICE_NAME"
+AUTOSTART_ENV_PATH="$HOME/.config/symphony-trello/autostart.env"
+LAUNCH_AGENT_DIR="$HOME/Library/LaunchAgents"
+LAUNCH_AGENT_LABEL="ch.fmartin.symphony-trello"
+LAUNCH_AGENT_PATH="$LAUNCH_AGENT_DIR/$LAUNCH_AGENT_LABEL.plist"
 
 usage() {
   cat <<USAGE
@@ -754,6 +761,82 @@ shell_literal() {
   printf "'%s'" "$value"
 }
 
+xml_escape() {
+  printf '%s' "$1" |
+    sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g' -e "s/'/\&apos;/g"
+}
+
+systemd_quote() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  value="${value//%/%%}"
+  printf '"%s"' "$value"
+}
+
+environment_file_quote() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  printf '"%s"' "$value"
+}
+
+autostart_environment_name() {
+  local name="$1"
+  [[ "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || return 1
+  case "$name" in
+  TRELLO_* | SYMPHONY_* | CODEX_* | GITHUB_* | GH_* | OPENAI_* | ANTHROPIC_* | QUARKUS_*) return 0 ;;
+  *) return 1 ;;
+  esac
+}
+
+has_control_character() {
+  local value="$1"
+  case "$value" in
+  *$'\n'*) return 0 ;;
+  esac
+  printf '%s' "$value" | LC_ALL=C grep -q '[[:cntrl:]]'
+}
+
+write_autostart_environment_file() {
+  local name parent temp value
+  if [[ "$DRY_RUN" == true ]]; then
+    echo "  WOULD write autostart environment snapshot: $AUTOSTART_ENV_PATH"
+    return
+  fi
+  parent="$(dirname "$AUTOSTART_ENV_PATH")"
+  run mkdir -p "$parent"
+  temp="$(mktemp "$parent/.autostart.env.XXXXXX")"
+  chmod 600 "$temp"
+  {
+    printf '# Installer-managed Symphony for Trello autostart environment.\n'
+    printf '# Contains only prefixed runtime variables from the installer session.\n'
+    while IFS= read -r name; do
+      autostart_environment_name "$name" || continue
+      value="${!name-}"
+      [[ -n "$value" ]] || continue
+      has_control_character "$value" && continue
+      printf '%s=%s\n' "$name" "$(environment_file_quote "$value")"
+    done < <(compgen -e | LC_ALL=C sort)
+  } >"$temp"
+  mv "$temp" "$AUTOSTART_ENV_PATH"
+  chmod 600 "$AUTOSTART_ENV_PATH"
+}
+
+xml_autostart_environment_entries() {
+  local name value
+  printf '    <key>PATH</key>\n'
+  printf '    <string>%s</string>\n' "$(xml_escape "$PATH")"
+  while IFS= read -r name; do
+    autostart_environment_name "$name" || continue
+    value="${!name-}"
+    [[ -n "$value" ]] || continue
+    has_control_character "$value" && continue
+    printf '    <key>%s</key>\n' "$(xml_escape "$name")"
+    printf '    <string>%s</string>\n' "$(xml_escape "$value")"
+  done < <(compgen -e | LC_ALL=C sort)
+}
+
 path_contains() {
   local search_path="${2:-$PATH}"
   case ":$search_path:" in
@@ -936,6 +1019,159 @@ remove_stale_managed_pid_files() {
       rm -f "$pid_file"
     fi
   done < <(find "$STATE_HOME" -maxdepth 1 -type f -name '*.pid' -print0)
+}
+
+user_systemd_available() {
+  prepare_user_systemd_environment
+  [[ "$OS_NAME" == "Linux" ]] &&
+    need systemctl &&
+    systemctl --user show-environment >/dev/null 2>&1
+}
+
+prepare_user_systemd_environment() {
+  local runtime_dir
+  if { [[ -z "${XDG_RUNTIME_DIR:-}" ]] || [[ ! -d "${XDG_RUNTIME_DIR:-}" ]]; } && need id; then
+    runtime_dir="/run/user/$(id -u)"
+    if [[ -d "$runtime_dir" ]]; then
+      export XDG_RUNTIME_DIR="$runtime_dir"
+    fi
+  fi
+  if [[ -z "${DBUS_SESSION_BUS_ADDRESS:-}" && -S "${XDG_RUNTIME_DIR:-}/bus" ]]; then
+    export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+  fi
+}
+
+write_user_systemd_service() {
+  local command_unit path_unit
+  command_unit="$(systemd_quote "$BIN_DIR/symphony-trello")"
+  path_unit="$(systemd_quote "PATH=$PATH")"
+  run mkdir -p "$SYSTEMD_USER_DIR"
+  if [[ "$DRY_RUN" == true ]]; then
+    echo "  WOULD write user systemd service: $SYSTEMD_SERVICE_PATH"
+    return
+  fi
+  cat >"$SYSTEMD_SERVICE_PATH" <<EOF
+[Unit]
+Description=Symphony for Trello managed local workers
+Documentation=https://github.com/martin-francois/symphony-trello
+StartLimitBurst=12
+StartLimitIntervalSec=300
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Environment=$path_unit
+EnvironmentFile=-%h/.config/symphony-trello/autostart.env
+ExecStart=$command_unit start --all
+ExecStop=$command_unit stop
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=default.target
+EOF
+  echo "  OK  User systemd service installed: $SYSTEMD_SERVICE_PATH"
+}
+
+enable_user_systemd_service() {
+  write_autostart_environment_file
+  write_user_systemd_service
+  if [[ "$DRY_RUN" == true ]]; then
+    echo "  WOULD enable user systemd service: $SYSTEMD_SERVICE_NAME"
+    echo "  WOULD start managed workers through user systemd"
+    return 0
+  fi
+  if systemctl --user daemon-reload >/dev/null 2>&1 &&
+    systemctl --user enable "$SYSTEMD_SERVICE_NAME" >/dev/null 2>&1 &&
+    systemctl --user restart "$SYSTEMD_SERVICE_NAME" >/dev/null 2>&1; then
+    echo "  OK  User systemd service enabled: $SYSTEMD_SERVICE_NAME"
+    if need loginctl && [[ -n "${USER:-}" ]]; then
+      if loginctl enable-linger "$USER" >/dev/null 2>&1; then
+        echo "  OK  User lingering enabled for reboot autostart."
+      else
+        echo "  NOTE  Could not enable user lingering. The service will start when the user session starts."
+      fi
+    fi
+    return 0
+  fi
+  echo "  NOTE  Could not enable the user systemd service. Falling back to direct start."
+  return 1
+}
+
+write_launch_agent() {
+  write_autostart_environment_file
+  run mkdir -p "$LAUNCH_AGENT_DIR"
+  if [[ "$DRY_RUN" == true ]]; then
+    echo "  WOULD write macOS LaunchAgent: $LAUNCH_AGENT_PATH"
+    return
+  fi
+  : >"$LAUNCH_AGENT_PATH"
+  chmod 600 "$LAUNCH_AGENT_PATH"
+  cat >"$LAUNCH_AGENT_PATH" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>$(xml_escape "$LAUNCH_AGENT_LABEL")</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>$(xml_escape "$BIN_DIR/symphony-trello")</string>
+    <string>start</string>
+    <string>--all</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+$(xml_autostart_environment_entries)
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <false/>
+  <key>WorkingDirectory</key>
+  <string>$(xml_escape "$HOME")</string>
+  <key>StandardOutPath</key>
+  <string>$(xml_escape "$STATE_HOME/launchagent.out.log")</string>
+  <key>StandardErrorPath</key>
+  <string>$(xml_escape "$STATE_HOME/launchagent.err.log")</string>
+</dict>
+</plist>
+EOF
+  echo "  OK  macOS LaunchAgent installed: $LAUNCH_AGENT_PATH"
+}
+
+enable_launch_agent() {
+  write_launch_agent
+  if [[ "$DRY_RUN" == true ]]; then
+    echo "  WOULD enable macOS LaunchAgent: $LAUNCH_AGENT_LABEL"
+    echo "  WOULD start managed workers through launchd"
+    return 0
+  fi
+  if need launchctl; then
+    launchctl bootout "gui/$(id -u)" "$LAUNCH_AGENT_PATH" >/dev/null 2>&1 || true
+    if launchctl bootstrap "gui/$(id -u)" "$LAUNCH_AGENT_PATH" >/dev/null 2>&1 &&
+      launchctl enable "gui/$(id -u)/$LAUNCH_AGENT_LABEL" >/dev/null 2>&1; then
+      echo "  OK  macOS LaunchAgent enabled: $LAUNCH_AGENT_LABEL"
+      return 0
+    fi
+  fi
+  echo "  NOTE  Could not enable the macOS LaunchAgent. Falling back to direct start."
+  return 1
+}
+
+start_managed_workers() {
+  echo "Starting managed workers..."
+  if user_systemd_available && enable_user_systemd_service; then
+    return
+  fi
+  if [[ "$OS_NAME" == "Darwin" ]] && enable_launch_agent; then
+    return
+  fi
+  if [[ "$OS_NAME" == "Linux" ]] && need systemctl; then
+    echo "  NOTE  User systemd is unavailable in this session. On headless Linux hosts, enable lingering and make sure the user systemd manager is available."
+  fi
+  echo "  NOTE  Autostart service was not configured. Use '$BIN_DIR/symphony-trello start --all' after reboot or login."
+  run "$BIN_DIR/symphony-trello" start --all
 }
 
 platform_name() {
@@ -1771,11 +2007,9 @@ if [[ "$NO_ONBOARD" == false ]]; then
   fi
   echo "Starting setup..."
   run_interactive "$BIN_DIR/symphony-trello" setup-local
-  if [[ "$RESTART_MANAGED_WORKERS" == true ]]; then
-    run "$BIN_DIR/symphony-trello" start --all
-  fi
+  start_managed_workers
 elif [[ "$RESTART_MANAGED_WORKERS" == true ]]; then
   echo
   echo "Restarting managed workers after update..."
-  run "$BIN_DIR/symphony-trello" start --all
+  start_managed_workers
 fi

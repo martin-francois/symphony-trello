@@ -62,8 +62,16 @@ worker is the public operation path and the manual systemd guide is a separate s
 is easy to let drift.
 
 This is not a decision to give up service-manager supervision. OpenClaw-style managed autostart
-across logout and reboot remains part of the desired installer/onboarding model and is tracked by
-[issue #523](https://github.com/martin-francois/symphony-trello/issues/523).
+belongs in the installer/onboarding path, not in a manual deployment guide. Issue
+[#523](https://github.com/martin-francois/symphony-trello/issues/523) adds installer-managed Linux
+user systemd, macOS LaunchAgent, and native Windows Scheduled Task autostart while keeping
+`start --all` as the fallback on hosts without that support.
+
+When setup used real environment variables rather than saved `.env` credentials, installer-managed
+autostart needs the same runtime values after logout or reboot. The installer therefore writes a
+private autostart environment snapshot containing only Symphony/Trello/Codex/GitHub/OpenAI/
+Anthropic/Quarkus-prefixed variables from the installer session. This keeps `.env` semantics
+unchanged while making the service-manager path restartable.
 
 The repository removes `docs/deployment.md` and `deploy/systemd/symphony-trello@.service`. README no
 longer has a separate "Production Deployment" section. `SPEC.md` no longer defines manual systemd as
@@ -80,8 +88,9 @@ and workflow settings such as `--add-path`, `codex.additional_writable_roots`, a
   manager if they accept ownership of that service configuration.
 * Bad, because the repository no longer provides copy-paste systemd commands for multi-workflow
   server hosts.
-* Bad, because installer-managed logout and reboot autostart remains a product gap until
-  [issue #523](https://github.com/martin-francois/symphony-trello/issues/523) is implemented.
+* Neutral, because installer-managed autostart is intentionally limited to service-manager support
+  that the installer can configure without a second manual deployment path; other hosts use the
+  existing `start --all` lifecycle command after restart or login.
 
 ### Confirmation
 
