@@ -89,6 +89,9 @@ auditing that may create issues lives in
   repository, when that action is already the clear issue scope. Whenever adding `needs human review`,
   also add `not ready` and immediately add an issue comment that states exactly what human decision,
   external action, or missing context is needed so the labels can be removed in a later sweep.
+  Before passing `needs human review` to `gh issue create`, re-read the issue body: if it already
+  tells an implementer to investigate the external system, choose a supported path, or document that
+  no supported path exists, the issue is actionable and must not get the label.
 - During issue triage, keep labels aligned with implementability. Use `not ready` when the issue is an
   idea/research note, lacks enough accepted scope to implement, or needs a prior non-dependency
   decision/action before work can start. Use `idea` only for speculative product or design options
