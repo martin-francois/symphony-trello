@@ -454,17 +454,24 @@ not a deterministic handoff-only protocol check.
 ## Live Deployment Troubleshooting Loop
 
 Use this loop when a real deployed workflow is already running and you need to prove whether the
-deployment is healthy. Checking only `systemctl` or `/api/v1/state` is not enough: Codex can add a
-Trello blocker comment while the service still looks active.
+deployment is healthy. Checking only the managed process status or `/api/v1/state` is not enough:
+Codex can add a Trello blocker comment while the service still looks active.
 
 Set `CARD_ID` to the card currently being processed and `EXPECTED_LIST` to the handoff list for
 that workflow, usually `Human Review` on recommended boards.
 
 ```bash
-if [ -z "${TRELLO_API_KEY:-}" ] || [ -z "${TRELLO_API_TOKEN:-}" ]; then
-  TRELLO_API_KEY="$(tr -d '\r\n' </etc/symphony-trello/secrets/trello-api-key)"
-  TRELLO_API_TOKEN="$(tr -d '\r\n' </etc/symphony-trello/secrets/trello-api-token)"
+if [ -f .env ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . ./.env
+  set +a
 fi
+
+test -n "${TRELLO_API_KEY:-}" && test -n "${TRELLO_API_TOKEN:-}" || {
+  echo "Set TRELLO_API_KEY and TRELLO_API_TOKEN before running this check." >&2
+  exit 2
+}
 
 CARD_ID="replace-with-card-id"
 EXPECTED_LIST="Human Review"
@@ -510,9 +517,9 @@ echo "Live deployment did not finish before the timeout." >&2
 exit 1
 ```
 
-Use a fresh `CUTOFF` after every deployment restart or systemd hardening change. That prevents old
-blocker comments from failing a fixed run, while still catching new comments created after the
-current verification started.
+Use a fresh `CUTOFF` after every deployment restart or host-access setting change. That prevents old
+blocker comments from failing a fixed run, while still catching new comments created after the current
+verification started.
 
 The deployment is healthy only when all of these are true:
 
@@ -521,14 +528,9 @@ The deployment is healthy only when all of these are true:
 3. The card moved out of the active list into the expected handoff list.
 4. The latest new Trello comments are successful handoff notes, not blocker/auth/sandbox comments.
 
-If new comments mention `bwrap: Can't read /proc/sys/kernel/overflowuid`, the systemd unit is hiding
-`/proc/sys`; do not use `ProcSubset=pid` for this service. If new comments mention
-`bwrap: loopback: Failed to create NETLINK_ROUTE socket`, the unit is blocking the address family
-Codex's sandbox needs; `RestrictAddressFamilies` must include `AF_NETLINK`.
-
 ### Regression Scenario: Deployed Project Root Access
 
-Use this when changing systemd hardening or manual deployment access.
+Use this when changing deployed host-path access.
 
 Use disposable external projects for this scenario. Do not reuse a private checkout. A suitable
 fixture is a temporary directory outside the Symphony workspace root with this Dockerfile:
@@ -544,20 +546,20 @@ Put a unique run id in `expected.txt`. The 30-second build step gives enough tim
 Trello moves the card from `Ready for Codex` to `In Progress` before the final handoff.
 
 1. Deploy with no extra allowed host paths.
-2. Create a Trello card that asks Codex to inspect a disposable host path outside
-   `/var/lib/symphony-trello`.
+2. Create a Trello card that asks Codex to inspect a disposable host path outside the managed
+   workspace root.
 3. Verify the card moves to the blocked handoff list and the new Trello comment explains that the
    requested path is inaccessible because undeclared host paths are blocked by default, avoids
    absolute host paths and per-card workspace locations, and says deployment access can be relaxed with
    allowed host paths.
-4. Deploy again with that disposable path in the manual systemd `BindPaths`, `ReadWritePaths`, and
-   `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS` settings.
+4. Deploy again with that disposable path configured through setup or workflow host-path access, such
+   as `--add-path`, `codex.additional_writable_roots`, or
+   `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS`.
 5. Create a fresh card that asks Codex to read and write a harmless marker file in the allowed path.
 6. Verify the card moves to the review handoff list, the marker file changed as requested, and
    `/api/v1/state` drains to zero running and retrying entries.
-7. If the allowed path is a parent directory and Codex reports a sandbox error
-   for the parent, rerun with `SYMPHONY_CODEX_DANGER_FULL_ACCESS=true` while keeping the systemd
-   host paths narrow.
+7. If the allowed path is a parent directory and Codex reports a sandbox error for the parent, rerun
+   with `SYMPHONY_CODEX_DANGER_FULL_ACCESS=true` only for a trusted disposable workflow.
 8. Deploy again with a different allowed path and create a card for the previous path. It should
    block again, proving the allowlist did not become broad host access.
 
@@ -568,12 +570,13 @@ in `In Progress`.
 
 ### Regression Scenario: Repository URL Or Read-Only Host Checkout
 
-Use this when changing generated workflow repository checkout instructions or deployment path access.
+Use this when changing generated workflow repository checkout instructions or deployed host-path
+access.
 Use a disposable repository, not a private project checkout.
 
 1. Prepare a readable local repository checkout outside the Symphony workspace root and make it
    read-only for the service user.
-2. Deploy with the parent directory in the manual systemd host path settings.
+2. Deploy with the parent directory configured as an allowed host path.
 3. Create one Trello card whose title names only the repository URL and asks for a small committed
    code or documentation change.
 4. Create another Trello card whose title names the read-only local checkout path and asks for the
@@ -626,7 +629,7 @@ assertion must inspect every commit on the resulting PR through GitHub, not only
 commit.
 
 1. Create a temporary recommended Trello board with the fast path command and deploy that workflow
-   with the manual systemd guide.
+   with the managed local worker.
 2. In a disposable repository or private test repository, create a temporary non-default branch with
    one harmless commit authored as `Codex <codex@openai.com>`, push it, and open a temporary PR.
 3. Create a Trello card in `Ready for Codex` that asks Codex to continue that existing PR and make
@@ -678,7 +681,7 @@ preparation instead of relying on the agent prompt alone.
 Observed on 2026-05-05 against a real Trello board:
 
 - Card: requested running Docker-based E2E tests for another local project checkout.
-- The deployed `symphony-trello@local` workflow watched `Ready for Codex`.
+- The deployed local workflow watched `Ready for Codex`.
 - The service user could not access the requested local project checkout.
 - Codex added a `Blocked:` Trello comment and left the card in `Ready for Codex`, as the workflow
   prompt instructed for blocked work.

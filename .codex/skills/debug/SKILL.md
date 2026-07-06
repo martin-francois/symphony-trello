@@ -70,12 +70,13 @@ symphony-trello diagnostics --deep
 symphony-trello diagnostics --show-private-context
 curl -fsS http://127.0.0.1:18080/api/v1/state | jq
 rg -n "card_identifier=<redacted>|worker_identity=|session_id=" log/ target/ /var/log 2>/dev/null
-systemctl status 'symphony-trello@*'
-journalctl -u 'symphony-trello@<workflow>' --since '1 hour ago'
+symphony-trello status
+symphony-trello logs
 ```
 
-Adjust paths for the environment. Do not paste secrets or unrelated host paths
-into Trello or GitHub.
+Use the install's managed lifecycle commands when available, or the operator-owned
+service manager commands for custom deployments. Adjust paths for the environment.
+Do not paste secrets or unrelated host paths into Trello or GitHub.
 
 ## Evidence To Record
 

@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded by [ADR 0062](0062-remove-manual-systemd-deployment-path.md)
 date: 2026-05-05
 decision-makers: [François Martin, Codex]
 consulted: [README.md, docs/deployment.md, docs/adr/0010-one-process-per-trello-board.md]
@@ -8,7 +8,18 @@ informed: [Future maintainers]
 
 # Provide a systemd Template for Multi-Workflow Server Deployment
 
+This ADR records the historical decision to add a manual systemd template. It is superseded by
+[ADR 0062](0062-remove-manual-systemd-deployment-path.md), which removes that public deployment path
+and makes the installer-managed local worker the supported operation path.
+
 ## Context and Problem Statement
+
+Historical note: this section describes the state of the project before the installer-managed local
+worker and connected-board lifecycle commands existed. The current public operation path is described
+by [ADR 0062](0062-remove-manual-systemd-deployment-path.md); this ADR is kept only to preserve the
+old decision record. The service-manager reliability goals remain product goals for the
+installer-managed lifecycle and are tracked by
+[issue #523](https://github.com/martin-francois/symphony-trello/issues/523).
 
 Symphony for Trello runs one process per workflow file and Trello board. That model is clear, but it
 becomes inconvenient on a server when an operator has several workflows and must keep them running

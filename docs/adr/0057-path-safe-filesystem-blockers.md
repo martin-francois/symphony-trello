@@ -43,7 +43,7 @@ workpads.
 
 Generated workflows and shipped skills tell Codex to explain that the requested file or folder is
 inaccessible because undeclared host paths are blocked by default. They also tell Codex to point the
-operator to the allowed-host-path deployment settings. They must not copy absolute host paths,
+operator to the allowed-host-path setup or workflow settings. They must not copy absolute host paths,
 per-card workspace locations, account names, or deployment-specific paths into Trello-visible text. Use
 labels such as "the requested path" and "the per-card workspace" instead.
 

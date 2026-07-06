@@ -2,7 +2,7 @@
 
 ## Scope
 
-How to deploy and verify Symphony for Trello against real systems: when to run manual deployment
+How to deploy and verify Symphony for Trello against real systems: when to run live deployment
 verification, how live end-to-end runs must be structured, deployment auth and filesystem access,
 shipped-skill installation, and installer/onboarding lifecycle coverage. Unit/integration testing
 lives in [Testing](testing.md).
@@ -10,7 +10,7 @@ lives in [Testing](testing.md).
 ## When to verify a deployed change
 
 - When a change affects runtime behavior and the user is likely to verify it manually afterward, ask
-  at the end whether to run the manual deployment verification next when deployment inputs are
+  at the end whether to run live deployment verification next when deployment inputs are
   available. Do not deploy or suggest deployment for docs-only changes.
 - When fixing a bug that was observed during live deployed execution, and live verification is
   reasonably possible from the current environment, perform the relevant live deployed verification
@@ -34,7 +34,7 @@ lives in [Testing](testing.md).
 - For live PR-author verification, inspect every commit in the resulting pull request through GitHub,
   not only the new commit Codex just created. A card is not proven fixed when an existing PR still
   contains earlier commits authored by a generic Codex identity.
-- Do not call a live deployment healthy just because the systemd service is active. When a real
+- Do not call a live deployment healthy just because the managed process is active. When a real
   workflow has active work, verify that Codex can authenticate, the work finishes or reaches an
   expected terminal state, Trello handoff happens when required, and `/api/v1/state` has no
   unexpected running or retrying entries.
@@ -80,8 +80,8 @@ lives in [Testing](testing.md).
   Codex read or edit unrelated files. Trello-visible blocker comments and workpad updates for
   filesystem access must not copy absolute host paths, per-card workspace locations, account names, or
   deployment-specific paths. Refer to them as "the requested path" or "the per-card workspace",
-  explain the security default, and point to the exact manual systemd or workflow setting that
-  relaxes access.
+  explain the security default, and point to the exact setup option or workflow setting that relaxes
+  access.
 - Do not assume the person using the Trello board has shell access to the machine where Symphony runs.
   For cards that wait, block, or do not move, make the actionable reason visible on the Trello card
   itself through the workpad, a managed status comment, or the configured handoff/blocker comment.

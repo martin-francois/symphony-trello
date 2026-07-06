@@ -3468,14 +3468,13 @@ Required when the workflow expects the agent to perform Trello handoff transitio
 - HTTP server extension access-controls operational endpoints when bound to a non-loopback
   interface.
 - Repository-local agent skills follow Section 19.1 when generated workflows reference skills.
-- Manual systemd deployments follow Section 19.2 when this repository's deployment template is used.
-- Deployment host path access follows Section 19.3 when operators expose files outside managed
+- Deployment host path access follows Section 19.2 when operators expose files outside managed
   workspaces.
-- The opt-in Java live E2E harness follows Section 19.4 when external Trello credentials are
+- The opt-in Java live E2E harness follows Section 19.3 when external Trello credentials are
   supplied.
-- Local installer and onboarding commands follow Section 19.5 when this repository's one-liner
+- Local installer and onboarding commands follow Section 19.4 when this repository's one-liner
   scripts or `setup-local` command are used.
-- Java repository quality gates follow Section 19.6 for this repository's maintained implementation.
+- Java repository quality gates follow Section 19.5 for this repository's maintained implementation.
 - `trello_rest` client-side tool extension exposes scoped Trello REST access through the app-server
   session using configured Symphony auth.
 - `trello_rest` client-side tool extension disallows destructive operations by default.
@@ -3605,34 +3604,7 @@ GitHub merge extension:
   otherwise addressed, generated workflows MAY merge only when the unresolved thread and reason are
   recorded clearly
 
-### 19.2 Manual systemd Deployment Profile
-
-The manual systemd deployment profile lets one installed application run one or more workflow
-services on a Linux host while preserving the one-process-per-workflow contract.
-
-When this profile is used:
-
-- one systemd template instance runs one workflow file
-- the instance name maps to `/etc/symphony-trello/workflows/<name>.WORKFLOW.md`
-- each workflow file still contains exactly one `tracker.board_id`
-- each workflow service SHOULD use its own HTTP port and workspace root
-- the packaged Quarkus application is installed under `/opt/symphony-trello`
-- workflow files and root-managed config live under `/etc/symphony-trello`
-- persistent runtime workspaces live under `/var/lib/symphony-trello`
-- Trello credentials SHOULD be loaded through systemd credential files and referenced from workflow
-  config with `file:$CREDENTIALS_DIRECTORY/...`
-- Trello credential environment variables SHOULD be removed before launching Codex or workflow hooks
-- Codex CLI authentication SHOULD reuse the existing Codex auth file created by `codex login`
-- when generated workflows publish pull requests, Git and GitHub CLI authentication SHOULD be
-  available to the service user without putting raw tokens in workflow files
-- the unit SHOULD run as a dedicated `symphony-trello` user
-- the unit SHOULD bind the HTTP server to loopback by default unless an operator intentionally
-  exposes it
-
-The deployment profile is intentionally transparent. Operators can inspect and manage each workflow
-with normal `systemctl` and `journalctl` commands.
-
-### 19.3 Deployment Host Path Access Profile
+### 19.2 Deployment Host Path Access Profile
 
 Deployed Symphony should expose host paths explicitly. The default posture is that Codex can read and
 write Symphony-managed workspace paths, but not arbitrary host files.
@@ -3640,13 +3612,14 @@ write Symphony-managed workspace paths, but not arbitrary host files.
 When this profile is used:
 
 - undeclared host paths are blocked by default for security reasons
-- an operator may allow one or more files or folders with documented systemd settings
-- allowed host paths SHOULD be reflected in both the systemd filesystem policy and Codex's
-  `workspaceWrite` writable roots when that sandbox mode is used
-- the manual systemd profile documents the equivalent `BindPaths`, `ReadWritePaths`, and
-  `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS` settings
-- a less strict Codex inner sandbox MAY be enabled for trusted workflows while systemd still limits
-  the visible writable host paths
+- an operator may allow one or more files or folders with documented setup options, workflow config,
+  or environment settings
+- allowed host paths SHOULD be reflected in Codex's `workspaceWrite` writable roots when that
+  sandbox mode is used
+- setup and generated workflow guidance document the equivalent `--add-path`,
+  `codex.additional_writable_roots`, and `SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS` settings
+- a less strict Codex inner sandbox MAY be enabled for trusted workflows only when the surrounding
+  host or service boundary intentionally allows that access
 - blocker comments for filesystem access problems SHOULD explain that the requested file or folder
   is inaccessible because undeclared host paths are blocked by default, SHOULD point to the
   documented setting that relaxes access, and MUST NOT copy absolute host paths, per-card workspace
@@ -3677,7 +3650,7 @@ This preserves the security default while still allowing cards to use existing h
 source context when an operator has allowed access, and it keeps the workspace root available for
 runtime-managed metadata such as Codex skills.
 
-### 19.4 Opt-In Java Live E2E Harness
+### 19.3 Opt-In Java Live E2E Harness
 
 Live Trello and real-Codex verification is environment-dependent. This repository therefore keeps
 normal CI deterministic while providing an opt-in Java integration-test harness and documented manual
@@ -3698,7 +3671,7 @@ When this profile is used:
 - live test output and committed documentation MUST avoid leaking Trello tokens, private board IDs,
   private card IDs, private project names, account names, or private host paths
 
-### 19.5 Local Installer And Plan B Onboarding Profile
+### 19.4 Local Installer And Plan B Onboarding Profile
 
 This Java repository ships an OpenClaw-inspired local onboarding profile. The public install scripts
 download versioned GitHub Release archives by default. Java setup code owns Trello, Codex, GitHub,
@@ -3781,6 +3754,8 @@ When this profile is used:
   explicit skip option is used
 - the local CLI invoked through the managed-run wrapper MUST provide status, logs, start, and stop
   commands through Java lifecycle services
+- OpenClaw-style service-manager autostart across logout and reboot is a planned installer-managed
+  lifecycle capability tracked by issue #523, not a manual deployment runbook requirement.
 - local uninstall MUST stop managed processes before deleting installer-managed files
 - local uninstall MUST preserve local credentials, workflows, connected-board metadata, workspaces,
   state/logs, Codex auth, GitHub auth, and Trello boards by default
@@ -3789,8 +3764,6 @@ When this profile is used:
 - local uninstall MUST NOT treat the installer-managed app confirmation as confirmation to delete
   user data; unattended user-data cleanup MUST require a separate explicit confirmation option
 - local uninstall MUST require an installer marker before recursively deleting the app directory.
-  It is a local convenience profile and does not replace the manual systemd server deployment
-  profile.
 - deterministic CI SHOULD exercise the POSIX installer lifecycle beyond syntax checks by driving
   interactive prompts through a pseudo-terminal, using test doubles for external tools/services,
   verifying install, update, managed start/status, and uninstall cleanup behavior without real Trello,
@@ -3799,7 +3772,7 @@ When this profile is used:
   native Windows PowerShell runner; local Linux machines MAY use the Microsoft .NET SDK container
   image through `scripts/pwsh-docker.sh` when a local PowerShell check is needed
 
-### 19.6 Java Repository Quality Profile
+### 19.5 Java Repository Quality Profile
 
 This profile documents build and maintenance rules for this Java repository. These rules are not
 runtime conformance requirements for other Symphony-for-Trello implementations.

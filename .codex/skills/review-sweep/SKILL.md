@@ -161,6 +161,10 @@ match the work actually completed, update the PR metadata before handoff.
   local evidence and flaky-check caveat.
 - If checks are pending or stale, wait, refresh, or rerun them while the card
   remains active unless a true external blocker appears.
+- Wait for GitHub Actions and other required CI checks, but do not block only on
+  a pending CodeRabbit status context. Treat CodeRabbit as asynchronous review
+  feedback: act on posted comments or requested changes, and mention if it is
+  still pending after actual CI is green.
 - If CI cannot run because of external quota or infrastructure limits, run
   equivalent local CI checks. Hand off only when those checks pass or only have
   failures clearly unrelated to the card.

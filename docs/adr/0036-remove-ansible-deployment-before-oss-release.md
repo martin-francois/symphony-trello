@@ -12,11 +12,14 @@ informed: [Future maintainers]
 
 # Remove Ansible Deployment Before OSS Release
 
+ADR 0062 later removed the manual systemd deployment path that this ADR preserved. The Ansible
+removal decision remains accepted.
+
 ## Context and Problem Statement
 
 The repository had two public server setup paths: manual systemd instructions and an Ansible
-desired-state playbook. The installer and managed local worker are now the main public setup path,
-with direct CLI and manual systemd commands available for advanced use.
+desired-state playbook. The installer and managed local worker became the main public setup path,
+with direct CLI and manual systemd commands initially available for advanced use.
 
 Keeping Ansible in the OSS release would add documentation, dependency, CI, lint, Renovate, and
 support work for a deployment model that has no current user-demand signal.
@@ -25,7 +28,7 @@ support work for a deployment model that has no current user-demand signal.
 
 * Keep the OSS setup surface small and supportable.
 * Make the installer the primary public setup path.
-* Preserve direct CLI and manual systemd setup for advanced users.
+* Preserve direct CLI setup for advanced users.
 * Remove CI and dependency maintenance that exists only for Ansible.
 * Close Ansible smoke-test work instead of building coverage for a removed path.
 
@@ -38,27 +41,26 @@ support work for a deployment model that has no current user-demand signal.
 
 ## Decision Outcome
 
-Chosen option: "Remove Ansible before OSS release", because the repository can support installer,
-direct CLI, and manual systemd paths without carrying another operational model before users ask for
-managed deployment automation.
+Chosen option: "Remove Ansible before OSS release", because the repository could support installer
+and direct CLI paths without carrying another operational model before users ask for managed
+deployment automation. ADR 0062 later removed the manual systemd path as well.
 
 ### Consequences
 
-* Good, because public docs point users to the installer first and manual systemd only for advanced
-  server operation.
+* Good, because public docs point users to the installer first.
 * Good, because CI no longer installs or lints Ansible-only dependencies.
 * Good, because Renovate no longer needs Ansible-only dependency inputs.
 * Neutral, because repeatable multi-workflow server deployment may be reconsidered later from a
   fresh user-demand issue.
-* Bad, because operators who already used the playbook must migrate to manual systemd commands.
+* Bad, because operators who already used the playbook had to migrate away from Ansible.
 
 ### Confirmation
 
 This decision is still implemented when the repository has no `deploy/ansible` tree, no
 `docs/ansible-deployment.md`, no Ansible CI or Renovate inputs, and no user-facing setup path that
-presents Ansible as supported. README and deployment docs should point users to the installer,
-direct CLI, and manual systemd paths. Generated workflow blocker guidance should mention manual
-systemd configuration, not Ansible variables.
+presents Ansible as supported. README should point users to the installer and direct CLI paths.
+Generated workflow blocker guidance should mention setup or workflow host-path settings, not Ansible
+variables.
 
 ## Pros and Cons of the Options
 
@@ -100,6 +102,6 @@ Make Ansible the only server deployment path.
 
 [GitHub issue #115](https://github.com/martin-francois/symphony-trello/issues/115) requests the
 removal, implemented by [GitHub PR #119](https://github.com/martin-francois/symphony-trello/pull/119).
-[GitHub issue #10](https://github.com/martin-francois/symphony-trello/issues/10) tracks
-Ansible/systemd smoke coverage and should be closed once this removal lands. This decision
-supersedes [ADR 0014](0014-ansible-desired-state-deployment.md).
+[GitHub issue #10](https://github.com/martin-francois/symphony-trello/issues/10) tracked
+Ansible/systemd smoke coverage before those deployment paths were removed. This decision supersedes
+[ADR 0014](0014-ansible-desired-state-deployment.md).

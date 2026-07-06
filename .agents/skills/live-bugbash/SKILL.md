@@ -162,7 +162,8 @@ When this skill is used for an actual bug bash, read these files before starting
 11. `references/issue-drafts-and-reporting.md`
 
 Also read these repository docs when present: `../../../docs/live-e2e.md`,
-`../../../docs/operations.md`, `../../../docs/deployment.md`,
+`../../../docs/operations.md`, the "Allowed Host Paths And Sandbox" section in `../../../README.md`,
+`../../../docs/agents/deployment-and-live-verification.md`,
 `../../../docs/agents/default-workflow.md`, and relevant ADRs found during the run. If a listed file
 does not exist, record that as a repository-shape observation and continue with the available
 equivalents.
