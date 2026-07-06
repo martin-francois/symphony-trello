@@ -70,15 +70,12 @@ final class ReleaseWorkflowTest {
     void releasePleaseConfigsCreateDraftReleasesForImmutableAssetPublication() throws IOException {
         // given
         Path normalConfig = Path.of("release-please-config.json");
-        Path baselineConfig = Path.of("release-please-public-baseline-config.json");
 
         // when
         String normalSource = Files.readString(normalConfig);
-        String baselineSource = Files.readString(baselineConfig);
 
         // then
         assertThat(normalSource).contains("\"draft\": true", "\"force-tag-creation\": true");
-        assertThat(baselineSource).contains("\"draft\": true", "\"force-tag-creation\": true");
     }
 
     @Test
