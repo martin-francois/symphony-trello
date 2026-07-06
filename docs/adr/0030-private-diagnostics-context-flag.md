@@ -128,7 +128,7 @@ private identifier and path is printed.
 
 * Good, because it tries to clarify that credentials stay hidden.
 * Bad, because `secret` is ambiguous. Trello board ids, Trello board URLs, and local paths are not
-  credentials, but they are still private and unsafe for public issue reports.
+  credentials, but they are still sensitive and unsafe for public issue reports.
 * Bad, because it describes an implementation policy instead of the user's task.
 
 ### `--show-identifiers-and-paths`

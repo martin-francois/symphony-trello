@@ -12,8 +12,7 @@ informed: [Future maintainers]
 
 The Java setup entrypoints had grown hand-written parsers for board creation, board import,
 workspace listing, local onboarding, local checks, port repair, and GitHub configuration. The
-manual parsers duplicated option handling and made the command surface harder to evolve safely before
-the project becomes open source.
+manual parsers duplicated option handling and made the command surface harder to evolve safely.
 
 How should Symphony for Trello keep command-line behavior maintainable without moving product setup
 logic into command parser classes?
@@ -24,7 +23,7 @@ logic into command parser classes?
 * Keep Trello, Codex, GitHub, workflow, health-check, and onboarding behavior in Java services.
 * Make invalid command usage fail consistently with useful help.
 * Use a maintained Java CLI library instead of adding parsing logic to shell or PowerShell.
-* Keep the public command model clean while the project is still private.
+* Keep the public command model clean.
 
 ## Considered Options
 
@@ -62,8 +61,8 @@ and start/stop/status/logs behavior so POSIX and PowerShell do not duplicate pro
 logic.
 
 The previous mode flags `setup-local --check`, `setup-local --repair-port`, and
-`setup-local --configure-github` are not kept as public compatibility aliases. The project is still
-private, so the cleaner nested command model is preferred before release.
+`setup-local --configure-github` are not kept as public compatibility aliases. Those temporary flags
+were never part of the supported command contract, so the cleaner nested command model is preferred.
 
 ### Consequences
 

@@ -133,9 +133,7 @@ python3 infra/helper.py run_fuzzer --corpus-dir=/tmp/symphony-trello-TrelloCheck
 base images. The current helper expects the `--corpus-dir` path to exist. The `--` before
 `-runs=100` separates OSS-Fuzz helper options from libFuzzer options.
 
-Before the repository is public, the normal helper flow cannot clone it anonymously from GitHub. Do
-not put private credentials in the Dockerfile or Docker build context. For pre-public validation,
-copy the `oss-fuzz/` files into a local OSS-Fuzz checkout and use a temporary local-source override
-there, then run the same helper commands. Remove the local override before copying the project files
-to upstream OSS-Fuzz. Once the repository is public, the helper commands above are the validation
-path to use.
+Do not put private credentials in the Dockerfile or Docker build context. When validating local-only
+or unpushed changes, copy the `oss-fuzz/` files into a local OSS-Fuzz checkout and use a temporary
+local-source override there, then run the same helper commands. Remove the local override before
+copying the project files to upstream OSS-Fuzz.

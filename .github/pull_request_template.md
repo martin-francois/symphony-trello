@@ -27,6 +27,23 @@ Choose all that apply.
 Describe what a user, operator, or contributor can observe after this PR. If there is no
 user-visible change, write `None`.
 
+## Compatibility Decision
+
+Choose one and explain the choice. Contract changes default to a documented breaking change unless
+the linked issue, `SPEC.md`, or an ADR deliberately chooses compatibility.
+
+- [ ] Breaking change
+- [ ] Compatible change with temporary migration or legacy support
+- [ ] Permanent compatibility contract
+- [ ] No user-facing contract change
+- [ ] N/A docs, tests, or internal-only change
+
+- Chosen path:
+- What breaks or stays compatible:
+- Migration path for breaking changes:
+- `BREAKING CHANGE:` footer text for the squash commit body or retained commit, if breaking:
+- Removal condition and cleanup tracking for temporary compatibility logic:
+
 ## Root Cause And Guardrail
 
 For bug fixes or regressions, explain why the issue happened and what now prevents it from coming
@@ -66,6 +83,8 @@ explain why.
 - [ ] Docs updated, or N/A
 - [ ] ADR updated for architecture decisions or tradeoffs, or N/A
 - [ ] PR title or squash title uses Conventional Commits and is release-note ready
+- [ ] Breaking changes include a `BREAKING CHANGE:` footer with reason and migration path in the
+      squash commit body or retained commit, or N/A
 - [ ] Live E2E/deployment notes included when behavior or deployment changed, or N/A
 - [ ] Redaction checked: no Trello credentials, Codex auth files, GitHub tokens, private board links,
       account names, private host paths, or deployment-specific paths

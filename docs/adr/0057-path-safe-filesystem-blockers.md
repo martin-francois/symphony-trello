@@ -62,10 +62,10 @@ Generate a workflow and confirm the filesystem blocker guidance says not to copy
 paths, per-card workspace locations, account names, or deployment-specific paths into Trello-visible
 text.
 
-The project had no public users when this wording changed, so Symphony does not carry a runtime
-migration path, historical prompt detector, or generated-workflow ownership marker. Existing private
-workflows were updated manually once. Runtime code parses the workflow it is given and validates the
-current schema; it does not rewrite older private prompt text.
+The previous generated prompt wording was never part of the supported compatibility contract, so
+Symphony does not carry a runtime migration path, historical prompt detector, or generated-workflow
+ownership marker. Runtime code parses the workflow it is given and validates the current schema; it
+does not rewrite unsupported historical prompt text.
 
 Run the focused tests:
 

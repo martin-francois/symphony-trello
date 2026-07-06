@@ -32,20 +32,22 @@ jobs:
           mkdir -p "$COMMITLINT_HOME"
           printf '{"private":true}\n' > "$COMMITLINT_HOME/package.json"
           cp commitlint.config.cjs "$COMMITLINT_HOME/commitlint.config.cjs"
+          cp commitlint.message.config.cjs "$COMMITLINT_HOME/commitlint.message.config.cjs"
           pnpm --dir "$COMMITLINT_HOME" add --silent \
             @commitlint/cli@21.0.1 \
             @commitlint/config-conventional@21.0.1
           echo "COMMITLINT_BIN=$COMMITLINT_HOME/node_modules/.bin/commitlint" >> "$GITHUB_ENV"
-          echo "COMMITLINT_CONFIG=$COMMITLINT_HOME/commitlint.config.cjs" >> "$GITHUB_ENV"
+          echo "COMMITLINT_TITLE_CONFIG=$COMMITLINT_HOME/commitlint.config.cjs" >> "$GITHUB_ENV"
+          echo "COMMITLINT_MESSAGE_CONFIG=$COMMITLINT_HOME/commitlint.message.config.cjs" >> "$GITHUB_ENV"
       - name: Lint pull request title
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          printf '%s\n' "$PR_TITLE" | "$COMMITLINT_BIN" --config "$COMMITLINT_CONFIG"
+          printf '%s\n' "$PR_TITLE" | "$COMMITLINT_BIN" --config "$COMMITLINT_TITLE_CONFIG"
       - name: Lint pull request commits
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          "$COMMITLINT_BIN" --config "$COMMITLINT_CONFIG" \
+          "$COMMITLINT_BIN" --config "$COMMITLINT_MESSAGE_CONFIG" \
             --from "$PR_BASE_SHA" --to "$PR_HEAD_SHA" --verbose

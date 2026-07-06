@@ -20,8 +20,8 @@ URLs, and external service payloads. Example-based tests cover the known paths, 
 explore malformed input space deeply. Live Trello bugbashes catch real integration bugs, but they are
 slow, depend on credentials, and are not deterministic enough to be the first line of defense.
 
-How should the project add fuzzing and chaos-style coverage before the first public release while
-keeping normal Maven verification deterministic?
+How should the project add fuzzing and chaos-style coverage while keeping normal Maven verification
+deterministic?
 
 ## Decision Drivers
 
@@ -103,8 +103,8 @@ network access and assert that writes are not retried or performed when validati
   direct Docker build.
 * Good, because external-boundary chaos cases do not need live credentials.
 * Neutral, because active fuzzing remains opt-in and runs one target per Maven invocation.
-* Neutral, because pre-public helper validation needs a local-source override until GitHub can clone
-  the repository anonymously.
+* Neutral, because local validation of unpushed OSS-Fuzz changes may need a temporary local-source
+  override.
 * Bad, because the project has another test dependency and a small amount of OSS-Fuzz-specific
   wrapper code to keep current.
 * Bad, because the OSS-Fuzz files are not proof of hosted coverage until the external OSS-Fuzz

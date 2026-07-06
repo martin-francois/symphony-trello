@@ -6,10 +6,10 @@ How to write user-facing documentation, README content, CLI and installer text, 
 prompts, and product terminology. Deployment steps and installer lifecycle testing live in
 [Deployment & live verification](deployment-and-live-verification.md).
 
-## Open-source readiness and README focus
+## Public documentation and README focus
 
-- Keep the project open-source-ready even while private: clear README, usable CONTRIBUTING, useful
-  ADRs, no committed secrets, and reviewable history.
+- Keep public-facing documentation reviewable: clear README, usable CONTRIBUTING, useful ADRs, no
+  committed secrets, and history that explains current support boundaries.
 - Lead the README with who the project is for, why they should use it, and the practical benefits
   before implementation details. Move technical mechanics into supporting sections once the value is
   clear.

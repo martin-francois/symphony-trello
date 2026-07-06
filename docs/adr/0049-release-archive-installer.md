@@ -17,9 +17,8 @@ The first installer path cloned the Git repository and built Symphony for Trello
 the simple install path depend on Git and Maven even though most users only need a released app.
 
 [GitHub issue #363](https://github.com/martin-francois/symphony-trello/issues/363) asked for an
-OpenClaw-style one-line install command and a smoother future move away from source-checkout
-installs. The project is still private before the open-source release, but the release path should
-already match the public path we expect users to run later.
+OpenClaw-style one-line install command and a smoother move away from source-checkout installs. The
+release path matches the public path users run.
 
 The installer still needs a source-checkout mode for development and release testing.
 
@@ -51,9 +50,8 @@ creates a draft release and forces tag creation. The release workflow checks out
 release source, runs the packaging script from that tag, builds the packaged Quarkus app, packages
 Linux and Windows archives, uploads installer and uninstaller scripts, and uploads `checksums.txt`
 while the release is still a draft. It verifies every expected asset and then publishes the release.
-Release assets are built from tag-local source, scripts, and installer templates. Private
-pre-release test tags that predate the packaging script are not supported by the public release
-asset workflow.
+Release assets are built from tag-local source, scripts, and installer templates. Development test
+tags that predate the packaging script are not supported by the public release asset workflow.
 
 Release asset uploads do not clobber existing assets. If a public release is wrong or incomplete,
 publish a new patch release instead of replacing assets on the existing release. The workflow still
@@ -84,8 +82,8 @@ signing evaluation.
 * Good, because assets are uploaded and verified before immutable release publication.
 * Good, because public release assets are not replaced in place.
 * Good, because source-checkout installation is still available when needed.
-* Bad, because private-repository release asset downloads cannot be tested exactly like public
-  unauthenticated downloads until the repository is public.
+* Bad, because release asset downloads need hosted GitHub release validation in addition to local
+  packaging checks.
 * Bad, because a broken public release requires a new patch release instead of a same-tag asset
   repair.
 * Bad, because checksum verification is weaker than signing. Signing remains a follow-up.
@@ -139,7 +137,7 @@ Publish the app to Maven Central and make the installer resolve the released art
 * Good, because Maven Central is a standard Java distribution channel.
 * Bad, because this is a CLI application, not a library dependency.
 * Bad, because it would still require resolver tooling in the installer path.
-* Bad, because it adds release complexity before the first public release.
+* Bad, because it adds release complexity.
 
 ### Stable Redirect URL
 

@@ -25,7 +25,7 @@ What flag should enable those deeper checks?
 * Give users and coding agents a short flag for deeper troubleshooting.
 * Keep deeper diagnostics public-safe unless combined with `--show-private-context`.
 * Leave room for future public-safe probes beyond auth checks.
-* Avoid compatibility aliases because the project is not public yet.
+* Avoid compatibility aliases for unreleased temporary flag names.
 
 ## Considered Options
 
@@ -42,8 +42,8 @@ Chosen option: `--deep`, because it describes the troubleshooting mode instead o
 implementation detail. Today it runs Codex and GitHub auth-status checks. Later it may include other
 public-safe probes.
 
-`--probe-auth` is not kept as an alias. The project is still private, so there is no public
-compatibility contract for that flag.
+`--probe-auth` is not kept as an alias. That temporary flag was never part of the supported command
+contract, so there is no compatibility contract for it.
 
 `--show-private-context` remains separate. `--deep` means "collect more public-safe diagnostics".
 `--show-private-context` means "print private local identifiers, URLs, and paths for local

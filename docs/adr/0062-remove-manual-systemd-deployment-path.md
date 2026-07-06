@@ -146,5 +146,5 @@ container deployment, Nix module, or configuration-management recipe.
 
 This decision supersedes [ADR 0013](0013-systemd-template-deployment.md). It also updates the
 deployment assumption preserved by
-[ADR 0036](0036-remove-ansible-deployment-before-oss-release.md): Ansible remains removed, and manual
-systemd is no longer kept as the advanced public path.
+[ADR 0036](0036-remove-ansible-deployment-before-oss-release.md): Ansible remains removed, and
+manual systemd is no longer kept as the advanced public path.

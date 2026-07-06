@@ -505,11 +505,11 @@ Note:
 - Extensions SHOULD document their field schema, defaults, validation rules, and whether changes
   apply dynamically or require restart.
 
-Before the first public release, generated workflow output is a clean-break current contract.
-Runtime and setup code MUST parse the supplied workflow as current input. They MUST NOT carry
-product migration code, historical generated-template detection, or automatic upgrades for private
-pre-release workflow files; the private deployment is updated manually when the current contract
-changes.
+Generated workflow output follows the current documented contract. Runtime and setup code MUST parse
+the supplied workflow as current input. They MUST NOT carry product migration code, historical
+generated-template detection, or automatic upgrades unless an explicit issue, specification change,
+or ADR defines the supported compatibility contract. Temporary migration behavior MUST also define
+the condition that removes it.
 
 Generated workflows explicitly configure Codex with `workspaceWrite` and `networkAccess: true` so
 selected repository URLs can be cloned while keeping filesystem writes limited to the workspace and

@@ -181,9 +181,8 @@ same local rules with:
 ```
 
 Use rule-specific `nosemgrep` comments only for true false positives and include a reason. CodeQL is
-a later public-repository code-scanning layer and is not part of normal local `verify`. Hosted
-dashboards can add signal, but they must not replace local checks contributors can run, fix, and
-rerun.
+a hosted repository code-scanning layer and is not part of normal local `verify`. Hosted dashboards
+can add signal, but they must not replace local checks contributors can run, fix, and rerun.
 
 Fuzzing and deterministic chaos tests cover parser and external-boundary failure modes that are hard
 to exhaust with example-based tests. CI runs the Jazzer fuzz tests in deterministic regression mode
@@ -240,9 +239,16 @@ supporting cleanup or refactoring. Unrelated cleanup, refactoring, formatting, d
 or tooling changes belong in a separate PR. Maintainers may rebase-merge cohesive multi-commit PRs
 without squashing, so every commit title should be a useful Conventional Commit.
 
-Use `feat:` for user-visible additions and `fix:` for user-visible bug fixes. Add a
-`BREAKING CHANGE:` footer only when a release really requires manual action from users or operators.
-Do not edit `CHANGELOG.md` manually; the release automation updates it.
+Use `feat:` for user-visible additions and `fix:` for user-visible bug fixes. Breaking changes must
+use both Conventional Commit markers in the message that reaches `main`: `!` before the colon in the
+type or scope, such as `feat!:` or `feat(installer)!:`, and a `BREAKING CHANGE:` footer. The `!`
+makes the break visible in commit-title-only views, and the footer gives release automation the
+breaking-change changelog entry users rely on for manual action. For squash-merged PRs, put `!` in
+the PR title and put the footer in the squash commit body. For rebase-merged or intentionally
+multi-commit PRs, put both markers in the retained commit that owns the breaking change. The footer
+should explain why the break is necessary, what changed, and how users or operators migrate.
+Commitlint rejects breaking messages that have only one marker. Do not edit `CHANGELOG.md` manually;
+the release automation updates it.
 
 Before opening or retitling a pull request, run the same title check that CI uses:
 
@@ -252,10 +258,11 @@ printf '%s\n' 'docs: describe static-analysis policy' | pnpm dlx --package @comm
 
 Replace the sample title with the exact pull request title. Normal squash-merge PRs are covered by
 that PR-title check. For multi-commit PRs that maintainers may rebase-merge, check the commit range
-too:
+too. This stricter message check enforces that breaking commits use both `!` and a
+`BREAKING CHANGE:` footer:
 
 ```bash
-pnpm dlx --package @commitlint/cli@21.0.1 --package @commitlint/config-conventional@21.0.1 commitlint --config commitlint.config.cjs --from origin/main --to HEAD --verbose
+pnpm dlx --package @commitlint/cli@21.0.1 --package @commitlint/config-conventional@21.0.1 commitlint --config commitlint.message.config.cjs --from origin/main --to HEAD --verbose
 ```
 
 Every retained commit title in that range must be a useful Conventional Commit.

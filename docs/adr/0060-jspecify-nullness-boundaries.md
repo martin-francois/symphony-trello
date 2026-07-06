@@ -14,9 +14,9 @@ informed: [Future maintainers, Contributors]
 ## Context and Problem Statement
 
 The Java codebase used tests, Optional usage, static analysis, and review discipline for null-safety.
-That leaves important API and integration boundaries with implicit null contracts. Before the first
-public release, contributors should be able to see where `null` is accepted or returned without
-reverse-engineering constructor normalization and defensive checks.
+That leaves important API and integration boundaries with implicit null contracts. Contributors
+should be able to see where `null` is accepted or returned without reverse-engineering constructor
+normalization and defensive checks.
 
 How should this repository introduce nullness annotations without creating broad mechanical churn or
 a noisy blocking checker?
@@ -80,7 +80,7 @@ Do not add nullness annotations yet.
 
 * Good, because there is no dependency or annotation work.
 * Bad, because contributors must infer nullness from tests, validation code, and comments.
-* Bad, because public release API boundaries stay less precise than they can be.
+* Bad, because public API boundaries stay less precise than they can be.
 
 ### Add JSpecify on Reviewed Boundaries Without a Checker
 
