@@ -271,14 +271,14 @@ user explicitly chooses a spec carry-over.
   exact title:
 
   ```bash
-  printf '%s\n' 'docs: describe static-analysis policy' | pnpm dlx --package @commitlint/cli@21.0.1 --package @commitlint/config-conventional@21.0.1 commitlint --config commitlint.config.cjs
+  scripts/commitlint-local title 'docs: describe static-analysis policy'
   ```
 
   For a PR that may be rebase-merged or intentionally keeps multiple commits, also lint the commit
   range with the stricter message config:
 
   ```bash
-  pnpm dlx --package @commitlint/cli@21.0.1 --package @commitlint/config-conventional@21.0.1 commitlint --config commitlint.message.config.cjs --from origin/main --to HEAD --verbose
+  scripts/commitlint-local range origin/main HEAD
   ```
 
 - For a breaking change, verify the exact PR title and squash commit body, or the retained commit
