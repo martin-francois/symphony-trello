@@ -11,6 +11,16 @@ this repository.
 - Ask the user only when local context and the spec are insufficient and a wrong assumption would be
   costly or hard to reverse.
 - Be direct about residual risk, skipped verification, or parts that are intentionally not covered.
+- In every user-facing response after a tool, dependency, environment, permission, or workflow step
+  does not work the first time and requires a workaround, fallback, retry, or manual adaptation,
+  mention unresolved friction again instead of saving it only for the final response. Once the
+  friction is durably resolved or no longer applies, stop repeating it; mention the resolution only
+  in the response where the fix is made or confirmed. State what happened, what workaround was used,
+  whether the result is still trustworthy, and what could make that path work the first time in
+  future runs. Offer to make those improvements when they are in repository or local-environment
+  scope. When offering more than one improvement, label the options with letters and say the user can
+  reply with letters such as `A` or `AD` to choose multiple options. If Codex cannot make an
+  improvement itself, explain the exact user action needed instead of only saying it cannot be done.
 
 ## Review before finalizing
 
@@ -49,6 +59,16 @@ this repository.
   each repair. Once the Codex review loop is clean, run the required verification once for the final
   tree. If that final verification fails, fix the failure, rerun the Codex review loop, and only then
   run final verification again.
+- After launching Codex review, wait for the command to finish before continuing the workflow or
+  reporting progress to the user. Do not send progress updates merely because the review process is
+  still running or because the session was polled. Report again only when the review completes, fails,
+  or needs external input.
+- When a Codex review/fix loop changes an already committed branch, fix each justified finding into
+  the commit that introduced or owns the reviewed code. Use `git commit --fixup` plus autosquash,
+  amend the owning commit, or otherwise rewrite the branch so the final history does not leave
+  generic "review fixes" commits behind. If a finding spans multiple existing commits, split the
+  repair by ownership when practical; otherwise put the fix in the earliest commit that needs the
+  corrected behavior and keep the resulting commit focused.
 
 ## References
 
