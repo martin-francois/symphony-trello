@@ -40,20 +40,22 @@ Chosen option: "Install Codex CLI into a Symphony-managed npm prefix and show re
 steps", because it keeps installer-managed state reversible without presenting users with a single
 long command line before they decide.
 
-The installer uses npm's `--prefix` option to install Codex CLI under `SYMPHONY_HOME/npm`. It then
-creates a command link in the configured local command directory so the wrapper and the user's shell
-can find `codex`. The prompt uses short labels for the managed install location, command link, and
-Codex CLI install command, and states that system-wide npm packages are unchanged.
+The installer uses npm's `--prefix` option to install Codex CLI under the installer-selected managed
+npm prefix. Explicit `SYMPHONY_HOME` installs keep the historical `$SYMPHONY_HOME/npm` location; the
+normal POSIX XDG layout and MicroOS `/var` layout use the selected cache directory. The installer
+then creates a command link in the configured local command directory so the wrapper and the user's
+shell can find `codex`. The prompt uses short labels for the managed install location, command link,
+and Codex CLI install command, and states that system-wide npm packages are unchanged.
 
 When npm is already available, the POSIX prompt includes:
 
 ```text
 Codex CLI is missing.
 Install Codex CLI with Symphony-managed npm.
-  Location: $HOME/.local/share/symphony-trello/npm
+  Location: $HOME/.cache/symphony-trello/npm
   Command: $HOME/.local/bin/codex
 This keeps system-wide npm packages unchanged.
-  Codex CLI: npm install --global --prefix '$HOME/.local/share/symphony-trello/npm' @openai/codex
+  Codex CLI: npm install --global --prefix '$HOME/.cache/symphony-trello/npm' @openai/codex
 Run now? [y/N]
 ```
 
