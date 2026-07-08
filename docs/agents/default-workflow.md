@@ -72,7 +72,8 @@ commit and open pull requests. Topic-specific rules live in the pages linked und
   the current constraints, create or suggest a GitHub issue before finishing. The issue must state
   the desired outcome, the options checked, why each option is not good enough right now, what a
   future acceptable solution would need to provide, and any ADR or PR that records the current
-  decision. Use the `idea` label when the work is exploratory rather than ready to implement.
+  decision. Use the `idea` label only together with `not ready` when the work is exploratory rather
+  than ready to implement.
 - Apply [compatibility discipline](#compatibility-discipline): default to the current documented
   contract, make breaking-vs-compatible choices explicit in issues and pull requests, and add
   compatibility behavior only when the issue, specification, or ADR deliberately chooses it.

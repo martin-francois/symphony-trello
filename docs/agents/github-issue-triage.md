@@ -31,15 +31,38 @@ auditing that may create issues lives in
   intentionally scoped, not as historical chat notes. Remove stale dependency wording once blockers
   are closed, add missing useful links, fix incorrect links, update labels and milestones, maintain
   bidirectional dependency lines, and add or remove `blocked` based on unresolved
-  `Must be implemented after:` dependencies. Issue-to-issue relationship links must be bidirectional:
-  if an open issue says it is related to, coordinates with, follows up from, or is a prerequisite for
-  another open issue, the other issue should link back with the matching relationship unless the
-  reference is only historical provenance for closed work. Prefer editing issue descriptions over
-  adding comments unless a historical note or external artifact link must be preserved. Run the audit
-  in cycles: after making changes, fetch the open issue set again and repeat the
-  body/label/milestone/link/dependency review until one full pass finds nothing else to change.
-  Summarize which issues were changed, how many cycles ran, and which issues were intentionally left
-  unchanged.
+  `Must be implemented after:` dependencies. For labels, apply the full Triage labels policy on every
+  sweep, including type labels, exactly one priority label, `breaking change`, `blocked`,
+  `needs human review`, `not ready`, `idea`, assigned-issue `help wanted` removal, unassigned-ready
+  `help wanted`, and `good first issue` when the 80% one-shot bar is met. Issue-to-issue
+  relationship links must be bidirectional: if an open issue says it is related to, coordinates with,
+  follows up from, or is a prerequisite for another open issue, the other issue should link back with
+  the matching relationship unless the reference is only historical provenance for closed work.
+  Prefer editing issue descriptions over adding comments unless a historical note or external
+  artifact link must be preserved. For issues created by the authenticated maintainer account, update
+  the body as if the issue had been written that way from the start, weaving new context into the
+  relevant section instead of appending it to the end or posting a redundant comment; GitHub already
+  keeps the edit history. Run the audit in cycles: after making changes, fetch the open issue set
+  again and repeat the body/label/milestone/link/dependency review until one full pass finds nothing
+  else to change. Summarize which issues were changed, how many cycles ran, and which issues were
+  intentionally left unchanged.
+- During a sweep, treat contributor pickup comments as actionable only on open, unassigned issues
+  with `help wanted`. A pickup comment is a comment by a GitHub user asking to be assigned, asking
+  whether they can work on the issue, or saying they want to start or have started work on the issue.
+  If multiple users ask, use the earliest qualifying comment. Attempt to assign that user before
+  commenting. Only after assignment succeeds, remove `help wanted` per the assigned-issue label rule
+  and add a short comment thanking them, saying they are assigned, and saying they can start work. If
+  assignment fails because the authenticated account lacks permission or the repository rejects the
+  assignee, do not post the assignment comment; include the blocker in the sweep summary instead.
+- At the end of every sweep, report open issues that were assigned at least 14 days ago and still
+  have no open pull request. Check linked pull requests and open repository pull requests that
+  reference the issue URL or number, including closing-keyword references. For each stale assigned
+  issue, include the issue title, issue URL, and current assignee logins. Exclude issues assigned
+  only to the user who requested the sweep; if that user cannot be identified from the prompt or
+  repository context, use the authenticated GitHub account as the best available approximation and
+  state that assumption in the summary. Determine assignment age from the assignment timeline when
+  available; if the timeline is unavailable, report only issues whose current assignment is otherwise
+  known to be at least 14 days old.
 
 ## Already-implemented check
 
@@ -54,6 +77,12 @@ auditing that may create issues lives in
 
 ## Triage labels
 
+- When creating or editing an issue, apply the full useful label set before finishing rather than
+  adding only the minimum template label. Explicitly evaluate type labels, priority, `blocked`,
+  `breaking change`, `not ready`, `help wanted`, and `good first issue` as applicable. Every open
+  issue should have exactly one priority label: `priority high`, `priority medium`, or
+  `priority low`. Do not defer `good first issue` to a later sweep: apply it immediately when the
+  issue satisfies the 80% one-shot implementation bar.
 - During issue triage, check every open issue for breaking-change risk, especially while the
   affected contract is still small enough to change deliberately. Add the `breaking change` label
   when the accepted implementation may intentionally change or invalidate current user-facing
@@ -109,20 +138,29 @@ auditing that may create issues lives in
 - During issue triage, keep labels aligned with implementability. Use `not ready` when the issue is an
   idea/research note, lacks enough accepted scope to implement, or needs a prior non-dependency
   decision/action before work can start. Use `idea` only for speculative product or design options
-  that are not ready to implement; every `idea` issue must also have `not ready`. Do not add `idea` to
-  already-scoped work that an implementer can start from the issue description, even when the feature
-  was originally discussed as a possibility. Idea issue descriptions should ask interested users to
-  upvote the issue so maintainers can judge demand before accepting or prioritizing the work. Use
-  `help wanted` for open implementable issues except dependency dashboard issues and issues marked
-  `not ready`. Use `good first issue` only when a coding agent could be given only "implement this
-  issue <url>" and, in one shot without an elaborate extra prompt, submit a PR that would need no
-  maintainer PR comments and receive LGTM in roughly 80% of attempts. The same bar applies to a
-  developer who is new to the repository. That means the issue must be small, well-scoped, low-risk,
-  independent of unresolved decisions or external timing, and specific enough that the expected
-  implementation is clear. Use `already implemented` when the issue appears to describe behavior that
-  already exists. Close it with a reference comment when the implementation is verified against code
-  or tests (triage sweeps do this check on every open issue); when verification is inconclusive, keep
-  it open with `needs human review` and `not ready` per the GitHub Issue Triage section.
+  that are not ready to implement; every `idea` issue must also have `not ready`, though `not ready`
+  may be used without `idea` for non-speculative blocked scope. Do not add `idea` to already-scoped
+  work that an implementer can start from the issue description, even when the feature was originally
+  discussed as a possibility. Idea issue descriptions should ask interested users to upvote the issue
+  so maintainers can judge demand before accepting or prioritizing the work. An issue with
+  `not ready` or `blocked` must not have `help wanted` or `good first issue`, because those labels
+  tell contributors the issue is ready to pick up. Dependency dashboard issues must not have
+  `help wanted` or `good first issue`, because they track automated dependency update state rather
+  than contributor-implementable work. Every open, unassigned issue that is not a dependency
+  dashboard issue and has neither `not ready` nor `blocked` should have at least `help wanted`, so
+  contributor-pickup status is explicit. When any user is assigned to an issue, remove `help wanted`
+  because the issue is claimed; if all assignees are later removed, re-evaluate whether `help wanted`
+  should return. Add `good first issue` when the issue meets the 80% one-shot bar: a coding agent
+  could be given only
+  "implement this issue <url>"
+  and, in one shot without an elaborate extra prompt, submit a PR that would need no maintainer PR
+  comments and receive LGTM in roughly 80% of attempts. The same bar applies to a developer who is
+  new to the repository. That means the issue must be small, well-scoped, low-risk, independent of
+  unresolved decisions or external timing, and specific enough that the expected implementation is
+  clear. Use `already implemented` when the issue appears to describe behavior that already exists.
+  Close it with a reference comment when the implementation is verified against code or tests (triage
+  sweeps do this check on every open issue); when verification is inconclusive, keep it open with
+  `needs human review` and `not ready` per the GitHub Issue Triage section.
 - Use `not ready` when the issue scope, design, or acceptance criteria are not finalized enough to
   implement, or when `needs human review` applies. Do not use `not ready` for an otherwise actionable
   issue that is only blocked by another issue, waiting for a clear timing condition, or waiting for an
