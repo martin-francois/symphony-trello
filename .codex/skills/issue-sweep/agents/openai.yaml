@@ -1,0 +1,4 @@
+interface:
+  display_name: "Issue Sweep"
+  short_description: "Run repository-wide GitHub issue triage sweeps."
+  default_prompt: "Use $issue-sweep to run an issue sweep for this repository."
