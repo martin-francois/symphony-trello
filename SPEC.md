@@ -3694,9 +3694,10 @@ When this profile is used:
   installer is the recommended Windows setup path
 - missing Java, Codex CLI, Codex npm-fallback Node/npm, or source-checkout Git prerequisites MUST
   produce concrete assisted installation. The installer MUST reuse an existing authenticated Codex
-  CLI first and otherwise fall back to a user-local Codex npm install under `SYMPHONY_HOME`. Node/npm
-  MAY be reused from `PATH` or installed through the platform package manager. The installer MUST ask
-  before privileged or system-wide commands and print the exact install steps first
+  CLI first and otherwise fall back to a user-local Codex npm install under the installer-selected
+  cache path. Node/npm MAY be reused from `PATH` or installed through the platform package manager.
+  The installer MUST ask before privileged or system-wide commands and print the exact install steps
+  first
 - on immutable Linux systems that use `transactional-update`, the installer MUST combine missing
   package-manager prerequisites it can know up front into one `transactional-update` package command,
   stop after that command succeeds, and tell the operator to reboot and rerun the installer. It MUST
@@ -3720,8 +3721,29 @@ When this profile is used:
   workflows and ports already accepting connections on localhost
 - setup MUST separate installer-managed app files from user data. Local credentials, workflows,
   connected-board metadata, workspaces, and state/log files are user data
+- on generic Linux, macOS, and WSL2 installs, default local paths SHOULD follow the user's XDG-style
+  homes: app and workspaces under the data home, config under the config home, state/logs under the
+  state home, and dependency caches under the cache home
+- on openSUSE MicroOS-like Linux hosts, and on other Linux hosts with the same storage topology,
+  where the user's home is on the small root-backed filesystem and `/var` is a separate larger
+  mutable filesystem, the POSIX installer SHOULD place heavy Symphony app, workspace, state, config,
+  and cache data under a user-owned `/var/lib/symphony-trello/users/<user>` layout unless explicit
+  path overrides are supplied
+- when the user's home resolves into `/var`, the POSIX installer SHOULD keep the logical XDG paths
+  under `$HOME` and MUST NOT reject the install only because a home path component is a symlink that
+  resolves under that trusted home
+- installer and uninstaller path validation MUST reject broad dangerous paths while allowing safe
+  symlinked paths that resolve inside the user's real home or the selected MicroOS data root
+- the POSIX installer MUST write an install context outside the app directory, including stable
+  default context locations under `$HOME`, so uninstall and update-oriented reruns can rediscover the
+  selected app, config, workspace, state, cache, command, and layout paths without requiring the
+  original flags
 - uninstall MUST preserve the current config, workspaces, and state directories by default and remove
   them only when the matching local-data cleanup scope was explicitly requested
+- POSIX uninstall MUST use the install context before falling back to default path resolution and
+  SHOULD delete nested btrfs subvolumes under requested cleanup targets before using a plain
+  recursive file delete. When a requested cleanup target is itself a btrfs subvolume, POSIX uninstall
+  SHOULD delete nested subvolumes deepest first, then delete the target subvolume
 - GitHub integration is optional; a missing GitHub account, GitHub CLI, or GitHub auth MUST NOT
   block a non-GitHub local workflow. When a user requests GitHub integration and GitHub CLI is
   missing, setup MUST offer assisted GitHub CLI installation where the platform helper knows a

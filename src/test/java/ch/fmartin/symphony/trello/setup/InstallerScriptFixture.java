@@ -62,11 +62,17 @@ final class InstallerScriptFixture {
 
     private static void applyTestEnvironment(ProcessBuilder processBuilder, Map<String, String> environment)
             throws IOException {
-        processBuilder.environment().putAll(environment);
+        Map<String, String> processEnvironment = processBuilder.environment();
+        for (String xdgHome : List.of("XDG_DATA_HOME", "XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME")) {
+            if (!environment.containsKey(xdgHome)) {
+                processEnvironment.remove(xdgHome);
+            }
+        }
+        processEnvironment.putAll(environment);
         if (!environment.containsKey("HOME") && !isWindows()) {
             Path home = defaultPosixHome(environment);
             Files.createDirectories(home);
-            processBuilder.environment().put("HOME", home.toString());
+            processEnvironment.put("HOME", home.toString());
         }
     }
 
@@ -315,7 +321,8 @@ final class InstallerScriptFixture {
                 #!/usr/bin/env bash
                 set -euo pipefail
                 echo "systemctl $*" >> "${SYMPHONY_FAKE_LOG:?}"
-                service_file="$HOME/.config/systemd/user/symphony-trello.service"
+                config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
+                service_file="$config_home/systemd/user/symphony-trello.service"
                 command_path=""
                 if [[ -f "$service_file" ]]; then
                   command_path="$(sed -n 's/^ExecStart="\\([^"]*symphony-trello\\)" .*/\\1/p' "$service_file" | head -1)"

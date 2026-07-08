@@ -45,7 +45,7 @@ final class InstallerScriptLifecycleTest {
         Path binDirectory = temporaryDirectory.resolve("bin");
         Path stateHome = symphonyHome.resolve("state");
         Path userService = homeDirectory.resolve(".config/systemd/user/symphony-trello.service");
-        Path autostartEnvironment = homeDirectory.resolve(".config/symphony-trello/autostart.env");
+        Path autostartEnvironment = configDirectory.resolve("autostart.env");
         Path fakeLog = temporaryDirectory.resolve("fake-tools.log");
         Map<String, String> environment = Map.of(
                 "PATH",
@@ -202,7 +202,7 @@ final class InstallerScriptLifecycleTest {
                         "Type=oneshot",
                         "RemainAfterExit=yes",
                         "Environment=\"PATH=",
-                        "EnvironmentFile=-%h/.config/symphony-trello/autostart.env",
+                        "EnvironmentFile=-" + autostartEnvironment,
                         "symphony-trello\" start --all",
                         "symphony-trello\" stop",
                         "Restart=on-failure",

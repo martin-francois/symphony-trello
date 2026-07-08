@@ -164,8 +164,13 @@ Workspace and authorize the API token in the browser.
     boards and Workspaces your account can access.
 15. Save both values in the `.env` file read by the command you will run:
 
-    - Installed `symphony-trello` command: `$HOME/.local/share/symphony-trello/config/.env`,
-      unless you installed with a custom `SYMPHONY_HOME` or `SYMPHONY_TRELLO_CONFIG_DIR`.
+    - Fresh installed `symphony-trello` command on normal Linux, macOS, or WSL2:
+      `$HOME/.config/symphony-trello/.env`.
+    - Existing default installs upgraded from the older single-home layout keep using the path from
+      their install context, usually `$HOME/.local/share/symphony-trello/config/.env`.
+    - Custom installs use the selected `SYMPHONY_HOME` or `SYMPHONY_TRELLO_CONFIG_DIR` config path.
+    - Installed `symphony-trello` command on MicroOS-like systems where the installer chose the
+      `/var` layout: `/var/lib/symphony-trello/users/<user>/config/.env`.
     - Source checkout with Maven: the project-root `.env`.
 
 ```properties
@@ -558,9 +563,26 @@ Setup saves Trello credentials that you type or pass directly. If credentials al
 environment variables or an existing `.env` file, setup uses them without copying them into another
 file for setup. For managed autostart, the installer writes a private autostart environment snapshot
 with only Symphony/Trello/Codex/GitHub/OpenAI/Anthropic/Quarkus-prefixed variables from the installer
-session, then removes that snapshot during uninstall. Workflows, connected-board metadata,
-workspaces, and logs live under `SYMPHONY_HOME` by default, separate from the installer-managed app
-checkout.
+session, then removes that snapshot during uninstall.
+
+On normal Linux, macOS, and WSL2 installs, Symphony uses XDG-style user-local paths by default:
+config in `$HOME/.config/symphony-trello`, app and workspaces in
+`$HOME/.local/share/symphony-trello`, state and logs in `$HOME/.local/state/symphony-trello`, and
+cache/dependency data in `$HOME/.cache/symphony-trello`.
+
+On openSUSE MicroOS-like hosts, and on other Linux hosts with the same storage topology, the POSIX
+installer checks whether `$HOME` is on a small root-backed filesystem while `/var` is the larger
+mutable filesystem. If so, it stores Symphony's app, config, workspaces, state, and cache under
+`/var/lib/symphony-trello/users/<user>/` and keeps the command shim in `$HOME/.local/bin`. If
+`$HOME` already resolves into `/var`, for example through a symlinked or bind-mounted home, the
+installer keeps the normal logical XDG paths under `$HOME`. Explicit path overrides such as
+`SYMPHONY_HOME`, `SYMPHONY_TRELLO_CONFIG_DIR`, `SYMPHONY_TRELLO_WORKSPACE_ROOT`,
+`SYMPHONY_TRELLO_STATE_HOME`, `--prefix`, and `--bin-dir` still win.
+
+The installer writes an install context in the selected config and state directories, plus stable
+default context locations under `$HOME`, so future updates and uninstall can find the selected paths
+without the original flags. Durable data is config and state/logs. Large generated data is app
+files, workspaces, and cache/dependency stores.
 
 The installer writes the command to `$HOME/.local/bin/symphony-trello` on macOS, Linux, and WSL2, or
 `$HOME\.local\bin\symphony-trello.ps1` on native Windows PowerShell. If that directory is not on

@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -24,6 +25,8 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 final class InstallerScriptTest {
+    private static final String INSTALL_CONTEXT_PROPERTIES = "install-context.properties";
+
     @TempDir
     Path temporaryDirectory;
 
@@ -72,6 +75,2513 @@ final class InstallerScriptTest {
     }
 
     @Test
+    void posixInstallerUsesXdgSplitLayoutByDefault() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("xdg-home");
+        Files.createDirectories(home);
+
+        // when
+        ProcessResult result = run(Map.of("HOME", home.toString()), "bash", "install.sh", "--dry-run", "--no-onboard");
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output())
+                .contains(
+                        "Install: " + home.resolve(".local/share/symphony-trello/app"),
+                        "Config: " + home.resolve(".config/symphony-trello"),
+                        "Workspaces: " + home.resolve(".local/share/symphony-trello/workspaces"),
+                        "State/logs: " + home.resolve(".local/state/symphony-trello"),
+                        "Command: " + home.resolve(".local/bin/symphony-trello"));
+    }
+
+    @Test
+    void posixInstallerUsesMicroOsVarLayoutWhenHomeIsRootBacked() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("microos-root-home");
+        Path varPath = temporaryDirectory.resolve("microos-var");
+        Path usersRoot = temporaryDirectory.resolve("microos-users");
+        Files.createDirectories(home);
+        Files.createDirectories(varPath);
+
+        // when
+        ProcessResult result = run(
+                microOsLayoutEnvironment(home, varPath, usersRoot), "bash", "install.sh", "--dry-run", "--no-onboard");
+
+        // then
+        result.assertSuccess();
+        Path userRoot = usersRoot.resolve("micro-user");
+        assertThat(result.output())
+                .contains(
+                        "Detected openSUSE MicroOS amd64",
+                        "Install: " + userRoot.resolve("data/app"),
+                        "Config: " + userRoot.resolve("config"),
+                        "Workspaces: " + userRoot.resolve("workspaces"),
+                        "State/logs: " + userRoot.resolve("state"),
+                        "Command: " + home.resolve(".local/bin/symphony-trello"),
+                        "Detected MicroOS-like storage layout.",
+                        "WOULD create MicroOS data root with:",
+                        "install -d -m 0750 -o 'micro-user' -g 'micro-group' '" + userRoot + "'");
+    }
+
+    @Test
+    void posixScriptsUseMicroOsVarLayoutWhenVarIsLargerThanRootBackedHome() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("microos-larger-var-home");
+        Path varPath = temporaryDirectory.resolve("microos-larger-var");
+        Path usersRoot = temporaryDirectory.resolve("microos-larger-var-users");
+        Path userRoot = usersRoot.resolve("micro-user");
+        Files.createDirectories(home);
+        Files.createDirectories(varPath);
+        Map<String, String> environment = new LinkedHashMap<>(microOsLayoutEnvironment(home, varPath, usersRoot));
+        environment.put("SYMPHONY_TRELLO_TEST_HOME_SIZE_KB", "20971520");
+        environment.put("SYMPHONY_TRELLO_TEST_VAR_SIZE_KB", "41943040");
+
+        // when
+        ProcessResult install = run(environment, "bash", "install.sh", "--dry-run", "--no-onboard");
+        ProcessResult uninstall = run(environment, "bash", "uninstall.sh", "--dry-run");
+
+        // then
+        install.assertSuccess();
+        uninstall.assertSuccess();
+        assertThat(install.output())
+                .contains(
+                        "Install: " + userRoot.resolve("data/app"),
+                        "Config: " + userRoot.resolve("config"),
+                        "Workspaces: " + userRoot.resolve("workspaces"),
+                        "State/logs: " + userRoot.resolve("state"));
+        assertThat(uninstall.output())
+                .contains(
+                        "APP FILES       " + userRoot.resolve("data/app"),
+                        "CONFIG          " + userRoot.resolve("config"),
+                        "WORKSPACES      " + userRoot.resolve("workspaces"),
+                        "STATE/LOGS      " + userRoot.resolve("state"));
+    }
+
+    @Test
+    void posixInstallerRejectsSymlinkedMicroOsVarRoot() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("microos-symlink-root-home");
+        Path varPath = temporaryDirectory.resolve("microos-symlink-root-var");
+        Path usersRoot = temporaryDirectory.resolve("microos-symlink-root-users");
+        Path outside = temporaryDirectory.resolve("microos-symlink-root-outside");
+        Path userRoot = usersRoot.resolve("micro-user");
+        Files.createDirectories(home);
+        Files.createDirectories(varPath);
+        Files.createDirectories(usersRoot);
+        Files.createDirectories(outside);
+        Files.createSymbolicLink(userRoot, outside);
+
+        // when
+        ProcessResult result = runUnchecked(
+                microOsLayoutEnvironment(home, varPath, usersRoot), "bash", "install.sh", "--dry-run", "--no-onboard");
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isEqualTo(2);
+        assertThat(result.output())
+                .contains("Recommended MicroOS data root must not contain symlinked path components: " + userRoot)
+                .doesNotContain("Install: " + outside.resolve("data/app"));
+    }
+
+    @Test
+    void posixInstallerRejectsSymlinkedMicroOsVarRootParent() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("microos-symlink-parent-home");
+        Path varPath = temporaryDirectory.resolve("microos-symlink-parent-var");
+        Path realUsersParent = temporaryDirectory.resolve("microos-symlink-parent-real");
+        Path symlinkUsersParent = temporaryDirectory.resolve("microos-symlink-parent-link");
+        Path usersRoot = symlinkUsersParent.resolve("users");
+        Path userRoot = usersRoot.resolve("micro-user");
+        Files.createDirectories(home);
+        Files.createDirectories(varPath);
+        Files.createDirectories(realUsersParent);
+        Files.createSymbolicLink(symlinkUsersParent, realUsersParent);
+
+        // when
+        ProcessResult result = runUnchecked(
+                microOsLayoutEnvironment(home, varPath, usersRoot), "bash", "install.sh", "--dry-run", "--no-onboard");
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isEqualTo(2);
+        assertThat(result.output())
+                .contains("Recommended MicroOS data root must not contain symlinked path components: " + userRoot)
+                .doesNotContain("WOULD create MicroOS data root");
+        assertThat(realUsersParent.resolve("users")).doesNotExist();
+    }
+
+    @Test
+    void posixInstallerRejectsUnsafeMicroOsUsernamePathSegment() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("microos-unsafe-user-home");
+        Path varPath = temporaryDirectory.resolve("microos-unsafe-user-var");
+        Path usersRoot = temporaryDirectory.resolve("microos-unsafe-user-root");
+        Files.createDirectories(home);
+        Files.createDirectories(varPath);
+        Map<String, String> environment = new LinkedHashMap<>(microOsLayoutEnvironment(home, varPath, usersRoot));
+        environment.put("SYMPHONY_TRELLO_TEST_USER", "../../../../etc/pwn");
+
+        // when
+        ProcessResult result = runUnchecked(environment, "bash", "install.sh", "--dry-run", "--no-onboard");
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isEqualTo(2);
+        assertThat(result.output())
+                .contains("Could not determine a safe local username for the MicroOS data root.")
+                .doesNotContain("../../../../etc/pwn", "Dry run: no files changed.");
+    }
+
+    @Test
+    void posixInstallerKeepsMicroOsVarLayoutWhenOnlyCommandDirectoryIsOverridden() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("microos-bin-home");
+        Path varPath = temporaryDirectory.resolve("microos-bin-var");
+        Path usersRoot = temporaryDirectory.resolve("microos-bin-users");
+        Path binDirectory = temporaryDirectory.resolve("microos-bin");
+        Files.createDirectories(home);
+        Files.createDirectories(varPath);
+
+        // when
+        ProcessResult result = run(
+                microOsLayoutEnvironment(home, varPath, usersRoot),
+                "bash",
+                "install.sh",
+                "--dry-run",
+                "--no-onboard",
+                "--bin-dir",
+                binDirectory.toString());
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output())
+                .contains(
+                        "Install: " + usersRoot.resolve("micro-user/data/app"),
+                        "Workspaces: " + usersRoot.resolve("micro-user/workspaces"),
+                        "Command: " + binDirectory.resolve("symphony-trello"))
+                .doesNotContain("Install: " + home.resolve(".local/share/symphony-trello/app"));
+    }
+
+    @Test
+    void posixInstallerKeepsMicroOsVarLayoutWhenOnlyPrefixIsOverridden() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("microos-prefix-home");
+        Path varPath = temporaryDirectory.resolve("microos-prefix-var");
+        Path usersRoot = temporaryDirectory.resolve("microos-prefix-users");
+        Path app = temporaryDirectory.resolve("microos-prefix-app");
+        Files.createDirectories(home);
+        Files.createDirectories(varPath);
+
+        // when
+        ProcessResult result = run(
+                microOsLayoutEnvironment(home, varPath, usersRoot),
+                "bash",
+                "install.sh",
+                "--dry-run",
+                "--no-onboard",
+                "--prefix",
+                app.toString());
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output())
+                .contains(
+                        "Install: " + app,
+                        "Config: " + usersRoot.resolve("micro-user/config"),
+                        "Workspaces: " + usersRoot.resolve("micro-user/workspaces"),
+                        "State/logs: " + usersRoot.resolve("micro-user/state"),
+                        "Detected MicroOS-like storage layout.")
+                .doesNotContain(
+                        "Config: " + home.resolve(".config/symphony-trello"),
+                        "Workspaces: " + home.resolve(".local/share/symphony-trello/workspaces"),
+                        "State/logs: " + home.resolve(".local/state/symphony-trello"));
+    }
+
+    @Test
+    void posixInstallerKeepsMicroOsVarLayoutWhenOnlyConfigDirectoryIsOverridden() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("microos-config-home");
+        Path varPath = temporaryDirectory.resolve("microos-config-var");
+        Path usersRoot = temporaryDirectory.resolve("microos-config-users");
+        Path configDirectory = temporaryDirectory.resolve("microos-config");
+        Files.createDirectories(home);
+        Files.createDirectories(varPath);
+        Map<String, String> environment = new LinkedHashMap<>(microOsLayoutEnvironment(home, varPath, usersRoot));
+        environment.put("SYMPHONY_TRELLO_CONFIG_DIR", configDirectory.toString());
+
+        // when
+        ProcessResult result = run(environment, "bash", "install.sh", "--dry-run", "--no-onboard");
+
+        // then
+        result.assertSuccess();
+        Path userRoot = usersRoot.resolve("micro-user");
+        assertThat(result.output())
+                .contains(
+                        "Install: " + userRoot.resolve("data/app"),
+                        "Config: " + configDirectory,
+                        "Workspaces: " + userRoot.resolve("workspaces"),
+                        "State/logs: " + userRoot.resolve("state"))
+                .doesNotContain(
+                        "Install: " + home.resolve(".local/share/symphony-trello/app"),
+                        "Workspaces: " + home.resolve(".local/share/symphony-trello/workspaces"),
+                        "State/logs: " + home.resolve(".local/state/symphony-trello"));
+    }
+
+    @Test
+    void posixInstallerKeepsXdgLayoutOnMicroOsWhenHomeIsNotRootBacked() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("microos-normal-home");
+        Path varPath = temporaryDirectory.resolve("microos-normal-var");
+        Path usersRoot = temporaryDirectory.resolve("microos-normal-users");
+        Files.createDirectories(home);
+        Files.createDirectories(varPath);
+        Map<String, String> environment = new LinkedHashMap<>(microOsLayoutEnvironment(home, varPath, usersRoot));
+        environment.remove("SYMPHONY_TRELLO_TEST_HOME_FS_SOURCE");
+        environment.remove("SYMPHONY_TRELLO_TEST_ROOT_FS_SOURCE");
+        environment.remove("SYMPHONY_TRELLO_TEST_VAR_FS_SOURCE");
+        environment.remove("SYMPHONY_TRELLO_TEST_HOME_SIZE_KB");
+        environment.remove("SYMPHONY_TRELLO_TEST_VAR_SIZE_KB");
+
+        // when
+        ProcessResult result = run(environment, "bash", "install.sh", "--dry-run", "--no-onboard");
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output())
+                .contains(
+                        "Detected openSUSE MicroOS amd64",
+                        "Install: " + home.resolve(".local/share/symphony-trello/app"),
+                        "Config: " + home.resolve(".config/symphony-trello"),
+                        "State/logs: " + home.resolve(".local/state/symphony-trello"))
+                .doesNotContain("Detected MicroOS-like storage layout.", usersRoot.toString());
+    }
+
+    @Test
+    void posixScriptsUseMicroOsVarLayoutForStorageHeuristicWithoutMicroOsRelease() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("storage-root-home");
+        Path varPath = temporaryDirectory.resolve("storage-var");
+        Path usersRoot = temporaryDirectory.resolve("storage-users");
+        Path userRoot = usersRoot.resolve("micro-user");
+        Files.createDirectories(home);
+        Files.createDirectories(varPath);
+        Map<String, String> environment = new LinkedHashMap<>(microOsLayoutEnvironment(home, varPath, usersRoot));
+        environment.put("SYMPHONY_TRELLO_TEST_OS_ID", "debian");
+        environment.put("SYMPHONY_TRELLO_TEST_OS_PRETTY_NAME", "Debian GNU/Linux");
+        environment.put("SYMPHONY_TRELLO_TEST_HOME_FS_SOURCE", "rootfs");
+        environment.put("SYMPHONY_TRELLO_TEST_ROOT_FS_SOURCE", "rootfs");
+        environment.put("SYMPHONY_TRELLO_TEST_VAR_FS_SOURCE", "varfs");
+        environment.put("SYMPHONY_TRELLO_TEST_HOME_SIZE_KB", "1024");
+        environment.put("SYMPHONY_TRELLO_TEST_VAR_SIZE_KB", "8192");
+
+        // when
+        ProcessResult install = run(environment, "bash", "install.sh", "--dry-run", "--no-onboard");
+        ProcessResult uninstall = run(environment, "bash", "uninstall.sh", "--dry-run");
+
+        // then
+        install.assertSuccess();
+        uninstall.assertSuccess();
+        assertThat(install.output())
+                .contains(
+                        "Detected MicroOS-like storage layout.",
+                        "Install: " + userRoot.resolve("data/app"),
+                        "Workspaces: " + userRoot.resolve("workspaces"),
+                        "State/logs: " + userRoot.resolve("state"))
+                .doesNotContain("Install: " + home.resolve(".local/share/symphony-trello/app"));
+        assertThat(uninstall.output())
+                .contains(
+                        "APP FILES       " + userRoot.resolve("data/app"),
+                        "WORKSPACES      " + userRoot.resolve("workspaces"),
+                        "STATE/LOGS      " + userRoot.resolve("state"))
+                .doesNotContain("APP FILES       " + home.resolve(".local/share/symphony-trello/app"));
+    }
+
+    @Test
+    void posixScriptsSkipIncompleteInstallContextDuringDefaultLayoutSelection() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("partial-context-home");
+        Path varPath = temporaryDirectory.resolve("partial-context-var");
+        Path usersRoot = temporaryDirectory.resolve("partial-context-users");
+        Path userRoot = usersRoot.resolve("micro-user");
+        Path partialApp = temporaryDirectory.resolve("partial-context-app");
+        Path partialContext = installContext(home.resolve(".local/state/symphony-trello"));
+        Files.createDirectories(home);
+        Files.createDirectories(varPath);
+        Files.createDirectories(partialApp);
+        Files.createDirectories(partialContext.getParent());
+        Files.writeString(
+                partialContext,
+                """
+                installer=install.sh
+                install_format_version=2
+                app_dir=%s
+                config_dir=/tmp/ignored-config
+                """
+                        .formatted(partialApp),
+                StandardCharsets.UTF_8);
+        Map<String, String> environment = new LinkedHashMap<>(microOsLayoutEnvironment(home, varPath, usersRoot));
+        environment.put("SYMPHONY_TRELLO_TEST_OS_ID", "debian");
+        environment.put("SYMPHONY_TRELLO_TEST_OS_PRETTY_NAME", "Debian GNU/Linux");
+
+        // when
+        ProcessResult install = run(environment, "bash", "install.sh", "--dry-run", "--no-onboard");
+        ProcessResult uninstall = run(environment, "bash", "uninstall.sh", "--dry-run");
+
+        // then
+        install.assertSuccess();
+        uninstall.assertSuccess();
+        assertThat(install.output())
+                .contains(
+                        "Detected MicroOS-like storage layout.",
+                        "Install: " + userRoot.resolve("data/app"),
+                        "Config: " + userRoot.resolve("config"))
+                .doesNotContain(partialApp.toString(), "/tmp/ignored-config");
+        assertThat(uninstall.output())
+                .contains(
+                        "APP FILES       " + userRoot.resolve("data/app"),
+                        "CONFIG          " + userRoot.resolve("config"))
+                .doesNotContain(partialApp.toString(), "/tmp/ignored-config");
+    }
+
+    @Test
+    void posixScriptsSkipUnsafeLegacyContextPathThroughUntrustedSymlink() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("unsafe-legacy-context-home");
+        Path outside = temporaryDirectory.resolve("unsafe-legacy-context-outside");
+        Path varPath = temporaryDirectory.resolve("unsafe-legacy-context-var");
+        Path usersRoot = temporaryDirectory.resolve("unsafe-legacy-context-users");
+        Path userRoot = usersRoot.resolve("micro-user");
+        Path binDirectory = home.resolve("bin");
+        Path unsafeContext = installContext(outside.resolve("share/symphony-trello/state"));
+        Path replayedApp = temporaryDirectory.resolve("unsafe-legacy-context-replayed-app");
+        Files.createDirectories(home);
+        Files.createDirectories(binDirectory);
+        Files.createDirectories(outside);
+        Files.createDirectories(varPath);
+        Files.createDirectories(unsafeContext.getParent());
+        Files.createSymbolicLink(home.resolve(".local"), outside);
+        Files.writeString(
+                unsafeContext,
+                """
+                installer=install.sh
+                install_format_version=2
+                layout_mode=custom-flags
+                app_dir=%s
+                config_dir=%s
+                workspace_root=%s
+                state_home=%s
+                bin_dir=%s
+                created_microos_var_root=false
+                """
+                        .formatted(
+                                replayedApp,
+                                temporaryDirectory.resolve("unsafe-legacy-context-replayed-config"),
+                                temporaryDirectory.resolve("unsafe-legacy-context-replayed-workspaces"),
+                                temporaryDirectory.resolve("unsafe-legacy-context-replayed-state"),
+                                temporaryDirectory.resolve("unsafe-legacy-context-replayed-bin")),
+                StandardCharsets.UTF_8);
+        Map<String, String> environment = new LinkedHashMap<>(microOsLayoutEnvironment(home, varPath, usersRoot));
+        environment.put("SYMPHONY_TRELLO_TEST_OS_ID", "debian");
+        environment.put("SYMPHONY_TRELLO_TEST_OS_PRETTY_NAME", "Debian GNU/Linux");
+
+        // when
+        ProcessResult install = run(
+                environment, "bash", "install.sh", "--dry-run", "--no-onboard", "--bin-dir", binDirectory.toString());
+        ProcessResult uninstall =
+                run(environment, "bash", "uninstall.sh", "--dry-run", "--bin-dir", binDirectory.toString());
+
+        // then
+        install.assertSuccess();
+        uninstall.assertSuccess();
+        assertThat(install.output())
+                .contains("Install: " + userRoot.resolve("data/app"))
+                .doesNotContain("Install: " + replayedApp);
+        assertThat(uninstall.output())
+                .contains("APP FILES       " + userRoot.resolve("data/app"))
+                .doesNotContain("APP FILES       " + replayedApp);
+        assertThat(unsafeContext).exists();
+    }
+
+    @Test
+    void posixScriptsDoNotRequireMicroOsUsernameForGenericContextDiscovery() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("generic-context-no-user-home");
+        Path fakeBin = temporaryDirectory.resolve("generic-context-no-user-bin");
+        Files.createDirectories(home);
+        Files.createDirectories(fakeBin);
+        writeExecutable(
+                fakeBin.resolve("id"),
+                """
+                #!/usr/bin/env bash
+                exit 1
+                """);
+        Map<String, String> environment =
+                Map.of("PATH", fakeBin + File.pathSeparator + System.getenv("PATH"), "HOME", home.toString());
+
+        // when
+        ProcessResult install = run(environment, "bash", "install.sh", "--dry-run", "--no-onboard");
+        ProcessResult uninstall = run(environment, "bash", "uninstall.sh", "--dry-run");
+
+        // then
+        install.assertSuccess();
+        uninstall.assertSuccess();
+        assertThat(install.output())
+                .contains("Install: " + home.resolve(".local/share/symphony-trello/app"))
+                .doesNotContain("Could not determine a safe local username for the MicroOS data root.");
+        assertThat(uninstall.output())
+                .contains("APP FILES       " + home.resolve(".local/share/symphony-trello/app"))
+                .doesNotContain("Could not determine a safe local username for the MicroOS data root.");
+    }
+
+    @Test
+    void posixScriptsKeepXdgLayoutForNonMicroOsWhenStorageHeuristicDoesNotMatch() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("storage-same-source-home");
+        Path varPath = temporaryDirectory.resolve("storage-same-source-var");
+        Path usersRoot = temporaryDirectory.resolve("storage-same-source-users");
+        Files.createDirectories(home);
+        Files.createDirectories(varPath);
+        Map<String, String> environment = new LinkedHashMap<>(microOsLayoutEnvironment(home, varPath, usersRoot));
+        environment.put("SYMPHONY_TRELLO_TEST_OS_ID", "debian");
+        environment.put("SYMPHONY_TRELLO_TEST_OS_PRETTY_NAME", "Debian GNU/Linux");
+        environment.put("SYMPHONY_TRELLO_TEST_HOME_FS_SOURCE", "rootfs");
+        environment.put("SYMPHONY_TRELLO_TEST_ROOT_FS_SOURCE", "rootfs");
+        environment.put("SYMPHONY_TRELLO_TEST_VAR_FS_SOURCE", "rootfs");
+        environment.put("SYMPHONY_TRELLO_TEST_HOME_SIZE_KB", "1024");
+        environment.put("SYMPHONY_TRELLO_TEST_VAR_SIZE_KB", "8192");
+
+        // when
+        ProcessResult install = run(environment, "bash", "install.sh", "--dry-run", "--no-onboard");
+        ProcessResult uninstall = run(environment, "bash", "uninstall.sh", "--dry-run");
+
+        // then
+        install.assertSuccess();
+        uninstall.assertSuccess();
+        assertThat(install.output())
+                .contains(
+                        "Install: " + home.resolve(".local/share/symphony-trello/app"),
+                        "Config: " + home.resolve(".config/symphony-trello"),
+                        "State/logs: " + home.resolve(".local/state/symphony-trello"))
+                .doesNotContain("Detected MicroOS-like storage layout.", usersRoot.toString());
+        assertThat(uninstall.output())
+                .contains(
+                        "APP FILES       " + home.resolve(".local/share/symphony-trello/app"),
+                        "CONFIG          " + home.resolve(".config/symphony-trello"),
+                        "STATE/LOGS      " + home.resolve(".local/state/symphony-trello"))
+                .doesNotContain("APP FILES       " + usersRoot.resolve("micro-user/data/app"));
+    }
+
+    @Test
+    void posixInstallerFailsNonInteractiveMicroOsVarRootCreationWithActionableCommand() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("microos-noninteractive-home");
+        Path varPath = temporaryDirectory.resolve("microos-noninteractive-var");
+        Path usersRoot = temporaryDirectory.resolve("microos-noninteractive-users");
+        Path fakeBin = temporaryDirectory.resolve("microos-noninteractive-bin");
+        Files.createDirectories(home);
+        Files.createDirectories(varPath);
+        Files.createDirectories(fakeBin);
+        writeExecutable(
+                fakeBin.resolve("java"),
+                """
+                #!/bin/sh
+                echo 'openjdk version "25.0.1"' >&2
+                """);
+        writeExecutable(
+                fakeBin.resolve("javac"),
+                """
+                #!/bin/sh
+                echo 'javac 25.0.1'
+                """);
+        Map<String, String> environment = new LinkedHashMap<>(microOsLayoutEnvironment(home, varPath, usersRoot));
+        environment.put("PATH", fakeBin + File.pathSeparator + "/bin");
+        environment.put("SYMPHONY_TRELLO_TEST_NO_PRIVILEGE_HELPERS", "true");
+
+        // when
+        ProcessResult result = runUnchecked(environment, "/bin/bash", "install.sh", "--no-onboard");
+
+        // then
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.output())
+                .contains(
+                        "Detected MicroOS-like storage layout.",
+                        "Create the recommended MicroOS data root, then rerun this installer:",
+                        "install -d -m 0750 -o 'micro-user' -g 'micro-group' '" + usersRoot.resolve("micro-user") + "'")
+                .doesNotContain("Installing Symphony...", "sudo install");
+    }
+
+    @Test
+    void posixInstallerRejectsExistingMicroOsVarRootWritableByOtherUsers() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("microos-world-writable-home");
+        Path varPath = temporaryDirectory.resolve("microos-world-writable-var");
+        Path usersRoot = temporaryDirectory.resolve("microos-world-writable-users");
+        Path userRoot = usersRoot.resolve("micro-user");
+        Files.createDirectories(home);
+        Files.createDirectories(varPath);
+        Files.createDirectories(userRoot);
+        Files.setPosixFilePermissions(userRoot, PosixFilePermissions.fromString("rwxrwx---"));
+        Map<String, String> environment = microOsLayoutEnvironment(home, varPath, usersRoot);
+
+        // when
+        ProcessResult result = runUnchecked(environment, "bash", "install.sh", "--dry-run", "--no-onboard");
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isEqualTo(2);
+        assertThat(result.output())
+                .contains(
+                        "Recommended MicroOS data root must not be writable by group or other: " + userRoot,
+                        "install -d -m 0750 -o 'micro-user' -g 'micro-group' '" + userRoot + "'")
+                .doesNotContain("WOULD clone or update:", "Installing Symphony...");
+    }
+
+    @Test
+    void posixInstallerCreatesMicroOsVarRootWhenDefaultPromptIsAccepted() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
+        assumeTrue(commandExists("script"));
+        Path installScript = Path.of("install.sh").toAbsolutePath();
+        Path sourceRepository = createSourceRepository(temporaryDirectory);
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path home = temporaryDirectory.resolve("microos-interactive-home");
+        Path varPath = temporaryDirectory.resolve("microos-interactive-var");
+        Path usersRoot = temporaryDirectory.resolve("microos-interactive-users");
+        Path userRoot = usersRoot.resolve("micro-user");
+        Path fakeLog = temporaryDirectory.resolve("microos-interactive.log");
+        Files.createDirectories(home);
+        Files.createDirectories(varPath);
+        writeExecutable(
+                fakeBin.resolve("sudo"),
+                """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                echo "sudo $*" >> "${SYMPHONY_FAKE_LOG:?}"
+                "$@"
+                """);
+        writeExecutable(
+                fakeBin.resolve("install"),
+                """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                directory="${@: -1}"
+                echo "install $*" >> "${SYMPHONY_FAKE_LOG:?}"
+                mkdir -p "$directory"
+                """);
+        Map<String, String> environment = new LinkedHashMap<>(microOsLayoutEnvironment(home, varPath, usersRoot));
+        environment.put("PATH", fakeBin + File.pathSeparator + System.getenv("PATH"));
+        environment.put("SYMPHONY_TRELLO_REPO_URL", sourceRepository.toUri().toString());
+        environment.put("SYMPHONY_TRELLO_REF", "main");
+        environment.put("SYMPHONY_FAKE_LOG", fakeLog.toString());
+        environment.put("SYMPHONY_TRELLO_TEST_EUID", "1000");
+
+        // when
+        ProcessResult result = runWithPseudoTerminal(
+                environment, "\n", "bash " + shellQuote(installScript.toString()) + " --no-onboard");
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output())
+                .contains(
+                        "Create command:",
+                        "install -d -m 0750 -o 'micro-user' -g 'micro-group' '" + userRoot + "'",
+                        "Create this directory now? [Y/n]");
+        assertThat(result.output().indexOf("install -d -m 0750"))
+                .isLessThan(result.output().indexOf("Create this directory now? [Y/n]"));
+        assertThat(userRoot).isDirectory();
+        assertThat(fakeLog)
+                .content(StandardCharsets.UTF_8)
+                .contains(
+                        "sudo install -d -m 0750 -o micro-user -g micro-group " + userRoot,
+                        "install -d -m 0750 -o micro-user -g micro-group " + userRoot);
+        assertThat(installContext(userRoot.resolve("config")))
+                .content(StandardCharsets.UTF_8)
+                .contains("layout_mode=microos-var", "microos_var_root=" + userRoot, "created_microos_var_root=true");
+    }
+
+    @Test
+    void posixInstallWithCustomMicroOsConfigWritesRootContextAndUninstallCleansRoot() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
+        assumeTrue(commandExists("script"));
+        Path installScript = Path.of("install.sh").toAbsolutePath();
+        Path sourceRepository = createSourceRepository(temporaryDirectory);
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path home = temporaryDirectory.resolve("microos-custom-config-home");
+        Path varPath = temporaryDirectory.resolve("microos-custom-config-var");
+        Path usersRoot = temporaryDirectory.resolve("microos-custom-config-users");
+        Path userRoot = usersRoot.resolve("micro-user");
+        Path configDirectory = temporaryDirectory.resolve("microos-custom-config");
+        Path fakeLog = temporaryDirectory.resolve("microos-custom-config.log");
+        Files.createDirectories(home);
+        Files.createDirectories(varPath);
+        writeExecutable(
+                fakeBin.resolve("sudo"),
+                """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                echo "sudo $*" >> "${SYMPHONY_FAKE_LOG:?}"
+                "$@"
+                """);
+        writeExecutable(
+                fakeBin.resolve("install"),
+                """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                directory="${@: -1}"
+                echo "install $*" >> "${SYMPHONY_FAKE_LOG:?}"
+                mkdir -p "$directory"
+                """);
+        Map<String, String> environment = new LinkedHashMap<>(microOsLayoutEnvironment(home, varPath, usersRoot));
+        environment.put("PATH", fakeBin + File.pathSeparator + System.getenv("PATH"));
+        environment.put("SYMPHONY_TRELLO_CONFIG_DIR", configDirectory.toString());
+        environment.put("SYMPHONY_TRELLO_REPO_URL", sourceRepository.toUri().toString());
+        environment.put("SYMPHONY_TRELLO_REF", "main");
+        environment.put("SYMPHONY_FAKE_LOG", fakeLog.toString());
+        environment.put("SYMPHONY_TRELLO_TEST_EUID", "1000");
+
+        // when
+        ProcessResult install = runWithPseudoTerminal(
+                environment, "\n", "bash " + shellQuote(installScript.toString()) + " --no-onboard");
+
+        // then
+        install.assertSuccess();
+        assertThat(configDirectory.resolve("install-context.properties"))
+                .content(StandardCharsets.UTF_8)
+                .contains(
+                        "layout_mode=microos-var",
+                        "config_dir=" + configDirectory,
+                        "microos_var_root=" + userRoot,
+                        "created_microos_var_root=true");
+
+        // when
+        ProcessResult uninstall =
+                run(environment, "bash", "uninstall.sh", "--yes", "--yes-local-data", "--remove-all-local-data");
+
+        // then
+        uninstall.assertSuccess();
+        assertThat(uninstall.output()).contains("REMOVE  " + userRoot);
+        assertThat(userRoot).doesNotExist();
+        assertThat(configDirectory).doesNotExist();
+    }
+
+    @Test
+    void posixInstallerAllowsMicroOsHomeSymlinkedIntoVar() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path varPath = temporaryDirectory.resolve("symlink-var");
+        Path realHome = varPath.resolve("userhomes/live/micro-user");
+        Path symlinkedHome = temporaryDirectory.resolve("symlink-home");
+        Path usersRoot = varPath.resolve("lib/symphony-trello/users");
+        Files.createDirectories(realHome);
+        Files.createDirectories(usersRoot);
+        Files.createSymbolicLink(symlinkedHome, realHome);
+
+        // when
+        ProcessResult result = run(
+                microOsLayoutEnvironment(symlinkedHome, varPath, usersRoot),
+                "bash",
+                "install.sh",
+                "--dry-run",
+                "--no-onboard");
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output())
+                .contains(
+                        "Install: " + symlinkedHome.resolve(".local/share/symphony-trello/app"),
+                        "Config: " + symlinkedHome.resolve(".config/symphony-trello"),
+                        "State/logs: " + symlinkedHome.resolve(".local/state/symphony-trello"))
+                .doesNotContain("must resolve inside the user home", "WOULD create MicroOS data root");
+    }
+
+    @Test
+    void posixUninstallerUsesMicroOsVarLayoutFallbackWithoutInstallContext() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("microos-uninstall-home");
+        Path varPath = temporaryDirectory.resolve("microos-uninstall-var");
+        Path usersRoot = temporaryDirectory.resolve("microos-uninstall-users");
+        Files.createDirectories(home);
+        Files.createDirectories(varPath);
+        Path userRoot = usersRoot.resolve("micro-user");
+
+        // when
+        ProcessResult result =
+                run(microOsLayoutEnvironment(home, varPath, usersRoot), "bash", "uninstall.sh", "--dry-run");
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output())
+                .contains(
+                        "APP FILES       " + userRoot.resolve("data/app"),
+                        "CONFIG          " + userRoot.resolve("config"),
+                        "WORKSPACES      " + userRoot.resolve("workspaces"),
+                        "STATE/LOGS      " + userRoot.resolve("state"));
+    }
+
+    @Test
+    void posixInstallWritesContextAndUninstallUsesItWithoutCustomPaths() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
+        Path sourceRepository = createSourceRepository(temporaryDirectory);
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path home = temporaryDirectory.resolve("context-home");
+        Path varPath = temporaryDirectory.resolve("context-var");
+        Path usersRoot = temporaryDirectory.resolve("context-users");
+        Path userRoot = usersRoot.resolve("micro-user");
+        Path binDirectory = home.resolve(".local/bin");
+        Path fakeLog = temporaryDirectory.resolve("context.log");
+        Files.createDirectories(home);
+        Files.createDirectories(varPath);
+        Files.createDirectories(userRoot);
+        Map<String, String> environment = new LinkedHashMap<>(microOsLayoutEnvironment(home, varPath, usersRoot));
+        environment.put("PATH", fakeBin + File.pathSeparator + System.getenv("PATH"));
+        environment.put("SYMPHONY_TRELLO_REPO_URL", sourceRepository.toUri().toString());
+        environment.put("SYMPHONY_TRELLO_REF", "main");
+        environment.put("SYMPHONY_FAKE_LOG", fakeLog.toString());
+
+        // when
+        ProcessResult install = run(environment, "bash", "install.sh", "--no-onboard");
+        ProcessResult uninstall = run(environment, "bash", "uninstall.sh", "--yes");
+
+        // then
+        install.assertSuccess();
+        uninstall.assertSuccess();
+        assertThat(userRoot.resolve("config/install-context.properties"))
+                .content(StandardCharsets.UTF_8)
+                .contains(
+                        "install_format_version=2",
+                        "layout_mode=microos-var",
+                        "app_dir=" + userRoot.resolve("data/app"),
+                        "config_dir=" + userRoot.resolve("config"),
+                        "workspace_root=" + userRoot.resolve("workspaces"),
+                        "state_home=" + userRoot.resolve("state"),
+                        "cache_dir=" + userRoot.resolve("cache"),
+                        "bin_dir=" + binDirectory,
+                        "microos_var_root=" + userRoot,
+                        "codex_npm_prefix=" + userRoot.resolve("cache/npm"));
+        assertThat(userRoot.resolve("state/install-context.properties"))
+                .content(StandardCharsets.UTF_8)
+                .contains("layout_mode=microos-var", "created_microos_var_root=false");
+        assertThat(userRoot.resolve("data/app")).doesNotExist();
+        assertThat(binDirectory.resolve("symphony-trello")).doesNotExist();
+        assertThat(userRoot.resolve("config")).isDirectory();
+        assertThat(userRoot.resolve("workspaces")).isDirectory();
+        assertThat(userRoot.resolve("state")).isDirectory();
+    }
+
+    @Test
+    void posixInstallWritesDiscoverableContextForCustomHome() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
+        Path sourceRepository = createSourceRepository(temporaryDirectory);
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path home = temporaryDirectory.resolve("custom-context-home");
+        Path symphonyHome = temporaryDirectory.resolve("custom-context-symphony-home");
+        Path fakeLog = temporaryDirectory.resolve("custom-context.log");
+        Files.createDirectories(home);
+        Map<String, String> installEnvironment =
+                installEnvironmentForCustomHome(sourceRepository, fakeBin, home, symphonyHome, fakeLog);
+
+        // when
+        ProcessResult install = run(installEnvironment, "bash", "install.sh", "--no-onboard");
+        ProcessResult uninstall = run(Map.of("HOME", home.toString()), "bash", "uninstall.sh", "--dry-run", "--yes");
+
+        // then
+        install.assertSuccess();
+        uninstall.assertSuccess();
+        assertThat(home.resolve(".local/state/symphony-trello/install-context.properties"))
+                .content(StandardCharsets.UTF_8)
+                .contains(
+                        "layout_mode=custom-env",
+                        "app_dir=" + symphonyHome.resolve("app"),
+                        "config_dir=" + symphonyHome.resolve("config"),
+                        "workspace_root=" + symphonyHome.resolve("workspaces"),
+                        "state_home=" + symphonyHome.resolve("state"));
+        assertThat(symphonyHome.resolve("state/install-context.properties"))
+                .content(StandardCharsets.UTF_8)
+                .contains("layout_mode=custom-env", "app_dir=" + symphonyHome.resolve("app"));
+        assertThat(uninstall.output())
+                .contains(
+                        "App checkout: " + symphonyHome.resolve("app"),
+                        "CONFIG          " + symphonyHome.resolve("config"),
+                        "WORKSPACES      " + symphonyHome.resolve("workspaces"),
+                        "STATE/LOGS      " + symphonyHome.resolve("state"))
+                .doesNotContain("App checkout: " + home.resolve(".local/share/symphony-trello/app"));
+    }
+
+    @Test
+    void posixScriptsUseSymphonyHomeContextAndLegacyAutostartSnapshot() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("legacy-context-home");
+        Path symphonyHome = temporaryDirectory.resolve("legacy-context-symphony-home");
+        Path app = symphonyHome.resolve("app");
+        Path config = symphonyHome.resolve("config");
+        Path workspaces = symphonyHome.resolve("workspaces");
+        Path state = symphonyHome.resolve("state");
+        Path cache = symphonyHome.resolve("cache");
+        Path binDirectory = temporaryDirectory.resolve("legacy-context-bin");
+        Path command = binDirectory.resolve("symphony-trello");
+        Path xdgConfigHome = temporaryDirectory.resolve("legacy-context-xdg-config");
+        Path legacyService = home.resolve(".config/systemd/user/symphony-trello.service");
+        Path legacyAutostartEnv = home.resolve(".config/symphony-trello/autostart.env");
+        Files.createDirectories(app);
+        Files.createDirectories(config);
+        Files.createDirectories(workspaces);
+        Files.createDirectories(state);
+        Files.createDirectories(cache);
+        Files.createDirectories(binDirectory);
+        Files.createDirectories(legacyService.getParent());
+        Files.createDirectories(legacyAutostartEnv.getParent());
+        Files.writeString(app.resolve(".symphony-trello-install"), "marker", StandardCharsets.UTF_8);
+        Files.writeString(command, "launcher\n", StandardCharsets.UTF_8);
+        Files.writeString(legacyService, "legacy service\n", StandardCharsets.UTF_8);
+        Files.writeString(legacyAutostartEnv, "TRELLO_API_KEY=\"legacy\"\n", StandardCharsets.UTF_8);
+        Files.writeString(
+                state.resolve("install-context.properties"),
+                """
+                installer=install.sh
+                install_format_version=1
+                app_dir=%s
+                config_dir=%s
+                workspace_root=%s
+                state_home=%s
+                cache_dir=%s
+                bin_dir=%s
+                codex_npm_prefix=%s
+                """
+                        .formatted(app, config, workspaces, state, cache, binDirectory, cache.resolve("npm")),
+                StandardCharsets.UTF_8);
+        Map<String, String> environment = Map.of(
+                "HOME",
+                home.toString(),
+                "SYMPHONY_HOME",
+                symphonyHome.toString(),
+                "SYMPHONY_TRELLO_CONFIG_DIR",
+                config.toString(),
+                "XDG_CONFIG_HOME",
+                xdgConfigHome.toString());
+
+        // when
+        ProcessResult installDryRun = run(environment, "bash", "install.sh", "--dry-run", "--no-onboard");
+        ProcessResult uninstall = run(environment, "bash", "uninstall.sh", "--yes");
+
+        // then
+        installDryRun.assertSuccess();
+        uninstall.assertSuccess();
+        assertThat(installDryRun.output()).contains("Command: " + command);
+        assertThat(uninstall.output())
+                .contains(
+                        "Installed CLI: " + command,
+                        "USER SERVICE    " + legacyService,
+                        "STOP  user systemd service: symphony-trello.service",
+                        "REMOVE  " + legacyService,
+                        "REMOVE  " + command,
+                        "REMOVE  " + legacyAutostartEnv);
+        assertThat(command).doesNotExist();
+        assertThat(legacyService).doesNotExist();
+        assertThat(legacyAutostartEnv).doesNotExist();
+    }
+
+    @Test
+    void posixUninstallerRemovesRecordedAutostartSnapshotWhenConfigIsOverridden() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("recorded-autostart-home");
+        Path app = temporaryDirectory.resolve("recorded-autostart-app");
+        Path oldConfig = temporaryDirectory.resolve("recorded-autostart-old-config");
+        Path newConfig = temporaryDirectory.resolve("recorded-autostart-new-config");
+        Path workspaces = temporaryDirectory.resolve("recorded-autostart-workspaces");
+        Path state = home.resolve(".local/state/symphony-trello");
+        Path cache = temporaryDirectory.resolve("recorded-autostart-cache");
+        Path binDirectory = temporaryDirectory.resolve("recorded-autostart-bin");
+        Path recordedAutostartEnv = oldConfig.resolve("autostart.env");
+        Files.createDirectories(home.resolve(".config/symphony-trello"));
+        Files.createDirectories(app);
+        Files.createDirectories(oldConfig);
+        Files.createDirectories(newConfig);
+        Files.createDirectories(workspaces);
+        Files.createDirectories(state);
+        Files.createDirectories(cache);
+        Files.createDirectories(binDirectory);
+        Files.writeString(app.resolve(".symphony-trello-install"), "marker", StandardCharsets.UTF_8);
+        Files.writeString(recordedAutostartEnv, "TRELLO_API_KEY=\"recorded\"\n", StandardCharsets.UTF_8);
+        Files.writeString(
+                state.resolve("install-context.properties"),
+                """
+                installer=install.sh
+                install_format_version=2
+                layout_mode=custom-env
+                app_dir=%s
+                config_dir=%s
+                workspace_root=%s
+                state_home=%s
+                cache_dir=%s
+                bin_dir=%s
+                autostart_env_path=%s
+                codex_npm_prefix=%s
+                created_microos_var_root=false
+                """
+                        .formatted(
+                                app,
+                                oldConfig,
+                                workspaces,
+                                state,
+                                cache,
+                                binDirectory,
+                                recordedAutostartEnv,
+                                cache.resolve("npm")),
+                StandardCharsets.UTF_8);
+        Map<String, String> environment =
+                Map.of("HOME", home.toString(), "SYMPHONY_TRELLO_CONFIG_DIR", newConfig.toString());
+
+        // when
+        ProcessResult result = run(environment, "bash", "uninstall.sh", "--yes");
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output()).contains("REMOVE  " + recordedAutostartEnv);
+        assertThat(recordedAutostartEnv).doesNotExist();
+        assertThat(newConfig.resolve("autostart.env")).doesNotExist();
+    }
+
+    @Test
+    void posixInstallerPreservesRecordedAutostartSnapshotWhenConfigIsOverridden() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
+        Path installScript = Path.of("install.sh").toAbsolutePath();
+        Path sourceRepository = createSourceRepository(temporaryDirectory);
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path home = temporaryDirectory.resolve("install-recorded-autostart-home");
+        Path app = temporaryDirectory.resolve("install-recorded-autostart-app");
+        Path oldConfig = temporaryDirectory.resolve("install-recorded-autostart-old-config");
+        Path newConfig = temporaryDirectory.resolve("install-recorded-autostart-new-config");
+        Path workspaces = temporaryDirectory.resolve("install-recorded-autostart-workspaces");
+        Path state = home.resolve(".local/state/symphony-trello");
+        Path cache = temporaryDirectory.resolve("install-recorded-autostart-cache");
+        Path binDirectory = temporaryDirectory.resolve("install-recorded-autostart-bin");
+        Path fakeLog = temporaryDirectory.resolve("install-recorded-autostart.log");
+        Path recordedAutostartEnv = oldConfig.resolve("autostart.env");
+        Files.createDirectories(home);
+        Files.createDirectories(oldConfig);
+        Files.createDirectories(newConfig);
+        Files.createDirectories(state);
+        Files.createDirectories(cache);
+        Files.createDirectories(binDirectory);
+        Files.writeString(recordedAutostartEnv, "TRELLO_API_KEY=\"recorded\"\n", StandardCharsets.UTF_8);
+        Files.writeString(
+                state.resolve(INSTALL_CONTEXT_PROPERTIES),
+                """
+                installer=install.sh
+                install_format_version=2
+                layout_mode=custom-flags
+                app_dir=%s
+                config_dir=%s
+                workspace_root=%s
+                state_home=%s
+                cache_dir=%s
+                bin_dir=%s
+                autostart_env_path=%s
+                codex_npm_prefix=%s
+                created_microos_var_root=false
+                """
+                        .formatted(
+                                app,
+                                oldConfig,
+                                workspaces,
+                                state,
+                                cache,
+                                binDirectory,
+                                recordedAutostartEnv,
+                                cache.resolve("npm")),
+                StandardCharsets.UTF_8);
+        Map<String, String> environment = Map.of(
+                "PATH",
+                fakeBin + File.pathSeparator + System.getenv("PATH"),
+                "HOME",
+                home.toString(),
+                "SYMPHONY_TRELLO_CONFIG_DIR",
+                newConfig.toString(),
+                "SYMPHONY_TRELLO_REPO_URL",
+                sourceRepository.toUri().toString(),
+                "SYMPHONY_TRELLO_REF",
+                "main",
+                "SYMPHONY_FAKE_LOG",
+                fakeLog.toString());
+
+        // when
+        ProcessResult result = run(
+                environment,
+                "bash",
+                installScript.toString(),
+                "--no-onboard",
+                "--no-update-path",
+                "--bin-dir",
+                binDirectory.toString());
+
+        // then
+        result.assertSuccess();
+        assertThat(recordedAutostartEnv).exists();
+        assertThat(newConfig.resolve("autostart.env")).doesNotExist();
+        assertThat(state.resolve(INSTALL_CONTEXT_PROPERTIES))
+                .content(StandardCharsets.UTF_8)
+                .contains("config_dir=" + newConfig, "autostart_env_path=" + recordedAutostartEnv)
+                .doesNotContain("autostart_env_path=" + newConfig.resolve("autostart.env"));
+    }
+
+    @Test
+    void posixInstallSkipsUnsafeStableContextPathThroughUntrustedSymlink() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
+        Path sourceRepository = createSourceRepository(temporaryDirectory);
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path home = temporaryDirectory.resolve("unsafe-stable-context-home");
+        Path outside = temporaryDirectory.resolve("unsafe-stable-context-outside");
+        Path symphonyHome = temporaryDirectory.resolve("unsafe-stable-context-symphony-home");
+        Path configDirectory = temporaryDirectory.resolve("unsafe-stable-context-config");
+        Path fakeLog = temporaryDirectory.resolve("unsafe-stable-context.log");
+        Files.createDirectories(home);
+        Files.createDirectories(outside);
+        Files.createDirectories(configDirectory);
+        Files.createSymbolicLink(home.resolve(".config"), outside);
+        Map<String, String> environment = new LinkedHashMap<>(
+                installEnvironmentForCustomHome(sourceRepository, fakeBin, home, symphonyHome, fakeLog));
+        environment.put("SYMPHONY_TRELLO_CONFIG_DIR", configDirectory.toString());
+
+        // when
+        ProcessResult install = run(environment, "bash", "install.sh", "--no-onboard");
+
+        // then
+        install.assertSuccess();
+        assertThat(configDirectory.resolve("install-context.properties"))
+                .content(StandardCharsets.UTF_8)
+                .contains("config_dir=" + configDirectory);
+        assertThat(home.resolve(".local/state/symphony-trello/install-context.properties"))
+                .exists();
+        assertThat(outside.resolve("symphony-trello/install-context.properties"))
+                .doesNotExist();
+    }
+
+    @Test
+    void posixInstallContextReplayAllowsDedicatedAppPathDirectlyUnderHome() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("context-home-app-home");
+        Path app = home.resolve("symphony-trello");
+        Path dataHome = home.resolve(".local/share/symphony-trello");
+        Path stateHome = home.resolve(".local/state/symphony-trello");
+        Files.createDirectories(stateHome);
+        Files.writeString(
+                stateHome.resolve("install-context.properties"),
+                """
+                installer=install.sh
+                install_format_version=1
+                install_source=release-archive
+                app_version=1.1.0
+                app_dir=%s
+                config_dir=%s
+                workspace_root=%s
+                state_home=%s
+                bin_dir=%s
+                codex_npm_prefix=%s
+                """
+                        .formatted(
+                                app,
+                                dataHome.resolve("config"),
+                                dataHome.resolve("workspaces"),
+                                dataHome.resolve("state"),
+                                home.resolve(".local/bin"),
+                                dataHome.resolve("npm")),
+                StandardCharsets.UTF_8);
+
+        // when
+        ProcessResult install = run(Map.of("HOME", home.toString()), "bash", "install.sh", "--dry-run", "--no-onboard");
+        ProcessResult uninstall = run(Map.of("HOME", home.toString()), "bash", "uninstall.sh", "--dry-run", "--yes");
+
+        // then
+        install.assertSuccess();
+        uninstall.assertSuccess();
+        assertThat(install.output())
+                .contains("Install: " + app)
+                .doesNotContain("--prefix must point to a dedicated app checkout directory");
+        assertThat(uninstall.output())
+                .contains("App checkout: " + app)
+                .doesNotContain("--prefix must point to a dedicated app checkout directory");
+    }
+
+    @Test
+    void posixInstallContextReplayAllowsSymlinkedExplicitAppParent() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("context-symlink-app-home");
+        Path outside = temporaryDirectory.resolve("context-symlink-app-outside");
+        Path symlink = temporaryDirectory.resolve("context-symlink-app-link");
+        Path app = symlink.resolve("app");
+        Path commandDirectory = symlink.resolve("bin");
+        Path config = temporaryDirectory.resolve("context-symlink-app-config");
+        Path workspaces = temporaryDirectory.resolve("context-symlink-app-workspaces");
+        Path state = home.resolve(".local/state/symphony-trello");
+        Path cache = temporaryDirectory.resolve("context-symlink-app-cache");
+        Files.createDirectories(state);
+        Files.createDirectories(outside.resolve("app"));
+        Files.createDirectories(outside.resolve("bin"));
+        Files.createDirectories(config);
+        Files.createDirectories(workspaces);
+        Files.createDirectories(cache);
+        Files.writeString(outside.resolve("app/.symphony-trello-install"), "marker", StandardCharsets.UTF_8);
+        Files.createSymbolicLink(symlink, outside);
+        Files.writeString(
+                state.resolve("install-context.properties"),
+                """
+                installer=install.sh
+                install_format_version=2
+                layout_mode=custom-flags
+                app_dir=%s
+                config_dir=%s
+                workspace_root=%s
+                state_home=%s
+                cache_dir=%s
+                bin_dir=%s
+                codex_npm_prefix=%s
+                created_microos_var_root=false
+                """
+                        .formatted(app, config, workspaces, state, cache, commandDirectory, cache.resolve("npm")),
+                StandardCharsets.UTF_8);
+
+        // when
+        ProcessResult install = run(Map.of("HOME", home.toString()), "bash", "install.sh", "--dry-run", "--no-onboard");
+        ProcessResult uninstall = run(Map.of("HOME", home.toString()), "bash", "uninstall.sh", "--dry-run", "--yes");
+
+        // then
+        install.assertSuccess();
+        uninstall.assertSuccess();
+        assertThat(install.output())
+                .contains(
+                        "Install: " + app,
+                        "Command: " + commandDirectory.resolve("symphony-trello"),
+                        "Config: " + config);
+        assertThat(uninstall.output())
+                .contains(
+                        "App checkout: " + app,
+                        "Installed CLI: " + commandDirectory.resolve("symphony-trello"),
+                        "CONFIG          " + config);
+    }
+
+    @Test
+    void posixScriptsAllowSymlinkedSymphonyHomeOverride() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("symlink-symphony-home-user");
+        Path outside = temporaryDirectory.resolve("symlink-symphony-home-target");
+        Path symlink = temporaryDirectory.resolve("symlink-symphony-home-link");
+        Path symphonyHome = symlink.resolve("symphony");
+        Files.createDirectories(home);
+        Files.createDirectories(outside);
+        Files.createSymbolicLink(symlink, outside);
+        Map<String, String> environment = Map.of("HOME", home.toString(), "SYMPHONY_HOME", symphonyHome.toString());
+
+        // when
+        ProcessResult install = run(environment, "bash", "install.sh", "--dry-run", "--no-onboard");
+        ProcessResult uninstall = run(environment, "bash", "uninstall.sh", "--dry-run", "--yes");
+
+        // then
+        install.assertSuccess();
+        uninstall.assertSuccess();
+        assertThat(install.output())
+                .contains(
+                        "Install: " + symphonyHome.resolve("app"),
+                        "Config: " + symphonyHome.resolve("config"),
+                        "Workspaces: " + symphonyHome.resolve("workspaces"),
+                        "State/logs: " + symphonyHome.resolve("state"))
+                .doesNotContain("must resolve inside the user home or Symphony MicroOS data root");
+        assertThat(uninstall.output())
+                .contains(
+                        "App checkout: " + symphonyHome.resolve("app"),
+                        "CONFIG          " + symphonyHome.resolve("config"),
+                        "WORKSPACES      " + symphonyHome.resolve("workspaces"),
+                        "STATE/LOGS      " + symphonyHome.resolve("state"))
+                .doesNotContain("must resolve inside the user home or Symphony MicroOS data root");
+    }
+
+    @Test
+    void posixInstallContextReplayKeepsDataPathsWhenPrefixIsExplicitlySupplied() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("context-explicit-prefix-home");
+        Path app = temporaryDirectory.resolve("context-explicit-prefix-app");
+        Path dataHome = home.resolve(".local/share/symphony-trello");
+        Path stateHome = dataHome.resolve("state");
+        Path binDirectory = home.resolve(".local/bin");
+        Files.createDirectories(stateHome);
+        Files.writeString(
+                stateHome.resolve("install-context.properties"),
+                """
+                installer=install.sh
+                install_format_version=1
+                install_source=release-archive
+                app_version=1.1.0
+                app_dir=%s
+                config_dir=%s
+                workspace_root=%s
+                state_home=%s
+                bin_dir=%s
+                codex_npm_prefix=%s
+                """
+                        .formatted(
+                                app,
+                                dataHome.resolve("config"),
+                                dataHome.resolve("workspaces"),
+                                dataHome.resolve("state"),
+                                binDirectory,
+                                dataHome.resolve("npm")),
+                StandardCharsets.UTF_8);
+
+        // when
+        ProcessResult result = run(
+                Map.of("HOME", home.toString()),
+                "bash",
+                "install.sh",
+                "--dry-run",
+                "--no-onboard",
+                "--prefix",
+                app.toString());
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output())
+                .contains(
+                        "Install: " + app,
+                        "Config: " + dataHome.resolve("config"),
+                        "Workspaces: " + dataHome.resolve("workspaces"),
+                        "State/logs: " + dataHome.resolve("state"),
+                        "Command: " + binDirectory.resolve("symphony-trello"))
+                .doesNotContain(
+                        "Config: " + home.resolve(".config/symphony-trello"),
+                        "State/logs: " + home.resolve(".local/state/symphony-trello"));
+    }
+
+    @Test
+    void posixScriptsReplayMatchingInstallContextWhenSymphonyHomeIsExplicitlySupplied() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("context-explicit-home-env-home");
+        Path symphonyHome = temporaryDirectory.resolve("context-explicit-home-env-symphony");
+        Path app = symphonyHome.resolve("app");
+        Path config = temporaryDirectory.resolve("context-explicit-home-env-config");
+        Path workspaces = temporaryDirectory.resolve("context-explicit-home-env-workspaces");
+        Path state = temporaryDirectory.resolve("context-explicit-home-env-state");
+        Path cache = temporaryDirectory.resolve("context-explicit-home-env-cache");
+        Path bin = temporaryDirectory.resolve("context-explicit-home-env-bin");
+        Files.createDirectories(home.resolve(".config/symphony-trello"));
+        Files.createDirectories(app);
+        Files.createDirectories(config);
+        Files.createDirectories(workspaces);
+        Files.createDirectories(state);
+        Files.createDirectories(cache.resolve("npm"));
+        Files.createDirectories(bin);
+        Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n", StandardCharsets.UTF_8);
+        Files.writeString(
+                home.resolve(".config/symphony-trello/install-context.properties"),
+                """
+                installer=install.sh
+                install_format_version=2
+                layout_mode=custom-env
+                app_dir=%s
+                config_dir=%s
+                workspace_root=%s
+                state_home=%s
+                cache_dir=%s
+                bin_dir=%s
+                codex_npm_prefix=%s
+                created_microos_var_root=false
+                """
+                        .formatted(app, config, workspaces, state, cache, bin, cache.resolve("npm")),
+                StandardCharsets.UTF_8);
+        Map<String, String> environment = Map.of("HOME", home.toString(), "SYMPHONY_HOME", symphonyHome.toString());
+
+        // when
+        ProcessResult install = run(environment, "bash", "install.sh", "--dry-run", "--no-onboard");
+        ProcessResult uninstall = run(environment, "bash", "uninstall.sh", "--dry-run", "--yes");
+
+        // then
+        install.assertSuccess();
+        uninstall.assertSuccess();
+        assertThat(install.output())
+                .contains(
+                        "Install: " + app,
+                        "Config: " + config,
+                        "Workspaces: " + workspaces,
+                        "State/logs: " + state,
+                        "Command: " + bin.resolve("symphony-trello"))
+                .doesNotContain("Config: " + symphonyHome.resolve("config"));
+        assertThat(uninstall.output())
+                .contains(
+                        "App checkout: " + app,
+                        "Installed CLI: " + bin.resolve("symphony-trello"),
+                        "CONFIG          " + config,
+                        "WORKSPACES      " + workspaces,
+                        "STATE/LOGS      " + state);
+    }
+
+    @Test
+    void posixUninstallerTreatsContextDataPathsAsKnownWhenPrefixIsExplicitlySupplied() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("uninstall-context-explicit-prefix-home");
+        Path app = temporaryDirectory.resolve("uninstall-context-explicit-prefix-app");
+        Path dataHome = home.resolve(".local/share/symphony-trello");
+        Path config = dataHome.resolve("config");
+        Path workspaces = dataHome.resolve("workspaces");
+        Path state = dataHome.resolve("state");
+        Path cache = dataHome.resolve("cache");
+        Files.createDirectories(app);
+        Files.createDirectories(config);
+        Files.createDirectories(workspaces);
+        Files.createDirectories(state);
+        Files.createDirectories(cache.resolve("npm"));
+        Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n", StandardCharsets.UTF_8);
+        Files.writeString(
+                state.resolve("install-context.properties"),
+                """
+                installer=install.sh
+                install_format_version=2
+                layout_mode=custom-env
+                app_dir=%s
+                config_dir=%s
+                workspace_root=%s
+                state_home=%s
+                cache_dir=%s
+                bin_dir=%s
+                codex_npm_prefix=%s
+                created_microos_var_root=false
+                """
+                        .formatted(
+                                app,
+                                config,
+                                workspaces,
+                                state,
+                                cache,
+                                home.resolve(".local/bin"),
+                                cache.resolve("npm")),
+                StandardCharsets.UTF_8);
+
+        // when
+        ProcessResult result = run(
+                Map.of("HOME", home.toString()),
+                "bash",
+                "uninstall.sh",
+                "--dry-run",
+                "--yes",
+                "--yes-local-data",
+                "--remove-all-local-data",
+                "--prefix",
+                app.toString());
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output())
+                .contains("CONFIG          " + config, "WORKSPACES      " + workspaces, "STATE/LOGS      " + state)
+                .doesNotContain(
+                        "Refusing to remove default local data while uninstalling a custom --prefix.",
+                        "CONFIG: set SYMPHONY_HOME or SYMPHONY_TRELLO_CONFIG_DIR",
+                        "WORKSPACES: set SYMPHONY_HOME or SYMPHONY_TRELLO_WORKSPACE_ROOT",
+                        "STATE/LOGS: set SYMPHONY_HOME or SYMPHONY_TRELLO_STATE_HOME");
+    }
+
+    @Test
+    void posixUninstallerIgnoresInstallContextForDifferentExplicitPrefix() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("uninstall-stale-context-home");
+        Path contextApp = temporaryDirectory.resolve("uninstall-stale-context-app");
+        Path explicitApp = temporaryDirectory.resolve("uninstall-stale-context-explicit-app");
+        Path dataHome = home.resolve(".local/share/symphony-trello");
+        Path config = dataHome.resolve("config");
+        Path workspaces = dataHome.resolve("workspaces");
+        Path state = dataHome.resolve("state");
+        Path cache = dataHome.resolve("cache");
+        Path bin = temporaryDirectory.resolve("uninstall-stale-context-bin");
+        Files.createDirectories(contextApp);
+        Files.createDirectories(explicitApp);
+        Files.createDirectories(config);
+        Files.createDirectories(workspaces);
+        Files.createDirectories(state);
+        Files.createDirectories(cache.resolve("npm"));
+        Files.createDirectories(bin);
+        Files.writeString(
+                explicitApp.resolve(".symphony-trello-install"), "installer-managed\n", StandardCharsets.UTF_8);
+        Files.writeString(config.resolve(".env"), "TRELLO_API_KEY=secret\n", StandardCharsets.UTF_8);
+        Files.writeString(workspaces.resolve("card.txt"), "work\n", StandardCharsets.UTF_8);
+        Files.writeString(state.resolve("worker.pid"), "123\n", StandardCharsets.UTF_8);
+        Files.writeString(
+                state.resolve("install-context.properties"),
+                """
+                installer=install.sh
+                install_format_version=2
+                layout_mode=custom-env
+                app_dir=%s
+                config_dir=%s
+                workspace_root=%s
+                state_home=%s
+                cache_dir=%s
+                bin_dir=%s
+                codex_npm_prefix=%s
+                created_microos_var_root=false
+                """
+                        .formatted(
+                                contextApp,
+                                config,
+                                workspaces,
+                                state,
+                                cache,
+                                home.resolve(".local/bin"),
+                                cache.resolve("npm")),
+                StandardCharsets.UTF_8);
+
+        // when
+        ProcessResult result = run(
+                Map.of("HOME", home.toString()),
+                "bash",
+                "uninstall.sh",
+                "--yes",
+                "--yes-local-data",
+                "--remove-all-local-data",
+                "--prefix",
+                explicitApp.toString(),
+                "--bin-dir",
+                bin.toString());
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isEqualTo(2);
+        assertThat(result.output())
+                .contains("Refusing to remove default local data while uninstalling a custom --prefix.")
+                .doesNotContain(
+                        "CONFIG          " + config, "WORKSPACES      " + workspaces, "STATE/LOGS      " + state);
+        assertThat(config.resolve(".env")).exists();
+        assertThat(workspaces.resolve("card.txt")).exists();
+        assertThat(state.resolve("worker.pid")).exists();
+        assertThat(explicitApp.resolve(".symphony-trello-install")).exists();
+    }
+
+    @MethodSource("posixBroadLocalDataRootOverrideScenarios")
+    @ParameterizedTest(name = "{0}")
+    void posixScriptsRejectBroadLocalDataRootOverrides(BroadLocalDataRootOverrideScenario scenario) throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve(scenario.slug() + "-home");
+        Files.createDirectories(home);
+        Map<String, String> environment = Map.of("HOME", home.toString(), scenario.environmentVariable(), "/etc");
+
+        // when
+        ProcessResult install = run(environment, "bash", "install.sh", "--dry-run", "--no-onboard");
+        ProcessResult uninstall = run(
+                environment, "bash", "uninstall.sh", "--dry-run", "--yes", "--yes-local-data", scenario.removeFlag());
+
+        // then
+        assertThat(install.exitCode()).as(install.output()).isEqualTo(2);
+        assertThat(uninstall.exitCode()).as(uninstall.output()).isEqualTo(2);
+        assertThat(install.output())
+                .contains("Symphony config, workspace, and state paths must point to dedicated directories.")
+                .doesNotContain("Install:");
+        assertThat(uninstall.output())
+                .contains("Symphony config, workspace, and state paths must point to dedicated directories.")
+                .doesNotContain("Will remove if present:", "WOULD REMOVE  /etc");
+    }
+
+    private static Stream<BroadLocalDataRootOverrideScenario> posixBroadLocalDataRootOverrideScenarios() {
+        return Stream.of(
+                new BroadLocalDataRootOverrideScenario(
+                        "config override", "broad-config", "SYMPHONY_TRELLO_CONFIG_DIR", "--remove-config"),
+                new BroadLocalDataRootOverrideScenario(
+                        "workspace override",
+                        "broad-workspace",
+                        "SYMPHONY_TRELLO_WORKSPACE_ROOT",
+                        "--remove-workspaces"),
+                new BroadLocalDataRootOverrideScenario(
+                        "state override", "broad-state", "SYMPHONY_TRELLO_STATE_HOME", "--remove-state"));
+    }
+
+    private record BroadLocalDataRootOverrideScenario(
+            String name, String slug, String environmentVariable, String removeFlag) {
+        @Override
+        public String toString() {
+            return name;
+        }
+    }
+
+    @Test
+    void posixScriptsRejectCommandDirectoryLocalDataRootOverrides() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("system-command-root-home");
+        Path app = temporaryDirectory.resolve("system-command-root-app");
+        Path bin = temporaryDirectory.resolve("system-command-root-bin");
+        Files.createDirectories(home);
+        Files.createDirectories(app);
+        Files.createDirectories(bin);
+        Files.writeString(app.resolve(".symphony-trello-install"), "marker", StandardCharsets.UTF_8);
+        Map<String, String> environment = Map.of("HOME", home.toString(), "SYMPHONY_TRELLO_CONFIG_DIR", "/bin");
+
+        // when
+        ProcessResult install = runUnchecked(
+                environment,
+                "bash",
+                "install.sh",
+                "--dry-run",
+                "--no-onboard",
+                "--prefix",
+                app.toString(),
+                "--bin-dir",
+                bin.toString());
+        ProcessResult uninstall = runUnchecked(
+                environment,
+                "bash",
+                "uninstall.sh",
+                "--dry-run",
+                "--yes",
+                "--yes-local-data",
+                "--remove-config",
+                "--prefix",
+                app.toString(),
+                "--bin-dir",
+                bin.toString());
+
+        // then
+        assertThat(install.exitCode()).as(install.output()).isEqualTo(2);
+        assertThat(uninstall.exitCode()).as(uninstall.output()).isEqualTo(2);
+        assertThat(install.output())
+                .contains("Symphony config, workspace, and state paths must point to dedicated directories.")
+                .doesNotContain("Dry run: no files changed.");
+        assertThat(uninstall.output())
+                .contains("Symphony config, workspace, and state paths must point to dedicated directories.")
+                .doesNotContain("WOULD REMOVE  //bin", "WOULD REMOVE  /bin", "WOULD REMOVE  /usr/bin");
+    }
+
+    @Test
+    void posixScriptsRejectDefaultLocalDataPathThroughUntrustedSymlink() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("symlink-config-home");
+        Path outside = temporaryDirectory.resolve("symlink-config-outside");
+        Path app = home.resolve(".local/share/symphony-trello/app");
+        Files.createDirectories(home.resolve(".local/share/symphony-trello"));
+        Files.createDirectories(home.resolve(".local/state/symphony-trello"));
+        Files.createDirectories(outside.resolve("symphony-trello"));
+        Files.createDirectories(app);
+        Files.writeString(app.resolve(".symphony-trello-install"), "marker", StandardCharsets.UTF_8);
+        Files.writeString(outside.resolve("symphony-trello/.env"), "TRELLO_TOKEN=test\n", StandardCharsets.UTF_8);
+        Files.createSymbolicLink(home.resolve(".config"), outside);
+        Map<String, String> environment = Map.of("HOME", home.toString());
+
+        // when
+        ProcessResult install = runUnchecked(environment, "bash", "install.sh", "--dry-run", "--no-onboard");
+        ProcessResult uninstall =
+                runUnchecked(environment, "bash", "uninstall.sh", "--yes", "--yes-local-data", "--remove-config");
+
+        // then
+        assertThat(install.exitCode()).as(install.output()).isEqualTo(2);
+        assertThat(uninstall.exitCode()).as(uninstall.output()).isEqualTo(2);
+        assertThat(install.output())
+                .contains(
+                        "Symphony config, workspace, and state paths must resolve inside the user home or Symphony MicroOS data root.")
+                .doesNotContain("Dry run: no files changed.");
+        assertThat(uninstall.output())
+                .contains(
+                        "Symphony config, workspace, and state paths must resolve inside the user home or Symphony MicroOS data root.")
+                .doesNotContain("REMOVE  " + outside.resolve("symphony-trello"));
+        assertThat(outside.resolve("symphony-trello/.env")).exists();
+    }
+
+    @Test
+    void posixScriptsRejectDefaultCachePathThroughUntrustedSymlink() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("symlink-cache-home");
+        Path outside = temporaryDirectory.resolve("symlink-cache-outside");
+        Path app = home.resolve(".local/share/symphony-trello/app");
+        Path outsideNpmPrefix = outside.resolve("symphony-trello/npm");
+        Files.createDirectories(home.resolve(".local/share/symphony-trello"));
+        Files.createDirectories(home.resolve(".config/symphony-trello"));
+        Files.createDirectories(home.resolve(".local/state/symphony-trello"));
+        Files.createDirectories(home.resolve(".local/bin"));
+        Files.createDirectories(app);
+        Files.createDirectories(outsideNpmPrefix.resolve("bin"));
+        Files.writeString(app.resolve(".symphony-trello-install"), "marker", StandardCharsets.UTF_8);
+        Files.writeString(outsideNpmPrefix.resolve("package.json"), "{\"private\":true}\n", StandardCharsets.UTF_8);
+        Files.createSymbolicLink(home.resolve(".cache"), outside);
+        Files.createSymbolicLink(
+                home.resolve(".local/bin/codex"), home.resolve(".cache/symphony-trello/npm/bin/codex"));
+        Map<String, String> environment = Map.of("HOME", home.toString());
+
+        // when
+        ProcessResult install = runUnchecked(environment, "bash", "install.sh", "--dry-run", "--no-onboard");
+        ProcessResult uninstall = runUnchecked(environment, "bash", "uninstall.sh", "--yes");
+
+        // then
+        assertThat(install.exitCode()).as(install.output()).isEqualTo(2);
+        assertThat(uninstall.exitCode()).as(uninstall.output()).isEqualTo(2);
+        assertThat(install.output())
+                .contains(
+                        "Symphony cache and managed npm paths must resolve inside the user home or Symphony MicroOS data root.")
+                .doesNotContain("Dry run: no files changed.");
+        assertThat(uninstall.output())
+                .contains(
+                        "Symphony cache and managed npm paths must resolve inside the user home or Symphony MicroOS data root.")
+                .doesNotContain("REMOVE  " + outsideNpmPrefix);
+        assertThat(outsideNpmPrefix.resolve("package.json")).exists();
+    }
+
+    @Test
+    void posixScriptsRejectDefaultCachePathInsidePreservedDataRoot() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("cache-overlap-home");
+        Path app = home.resolve(".local/share/symphony-trello/app");
+        Path workspaceRoot = home.resolve(".local/share/symphony-trello/workspaces");
+        Path managedNpm = workspaceRoot.resolve("symphony-trello/npm");
+        Files.createDirectories(app);
+        Files.createDirectories(home.resolve(".config/symphony-trello"));
+        Files.createDirectories(home.resolve(".local/state/symphony-trello"));
+        Files.createDirectories(managedNpm);
+        Files.writeString(app.resolve(".symphony-trello-install"), "marker", StandardCharsets.UTF_8);
+        Files.writeString(managedNpm.resolve("package.json"), "{\"private\":true}\n", StandardCharsets.UTF_8);
+        Map<String, String> environment = Map.of("HOME", home.toString(), "XDG_CACHE_HOME", workspaceRoot.toString());
+
+        // when
+        ProcessResult install = runUnchecked(environment, "bash", "install.sh", "--dry-run", "--no-onboard");
+        ProcessResult uninstall = runUnchecked(environment, "bash", "uninstall.sh", "--yes");
+
+        // then
+        assertDefaultCacheOverlapRejected(install, uninstall, managedNpm);
+    }
+
+    @Test
+    void posixScriptsRejectDefaultCachePathInsideAppDirectory() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("cache-app-overlap-home");
+        Path app = home.resolve(".local/share/symphony-trello/app");
+        Path managedNpm = app.resolve("symphony-trello/npm");
+        Files.createDirectories(app);
+        Files.createDirectories(home.resolve(".config/symphony-trello"));
+        Files.createDirectories(home.resolve(".local/state/symphony-trello"));
+        Files.createDirectories(managedNpm);
+        Files.writeString(app.resolve(".symphony-trello-install"), "marker", StandardCharsets.UTF_8);
+        Files.writeString(managedNpm.resolve("package.json"), "{\"private\":true}\n", StandardCharsets.UTF_8);
+        Map<String, String> environment = Map.of("HOME", home.toString(), "XDG_CACHE_HOME", app.toString());
+
+        // when
+        ProcessResult install = runUnchecked(environment, "bash", "install.sh", "--dry-run", "--no-onboard");
+        ProcessResult uninstall = runUnchecked(environment, "bash", "uninstall.sh", "--yes");
+
+        // then
+        assertDefaultCacheOverlapRejected(install, uninstall, managedNpm);
+    }
+
+    private static void assertDefaultCacheOverlapRejected(
+            ProcessResult install, ProcessResult uninstall, Path managedNpm) {
+        assertThat(install.exitCode()).as(install.output()).isEqualTo(2);
+        assertThat(uninstall.exitCode()).as(uninstall.output()).isEqualTo(2);
+        assertThat(install.output())
+                .contains(
+                        "Symphony cache and managed npm paths must not overlap Symphony app, config, workspace, or state directories.")
+                .doesNotContain("Install:");
+        assertThat(uninstall.output())
+                .contains(
+                        "Symphony cache and managed npm paths must not overlap Symphony app, config, workspace, or state directories.")
+                .doesNotContain("REMOVE  " + managedNpm);
+        assertThat(managedNpm.resolve("package.json")).exists();
+    }
+
+    @Test
+    void posixUninstallerRefusesToRemoveAppContainingPreservedSymlinkedConfigPath() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("app-symlink-config-home");
+        Path symphonyHome = temporaryDirectory.resolve("app-symlink-config-symphony");
+        Path app = symphonyHome.resolve("app");
+        Path outsideConfig = temporaryDirectory.resolve("app-symlink-config-target");
+        Path configSymlink = app.resolve("config");
+        Path workspaceRoot = temporaryDirectory.resolve("app-symlink-config-workspaces");
+        Path stateHome = temporaryDirectory.resolve("app-symlink-config-state");
+        Path binDirectory = temporaryDirectory.resolve("app-symlink-config-bin");
+        Files.createDirectories(home);
+        Files.createDirectories(app);
+        Files.createDirectories(outsideConfig);
+        Files.createDirectories(workspaceRoot);
+        Files.createDirectories(stateHome);
+        Files.createDirectories(binDirectory);
+        Files.writeString(app.resolve(".symphony-trello-install"), "marker", StandardCharsets.UTF_8);
+        Files.writeString(outsideConfig.resolve(".env"), "TRELLO_TOKEN=test\n", StandardCharsets.UTF_8);
+        Files.createSymbolicLink(configSymlink, outsideConfig);
+        Map<String, String> environment = Map.of(
+                "HOME",
+                home.toString(),
+                "SYMPHONY_HOME",
+                symphonyHome.toString(),
+                "SYMPHONY_TRELLO_CONFIG_DIR",
+                configSymlink.toString(),
+                "SYMPHONY_TRELLO_WORKSPACE_ROOT",
+                workspaceRoot.toString(),
+                "SYMPHONY_TRELLO_STATE_HOME",
+                stateHome.toString());
+
+        // when
+        ProcessResult result = run(environment, "bash", "uninstall.sh", "--yes", "--bin-dir", binDirectory.toString());
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isEqualTo(2);
+        assertThat(result.output())
+                .contains(
+                        "Refusing to remove app directory because it contains current local data that is preserved by default:",
+                        "CONFIG     " + configSymlink);
+        assertThat(app).isDirectory();
+        assertThat(configSymlink).isSymbolicLink();
+        assertThat(outsideConfig.resolve(".env")).exists();
+    }
+
+    @Test
+    void posixUninstallerSkipsUnsafeStableContextCleanupThroughUntrustedSymlink() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("unsafe-context-cleanup-home");
+        Path outside = temporaryDirectory.resolve("unsafe-context-cleanup-outside");
+        Path app = temporaryDirectory.resolve("unsafe-context-cleanup-app");
+        Path config = temporaryDirectory.resolve("unsafe-context-cleanup-config");
+        Path workspaces = temporaryDirectory.resolve("unsafe-context-cleanup-workspaces");
+        Path state = temporaryDirectory.resolve("unsafe-context-cleanup-state");
+        Path binDirectory = temporaryDirectory.resolve("unsafe-context-cleanup-bin");
+        Path outsideContext = outside.resolve("symphony-trello/install-context.properties");
+        Files.createDirectories(home);
+        Files.createDirectories(outsideContext.getParent());
+        Files.createDirectories(app);
+        Files.createDirectories(config);
+        Files.createDirectories(workspaces);
+        Files.createDirectories(state);
+        Files.createDirectories(binDirectory);
+        Files.writeString(app.resolve(".symphony-trello-install"), "marker", StandardCharsets.UTF_8);
+        Files.writeString(outsideContext, "installer=install.sh\n", StandardCharsets.UTF_8);
+        Files.createSymbolicLink(home.resolve(".config"), outside);
+        Map<String, String> environment = Map.of(
+                "HOME",
+                home.toString(),
+                "SYMPHONY_TRELLO_CONFIG_DIR",
+                config.toString(),
+                "SYMPHONY_TRELLO_WORKSPACE_ROOT",
+                workspaces.toString(),
+                "SYMPHONY_TRELLO_STATE_HOME",
+                state.toString());
+
+        // when
+        ProcessResult result = run(
+                environment,
+                "bash",
+                "uninstall.sh",
+                "--yes",
+                "--yes-local-data",
+                "--remove-all-local-data",
+                "--prefix",
+                app.toString(),
+                "--bin-dir",
+                binDirectory.toString());
+
+        // then
+        result.assertSuccess();
+        assertThat(outsideContext).exists();
+        assertThat(result.output())
+                .doesNotContain(
+                        "Remove install context discovery files for future no-flag installs and uninstalls?",
+                        "REMOVE  " + outsideContext);
+    }
+
+    @Test
+    void posixFullUninstallRemovesStableContextForCustomHome() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
+        Path sourceRepository = createSourceRepository(temporaryDirectory);
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path home = temporaryDirectory.resolve("custom-context-clean-home");
+        Path symphonyHome = temporaryDirectory.resolve("custom-context-clean-symphony-home");
+        Path fakeLog = temporaryDirectory.resolve("custom-context-clean.log");
+        Path stableStateContext = home.resolve(".local/state/symphony-trello/install-context.properties");
+        Path stableConfigContext = home.resolve(".config/symphony-trello/install-context.properties");
+        Files.createDirectories(home);
+        Map<String, String> installEnvironment =
+                installEnvironmentForCustomHome(sourceRepository, fakeBin, home, symphonyHome, fakeLog);
+
+        // when
+        ProcessResult install = run(installEnvironment, "bash", "install.sh", "--no-onboard");
+        ProcessResult uninstall = run(
+                Map.of("HOME", home.toString()),
+                "bash",
+                "uninstall.sh",
+                "--yes",
+                "--yes-local-data",
+                "--remove-all-local-data");
+        ProcessResult nextInstall =
+                run(Map.of("HOME", home.toString()), "bash", "install.sh", "--dry-run", "--no-onboard");
+
+        // then
+        install.assertSuccess();
+        uninstall.assertSuccess();
+        assertThat(uninstall.output()).contains("REMOVE  " + stableStateContext, "REMOVE  " + stableConfigContext);
+        assertThat(stableStateContext).doesNotExist();
+        assertThat(stableConfigContext).doesNotExist();
+        assertThat(nextInstall.output())
+                .contains("Install: " + home.resolve(".local/share/symphony-trello/app"))
+                .doesNotContain("Install: " + symphonyHome.resolve("app"));
+    }
+
+    @Test
+    void posixUninstallerUsesInstallContextWhenOnlyCommandDirectoryIsOverridden() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("context-bin-home");
+        Path app = temporaryDirectory.resolve("context-bin-app");
+        Path config = temporaryDirectory.resolve("context-bin-config");
+        Path workspaces = temporaryDirectory.resolve("context-bin-workspaces");
+        Path state = temporaryDirectory.resolve("context-bin-state");
+        Path cache = temporaryDirectory.resolve("context-bin-cache");
+        Path contextBin = temporaryDirectory.resolve("context-bin-original");
+        Path overrideBin = temporaryDirectory.resolve("context-bin-override");
+        Files.createDirectories(home.resolve(".config/symphony-trello"));
+        Files.createDirectories(app);
+        Files.createDirectories(config);
+        Files.createDirectories(workspaces);
+        Files.createDirectories(state);
+        Files.createDirectories(cache);
+        Files.createDirectories(contextBin);
+        Files.createDirectories(overrideBin);
+        Files.writeString(app.resolve(".symphony-trello-install"), "marker", StandardCharsets.UTF_8);
+        Files.writeString(
+                home.resolve(".config/symphony-trello/install-context.properties"),
+                """
+                installer=install.sh
+                install_format_version=2
+                layout_mode=custom-env
+                app_dir=%s
+                config_dir=%s
+                workspace_root=%s
+                state_home=%s
+                cache_dir=%s
+                bin_dir=%s
+                codex_npm_prefix=%s
+                created_microos_var_root=false
+                """
+                        .formatted(app, config, workspaces, state, cache, contextBin, cache.resolve("npm")),
+                StandardCharsets.UTF_8);
+
+        // when
+        ProcessResult result = run(
+                Map.of("HOME", home.toString()),
+                "bash",
+                "uninstall.sh",
+                "--dry-run",
+                "--yes",
+                "--bin-dir",
+                overrideBin.toString());
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output())
+                .contains(
+                        "App checkout: " + app,
+                        "Installed CLI: " + overrideBin.resolve("symphony-trello"),
+                        "CONFIG          " + config,
+                        "WORKSPACES      " + workspaces,
+                        "STATE/LOGS      " + state)
+                .doesNotContain(
+                        "App checkout: " + home.resolve(".local/share/symphony-trello/app"),
+                        "Installed CLI: " + contextBin.resolve("symphony-trello"));
+    }
+
+    @Test
+    void posixUninstallerRemovesEmptyInstallerCreatedMicroOsRootWhenAllLocalDataIsRemoved() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("microos-cleanup-home");
+        Path varPath = temporaryDirectory.resolve("microos-cleanup-var");
+        Path usersRoot = temporaryDirectory.resolve("microos-cleanup-users");
+        Path userRoot = usersRoot.resolve("micro-user");
+        Path app = userRoot.resolve("data/app");
+        Path config = userRoot.resolve("config");
+        Path workspaces = userRoot.resolve("workspaces");
+        Path state = userRoot.resolve("state");
+        Path cache = userRoot.resolve("cache");
+        Files.createDirectories(home);
+        Files.createDirectories(varPath);
+        Files.createDirectories(app);
+        Files.createDirectories(config);
+        Files.createDirectories(workspaces);
+        Files.createDirectories(state);
+        Files.createDirectories(cache.resolve("npm"));
+        Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n", StandardCharsets.UTF_8);
+        Files.writeString(
+                state.resolve("install-context.properties"),
+                """
+                installer=install.sh
+                install_format_version=2
+                layout_mode=microos-var
+                app_dir=%s
+                config_dir=%s
+                workspace_root=%s
+                state_home=%s
+                cache_dir=%s
+                bin_dir=%s
+                codex_npm_prefix=%s
+                created_microos_var_root=true
+                """
+                        .formatted(
+                                app,
+                                config,
+                                workspaces,
+                                state,
+                                cache,
+                                home.resolve(".local/bin"),
+                                cache.resolve("npm")),
+                StandardCharsets.UTF_8);
+
+        // when
+        ProcessResult result = run(
+                microOsLayoutEnvironment(home, varPath, usersRoot),
+                "bash",
+                "uninstall.sh",
+                "--yes",
+                "--yes-local-data",
+                "--remove-all-local-data");
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output()).contains("REMOVE  " + userRoot);
+        assertThat(userRoot).doesNotExist();
+    }
+
+    @Test
+    void posixUninstallerDryRunDoesNotPruneMicroOsDataOrCacheDirectories() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("microos-dry-cleanup-home");
+        Path varPath = temporaryDirectory.resolve("microos-dry-cleanup-var");
+        Path usersRoot = temporaryDirectory.resolve("microos-dry-cleanup-users");
+        Path userRoot = usersRoot.resolve("micro-user");
+        Path data = userRoot.resolve("data");
+        Path config = userRoot.resolve("config");
+        Path workspaces = userRoot.resolve("workspaces");
+        Path state = userRoot.resolve("state");
+        Path cache = userRoot.resolve("cache");
+        Files.createDirectories(home);
+        Files.createDirectories(varPath);
+        Files.createDirectories(data);
+        Files.createDirectories(config);
+        Files.createDirectories(workspaces);
+        Files.createDirectories(state);
+        Files.createDirectories(cache);
+        Files.writeString(
+                state.resolve("install-context.properties"),
+                """
+                installer=install.sh
+                install_format_version=2
+                layout_mode=microos-var
+                app_dir=%s
+                config_dir=%s
+                workspace_root=%s
+                state_home=%s
+                cache_dir=%s
+                bin_dir=%s
+                codex_npm_prefix=%s
+                created_microos_var_root=true
+                """
+                        .formatted(
+                                data.resolve("app"),
+                                config,
+                                workspaces,
+                                state,
+                                cache,
+                                home.resolve(".local/bin"),
+                                cache.resolve("npm")),
+                StandardCharsets.UTF_8);
+
+        // when
+        ProcessResult result = run(
+                microOsLayoutEnvironment(home, varPath, usersRoot),
+                "bash",
+                "uninstall.sh",
+                "--dry-run",
+                "--yes",
+                "--yes-local-data",
+                "--remove-all-local-data");
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output())
+                .contains("Dry run: no files changed.", "WOULD REMOVE  " + userRoot)
+                .doesNotContain("Kept MicroOS data root because it is not empty");
+        assertThat(data).isDirectory();
+        assertThat(cache).isDirectory();
+        assertThat(userRoot).isDirectory();
+    }
+
+    @Test
+    void posixUninstallerDeletesBtrfsSubvolumeTargetsWithBtrfsCommand() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path fakeBin = temporaryDirectory.resolve("btrfs-bin");
+        Path mountRoot = temporaryDirectory.resolve("btrfs-mount");
+        Path symphonyHome = mountRoot.resolve("symphony");
+        Path app = symphonyHome.resolve("app");
+        Path btrfsLog = temporaryDirectory.resolve("btrfs.log");
+        Files.createDirectories(fakeBin);
+        Files.createDirectories(app);
+        Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n", StandardCharsets.UTF_8);
+        writeExecutable(
+                fakeBin.resolve("btrfs"),
+                """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                case "$1 $2" in
+                  "subvolume show")
+                    exit 0
+                    ;;
+                  "subvolume list")
+                    echo "ID 256 gen 1 top level 5 path symphony/app/nested"
+                    echo "ID 257 gen 1 top level 256 path symphony/app/nested/deeper"
+                    ;;
+                  "subvolume delete")
+                    echo "delete $3" >> "${SYMPHONY_FAKE_LOG:?}"
+                    /bin/rm -rf "$3"
+                    ;;
+                esac
+                """);
+
+        // when
+        ProcessResult result = runBtrfsUninstall(fakeBin, mountRoot, symphonyHome, btrfsLog);
+
+        // then
+        result.assertSuccess();
+        assertBtrfsSubvolumeDeletes(btrfsLog, app);
+    }
+
+    @Test
+    void posixUninstallerKeepsNestedBtrfsDeletesUnderTargetMountRoot() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path fakeBin = temporaryDirectory.resolve("btrfs-target-root-bin");
+        Path symphonyHome = temporaryDirectory.resolve("btrfs-target-root-home");
+        Path app = symphonyHome.resolve("app");
+        Path btrfsLog = temporaryDirectory.resolve("btrfs-target-root.log");
+        Files.createDirectories(fakeBin);
+        Files.createDirectories(app.resolve("nested/deeper"));
+        Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n", StandardCharsets.UTF_8);
+        writeExecutable(
+                fakeBin.resolve("findmnt"),
+                """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                echo "${SYMPHONY_FAKE_BTRFS_MOUNT:?}"
+                """);
+        writeExecutable(
+                fakeBin.resolve("btrfs"),
+                """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                case "$1 $2" in
+                  "subvolume show")
+                    exit 0
+                    ;;
+                  "subvolume list")
+                    echo "ID 256 gen 1 top level 5 path app/nested"
+                    echo "ID 257 gen 1 top level 256 path nested/deeper"
+                    ;;
+                  "subvolume delete")
+                    echo "delete $3" >> "${SYMPHONY_FAKE_LOG:?}"
+                    case "$3" in
+                      "${SYMPHONY_FAKE_APP:?}"*)
+                        /bin/rm -rf "$3"
+                        ;;
+                      *)
+                        echo "unexpected delete path: $3" >&2
+                        exit 3
+                        ;;
+                    esac
+                    ;;
+                esac
+                """);
+        Map<String, String> environment = Map.of(
+                "PATH",
+                fakeBin + File.pathSeparator + System.getenv("PATH"),
+                "SYMPHONY_HOME",
+                symphonyHome.toString(),
+                "SYMPHONY_FAKE_BTRFS_MOUNT",
+                app.toString(),
+                "SYMPHONY_FAKE_APP",
+                app.toString(),
+                "SYMPHONY_FAKE_LOG",
+                btrfsLog.toString());
+
+        // when
+        ProcessResult result = run(environment, "bash", "uninstall.sh", "--yes");
+
+        // then
+        result.assertSuccess();
+        assertBtrfsSubvolumeDeletes(btrfsLog, app);
+    }
+
+    @Test
+    void posixUninstallerDeletesNestedBtrfsSubvolumesUnderOrdinaryDirectoryTargets() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path fakeBin = temporaryDirectory.resolve("btrfs-ordinary-bin");
+        Path mountRoot = temporaryDirectory.resolve("btrfs-ordinary-mount");
+        Path symphonyHome = mountRoot.resolve("symphony");
+        Path app = symphonyHome.resolve("app");
+        Path btrfsLog = temporaryDirectory.resolve("btrfs-ordinary.log");
+        Files.createDirectories(fakeBin);
+        Files.createDirectories(app.resolve("nested/deeper"));
+        Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n", StandardCharsets.UTF_8);
+        writeExecutable(
+                fakeBin.resolve("btrfs"),
+                """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                case "$1 $2" in
+                  "subvolume show")
+                    exit 1
+                    ;;
+                  "subvolume list")
+                    echo "ID 256 gen 1 top level 5 path symphony/app/nested"
+                    echo "ID 257 gen 1 top level 256 path symphony/app/nested/deeper"
+                    ;;
+                  "subvolume delete")
+                    echo "delete $3" >> "${SYMPHONY_FAKE_LOG:?}"
+                    /bin/rm -rf "$3"
+                    ;;
+                esac
+                """);
+        writeExecutable(
+                fakeBin.resolve("rm"),
+                """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                if [[ "${1:-}" == "--help" ]]; then
+                  echo "GNU rm supports --one-file-system"
+                  exit 0
+                fi
+                echo "rm $*" >> "${SYMPHONY_FAKE_LOG:?}"
+                /bin/rm "$@"
+                """);
+
+        // when
+        ProcessResult result = runBtrfsUninstall(fakeBin, mountRoot, symphonyHome, btrfsLog);
+
+        // then
+        result.assertSuccess();
+        assertThat(Files.readString(btrfsLog, StandardCharsets.UTF_8))
+                .containsSubsequence(
+                        "delete " + app.resolve("nested/deeper"),
+                        "delete " + app.resolve("nested"),
+                        "rm -rf --one-file-system " + app);
+        assertThat(app).doesNotExist();
+    }
+
+    @Test
+    void posixUninstallerFallsBackToRmForOrdinaryDirectoryWhenBtrfsListFails() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path fakeBin = temporaryDirectory.resolve("btrfs-list-fails-bin");
+        Path mountRoot = temporaryDirectory.resolve("btrfs-list-fails-mount");
+        Path symphonyHome = mountRoot.resolve("symphony");
+        Path app = symphonyHome.resolve("app");
+        Path btrfsLog = temporaryDirectory.resolve("btrfs-list-fails.log");
+        Files.createDirectories(fakeBin);
+        Files.createDirectories(app);
+        Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n", StandardCharsets.UTF_8);
+        writeExecutable(
+                fakeBin.resolve("btrfs"),
+                """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                case "$1 $2" in
+                  "subvolume show")
+                    exit 1
+                    ;;
+                  "subvolume list")
+                    exit 42
+                    ;;
+                  "subvolume delete")
+                    echo "delete $3" >> "${SYMPHONY_FAKE_LOG:?}"
+                    ;;
+                esac
+                """);
+        writeExecutable(
+                fakeBin.resolve("rm"),
+                """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                if [[ "${1:-}" == "--help" ]]; then
+                  echo "GNU rm supports --one-file-system"
+                  exit 0
+                fi
+                echo "rm $*" >> "${SYMPHONY_FAKE_LOG:?}"
+                /bin/rm "$@"
+                """);
+
+        // when
+        ProcessResult result = runBtrfsUninstall(fakeBin, mountRoot, symphonyHome, btrfsLog);
+
+        // then
+        result.assertSuccess();
+        assertThat(Files.readString(btrfsLog, StandardCharsets.UTF_8))
+                .contains("rm -rf --one-file-system " + app)
+                .doesNotContain("delete ");
+        assertThat(app).doesNotExist();
+    }
+
+    @Test
+    void posixUninstallerUnlinksSymlinkedCleanupTargetsBeforeBtrfsProbe() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path fakeBin = temporaryDirectory.resolve("btrfs-symlink-bin");
+        Path home = temporaryDirectory.resolve("btrfs-symlink-home");
+        Path symphonyHome = temporaryDirectory.resolve("btrfs-symlink-symphony-home");
+        Path targetConfig = temporaryDirectory.resolve("btrfs-symlink-target-config");
+        Path configSymlink = home.resolve("config-link");
+        Path commandLog = temporaryDirectory.resolve("btrfs-symlink.log");
+        Files.createDirectories(fakeBin);
+        Files.createDirectories(home);
+        Files.createDirectories(symphonyHome);
+        Files.createDirectories(targetConfig);
+        Files.createSymbolicLink(configSymlink, targetConfig);
+        writeExecutable(
+                fakeBin.resolve("btrfs"),
+                """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                echo "btrfs $*" >> "${SYMPHONY_FAKE_LOG:?}"
+                exit 3
+                """);
+        writeExecutable(
+                fakeBin.resolve("rm"),
+                """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                if [[ "${1:-}" == "--help" ]]; then
+                  echo "GNU rm supports --one-file-system"
+                  exit 0
+                fi
+                echo "rm $*" >> "${SYMPHONY_FAKE_LOG:?}"
+                /bin/rm "$@"
+                """);
+        Map<String, String> environment = Map.of(
+                "PATH",
+                fakeBin + File.pathSeparator + System.getenv("PATH"),
+                "HOME",
+                home.toString(),
+                "SYMPHONY_HOME",
+                symphonyHome.toString(),
+                "SYMPHONY_TRELLO_CONFIG_DIR",
+                configSymlink.toString(),
+                "SYMPHONY_FAKE_LOG",
+                commandLog.toString());
+
+        // when
+        ProcessResult result = run(environment, "bash", "uninstall.sh", "--yes", "--yes-local-data", "--remove-config");
+
+        // then
+        result.assertSuccess();
+        assertThat(configSymlink).doesNotExist();
+        assertThat(targetConfig).isDirectory();
+        assertThat(commandLog)
+                .content(StandardCharsets.UTF_8)
+                .contains("rm -f " + configSymlink)
+                .doesNotContain("btrfs ");
+    }
+
+    @Test
+    void posixUninstallerDeletesBtrfsSubvolumesReturnedRelativeToFilesystemRoot() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path fakeBin = temporaryDirectory.resolve("btrfs-top-level-bin");
+        Path mountRoot = temporaryDirectory.resolve("btrfs-top-level-mount").resolve("var");
+        Path symphonyHome = mountRoot.resolve("lib/symphony-trello/users/codex");
+        Path app = symphonyHome.resolve("app");
+        Path btrfsLog = temporaryDirectory.resolve("btrfs-top-level.log");
+        Files.createDirectories(fakeBin);
+        Files.createDirectories(app.resolve("nested/deeper"));
+        Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n", StandardCharsets.UTF_8);
+        writeExecutable(
+                fakeBin.resolve("btrfs"),
+                """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                case "$1 $2" in
+                  "subvolume show")
+                    exit 0
+                    ;;
+                  "subvolume list")
+                    echo "ID 256 gen 1 top level 5 path @/var/lib/symphony-trello/users/codex/app/nested"
+                    echo "ID 257 gen 1 top level 256 path @/var/lib/symphony-trello/users/codex/app/nested/deeper"
+                    ;;
+                  "subvolume delete")
+                    echo "delete $3" >> "${SYMPHONY_FAKE_LOG:?}"
+                    case "$3" in
+                      */@/*)
+                        echo "unexpected unmounted btrfs path: $3" >&2
+                        exit 3
+                        ;;
+                      */var/lib/symphony-trello/users/codex/app*)
+                        /bin/rm -rf "$3"
+                        ;;
+                      *)
+                        echo "unexpected delete path: $3" >&2
+                        exit 3
+                        ;;
+                    esac
+                    ;;
+                esac
+                """);
+
+        // when
+        ProcessResult result = runBtrfsUninstall(fakeBin, mountRoot, symphonyHome, btrfsLog);
+
+        // then
+        result.assertSuccess();
+        assertThat(assertBtrfsSubvolumeDeletes(btrfsLog, app)).doesNotContain("/@/");
+    }
+
+    @Test
+    void posixUninstallerParsesBtrfsSubvolumePathsContainingPathToken() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path fakeBin = temporaryDirectory.resolve("btrfs-path-token-bin");
+        Path mountRoot = temporaryDirectory.resolve("btrfs-path-token-mount");
+        Path symphonyHome = mountRoot.resolve("foo path bar");
+        Path app = symphonyHome.resolve("app");
+        Path btrfsLog = temporaryDirectory.resolve("btrfs-path-token.log");
+        Files.createDirectories(fakeBin);
+        Files.createDirectories(app.resolve("nested/deeper"));
+        Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n", StandardCharsets.UTF_8);
+        writeExecutable(
+                fakeBin.resolve("btrfs"),
+                """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                case "$1 $2" in
+                  "subvolume show")
+                    exit 0
+                    ;;
+                  "subvolume list")
+                    echo "ID 256 gen 1 top level 5 path foo path bar/app/nested"
+                    echo "ID 257 gen 1 top level 256 path foo path bar/app/nested/deeper"
+                    ;;
+                  "subvolume delete")
+                    echo "delete $3" >> "${SYMPHONY_FAKE_LOG:?}"
+                    case "$3" in
+                      "${SYMPHONY_FAKE_APP:?}"*)
+                        /bin/rm -rf "$3"
+                        ;;
+                      *)
+                        echo "unexpected delete path: $3" >&2
+                        exit 3
+                        ;;
+                    esac
+                    ;;
+                esac
+                """);
+
+        // when
+        ProcessResult result = runBtrfsUninstall(fakeBin, mountRoot, symphonyHome, btrfsLog);
+
+        // then
+        result.assertSuccess();
+        assertBtrfsSubvolumeDeletes(btrfsLog, app);
+    }
+
+    @Test
+    void posixUninstallerUsesPortableRmWhenOneFileSystemIsUnsupported() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path fakeBin = temporaryDirectory.resolve("bsd-rm-bin");
+        Path symphonyHome = temporaryDirectory.resolve("bsd-rm-home");
+        Path app = symphonyHome.resolve("app");
+        Path rmLog = temporaryDirectory.resolve("bsd-rm.log");
+        Files.createDirectories(fakeBin);
+        Files.createDirectories(app);
+        Files.writeString(app.resolve(".symphony-trello-install"), "installer-managed\n", StandardCharsets.UTF_8);
+        writeExecutable(
+                fakeBin.resolve("rm"),
+                """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                if [[ "${1:-}" == "--help" ]]; then
+                  echo "BSD rm"
+                  exit 1
+                fi
+                echo "rm $*" >> "${SYMPHONY_FAKE_LOG:?}"
+                /bin/rm "$@"
+                """);
+        Map<String, String> environment = Map.of(
+                "PATH", fakeBin + File.pathSeparator + System.getenv("PATH"),
+                "SYMPHONY_HOME", symphonyHome.toString(),
+                "SYMPHONY_FAKE_LOG", rmLog.toString());
+
+        // when
+        ProcessResult result = run(environment, "bash", "uninstall.sh", "--yes");
+
+        // then
+        result.assertSuccess();
+        assertThat(rmLog)
+                .content(StandardCharsets.UTF_8)
+                .contains("rm -rf " + app)
+                .doesNotContain("--one-file-system");
+    }
+
+    private static Map<String, String> microOsLayoutEnvironment(Path home, Path varPath, Path usersRoot) {
+        Map<String, String> environment = new LinkedHashMap<>();
+        environment.put("HOME", home.toString());
+        environment.put("USER", "micro-user");
+        environment.put("SYMPHONY_TRELLO_TEST_USER", "micro-user");
+        environment.put("SYMPHONY_TRELLO_TEST_GROUP", "micro-group");
+        environment.put("SYMPHONY_TRELLO_TEST_OS", "Linux");
+        environment.put("SYMPHONY_TRELLO_TEST_ARCH", "x86_64");
+        environment.put("SYMPHONY_TRELLO_TEST_OS_ID", "opensuse-microos");
+        environment.put("SYMPHONY_TRELLO_TEST_OS_PRETTY_NAME", "openSUSE MicroOS");
+        environment.put("SYMPHONY_TRELLO_TEST_VAR_PATH", varPath.toString());
+        environment.put("SYMPHONY_TRELLO_TEST_VAR_USERS_ROOT", usersRoot.toString());
+        environment.put("SYMPHONY_TRELLO_TEST_HOME_FS_SOURCE", "rootfs");
+        environment.put("SYMPHONY_TRELLO_TEST_ROOT_FS_SOURCE", "rootfs");
+        environment.put("SYMPHONY_TRELLO_TEST_VAR_FS_SOURCE", "varfs");
+        environment.put("SYMPHONY_TRELLO_TEST_HOME_SIZE_KB", "1024");
+        environment.put("SYMPHONY_TRELLO_TEST_VAR_SIZE_KB", "8192");
+        return Map.copyOf(environment);
+    }
+
+    private static Path installContext(Path directory) {
+        return directory.resolve(INSTALL_CONTEXT_PROPERTIES);
+    }
+
+    @Test
     void posixUninstallHelpUsesStablePublicUrls() throws Exception {
         // given
         assumeTrue(commandExists("bash"));
@@ -105,6 +2615,242 @@ final class InstallerScriptTest {
         assertThat(result.output())
                 .contains("powershell -c \"irm https://symphony-trello.fmartin.ch/uninstall.ps1 | iex\"")
                 .doesNotContain("raw.githubusercontent.com");
+    }
+
+    @Test
+    void posixInstallerRejectsNormalizedCommandDirectoryInsideAppBeforeDryRunPlan() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("normalized-bin-home");
+        Files.createDirectories(home);
+        Path commandDirectory = home.resolve(".local/share/symphony-trello/missing/../app/bin");
+
+        // when
+        ProcessResult result = runUnchecked(
+                Map.of("HOME", home.toString()),
+                "bash",
+                "install.sh",
+                "--dry-run",
+                "--no-onboard",
+                "--bin-dir",
+                commandDirectory.toString());
+
+        // then
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.output())
+                .contains("--bin-dir must not overlap Symphony app, config, workspace, or state directories.")
+                .doesNotContain("Dry run: no files changed.");
+    }
+
+    @Test
+    void posixInstallerRejectsNormalizedAppPathInsideConfigBeforeDryRunPlan() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("normalized-app-home");
+        Path safeBin = temporaryDirectory.resolve("normalized-app-bin");
+        Files.createDirectories(home);
+        Path app = home.resolve(".local/share/symphony-trello/missing/../../../../.config/symphony-trello/app");
+
+        // when
+        ProcessResult result = runUnchecked(
+                Map.of("HOME", home.toString()),
+                "bash",
+                "install.sh",
+                "--dry-run",
+                "--no-onboard",
+                "--prefix",
+                app.toString(),
+                "--bin-dir",
+                safeBin.toString());
+
+        // then
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.output())
+                .contains("--prefix must not overlap Symphony config, workspace, or state directories.")
+                .doesNotContain("Dry run: no files changed.");
+    }
+
+    @Test
+    void posixScriptsRejectSymlinkResolvedAppPathAtCheckoutDirectory() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("symlink-checkout-app-home");
+        Path safeBin = temporaryDirectory.resolve("symlink-checkout-app-bin");
+        Path checkout = Path.of("").toAbsolutePath().normalize();
+        Path checkoutParentLink = temporaryDirectory.resolve("symlink-checkout-parent-link");
+        Path app = checkoutParentLink.resolve(checkout.getFileName());
+        Files.createDirectories(home);
+        Files.createDirectories(safeBin);
+        Files.createSymbolicLink(checkoutParentLink, checkout.getParent());
+        Map<String, String> environment = Map.of("HOME", home.toString());
+
+        // when
+        PosixDryRunPair results = runPosixInstallAndUninstallDryRunWithPrefix(environment, app, safeBin);
+
+        // then
+        assertThat(results.install().exitCode()).as(results.install().output()).isEqualTo(2);
+        assertThat(results.uninstall().exitCode())
+                .as(results.uninstall().output())
+                .isEqualTo(2);
+        assertThat(results.install().output())
+                .contains("--prefix must point to a dedicated app checkout directory.")
+                .doesNotContain("Dry run: no files changed.");
+        assertThat(results.uninstall().output())
+                .contains("--prefix must point to a dedicated app checkout directory.")
+                .doesNotContain("Will remove if present:");
+    }
+
+    @Test
+    void posixScriptsRejectSymlinkResolvedCommandDirectoryAtHome() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("symlink-home-bin-home");
+        Path symphonyHome = temporaryDirectory.resolve("symlink-home-bin-symphony");
+        Path homeLink = temporaryDirectory.resolve("symlink-home-bin-link");
+        Files.createDirectories(home);
+        Files.createDirectories(symphonyHome);
+        Files.createSymbolicLink(homeLink, home);
+        Map<String, String> environment = Map.of("HOME", home.toString(), "SYMPHONY_HOME", symphonyHome.toString());
+
+        // when
+        ProcessResult install = runUnchecked(
+                environment, "bash", "install.sh", "--dry-run", "--no-onboard", "--bin-dir", homeLink.toString());
+        ProcessResult uninstall = runUnchecked(
+                environment, "bash", "uninstall.sh", "--dry-run", "--yes", "--bin-dir", homeLink.toString());
+
+        // then
+        assertThat(install.exitCode()).as(install.output()).isEqualTo(2);
+        assertThat(uninstall.exitCode()).as(uninstall.output()).isEqualTo(2);
+        assertThat(install.output())
+                .contains("--bin-dir must point to a dedicated command directory.")
+                .doesNotContain("Dry run: no files changed.");
+        assertThat(uninstall.output())
+                .contains("--bin-dir must point to a dedicated command directory.")
+                .doesNotContain("Will remove if present:");
+    }
+
+    @Test
+    void posixScriptsRejectSymlinkParentTraversalAppPathInsideConfigBeforeUnsafeRemoval() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("symlink-parent-app-home");
+        Path symphonyHome = temporaryDirectory.resolve("symlink-parent-app-symphony");
+        Path configSubdirectory = symphonyHome.resolve("config/sub");
+        Path symlink = temporaryDirectory.resolve("symlink-parent-app-link");
+        Path app = symlink.resolve("../app");
+        Path safeBin = temporaryDirectory.resolve("symlink-parent-app-bin");
+        Files.createDirectories(home);
+        Files.createDirectories(configSubdirectory);
+        Files.createSymbolicLink(symlink, configSubdirectory);
+        Map<String, String> environment = Map.of("HOME", home.toString(), "SYMPHONY_HOME", symphonyHome.toString());
+
+        // when
+        PosixDryRunPair results = runPosixInstallAndUninstallDryRunWithPrefix(environment, app, safeBin);
+
+        // then
+        assertThat(results.install().exitCode()).as(results.install().output()).isEqualTo(2);
+        assertThat(results.uninstall().exitCode())
+                .as(results.uninstall().output())
+                .isEqualTo(2);
+        assertThat(results.install().output())
+                .contains("--prefix must not overlap Symphony config, workspace, or state directories.")
+                .doesNotContain("Dry run: no files changed.");
+        assertThat(results.uninstall().output())
+                .contains("Refusing dangerous removal path: " + app)
+                .doesNotContain("REMOVE  " + app);
+        assertThat(configSubdirectory).isDirectory();
+    }
+
+    @Test
+    void posixScriptsRejectSymlinkCycleAppPathWithoutHanging() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("timeout"));
+        Path home = temporaryDirectory.resolve("symlink-cycle-app-home");
+        Path app = temporaryDirectory.resolve("symlink-cycle-app-loop");
+        Path safeBin = temporaryDirectory.resolve("symlink-cycle-app-bin");
+        Files.createDirectories(home);
+        Files.createSymbolicLink(app, app);
+        Map<String, String> environment = Map.of("HOME", home.toString());
+
+        // when
+        ProcessResult install = runUnchecked(
+                environment,
+                "timeout",
+                "5s",
+                "bash",
+                "install.sh",
+                "--dry-run",
+                "--no-onboard",
+                "--prefix",
+                app.toString(),
+                "--bin-dir",
+                safeBin.toString());
+        ProcessResult uninstall = runUnchecked(
+                environment,
+                "timeout",
+                "5s",
+                "bash",
+                "uninstall.sh",
+                "--dry-run",
+                "--yes",
+                "--prefix",
+                app.toString(),
+                "--bin-dir",
+                safeBin.toString());
+
+        // then
+        assertThat(install.exitCode()).as(install.output()).isEqualTo(2);
+        assertThat(uninstall.exitCode()).as(uninstall.output()).isEqualTo(2);
+        assertThat(install.output()).contains("--prefix must not be a symlink.");
+        assertThat(uninstall.output()).contains("--prefix must not be a symlink.");
+    }
+
+    @Test
+    void posixScriptsRejectSymlinkParentTraversalCommandDirectoryInsideStateBeforePlan() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("symlink-parent-bin-home");
+        Path symphonyHome = temporaryDirectory.resolve("symlink-parent-bin-symphony");
+        Path stateSubdirectory = symphonyHome.resolve("state/sub");
+        Path symlink = temporaryDirectory.resolve("symlink-parent-bin-link");
+        Path commandDirectory = symlink.resolve("../bin");
+        Files.createDirectories(home);
+        Files.createDirectories(stateSubdirectory);
+        Files.createSymbolicLink(symlink, stateSubdirectory);
+        Map<String, String> environment = Map.of("HOME", home.toString(), "SYMPHONY_HOME", symphonyHome.toString());
+
+        // when
+        ProcessResult install = runUnchecked(
+                environment,
+                "bash",
+                "install.sh",
+                "--dry-run",
+                "--no-onboard",
+                "--prefix",
+                symphonyHome.resolve("app").toString(),
+                "--bin-dir",
+                commandDirectory.toString());
+        ProcessResult uninstall = runUnchecked(
+                environment,
+                "bash",
+                "uninstall.sh",
+                "--dry-run",
+                "--yes",
+                "--prefix",
+                symphonyHome.resolve("app").toString(),
+                "--bin-dir",
+                commandDirectory.toString());
+
+        // then
+        assertThat(install.exitCode()).as(install.output()).isEqualTo(2);
+        assertThat(uninstall.exitCode()).as(uninstall.output()).isEqualTo(2);
+        assertThat(install.output())
+                .contains("--bin-dir must not overlap Symphony app, config, workspace, or state directories.")
+                .doesNotContain("Dry run: no files changed.");
+        assertThat(uninstall.output())
+                .contains("--bin-dir must not overlap Symphony app, config, workspace, or state directories.")
+                .doesNotContain("Will remove if present:");
     }
 
     @MethodSource("posixUnsafeCommandDirectoryScenarios")
@@ -302,6 +3048,75 @@ final class InstallerScriptTest {
         // then
         assertThat(result.exitCode()).as(result.output()).isZero();
         assertThat(result.output()).contains("Installed CLI:", "Will remove if present:");
+    }
+
+    @Test
+    void posixUninstallerRejectsFinalSymlinkedAppDirectory() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("uninstall-symlink-app-home");
+        Path targetApp = temporaryDirectory.resolve("uninstall-symlink-app-target");
+        Path symlinkApp = temporaryDirectory.resolve("uninstall-symlink-app-link");
+        Path bin = temporaryDirectory.resolve("uninstall-symlink-app-bin");
+        Files.createDirectories(home);
+        Files.createDirectories(targetApp);
+        Files.createDirectories(bin);
+        Files.writeString(targetApp.resolve(".symphony-trello-install"), "marker", StandardCharsets.UTF_8);
+        Files.createSymbolicLink(symlinkApp, targetApp);
+
+        // when
+        ProcessResult result = run(
+                Map.of("HOME", home.toString()),
+                "bash",
+                "uninstall.sh",
+                "--yes",
+                "--prefix",
+                symlinkApp.toString(),
+                "--bin-dir",
+                bin.toString());
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isEqualTo(2);
+        assertThat(result.output()).contains("--prefix must not be a symlink.").doesNotContain("REMOVE  " + symlinkApp);
+        assertThat(Files.isSymbolicLink(symlinkApp)).isTrue();
+        assertThat(targetApp.resolve(".symphony-trello-install")).exists();
+    }
+
+    @Test
+    void posixUninstallerPreservesDataInsideCanonicalAppDirectoryThroughSymlinkedParent() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        Path home = temporaryDirectory.resolve("uninstall-symlink-parent-home");
+        Path realRoot = temporaryDirectory.resolve("uninstall-symlink-parent-real");
+        Path symlinkRoot = temporaryDirectory.resolve("uninstall-symlink-parent-link");
+        Path app = symlinkRoot.resolve("app");
+        Path config = realRoot.resolve("app/config");
+        Path bin = temporaryDirectory.resolve("uninstall-symlink-parent-bin");
+        Files.createDirectories(home);
+        Files.createDirectories(config);
+        Files.createDirectories(bin);
+        Files.writeString(realRoot.resolve("app/.symphony-trello-install"), "marker", StandardCharsets.UTF_8);
+        Files.writeString(config.resolve(".env"), "TRELLO_TOKEN=test\n", StandardCharsets.UTF_8);
+        Files.createSymbolicLink(symlinkRoot, realRoot);
+
+        // when
+        ProcessResult result = run(
+                Map.of("HOME", home.toString(), "SYMPHONY_TRELLO_CONFIG_DIR", config.toString()),
+                "bash",
+                "uninstall.sh",
+                "--yes",
+                "--prefix",
+                app.toString(),
+                "--bin-dir",
+                bin.toString());
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isEqualTo(2);
+        assertThat(result.output())
+                .contains("Refusing to remove app directory because it contains current local data")
+                .doesNotContain("REMOVE  " + app);
+        assertThat(config.resolve(".env")).exists();
+        assertThat(realRoot.resolve("app/.symphony-trello-install")).exists();
     }
 
     @MethodSource("posixUnsafeAppPathScenarios")
@@ -538,14 +3353,14 @@ final class InstallerScriptTest {
                         "install-root-config",
                         "install.sh",
                         "--no-onboard",
-                        "--prefix must not overlap Symphony config, workspace, or state directories.",
+                        "Symphony config, workspace, and state paths must point to dedicated directories.",
                         List.of("WOULD clone or update:", "Dry run: no files changed.")),
                 new PosixRootScopedConfigDirectoryScenario(
                         "uninstaller",
                         "uninstall-root-config",
                         "uninstall.sh",
                         "--yes",
-                        "--bin-dir must not overlap Symphony app, config, workspace, or state directories.",
+                        "Symphony config, workspace, and state paths must point to dedicated directories.",
                         List.of("Will remove if present:", "Trello boards were not deleted or archived.")));
     }
 
@@ -2035,7 +4850,13 @@ final class InstallerScriptTest {
         assumeTrue(commandExists("script"));
         Path installScript = Path.of("install.sh").toAbsolutePath();
         Path fakeBin = temporaryDirectory.resolve("microos-transactional-bin");
+        Path home = temporaryDirectory.resolve("microos-transactional-home");
+        Path varPath = temporaryDirectory.resolve("microos-transactional-var");
+        Path usersRoot = temporaryDirectory.resolve("microos-transactional-users");
+        Path userRoot = usersRoot.resolve("micro-user");
         Files.createDirectories(fakeBin);
+        Files.createDirectories(home);
+        Files.createDirectories(varPath);
         writeCommandProxy(fakeBin, "bash", "/bin/bash");
         Path commandLog = temporaryDirectory.resolve("microos-transactional.log");
         writeExecutable(
@@ -2053,14 +4874,19 @@ final class InstallerScriptTest {
                 set -euo pipefail
                 echo "transactional-update $*" >> "${SYMPHONY_FAKE_LOG:?}"
                 """);
-        Map<String, String> environment = Map.of(
-                "PATH", fakeBin.toString(),
-                "SYMPHONY_FAKE_LOG", commandLog.toString(),
-                "SYMPHONY_TRELLO_TEST_EUID", "1000",
-                "SYMPHONY_TRELLO_TEST_OS", "Linux",
-                "SYMPHONY_TRELLO_TEST_OS_PRETTY_NAME", "openSUSE MicroOS",
-                "SYMPHONY_TRELLO_TEST_OS_ID", "opensuse-microos",
-                "SYMPHONY_TRELLO_TEST_ARCH", "x86_64");
+        writeExecutable(
+                fakeBin.resolve("install"),
+                """
+                #!/bin/bash
+                set -euo pipefail
+                directory="${@: -1}"
+                echo "install $*" >> "${SYMPHONY_FAKE_LOG:?}"
+                mkdir -p "$directory"
+                """);
+        Map<String, String> environment = new LinkedHashMap<>(microOsLayoutEnvironment(home, varPath, usersRoot));
+        environment.put("PATH", fakeBin.toString());
+        environment.put("SYMPHONY_FAKE_LOG", commandLog.toString());
+        environment.put("SYMPHONY_TRELLO_TEST_EUID", "1000");
 
         // when
         ProcessResult result = runWithPseudoTerminal(
@@ -2081,9 +4907,12 @@ final class InstallerScriptTest {
                         "Reboot this machine so the new system snapshot becomes active, then rerun this installer.")
                 .doesNotContain(
                         "zypper install",
+                        "Detected MicroOS-like storage layout.",
+                        "Create command:",
                         "Codex CLI install:",
                         "Open a new terminal with Java 25+ on PATH",
                         "Open a new terminal with npm on PATH");
+        assertThat(userRoot).doesNotExist();
         assertThat(Files.readString(commandLog, StandardCharsets.UTF_8))
                 .isEqualTo(
                         "sudo transactional-update --non-interactive pkg install git java-25-openjdk-devel nodejs npm\n"
@@ -3723,6 +6552,66 @@ final class InstallerScriptTest {
     }
 
     @Test
+    void posixUninstallerKeepsDiscoveryContextWhenAppRemovalIsDeclined() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("script"));
+        Path uninstallScript = Path.of("uninstall.sh").toAbsolutePath();
+        Path home = temporaryDirectory.resolve("declined-context-home");
+        Path symphonyHome = temporaryDirectory.resolve("declined-context-symphony-home");
+        Path appHome = symphonyHome.resolve("app");
+        Path configDirectory = symphonyHome.resolve("config");
+        Path workspaceRoot = symphonyHome.resolve("workspaces");
+        Path stateHome = symphonyHome.resolve("state");
+        Path binDirectory = symphonyHome.resolve("bin");
+        Path defaultStateContext = home.resolve(".local/state/symphony-trello").resolve(INSTALL_CONTEXT_PROPERTIES);
+        Path defaultConfigContext = home.resolve(".config/symphony-trello").resolve(INSTALL_CONTEXT_PROPERTIES);
+        Files.createDirectories(appHome);
+        Files.createDirectories(configDirectory);
+        Files.createDirectories(workspaceRoot);
+        Files.createDirectories(stateHome);
+        Files.createDirectories(binDirectory);
+        Files.createDirectories(defaultStateContext.getParent());
+        Files.createDirectories(defaultConfigContext.getParent());
+        String context =
+                """
+                installer=install.sh
+                install_format_version=2
+                layout_mode=custom-flags
+                app_dir=%s
+                config_dir=%s
+                workspace_root=%s
+                state_home=%s
+                bin_dir=%s
+                created_microos_var_root=false
+                """
+                        .formatted(appHome, configDirectory, workspaceRoot, stateHome, binDirectory);
+        Files.writeString(defaultStateContext, context, StandardCharsets.UTF_8);
+        Files.writeString(defaultConfigContext, context, StandardCharsets.UTF_8);
+        Map<String, String> environment = Map.of("HOME", home.toString(), "SYMPHONY_HOME", symphonyHome.toString());
+
+        // when
+        ProcessResult result = runWithPseudoTerminal(
+                environment,
+                "n\n",
+                "bash " + shellQuote(uninstallScript.toString()) + " --yes-local-data --remove-all-local-data --prefix "
+                        + shellQuote(appHome.toString()) + " --bin-dir "
+                        + shellQuote(binDirectory.toString()));
+
+        // then
+        assertThat(result.exitCode()).as(result.output()).isZero();
+        assertThat(result.output())
+                .contains("Skipped installer-managed files.")
+                .doesNotContain("REMOVE  " + defaultStateContext);
+        assertThat(appHome).exists();
+        assertThat(defaultStateContext).exists();
+        assertThat(defaultConfigContext).exists();
+        assertThat(configDirectory).doesNotExist();
+        assertThat(workspaceRoot).doesNotExist();
+        assertThat(stateHome).doesNotExist();
+    }
+
+    @Test
     void posixUninstallerAllowsRemovingAppDirectoryContainingCurrentDataWithExplicitCleanupScopes() throws Exception {
         // given
         assumeTrue(commandExists("bash"));
@@ -4126,6 +7015,93 @@ final class InstallerScriptTest {
                         "Added " + binDirectory + " to PATH in " + home.resolve(".profile"));
         assertThat(binDirectory.resolve("codex")).doesNotExist();
         assertThat(symphonyHome.resolve("npm")).doesNotExist();
+    }
+
+    @Test
+    void posixInstallerUsesSystemdUserDirectoryAndXdgConfigAutostartEnvironment() throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
+        assumeTrue(commandExists("script"));
+        Path installScript = Path.of("install.sh").toAbsolutePath();
+        Path uninstallScript = Path.of("uninstall.sh").toAbsolutePath();
+        Path sourceRepository = createSourceRepository(temporaryDirectory);
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path home = temporaryDirectory.resolve("xdg-systemd-home");
+        Path xdgDataHome = temporaryDirectory.resolve("xdg-systemd-data");
+        Path xdgConfigHome = temporaryDirectory.resolve("xdg systemd config");
+        Path xdgStateHome = temporaryDirectory.resolve("xdg-systemd-state");
+        Path xdgCacheHome = temporaryDirectory.resolve("xdg-systemd-cache");
+        Path binDirectory = temporaryDirectory.resolve("xdg-systemd-bin");
+        Path fakeLog = temporaryDirectory.resolve("xdg-systemd.log");
+        Path servicePath = xdgConfigHome.resolve("systemd/user/symphony-trello.service");
+        Path homeServicePath = home.resolve(".config/systemd/user/symphony-trello.service");
+        Path autostartEnvPath = xdgConfigHome.resolve("symphony-trello/autostart.env");
+        Files.createDirectories(home);
+        Files.createFile(temporaryDirectory.resolve("codex-authenticated"));
+        Map<String, String> installEnvironment = Map.of(
+                "PATH",
+                fakeBin + File.pathSeparator + System.getenv("PATH"),
+                "HOME",
+                home.toString(),
+                "XDG_DATA_HOME",
+                xdgDataHome.toString(),
+                "XDG_CONFIG_HOME",
+                xdgConfigHome.toString(),
+                "XDG_STATE_HOME",
+                xdgStateHome.toString(),
+                "XDG_CACHE_HOME",
+                xdgCacheHome.toString(),
+                "SYMPHONY_TRELLO_REPO_URL",
+                sourceRepository.toUri().toString(),
+                "SYMPHONY_TRELLO_REF",
+                "main",
+                "SYMPHONY_FAKE_LOG",
+                fakeLog.toString());
+
+        // when
+        ProcessResult install = runWithPseudoTerminal(
+                installEnvironment,
+                "api-key\napi-token\nXDG Systemd Board\n\n\n",
+                "bash " + shellQuote(installScript.toString()) + " --no-update-path --bin-dir "
+                        + shellQuote(binDirectory.toString()));
+        install.assertSuccess();
+        String serviceContent = Files.readString(servicePath, StandardCharsets.UTF_8);
+        String installContext = Files.readString(
+                xdgStateHome.resolve("symphony-trello/install-context.properties"), StandardCharsets.UTF_8);
+        Map<String, String> uninstallEnvironment = Map.of(
+                "PATH",
+                fakeBin + File.pathSeparator + System.getenv("PATH"),
+                "HOME",
+                home.toString(),
+                "SYMPHONY_FAKE_LOG",
+                fakeLog.toString());
+        ProcessResult uninstall = run(
+                uninstallEnvironment,
+                "bash",
+                uninstallScript.toString(),
+                "--yes",
+                "--bin-dir",
+                binDirectory.toString());
+
+        // then
+        uninstall.assertSuccess();
+        assertThat(servicePath).doesNotExist();
+        assertThat(homeServicePath).doesNotExist();
+        assertThat(autostartEnvPath).doesNotExist();
+        assertThat(serviceContent)
+                .contains("EnvironmentFile=-" + autostartEnvPath.toString().replace(" ", "\\x20"))
+                .doesNotContain("%h/.config/symphony-trello/autostart.env");
+        assertThat(installContext)
+                .contains(
+                        "systemd_user_dir=" + xdgConfigHome.resolve("systemd/user"),
+                        "systemd_service_path=" + servicePath,
+                        "autostart_env_path=" + autostartEnvPath);
+        assertThat(Files.readString(fakeLog, StandardCharsets.UTF_8))
+                .contains(
+                        "systemctl --user enable symphony-trello.service",
+                        "systemctl --user restart symphony-trello.service",
+                        "systemctl --user disable --now symphony-trello.service");
     }
 
     @ParameterizedTest(name = "pinned ref type: {0}")
@@ -4717,6 +7693,18 @@ final class InstallerScriptTest {
                 pwsh, sourceRepository, fakeBin, symphonyHome, binDirectory, fakeLog, Map.of());
     }
 
+    private static Map<String, String> installEnvironmentForCustomHome(
+            Path sourceRepository, Path fakeBin, Path home, Path symphonyHome, Path fakeLog) {
+        Map<String, String> environment = new LinkedHashMap<>();
+        environment.put("HOME", home.toString());
+        environment.put("SYMPHONY_HOME", symphonyHome.toString());
+        environment.put("PATH", fakeBin + File.pathSeparator + System.getenv("PATH"));
+        environment.put("SYMPHONY_TRELLO_REPO_URL", sourceRepository.toUri().toString());
+        environment.put("SYMPHONY_TRELLO_REF", "main");
+        environment.put("SYMPHONY_FAKE_LOG", fakeLog.toString());
+        return environment;
+    }
+
     private static ProcessResult runPowerShellSourceCheckoutInstall(
             List<String> pwsh,
             Path sourceRepository,
@@ -4906,6 +7894,32 @@ final class InstallerScriptTest {
         }
     }
 
+    private static ProcessResult runBtrfsUninstall(Path fakeBin, Path mountRoot, Path symphonyHome, Path btrfsLog)
+            throws Exception {
+        writeExecutable(
+                fakeBin.resolve("findmnt"),
+                """
+                #!/usr/bin/env bash
+                set -euo pipefail
+                echo "${SYMPHONY_FAKE_BTRFS_MOUNT:?}"
+                """);
+        Map<String, String> environment = Map.of(
+                "PATH", fakeBin + File.pathSeparator + System.getenv("PATH"),
+                "SYMPHONY_HOME", symphonyHome.toString(),
+                "SYMPHONY_FAKE_APP", symphonyHome.resolve("app").toString(),
+                "SYMPHONY_FAKE_BTRFS_MOUNT", mountRoot.toString(),
+                "SYMPHONY_FAKE_LOG", btrfsLog.toString());
+        return run(environment, "bash", "uninstall.sh", "--yes");
+    }
+
+    private static String assertBtrfsSubvolumeDeletes(Path btrfsLog, Path app) throws IOException {
+        String log = Files.readString(btrfsLog, StandardCharsets.UTF_8);
+        assertThat(log)
+                .containsSubsequence(
+                        "delete " + app.resolve("nested/deeper"), "delete " + app.resolve("nested"), "delete " + app);
+        return log;
+    }
+
     private static String normalizedWhitespace(String text) {
         return text.replace("|", "").replaceAll("\\s+", " ");
     }
@@ -4999,6 +8013,8 @@ final class InstallerScriptTest {
                         "checkout",
                         Path.of("").toAbsolutePath().normalize().toString(),
                         "--bin-dir must point to a dedicated command directory."),
+                new UnsafeCommandDirectory(
+                        "usr-bin", "/usr/bin", "--bin-dir must point to a dedicated command directory."),
                 new UnsafeCommandDirectory("blank", "", "--bin-dir must not be blank."),
                 new UnsafeCommandDirectory("whitespace", "   ", "--bin-dir must not be blank."),
                 new UnsafeCommandDirectory("relative", "relative-bin", "--bin-dir must be an absolute path."),
@@ -5007,7 +8023,11 @@ final class InstallerScriptTest {
                         temporaryDirectory.resolve("bin\nline").toString(),
                         "--bin-dir must not contain control characters."),
                 new UnsafeCommandDirectory("file", file.toString(), "--bin-dir must be a directory.")));
-        cases.addAll(unsafeCommandDirectorySymlinkCases(symlink, symlinkName));
+        cases.addAll(unsafeCommandDirectorySymlinkCases(
+                symlink,
+                symlinkName,
+                "--bin-dir must not overlap Symphony app, config, workspace, or state directories.",
+                false));
         cases.add(extraCase);
         return List.copyOf(cases);
     }
@@ -5031,20 +8051,28 @@ final class InstallerScriptTest {
     }
 
     private List<UnsafeCommandDirectory> unsafeCommandDirectorySymlinkCases(Path symlink, String symlinkName) {
-        return List.of(
-                new UnsafeCommandDirectory("symlink", symlink.toString(), "--bin-dir must not be a symlink."),
+        return unsafeCommandDirectorySymlinkCases(symlink, symlinkName, "--bin-dir must not be a symlink.", true);
+    }
+
+    private List<UnsafeCommandDirectory> unsafeCommandDirectorySymlinkCases(
+            Path symlink, String symlinkName, String expectedMessage, boolean includeTraversal) {
+        List<UnsafeCommandDirectory> cases = new ArrayList<>(List.of(
+                new UnsafeCommandDirectory("symlink", symlink.toString(), expectedMessage),
                 new UnsafeCommandDirectory(
-                        "symlink-parent", symlink.resolve("bin").toString(), "--bin-dir must not be a symlink."),
-                new UnsafeCommandDirectory(
-                        "symlink-traversal", symlink.resolve("../bin").toString(), "--bin-dir must not be a symlink."),
-                new UnsafeCommandDirectory(
-                        "symlink-after-traversal",
-                        temporaryDirectory
-                                .resolve("missing")
-                                .resolve("../" + symlinkName)
-                                .resolve("bin")
-                                .toString(),
-                        "--bin-dir must not be a symlink."));
+                        "symlink-parent", symlink.resolve("bin").toString(), expectedMessage)));
+        if (includeTraversal) {
+            cases.add(new UnsafeCommandDirectory(
+                    "symlink-traversal", symlink.resolve("../bin").toString(), expectedMessage));
+            cases.add(new UnsafeCommandDirectory(
+                    "symlink-after-traversal",
+                    temporaryDirectory
+                            .resolve("missing")
+                            .resolve("../" + symlinkName)
+                            .resolve("bin")
+                            .toString(),
+                    expectedMessage));
+        }
+        return List.copyOf(cases);
     }
 
     private List<UnsafeInstallerPath> posixUnsafeAppPaths(
@@ -5071,7 +8099,6 @@ final class InstallerScriptTest {
                 new UnsafeInstallerPath(
                         "control", temporaryDirectory.resolve("app\nline").toString(), "control characters"),
                 new UnsafeInstallerPath("file", file.toString(), "--prefix must be a directory.")));
-        cases.addAll(unsafeAppSymlinkCases(symlink, symlinkName));
         return List.copyOf(cases);
     }
 
@@ -5240,6 +8267,33 @@ final class InstallerScriptTest {
                                 : command)
                 .toList();
     }
+
+    private PosixDryRunPair runPosixInstallAndUninstallDryRunWithPrefix(
+            Map<String, String> environment, Path app, Path bin) throws Exception {
+        return new PosixDryRunPair(
+                runUnchecked(
+                        environment,
+                        "bash",
+                        "install.sh",
+                        "--dry-run",
+                        "--no-onboard",
+                        "--prefix",
+                        app.toString(),
+                        "--bin-dir",
+                        bin.toString()),
+                runUnchecked(
+                        environment,
+                        "bash",
+                        "uninstall.sh",
+                        "--dry-run",
+                        "--yes",
+                        "--prefix",
+                        app.toString(),
+                        "--bin-dir",
+                        bin.toString()));
+    }
+
+    private record PosixDryRunPair(ProcessResult install, ProcessResult uninstall) {}
 
     private record UnsafeCommandDirectory(String name, String value, String expectedMessage) {}
 
