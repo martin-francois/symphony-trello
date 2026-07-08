@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage:
+  scripts/validate-codex-skill SKILL_DIR [SKILL_DIR...]
+
+Runs the Codex skill-creator quick validator through an isolated Python virtual
+environment so PyYAML does not need to be installed globally.
+
+Environment:
+  CODEX_SKILL_QUICK_VALIDATE  Path to quick_validate.py.
+  CODEX_SKILL_VALIDATE_VENV   Virtualenv path. Defaults to user cache.
+  CODEX_HOME                  Codex home. Defaults to $HOME/.codex.
+EOF
+}
+
+die() {
+  printf 'validate-codex-skill: %s\n' "$*" >&2
+  exit 2
+}
+
+if [ "$#" -eq 0 ]; then
+  usage >&2
+  exit 2
+fi
+
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+  usage
+  exit 0
+fi
+
+python_command="${PYTHON:-python3}"
+pyyaml_version="6.0.2"
+codex_home="${CODEX_HOME:-$HOME/.codex}"
+validator="${CODEX_SKILL_QUICK_VALIDATE:-}"
+cache_root="${XDG_CACHE_HOME:-$HOME/.cache}/symphony-trello"
+
+if [ -z "$validator" ]; then
+  for candidate in \
+    "$codex_home/skills/.system/skill-creator/scripts/quick_validate.py" \
+    "$HOME/.codex/skills/.system/skill-creator/scripts/quick_validate.py"; do
+    if [ -f "$candidate" ]; then
+      validator="$candidate"
+      break
+    fi
+  done
+fi
+
+[ -n "$validator" ] || die "Could not find skill-creator quick_validate.py; set CODEX_SKILL_QUICK_VALIDATE"
+[ -f "$validator" ] || die "Validator does not exist: $validator"
+
+if [ -e "$cache_root" ] && [ ! -O "$cache_root" ]; then
+  die "Cache directory is not owned by the current user: $cache_root"
+fi
+mkdir -p -m 700 "$cache_root"
+
+venv="${CODEX_SKILL_VALIDATE_VENV:-$cache_root/skill-validate-venv}"
+
+if [ -e "$venv" ] && [ ! -O "$venv" ]; then
+  die "Virtualenv path is not owned by the current user: $venv"
+fi
+
+if [ ! -x "$venv/bin/python" ]; then
+  "$python_command" -m venv "$venv"
+  chmod 700 "$venv"
+fi
+
+if ! "$venv/bin/python" - "$pyyaml_version" <<'PY' >/dev/null 2>&1
+import sys
+try:
+    import yaml
+except ImportError:
+    raise SystemExit(1)
+raise SystemExit(0 if yaml.__version__ == sys.argv[1] else 1)
+PY
+then
+  "$venv/bin/python" -m pip install --disable-pip-version-check --quiet "PyYAML==$pyyaml_version"
+fi
+
+for skill_dir in "$@"; do
+  [ -d "$skill_dir" ] || die "Skill directory does not exist: $skill_dir"
+  "$venv/bin/python" "$validator" "$skill_dir"
+done
