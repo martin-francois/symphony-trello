@@ -38,6 +38,13 @@ commit and open pull requests. Topic-specific rules live in the pages linked und
   maintainable, keep the cleanup/refactoring focused on that change. Put unrelated cleanup,
   refactoring, formatting, dependency updates, or tooling changes in a separate issue, branch, or
   pull request.
+- When the user asks for work that is unrelated to the current branch or pull request and does not
+  say where it should go, ask before changing files. Offer lettered choices: commit directly on
+  `main`, create a new branch and pull request, or put it on the current branch or pull request as a
+  separate commit. Because this work is already unrelated to the current branch or changes, never
+  suggest merging it into an existing commit unless the user explicitly asks for history cleanup after
+  seeing that tradeoff. Do not leave unrelated committed work unpublished on a local branch; push and
+  create or update the selected pull request, or push `main` only when the user chose that path.
 - Update documentation and ADRs when behavior, setup, architecture, or tradeoffs change.
 - Before finishing a task where you made or explained a deliberate design tradeoff, run an explicit
   ADR check: if the choice would be costly for a future maintainer to rediscover, add or update the
