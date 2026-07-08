@@ -253,7 +253,7 @@ the release automation updates it.
 Before opening or retitling a pull request, run the same title check that CI uses:
 
 ```bash
-printf '%s\n' 'docs: describe static-analysis policy' | pnpm dlx --package @commitlint/cli@21.0.1 --package @commitlint/config-conventional@21.0.1 commitlint --config commitlint.config.cjs
+scripts/commitlint-local title 'docs: describe static-analysis policy'
 ```
 
 Replace the sample title with the exact pull request title. Normal squash-merge PRs are covered by
@@ -262,7 +262,7 @@ too. This stricter message check enforces that breaking commits use both `!` and
 `BREAKING CHANGE:` footer:
 
 ```bash
-pnpm dlx --package @commitlint/cli@21.0.1 --package @commitlint/config-conventional@21.0.1 commitlint --config commitlint.message.config.cjs --from origin/main --to HEAD --verbose
+scripts/commitlint-local range origin/main HEAD
 ```
 
 Every retained commit title in that range must be a useful Conventional Commit.

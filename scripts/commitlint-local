@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat >&2 <<'EOF'
+Usage:
+  scripts/commitlint-local title '<pull-request-title>'
+  scripts/commitlint-local range [<base-ref>] [<head-ref>]
+EOF
+}
+
+die() {
+  echo "commitlint-local: $*" >&2
+  exit 2
+}
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+cache_root="${XDG_CACHE_HOME:-$HOME/.cache}/symphony-trello"
+commitlint_home="$cache_root/commitlint"
+commitlint_cli_package="@commitlint/cli@21.0.1"
+commitlint_config_package="@commitlint/config-conventional@21.0.1"
+commitlint_cli_version="${commitlint_cli_package##*@}"
+commitlint_config_version="${commitlint_config_package##*@}"
+version_marker="$commitlint_home/.pinned-versions"
+expected_versions="$commitlint_cli_package $commitlint_config_package"
+
+if [[ "$#" -lt 1 ]]; then
+  usage
+  exit 2
+fi
+
+command="$1"
+shift
+
+if ! command -v pnpm >/dev/null 2>&1; then
+  die "pnpm is required; enable Corepack and prepare the pinned pnpm version first"
+fi
+
+if [[ -e "$cache_root" && ! -O "$cache_root" ]]; then
+  die "Cache directory is not owned by the current user: $cache_root"
+fi
+mkdir -p -m 700 "$commitlint_home"
+
+cat >"$commitlint_home/package.json" <<EOF
+{"private":true,"dependencies":{"@commitlint/cli":"$commitlint_cli_version","@commitlint/config-conventional":"$commitlint_config_version"}}
+EOF
+
+if [[ ! -x "$commitlint_home/node_modules/.bin/commitlint" ||
+  ! -e "$commitlint_home/node_modules/@commitlint/config-conventional" ||
+  "$(cat "$version_marker" 2>/dev/null || true)" != "$expected_versions" ]]; then
+  pnpm --dir "$commitlint_home" install --silent --ignore-scripts
+  printf '%s\n' "$expected_versions" >"$version_marker"
+fi
+
+cp "$repo_root/commitlint.config.cjs" "$commitlint_home/commitlint.config.cjs"
+cp "$repo_root/commitlint.message.config.cjs" "$commitlint_home/commitlint.message.config.cjs"
+
+case "$command" in
+title)
+  [[ "$#" -eq 1 ]] || die "title mode needs exactly one pull request title"
+  printf '%s\n' "$1" |
+    "$commitlint_home/node_modules/.bin/commitlint" --config "$commitlint_home/commitlint.config.cjs"
+  ;;
+range)
+  base_ref="${1:-origin/main}"
+  head_ref="${2:-HEAD}"
+  [[ "$#" -le 2 ]] || die "range mode accepts at most a base ref and head ref"
+  "$commitlint_home/node_modules/.bin/commitlint" \
+    --config "$commitlint_home/commitlint.message.config.cjs" \
+    --cwd "$repo_root" \
+    --from "$base_ref" \
+    --to "$head_ref" \
+    --verbose
+  ;;
+*)
+  usage
+  exit 2
+  ;;
+esac

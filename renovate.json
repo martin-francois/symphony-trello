@@ -42,7 +42,8 @@
       "managerFilePatterns": [
         "/^\\.github/workflows/commitlint\\.yml$/",
         "/^AGENTS\\.md$/",
-        "/^CONTRIBUTING\\.md$/"
+        "/^CONTRIBUTING\\.md$/",
+        "/^scripts/commitlint-local$/"
       ],
       "matchStrings": [
         "(?:--package\\s+|\\s+)(?<depName>@commitlint/(?:cli|config-conventional))@(?<currentValue>\\d+\\.\\d+\\.\\d+)"
