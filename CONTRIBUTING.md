@@ -74,6 +74,36 @@ Packaged runs also accept a positional workflow path and `--port`:
 java -jar target/quarkus-app/quarkus-run.jar ./WORKFLOW.md --port 18081
 ```
 
+## Repository Knowledge Graph
+
+This repository includes a project-scoped Graphify skill under `.agents/skills/graphify/`.
+Graphify can build a local knowledge graph for source-code navigation.
+
+Install or update the CLI:
+
+```bash
+uv tool install graphifyy
+```
+
+Refresh the committed project skill:
+
+```bash
+graphify install --project --platform agents
+```
+
+Build a local code graph without external model setup:
+
+```bash
+graphify extract src --no-cluster
+```
+
+This writes generated files under `src/graphify-out/`, which is ignored by Git. Query the graph with
+commands such as:
+
+```bash
+graphify query "How does setup validation flow?" --graph src/graphify-out/graph.json
+```
+
 ## Specification Alignment
 
 `SPEC.md` is the project contract. It adapts OpenAI Symphony from Linear to Trello while keeping

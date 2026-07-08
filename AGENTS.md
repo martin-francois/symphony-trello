@@ -57,6 +57,7 @@ guidance here, put it in docs/agents and add a link instead.
 - [Testing](docs/agents/testing.md)
 - [Deployment & live verification](docs/agents/deployment-and-live-verification.md)
 - [Java style & design preferences](docs/agents/java-style.md)
+- [Graphify knowledge graph support](docs/agents/graphify.md)
 - [Static analysis policy](docs/agents/static-analysis.md)
 - [Documentation & README](docs/agents/documentation-and-readme.md)
 - [GitHub issue triage](docs/agents/github-issue-triage.md)

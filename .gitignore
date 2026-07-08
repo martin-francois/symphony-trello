@@ -7,6 +7,11 @@ target/
 .mvn/wrapper/maven-wrapper.jar
 .mvn/wrapper/dists/
 
+# Graphify generated knowledge graph output. Keep the project skill tracked,
+# but do not commit generated graphs or local extraction caches.
+**/graphify-out/
+**/.graphify_*.json
+
 # Tessl install output. Keep tessl.json tracked as the source of truth.
 .tessl/
 .agents/skills/tessl__*
