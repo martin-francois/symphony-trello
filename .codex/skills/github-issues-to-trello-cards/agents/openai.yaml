@@ -1,0 +1,4 @@
+interface:
+  display_name: "GitHub Issues To Trello Cards"
+  short_description: "Create or sync Trello cards from GitHub issues."
+  default_prompt: "Use $github-issues-to-trello-cards to create Trello cards from these GitHub issues."
