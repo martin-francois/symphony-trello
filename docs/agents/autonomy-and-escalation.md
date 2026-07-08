@@ -36,6 +36,14 @@ this repository.
   for one specific commit. Never run `codex review --uncommitted "prompt"`,
   `codex review "prompt" --uncommitted`, `printf "prompt" | codex review --uncommitted -`, bare
   `codex review`, or a mismatched scope and then correct it later.
+- Cap each Codex review run at 30 minutes, for example with
+  `timeout 30m codex --dangerously-bypass-approvals-and-sandbox review --base origin/main --title "Short review title"`.
+  If the command times out, stop that pass, keep any useful visible findings, and rerun a fresh
+  scoped review after addressing or narrowing the cause. Do not leave orphaned review processes
+  running in the background.
+- After starting a Codex review pass, wait quietly for it to finish. Do not send repeated progress
+  updates, polling notes, or "still running" messages unless the user asks for status or the review
+  hits the timeout and needs action.
 - After a Codex review pass reports justified findings, fix them and rerun Codex review directly.
   Do not run the repository's normal local verification gate between review iterations only to check
   each repair. Once the Codex review loop is clean, run the required verification once for the final
