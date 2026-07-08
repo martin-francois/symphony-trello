@@ -11,6 +11,8 @@ docker_args=(
   run
   -i
   --rm
+  --security-opt
+  label=disable
   --workdir "$work_dir"
   -e GIT_CONFIG_COUNT=1
   -e GIT_CONFIG_KEY_0=safe.directory
