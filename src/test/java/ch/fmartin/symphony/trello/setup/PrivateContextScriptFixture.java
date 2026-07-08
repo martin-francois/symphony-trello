@@ -98,6 +98,7 @@ final class PrivateContextScriptFixture {
                 set -euo pipefail
 
                 interactive=false
+                disables_label=false
                 private_config=false
                 mode=""
 
@@ -106,6 +107,10 @@ final class PrivateContextScriptFixture {
                     -i|--interactive)
                       interactive=true
                       shift
+                      ;;
+                    --security-opt)
+                      [ "${2:-}" = "label=disable" ] && disables_label=true
+                      shift 2
                       ;;
                     -c)
                       case "${2:-}" in
@@ -126,6 +131,10 @@ final class PrivateContextScriptFixture {
                 if [ "$interactive" = false ]; then
                   printf 'fake docker: missing interactive stdin\\n' >&2
                   exit 42
+                fi
+                if [ "$disables_label" = false ]; then
+                  printf 'fake docker: missing disabled label security option\\n' >&2
+                  exit 43
                 fi
 
                 scan_file="$(mktemp)"
