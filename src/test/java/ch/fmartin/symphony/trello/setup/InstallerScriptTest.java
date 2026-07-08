@@ -3795,8 +3795,11 @@ final class InstallerScriptTest {
         Files.createDirectories(fakeBin);
         writeExecutable(fakeBin.resolve("git"), "#!/usr/bin/env bash\nexit 0\n");
         writeExecutable(fakeBin.resolve("apt-get"), "#!/usr/bin/env bash\nexit 0\n");
+        writeCommandProxy(fakeBin, "sed", "/bin/sed");
+        writeCommandProxy(fakeBin, "head", "/usr/bin/head");
         Map<String, String> environment = Map.of(
-                "PATH", fakeBin + File.pathSeparator + "/bin",
+                "PATH", fakeBin.toString(),
+                "SYMPHONY_TRELLO_TEST_EUID", "0",
                 "SYMPHONY_TRELLO_TEST_OS", "Linux",
                 "SYMPHONY_TRELLO_TEST_ARCH", "x86_64");
 

@@ -69,11 +69,22 @@ final class InstallerScriptFixture {
             }
         }
         processEnvironment.putAll(environment);
+        applyDeterministicLinuxDistro(processEnvironment, environment);
         if (!environment.containsKey("HOME") && !isWindows()) {
             Path home = defaultPosixHome(environment);
             Files.createDirectories(home);
             processEnvironment.put("HOME", home.toString());
         }
+    }
+
+    private static void applyDeterministicLinuxDistro(
+            Map<String, String> processEnvironment, Map<String, String> environment) {
+        if (!"Linux".equals(environment.get("SYMPHONY_TRELLO_TEST_OS"))) {
+            return;
+        }
+        processEnvironment.putIfAbsent("SYMPHONY_TRELLO_TEST_OS_ID", "debian");
+        processEnvironment.putIfAbsent("SYMPHONY_TRELLO_TEST_OS_ID_LIKE", "debian");
+        processEnvironment.putIfAbsent("SYMPHONY_TRELLO_TEST_OS_PRETTY_NAME", "Debian GNU/Linux");
     }
 
     private static Path defaultPosixHome(Map<String, String> environment) {
