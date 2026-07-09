@@ -22,6 +22,11 @@ lives in [Testing](testing.md).
   reproduce the reported symptom. Use real Trello and real Codex when the scenario involves them and
   they are reasonably available. A fake-Codex or mocked phase may help isolate the mechanism, but it
   does not count as real-Codex reproduction.
+- Prefer running the reproduction in an isolated Docker or Podman container instead of directly on
+  the host whenever the container can faithfully represent the failing environment and interaction.
+  Use the host only when the bug depends on host behavior, required integrations cannot be exposed
+  safely to the container, or no working container runtime is available; record that reason with the
+  reproduction evidence.
 - Use only disposable, run-scoped Trello boards, cards, repositories, branches, and workspaces. Never
   reproduce by mutating a production board, a normal working repository, or unrelated external
   state. Record cleanup responsibility and archive or remove the disposable resources after the
@@ -35,10 +40,10 @@ lives in [Testing](testing.md).
   applicable, and what happened as expected, then ask for the missing details. Do not substitute a
   speculative code change for a confirmed reproduction.
 - After the regression test fails for the bug-specific reason and the fix makes it pass, deploy the
-  fixed state and replay the same procedure with the same observations and success criteria. Prefer
-  fresh disposable resources when prior state could affect the result. Do not claim success if the
-  symptom remains reproducible or the post-fix live replay could not be completed; report the exact
-  remaining failure or verification blocker instead.
+  fixed state and replay the same procedure in the same host or container environment, with the same
+  observations and success criteria. Prefer fresh disposable resources when prior state could affect
+  the result. Do not claim success if the symptom remains reproducible or the post-fix live replay
+  could not be completed; report the exact remaining failure or verification blocker instead.
 
 ## Debugging auto-posted setup-failure issues
 

@@ -187,8 +187,9 @@ optional verification. Follow this order:
 
 1. Investigate the report enough to define the exact symptom and a safe reproduction procedure.
 2. Before changing product code, deploy the affected current state locally and reproduce the bug.
-   Use real Trello and real Codex when they are relevant and reasonably available, and use only
-   disposable, run-scoped Trello boards and repositories. Follow
+   Prefer an isolated Docker or Podman container over the host system whenever the container can
+   reproduce the scenario faithfully. Use real Trello and real Codex when they are relevant and
+   reasonably available, and use only disposable, run-scoped Trello boards and repositories. Follow
    [Deployment & live verification](deployment-and-live-verification.md#live-bug-fix-reproduction-loop).
 3. If the bug cannot be reproduced, stop without implementing a speculative fix. Explain what was
    attempted, why live reproduction was unavailable when applicable, or what behaved as expected,
