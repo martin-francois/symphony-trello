@@ -10,10 +10,11 @@ description: >
 
 ## Goals
 
-- Keep the feature branch current with `origin/main`.
+- Keep the feature branch current with `origin/main` through rebasing.
 - Preserve the branch's intent and the user's changes.
 - Resolve conflicts by understanding both sides before editing.
 - Rerun the relevant checks after conflict resolution.
+- Never introduce a merge commit when synchronizing a feature branch.
 
 ## Steps
 
@@ -35,10 +36,10 @@ description: >
    git pull --ff-only origin "$branch"
    ```
 
-5. Merge latest main with conflict context:
+5. Rebase onto latest main with conflict context:
 
    ```bash
-   git -c merge.conflictstyle=zdiff3 merge origin/main
+   git -c merge.conflictstyle=zdiff3 rebase origin/main
    ```
 
 6. If conflicts occur:
@@ -47,14 +48,18 @@ description: >
    - Resolve the intended behavior first, then edit.
    - Do not choose `ours` or `theirs` for a whole file unless that is clearly
      correct.
-   - Run `git diff --check` before committing the merge.
+   - Stage each resolution and continue with `GIT_EDITOR=true git rebase --continue`.
+   - Run `git diff --check` after the rebase completes.
 7. Run the relevant checks from `AGENTS.md`.
-8. Summarize conflict files, decisions, and validation in the branch notes or
+8. Verify `git rev-list --merges origin/main..HEAD` is empty.
+9. Push the rewritten branch with `git push --force-with-lease`, using the
+   previously fetched remote branch as the lease protection.
+10. Summarize conflict files, decisions, and validation in the branch notes or
    handoff comment.
 
 ## Stop Conditions
 
 - The conflict depends on product intent that is not inferable from the repo,
   issue, or current user instructions.
-- The merge would drop user changes or alter an external contract without clear
+- The rebase would drop user changes or alter an external contract without clear
   confirmation.

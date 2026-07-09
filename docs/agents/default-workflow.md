@@ -235,6 +235,9 @@ user explicitly chooses a spec carry-over.
   existing branch commit or squashing related local commits before pushing, unless the user
   explicitly asks for multiple commits or the change includes a refactor, which belongs in its own
   focused commit before the behavior-change commit.
+- Synchronize feature branches by rebasing onto the latest default branch. Never create merge
+  commits to update a pull request branch; after verifying the rewritten history, push it with
+  `--force-with-lease` against the previously fetched remote head.
 - If the user explicitly wants a multi-commit pull request, keep each commit focused and Conventional
   Commit titled. Use one commit for the user-visible feature or fix and separate commits only for
   directly supporting cleanup or refactoring that belongs to the same cohesive change; unrelated work
