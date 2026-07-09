@@ -16,6 +16,30 @@ lives in [Testing](testing.md).
   reasonably possible from the current environment, perform the relevant live deployed verification
   before claiming the fix is complete.
 
+## Live bug-fix reproduction loop
+
+- Before changing product code for a bug, deploy the affected current state locally and attempt to
+  reproduce the reported symptom. Use real Trello and real Codex when the scenario involves them and
+  they are reasonably available. A fake-Codex or mocked phase may help isolate the mechanism, but it
+  does not count as real-Codex reproduction.
+- Use only disposable, run-scoped Trello boards, cards, repositories, branches, and workspaces. Never
+  reproduce by mutating a production board, a normal working repository, or unrelated external
+  state. Record cleanup responsibility and archive or remove the disposable resources after the
+  before-and-after loop is complete.
+- Record a repeatable, sanitized reproduction procedure and the observable failure criteria before
+  implementing the fix. Include the deployed revision, relevant non-secret configuration, inputs,
+  and externally visible Trello/Codex outcomes without recording credentials, private links,
+  account names, or private host paths.
+- If the symptom cannot be reproduced through the live path or the closest safe equivalent, stop the
+  bug fix. Report what was attempted, why a required real integration was unavailable when
+  applicable, and what happened as expected, then ask for the missing details. Do not substitute a
+  speculative code change for a confirmed reproduction.
+- After the regression test fails for the bug-specific reason and the fix makes it pass, deploy the
+  fixed state and replay the same procedure with the same observations and success criteria. Prefer
+  fresh disposable resources when prior state could affect the result. Do not claim success if the
+  symptom remains reproducible or the post-fix live replay could not be completed; report the exact
+  remaining failure or verification blocker instead.
+
 ## Debugging auto-posted setup-failure issues
 
 - When the user provides a GitHub issue that was automatically posted from a local setup failure,

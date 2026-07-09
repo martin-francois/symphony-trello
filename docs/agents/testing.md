@@ -60,10 +60,14 @@ parallel safety. Live end-to-end and deployed-verification rules live in
 
 ## Regression tests
 
-- When a bug is found, explicitly ask why the current suite missed it and add the smallest regression
-  test that would have failed before the fix. Prefer writing that test before the fix when practical.
-  If the fix already exists, temporarily revert or otherwise disable the fix when feasible to confirm
-  the regression test fails for the original bug, then restore the fix and make the test pass.
+- After reproducing a bug and before changing product code, explicitly ask why the current suite
+  missed it and add the smallest regression test that represents the reproduced failure. Run the
+  test against the buggy code and confirm that it fails in the expected bug-specific way rather than
+  because of fixture setup, an unavailable dependency, or another incidental error. Do not implement
+  the fix until this red test is established. If no suitable regression test can be made to fail for
+  the reproduced bug, stop, explain the testability blocker, and ask the requester how to proceed.
+- After establishing the red test, fix the identified mechanism and run the focused test until it is
+  green. Keep the regression test in the normal durable test suite at the narrowest useful level.
 - Fuzz tests are regression tests in normal Maven runs. When changing parser, prompt-line safety,
   workflow loading, or Trello reference/checklist parsing logic, run the focused fuzzing and chaos
   regression command from [Fuzzing](../fuzzing.md). If the user asks for active or continuous

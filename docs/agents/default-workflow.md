@@ -182,17 +182,33 @@ user explicitly chooses a spec carry-over.
 
 ## Fixing bugs
 
-- Fix bugs in this order: investigate first, reproduce second, fix third. The investigation must
-  name the exact mechanism that produces the failure - the specific code path, lock, state, timing,
-  or interaction - and why it exists, before any fix is designed. A plausible category such as
-  "flaky", "transient", "timing", "GC", "race", or "host load" is a symptom description, not a root
-  cause; for behavior in code this project owns, keep digging until the failing mechanism is
-  identified in the code, and accept an environmental explanation only after the owned code has been
-  ruled out. Then reproduce the bug and turn the reproduction into the smallest regression test,
-  confirm that the test fails for the identified mechanism and not for an incidental reason, and only
-  then implement the fix at the mechanism. A tolerance mechanism such as a retry, longer timeout, or
-  fallback is acceptable only as a documented compatibility or defense-in-depth layer on top of the
-  mechanism fix, never as a replacement for finding it.
+Treat reproduction, a failing regression test, and post-fix reproduction as hard gates rather than
+optional verification. Follow this order:
+
+1. Investigate the report enough to define the exact symptom and a safe reproduction procedure.
+2. Before changing product code, deploy the affected current state locally and reproduce the bug.
+   Use real Trello and real Codex when they are relevant and reasonably available, and use only
+   disposable, run-scoped Trello boards and repositories. Follow
+   [Deployment & live verification](deployment-and-live-verification.md#live-bug-fix-reproduction-loop).
+3. If the bug cannot be reproduced, stop without implementing a speculative fix. Explain what was
+   attempted, why live reproduction was unavailable when applicable, or what behaved as expected,
+   then ask the requester for the missing reproduction details.
+4. Identify the exact mechanism that produces the reproduced failure - the specific code path, lock,
+   state, timing, or interaction - and why it exists before designing the fix. A plausible category
+   such as "flaky", "transient", "timing", "GC", "race", or "host load" is a symptom description,
+   not a root cause; for behavior in code this project owns, keep digging until the failing mechanism
+   is identified, and accept an environmental explanation only after owned code has been ruled out.
+5. Turn the reproduction into the smallest regression test, run it against the buggy code, and
+   confirm that it fails for the expected bug-specific reason rather than an incidental failure. Do
+   not change product code until this red test is established. Follow
+   [Testing](testing.md#regression-tests).
+6. Fix the identified mechanism and run the focused regression test until it passes. A retry, longer
+   timeout, fallback, or other tolerance mechanism is acceptable only as a documented compatibility
+   or defense-in-depth layer on top of the mechanism fix, never as a replacement for finding it.
+7. Deploy the fixed state and repeat the same live reproduction procedure and success criteria. Use
+   fresh disposable resources when reuse could hide or contaminate the result. Claim the bug is fixed
+   only when the original symptom is no longer reproducible; otherwise continue the loop.
+
 - Never present a guess as a finding. Before stating a cause, behavior, or fact about this system,
   verify it against the code, the issue evidence, a reproduction, or documentation, and base
   decisions on what the verification showed. When something cannot be verified with reasonable
