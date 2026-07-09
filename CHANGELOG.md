@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.1.1](https://github.com/martin-francois/symphony-trello/compare/v1.1.0...v1.1.1) (2026-07-09)
+
+
+### Bug Fixes
+
+* allow BetterLeaks container to read mounted scans ([a104ee1](https://github.com/martin-francois/symphony-trello/commit/a104ee11e69779d40de8ab0eacf3f262bbc56a0f))
+* support MicroOS installer layouts ([d070445](https://github.com/martin-francois/symphony-trello/commit/d0704458987484895f8f57c8064a7be67656578e)), closes [#530](https://github.com/martin-francois/symphony-trello/issues/530)
+
+
+### Documentation
+
+* add GitHub issue Trello card skill ([8c1413c](https://github.com/martin-francois/symphony-trello/commit/8c1413c270e2506b94b83190cf8e622dfcd1253b))
+* cap Codex review runs at 30 minutes ([699e30a](https://github.com/martin-francois/symphony-trello/commit/699e30a1c8d93e3b3c629ab0d87ccaa7439c7174))
+* clarify branch review and response workflows ([ea15a43](https://github.com/martin-francois/symphony-trello/commit/ea15a43374032d7228e929ec20aa6d5dc6dcdf1f))
+* clarify issue triage and sweep policy ([6ffa652](https://github.com/martin-francois/symphony-trello/commit/6ffa65275f2c018edb64d771084a308a3849b1a9))
+* require rebased pull request branches ([f7f8a42](https://github.com/martin-francois/symphony-trello/commit/f7f8a42ed3e3446472f11a2c9d78b532c707fb43))
+
 ## [1.1.0](https://github.com/martin-francois/symphony-trello/compare/v1.0.2...v1.1.0) (2026-07-06)
 
 
