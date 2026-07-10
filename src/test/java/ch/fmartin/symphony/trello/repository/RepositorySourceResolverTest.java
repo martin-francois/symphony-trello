@@ -8,6 +8,7 @@ import ch.fmartin.symphony.trello.domain.Card;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -459,6 +460,54 @@ final class RepositorySourceResolverTest {
         assertThat(selection.problem().code()).isEqualTo("repository_path_malformed");
     }
 
+    @MethodSource("unsafePromptLineCharacters")
+    @ParameterizedTest(name = "{0}")
+    void rejectsEveryIsoControlAndUnicodeLineSeparatorFromPromptLines(String scenario, int codePoint) {
+        // given
+        String value = "before" + Character.toString(codePoint) + "after";
+
+        // when
+        boolean safe = RepositorySourceText.safePromptLine(value);
+
+        // then
+        assertThat(safe).as(scenario).isFalse();
+    }
+
+    private static Stream<Arguments> unsafePromptLineCharacters() {
+        return IntStream.concat(
+                        IntStream.rangeClosed(0, 0x9F).filter(Character::isISOControl), IntStream.of(0x2028, 0x2029))
+                .mapToObj(codePoint -> Arguments.of("U+%04X".formatted(codePoint), codePoint));
+    }
+
+    @MethodSource("invalidSetupRepositoryUrls")
+    @ParameterizedTest(name = "{0}")
+    void rejectsMalformedSetupRepositoryUrls(String scenario, String repositoryUrl) {
+        // given
+
+        // when
+        RepositorySourceSelection selection = resolver.selectWorkflowDefaultUrl(repositoryUrl);
+
+        // then
+        assertThat(selection.status()).as(scenario).isEqualTo(RepositorySourceSelection.Status.INVALID_SELECTED);
+        assertThat(selection.problem().code()).isEqualTo("repository_remote_malformed");
+    }
+
+    private static Stream<Arguments> invalidSetupRepositoryUrls() {
+        return Stream.of(
+                Arguments.of("literal NEL in SCP path", "git@example.invalid:team/repo\u0085injected.git"),
+                Arguments.of(
+                        "percent-decoded NEL in HTTPS path", "https://example.invalid/team/repo%C2%85injected.git"),
+                Arguments.of(
+                        "percent-decoded line separator in HTTP path",
+                        "http://example.invalid/team/repo%E2%80%A8injected.git"),
+                Arguments.of(
+                        "percent-decoded paragraph separator in SSH path",
+                        "ssh://git@example.invalid/team/repo%E2%80%A9injected.git"),
+                Arguments.of("HTTP port zero", "http://example.invalid:0/team/project.git"),
+                Arguments.of("HTTPS port above range", "https://example.invalid:65536/team/project.git"),
+                Arguments.of("SSH port above range", "ssh://git@example.invalid:99999/team/project.git"));
+    }
+
     @Test
     void selectsWorkflowDefaultUrlWhenCardHasNoExplicitSource() {
         // given
@@ -471,6 +520,20 @@ final class RepositorySourceResolverTest {
         // then
         assertThat(selection.status()).isEqualTo(RepositorySourceSelection.Status.SELECTED);
         assertThat(selection.source().origin()).isEqualTo(RepositorySource.Origin.WORKFLOW_DEFAULT_URL);
+        assertThat(selection.source().value()).isEqualTo("https://github.example/team/default.git");
+    }
+
+    @Test
+    void preservesTokenPunctuationCompatibilityForExistingWorkflowDefaults() {
+        // given
+        EffectiveConfig.RepositoryConfig repository =
+                new EffectiveConfig.RepositoryConfig("<https://github.example/team/default.git>.", null);
+
+        // when
+        RepositorySourceSelection selection = resolver.select(cardWithDescription("No source"), repository);
+
+        // then
+        assertThat(selection.status()).isEqualTo(RepositorySourceSelection.Status.SELECTED);
         assertThat(selection.source().value()).isEqualTo("https://github.example/team/default.git");
     }
 

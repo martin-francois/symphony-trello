@@ -192,6 +192,13 @@ Now create the board and workflow:
 symphony-trello new-board --name "Symphony Work Queue"
 ```
 
+When this board is for one repository, save its clone URL during setup:
+
+```bash
+symphony-trello new-board --name "Symphony Work Queue" \
+  --repository-url https://github.com/OWNER/REPO.git
+```
+
 For a non-GitHub board:
 
 ```bash
@@ -293,6 +300,9 @@ Use this path when you already have a Trello board and want Symphony to write a 
 symphony-trello import-board --board SYNTH001 --active "Ready for Codex" --in-progress "In Progress" --terminal Done --blocked Blocked
 ```
 
+Add `--repository-url URL` when every card handled by the imported workflow normally belongs to the
+same repository. Omit it to keep the workflow repository-general.
+
 Add `--no-github` when the imported board should not use GitHub PR publication or merging:
 
 ```bash
@@ -336,6 +346,10 @@ Common setup command options:
 - `--workspace-root PATH`: choose where Symphony creates the local work directory for each Trello
   card. The generated workflow uses `./workspaces`; choose another path when you want those
   checkouts on a different disk or clearly separated from the repository.
+- `--repository-url URL`: save the workflow's usual clone source in `repository.default_url`.
+  `setup-local`, `new-board`, and `import-board` accept credential-free HTTP(S), username-only
+  `ssh://`, SCP-style SSH, and `file://` URLs without query strings or fragments. Setup validates
+  the URL format locally; it does not contact the repository.
 - `--server-port PORT`: choose the HTTP status port written into the generated workflow. Use a port
   from `1024` through `65535`. If you omit it, Symphony uses the first unused workflow port starting
   at `18080`.
@@ -441,6 +455,17 @@ and checks, and normally updates the existing PR instead of starting over.
 When every card in a workflow belongs to the same GitHub repository, set the workflow repository
 default once. Then cards do not need to repeat the repository URL.
 
+Guided `setup-local` asks:
+
+```text
+Repository clone URL (optional; press Enter for none):
+```
+
+Enter the clone URL to save it as `repository.default_url`, or press Enter to keep the workflow
+repository-general. Non-interactive setup and the direct `new-board` and `import-board` commands use
+`--repository-url URL`. Setup output names the generated workflow file where you can add or change
+`repository.default_url` later; manual editing remains available for advanced cases.
+
 In the workflow file front matter, set `repository.default_url`:
 
 ```yaml
@@ -449,7 +474,9 @@ repository:
   default_path: null
 ```
 
-Use the normal clone URL for the project. Do not include credentials, query strings, or fragments.
+Use the normal clone URL for the project. Generic Git remotes supported by the workflow contract are
+valid too; the repository does not have to be hosted on GitHub. Do not include credentials, query
+strings, or fragments.
 
 With this setting, Symphony gives Codex that repository context for every card handled by the
 workflow. A card can still override the workflow default when it needs a different repository by

@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUrls.HTTPS;
+import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUrls.SSH;
 import static java.util.stream.Collectors.joining;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
@@ -51,6 +53,7 @@ final class SetupDiagnosticReporterTest {
         List<String> expectedFailureCodes = List.of(
                 "setup_ambiguous_active_state",
                 "setup_invalid_arguments",
+                "setup_invalid_repository_url",
                 "setup_missing_api_key",
                 "setup_missing_api_token",
                 "setup_overlapping_list_roles",
@@ -3506,6 +3509,9 @@ final class SetupDiagnosticReporterTest {
                                     "--board-name",
                                     "Private Launch Board",
                                     "--board=private-short-link",
+                                    "--repository-url",
+                                    HTTPS,
+                                    "--repository-url=" + SSH,
                                     "--active",
                                     "Secret Queue"))
                     .orElseThrow();
@@ -3555,6 +3561,8 @@ final class SetupDiagnosticReporterTest {
                         "inline-secret",
                         "Private Launch Board",
                         "private-short-link",
+                        HTTPS,
+                        SSH,
                         "Secret Queue",
                         "Secret Queue v2.1",
                         "Internal Backlog v3.2",

@@ -13,6 +13,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 public final class RepositorySourceResolver {
+    private static final int MAX_URI_PORT = 65_535;
     private static final Pattern LABELED_SOURCE = Pattern.compile(
             "(?i)^[\\t ]*(repository[\\t ]+(?:url|path)|repo[\\t ]+(?:url|path)|local[\\t ]+(?:checkout|path)|checkout|repository|repo)[\\t ]*:[\\t ]*(.*)$");
     private static final Pattern LINE_BREAK = Pattern.compile("\\R");
@@ -28,6 +29,29 @@ public final class RepositorySourceResolver {
             return explicit;
         }
         return workflowDefault(repository);
+    }
+
+    /**
+     * Validates a repository URL intended for {@code repository.default_url} without resolving or
+     * contacting the repository.
+     */
+    public RepositorySourceSelection selectWorkflowDefaultUrl(String value) {
+        if (!RepositorySourceText.safePromptLine(value)) {
+            return invalid(
+                    "repository_remote_malformed",
+                    "The selected repository URL contains unsupported control characters.");
+        }
+        String candidate = value.strip();
+        if (candidate.contains("?") || candidate.contains("#")) {
+            return invalid(
+                    "repository_remote_malformed", "Repository URLs must not include query strings or fragments.");
+        }
+        if (!candidate.equals(stripTokenPunctuation(candidate))) {
+            return invalid(
+                    "repository_remote_malformed",
+                    "The selected repository URL contains unsupported token punctuation.");
+        }
+        return parse(candidate, RepositorySource.Origin.WORKFLOW_DEFAULT_URL, SourceMode.REMOTE_OR_FILE);
     }
 
     private RepositorySourceSelection explicitSource(Card card) {
@@ -165,6 +189,10 @@ public final class RepositorySourceResolver {
 
     private static RepositorySourceSelection uriRemote(URI uri, RepositorySource.Origin origin, boolean includeUser) {
         String rawPath = uri.getRawPath();
+        if (uri.getPort() == 0 || uri.getPort() > MAX_URI_PORT) {
+            return invalid(
+                    "repository_remote_malformed", "The selected repository URL must use a port from 1 through 65535.");
+        }
         if (blank(uri.getHost()) || blank(rawPath) || "/".equals(rawPath)) {
             return invalid(
                     "repository_remote_malformed",

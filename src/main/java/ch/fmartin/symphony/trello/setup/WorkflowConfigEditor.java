@@ -235,6 +235,20 @@ final class WorkflowConfigEditor {
         return maxAgentsSetting(workflowPath).value();
     }
 
+    TrelloBoardSetup.RepositoryDefaults repositoryDefaults(Path workflowPath) {
+        try {
+            SequencedMap<String, Object> yaml = parseYaml(read(workflowPath));
+            if (!(yaml.get("repository") instanceof Map<?, ?> repository)) {
+                return TrelloBoardSetup.RepositoryDefaults.empty();
+            }
+            return TrelloBoardSetup.RepositoryDefaults.preserved(
+                    optionalString(repository.get("default_url")).orElse(null),
+                    optionalString(repository.get("default_path")).orElse(null));
+        } catch (IOException | RuntimeException ignored) {
+            return TrelloBoardSetup.RepositoryDefaults.empty();
+        }
+    }
+
     WorkflowIntegerSetting maxAgentsSetting(Path workflowPath) {
         try {
             SequencedMap<String, Object> yaml = parseYaml(read(workflowPath));

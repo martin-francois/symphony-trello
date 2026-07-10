@@ -140,6 +140,7 @@ final class SetupDiagnosticReporter {
             "setup_github_upgrade_list_declined",
             "setup_github_upgrade_not_found",
             "setup_invalid_arguments",
+            "setup_invalid_repository_url",
             "setup_invalid_choice",
             "setup_invalid_http_port_override",
             "setup_invalid_max_agents",
@@ -200,6 +201,7 @@ final class SetupDiagnosticReporter {
             "--board",
             "--existing-board-id",
             "--workspace-id",
+            "--repository-url",
             "--active",
             "--terminal",
             "--in-progress",
@@ -2340,6 +2342,7 @@ final class SetupDiagnosticReporter {
         addOption(args, "--board-name", request.boardName());
         addOption(args, "--existing-board-id", request.existingBoardId());
         addOption(args, "--workspace-id", request.workspaceId());
+        addOption(args, "--repository-url", request.repositoryUrl());
         addOptions(args, "--active", request.activeStates());
         addOptions(args, "--terminal", request.terminalStates());
         addOption(args, "--in-progress", request.inProgressState());

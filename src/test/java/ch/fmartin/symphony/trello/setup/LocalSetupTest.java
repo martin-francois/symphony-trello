@@ -3,6 +3,10 @@ package ch.fmartin.symphony.trello.setup;
 import static ch.fmartin.symphony.trello.CliExitCodes.SETUP_FAILURE;
 import static ch.fmartin.symphony.trello.testsupport.ManifestAssertions.assertThatManifest;
 import static ch.fmartin.symphony.trello.testsupport.TerminalTranscriptAssertions.assertThatTranscript;
+import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUrls.HTTP;
+import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUrls.HTTPS;
+import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUrls.SCP;
+import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUrls.SSH;
 import static ch.fmartin.symphony.trello.testsupport.WorkflowAssertions.assertThatWorkflow;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.abort;
@@ -54,8 +58,114 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "Checking prerequisites",
                         "Dry run",
                         "WOULD write workflow:",
-                        workflow.toAbsolutePath().normalize().toString());
+                        workflow.toAbsolutePath().normalize().toString())
+                .stdoutDoesNotContain("Repository clone URL (optional; press Enter for none):");
         assertThat(trello.createdLists()).isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {HTTP, HTTPS, SSH, SCP})
+    void dryRunAcceptsRepositoryUrlFormsWithoutNetworkValidation(String repositoryUrl) {
+        // given
+
+        // when
+        SetupRunResult result = runSetup(
+                "--dry-run", "--non-interactive", "--repository-url", repositoryUrl, "--board-name", "URL Queue");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("Dry run")
+                .stdoutDoesNotContain(repositoryUrl, "Repository clone URL (optional; press Enter for none):");
+        assertThat(trello.memberLookups()).isEmpty();
+        assertThat(trello.workspaceLookups()).isEmpty();
+        assertThat(trello.createdLists()).isEmpty();
+    }
+
+    @Test
+    void dryRunAcceptsFileRepositoryUrlWithoutNetworkValidation() {
+        // given
+        String repositoryUrl = tempDir.resolve("synthetic repository").toUri().toString();
+
+        // when
+        SetupRunResult result = runSetup(
+                "--dry-run", "--non-interactive", "--repository-url", repositoryUrl, "--board-name", "File URL Queue");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("Dry run")
+                .stdoutDoesNotContain(repositoryUrl, "Repository clone URL (optional; press Enter for none):");
+        assertThat(trello.memberLookups()).isEmpty();
+        assertThat(trello.workspaceLookups()).isEmpty();
+        assertThat(trello.createdLists()).isEmpty();
+    }
+
+    @MethodSource("invalidRepositoryUrls")
+    @ParameterizedTest
+    @SuppressWarnings("JUnitValueSource")
+    void setupRejectsInvalidRepositoryUrlBeforeCodexTrelloOrFileSideEffects(String repositoryUrl) {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.invalid-repository-url.md");
+        Path env = tempDir.resolve(".env.invalid-repository-url");
+        AtomicInteger catalogResolutions = new AtomicInteger();
+        LocalSetup catalogBackedSetup = setupWithCodexSelectionDefaults(() -> {
+            catalogResolutions.incrementAndGet();
+            return CodexModelSelectionDefaults.of(TrelloBoardSetup.CodexModelDefaults.fallback());
+        });
+
+        // when
+        SetupRunResult result = runSetup(
+                catalogBackedSetup,
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Invalid Repository URL Queue",
+                "--repository-url",
+                repositoryUrl,
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertFailure(SETUP_FAILURE)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_repository_url",
+                        "--repository-url must be a credential-free HTTP(S), username-only SSH, SCP-style SSH, or file URL without a query or fragment.")
+                .stderrDoesNotContain(repositoryUrl, "Troubleshooting report written");
+        assertThat(catalogResolutions).hasValue(0);
+        assertThat(commands.codexLoginCommands).isEmpty();
+        assertThat(trello.memberLookups()).isEmpty();
+        assertThat(trello.workspaceLookups()).isEmpty();
+        assertThat(trello.createdLists()).isEmpty();
+        assertThat(workflow).doesNotExist();
+        assertThat(env).doesNotExist();
+    }
+
+    private static Stream<String> invalidRepositoryUrls() {
+        return Stream.of(
+                "/tmp/synthetic-repository",
+                "https://user:password@example.invalid/team/project.git",
+                HTTPS + "?ref=main",
+                HTTPS + "#fragment",
+                SCP + "?ref=main",
+                SCP + "#fragment",
+                "ftp://example.invalid/team/project.git",
+                "https://example.invalid",
+                "<" + HTTPS + ">",
+                HTTPS + ",",
+                "https://example.invalid/team/\nproject.git",
+                HTTPS + "\t",
+                "git@example.invalid:team/project\u0085injected.git",
+                "https://example.invalid/team/project%C2%85injected.git",
+                "https://example.invalid:0/team/project.git",
+                "ssh://git@example.invalid:65536/team/project.git",
+                "not a repository URL");
     }
 
     @Test
@@ -1605,7 +1715,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "\n\n3\nn\nn\n",
+                "\n\n\n3\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -1642,7 +1752,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "\n\n\n\n2\nn\nn\n",
+                "\n\n\n\n\n2\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -1821,7 +1931,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "\n\n\nn\nn\n",
+                "\n\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -1889,7 +1999,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "\n\n100\n",
+                "\n\n\n100\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -1961,7 +2071,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 modelBackedSetup,
-                "\n\n\n\n\nn\nn\n",
+                "\n\n\n\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -2005,7 +2115,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 modelBackedSetup,
-                "\n\n\nnot-supported\n\nn\nn\n",
+                "\n\n\n\nnot-supported\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -2045,7 +2155,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 modelBackedSetup,
-                "\n\n\nxhigh\n\nn\nn\n",
+                "\n\n\n\nxhigh\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -2169,7 +2279,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 modelBackedSetup,
-                "\n\ngpt-selected\n\nn\nn\n",
+                "\n\n\ngpt-selected\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -2206,7 +2316,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 modelBackedSetup,
-                "\n\ngpt-selected\n",
+                "\n\n\ngpt-selected\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -2252,7 +2362,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 catalogBackedSetup,
-                "\n\ngpt-6\n\n\nn\nn\n",
+                "\n\n\ngpt-6\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -2392,7 +2502,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 catalogBackedSetup,
-                "gpt-no-default\n\n\n\nn\nn\n",
+                "\ngpt-no-default\n\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -2429,7 +2539,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "\n\ngpt-selected\nlow\n\nn\nn\n",
+                "\n\n\ngpt-selected\nlow\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -2470,7 +2580,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "gpt-selected\nlow\n\nn\nn\n",
+                "\ngpt-selected\nlow\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -2525,7 +2635,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 modelBackedSetup,
-                "\n\n\nn\nn\n",
+                "\n\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -2585,7 +2695,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 catalogBackedSetup,
-                "gpt-6\n\n\nn\nn\n",
+                "\ngpt-6\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -2689,7 +2799,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 catalogBackedSetup,
-                "gpt-6\n\n\nn\nn\n",
+                "\ngpt-6\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -2937,7 +3047,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 unsupportedModelSetup,
-                "\n\n\nn\nn\n",
+                "\n\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -3206,7 +3316,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 environmentBackedSetup,
-                "prompt-token\n\n\n\nn\nn\n",
+                "\nprompt-token\n\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--board-name",
@@ -3302,7 +3412,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "\n\n\nn\nn\n",
+                "\n\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -3321,6 +3431,10 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         result.assertSuccess()
                 .stdoutContains(
                         "Trello board",
+                        "Repository clone URL (optional; press Enter for none): ",
+                        "Repository clone URL not set; this workflow remains repository-general.",
+                        "To add or change it later, edit repository.default_url in:",
+                        workflow.toAbsolutePath().normalize().toString(),
                         "Workspace access",
                         "This controls which files/folders sandboxed Trello card runs may use.",
                         "Default workspace path:",
@@ -3332,7 +3446,94 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "Local setup relies on Codex sandbox behavior and normal OS permissions, not OS-level filesystem isolation.",
                 "Additional paths, comma-separated:");
         assertThatTranscript(result.stdout())
-                .containsSectionsInOrder("Trello board", "Workspace access", "Codex execution");
+                .containsSectionsInOrder("Trello board", "Repository clone URL", "Workspace access", "Codex execution");
+        assertThatWorkflow(workflow).hasNoRepositoryDefaultUrl();
+    }
+
+    @Test
+    void interactiveSetupWritesProvidedRepositoryUrlWithoutEchoingIt() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.repository-url.md");
+        Path env = tempDir.resolve(".env.repository-url");
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                HTTPS + "\n\n\n\nn\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Repository URL Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "Repository clone URL (optional; press Enter for none): ",
+                        "Repository clone URL saved in repository.default_url",
+                        "To add or change it later, edit repository.default_url in:",
+                        workflow.toAbsolutePath().normalize().toString())
+                .stdoutDoesNotContain(HTTPS);
+        assertThat(result.stderr()).doesNotContain(HTTPS);
+        assertThatWorkflow(workflow).hasRepositoryDefaultUrl(HTTPS);
+    }
+
+    @Test
+    void interactiveSetupRejectsInvalidRepositoryUrlBeforeCodexAndTrello() {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.invalid-prompted-repository-url.md");
+        Path env = tempDir.resolve(".env.invalid-prompted-repository-url");
+        String invalidRepositoryUrl = HTTPS + "?private=ref";
+        commands.githubAuthenticated = false;
+        commands.githubCliAvailable = false;
+        AtomicInteger catalogResolutions = new AtomicInteger();
+        LocalSetup catalogBackedSetup = setupWithCodexSelectionDefaults(() -> {
+            catalogResolutions.incrementAndGet();
+            return CodexModelSelectionDefaults.of(TrelloBoardSetup.CodexModelDefaults.fallback());
+        });
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                catalogBackedSetup,
+                invalidRepositoryUrl + "\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Invalid Prompted Repository URL Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--github");
+
+        // then
+        result.assertFailure(SETUP_FAILURE)
+                .stdoutContains("Repository clone URL (optional; press Enter for none): ")
+                .stdoutDoesNotContain(invalidRepositoryUrl, "Checking Codex login", "Validating Trello")
+                .stderrContains(
+                        "setup_failed code=setup_invalid_repository_url",
+                        "--repository-url must be a credential-free HTTP(S), username-only SSH, SCP-style SSH, or file URL without a query or fragment.")
+                .stderrDoesNotContain(invalidRepositoryUrl, "Troubleshooting report written");
+        assertThat(catalogResolutions).hasValue(0);
+        assertThat(commands.codexLoginCommands).isEmpty();
+        assertThat(commands.githubLoginCommands).isEmpty();
+        assertThat(commands.commandEvents).doesNotContain("install-gh", "install-gh-winget");
+        assertThat(trello.memberLookups()).isEmpty();
+        assertThat(trello.workspaceLookups()).isEmpty();
+        assertThat(trello.createdLists()).isEmpty();
+        assertThat(workflow).doesNotExist();
+        assertThat(env).doesNotExist();
     }
 
     @Test
@@ -4191,7 +4392,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "\n\nn\n",
+                "\n\n\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -4234,7 +4435,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "2\nboard-1\n\n\nQueue\nFinished\nWorking\nBlocked\n\nn\nn\n",
+                "2\n\nboard-1\n\n\nQueue\nFinished\nWorking\nBlocked\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -4276,7 +4477,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "2\nboard-1\n\n\nQueue\nFinished\nBlocked\n\nn\nn\n",
+                "2\n\nboard-1\n\n\nQueue\nFinished\nBlocked\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -4312,7 +4513,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "2\nboard-1\n\n\nQueue\nFinished\nWorking\n-\n\nn\nn\n",
+                "2\n\nboard-1\n\n\nQueue\nFinished\nWorking\n-\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -4346,7 +4547,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "2\nboard-1\n\n\n-\n-\n\nn\nn\n",
+                "2\n\nboard-1\n\n\n-\n-\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -6206,6 +6407,58 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void configureGithubPreservesRawRepositoryDefaultsWhenWorkflowIsRegenerated() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.github-upgrade-repository-defaults.md");
+        Path env = tempDir.resolve(".env.github-upgrade-repository-defaults");
+        String repositoryUrlReference = "$SYNTHETIC_REPOSITORY_URL";
+        String repositoryPathReference = "$SYNTHETIC_REPOSITORY_PATH";
+        SetupRunResult firstResult = runSetup(
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "GitHub Upgrade Repository Defaults",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+        firstResult.assertSuccess();
+        Files.writeString(
+                workflow,
+                Files.readString(workflow, StandardCharsets.UTF_8)
+                        .replace("default_url: null", "default_url: " + repositoryUrlReference)
+                        .replace("default_path: null", "default_path: " + repositoryPathReference),
+                StandardCharsets.UTF_8);
+        commands.githubAuthenticated = true;
+        commands.startedWorkflows.clear();
+        commands.startedEnvFiles.clear();
+        commands.stoppedWorkflows.clear();
+        trello.createdLists().clear();
+
+        // when
+        SetupRunResult secondResult = runSetup(
+                "configure-github", "--non-interactive", "--endpoint", endpoint(), "--key", "key", "--token", "token");
+
+        // then
+        secondResult
+                .assertSuccess()
+                .stdoutContains("GitHub workflow enabled for \"GitHub Upgrade Repository Defaults\"");
+        Object repository = new WorkflowLoader().load(workflow).config().get("repository");
+        assertThat(repository).isInstanceOfSatisfying(Map.class, defaults -> assertThat(defaults)
+                .containsEntry("default_url", repositoryUrlReference)
+                .containsEntry("default_path", repositoryPathReference));
+        assertThat(trello.createdLists()).containsExactly("Merging");
+        assertThat(commands.stoppedWorkflows).containsExactly(workflow.toString());
+        assertThat(commands.startedWorkflows).containsExactly(workflow.toString());
+    }
+
+    @Test
     void configureGithubPreservesEnvironmentBackedServerPort() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.github-upgrade-env-port.md");
@@ -6783,7 +7036,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "n\nn\n",
+                "\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -6832,7 +7085,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "\n\n\n\n\nn\nn\n",
+                "\n\n\n\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -6897,7 +7150,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 .stderrContains(
                         "setup_failed code=setup_invalid_arguments",
                         "setup-local " + scenario.subcommand() + " does not support " + scenario.optionName())
-                .stderrDoesNotContain("Troubleshooting report written");
+                .stderrDoesNotContain("Troubleshooting report written", HTTPS);
         result.stdoutDoesNotContain("Dry run", "Symphony setup check");
         assertThat(trello.createdLists()).isEmpty();
     }
@@ -6976,6 +7229,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
     private static Stream<UnsupportedLifecycleOptionScenario> unsupportedLifecycleOptionScenarios() {
         return Stream.of(
+                unsupportedLifecycleOption("check", "--repository-url", "check", "--repository-url", HTTPS),
                 unsupportedLifecycleOption("check", "--server-port", "check", "--server-port", "1"),
                 unsupportedLifecycleOption("check", "--server-port", "check", "--server-port", "0"),
                 unsupportedLifecycleOption("check", "--active", "check", "--active", "Inbox"),
@@ -6985,6 +7239,14 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "check", "--workflow", "check", "--board", "Board", "--workflow", "WORKFLOW.md"),
                 unsupportedLifecycleOption("check", "--codex-model", "--codex-model", "", "check"),
                 unsupportedLifecycleOption("check", "--codex-model", "check", "--codex-model", ""),
+                unsupportedLifecycleOption(
+                        "repair-port",
+                        "--repository-url",
+                        "repair-port",
+                        "--board",
+                        "Board",
+                        "--repository-url",
+                        HTTPS),
                 unsupportedLifecycleOption(
                         "repair-port", "--server-port", "repair-port", "--board", "Board", "--server-port", "1"),
                 unsupportedLifecycleOption(
@@ -7002,6 +7264,14 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 unsupportedLifecycleOption("repair-port", "--workflow", "repair-port", "--workflow", "WORKFLOW.md"),
                 unsupportedLifecycleOption(
                         "repair-port", "--workflow", "repair-port", "--board", "Board", "--workflow", "WORKFLOW.md"),
+                unsupportedLifecycleOption(
+                        "configure-github",
+                        "--repository-url",
+                        "configure-github",
+                        "--board",
+                        "Board",
+                        "--repository-url",
+                        HTTPS),
                 unsupportedLifecycleOption(
                         "configure-github", "--dry-run", "configure-github", "--board", "Board", "--dry-run"),
                 unsupportedLifecycleOption(
@@ -7035,7 +7305,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
     private static Stream<BroadWorkspacePathScenario> broadWorkspacePathScenarios() {
         return Stream.of(
-                new BroadWorkspacePathScenario("interactive-declined", false, false, "\n\n\nn\nn\nn\n", 0, false),
+                new BroadWorkspacePathScenario("interactive-declined", false, false, "\n\n\n\nn\nn\nn\n", 0, false),
                 new BroadWorkspacePathScenario("non-interactive-rejected", true, false, null, 2, false),
                 new BroadWorkspacePathScenario("non-interactive-allowed", true, true, null, 0, true));
     }
@@ -7282,7 +7552,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "n\n",
+                "\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -7313,7 +7583,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "\n\ny\n\nn\nn\n",
+                "\n\n\ny\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -7347,7 +7617,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 windowsSetup,
-                "\n\ny\n\nn\nn\n",
+                "\n\n\ny\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -7390,7 +7660,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "n\n\n\n\nn\nn\n",
+                "\nn\n\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -7435,7 +7705,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 loginAwareSetup,
-                "n\n\n\n\nn\nn\n",
+                "\nn\n\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",

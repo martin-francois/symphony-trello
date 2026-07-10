@@ -8,6 +8,7 @@ import ch.fmartin.symphony.trello.repository.RepositorySourceProblem;
 import ch.fmartin.symphony.trello.repository.RepositorySourceResolver;
 import ch.fmartin.symphony.trello.repository.RepositorySourceSelection;
 import com.code_intelligence.jazzer.api.FuzzedDataProvider;
+import java.net.URI;
 import java.time.Instant;
 import java.util.List;
 
@@ -21,8 +22,10 @@ public final class RepositorySourceFuzzer {
 
     public static void fuzzerTestOneInput(FuzzedDataProvider data) {
         String text = data.consumeString(MAX_TEXT_LENGTH);
-        RepositorySourceSelection selection = RESOLVER.select(card(text), NO_DEFAULT);
-        assertSelectionFitsPromptBoundaries(selection);
+        assertSelectionFitsPromptBoundaries(RESOLVER.select(card(text), NO_DEFAULT));
+        RepositorySourceSelection workflowDefault = RESOLVER.selectWorkflowDefaultUrl(text);
+        assertSelectionFitsPromptBoundaries(workflowDefault);
+        assertSelectedUriFitsValidationBoundaries(text, workflowDefault);
     }
 
     private static void assertSelectionFitsPromptBoundaries(RepositorySourceSelection selection) {
@@ -98,8 +101,31 @@ public final class RepositorySourceFuzzer {
                 null);
     }
 
+    private static void assertSelectedUriFitsValidationBoundaries(
+            String rawValue, RepositorySourceSelection selection) {
+        if (selection.status() != RepositorySourceSelection.Status.SELECTED || !rawValue.contains("://")) {
+            return;
+        }
+        URI uri = URI.create(rawValue.strip());
+        if (unsafePromptLine(uri.getAuthority())
+                || unsafePromptLine(uri.getUserInfo())
+                || unsafePromptLine(uri.getPath())) {
+            throw new AssertionError("selected URI contains unsafe decoded text");
+        }
+        if (uri.getPort() == 0 || uri.getPort() > 65_535) {
+            throw new AssertionError("selected URI contains an unusable explicit port");
+        }
+    }
+
     private static boolean unsafePromptLine(String value) {
-        return value.chars().anyMatch(character -> character <= 0x1F || character == 0x7F);
+        return value != null && value.codePoints().anyMatch(RepositorySourceFuzzer::unsafePromptLineCharacter);
+    }
+
+    private static boolean unsafePromptLineCharacter(int codePoint) {
+        int type = Character.getType(codePoint);
+        return Character.isISOControl(codePoint)
+                || type == Character.LINE_SEPARATOR
+                || type == Character.PARAGRAPH_SEPARATOR;
     }
 
     private static boolean blank(String value) {

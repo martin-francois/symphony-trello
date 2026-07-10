@@ -128,6 +128,7 @@ final class TrelloCredentialStoreTest {
                 options.boardName(),
                 options.existingBoardId(),
                 options.workspaceId(),
+                options.repositoryUrl(),
                 options.activeStates(),
                 options.terminalStates(),
                 options.inProgressState(),

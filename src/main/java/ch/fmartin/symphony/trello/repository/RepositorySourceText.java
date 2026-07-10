@@ -14,10 +14,13 @@ final class RepositorySourceText {
     }
 
     static boolean safePromptLine(@Nullable String value) {
-        return value != null && value.chars().noneMatch(RepositorySourceText::unsafePromptLineCharacter);
+        return value != null && value.codePoints().noneMatch(RepositorySourceText::unsafePromptLineCharacter);
     }
 
-    static boolean unsafePromptLineCharacter(int character) {
-        return character <= 0x1F || character == 0x7F;
+    static boolean unsafePromptLineCharacter(int codePoint) {
+        int type = Character.getType(codePoint);
+        return Character.isISOControl(codePoint)
+                || type == Character.LINE_SEPARATOR
+                || type == Character.PARAGRAPH_SEPARATOR;
     }
 }
