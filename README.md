@@ -757,8 +757,9 @@ symphony-trello diagnostics --show-private-context
 symphony-trello stop --board "My Board Name"
 ```
 
-Use `setup-local repair-port --board "My Board Name"` only when `setup-local check` reports that
-a board's local HTTP port is already used by another process.
+Use `setup-local repair-port --board "My Board Name"` when `setup-local check` reports that a board's
+local HTTP port is already used by another process, or after intentionally changing `server.port` as
+described in [Find And Edit Workflow Files](#find-and-edit-workflow-files).
 
 Uninstall removes only the installer-managed command and app checkout by default. It preserves local
 `.env` files, workflows, connected-board metadata, workspaces, logs/state, Codex auth, GitHub auth,
@@ -950,6 +951,108 @@ files in the same folder already use earlier ports. If another local Symphony pr
 using the same resolved workflow file, startup takes a workflow-local operating-system lock and fails
 before polling Trello. If that lock cannot be created, startup fails instead of using a weaker
 process-local fallback.
+
+### Find And Edit Workflow Files
+
+By default, installer-managed `setup-local` writes each generated workflow in the active Symphony
+config directory. Without `--workflow`, the file is named from the Trello board, for example
+`WORKFLOW.my-board.md`. Unless `--force` is set, setup adds a number such as
+`WORKFLOW.my-board-2.md` when that name already exists. `--workflow PATH` overrides generated naming;
+a relative path resolves from the active config directory. `--force` permits overwriting the
+selected path.
+
+The default workflow directory is:
+
+- `$XDG_CONFIG_HOME/symphony-trello` when `XDG_CONFIG_HOME` is set on Linux, macOS, or WSL2;
+  otherwise `$HOME/.config/symphony-trello`.
+- `/var/lib/symphony-trello/users/<user>/config` when the installer selects the MicroOS-style
+  `/var` layout.
+- `$env:LOCALAPPDATA\SymphonyTrello\config` for a native Windows PowerShell install.
+- A custom active directory selected by setup's `--config-dir`, `SYMPHONY_TRELLO_CONFIG_DIR`, an
+  installer `SYMPHONY_HOME` or PowerShell `-SymphonyHome`, or a saved install context.
+
+Do not guess the final file name from the Trello board name. Guided setup prints the full path on its
+`Workflow written:` line, and the direct `new-board` and `import-board` commands print it on their
+`Wrote workflow:` line. Run this command later to inspect the recorded workflow paths; it lists each
+valid entry and warns about invalid ones:
+
+```bash
+symphony-trello setup-local check
+```
+
+`setup-local check` reads the selected connected-board manifest rather than scanning the config
+directory for `WORKFLOW*.md`. Its output has a `Workflow:` row for each valid connected workflow and
+warns about recorded paths that are missing or invalid. Add `--board "My Board Name"` to select one
+board, or omit `--board` to check every manifest entry. Extra workflow files on disk are not
+automatically treated as connected boards. If several connected boards have the same name, select
+one with its Trello id or short link instead.
+
+To also enumerate conventionally named workflow files that are disconnected, hand-created, or
+orphaned, search the active config directory on disk. Replace the example path with the active
+directory described above:
+
+```bash
+find "/path/to/active/config" \( -type f -o -type l \) -name 'WORKFLOW*.md' -print
+```
+
+In PowerShell:
+
+```powershell
+Get-ChildItem -LiteralPath 'C:\path\to\active\config' -Filter 'WORKFLOW*.md' -File -Recurse |
+  Select-Object -ExpandProperty FullName
+```
+
+This filesystem list does not say which files have connected managed workers. Compare it with the
+unfiltered `setup-local check` output. A custom `--workflow` path outside the active config directory,
+or a nonconventional file name, is not found by this search; use the exact path printed by setup. The
+selected manifest records that path while the board is connected.
+
+Each connected Trello board records one workflow path and one local HTTP status port. The workflow
+selects one `tracker.board_id`; when the board is started, one managed Symphony worker process loads
+that file and listens on its port. Connecting another Trello board creates another workflow and
+worker configuration with its own port. Raising
+`agent.max_concurrent_agents` can start several Codex sessions inside that worker; it does not change
+the one-workflow-per-board mapping.
+
+Open the exact path printed by setup or `setup-local check` in a text editor and save changes to the
+same file. No reload command is needed. When available, a filesystem watcher requests a refresh when
+the file changes, and every scheduler tick also checks the file in case a watch event was missed or
+watching is unavailable. The fallback delay is the current workflow's `polling.interval_ms`;
+generated workflows set it to 5000 ms.
+
+<!--
+Keep this paragraph aligned with SPEC.md section 6.2 and `RunningEntry.launchConfig`. In-flight
+tracker reconciliation and stall handling use launch-time configuration, not later reloads.
+-->
+A valid reload affects later scheduler decisions and newly started Codex work. It does not rewrite or
+restart an in-flight Codex session. Each running session continues to use the effective workflow
+configuration captured when it started for tracker reconciliation and stall handling. Normal
+reconciliation can still cancel it if the Trello card becomes ineligible under that launch-time
+configuration or if its launch-time stall timeout expires. If the edited file is invalid, Symphony
+logs `outcome=reload_failed` and continues with the last valid workflow. Fix and save the same file
+to try the reload again.
+
+`server.port` is restart-bound: editing it does not move the HTTP listener of a running worker and
+can leave the connected-board manifest with the old port. To choose a specific available port, stop
+the managed worker, edit `server.port`, start the board, then run `repair-port` to copy the healthy
+workflow port into the manifest:
+
+```bash
+symphony-trello stop --board "My Board Name"
+# Edit server.port in the workflow file.
+symphony-trello start --board "My Board Name"
+symphony-trello setup-local repair-port --board "My Board Name"
+symphony-trello setup-local check --board "My Board Name"
+```
+
+When `setup-local check` reports a port conflict, run `repair-port` without editing the workflow. It
+selects an available port, updates both the workflow and connected-board metadata, and restarts a
+running managed worker.
+
+If `SYMPHONY_HTTP_PORT` or `QUARKUS_HTTP_PORT` is set in the board environment or service
+environment, that value takes precedence over `server.port`, and `repair-port` refuses to run while
+the override is defined. Remove it before using `repair-port`. To keep managing the port through the
+override instead, change the override and restart the worker without running `repair-port`.
 
 [`WORKFLOW.example.md`](WORKFLOW.example.md) contains a complete starter. YAML front matter
 configures runtime behavior. The Markdown body becomes the prompt template for the card.

@@ -1602,7 +1602,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     @Test
     void nonInteractiveSetupCreatesNonGithubBoardAndWorkflow() throws Exception {
         // given
-        Path workflow = tempDir.resolve("WORKFLOW.local.md");
+        Path workflow = tempDir.resolve(".").resolve("WORKFLOW.local.md");
+        Path normalizedWorkflow = workflow.toAbsolutePath().normalize();
         Path env = tempDir.resolve(".env");
 
         // when
@@ -1627,6 +1628,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 .stdoutContains(
                         "GitHub integration skipped",
                         "Board connected: \"Local Queue\"",
+                        "  OK  Workflow written: " + normalizedWorkflow,
                         "Starting Symphony",
                         "Symphony is connected to \"Local Queue\"",
                         "You're good to go - your Trello board is now a queue for Codex work.",
@@ -1648,8 +1650,11 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 .containsExactly("Inbox", "Ready for Codex", "In Progress", "Blocked", "Human Review", "Done");
         assertThat(env).content(StandardCharsets.UTF_8).contains("TRELLO_API_KEY=key", "TRELLO_API_TOKEN=token");
         assertOwnerOnlyWhenPosix(env);
-        assertThatWorkflow(workflow).hasNoGithubFlow().doesNotHaveMerging().hasNetworkEnabledWorkspaceSandbox();
-        assertThat(commands.startedWorkflows).containsExactly(workflow.toString());
+        assertThatWorkflow(normalizedWorkflow)
+                .hasNoGithubFlow()
+                .doesNotHaveMerging()
+                .hasNetworkEnabledWorkspaceSandbox();
+        assertThat(commands.startedWorkflows).containsExactly(normalizedWorkflow.toString());
         assertThat(commands.startedEnvFiles).containsExactly(env.toString());
     }
 
