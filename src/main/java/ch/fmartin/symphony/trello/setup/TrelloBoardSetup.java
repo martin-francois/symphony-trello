@@ -3085,8 +3085,10 @@ public final class TrelloBoardSetup {
             return new RepositoryDefaults(null, null);
         }
 
-        static RepositoryDefaults withDefaultUrl(Optional<String> defaultUrl) {
-            return new RepositoryDefaults(defaultUrl.orElse(null), null);
+        RepositoryDefaults withExplicitDefaultUrl(Optional<String> explicitDefaultUrl) {
+            return explicitDefaultUrl
+                    .map(defaultUrl -> new RepositoryDefaults(defaultUrl, defaultPath))
+                    .orElse(this);
         }
 
         static RepositoryDefaults preserved(String defaultUrl, String defaultPath) {

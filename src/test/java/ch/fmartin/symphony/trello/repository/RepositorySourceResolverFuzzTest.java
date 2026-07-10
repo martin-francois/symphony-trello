@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.repository;
 
+import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUris.hasUnusableExplicitPort;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
@@ -80,8 +81,11 @@ final class RepositorySourceResolverFuzzTest {
                 "git@example.invalid:repo\u0085injected.git",
                 "https://example.invalid/team/repo%C2%85injected.git",
                 "https://example.invalid/team/repo%E2%80%A8injected.git",
+                "https://example.invalid:/team/repo.git",
                 "https://example.invalid:0/team/repo.git",
-                "ssh://git@example.invalid:65536/team/repo.git");
+                "ssh://git@example.invalid:65536/team/repo.git",
+                "https://example.invalid:2147483648/team/repo.git",
+                "ssh://git@example.invalid:999999999999/team/repo.git");
     }
 
     private static Stream<String> cardTexts() {
@@ -130,9 +134,9 @@ final class RepositorySourceResolverFuzzTest {
         assertThat(safePromptLine(uri.getAuthority())).isTrue();
         assertThat(safePromptLine(uri.getUserInfo())).isTrue();
         assertThat(safePromptLine(uri.getPath())).isTrue();
-        if (uri.getPort() >= 0) {
-            assertThat(uri.getPort()).isBetween(1, 65_535);
-        }
+        assertThat(hasUnusableExplicitPort(uri))
+                .as("selected URI has a usable explicit port")
+                .isFalse();
     }
 
     private static boolean safePromptLine(String value) {

@@ -13,6 +13,8 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 public final class RepositorySourceResolver {
+    private static final int URI_PORT_ABSENT = -1;
+    private static final int MIN_URI_PORT = 1;
     private static final int MAX_URI_PORT = 65_535;
     private static final Pattern LABELED_SOURCE = Pattern.compile(
             "(?i)^[\\t ]*(repository[\\t ]+(?:url|path)|repo[\\t ]+(?:url|path)|local[\\t ]+(?:checkout|path)|checkout|repository|repo)[\\t ]*:[\\t ]*(.*)$");
@@ -189,7 +191,7 @@ public final class RepositorySourceResolver {
 
     private static RepositorySourceSelection uriRemote(URI uri, RepositorySource.Origin origin, boolean includeUser) {
         String rawPath = uri.getRawPath();
-        if (uri.getPort() == 0 || uri.getPort() > MAX_URI_PORT) {
+        if (invalidExplicitPort(uri)) {
             return invalid(
                     "repository_remote_malformed", "The selected repository URL must use a port from 1 through 65535.");
         }
@@ -211,6 +213,26 @@ public final class RepositorySourceResolver {
             return invalid(
                     "repository_remote_malformed", "The selected repository URL must include a valid repository path.");
         }
+    }
+
+    private static boolean invalidExplicitPort(URI uri) {
+        int port = uri.getPort();
+        return port == URI_PORT_ABSENT ? hasExplicitAuthorityPort(uri) : port < MIN_URI_PORT || port > MAX_URI_PORT;
+    }
+
+    private static boolean hasExplicitAuthorityPort(URI uri) {
+        String authority = uri.getRawAuthority();
+        if (authority == null) {
+            return false;
+        }
+        String hostAndPort = authority.substring(authority.lastIndexOf('@') + 1);
+        if (hostAndPort.startsWith("[")) {
+            int closingBracket = hostAndPort.indexOf(']');
+            return closingBracket >= 0
+                    && closingBracket + 1 < hostAndPort.length()
+                    && hostAndPort.charAt(closingBracket + 1) == ':';
+        }
+        return hostAndPort.indexOf(':') >= 0;
     }
 
     private static RepositorySourceSelection scpRemote(String value, RepositorySource.Origin origin) {

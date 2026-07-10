@@ -450,7 +450,7 @@ finding on the Trello card or, when there is a linked PR, on the PR. Then move t
 `Ready for Codex`. Codex treats that as rework, rereads the card, comments, workpad, PR feedback,
 and checks, and normally updates the existing PR instead of starting over.
 
-### One Workflow For One GitHub Repository
+### One Workflow For One Repository
 
 When every card in a workflow belongs to the same GitHub repository, set the workflow repository
 default once. Then cards do not need to repeat the repository URL.
@@ -809,7 +809,7 @@ board manually, copy [`WORKFLOW.example.md`](WORKFLOW.example.md), set `tracker.
 the list names to match the board.
 
 If all cards on this board belong to one GitHub repository, also set `repository.default_url` in that
-workflow file. See [One Workflow For One GitHub Repository](#one-workflow-for-one-github-repository).
+workflow file. See [One Workflow For One Repository](#one-workflow-for-one-repository).
 
 Start with `max_concurrent_agents: 1`. If two cards are in an active list such as `Ready for Codex`,
 that default makes Symphony run one card and leave the other waiting until a slot is free. Raising

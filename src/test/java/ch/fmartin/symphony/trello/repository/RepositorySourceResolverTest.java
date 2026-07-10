@@ -503,9 +503,13 @@ final class RepositorySourceResolverTest {
                 Arguments.of(
                         "percent-decoded paragraph separator in SSH path",
                         "ssh://git@example.invalid/team/repo%E2%80%A9injected.git"),
+                Arguments.of("explicit empty HTTPS port", "https://example.invalid:/team/project.git"),
                 Arguments.of("HTTP port zero", "http://example.invalid:0/team/project.git"),
                 Arguments.of("HTTPS port above range", "https://example.invalid:65536/team/project.git"),
-                Arguments.of("SSH port above range", "ssh://git@example.invalid:99999/team/project.git"));
+                Arguments.of("SSH port above range", "ssh://git@example.invalid:99999/team/project.git"),
+                Arguments.of("HTTPS port above integer range", "https://example.invalid:2147483648/team/project.git"),
+                Arguments.of(
+                        "SSH port far above integer range", "ssh://git@example.invalid:999999999999/team/project.git"));
     }
 
     @Test

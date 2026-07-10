@@ -42,6 +42,24 @@ public final class TestWorkflows {
                 """;
     }
 
+    public static String workflowWithRepositoryDefaults(
+            String boardId, int port, String repositoryDefaultUrl, String repositoryDefaultPath) {
+        return """
+                ---
+                tracker:
+                  kind: trello
+                  board_id: "%s"
+                repository:
+                  default_url: %s
+                  default_path: %s
+                server:
+                  port: %d
+                ---
+                Existing body
+                """
+                .formatted(boardId, repositoryDefaultUrl, repositoryDefaultPath, port);
+    }
+
     public static String diagnosticsWorkflowWithMaxAgents(String maxAgentsValue) {
         return """
                 ---

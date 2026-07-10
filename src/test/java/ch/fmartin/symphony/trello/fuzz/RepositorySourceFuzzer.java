@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.fuzz;
 
+import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUris.hasUnusableExplicitPort;
+
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.repository.RepositoryIdentity;
@@ -112,7 +114,7 @@ public final class RepositorySourceFuzzer {
                 || unsafePromptLine(uri.getPath())) {
             throw new AssertionError("selected URI contains unsafe decoded text");
         }
-        if (uri.getPort() == 0 || uri.getPort() > 65_535) {
+        if (hasUnusableExplicitPort(uri)) {
             throw new AssertionError("selected URI contains an unusable explicit port");
         }
     }

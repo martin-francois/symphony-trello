@@ -237,7 +237,8 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                         options.workflowPath,
                         options.force,
                         options.manifestPath(parent.boardSetup.environment()));
-                NewBoardRequest request = options.newBoardRequest(boardName, workspaceId);
+                NewBoardRequest request =
+                        options.newBoardRequest(boardName, workspaceId, parent.boardSetup.repositoryDefaults(options));
                 TrelloBoardSetup.NewBoardResult result = parent.boardSetup.createRecommendedBoard(request, options);
                 options.persistRuntimeCredentials(parent.input, parent.out, parent.err);
                 parent.boardSetup.persistConnectedBoard(
@@ -247,7 +248,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                         options.gitHubIntegration(),
                         options.manifestPath(parent.boardSetup.environment()),
                         parent.out);
-                printNewBoardResult(parent.out, result, options.runtimeEnvPath(), options.repositoryUrl);
+                printNewBoardResult(parent.out, result, options.runtimeEnvPath(), request.repositoryDefaults());
                 return 0;
             } catch (TrelloBoardSetupException exception) {
                 throw options.withRuntimeEnvHint(exception);
@@ -332,7 +333,8 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                         terminalStates,
                         inProgressState,
                         !noInProgress && inProgressState == null,
-                        blockedState);
+                        blockedState,
+                        parent.boardSetup.repositoryDefaults(options));
                 TrelloBoardSetup.ImportBoardResult result = parent.boardSetup.importExistingBoard(request, options);
                 options.persistRuntimeCredentials(parent.input, parent.out, parent.err);
                 parent.boardSetup.persistConnectedBoard(
@@ -342,7 +344,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                         options.gitHubIntegration(),
                         options.manifestPath(parent.boardSetup.environment()),
                         parent.out);
-                printImportBoardResult(parent.out, result, options.runtimeEnvPath(), options.repositoryUrl);
+                printImportBoardResult(parent.out, result, options.runtimeEnvPath(), request.repositoryDefaults());
                 return 0;
             } catch (TrelloBoardSetupException exception) {
                 throw options.withRuntimeEnvHint(exception);
@@ -774,7 +776,8 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         @Option(names = "--force", description = "Overwrite the workflow file when needed.")
         boolean force;
 
-        NewBoardRequest newBoardRequest(String boardName, String workspaceId) {
+        NewBoardRequest newBoardRequest(
+                String boardName, String workspaceId, TrelloBoardSetup.RepositoryDefaults repositoryDefaults) {
             validate();
             return new NewBoardRequest(
                     endpoint,
@@ -791,7 +794,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                     runtimeEnvPath(),
                     true,
                     false,
-                    TrelloBoardSetup.RepositoryDefaults.withDefaultUrl(repositoryUrl));
+                    repositoryDefaults);
         }
 
         ImportBoardRequest importBoardRequest(
@@ -800,7 +803,8 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                 List<String> terminalStates,
                 String inProgressState,
                 boolean detectInProgressState,
-                String blockedState) {
+                String blockedState,
+                TrelloBoardSetup.RepositoryDefaults repositoryDefaults) {
             validate();
             return new ImportBoardRequest(
                     endpoint,
@@ -820,7 +824,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                     false,
                     runtimeEnvPath(),
                     false,
-                    TrelloBoardSetup.RepositoryDefaults.withDefaultUrl(repositoryUrl));
+                    repositoryDefaults);
         }
 
         private GitHubIntegration gitHubIntegration() {
@@ -1019,7 +1023,10 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
     }
 
     private static void printNewBoardResult(
-            PrintStream out, TrelloBoardSetup.NewBoardResult result, Path envPath, Optional<String> repositoryUrl) {
+            PrintStream out,
+            TrelloBoardSetup.NewBoardResult result,
+            Path envPath,
+            TrelloBoardSetup.RepositoryDefaults repositoryDefaults) {
         out.println("Created Trello board: " + DisplayNames.quotedName(result.boardName()));
         if (result.boardUrl() != null && !result.boardUrl().isBlank()) {
             out.println("Board URL: " + result.boardUrl());
@@ -1027,7 +1034,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         out.println("Board identifier for WORKFLOW.md: " + result.boardKey());
         out.println("Created lists: " + DisplayNames.quotedList(result.lists()));
         out.println("Wrote workflow: " + result.workflowPath().toAbsolutePath().normalize());
-        printRepositoryDefaultSummary(out, repositoryUrl, result.workflowPath());
+        RepositoryDefaultSummary.printDirect(out, repositoryDefaults, result.workflowPath());
         out.println("HTTP status port: " + result.serverPort());
         out.println();
         out.println("Next:");
@@ -1035,7 +1042,10 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
     }
 
     private static void printImportBoardResult(
-            PrintStream out, TrelloBoardSetup.ImportBoardResult result, Path envPath, Optional<String> repositoryUrl) {
+            PrintStream out,
+            TrelloBoardSetup.ImportBoardResult result,
+            Path envPath,
+            TrelloBoardSetup.RepositoryDefaults repositoryDefaults) {
         out.println("Imported Trello board: " + DisplayNames.quotedName(result.boardName()));
         if (result.boardUrl() != null && !result.boardUrl().isBlank()) {
             out.println("Board URL: " + result.boardUrl());
@@ -1047,22 +1057,11 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         out.println("Terminal lists: " + DisplayNames.quotedList(result.terminalStates()));
         out.println("Blocked list: " + optionalListName(result.blockedState()));
         out.println("Wrote workflow: " + result.workflowPath().toAbsolutePath().normalize());
-        printRepositoryDefaultSummary(out, repositoryUrl, result.workflowPath());
+        RepositoryDefaultSummary.printDirect(out, repositoryDefaults, result.workflowPath());
         out.println("HTTP status port: " + result.serverPort());
         out.println();
         out.println("Next:");
         printInstalledCliNextSteps(out, envPath, result.workflowPath());
-    }
-
-    private static void printRepositoryDefaultSummary(
-            PrintStream out, Optional<String> repositoryUrl, Path workflowPath) {
-        if (repositoryUrl.isPresent()) {
-            out.println("Repository clone URL saved in repository.default_url");
-        } else {
-            out.println("Repository clone URL not set; this workflow remains repository-general.");
-        }
-        out.println("To add or change it later, edit repository.default_url in:");
-        out.println("  " + workflowPath.toAbsolutePath().normalize());
     }
 
     private static void printInstalledCliNextSteps(PrintStream out, Path envPath, Path workflowPath) {

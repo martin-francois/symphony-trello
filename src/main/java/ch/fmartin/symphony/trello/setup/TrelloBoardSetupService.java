@@ -18,6 +18,7 @@ final class TrelloBoardSetupService {
     private final TrelloBoardSetup setup;
     private final LocalWorkerManager workerManager;
     private final Map<String, String> environment;
+    private final WorkflowConfigEditor workflowConfig;
 
     TrelloBoardSetupService(TrelloBoardSetup setup) {
         this(setup, new LocalWorkerManager(System.getenv()), System.getenv());
@@ -27,6 +28,7 @@ final class TrelloBoardSetupService {
         this.setup = setup;
         this.workerManager = workerManager;
         this.environment = Map.copyOf(environment);
+        this.workflowConfig = new WorkflowConfigEditor();
     }
 
     TrelloBoardSetup.NewBoardResult createRecommendedBoard(NewBoardRequest request) {
@@ -45,6 +47,13 @@ final class TrelloBoardSetupService {
     TrelloBoardSetup.ImportBoardResult importExistingBoard(
             ImportBoardRequest request, TrelloBoardSetupMain.BoardSetupOptions options) {
         return setup(options).importExistingBoard(request);
+    }
+
+    TrelloBoardSetup.RepositoryDefaults repositoryDefaults(TrelloBoardSetupMain.BoardSetupOptions options) {
+        TrelloBoardSetup.RepositoryDefaults existingDefaults = options.force
+                ? workflowConfig.repositoryDefaults(options.workflowPath)
+                : TrelloBoardSetup.RepositoryDefaults.empty();
+        return existingDefaults.withExplicitDefaultUrl(options.repositoryUrl);
     }
 
     void preflightWorkflowWrite(Path workflowPath, boolean force) {
