@@ -2206,7 +2206,8 @@ final class TrelloBoardSetupMainTest {
     @Test
     void createsRecommendedBoardAndPrintsNextSteps() throws Exception {
         // given
-        Path workflow = tempDir.resolve("generated workflow.WORKFLOW.md");
+        Path workflow = tempDir.resolve(".").resolve("generated workflow.WORKFLOW.md");
+        Path normalizedWorkflow = workflow.toAbsolutePath().normalize();
         Path env = tempDir.resolve(".env.next-steps");
         int expectedPort = firstAvailableManagedPort();
 
@@ -2249,7 +2250,7 @@ final class TrelloBoardSetupMainTest {
             assertThat(board.boardKey()).isEqualTo("abc123");
             assertThat(board.boardName()).isEqualTo("Symphony Work Queue");
             assertThat(board.boardUrl()).isEqualTo("https://trello.com/b/abc123/board");
-            assertThat(board.workflowPath()).isEqualTo(workflow.toAbsolutePath().normalize());
+            assertThat(board.workflowPath()).isEqualTo(normalizedWorkflow);
             assertThat(board.envPath()).isEqualTo(env.toAbsolutePath().normalize());
             assertThat(board.workspaceRoot())
                     .isEqualTo(TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT
@@ -2261,17 +2262,14 @@ final class TrelloBoardSetupMainTest {
                 .contains(
                         "Created Trello board: \"Symphony Work Queue\"",
                         "Board identifier for WORKFLOW.md: abc123",
-                        "Wrote workflow:",
+                        "Wrote workflow: " + normalizedWorkflow,
                         "Repository clone URL saved in repository.default_url",
                         "HTTP status port: " + expectedPort,
                         "symphony-trello start --env "
                                 + shellQuote(env.toAbsolutePath().normalize().toString())
                                 + " --workflow "
-                                + shellQuote(
-                                        workflow.toAbsolutePath().normalize().toString()),
-                        "symphony-trello logs --workflow "
-                                + shellQuote(
-                                        workflow.toAbsolutePath().normalize().toString()))
+                                + shellQuote(normalizedWorkflow.toString()),
+                        "symphony-trello logs --workflow " + shellQuote(normalizedWorkflow.toString()))
                 .doesNotContain("./mvnw quarkus:dev");
     }
 
