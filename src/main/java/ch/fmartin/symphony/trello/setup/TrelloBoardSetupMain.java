@@ -247,7 +247,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                         options.gitHubIntegration(),
                         options.manifestPath(parent.boardSetup.environment()),
                         parent.out);
-                printNewBoardResult(parent.out, result, options.runtimeEnvPath());
+                printNewBoardResult(parent.out, result, options.runtimeEnvPath(), options.repositoryUrl);
                 return 0;
             } catch (TrelloBoardSetupException exception) {
                 throw options.withRuntimeEnvHint(exception);
@@ -342,7 +342,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                         options.gitHubIntegration(),
                         options.manifestPath(parent.boardSetup.environment()),
                         parent.out);
-                printImportBoardResult(parent.out, result, options.runtimeEnvPath());
+                printImportBoardResult(parent.out, result, options.runtimeEnvPath(), options.repositoryUrl);
                 return 0;
             } catch (TrelloBoardSetupException exception) {
                 throw options.withRuntimeEnvHint(exception);
@@ -756,6 +756,9 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         @Option(names = "--manifest", description = "Connected-board manifest path.")
         Optional<Path> manifest = Optional.empty();
 
+        @Option(names = "--repository-url", description = "Repository clone URL for generated workflows.")
+        Optional<String> repositoryUrl = Optional.empty();
+
         @Option(names = "--server-port", description = SetupOptionHelp.SERVER_PORT)
         Integer serverPort;
 
@@ -785,7 +788,10 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                     force,
                     !workflowPathExplicit,
                     gitHubIntegration(),
-                    runtimeEnvPath());
+                    runtimeEnvPath(),
+                    true,
+                    false,
+                    TrelloBoardSetup.RepositoryDefaults.withDefaultUrl(repositoryUrl));
         }
 
         ImportBoardRequest importBoardRequest(
@@ -812,7 +818,9 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
                     force,
                     gitHubIntegration(),
                     false,
-                    runtimeEnvPath());
+                    runtimeEnvPath(),
+                    false,
+                    TrelloBoardSetup.RepositoryDefaults.withDefaultUrl(repositoryUrl));
         }
 
         private GitHubIntegration gitHubIntegration() {
@@ -911,6 +919,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             manifest.ifPresent(path -> CliInputValidation.rejectDirectoryPath("--manifest", path));
             TrelloCredentialStore.validateEnvPathOption(envPath);
             validateCodexModelOverrides();
+            repositoryUrl = RepositoryUrlInput.validateExplicit(repositoryUrl);
             if (serverPort != null) {
                 LocalPort.validateCliServerPort(serverPort);
             }
@@ -928,6 +937,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             endpoint = TrelloApiEndpoint.normalize(endpoint);
             github.validate();
             validateCodexModelOverrides();
+            repositoryUrl = RepositoryUrlInput.validateExplicit(repositoryUrl);
             TrelloBoardSetup.validateSetupMaxAgents(maxConcurrentAgents);
         }
 
@@ -1008,7 +1018,8 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         return Path.of(configDir).resolve(TrelloBoardSetup.DEFAULT_WORKFLOW_PATH);
     }
 
-    private static void printNewBoardResult(PrintStream out, TrelloBoardSetup.NewBoardResult result, Path envPath) {
+    private static void printNewBoardResult(
+            PrintStream out, TrelloBoardSetup.NewBoardResult result, Path envPath, Optional<String> repositoryUrl) {
         out.println("Created Trello board: " + DisplayNames.quotedName(result.boardName()));
         if (result.boardUrl() != null && !result.boardUrl().isBlank()) {
             out.println("Board URL: " + result.boardUrl());
@@ -1016,6 +1027,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         out.println("Board identifier for WORKFLOW.md: " + result.boardKey());
         out.println("Created lists: " + DisplayNames.quotedList(result.lists()));
         out.println("Wrote workflow: " + result.workflowPath().toAbsolutePath().normalize());
+        printRepositoryDefaultSummary(out, repositoryUrl, result.workflowPath());
         out.println("HTTP status port: " + result.serverPort());
         out.println();
         out.println("Next:");
@@ -1023,7 +1035,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
     }
 
     private static void printImportBoardResult(
-            PrintStream out, TrelloBoardSetup.ImportBoardResult result, Path envPath) {
+            PrintStream out, TrelloBoardSetup.ImportBoardResult result, Path envPath, Optional<String> repositoryUrl) {
         out.println("Imported Trello board: " + DisplayNames.quotedName(result.boardName()));
         if (result.boardUrl() != null && !result.boardUrl().isBlank()) {
             out.println("Board URL: " + result.boardUrl());
@@ -1035,10 +1047,22 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         out.println("Terminal lists: " + DisplayNames.quotedList(result.terminalStates()));
         out.println("Blocked list: " + optionalListName(result.blockedState()));
         out.println("Wrote workflow: " + result.workflowPath().toAbsolutePath().normalize());
+        printRepositoryDefaultSummary(out, repositoryUrl, result.workflowPath());
         out.println("HTTP status port: " + result.serverPort());
         out.println();
         out.println("Next:");
         printInstalledCliNextSteps(out, envPath, result.workflowPath());
+    }
+
+    private static void printRepositoryDefaultSummary(
+            PrintStream out, Optional<String> repositoryUrl, Path workflowPath) {
+        if (repositoryUrl.isPresent()) {
+            out.println("Repository clone URL saved in repository.default_url");
+        } else {
+            out.println("Repository clone URL not set; this workflow remains repository-general.");
+        }
+        out.println("To add or change it later, edit repository.default_url in:");
+        out.println("  " + workflowPath.toAbsolutePath().normalize());
     }
 
     private static void printInstalledCliNextSteps(PrintStream out, Path envPath, Path workflowPath) {

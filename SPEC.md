@@ -939,6 +939,19 @@ answer MUST keep the current value. The prompt MUST explain local resource and p
 and MUST mention prerequisite checklist items for dependent Trello cards before those cards are moved
 into an active list.
 
+During guided `setup-local` board creation or import, setup MUST ask exactly one optional repository
+clone URL question, `Repository clone URL (optional; press Enter for none):`. A blank answer MUST
+keep both generated repository defaults null and retain the
+repository-general behavior. A supplied answer MUST populate `repository.default_url`. The regular
+`setup-local`, direct `new-board`, and direct `import-board` paths MUST also accept
+`--repository-url URL`; lifecycle-only `check`, `repair-port`, and `configure-github` paths MUST
+reject that option. Accepted values use this section's `repository.default_url` transport and
+credential rules. Validation MUST be local-only and MUST happen before Codex login or model-catalog
+resolution, GitHub auth or installation, Trello reads or writes, credential persistence, and workflow
+writes. `setup-local --dry-run` MUST NOT prompt for the value. Setup output MUST NOT echo the URL and
+MUST point to the normalized generated workflow path where `repository.default_url` can be edited
+later.
+
 The installed Bash and PowerShell wrappers dispatch `--help`, `-h`, `--version`, `setup-local`,
 `new-board`, `import-board`, `list-workspaces`, `start`, `stop`, `status`, `logs`, `diagnostics`,
 and unknown commands to this Java command boundary. The wrappers bootstrap paths, classpath, managed
@@ -3768,6 +3781,12 @@ When this profile is used:
 - `setup-local repair-port --board NAME` MUST repair only the selected connected local workflow by
   assigning the next free managed HTTP port and updating the workflow plus connected-board manifest
 - `setup-local --dry-run` reports planned setup work without changing Trello or workflow files
+- guided `setup-local` MUST collect and validate an optional `repository.default_url` before Codex,
+  GitHub, Trello, credential-persistence, or workflow-write side effects. A blank answer keeps the
+  generated workflow repository-general, and dry-run MUST NOT prompt
+- setup diagnostics MUST redact both `--repository-url URL` and `--repository-url=URL` forms
+- regeneration performed by `setup-local configure-github` MUST preserve existing raw
+  `repository.default_url` and `repository.default_path` values, including environment references
 - when `setup-local` chooses a default managed HTTP port, it MUST avoid ports reserved by connected
   workflows and ports already accepting connections on localhost
 - setup MUST separate installer-managed app files from user data. Local credentials, workflows,

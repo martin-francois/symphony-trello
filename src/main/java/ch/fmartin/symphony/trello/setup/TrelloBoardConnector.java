@@ -142,7 +142,8 @@ final class TrelloBoardConnector {
                         githubIntegration,
                         configuredLists.createMissingGithubLists(),
                         options.envPath(),
-                        maxAgents.preservedFromWorkflow()));
+                        maxAgents.preservedFromWorkflow(),
+                        TrelloBoardSetup.RepositoryDefaults.withDefaultUrl(options.repositoryUrl())));
         return LocalSetup.SetupResult.from(result, githubIntegration);
     }
 
@@ -192,7 +193,8 @@ final class TrelloBoardConnector {
                                 githubIntegration,
                                 options.envPath(),
                                 options.detectInProgressState(),
-                                maxAgents.preservedFromWorkflow())),
+                                maxAgents.preservedFromWorkflow(),
+                                TrelloBoardSetup.RepositoryDefaults.withDefaultUrl(options.repositoryUrl()))),
                 githubIntegration);
     }
 

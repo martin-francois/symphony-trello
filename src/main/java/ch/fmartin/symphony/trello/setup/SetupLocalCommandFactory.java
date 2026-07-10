@@ -28,6 +28,7 @@ import picocli.CommandLine.Spec;
 final class SetupLocalCommandFactory {
     private static final List<String> WORKFLOW_AND_ACCESS_OPTIONS = List.of(
             "--workspace-id",
+            "--repository-url",
             "--active",
             "--terminal",
             "--in-progress",
@@ -55,6 +56,7 @@ final class SetupLocalCommandFactory {
             "--force",
             "--board-name",
             "--workspace-id",
+            "--repository-url",
             "--active",
             "--terminal",
             "--in-progress",
@@ -288,6 +290,9 @@ final class SetupLocalCommandFactory {
         @Option(names = "--workspace-id", description = "Trello Workspace id for a new board.")
         Optional<String> workspaceId = Optional.empty();
 
+        @Option(names = "--repository-url", description = "Repository clone URL for generated workflows.")
+        Optional<String> repositoryUrl = Optional.empty();
+
         @Option(
                 names = "--active",
                 description = "Existing-board queued-work list name. Repeat for multiple lists.",
@@ -395,6 +400,7 @@ final class SetupLocalCommandFactory {
             CliInputValidation.rejectControlCharacters("--in-progress", inProgressState);
             CliInputValidation.rejectControlCharacters("--blocked", blockedState);
             CliInputValidation.rejectWorkspaceIdReference("--workspace-id", workspaceId);
+            repositoryUrl = RepositoryUrlInput.validateExplicit(repositoryUrl);
             github.validate();
             validateCodexModelOverrides();
             Optional<Boolean> resolvedGithubMode = githubMode.or(() -> github.selected());
@@ -435,6 +441,7 @@ final class SetupLocalCommandFactory {
                     boardName,
                     board,
                     workspaceId,
+                    repositoryUrl,
                     CliValueNormalizer.nonBlank(activeStates),
                     CliValueNormalizer.nonBlank(terminalStates),
                     CliValueNormalizer.nullIfBlank(inProgressState),
@@ -516,6 +523,7 @@ final class SetupLocalCommandFactory {
             addIfPresent(unsupported, "--force", force);
             addIfPresent(unsupported, "--board-name", boardName);
             addIfPresent(unsupported, "--workspace-id", workspaceId);
+            addIfPresent(unsupported, "--repository-url", repositoryUrl);
             addListIfPresent(unsupported, "--active", activeStates);
             addListIfPresent(unsupported, "--terminal", terminalStates);
             addIfPresent(unsupported, "--in-progress", inProgressState != null);
@@ -530,6 +538,7 @@ final class SetupLocalCommandFactory {
 
         private void addWorkflowAndAccessOptions(List<String> unsupported) {
             addIfPresent(unsupported, "--workspace-id", workspaceId);
+            addIfPresent(unsupported, "--repository-url", repositoryUrl);
             addListIfPresent(unsupported, "--active", activeStates);
             addListIfPresent(unsupported, "--terminal", terminalStates);
             addIfPresent(unsupported, "--in-progress", inProgressState != null);
@@ -632,6 +641,7 @@ final class SetupLocalCommandFactory {
             merged.boardName = child.boardName.or(() -> merged.boardName);
             merged.board = child.board.or(() -> merged.board);
             merged.workspaceId = child.workspaceId.or(() -> merged.workspaceId);
+            merged.repositoryUrl = child.repositoryUrl.or(() -> merged.repositoryUrl);
             merged.activeStates.addAll(child.activeStates);
             merged.terminalStates.addAll(child.terminalStates);
             merged.inProgressState = child.inProgressState == null ? merged.inProgressState : child.inProgressState;
@@ -667,6 +677,7 @@ final class SetupLocalCommandFactory {
             copy.boardName = source.boardName;
             copy.board = source.board;
             copy.workspaceId = source.workspaceId;
+            copy.repositoryUrl = source.repositoryUrl;
             copy.activeStates = new ArrayList<>(source.activeStates);
             copy.terminalStates = new ArrayList<>(source.terminalStates);
             copy.inProgressState = source.inProgressState;

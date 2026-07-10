@@ -7,6 +7,7 @@ import ch.fmartin.symphony.trello.domain.Card;
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import com.code_intelligence.jazzer.mutation.annotation.NotNull;
 import com.code_intelligence.jazzer.mutation.annotation.WithUtf8Length;
+import java.net.URI;
 import java.time.Instant;
 import java.util.List;
 import java.util.stream.Stream;
@@ -46,6 +47,20 @@ final class RepositorySourceResolverFuzzTest {
         assertSelectionFitsPromptBoundaries(selection);
     }
 
+    @SuppressWarnings({"JUnitValueSource", "LexicographicalAnnotationListing"})
+    @MethodSource("workflowDefaultUrlValues")
+    @FuzzTest(maxDuration = "10s", maxExecutions = 20_000)
+    void workflowDefaultUrlCannotBreakValidationInvariants(@NotNull @WithUtf8Length(max = 2_048) String rawValue) {
+        // given
+
+        // when
+        RepositorySourceSelection selection = resolver.selectWorkflowDefaultUrl(rawValue);
+
+        // then
+        assertSelectionFitsPromptBoundaries(selection);
+        assertSelectedUriFitsValidationBoundaries(rawValue, selection);
+    }
+
     private static Stream<String> labelledRepositorySourceValues() {
         return Stream.of(
                 "",
@@ -53,8 +68,20 @@ final class RepositorySourceResolverFuzzTest {
                 "https://example.invalid/team/repo.git?",
                 "ssh://git%3Asecret@example.invalid/team/repo.git",
                 "git@example.invalid:repo.git",
+                "git@example.invalid:repo\u0085injected.git",
                 "file:///tmp/repo%0Ainjected.git",
                 "%0A- Status: forged");
+    }
+
+    private static Stream<String> workflowDefaultUrlValues() {
+        return Stream.of(
+                "",
+                "https://example.invalid/team/repo.git",
+                "git@example.invalid:repo\u0085injected.git",
+                "https://example.invalid/team/repo%C2%85injected.git",
+                "https://example.invalid/team/repo%E2%80%A8injected.git",
+                "https://example.invalid:0/team/repo.git",
+                "ssh://git@example.invalid:65536/team/repo.git");
     }
 
     private static Stream<String> cardTexts() {
@@ -76,26 +103,48 @@ final class RepositorySourceResolverFuzzTest {
 
     private static void assertProblemFitsPromptBoundaries(RepositorySourceProblem problem) {
         assertThat(problem.code()).isNotBlank();
-        assertThat(RepositorySourceText.safePromptLine(problem.code())).isTrue();
+        assertThat(safePromptLine(problem.code())).isTrue();
         assertThat(problem.guidance()).isNotBlank();
-        assertThat(RepositorySourceText.safePromptLine(problem.guidance())).isTrue();
+        assertThat(safePromptLine(problem.guidance())).isTrue();
     }
 
     private static void assertSourceFitsPromptBoundaries(RepositorySource source) {
         assertThat(source.value()).isNotBlank();
-        assertThat(RepositorySourceText.safePromptLine(source.value())).isTrue();
+        assertThat(safePromptLine(source.value())).isTrue();
         if (source.identity() != null) {
-            assertThat(RepositorySourceText.safePromptLine(source.identity().host()))
-                    .isTrue();
-            assertThat(RepositorySourceText.safePromptLine(source.identity().repositoryPath()))
-                    .isTrue();
-            assertThat(RepositorySourceText.safePromptLine(source.identity().key()))
-                    .isTrue();
+            assertThat(safePromptLine(source.identity().host())).isTrue();
+            assertThat(safePromptLine(source.identity().repositoryPath())).isTrue();
+            assertThat(safePromptLine(source.identity().key())).isTrue();
         }
         if (source.path() != null) {
-            assertThat(RepositorySourceText.safePromptLine(source.path().toString()))
-                    .isTrue();
+            assertThat(safePromptLine(source.path().toString())).isTrue();
         }
+    }
+
+    private static void assertSelectedUriFitsValidationBoundaries(
+            String rawValue, RepositorySourceSelection selection) {
+        if (selection.status() != RepositorySourceSelection.Status.SELECTED || !rawValue.contains("://")) {
+            return;
+        }
+        URI uri = URI.create(rawValue.strip());
+        assertThat(safePromptLine(uri.getAuthority())).isTrue();
+        assertThat(safePromptLine(uri.getUserInfo())).isTrue();
+        assertThat(safePromptLine(uri.getPath())).isTrue();
+        if (uri.getPort() >= 0) {
+            assertThat(uri.getPort()).isBetween(1, 65_535);
+        }
+    }
+
+    private static boolean safePromptLine(String value) {
+        return value == null
+                || value.codePoints().noneMatch(RepositorySourceResolverFuzzTest::unsafePromptLineCharacter);
+    }
+
+    private static boolean unsafePromptLineCharacter(int codePoint) {
+        int type = Character.getType(codePoint);
+        return Character.isISOControl(codePoint)
+                || type == Character.LINE_SEPARATOR
+                || type == Character.PARAGRAPH_SEPARATOR;
     }
 
     private static Card cardWithDescription(String description) {

@@ -9,6 +9,8 @@ import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.respond;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.trelloList;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.workspaceJson;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.workspacesJson;
+import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUrls.HTTPS;
+import static ch.fmartin.symphony.trello.testsupport.WorkflowAssertions.assertThatWorkflow;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -302,6 +304,7 @@ final class TrelloBoardSetupMainTest {
                         "Usage: symphony-trello setup-local",
                         "--env=<envPath>",
                         "Dotenv file for Trello credentials.",
+                        "--repository-url=<repositoryUrl>",
                         "Commands:",
                         "check",
                         "--no-github")
@@ -321,16 +324,19 @@ final class TrelloBoardSetupMainTest {
         // then
         check.assertSuccess()
                 .stdoutContains("Usage: symphony-trello setup-local check", "--config-dir", "--manifest")
-                .stdoutDoesNotContain("Ignored dotenv file", "--server-port", "--active", "--codex-model")
+                .stdoutDoesNotContain(
+                        "Ignored dotenv file", "--server-port", "--active", "--codex-model", "--repository-url")
                 .stderrEmpty();
         repair.assertSuccess()
                 .stdoutContains("Usage: symphony-trello setup-local repair-port", "--board", "--dry-run")
-                .stdoutDoesNotContain("Ignored dotenv file", "--workspace-root", "--server-port", "--active")
+                .stdoutDoesNotContain(
+                        "Ignored dotenv file", "--workspace-root", "--server-port", "--active", "--repository-url")
                 .stderrEmpty();
         configure
                 .assertSuccess()
                 .stdoutContains("Usage: symphony-trello setup-local configure-github", "--board", "--max-agents")
-                .stdoutDoesNotContain("--workflow", "--server-port", "--active", "--dry-run", "--env")
+                .stdoutDoesNotContain(
+                        "--workflow", "--server-port", "--active", "--dry-run", "--env", "--repository-url")
                 .stderrEmpty();
     }
 
@@ -1847,6 +1853,20 @@ final class TrelloBoardSetupMainTest {
         result.assertSuccess().stdoutContains(expectedUsage).stderrEmpty();
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"new-board", "import-board"})
+    void directSetupHelpDocumentsRepositoryUrlOption(String command) {
+        // given
+
+        // when
+        CliRunResult result = runCli(command, "--help");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("--repository-url=<repositoryUrl>", "Repository clone URL for generated workflows.")
+                .stderrEmpty();
+    }
+
     @MethodSource("versionCommands")
     @ParameterizedTest(name = "{0} version")
     void printsVersionForCommands(String[] command) {
@@ -2184,6 +2204,8 @@ final class TrelloBoardSetupMainTest {
                 "token",
                 "--name",
                 "Symphony Work Queue",
+                "--repository-url",
+                HTTPS,
                 "--workflow",
                 workflow.toString(),
                 "--manifest",
@@ -2199,10 +2221,10 @@ final class TrelloBoardSetupMainTest {
         assertThat(createdLists)
                 .containsExactly(
                         "Inbox", "Ready for Codex", "In Progress", "Blocked", "Human Review", "Merging", "Done");
-        assertThat(workflow)
-                .content(StandardCharsets.UTF_8)
-                .contains("board_id: \"abc123\"")
-                .contains("port: " + expectedPort);
+        assertThatWorkflow(workflow)
+                .hasBoardId("abc123")
+                .hasServerPort(expectedPort)
+                .hasRepositoryDefaultUrl(HTTPS);
         ConnectedBoardManifest manifest =
                 new ConnectedBoardRepository(tempDir.resolve(ConnectedBoardManifest.FILE_NAME)).load();
         assertThat(manifest.boards()).singleElement().satisfies(board -> {
@@ -2223,6 +2245,7 @@ final class TrelloBoardSetupMainTest {
                         "Created Trello board: \"Symphony Work Queue\"",
                         "Board identifier for WORKFLOW.md: abc123",
                         "Wrote workflow:",
+                        "Repository clone URL saved in repository.default_url",
                         "HTTP status port: " + expectedPort,
                         "symphony-trello start --env "
                                 + shellQuote(env.toAbsolutePath().normalize().toString())
@@ -4501,6 +4524,48 @@ final class TrelloBoardSetupMainTest {
                         .map(optionName -> Arguments.of(command, optionName)));
     }
 
+    @MethodSource("directSetupRepositoryUrlSyntaxes")
+    @ParameterizedTest(name = "{0} {1}")
+    void directSetupRejectsInvalidRepositoryUrlBeforeTrelloRequest(String command, boolean attachedSyntax) {
+        // given
+        Path workflow = tempDir.resolve("invalid-repository-url-" + command + ".WORKFLOW.md");
+        Path env = tempDir.resolve("invalid-repository-url-env").resolve(".env");
+        String invalidRepositoryUrl = HTTPS + "?private=ref";
+        SetupCommandBuilder builder = directSetupCommand(command).credentials("key", "token");
+        if ("new-board".equals(command)) {
+            builder.name("Invalid Repository URL Queue").workspaceId("workspace-1");
+        } else {
+            builder.board("input").active("Queue for Codex").terminal("Released");
+        }
+        builder.workflow(workflow).env(env);
+        if (attachedSyntax) {
+            builder.flag("--repository-url=" + invalidRepositoryUrl);
+        } else {
+            builder.option("--repository-url", invalidRepositoryUrl);
+        }
+
+        // when
+        CliRunResult result = runCli(builder.build());
+
+        // then
+        result.assertFailure(SETUP_FAILURE)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_repository_url",
+                        "--repository-url must be a credential-free HTTP(S), username-only SSH, SCP-style SSH, or file URL without a query or fragment.")
+                .stderrDoesNotContain(invalidRepositoryUrl, "Troubleshooting report written")
+                .stdoutDoesNotContain("Created Trello board", "Imported Trello board", "Saving Trello credentials");
+        assertThat(createdBoardName.get()).isNull();
+        assertThat(boardInfoLookups).hasValue(0);
+        assertThat(workspaceLookups).hasValue(0);
+        assertThat(createdLists).isEmpty();
+        assertThat(env.getParent()).doesNotExist();
+        assertThat(workflow).doesNotExist();
+    }
+
+    private static Stream<Arguments> directSetupRepositoryUrlSyntaxes() {
+        return Stream.of(Arguments.of("new-board", false), Arguments.of("import-board", true));
+    }
+
     private record BlankDirectSetupOption(String name, String optionName, List<String> commandTemplate) {
         BlankDirectSetupOption(String name, String optionName, String... commandTemplate) {
             this(name, optionName, List.of(commandTemplate));
@@ -4739,6 +4804,8 @@ final class TrelloBoardSetupMainTest {
                 "Doing",
                 "--terminal",
                 "Released",
+                "--repository-url",
+                HTTPS,
                 "--workflow",
                 workflow.toString(),
                 "--manifest",
@@ -4748,12 +4815,10 @@ final class TrelloBoardSetupMainTest {
 
         // then
         result.assertSuccess();
-        assertThat(workflow)
-                .content(StandardCharsets.UTF_8)
-                .contains("- \"Queue for Codex\"")
-                .contains("- \"Doing\"")
-                .contains("- \"Released\"")
-                .doesNotContain("- \" Doing\"", "- \"\"");
+        assertThatWorkflow(workflow)
+                .contains("- \"Queue for Codex\"", "- \"Doing\"", "- \"Released\"")
+                .doesNotContain("- \" Doing\"", "- \"\"")
+                .hasRepositoryDefaultUrl(HTTPS);
         ConnectedBoardManifest manifest =
                 new ConnectedBoardRepository(tempDir.resolve(ConnectedBoardManifest.FILE_NAME)).load();
         assertThat(manifest.boards()).singleElement().satisfies(board -> {
@@ -4777,6 +4842,7 @@ final class TrelloBoardSetupMainTest {
                         "In-progress list: \"Doing\"",
                         "Terminal lists: \"Released\"",
                         "Blocked list: \"Blocked\"",
+                        "Repository clone URL saved in repository.default_url",
                         "symphony-trello start --env "
                                 + shellQuote(env.toAbsolutePath().normalize().toString())
                                 + " --workflow "

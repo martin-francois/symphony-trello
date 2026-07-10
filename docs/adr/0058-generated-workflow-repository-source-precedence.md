@@ -4,6 +4,7 @@ date: 2026-06-25
 decision-makers: [François Martin, Codex]
 consulted:
   - "[GitHub issue #33](https://github.com/martin-francois/symphony-trello/issues/33)"
+  - "[GitHub issue #540](https://github.com/martin-francois/symphony-trello/issues/540)"
   - "[SPEC.md](../../SPEC.md)"
 informed: [Future maintainers, Contributors]
 ---
@@ -75,6 +76,14 @@ paths may keep safe percent-encoding, but encoded or literal control characters 
 conventions. Missing or blank optional environment values resolve to absent. Relative
 `repository.default_path` values resolve relative to `WORKFLOW.md`.
 
+The 2026-07-10 onboarding amendment makes the common workflow URL default available during setup.
+Guided `setup-local` asks one optional clone-URL question; a blank answer keeps the generated
+workflow repository-general. Regular `setup-local`, `new-board`, and `import-board` also accept
+`--repository-url`. They reuse the repository source parser's transport, credential, query,
+fragment, malformed-input, and control-character rules without contacting the repository. Setup
+validates the value before external setup effects and never echoes it. A later `configure-github`
+regeneration preserves both raw repository defaults, including environment references.
+
 A valid selected source suppresses lower-priority fallbacks. An invalid explicit Trello card source
 does not silently fall back to workflow defaults.
 
@@ -108,6 +117,8 @@ Issue #33 remains open for later managed-checkout and live E2E work.
 * Good, because workflow defaults and source precedence become explicit and testable.
 * Good, because the first issue #33 PR stays small and mergeable.
 * Good, because no partial Java checkout manager is shipped.
+* Good, because common one-repository workflows can configure the default during onboarding while a
+  blank answer preserves the existing repository-general behavior.
 * Neutral, because generated workflow/agent behavior still performs repository preparation.
 * Bad, because managed checkout safety, direct-checkout transactions, durable preflight handoff, and
   provider-aware publication remain follow-up work.
@@ -117,7 +128,7 @@ Issue #33 remains open for later managed-checkout and live E2E work.
 Run focused tests for config resolution and generated workflow output:
 
 ```bash
-./mvnw -q -Dtest=ConfigResolverTest,TrelloBoardSetupTest test
+./mvnw -q -Dtest=ConfigResolverTest,TrelloBoardSetupTest,LocalSetupTest,TrelloBoardSetupMainTest test
 ```
 
 Also confirm the final PR does not add Java Git commands, a Java repository checkout preparer, direct

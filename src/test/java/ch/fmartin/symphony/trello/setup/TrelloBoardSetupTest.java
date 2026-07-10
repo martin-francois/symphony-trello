@@ -117,6 +117,21 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
+    void publicRepositoryDefaultsRejectCredentialBearingUrlAtConstruction() {
+        // given
+        String repositoryUrl = "https://user:password@example.invalid/team/project.git";
+
+        // when
+        Throwable thrown = catchThrowable(() -> new TrelloBoardSetup.RepositoryDefaults(repositoryUrl, null));
+
+        // then
+        assertThat(thrown)
+                .isInstanceOf(TrelloBoardSetupException.class)
+                .extracting(error -> ((TrelloBoardSetupException) error).code())
+                .isEqualTo("setup_invalid_repository_url");
+    }
+
+    @Test
     void newBoardDerivesBoardKeyFromUrlWhenCreateResponseOmitsShortLink() {
         // given
         trello.remove("/1/boards/");

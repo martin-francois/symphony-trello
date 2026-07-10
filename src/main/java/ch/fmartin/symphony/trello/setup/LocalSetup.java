@@ -142,8 +142,8 @@ public final class LocalSetup {
             if (options.repairPort()) {
                 return repairPort(options, out);
             }
-            options = validatePreflightCodexReasoningEffort(options, prerequisites);
             if (options.dryRun()) {
+                options = validatePreflightCodexReasoningEffort(options, prerequisites);
                 rejectInvalidUnconnectedBoardSelector(connectedBoardsUnchecked(options), options);
                 boardConnector.rejectDryRunNewBoardInProgress(options);
                 preflightLocalWorkflowWrite(options);
@@ -179,6 +179,8 @@ public final class LocalSetup {
                 }
             }
             TrelloBoardConnector.BoardSetupChoice boardSetupChoice = boardConnector.chooseBoardSetup(options, terminal);
+            options = configureRepositoryUrl(options, terminal);
+            options = validatePreflightCodexReasoningEffort(options, prerequisites);
             boardConnector.preflightRequestedServerPort(options, manifest);
             codexAuthFlow.ensureAuthenticated(prerequisites, options, terminal);
             options = validatePreflightCodexReasoningEffort(options);
@@ -229,7 +231,9 @@ public final class LocalSetup {
             out.println("Trello board");
             out.println("  OK  Board connected: " + DisplayNames.quotedName(result.boardName()));
             out.println("  OK  Board lists: " + quoted(result.lists()));
-            out.println("  OK  Workflow written: " + result.workflowPath());
+            out.println("  OK  Workflow written: "
+                    + result.workflowPath().toAbsolutePath().normalize());
+            printRepositoryDefaultSummary(out, options.repositoryUrl(), result.workflowPath());
             out.println("  OK  Local server port selected for " + DisplayNames.quotedName(result.boardName()) + ": "
                     + result.serverPort());
             printWorkspaceAndSandboxSummary(options, out);
@@ -258,6 +262,17 @@ public final class LocalSetup {
         // file-valued parents, existing files without --force, and unwritable parents are
         // expected input errors before any dry-run plan or Trello member validation.
         boardSetup.preflightWorkflowWrite(options.workflowPath(), options.force());
+    }
+
+    private static void printRepositoryDefaultSummary(
+            PrintStream out, Optional<String> repositoryUrl, Path workflowPath) {
+        if (repositoryUrl.isPresent()) {
+            out.println("  OK  Repository clone URL saved in repository.default_url");
+        } else {
+            out.println("  OK  Repository clone URL not set; this workflow remains repository-general.");
+        }
+        out.println("      To add or change it later, edit repository.default_url in:");
+        out.println("        " + workflowPath.toAbsolutePath().normalize());
     }
 
     private static ConnectedBoardRepository connectedBoards(Options options) {
@@ -662,6 +677,14 @@ public final class LocalSetup {
         List<Path> allowedPaths = workspaceAccessFlow.resolve(options, terminal);
         boolean dangerFullAccess = codexSandboxFlow.resolve(options, terminal);
         return options.withCodexAccess(allowedPaths, dangerFullAccess);
+    }
+
+    private static Options configureRepositoryUrl(Options options, Terminal terminal) throws IOException {
+        if (options.nonInteractive() || options.repositoryUrl().isPresent()) {
+            return options;
+        }
+        return options.withRepositoryUrl(
+                RepositoryUrlInput.fromPrompt(terminal.readLine(RepositoryUrlInput.PROMPT + " ")));
     }
 
     private Options configureCodexModel(Options options, Path workflowPath, Terminal terminal) throws IOException {
@@ -1123,6 +1146,8 @@ public final class LocalSetup {
         }
 
         MaxAgentsSelection maxAgents = configureGithubMaxAgents(options, board.workflowPath());
+        TrelloBoardSetup.RepositoryDefaults repositoryDefaults =
+                workflowConfig.repositoryDefaults(board.workflowPath());
         TrelloBoardSetup.ImportBoardResult result =
                 selectedBoardSetup.importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
                         options.endpoint(),
@@ -1141,7 +1166,8 @@ public final class LocalSetup {
                         GitHubIntegration.ENABLED,
                         true,
                         board.envPath(),
-                        maxAgents.preservedFromWorkflow()));
+                        maxAgents.preservedFromWorkflow(),
+                        repositoryDefaults));
         ConnectedBoard access = withRequestedCodexAccess(options, board, terminal);
         applyCodexAccess(
                 options.withCodexAccess(access.additionalWritableRoots(), access.dangerFullAccess()),
@@ -1600,6 +1626,7 @@ public final class LocalSetup {
             Optional<String> boardName,
             Optional<String> existingBoardId,
             Optional<String> workspaceId,
+            Optional<String> repositoryUrl,
             List<String> activeStates,
             List<String> terminalStates,
             String inProgressState,
@@ -1676,6 +1703,7 @@ public final class LocalSetup {
                     request.boardName(),
                     request.existingBoardId(),
                     request.workspaceId(),
+                    request.repositoryUrl(),
                     List.copyOf(request.activeStates()),
                     List.copyOf(request.terminalStates()),
                     request.inProgressState(),
@@ -1735,6 +1763,51 @@ public final class LocalSetup {
                     boardName,
                     existingBoardId,
                     workspaceId,
+                    repositoryUrl,
+                    activeStates,
+                    terminalStates,
+                    inProgressState,
+                    detectInProgressState,
+                    blockedState,
+                    workflowPath,
+                    workflowPathExplicit,
+                    workspaceRoot,
+                    workspaceRootExplicit,
+                    configDir,
+                    manifestPath,
+                    serverPort,
+                    maxAgents,
+                    maxAgentsExplicit,
+                    codexModel,
+                    codexReasoningEffort,
+                    codexModelCatalog,
+                    codexModelDefaults,
+                    envPath,
+                    additionalWritableRoots,
+                    allowAllPaths,
+                    dangerFullAccess,
+                    noStart,
+                    command,
+                    endpoint,
+                    callerDirectory);
+        }
+
+        Options withRepositoryUrl(Optional<String> repositoryUrl) {
+            return new Options(
+                    check,
+                    dryRun,
+                    repairPort,
+                    nonInteractive,
+                    force,
+                    forceNewSetup,
+                    configureGithub,
+                    githubMode,
+                    apiKey,
+                    apiToken,
+                    boardName,
+                    existingBoardId,
+                    workspaceId,
+                    repositoryUrl,
                     activeStates,
                     terminalStates,
                     inProgressState,
@@ -1807,6 +1880,7 @@ public final class LocalSetup {
 
         private boolean hasNonAccessWorkflowUpdateRequest() {
             return workspaceId.isPresent()
+                    || repositoryUrl.isPresent()
                     || !activeStates.isEmpty()
                     || !terminalStates.isEmpty()
                     || inProgressState != null
@@ -1822,6 +1896,7 @@ public final class LocalSetup {
 
         private boolean hasNonCodexModelWorkflowUpdateRequest() {
             return workspaceId.isPresent()
+                    || repositoryUrl.isPresent()
                     || !activeStates.isEmpty()
                     || !terminalStates.isEmpty()
                     || inProgressState != null
@@ -1859,6 +1934,7 @@ public final class LocalSetup {
                     boardName,
                     existingBoardId,
                     workspaceId,
+                    repositoryUrl,
                     activeStates,
                     terminalStates,
                     inProgressState,
@@ -1902,6 +1978,7 @@ public final class LocalSetup {
                     boardName,
                     existingBoardId,
                     workspaceId,
+                    repositoryUrl,
                     activeStates,
                     terminalStates,
                     inProgressState,

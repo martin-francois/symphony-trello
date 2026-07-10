@@ -249,7 +249,8 @@ public final class TrelloBoardSetup {
                         serverPort,
                         request.maxConcurrentAgents(),
                         githubEnabled,
-                        selectedCodexModelDefaults));
+                        selectedCodexModelDefaults,
+                        request.repositoryDefaults()));
 
         return new NewBoardResult(
                 boardId, boardKey, request.boardName(), boardUrl, createdLists, workflowPath, serverPort);
@@ -511,7 +512,8 @@ public final class TrelloBoardSetup {
                         serverPort,
                         request.maxConcurrentAgents(),
                         request.githubIntegration().enabled(),
-                        selectedCodexModelDefaults));
+                        selectedCodexModelDefaults,
+                        request.repositoryDefaults()));
 
         return new ImportBoardResult(
                 resolvedBoardId,
@@ -1034,7 +1036,8 @@ public final class TrelloBoardSetup {
             int serverPort,
             int maxAgents,
             boolean githubEnabled,
-            CodexModelDefaults codexModelDefaults) {
+            CodexModelDefaults codexModelDefaults,
+            RepositoryDefaults repositoryDefaults) {
         String doneState = landingDoneState(terminalStates);
         List<String> handoffStates = allowedMoveStates(inProgressState, reviewState, blockedState, doneState);
         return """
@@ -1055,8 +1058,8 @@ public final class TrelloBoardSetup {
                 workspace:
                   root: %s
                 repository:
-                  default_url: null
-                  default_path: null
+                  default_url: %s
+                  default_path: %s
                 server:
                   port: %d
                 polling:
@@ -1131,6 +1134,8 @@ public final class TrelloBoardSetup {
                         yamlList(activeStates),
                         yamlList(withSystemTerminalStates(terminalStates)),
                         yamlScalar(workspaceRoot.toString()),
+                        optionalYamlScalar(repositoryDefaults.defaultUrl()),
+                        optionalYamlScalar(repositoryDefaults.defaultPath()),
                         serverPort,
                         ConfigDefaults.GENERATED_WORKFLOW_POLLING_INTERVAL_MS,
                         trelloToolsYaml(handoffStates),
@@ -2122,6 +2127,10 @@ public final class TrelloBoardSetup {
         return "\"" + safe + "\"";
     }
 
+    private static String optionalYamlScalar(String value) {
+        return value == null ? "null" : yamlScalar(value);
+    }
+
     private static String quotedList(List<String> values) {
         return DisplayNames.quotedList(values);
     }
@@ -2435,7 +2444,45 @@ public final class TrelloBoardSetup {
             GitHubIntegration githubIntegration,
             Path envPath,
             boolean detectInProgressState,
-            boolean preserveConfiguredMaxConcurrentAgents) {
+            boolean preserveConfiguredMaxConcurrentAgents,
+            RepositoryDefaults repositoryDefaults) {
+        public NewBoardRequest {
+            Objects.requireNonNull(repositoryDefaults, "repositoryDefaults");
+        }
+
+        public NewBoardRequest(
+                URI endpoint,
+                TrelloCredentials credentials,
+                String boardName,
+                String workspaceId,
+                Path workflowPath,
+                Path workspaceRoot,
+                Integer serverPort,
+                int maxConcurrentAgents,
+                boolean force,
+                boolean useBoardNameWorkflowFallback,
+                GitHubIntegration githubIntegration,
+                Path envPath,
+                boolean detectInProgressState,
+                boolean preserveConfiguredMaxConcurrentAgents) {
+            this(
+                    endpoint,
+                    credentials,
+                    boardName,
+                    workspaceId,
+                    workflowPath,
+                    workspaceRoot,
+                    serverPort,
+                    maxConcurrentAgents,
+                    force,
+                    useBoardNameWorkflowFallback,
+                    githubIntegration,
+                    envPath,
+                    detectInProgressState,
+                    preserveConfiguredMaxConcurrentAgents,
+                    RepositoryDefaults.empty());
+        }
+
         public NewBoardRequest(
                 URI endpoint,
                 TrelloCredentials credentials,
@@ -2634,10 +2681,51 @@ public final class TrelloBoardSetup {
             GitHubIntegration githubIntegration,
             boolean createMissingGithubLists,
             Path envPath,
-            boolean preserveConfiguredMaxConcurrentAgents) {
+            boolean preserveConfiguredMaxConcurrentAgents,
+            RepositoryDefaults repositoryDefaults) {
         public ImportBoardRequest {
             activeStates = List.copyOf(activeStates);
             terminalStates = List.copyOf(terminalStates);
+            Objects.requireNonNull(repositoryDefaults, "repositoryDefaults");
+        }
+
+        public ImportBoardRequest(
+                URI endpoint,
+                TrelloCredentials credentials,
+                String boardId,
+                List<String> activeStates,
+                List<String> terminalStates,
+                String inProgressState,
+                boolean detectInProgressState,
+                String blockedState,
+                Path workflowPath,
+                Path workspaceRoot,
+                Integer serverPort,
+                int maxConcurrentAgents,
+                boolean force,
+                GitHubIntegration githubIntegration,
+                boolean createMissingGithubLists,
+                Path envPath,
+                boolean preserveConfiguredMaxConcurrentAgents) {
+            this(
+                    endpoint,
+                    credentials,
+                    boardId,
+                    activeStates,
+                    terminalStates,
+                    inProgressState,
+                    detectInProgressState,
+                    blockedState,
+                    workflowPath,
+                    workspaceRoot,
+                    serverPort,
+                    maxConcurrentAgents,
+                    force,
+                    githubIntegration,
+                    createMissingGithubLists,
+                    envPath,
+                    preserveConfiguredMaxConcurrentAgents,
+                    RepositoryDefaults.empty());
         }
 
         public ImportBoardRequest(
@@ -2974,6 +3062,43 @@ public final class TrelloBoardSetup {
 
         public boolean enabled() {
             return this == ENABLED;
+        }
+    }
+
+    public static final class RepositoryDefaults {
+        private final String defaultUrl;
+        private final String defaultPath;
+
+        public RepositoryDefaults(String defaultUrl, String defaultPath) {
+            this(defaultUrl, defaultPath, false);
+        }
+
+        private RepositoryDefaults(String defaultUrl, String defaultPath, boolean preserveRaw) {
+            this.defaultUrl = preserveRaw
+                    ? defaultUrl
+                    : RepositoryUrlInput.validateExplicit(Optional.ofNullable(defaultUrl))
+                            .orElse(null);
+            this.defaultPath = defaultPath;
+        }
+
+        static RepositoryDefaults empty() {
+            return new RepositoryDefaults(null, null);
+        }
+
+        static RepositoryDefaults withDefaultUrl(Optional<String> defaultUrl) {
+            return new RepositoryDefaults(defaultUrl.orElse(null), null);
+        }
+
+        static RepositoryDefaults preserved(String defaultUrl, String defaultPath) {
+            return new RepositoryDefaults(defaultUrl, defaultPath, true);
+        }
+
+        public String defaultUrl() {
+            return defaultUrl;
+        }
+
+        public String defaultPath() {
+            return defaultPath;
         }
     }
 }
