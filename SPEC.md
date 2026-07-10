@@ -700,9 +700,9 @@ The Java setup flow additionally uses `model/list` as the capability source for 
 selection. For the selected catalog model, it reads the exact ordered non-blank
 `supportedReasoningEfforts[].reasoningEffort` values and their non-blank `description` values. When
 that list is non-empty, guided setup MUST display every value in catalog order, MUST display each
-advertised description, MUST identify the model's `defaultReasoningEffort`, and MUST identify the
-effective current setup or workflow value when it is advertised. Every newly typed or
-option-provided effort MUST match the advertised values; a rejection MUST identify the accepted
+advertised description, MUST identify the model's `defaultReasoningEffort` when it is non-blank, and
+MUST identify the effective current setup or workflow value when it is advertised. Every newly typed
+or option-provided effort MUST match the advertised values; a rejection MUST identify the accepted
 values. Setup MUST NOT replace or supplement the catalog with a hand-maintained effort list or label
 table. When no effort list is advertised for the selected model, guided setup MUST say so and setup
 MUST accept a non-blank pass-through value rather than guess what that Codex version supports.
@@ -712,17 +712,28 @@ preserved model uses its own catalog choices, but default-model selection MUST i
 already available without side effects, dry-run MAY defer catalog-dependent validation; the real
 setup run MUST complete that validation before changing Trello or writing workflow files.
 
-The Java setup flow writes explicit `model` and `reasoning_effort` values into generated workflows.
-It queries the installed Codex CLI with the app-server `model/list` method and uses the default
-model's recommended reasoning effort. Guided setup prompts for the model and reasoning effort and
-accepts the recommended values when the operator presses Enter. Non-interactive setup writes the
-recommended values unless explicit setup options provide different values. Existing workflow values
-remain the source of truth for a Trello board and take precedence over discovered defaults during
-workflow regeneration. If the model list is available but does not mark a default, setup uses the
-first non-hidden returned model with usable details. If the list is empty or lacks usable model
-details, setup writes `gpt-5.5` and `medium`. If the installed app-server cannot answer the model-list
-request, setup omits the first-class fields so the generated workflow remains compatible with Codex
-versions that do not expose them.
+Reasoning-effort selection MUST apply this precedence: an explicit setup effort, a preserved existing
+workflow effort, the exact selected model's non-blank `defaultReasoningEffort`, omission when
+supported discovery has no exact recommendation, then the compatibility fallback only when model
+discovery is unsupported. A successful catalog response MUST NOT reuse another model's recommendation
+when the selected model is absent or its `defaultReasoningEffort` is blank. In that case, guided setup
+MUST use an unbracketed `Reasoning effort:` prompt and accepting the prompt MUST omit
+`reasoning_effort` from the generated workflow.
+
+The Java setup flow writes the selected `model` into generated workflows and writes
+`reasoning_effort` only when the precedence above resolves a value. It queries the installed Codex
+CLI with the app-server `model/list` method and uses the default model's recommendation when one is
+present. Guided setup prompts for the model and reasoning effort and accepts a recommendation when
+the operator presses Enter. Non-interactive setup follows the same resolution unless explicit setup
+options provide different values. Existing workflow values remain the source of truth for a Trello
+board and take precedence over discovered defaults during workflow regeneration. If the model list
+is available but does not mark a default, setup uses the first non-hidden returned model with a usable
+model id; that model MAY omit `defaultReasoningEffort`. If the list is empty or lacks a usable model
+id, setup writes `gpt-5.5` and `medium` for the fallback model. If the installed app-server cannot
+answer the model-list request, setup omits the first-class fields when neither a model nor a reasoning
+effort was explicitly requested so the generated workflow remains compatible with Codex versions
+that do not expose them. An explicit model request on that unsupported-discovery path uses `medium`
+as a compatibility fallback unless an explicit or preserved effort has higher precedence.
 
 - `command` (string shell command)
   - Default: `codex app-server`

@@ -45,10 +45,10 @@ focused on launching app-server.
 
 During setup, the Java implementation starts the installed Codex app-server on stdio and calls
 `model/list`. Generated workflows use the model marked as the Codex default and that model's
-recommended reasoning effort. If the list does not mark a default, setup uses the first non-hidden
-returned model with usable details. Each model's ordered `supportedReasoningEfforts` is the
-authoritative source for setup
-choices and descriptions. Guided setup displays that model's exact list with Codex-provided
+recommended reasoning effort when it has one. If the list does not mark a default, setup uses the
+first non-hidden returned model with a usable model id. Each model's ordered
+`supportedReasoningEfforts` is the authoritative source for setup choices and descriptions. Guided
+setup displays that model's exact list with Codex-provided
 descriptions, so values such as `xhigh`, `max`, and `ultra` become available without a Symphony code
 change. It derives the default marker from the model's `defaultReasoningEffort` and the current
 marker from the effective setup or preserved workflow value. Setup rejects a newly selected value
@@ -71,6 +71,15 @@ codex:
   reasoning_effort: medium
 ```
 
+Reasoning effort resolves in this order: an explicit setup effort, a preserved existing workflow
+effort, and the exact selected model's recommendation. When model discovery succeeds but that exact
+model is absent or has no recommendation, setup omits `reasoning_effort`. Guided setup uses an
+unbracketed prompt in that case, so another model's recommendation is never presented as the current
+one. When discovery itself is unsupported, an explicit model request keeps the `medium`
+compatibility fallback unless a higher-precedence value exists. This fallback is limited to the
+unsupported protocol path; a supported catalog miss is an authoritative absence, not a reason to
+reuse the fallback model's effort.
+
 `setup-local --dry-run` does not start Codex solely for catalog discovery because app-server startup
 can initialize Codex-owned files. If no catalog is already available without side effects, dry-run
 defers model-specific effort validation and the real setup run performs it before any Trello or
@@ -81,15 +90,17 @@ The Java client sends `codex.model` as the app-server `model` field and sends
 does not invent a replacement at runtime; the installed Codex CLI/app-server default or command
 configuration decides the value.
 
-If the installed Codex app-server cannot answer the model-list request, setup omits these
-first-class workflow fields instead of assuming that an older app-server accepts them. Existing
-workflow values are preserved during forced regeneration unless the user explicitly changes them.
+If the installed Codex app-server cannot answer the model-list request, setup omits these first-class
+workflow fields when the operator requested neither a model nor a reasoning effort instead of
+assuming that an older app-server accepts them. Existing workflow values are preserved during forced
+regeneration unless the user explicitly changes them.
 
 ### Consequences
 
 * Good, because generated workflows show the selected model and reasoning effort directly.
 * Good, because setup follows the installed Codex CLI recommendation at the time the board is
   connected.
+* Good, because selecting a model never inherits a recommendation from a different catalog entry.
 * Good, because effort choices follow the installed model catalog, including new values without a
   Symphony release.
 * Good, because `codex.command` remains available for operators that need custom app-server launch
@@ -98,6 +109,8 @@ workflow values are preserved during forced regeneration unless the user explici
   defaults.
 * Neutral, because setup permits pass-through values when a model does not advertise its supported
   efforts.
+* Neutral, because a supported catalog without an exact recommendation produces a workflow that lets
+  Codex choose its own reasoning default.
 * Bad, because the Java client must be updated if the app-server field names change.
 * Bad, because generated workflows do not silently change later when a new Codex model launches.
 * Bad, because setup needs a fallback path when Codex app-server cannot be queried.
@@ -113,7 +126,10 @@ forced regeneration. Codex default resolver tests must assert setup honors the a
 fallback defaults from unsupported first-class fields. Setup tests must also assert that every
 advertised model-specific choice is displayed in catalog order, default and current values are
 identified, an advertised `xhigh` value is accepted, an unsupported new value reports the accepted
-choices, and a missing capability list keeps pass-through compatibility.
+choices, and a missing capability list keeps pass-through compatibility. Command-boundary tests must
+also prove that a later catalog page supplies the exact selected-model recommendation, a supported
+catalog miss or blank recommendation omits `reasoning_effort`, preserved and explicit values retain
+precedence, and unsupported discovery keeps its compatibility fallback.
 
 ## Pros and Cons of the Options
 

@@ -1048,22 +1048,28 @@ descriptions advertised for the selected model; for example, `xhigh`, `max`, and
 that catalog entry supports them. It marks the model's advertised default and the effective current
 setup or workflow value. These markers are derived from the model default and current selection;
 they are not a fixed property of an effort name. Press Enter to keep the current value, or type
-another advertised value. Non-interactive setup writes the recommended values unless you pass
-`--codex-model` or `--codex-reasoning-effort`. A newly selected effort outside a non-empty advertised
-list is rejected with the accepted values. Symphony does not maintain a separate fixed effort list
-or display-name table. If the selected model does not advertise an effort list, guided setup says so
-and setup permits a non-blank pass-through value for compatibility with custom or older catalogs.
+another advertised value. An explicit `--codex-reasoning-effort` takes precedence, followed by an
+existing workflow value and then the exact selected model's recommendation. If model discovery
+succeeds but the selected model is absent or has no `defaultReasoningEffort`, guided setup shows
+`Reasoning effort:` without a bracketed recommendation. Press Enter to leave `reasoning_effort`
+unset. Non-interactive setup also omits the field instead of reusing another model's recommendation.
+A newly selected effort outside a non-empty advertised list is rejected with the accepted values.
+Symphony does not maintain a separate fixed effort list or display-name table. If the selected model
+does not advertise an effort list, guided setup says so and setup permits a non-blank pass-through
+value for compatibility with custom or older catalogs.
 Discovery retains hidden catalog entries so an explicitly selected or preserved model still gets its
 own choices, but setup never chooses a hidden model as the guided default.
 To preserve its no-write guarantee, `setup-local --dry-run` does not launch Codex solely to discover
 the model catalog. It still validates input that is available without discovery; a real setup run
 performs model-specific effort validation before changing Trello or writing workflow files.
 If the model list is available but does not name a default, setup uses the first non-hidden returned
-model with usable details. If the model list is empty or lacks usable model details, setup writes the
-fallback values shown above.
+model with a usable model id. That model's reasoning recommendation remains optional. If the model
+list is empty or lacks a usable model id, setup writes the fallback values shown above. A separately
+selected model still needs its own catalog recommendation; otherwise setup omits `reasoning_effort`.
 If the installed Codex app-server cannot answer the model-list request at all, setup omits the
-first-class model fields so the generated workflow remains compatible with older app-server
-versions.
+first-class model fields when the operator requested neither a model nor a reasoning effort. For
+compatibility with that older discovery path, an explicit model without an explicit or preserved
+effort uses the fallback `medium` effort.
 
 `codex.model` maps to the app-server `model` request field. `codex.reasoning_effort` maps to the
 app-server turn `effort` field. Edit those workflow values to choose a different model or reasoning

@@ -15,6 +15,7 @@ import ch.fmartin.symphony.trello.setup.CodexModelSelectionDefaults.ReasoningEff
 import ch.fmartin.symphony.trello.testsupport.SetupRunResult;
 import ch.fmartin.symphony.trello.testsupport.TestEnv;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -2276,6 +2277,105 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void interactiveSetupUsesExactRecommendationFromLaterModelListPage() throws Exception {
+        // given
+        Path appServer = CodexModelAppServerFixture.create(
+                tempDir,
+                """
+                while IFS= read -r line; do
+                  case "$line" in
+                    *'"method":"initialize"'*)
+                      printf '%s\\n' '{"jsonrpc":"2.0","id":1,"result":{}}'
+                      ;;
+                    *'"method":"model/list"'*'"cursor":"page-2"'*)
+                      printf '%s\\n' '{"jsonrpc":"2.0","id":3,"result":{"data":[{"model":"gpt-5.6-sol","defaultReasoningEffort":"low","isDefault":false,"supportedReasoningEfforts":[{"reasoningEffort":"low","description":"Fast responses with lighter reasoning"},{"reasoningEffort":"ultra","description":"Maximum reasoning with automatic task delegation"}]}]}}'
+                      ;;
+                    *'"method":"model/list"'*)
+                      printf '%s\\n' '{"jsonrpc":"2.0","id":2,"result":{"data":[{"model":"gpt-5.5","defaultReasoningEffort":"medium","isDefault":true}],"nextCursor":"page-2"}}'
+                      ;;
+                  esac
+                done
+                """);
+        LocalSetup resolverBackedSetup = setupWithCodexSelectionDefaults(
+                () -> new CodexModelDefaultsResolver(new ObjectMapper(), List.of(appServer.toString()))
+                        .resolveSelectionDefaults());
+        Path workflow = tempDir.resolve("WORKFLOW.later-page-model-recommendation.md");
+        Path env = tempDir.resolve(".env.later-page-model-recommendation");
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                resolverBackedSetup,
+                "gpt-5.6-sol\n\n\n\nn\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Later Page Recommendation Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess().stdoutContains("Reasoning effort [low]: ");
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-5.6-sol\"", "reasoning_effort: \"low\"")
+                .doesNotContain("reasoning_effort: \"medium\"");
+    }
+
+    @Test
+    void interactiveSetupOmitsReasoningWhenSelectedCatalogModelHasNoRecommendation() throws Exception {
+        // given
+        LocalSetup catalogBackedSetup =
+                setupWithCodexSelectionDefaults(CodexModelSelectionDefaults.withReasoningEffortOptions(
+                        new TrelloBoardSetup.CodexModelDefaults("gpt-default", "medium"),
+                        Map.of("gpt-default", "medium"),
+                        Map.of(
+                                "gpt-no-default",
+                                List.of(
+                                        new ReasoningEffortOption("low", "Faster responses"),
+                                        new ReasoningEffortOption("high", "Deeper reasoning")))));
+        Path workflow = tempDir.resolve("WORKFLOW.selected-model-without-recommendation.md");
+        Path env = tempDir.resolve(".env.selected-model-without-recommendation");
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                catalogBackedSetup,
+                "gpt-no-default\n\n\n\nn\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "No Recommendation Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "Reasoning effort choices for gpt-no-default:",
+                        "  low - Faster responses",
+                        "  high - Deeper reasoning",
+                        "Reasoning effort: ")
+                .stdoutDoesNotContain("Reasoning effort [medium]: ", "Reasoning effort [keep workflow default]: ");
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-no-default\"")
+                .doesNotContain("reasoning_effort:");
+    }
+
+    @Test
     void interactiveSetupWritesSelectedCodexModelAndReasoning() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.selected-model.md");
@@ -2565,13 +2665,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
-    void nonInteractiveSetupWritesExplicitCodexModelAndDefaultReasoning() throws Exception {
+    void nonInteractiveSetupOmitsReasoningWhenSelectedModelIsMissingFromSupportedCatalog() throws Exception {
         // given
-        Path workflow = tempDir.resolve("WORKFLOW.explicit-model.md");
-        Path env = tempDir.resolve(".env.explicit-model");
+        LocalSetup catalogBackedSetup = setupWithCodexSelectionDefaults(new CodexModelSelectionDefaults(
+                new TrelloBoardSetup.CodexModelDefaults("gpt-default", "medium"), Map.of("gpt-default", "medium")));
+        Path workflow = tempDir.resolve("WORKFLOW.selected-model-missing-from-catalog.md");
+        Path env = tempDir.resolve(".env.selected-model-missing-from-catalog");
 
         // when
         SetupRunResult result = runSetup(
+                catalogBackedSetup,
                 "--non-interactive",
                 "--endpoint",
                 endpoint(),
@@ -2580,20 +2683,21 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--token",
                 "token",
                 "--board-name",
-                "Explicit Model Queue",
+                "Catalog Miss Queue",
                 "--workflow",
                 workflow.toString(),
                 "--env",
                 env.toString(),
                 "--codex-model",
-                "gpt-explicit",
+                "gpt-not-advertised",
                 "--no-github");
 
         // then
         result.assertSuccess();
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
-                .contains("model: \"gpt-explicit\"", "reasoning_effort: \"medium\"");
+                .contains("model: \"gpt-not-advertised\"")
+                .doesNotContain("reasoning_effort:");
     }
 
     @Test

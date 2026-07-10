@@ -4171,6 +4171,42 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
+    void newBoardOmitsReasoningForExplicitModelMissingFromSupportedCatalog() {
+        // given
+        Path workflow = tempDir.resolve("supported-catalog-miss-new-board.WORKFLOW.md");
+        CodexModelSelectionDefaults catalog = new CodexModelSelectionDefaults(
+                new TrelloBoardSetup.CodexModelDefaults("gpt-default", "medium"), Map.of("gpt-default", "medium"));
+
+        // when
+        CliRunResult result = runCliWithSelectionDefaults(
+                catalog,
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--name",
+                "Supported Catalog Miss Queue",
+                "--workspace-id",
+                "workspace-1",
+                "--workflow",
+                workflow.toString(),
+                "--manifest",
+                tempDir.resolve(ConnectedBoardManifest.FILE_NAME).toString(),
+                "--codex-model",
+                "gpt-not-advertised");
+
+        // then
+        result.assertSuccess();
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-not-advertised\"")
+                .doesNotContain("reasoning_effort:");
+    }
+
+    @Test
     void newBoardRejectsReasoningEffortOutsideAdvertisedChoicesBeforeTrelloRequest() {
         // given
         Path workflow = tempDir.resolve("unsupported-reasoning-new-board.WORKFLOW.md");
@@ -5346,6 +5382,44 @@ final class TrelloBoardSetupMainTest {
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("model: \"gpt-default\"", "reasoning_effort: \"high\"");
+    }
+
+    @Test
+    void importBoardOmitsReasoningForExplicitModelMissingFromSupportedCatalog() {
+        // given
+        Path workflow = tempDir.resolve("supported-catalog-miss-import-board.WORKFLOW.md");
+        CodexModelSelectionDefaults catalog = new CodexModelSelectionDefaults(
+                new TrelloBoardSetup.CodexModelDefaults("gpt-default", "medium"), Map.of("gpt-default", "medium"));
+
+        // when
+        CliRunResult result = runCliWithSelectionDefaults(
+                catalog,
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "https://trello.com/b/input/existing-board",
+                "--active",
+                "Queue for Codex",
+                "--terminal",
+                "Released",
+                "--workflow",
+                workflow.toString(),
+                "--manifest",
+                tempDir.resolve(ConnectedBoardManifest.FILE_NAME).toString(),
+                "--codex-model",
+                "gpt-not-advertised");
+
+        // then
+        result.assertSuccess();
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-not-advertised\"")
+                .doesNotContain("reasoning_effort:");
     }
 
     @Test

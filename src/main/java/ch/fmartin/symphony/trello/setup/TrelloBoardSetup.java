@@ -601,11 +601,13 @@ public final class TrelloBoardSetup {
             CodexModelSelectionDefaults selectionDefaults,
             boolean preserveConfiguredReasoningEffort) {
         String model = codexModelOverride.orElseGet(defaults::model);
+        Optional<String> selectedModelReasoningEffort = codexModelOverride
+                .map(modelOverride -> selectionDefaults.reasoningEffortForSelectedModel(
+                        modelOverride, defaults, preserveConfiguredReasoningEffort))
+                .orElseGet(() -> Optional.ofNullable(defaults.reasoningEffort()));
         String reasoningEffort = codexReasoningEffortOverride
-                .or(() -> codexModelOverride.flatMap(
-                        modelOverride -> selectionDefaults.reasoningEffortForExplicitModelOverride(
-                                modelOverride, defaults, preserveConfiguredReasoningEffort)))
-                .orElseGet(defaults::reasoningEffort);
+                .or(() -> selectedModelReasoningEffort)
+                .orElse(null);
         codexReasoningEffortOverride.ifPresent(
                 ignored -> selectionDefaults.validateReasoningEffortForModel(model, reasoningEffort));
         return CodexModelDefaults.partial(model, reasoningEffort);
