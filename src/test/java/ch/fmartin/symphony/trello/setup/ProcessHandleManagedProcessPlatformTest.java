@@ -3,7 +3,9 @@ package ch.fmartin.symphony.trello.setup;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -11,6 +13,24 @@ import org.junit.jupiter.api.io.TempDir;
 final class ProcessHandleManagedProcessPlatformTest {
     @TempDir
     Path tempDir;
+
+    @Test
+    void managedWorkerEnvironmentDropsInstallerCompletionMode() {
+        // given
+        Map<String, String> inheritedEnvironment = new LinkedHashMap<>(
+                Map.of(LocalSetup.INSTALLER_COMPLETION_ENV, "defer", "KEEP_INHERITED", "inherited"));
+        Map<String, String> configuredEnvironment =
+                Map.of(LocalSetup.INSTALLER_COMPLETION_ENV, "print", "KEEP_CONFIGURED", "configured");
+
+        // when
+        ProcessHandleManagedProcessPlatform.configureWorkerEnvironment(inheritedEnvironment, configuredEnvironment);
+
+        // then
+        assertThat(inheritedEnvironment)
+                .containsEntry("KEEP_INHERITED", "inherited")
+                .containsEntry("KEEP_CONFIGURED", "configured")
+                .doesNotContainKey(LocalSetup.INSTALLER_COMPLETION_ENV);
+    }
 
     @Test
     void managedCommandMatchesExactInstallAndWorkflowArguments() {

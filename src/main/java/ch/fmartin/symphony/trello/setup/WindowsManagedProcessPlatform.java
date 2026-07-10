@@ -17,6 +17,7 @@ final class WindowsManagedProcessPlatform extends ProcessHandleManagedProcessPla
             throws IOException {
         createParentDirectories(stdout);
         createParentDirectories(stderr);
+        Map<String, String> workerEnvironment = withoutInstallerCompletionEnvironment(environment);
         ProcessBuilder builder = new ProcessBuilder(
                         powershellExecutable(),
                         "-NoProfile",
@@ -24,8 +25,9 @@ final class WindowsManagedProcessPlatform extends ProcessHandleManagedProcessPla
                         "-ExecutionPolicy",
                         "Bypass",
                         "-EncodedCommand",
-                        encodedStartProcessScript(command, workingDirectory, environment, stdout, stderr))
+                        encodedStartProcessScript(command, workingDirectory, workerEnvironment, stdout, stderr))
                 .redirectErrorStream(true);
+        configureWorkerEnvironment(builder.environment(), Map.of());
         Process launcher = builder.start();
         String output = new String(launcher.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         try {
@@ -50,11 +52,15 @@ final class WindowsManagedProcessPlatform extends ProcessHandleManagedProcessPla
         checkArgument(!command.isEmpty(), "command must not be empty");
         StringBuilder script = new StringBuilder();
         script.append("$ErrorActionPreference = 'Stop'\n");
-        environment.forEach((key, value) -> script.append("[System.Environment]::SetEnvironmentVariable(")
-                .append(powerShellString(key))
-                .append(", ")
-                .append(powerShellString(value))
-                .append(", 'Process')\n"));
+        script.append("[System.Environment]::SetEnvironmentVariable(")
+                .append(powerShellString(LocalSetup.INSTALLER_COMPLETION_ENV))
+                .append(", $null, 'Process')\n");
+        withoutInstallerCompletionEnvironment(environment)
+                .forEach((key, value) -> script.append("[System.Environment]::SetEnvironmentVariable(")
+                        .append(powerShellString(key))
+                        .append(", ")
+                        .append(powerShellString(value))
+                        .append(", 'Process')\n"));
         script.append("$process = Start-Process -FilePath ")
                 .append(powerShellString(command.getFirst()))
                 .append(" -ArgumentList ")

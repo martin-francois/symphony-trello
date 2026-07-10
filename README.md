@@ -588,6 +588,13 @@ Windows it creates a per-user Scheduled Task, falling back to a Startup-folder c
 creation is denied. If the host does not support managed autostart, run
 `symphony-trello start --all` after a system restart or login.
 
+The installer prints its final good-to-go handoff only after worker startup, autostart setup,
+lingering notes, and any direct-start fallback have finished successfully. The handoff names each
+connected Trello board with its normalized workflow path and ends with useful checks:
+`symphony-trello status` plus one shell-quoted `symphony-trello logs --workflow PATH` command for
+each connected workflow. If setup or managed worker startup fails, the installer exits without
+printing that completion block.
+
 Setup saves Trello credentials that you type or pass directly. If credentials already come from real
 environment variables or an existing `.env` file, setup uses them without copying them into another
 file for setup. For managed autostart, the installer writes a private autostart environment snapshot

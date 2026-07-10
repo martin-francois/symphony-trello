@@ -332,6 +332,12 @@ final class InstallerScriptFixture {
                 #!/usr/bin/env bash
                 set -euo pipefail
                 echo "systemctl $*" >> "${SYMPHONY_FAKE_LOG:?}"
+                if [[ -n "${SYMPHONY_FAKE_SYSTEMD_UNAVAILABLE:-}" && "$*" == "--user show-environment" ]]; then
+                  exit 1
+                fi
+                if [[ -n "${SYMPHONY_FAKE_SYSTEMD_ENABLE_FAILURE:-}" && "$*" == "--user enable symphony-trello.service" ]]; then
+                  exit 1
+                fi
                 config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
                 service_file="$config_home/systemd/user/symphony-trello.service"
                 command_path=""
@@ -351,6 +357,9 @@ final class InstallerScriptFixture {
                 #!/usr/bin/env bash
                 set -euo pipefail
                 echo "loginctl $*" >> "${SYMPHONY_FAKE_LOG:?}"
+                if [[ -n "${SYMPHONY_FAKE_LINGER_FAILURE:-}" ]]; then
+                  exit 1
+                fi
                 exit 0
                 """);
         writeExecutable(
@@ -526,7 +535,7 @@ final class InstallerScriptFixture {
                   if [[ ${#defaults[@]} -gt 0 ]]; then
                     effective_cli_args=("${raw_cli_args[0]}" "${defaults[@]}" "${raw_cli_args[@]:1}")
                   fi
-                  echo "setup-cli cwd=$PWD ${java_args[*]} ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain ${effective_cli_args[*]} dotenv=${SYMPHONY_TRELLO_DOTENV:-} workspace_env=${SYMPHONY_TRELLO_WORKSPACE_ROOT:-} state_env=${SYMPHONY_TRELLO_STATE_HOME:-}" >> "${SYMPHONY_FAKE_LOG:?}"
+                  echo "setup-cli cwd=$PWD ${java_args[*]} ch.fmartin.symphony.trello.setup.TrelloBoardSetupMain ${effective_cli_args[*]} dotenv=${SYMPHONY_TRELLO_DOTENV:-} workspace_env=${SYMPHONY_TRELLO_WORKSPACE_ROOT:-} state_env=${SYMPHONY_TRELLO_STATE_HOME:-} completion_mode=${SYMPHONY_TRELLO_INSTALLER_COMPLETION:-}" >> "${SYMPHONY_FAKE_LOG:?}"
                   if [[ "$*" == *"definitely-not-a-command"* ]]; then
                     echo "setup_failed code=setup_invalid_arguments message=Unmatched argument: 'definitely-not-a-command'" >&2
                     exit 2
@@ -556,6 +565,10 @@ final class InstallerScriptFixture {
                         ;;
                     esac
                   fi
+	                if [[ -n "${SYMPHONY_FAKE_START_ALL_FAILURE:-}" && "${effective_cli_args[0]:-}" == "start" && " ${effective_cli_args[*]} " == *" --all "* ]]; then
+	                  echo "managed start --all failed" >&2
+	                  exit 29
+	                fi
 	                fi
 	                if [[ "${effective_cli_args[0]:-}" == "start" || "${effective_cli_args[0]:-}" == "status" || "${effective_cli_args[0]:-}" == "stop" || "${effective_cli_args[0]:-}" == "logs" || "${effective_cli_args[0]:-}" == "diagnostics" ]]; then
 	                  cli_args=("${effective_cli_args[@]}")
@@ -650,6 +663,20 @@ final class InstallerScriptFixture {
                       :
                     fi
                   done
+                  if [[ "${SYMPHONY_TRELLO_INSTALLER_COMPLETION:-}" == "print" ]]; then
+                    board="$(sed -n 's/.*"boardName"[[:blank:]]*:[[:blank:]]*"\\([^"]*\\)".*/\\1/p' "$config_dir/connected-boards.json" | head -1)"
+                    workflow="$(sed -n 's/.*"workflowPath"[[:blank:]]*:[[:blank:]]*"\\([^"]*\\)".*/\\1/p' "$config_dir/connected-boards.json" | head -1)"
+                    echo "You're good to go - your Trello board is now a queue for Codex work."
+                    echo "Connected board: \"$board\""
+                    echo "Workflow: $workflow"
+                    echo
+                    echo "Create a Trello card with a clear task and move it to this workflow's configured queue list."
+                    echo
+                    echo "Useful commands:"
+                    echo "  symphony-trello status"
+                    printf "  symphony-trello logs --workflow '%s'\\n" "$workflow"
+                    exit 0
+                  fi
                   mkdir -p "$config_dir"
                   read -r key
                   read -r token
@@ -660,7 +687,10 @@ final class InstallerScriptFixture {
                   printf -- '---\\ntracker:\\n  kind: trello\\n---\\n# %s\\n' "$board" > "$workflow"
                   printf '{"boards":[{"boardId":"board-1","boardName":"%s","workflowPath":"%s","envPath":"%s/.env"}]}\\n' "$board" "$workflow" "$config_dir" > "$config_dir/connected-boards.json"
 	                  echo "setup-local key=$key token=$token board=$board" >> "${SYMPHONY_FAKE_LOG:?}"
-		                  "${SYMPHONY_TRELLO_COMMAND:?}" start --env "$config_dir/.env" --workflow "$workflow"
+	                  env -u SYMPHONY_TRELLO_INSTALLER_COMPLETION "${SYMPHONY_TRELLO_COMMAND:?}" start --env "$config_dir/.env" --workflow "$workflow"
+                  if [[ "${SYMPHONY_TRELLO_INSTALLER_COMPLETION:-}" != "defer" ]]; then
+                    echo "You're good to go - your Trello board is now a queue for Codex work."
+                  fi
                   exit 0
                 fi
                 if [[ "$*" == *"-jar "* ]]; then

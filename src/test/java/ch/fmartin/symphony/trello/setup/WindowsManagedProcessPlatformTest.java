@@ -30,7 +30,11 @@ final class WindowsManagedProcessPlatformTest {
                         "target/quarkus app/quarkus-run.jar",
                         "C:/Users/Fran/workflows/WORKFLOW.md"),
                 workingDirectory,
-                Map.of("SYMPHONY_TRELLO_DOTENV", "C:/Users/Fran/config/.env"),
+                Map.of(
+                        "SYMPHONY_TRELLO_DOTENV",
+                        "C:/Users/Fran/config/.env",
+                        LocalSetup.INSTALLER_COMPLETION_ENV,
+                        "defer"),
                 stdout,
                 stderr));
 
@@ -38,6 +42,7 @@ final class WindowsManagedProcessPlatformTest {
         assertThat(script)
                 .contains(
                         "$ErrorActionPreference = 'Stop'",
+                        "[System.Environment]::SetEnvironmentVariable('SYMPHONY_TRELLO_INSTALLER_COMPLETION', $null, 'Process')",
                         "[System.Environment]::SetEnvironmentVariable('SYMPHONY_TRELLO_DOTENV', 'C:/Users/Fran/config/.env', 'Process')",
                         "$process = Start-Process -FilePath 'C:/Program Files/Java/bin/java.exe'",
                         "-WorkingDirectory '"
@@ -47,7 +52,8 @@ final class WindowsManagedProcessPlatformTest {
                         "-WindowStyle Hidden -PassThru",
                         "[Console]::Out.WriteLine($process.Id)")
                 .contains(
-                        "-ArgumentList '\"-Dsymphony.trello.managed.app_home=C:/Program Files/Symphony/app\" -jar \"target/quarkus app/quarkus-run.jar\" C:/Users/Fran/workflows/WORKFLOW.md'");
+                        "-ArgumentList '\"-Dsymphony.trello.managed.app_home=C:/Program Files/Symphony/app\" -jar \"target/quarkus app/quarkus-run.jar\" C:/Users/Fran/workflows/WORKFLOW.md'")
+                .doesNotContain("'SYMPHONY_TRELLO_INSTALLER_COMPLETION', 'defer'");
     }
 
     @Test

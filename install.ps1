@@ -47,6 +47,9 @@ $WindowsUserProfile = if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOM
 $WindowsProfileRoot = if ($env:APPDATA) { $env:APPDATA } else { Join-Path $WindowsUserProfile "AppData\Roaming" }
 $StartupFolder = Join-Path $WindowsProfileRoot "Microsoft\Windows\Start Menu\Programs\Startup"
 $StartupCommandPath = Join-Path $StartupFolder "Symphony for Trello.cmd"
+$InstallerCompletionEnvironmentName = "SYMPHONY_TRELLO_INSTALLER_COMPLETION"
+$InstallerCompletionWasSet = Test-Path -LiteralPath "Env:$InstallerCompletionEnvironmentName"
+$InstallerCompletionPreviousValue = [Environment]::GetEnvironmentVariable($InstallerCompletionEnvironmentName, "Process")
 $ReleaseBaseUrl = if ($env:SYMPHONY_TRELLO_RELEASE_BASE_URL) {
   $env:SYMPHONY_TRELLO_RELEASE_BASE_URL
 } else {
@@ -610,6 +613,34 @@ function Invoke-Step([string]$Label, [scriptblock]$Action) {
   }
 }
 
+function Set-InstallerCompletionMode([string]$Mode) {
+  [Environment]::SetEnvironmentVariable($InstallerCompletionEnvironmentName, $Mode, "Process")
+}
+
+function Clear-InstallerCompletionMode {
+  [Environment]::SetEnvironmentVariable($InstallerCompletionEnvironmentName, $null, "Process")
+}
+
+function Restore-InstallerCompletionEnvironment {
+  if ($InstallerCompletionWasSet) {
+    [Environment]::SetEnvironmentVariable(
+      $InstallerCompletionEnvironmentName,
+      $InstallerCompletionPreviousValue,
+      "Process")
+  } else {
+    Clear-InstallerCompletionMode
+  }
+}
+
+function Start-ManagedWorkersWithoutInstallerCompletion {
+  try {
+    Clear-InstallerCompletionMode
+    Start-ManagedWorkers
+  } finally {
+    Restore-InstallerCompletionEnvironment
+  }
+}
+
 function Get-InstalledAppVersionFallback {
   if ($InstallSource -eq "release-archive") {
     return $Version
@@ -704,6 +735,9 @@ function Write-InstallContext {
 
 function Test-AutostartEnvironmentName([string]$Name) {
   if (-not [regex]::IsMatch($Name, "^[A-Za-z_][A-Za-z0-9_]*$")) {
+    return $false
+  }
+  if ($Name -eq $InstallerCompletionEnvironmentName) {
     return $false
   }
   return $Name.StartsWith("TRELLO_") -or
@@ -1324,7 +1358,10 @@ if ($DryRun) {
   Write-Host "  WOULD install CLI executable: $BinDir\symphony-trello.ps1"
   Offer-PathSetup
   if (-not $NoOnboard) {
-    Write-Host "  WOULD run guided setup after install."
+    Write-Host
+    Write-Host "Starting setup..."
+    Write-Host "  WOULD run: $BinDir\symphony-trello.ps1 setup-local"
+    Start-ManagedWorkersWithoutInstallerCompletion
   }
   exit 0
 }
@@ -1486,15 +1523,21 @@ if (-not $NoOnboard) {
     Write-Host "Restarting managed workers after update..."
   }
   Write-Host "Starting setup..."
-  if ($DryRun) {
-    Write-Host "  WOULD run: $BinDir\symphony-trello.ps1 setup-local"
-    Start-ManagedWorkers
-  } else {
+  try {
+    Set-InstallerCompletionMode "defer"
+    try {
+      Invoke-Step "$BinDir\symphony-trello.ps1 setup-local" { & "$BinDir\symphony-trello.ps1" setup-local }
+    } finally {
+      Clear-InstallerCompletionMode
+    }
+    Start-ManagedWorkersWithoutInstallerCompletion
+    Set-InstallerCompletionMode "print"
     Invoke-Step "$BinDir\symphony-trello.ps1 setup-local" { & "$BinDir\symphony-trello.ps1" setup-local }
-    Start-ManagedWorkers
+  } finally {
+    Restore-InstallerCompletionEnvironment
   }
 } elseif ($RestartManagedWorkers) {
   Write-Host
   Write-Host "Restarting managed workers after update..."
-  Start-ManagedWorkers
+  Start-ManagedWorkersWithoutInstallerCompletion
 }

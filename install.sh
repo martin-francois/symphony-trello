@@ -69,6 +69,7 @@ AUTOSTART_ENV_PATH="$HOME/.config/symphony-trello/autostart.env"
 LAUNCH_AGENT_DIR="$HOME/Library/LaunchAgents"
 LAUNCH_AGENT_LABEL="ch.fmartin.symphony-trello"
 LAUNCH_AGENT_PATH="$LAUNCH_AGENT_DIR/$LAUNCH_AGENT_LABEL.plist"
+INSTALLER_COMPLETION_ENV="SYMPHONY_TRELLO_INSTALLER_COMPLETION"
 
 usage() {
   cat <<USAGE
@@ -206,6 +207,16 @@ run_interactive() {
   if [[ "$DRY_RUN" == false ]]; then
     "$@" </dev/tty
   fi
+}
+
+run_setup_local_with_deferred_completion() {
+  local -x "$INSTALLER_COMPLETION_ENV=defer"
+  run_interactive "$BIN_DIR/symphony-trello" setup-local
+}
+
+print_installer_completion() {
+  local -x "$INSTALLER_COMPLETION_ENV=print"
+  run "$BIN_DIR/symphony-trello" setup-local
 }
 
 write_install_context() {
@@ -1419,6 +1430,7 @@ environment_file_quote() {
 autostart_environment_name() {
   local name="$1"
   [[ "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || return 1
+  [[ "$name" != "$INSTALLER_COMPLETION_ENV" ]] || return 1
   case "$name" in
   TRELLO_* | SYMPHONY_* | CODEX_* | GITHUB_* | GH_* | OPENAI_* | ANTHROPIC_* | QUARKUS_*) return 0 ;;
   *) return 1 ;;
@@ -1809,6 +1821,11 @@ start_managed_workers() {
   echo "  NOTE  Autostart service was not configured. Use '$BIN_DIR/symphony-trello start --all' after reboot or login."
   run "$BIN_DIR/symphony-trello" start --all
 }
+
+start_managed_workers_without_installer_completion() (
+  unset "$INSTALLER_COMPLETION_ENV"
+  start_managed_workers
+)
 
 platform_name() {
   local os arch distro
@@ -2743,10 +2760,16 @@ if [[ "$NO_ONBOARD" == false ]]; then
     echo "Restarting managed workers after update..."
   fi
   echo "Starting setup..."
-  run_interactive "$BIN_DIR/symphony-trello" setup-local
-  start_managed_workers
+  if [[ "$DRY_RUN" == true ]]; then
+    run_interactive "$BIN_DIR/symphony-trello" setup-local
+    start_managed_workers_without_installer_completion
+  else
+    run_setup_local_with_deferred_completion
+    start_managed_workers_without_installer_completion
+    print_installer_completion
+  fi
 elif [[ "$RESTART_MANAGED_WORKERS" == true ]]; then
   echo
   echo "Restarting managed workers after update..."
-  start_managed_workers
+  start_managed_workers_without_installer_completion
 fi
