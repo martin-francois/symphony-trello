@@ -155,7 +155,7 @@ final class CodexModelDefaultsResolverTest {
                       printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{}}'
                       ;;
                     *'"method":"model/list"'*)
-                      printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"data":[{"model":"codex-auto-review","hidden":true,"defaultReasoningEffort":"medium","isDefault":true,"supportedReasoningEfforts":[{"reasoningEffort":"low","description":"Fast review"},{"reasoningEffort":"medium","description":"Balanced review"},{"reasoningEffort":"high","description":"Deep review"},{"reasoningEffort":"xhigh","description":"Extra-deep review"}]},{"model":"gpt-visible","hidden":false,"defaultReasoningEffort":"high","isDefault":false,"supportedReasoningEfforts":[{"reasoningEffort":"high","description":"Visible default"}]}]}}'
+                      printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"data":[{"model":"gpt-5.6-terra","hidden":true,"defaultReasoningEffort":"medium","isDefault":true,"supportedReasoningEfforts":[{"reasoningEffort":"low","description":"Fast Terra"},{"reasoningEffort":"medium","description":"Balanced Terra"},{"reasoningEffort":"high","description":"Deep Terra"}]},{"model":"gpt-visible","hidden":false,"defaultReasoningEffort":"high","isDefault":false,"supportedReasoningEfforts":[{"reasoningEffort":"high","description":"Visible default"}]}]}}'
                       ;;
                   esac
                 done
@@ -167,14 +167,13 @@ final class CodexModelDefaultsResolverTest {
 
         // then
         assertThat(defaults.defaults()).isEqualTo(new CodexModelDefaults("gpt-visible", "high"));
-        assertThat(defaults.reasoningEffortChoicesForModel("codex-auto-review"))
-                .contains(List.of("low", "medium", "high", "xhigh"));
-        assertThat(defaults.reasoningEffortDescriptionForModel("codex-auto-review", "xhigh"))
-                .contains("Extra-deep review");
+        assertThat(defaults.reasoningEffortChoicesForModel("gpt-5.6-terra")).contains(List.of("low", "medium", "high"));
+        assertThat(defaults.reasoningEffortDescriptionForModel("gpt-5.6-terra", "high"))
+                .contains("Deep Terra");
     }
 
     @Test
-    void usesFirstModelWhenCodexAppServerDoesNotFlagDefaultModel() throws Exception {
+    void usesFirstVisibleUsableModelWithoutSpecialSolFallback() throws Exception {
         // given
         Path appServer = appServerScript(
                 """
@@ -184,7 +183,7 @@ final class CodexModelDefaultsResolverTest {
                       printf '%s\\n' '{"jsonrpc":"2.0","id":1,"result":{}}'
                       ;;
                     *'"method":"model/list"'*)
-                      printf '%s\\n' '{"jsonrpc":"2.0","id":2,"result":{"data":[{"model":"gpt-5.5","defaultReasoningEffort":"medium"},{"model":"gpt-6","defaultReasoningEffort":"high"}]}}'
+                      printf '%s\\n' '{"jsonrpc":"2.0","id":2,"result":{"data":[{"model":"gpt-visible-first","defaultReasoningEffort":"high"},{"model":"gpt-5.6-sol","defaultReasoningEffort":"low"}]}}'
                       ;;
                   esac
                 done
@@ -194,11 +193,35 @@ final class CodexModelDefaultsResolverTest {
         CodexModelDefaults defaults = new CodexModelDefaultsResolver(json, List.of(appServer.toString())).resolve();
 
         // then
-        assertThat(defaults).isEqualTo(new CodexModelDefaults("gpt-5.5", "medium"));
+        assertThat(defaults).isEqualTo(new CodexModelDefaults("gpt-visible-first", "high"));
     }
 
     @Test
-    void keepsExactModelRecommendationFromLaterModelListPage() throws Exception {
+    void prefersTerraRecommendationFromLaterModelListPageOverCatalogDefault() throws Exception {
+        // given
+        Path appServer = CodexModelAppServerFixture.createPaginated(
+                tempDir,
+                """
+                [{"model":"gpt-5.5","defaultReasoningEffort":"medium","isDefault":true}]
+                """,
+                """
+                [{"model":"gpt-5.6-terra","defaultReasoningEffort":"high","isDefault":false,"supportedReasoningEfforts":[{"reasoningEffort":"high","description":"Terra recommendation from Codex"},{"reasoningEffort":"max","description":"Deeper Terra reasoning"}]}]
+                """);
+
+        // when
+        CodexModelSelectionDefaults defaults =
+                new CodexModelDefaultsResolver(json, List.of(appServer.toString())).resolveSelectionDefaults();
+
+        // then
+        assertThat(defaults.defaults()).isEqualTo(new CodexModelDefaults("gpt-5.6-terra", "high"));
+        assertThat(defaults.reasoningEffortForModel("gpt-5.6-terra")).contains("high");
+        assertThat(defaults.reasoningEffortChoicesForModel("gpt-5.6-terra")).contains(List.of("high", "max"));
+        assertThat(defaults.reasoningEffortDescriptionForModel("gpt-5.6-terra", "high"))
+                .contains("Terra recommendation from Codex");
+    }
+
+    @Test
+    void prefersVisibleTerraWithoutInventingReasoningRecommendation() throws Exception {
         // given
         Path appServer = appServerScript(
                 """
@@ -207,11 +230,8 @@ final class CodexModelDefaultsResolverTest {
                     *'"method":"initialize"'*)
                       printf '%s\\n' '{"jsonrpc":"2.0","id":1,"result":{}}'
                       ;;
-                    *'"method":"model/list"'*'"cursor":"page-2"'*)
-                      printf '%s\\n' '{"jsonrpc":"2.0","id":3,"result":{"data":[{"model":"gpt-5.6-sol","defaultReasoningEffort":"low","isDefault":true,"supportedReasoningEfforts":[{"reasoningEffort":"low","description":"Fast responses with lighter reasoning"},{"reasoningEffort":"ultra","description":"Maximum reasoning with automatic task delegation"}]}]}}'
-                      ;;
                     *'"method":"model/list"'*)
-                      printf '%s\\n' '{"jsonrpc":"2.0","id":2,"result":{"data":[{"model":"gpt-5.5","defaultReasoningEffort":"medium","isDefault":false}],"nextCursor":"page-2"}}'
+                      printf '%s\\n' '{"jsonrpc":"2.0","id":2,"result":{"data":[{"model":"gpt-5.5","defaultReasoningEffort":"medium","isDefault":true},{"model":"gpt-5.6-terra","isDefault":false,"supportedReasoningEfforts":[{"reasoningEffort":"low"},{"reasoningEffort":"high"}]}]}}'
                       ;;
                   esac
                 done
@@ -222,11 +242,9 @@ final class CodexModelDefaultsResolverTest {
                 new CodexModelDefaultsResolver(json, List.of(appServer.toString())).resolveSelectionDefaults();
 
         // then
-        assertThat(defaults.defaults()).isEqualTo(new CodexModelDefaults("gpt-5.6-sol", "low"));
-        assertThat(defaults.reasoningEffortForModel("gpt-5.6-sol")).contains("low");
-        assertThat(defaults.reasoningEffortChoicesForModel("gpt-5.6-sol")).contains(List.of("low", "ultra"));
-        assertThat(defaults.reasoningEffortDescriptionForModel("gpt-5.6-sol", "ultra"))
-                .contains("Maximum reasoning with automatic task delegation");
+        assertThat(defaults.defaults()).isEqualTo(CodexModelDefaults.partial("gpt-5.6-terra", null));
+        assertThat(defaults.reasoningEffortForModel("gpt-5.6-terra")).isEmpty();
+        assertThat(defaults.reasoningEffortChoicesForModel("gpt-5.6-terra")).contains(List.of("low", "high"));
     }
 
     @Test
