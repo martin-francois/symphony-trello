@@ -29,6 +29,8 @@ single poll/reconcile cycle is enough to observe the latest Trello state.
 - `running`: active worker rows.
 - `retrying`: retry timer rows.
 - `codex_totals`: token and runtime totals observed from Codex app-server events.
+- `dispatch_pause`: `null` normally; while Codex is usage-limited, contains `code`, `detected`, and
+  `until` for the workflow-wide pickup pause.
 - `rate_limits`: latest Codex rate-limit payload when Codex reports one.
 
 Each `running` row includes:
@@ -175,9 +177,56 @@ thread. If Codex does not emit token usage events, the values remain zero.
 
 ## Rate Limits
 
-`rate_limits` mirrors the latest `account/rateLimits/updated` event from Codex when available.
-Symphony does not invent rate-limit state. If the field is absent or `null`, Codex has not reported
-rate-limit data to this process yet.
+`rate_limits` mirrors the merged `account/rateLimits/updated` snapshot from Codex when available.
+Sparse updates from concurrent workers using the same configured `codex.command` retain the latest
+reported fields for other windows and all available top-level metadata; absent or null fields do
+not erase earlier values. The merge commits only after the orchestrator accepts the worker identity,
+so an ignored or stale worker cannot change either the visible snapshot or a later retry deadline. A
+different configured command has an independent snapshot so a workflow reload cannot mix
+potentially different Codex accounts. Symphony does not invent rate-limit state.
+An update whose entire `rateLimits` value is null, omitted, or malformed keeps the last valid
+snapshot. If no valid snapshot has been reported yet, the notification remains observable but
+`rate_limits` stays `null`.
+
+A valid `codex.command` reload switches the visible snapshot to that command's independent scope
+(`null` until that scope has reported a valid snapshot) and removes the old command's pause as a
+gate for new work. Late rate-limit events from still-current prior-command workers remain in their
+launch command's snapshot; ignored worker events, typed usage results, and stale callbacks cannot
+mutate the new command's pause. Normal card lifecycle may create
+an ordinary retry under the new command when the physical tracker target is unchanged. A usage
+retry can restart immediately in that case, while unrelated retries recover their original
+unpaused deadline. Invalid reloads keep the current command and pause intact.
+
+A physical tracker-target change means the tracker kind, transport-equivalent endpoint, or resolved
+board changed. Endpoint scheme/host case, a trailing DNS dot, a default port, percent-escape hex
+case, and slashes removed only from the end of the whole raw endpoint before URI parsing by the
+Trello client are equivalent; slashes before query or fragment components are not removed. Raw dot
+segments, other path/port/query/fragment/user-info changes, and absent versus explicitly
+empty URI components are distinct. Credential rotation and selectors that resolve to the same board
+remain one target. Old-target retries retire instead of being applied to same-ID cards on the new
+target, while in-flight reconciliation, card release, workspace cleanup, and managed-section cleanup
+retain their launch target/config. If the command is unchanged, its account pause remains, but old
+card/probe/workpad ownership detaches and the deadline probes a fresh new-target candidate.
+
+When an agent attempt reports the exact structured Codex error `usageLimitExceeded`,
+`dispatch_pause.code` is `CODEX_USAGE_LIMIT`. `detected` is the first detection time and `until` is
+the latest usable exhausted-window reset, or the configured maximum retry backoff when Codex did not
+provide one. A non-positive configured maximum uses a one-second safety floor to prevent a hot loop.
+New candidate and retry dispatches wait before Trello I/O, but workers that were already running
+continue. At the deadline Symphony rechecks with exactly one affected or eligible card while the
+pause remains visible. A repeated limit extends the pause without shortening it. If the selected card
+is no longer active, Symphony transfers the probe; if no eligible card exists, it waits another
+fallback interval.
+
+The affected Trello workpad shows the clean Codex message and deadline when comment writes are
+allowed. Typed usage-limit event summaries also keep only that clean message, so raw Codex account
+and provider details are not copied into `running[].last_message` or card `recent_events`. Those raw
+details and the configured command string are likewise absent from `dispatch_pause` and the managed
+workpad section. Failed managed-section removals use bounded,
+delayed cleanup attempts on later
+polls and graceful stop. The pause is process-local; after a service restart, one attempt may
+encounter and re-establish the same limit. When that card next becomes eligible, its normal prompt
+refresh lets Symphony remove a stale managed section before dispatch.
 
 Trello API rate limits are logged separately. Search logs for `Trello rate limit reached`. The
 warning includes the workflow file and current `polling.interval_ms`. Repeated warnings usually mean
@@ -187,6 +236,8 @@ token.
 ## Common States
 
 - A card in `Ready for Codex` is queued.
+- An active `CODEX_USAGE_LIMIT` dispatch pause means queued cards stay put until the displayed
+  deadline, when Symphony selects one affected or eligible card as the availability check.
 - A card in `In Progress` was picked up by Codex and remains active.
 - A card in `Blocked` needs human or environment action before Symphony should try again.
 - A card in `Human Review` is ready for a person and is not dispatched.

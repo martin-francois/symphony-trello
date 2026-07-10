@@ -974,6 +974,48 @@ Optional environment variables:
 
 - `SYMPHONY_FAKE_CODEX_COMMENT`: Trello comment text to add.
 - `SYMPHONY_FAKE_CODEX_SLEEP_MS`: delay before handoff, useful for checking concurrency.
+- `SYMPHONY_FAKE_CODEX_USAGE_LIMIT_MATCH`: text in the turn request that makes the fake emit the
+  structured Codex `usageLimitExceeded` error instead of handing off.
+- `SYMPHONY_FAKE_CODEX_USAGE_LIMIT_RESETS_AT`: Unix epoch seconds included as the exhausted window's
+  reset time. Set this explicitly to a near-future value for live checks.
+- `SYMPHONY_FAKE_CODEX_NO_HANDOFF`: complete unmatched cards without Trello handoff tool calls.
+
+### Manual Regression Scenario: Codex Usage Limit Pauses Workflow Dispatch
+
+Use a disposable board with two cards in `Ready for Codex`, distinct prompt identifiers, and
+`max_concurrent_agents: 1`. Point `codex.command` at the fake app-server and set
+`SYMPHONY_FAKE_CODEX_USAGE_LIMIT_MATCH` to the higher-priority card's identifier. Set
+`SYMPHONY_FAKE_CODEX_USAGE_LIMIT_RESETS_AT` to a Unix timestamp one or two minutes in the future.
+Optionally set `SYMPHONY_FAKE_CODEX_SLEEP_MS` to keep the first turn running briefly before the
+failure, which covers a limit observed after work has started.
+
+Verify all of the following before the reset:
+
+1. The matched card is released from the configured `In Progress` pickup list and has one managed
+   `Codex usage availability` section in its `## Codex Workpad` comment.
+2. The second card remains in `Ready for Codex`; it is not moved through `In Progress`.
+3. `/api/v1/state` reports `dispatch_pause.code == "CODEX_USAGE_LIMIT"`, the detection time, and the
+   configured reset deadline.
+4. `POST /api/v1/refresh` does not bypass the pause or change the second card.
+
+At the deadline, verify that Symphony starts exactly one availability probe while every other
+eligible card stays in place. The matched card returns the same typed limit again; verify that the
+deadline extends without a second concurrent probe. To exercise recovery with this deterministic
+fake, move the matched card out of the active scope before a later deadline. Symphony transfers probe
+ownership to the unmatched second card, whose non-limit completion clears the pause. Verify that the
+managed section is removed (or remains owned by a bounded cleanup retry after an injected
+comment-write failure) and deferred pickup can resume.
+
+The command-reload late-result race, invalid-reload retention, same-ID cards across tracker
+endpoints, cleanup-owner replacement, and endpoint canonicalization are deterministic unit/integration
+cases in `SymphonyOrchestratorTest` and `TrackerTargetTest`. The single-process fake app-server in
+this section does not model a concurrent late old-command worker or a second fake Trello endpoint;
+do not claim those cases from this manual scenario.
+
+Restore the normal `codex.command` after the check. Do not deliberately exhaust a real Codex account
+for testing. If a usage limit occurs naturally in the middle of a real run, capture only sanitized
+evidence and verify the same workpad, status, and no-churn behavior without recording raw account or
+provider payloads.
 
 ## Cleanup
 

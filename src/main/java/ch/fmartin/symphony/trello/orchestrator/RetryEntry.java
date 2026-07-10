@@ -9,5 +9,10 @@ record RetryEntry(
         String cardUrl,
         int attempt,
         Instant dueAt,
+        Instant naturalDueAt,
+        String codexCommand,
+        TrackerTarget trackerTarget,
+        long generation,
         ScheduledFuture<?> timer,
-        String error) {}
+        String error,
+        boolean codexUsageLimit) {}

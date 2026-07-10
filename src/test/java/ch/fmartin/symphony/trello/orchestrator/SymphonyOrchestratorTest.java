@@ -1,13 +1,16 @@
 package ch.fmartin.symphony.trello.orchestrator;
 
-import static com.google.common.collect.ImmutableMap.toImmutableMap;
+import static ch.fmartin.symphony.trello.orchestrator.SymphonyOrchestratorTestSupport.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import ch.fmartin.symphony.trello.Sha3;
@@ -15,32 +18,25 @@ import ch.fmartin.symphony.trello.TestCards;
 import ch.fmartin.symphony.trello.agent.AgentEvent;
 import ch.fmartin.symphony.trello.agent.AgentRunResult;
 import ch.fmartin.symphony.trello.agent.AgentRunner;
-import ch.fmartin.symphony.trello.config.ConfigResolver;
-import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.domain.BlockerRef;
 import ch.fmartin.symphony.trello.domain.Card;
-import ch.fmartin.symphony.trello.prompt.PromptRenderer;
-import ch.fmartin.symphony.trello.tracker.CardLookupResult;
-import ch.fmartin.symphony.trello.tracker.TrackerClient;
 import ch.fmartin.symphony.trello.workflow.WorkflowException;
-import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
-import ch.fmartin.symphony.trello.workspace.HookRunner;
-import ch.fmartin.symphony.trello.workspace.WorkspaceManager;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -54,9 +50,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
 final class SymphonyOrchestratorTest {
-    private static final Instant COMMENT_TIME = Instant.parse("2026-01-01T00:00:00Z");
-    private static final Duration POLL_INTERVAL = Duration.ofMillis(25);
-
     @TempDir
     Path tempDir;
 
@@ -710,7 +703,7 @@ final class SymphonyOrchestratorTest {
         orchestrator.tickCompletionHookForTests = tickCompletions::incrementAndGet;
 
         orchestrator.start();
-        assertThat(blockingRun.started.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(blockingRun.started().await(5, TimeUnit.SECONDS)).isTrue();
         int completedTicksBeforeFailure = tickCompletions.get();
         tracker.setCardState(TestCards.card("card-1", "TRELLO-abc", "done"));
 
@@ -723,7 +716,7 @@ final class SymphonyOrchestratorTest {
         orchestrator.stop();
 
         // then
-        assertThat(blockingRun.cancelled).hasValue(1);
+        assertThat(blockingRun.cancelled()).hasValue(1);
         assertThat(workspaces.removalAttempts).hasValue(1);
     }
 
@@ -970,39 +963,32 @@ final class SymphonyOrchestratorTest {
     }
 
     @Test
-    void rateLimitEventsAreExposedInSnapshot() throws Exception {
+    void gracefulStopAccountsActiveRuntimeExactlyOnce() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
         writeWorkflow(workflow, "60000");
+        Instant now = Instant.parse("2026-07-10T12:00:00Z");
+        MutableClock clock = new MutableClock(now);
         FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
         AgentRunner runner = mock();
-        doAnswer(invocation -> {
-                    AgentRunner.AgentRunRequest request = invocation.getArgument(0);
-                    request.listener()
-                            .onEvent(new AgentEvent(
-                                    "account/rateLimits/updated",
-                                    COMMENT_TIME,
-                                    request.workerIdentity(),
-                                    123L,
-                                    "thread-1",
-                                    "turn-1",
-                                    "rate limits",
-                                    Map.of(),
-                                    new ObjectMapper().createObjectNode().put("primary", "ok")));
-                    return AgentRunResult.ok();
-                })
-                .when(runner)
-                .run(any());
-        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
+        BlockingRun blockingRun = blockRunnerUntilCancelled(runner);
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner, clock, successfulWorkpadHandler());
 
         // when
         orchestrator.start();
-        waitUntil(() -> orchestrator.snapshot().rateLimits() != null);
-        RuntimeSnapshot snapshot = orchestrator.snapshot();
+        assertThat(blockingRun.started().await(5, TimeUnit.SECONDS)).isTrue();
+        clock.advance(Duration.ofSeconds(12));
         orchestrator.stop();
+        RuntimeSnapshot stopped = orchestrator.snapshot();
+        clock.advance(Duration.ofSeconds(8));
+        orchestrator.stop();
+        RuntimeSnapshot stoppedAgain = orchestrator.snapshot();
 
         // then
-        assertThat(snapshot.rateLimits().toString()).contains("primary");
+        assertThat(blockingRun.cancelled()).hasValue(1);
+        assertThat(stopped.counts().running()).isZero();
+        assertThat(stopped.codexTotals().secondsRunning()).isEqualTo(12.0);
+        assertThat(stoppedAgain.codexTotals().secondsRunning()).isEqualTo(12.0);
     }
 
     @Test
@@ -1589,385 +1575,294 @@ final class SymphonyOrchestratorTest {
                 .isEqualTo("TRELLO-first"));
     }
 
-    private static BlockingRun blockRunnerUntilCancelled(AgentRunner runner) {
-        CountDownLatch started = new CountDownLatch(1);
-        AtomicInteger cancelled = new AtomicInteger();
-        doAnswer(invocation -> {
-                    started.countDown();
-                    try {
-                        blockUntilInterruptedOrTimedOut(Duration.ofSeconds(30));
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    }
-                    return AgentRunResult.fail("interrupted");
-                })
-                .when(runner)
-                .run(any());
-        doAnswer(invocation -> {
-                    cancelled.incrementAndGet();
-                    return null;
-                })
-                .when(runner)
-                .cancel(any());
-        return new BlockingRun(started, cancelled);
-    }
-
-    private record BlockingRun(CountDownLatch started, AtomicInteger cancelled) {}
-
-    private String dispatchFirstCard(Path workflow, FakeTracker tracker) throws Exception {
-        AtomicReference<String> dispatched = new AtomicReference<>();
+    @Test
+    void sameRawCardIdAcrossTargetsRunsIndependentlyWithoutCrossRemoval() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        String endpoint = "https://api.example.test/1";
+        writeWorkflowWithTarget(workflow, endpoint, "board-a", "token-a", "same-command", "work-a", 60_000, 2);
+        Card cardA = cardOnBoard("shared-card", "TRELLO-shared-a", "Todo", "board-a");
+        Card cardB = cardOnBoard("shared-card", "TRELLO-shared-b", "Todo", "board-b");
+        ScopedTracker tracker = new ScopedTracker();
+        tracker.setCandidates(endpoint, "board-a", List.of(cardA));
+        tracker.setCandidates(endpoint, "board-b", List.of(cardB));
+        CountDownLatch workerAStarted = new CountDownLatch(1);
+        CountDownLatch workerBStarted = new CountDownLatch(1);
+        CountDownLatch releaseWorkerA = new CountDownLatch(1);
+        CountDownLatch releaseWorkerB = new CountDownLatch(1);
+        List<AgentRunner.AgentRunRequest> requests = new CopyOnWriteArrayList<>();
         AgentRunner runner = mock();
-        doAnswer(invocation -> {
-                    AgentRunner.AgentRunRequest request = invocation.getArgument(0);
-                    dispatched.set(request.card().identifier());
-                    return AgentRunResult.ok();
-                })
-                .when(runner)
-                .run(any());
-        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
+        when(runner.run(any())).thenAnswer(invocation -> {
+            AgentRunner.AgentRunRequest request = invocation.getArgument(0);
+            requests.add(request);
+            String boardId = request.config().tracker().resolvedBoardId();
+            request.listener()
+                    .onEvent(agentEvent(
+                            request,
+                            boardId.equals("board-a") ? "a/running" : "b/running",
+                            boardId.equals("board-a") ? "from A" : "from B"));
+            if (boardId.equals("board-a")) {
+                workerAStarted.countDown();
+                assertThat(releaseWorkerA.await(5, TimeUnit.SECONDS)).isTrue();
+                return AgentRunResult.fail("old target failed after reload");
+            }
+            return finishBoardBRun(tracker, endpoint, workerBStarted, releaseWorkerB, request);
+        });
+        SymphonyOrchestrator orchestrator = orchestrator(
+                workflow, tracker, runner, Clock.fixed(COMMENT_TIME, ZoneOffset.UTC), successfulWorkpadHandler());
+
+        // when
         orchestrator.start();
-        waitUntil(() -> dispatched.get() != null);
+        assertThat(workerAStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        rewriteWorkflowWithTarget(workflow, endpoint, "board-b", "token-b", "same-command", "work-b", 60_000, 2);
+        orchestrator.tickNowForTests();
+        assertThat(workerBStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        AgentRunner.AgentRunRequest requestA = requests.stream()
+                .filter(request -> request.config().tracker().resolvedBoardId().equals("board-a"))
+                .findFirst()
+                .orElseThrow();
+        requestA.listener().onEvent(agentEvent(requestA, "a/late-after-reload", "late from A"));
+        RuntimeSnapshot whileBothRun = orchestrator.snapshot();
+        CardDebugDetails detailsB = orchestrator.cardDetails("TRELLO-shared-b").orElseThrow();
+        releaseWorkerA.countDown();
+        waitUntil(() ->
+                tracker.releases.size() == 1 && orchestrator.snapshot().counts().running() == 1);
+        RuntimeSnapshot afterOldTargetExit = orchestrator.snapshot();
+        releaseWorkerB.countDown();
+        waitUntil(() -> orchestrator.snapshot().counts().running() == 0);
+        RuntimeSnapshot afterBothExit = orchestrator.snapshot();
         orchestrator.stop();
-        return dispatched.get();
+
+        // then
+        assertThat(whileBothRun.running())
+                .extracting(RuntimeSnapshot.RunningRow::cardId)
+                .containsExactly("shared-card", "shared-card");
+        assertThat(detailsB.workspace().path()).isEqualTo(tempDir.resolve("work-b/TRELLO-shared-b"));
+        assertThat(detailsB.recentEvents())
+                .extracting(CardDebugDetails.EventInfo::event)
+                .containsExactly("b/running");
+        assertThat(afterOldTargetExit.running())
+                .singleElement()
+                .extracting(RuntimeSnapshot.RunningRow::cardIdentifier)
+                .isEqualTo("TRELLO-shared-b");
+        assertThat(afterOldTargetExit.retrying()).isEmpty();
+        assertThat(afterBothExit.retrying()).isEmpty();
+        assertThat(requests).hasSize(2);
+        verify(runner, never()).cancel(anyString());
     }
 
-    private static Card cardWithPriorityAndBlockers(
-            String id, String identifier, Integer priority, List<BlockerRef> blockers) {
-        return cardWithPriorityBlockersAndProblems(id, identifier, priority, blockers, List.of());
-    }
-
-    private static Card cardWithPriorityBlockersAndProblems(
-            String id,
-            String identifier,
-            Integer priority,
-            List<BlockerRef> blockers,
-            List<Card.PrerequisiteProblem> prerequisiteProblems) {
-        return new Card(
-                id,
-                identifier,
-                "Implement feature",
-                "Description",
-                priority,
-                "Todo",
-                "list",
-                "list-todo",
-                "Todo",
-                false,
-                "board-1",
-                false,
-                false,
-                1,
-                identifier,
-                "https://trello.com/c/" + identifier,
-                null,
-                "https://trello.com/c/" + identifier,
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of(),
-                prerequisiteProblems,
-                blockers,
-                List.of(),
-                Instant.parse("2026-01-01T00:00:00Z"),
-                Instant.parse("2026-01-02T00:00:00Z"),
-                null,
-                false,
-                BigDecimal.ONE);
-    }
-
-    private static void writeWorkflow(Path workflow, String pollIntervalMs) throws Exception {
-        writeWorkflow(workflow, pollIntervalMs, "");
-    }
-
-    private static void writeWorkflow(Path workflow, String pollIntervalMs, String extraConfig) throws Exception {
-        writeWorkflow(workflow, pollIntervalMs, extraConfig, "{{ card.title }}");
-    }
-
-    private static void writeWorkflow(Path workflow, String pollIntervalMs, String extraConfig, String prompt)
-            throws Exception {
-        Files.writeString(
-                workflow,
-                """
-                ---
-                tracker:
-                  kind: trello
-                  api_key: key
-                  api_token: token
-                  board_id: board-1
-                  active_states: [Todo]
-                workspace:
-                  root: work
-                polling:
-                  interval_ms: %s
-                %s
-                codex:
-                  command: fake
-                ---
-                %s
-                """
-                        .formatted(pollIntervalMs, extraConfig, prompt));
-    }
-
-    private static void writeRetryableInProgressWorkflow(Path workflow) throws Exception {
-        Files.writeString(
-                workflow,
-                """
-                ---
-                tracker:
-                  kind: trello
-                  api_key: key
-                  api_token: token
-                  board_id: board-1
-                  active_states: [Todo, In Progress]
-                  in_progress_state: In Progress
-                workspace:
-                  root: work
-                polling:
-                  interval_ms: 60000
-                agent:
-                  max_retry_backoff_ms: 60000
-                codex:
-                  command: fake
-                ---
-                {{ card.state }}
-                """);
-    }
-
-    private static void assertCardReleasedForRetry(RuntimeSnapshot snapshot, FakeTracker tracker) {
-        assertThat(snapshot.retrying()).singleElement().satisfies(row -> assertThat(row.cardIdentifier())
-                .isEqualTo("TRELLO-abc"));
-        assertThat(tracker.releasedCards).containsExactly("TRELLO-abc");
-        assertThat(tracker.cardState("card-1").state()).isEqualTo("Todo");
-    }
-
-    private record ReleaseRecord(String currentState, String sourceState) {}
-
-    private static SymphonyOrchestrator orchestrator(Path workflow, TrackerClient tracker, AgentRunner runner) {
-        return orchestrator(workflow, tracker, runner, new WorkspaceManager(new HookRunner()));
-    }
-
-    private static SymphonyOrchestrator orchestrator(
-            Path workflow, TrackerClient tracker, AgentRunner runner, WorkspaceManager workspaces) {
-        SymphonyOrchestrator orchestrator = new SymphonyOrchestrator(
-                new WorkflowLoader(), new ConfigResolver(), tracker, runner, new PromptRenderer(), workspaces);
-        orchestrator.workflowPath = workflow;
-        return orchestrator;
-    }
-
-    private static RuntimeSnapshot runOnceAndSnapshotIdle(SymphonyOrchestrator orchestrator, AtomicInteger runs)
-            throws Exception {
-        orchestrator.start();
-        waitUntil(() -> runs.get() == 1
-                && orchestrator.snapshot().counts().running() == 0
-                && orchestrator.snapshot().counts().retrying() == 0);
-        RuntimeSnapshot snapshot = orchestrator.snapshot();
-        orchestrator.stop();
-        return snapshot;
-    }
-
-    private static void waitUntil(Condition condition) throws Exception {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
-        while (System.nanoTime() < deadline) {
-            if (condition.matches()) {
-                return;
+    @Test
+    void staleOldTargetRetryCallbackCannotConsumeSameIdCurrentTargetRunningState() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        String endpoint = "https://api.example.test/1";
+        writeWorkflowWithTarget(workflow, endpoint, "board-a", "token-a", "same-command", "work-a");
+        Card cardA = cardOnBoard("shared-card", "TRELLO-stale-retry-a", "Todo", "board-a");
+        Card cardB = cardOnBoard("shared-card", "TRELLO-stale-retry-b", "Todo", "board-b");
+        ScopedTracker tracker = new ScopedTracker();
+        tracker.setCandidates(endpoint, "board-a", List.of(cardA));
+        tracker.setCandidates(endpoint, "board-b", List.of(cardB));
+        CountDownLatch workerBStarted = new CountDownLatch(1);
+        CountDownLatch releaseWorkerB = new CountDownLatch(1);
+        List<AgentRunner.AgentRunRequest> requests = new CopyOnWriteArrayList<>();
+        AgentRunner runner = mock();
+        when(runner.run(any())).thenAnswer(invocation -> {
+            AgentRunner.AgentRunRequest request = invocation.getArgument(0);
+            requests.add(request);
+            if (request.config().tracker().resolvedBoardId().equals("board-a")) {
+                return AgentRunResult.fail("queue old-target retry");
             }
-            pollDelayForBoundedConditionWait();
-        }
-        throw new AssertionError("Condition was not met before timeout");
-    }
-
-    private static boolean containsRetryingCard(RuntimeSnapshot snapshot, String cardIdentifier) {
-        return snapshot.retrying().stream().anyMatch(row -> row.cardIdentifier().equals(cardIdentifier));
-    }
-
-    private static void pollDelayForBoundedConditionWait() throws InterruptedException {
-        Thread.sleep(POLL_INTERVAL.toMillis());
-    }
-
-    private static void blockUntilInterruptedOrTimedOut(Duration timeout) throws InterruptedException {
-        new CountDownLatch(1).await(timeout.toMillis(), TimeUnit.MILLISECONDS);
-    }
-
-    @FunctionalInterface
-    private interface Condition {
-        boolean matches();
-    }
-
-    private static final class FakeTracker implements TrackerClient {
-        private volatile List<Card> candidates;
-        private volatile Map<String, CardLookupResult> cardStates;
-        private final AtomicInteger candidateFetches = new AtomicInteger();
-        private final AtomicInteger boardResolutions = new AtomicInteger();
-        private final AtomicInteger stateFetches = new AtomicInteger();
-        private final AtomicInteger promptStateFetches = new AtomicInteger();
-        private final AtomicInteger prepareForDispatchCalls = new AtomicInteger();
-        private final List<String> releasedCards = new ArrayList<>();
-        private final List<ReleaseRecord> releases = new ArrayList<>();
-        private volatile Card preparedCard;
-        private volatile RuntimeException resolveBoardIdFailure;
-        private volatile RuntimeException prepareForDispatchFailure;
-
-        private FakeTracker(List<Card> candidates) {
-            setCandidates(candidates);
-        }
-
-        private void setCandidates(List<Card> candidates) {
-            this.candidates = new ArrayList<>(candidates);
-            this.cardStates = candidates.stream().collect(toImmutableMap(Card::id, CardLookupResult.Found::new));
-        }
-
-        private void setCardState(Card card) {
-            Map<String, CardLookupResult> updated = new LinkedHashMap<>(this.cardStates);
-            updated.put(card.id(), new CardLookupResult.Found(card));
-            this.cardStates = updated;
-        }
-
-        private Card cardState(String cardId) {
-            return ((CardLookupResult.Found) cardStates.get(cardId)).card();
-        }
-
-        @Override
-        public String resolveBoardId(EffectiveConfig config) {
-            boardResolutions.incrementAndGet();
-            if (resolveBoardIdFailure != null) {
-                throw resolveBoardIdFailure;
-            }
-            return "board-1";
-        }
-
-        @Override
-        public List<Card> fetchCandidateCards(EffectiveConfig config) {
-            candidateFetches.incrementAndGet();
-            return candidates;
-        }
-
-        @Override
-        public List<Card> fetchTerminalCards(EffectiveConfig config) {
-            return List.of();
-        }
-
-        @Override
-        public Map<String, CardLookupResult> fetchCardStatesByIds(EffectiveConfig config, List<String> cardIds) {
-            stateFetches.incrementAndGet();
-            return cardStates.entrySet().stream()
-                    .filter(entry -> cardIds.contains(entry.getKey()))
-                    .collect(toImmutableMap(Map.Entry::getKey, Map.Entry::getValue));
-        }
-
-        @Override
-        public Map<String, CardLookupResult> fetchCardStatesForPromptByIds(
-                EffectiveConfig config, List<String> cardIds) {
-            promptStateFetches.incrementAndGet();
-            return fetchCardStatesByIds(config, cardIds);
-        }
-
-        @Override
-        public Card prepareForDispatch(EffectiveConfig config, Card card) {
-            prepareForDispatchCalls.incrementAndGet();
-            if (preparedCard == null) {
-                return card;
-            }
-            setCardState(preparedCard);
-            if (prepareForDispatchFailure != null) {
-                throw prepareForDispatchFailure;
-            }
-            return preparedCard;
-        }
-
-        @Override
-        public void releaseFromDispatch(EffectiveConfig config, Card card) {
-            releaseFromDispatch(config, card, card);
-        }
-
-        @Override
-        public void releaseFromDispatch(EffectiveConfig config, Card card, Card dispatchSource) {
-            releases.add(new ReleaseRecord(card.state(), dispatchSource.state()));
-            releasedCards.add(card.identifier());
-            String releaseState = card.state().equals(dispatchSource.state()) ? "Todo" : dispatchSource.state();
-            setCardState(TestCards.card(card.id(), card.identifier(), releaseState));
-        }
-    }
-
-    private static final class ThrowingWorkspaceManager extends WorkspaceManager {
-        private final AtomicInteger removalAttempts = new AtomicInteger();
-
-        private ThrowingWorkspaceManager() {
-            super(new HookRunner());
-        }
-
-        @Override
-        public void removeForIdentifierIfPresent(String cardIdentifier, EffectiveConfig config) {
-            removalAttempts.incrementAndGet();
-            throw new IllegalStateException("workspace cleanup failed");
-        }
-    }
-
-    private static final class StartBlockingTracker implements TrackerClient {
-        private final CountDownLatch terminalFetchStarted = new CountDownLatch(1);
-        private final CountDownLatch releaseTerminalFetch = new CountDownLatch(1);
-
-        @Override
-        public String resolveBoardId(EffectiveConfig config) {
-            return "board-1";
-        }
-
-        @Override
-        public List<Card> fetchCandidateCards(EffectiveConfig config) {
-            return List.of();
-        }
-
-        @Override
-        public List<Card> fetchTerminalCards(EffectiveConfig config) {
-            terminalFetchStarted.countDown();
+            return finishBoardBRun(tracker, endpoint, workerBStarted, releaseWorkerB, request);
+        });
+        SymphonyOrchestrator orchestrator = orchestrator(
+                workflow, tracker, runner, Clock.fixed(COMMENT_TIME, ZoneOffset.UTC), successfulWorkpadHandler());
+        CountDownLatch staleCallbackEntered = new CountDownLatch(1);
+        CountDownLatch releaseStaleCallback = new CountDownLatch(1);
+        orchestrator.retryTimerWaitingHookForTests = () -> {
+            staleCallbackEntered.countDown();
             try {
-                assertThat(releaseTerminalFetch.await(5, TimeUnit.SECONDS)).isTrue();
+                assertThat(releaseStaleCallback.await(5, TimeUnit.SECONDS)).isTrue();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new AssertionError(e);
             }
-            return List.of();
-        }
+        };
 
-        @Override
-        public Map<String, CardLookupResult> fetchCardStatesByIds(EffectiveConfig config, List<String> cardIds) {
-            return Map.of();
-        }
+        // when
+        orchestrator.start();
+        waitUntil(() -> orchestrator.snapshot().counts().retrying() == 1);
+        CompletableFuture<Void> staleCallback =
+                CompletableFuture.runAsync(() -> orchestrator.retryNowForTests("shared-card"));
+        assertThat(staleCallbackEntered.await(5, TimeUnit.SECONDS)).isTrue();
+        rewriteWorkflowWithTarget(workflow, endpoint, "board-b", "token-b", "same-command", "work-b");
+        orchestrator.tickNowForTests();
+        assertThat(workerBStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        RuntimeSnapshot beforeStaleCallback = orchestrator.snapshot();
+        releaseStaleCallback.countDown();
+        staleCallback.get(5, TimeUnit.SECONDS);
+        RuntimeSnapshot afterStaleCallback = orchestrator.snapshot();
+        releaseWorkerB.countDown();
+        waitUntil(() -> orchestrator.snapshot().counts().running() == 0);
+        orchestrator.stop();
+
+        // then
+        assertThat(beforeStaleCallback.running())
+                .singleElement()
+                .extracting(RuntimeSnapshot.RunningRow::cardIdentifier)
+                .isEqualTo("TRELLO-stale-retry-b");
+        assertThat(beforeStaleCallback.retrying()).isEmpty();
+        assertThat(afterStaleCallback.running()).isEqualTo(beforeStaleCallback.running());
+        assertThat(afterStaleCallback.retrying()).isEmpty();
+        assertThat(requests).hasSize(2);
+        assertThat(requests.get(1).attempt()).isNull();
     }
 
-    private static final class BlockingTracker implements TrackerClient {
-        private final AtomicInteger candidateFetches = new AtomicInteger();
-        private final CountDownLatch firstFetchStarted = new CountDownLatch(1);
-        private final CountDownLatch releaseFirstFetch = new CountDownLatch(1);
-
-        @Override
-        public String resolveBoardId(EffectiveConfig config) {
-            return "board-1";
-        }
-
-        @Override
-        public List<Card> fetchCandidateCards(EffectiveConfig config) {
-            if (candidateFetches.incrementAndGet() == 1) {
-                firstFetchStarted.countDown();
-                try {
-                    assertThat(releaseFirstFetch.await(5, TimeUnit.SECONDS)).isTrue();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    throw new AssertionError(e);
-                }
+    @Test
+    void sameRawCardIdAcrossTargetsKeepsRecentEventsIsolated() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        String endpoint = "https://api.example.test/1";
+        writeWorkflowWithTarget(workflow, endpoint, "board-a", "token-a", "same-command", "work-a");
+        Card cardA = cardOnBoard("shared-card", "TRELLO-history-a", "Todo", "board-a");
+        Card cardB = cardOnBoard("shared-card", "TRELLO-history-b", "Todo", "board-b");
+        ScopedTracker tracker = new ScopedTracker();
+        tracker.setCandidates(endpoint, "board-a", List.of(cardA));
+        tracker.setCandidates(endpoint, "board-b", List.of(cardB));
+        CountDownLatch workerBStarted = new CountDownLatch(1);
+        CountDownLatch workerACompleted = new CountDownLatch(1);
+        CountDownLatch releaseWorkerB = new CountDownLatch(1);
+        AgentRunner runner = mock();
+        when(runner.run(any())).thenAnswer(invocation -> {
+            AgentRunner.AgentRunRequest request = invocation.getArgument(0);
+            String boardId = request.config().tracker().resolvedBoardId();
+            request.listener()
+                    .onEvent(agentEvent(
+                            request,
+                            boardId.equals("board-a") ? "a/history" : "b/history",
+                            boardId.equals("board-a") ? "from A" : "from B"));
+            if (boardId.equals("board-a")) {
+                tracker.setCardState(
+                        endpoint,
+                        "board-a",
+                        cardOnBoard(request.card().id(), request.card().identifier(), "Human Review", "board-a"));
+                workerACompleted.countDown();
+                return AgentRunResult.ok();
             }
-            return List.of();
-        }
+            return finishBoardBRun(tracker, endpoint, workerBStarted, releaseWorkerB, request);
+        });
+        SymphonyOrchestrator orchestrator = orchestrator(
+                workflow, tracker, runner, Clock.fixed(COMMENT_TIME, ZoneOffset.UTC), successfulWorkpadHandler());
 
-        @Override
-        public List<Card> fetchTerminalCards(EffectiveConfig config) {
-            return List.of();
-        }
+        // when
+        orchestrator.start();
+        assertThat(workerACompleted.await(5, TimeUnit.SECONDS)).isTrue();
+        waitUntil(() -> orchestrator.snapshot().counts().running() == 0);
+        rewriteWorkflowWithTarget(workflow, endpoint, "board-b", "token-b", "same-command", "work-b");
+        orchestrator.tickNowForTests();
+        assertThat(workerBStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        CardDebugDetails details = orchestrator.cardDetails("TRELLO-history-b").orElseThrow();
+        releaseWorkerB.countDown();
+        waitUntil(() -> orchestrator.snapshot().counts().running() == 0);
+        orchestrator.stop();
 
-        @Override
-        public Map<String, CardLookupResult> fetchCardStatesByIds(EffectiveConfig config, List<String> cardIds) {
-            return Map.of();
-        }
+        // then
+        assertThat(details.recentEvents())
+                .extracting(CardDebugDetails.EventInfo::event)
+                .containsExactly("b/history");
+    }
+
+    @Test
+    void missingLaunchTargetCardAfterReloadCleansOnlyLaunchWorkspaceRoot() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        String endpoint = "https://api.example.test/1";
+        writeWorkflowWithTarget(workflow, endpoint, "board-a", "token-a", "command", "work-a");
+        Card cardA = cardOnBoard("shared-card", "TRELLO-workspace", "Todo", "board-a");
+        ScopedTracker tracker = new ScopedTracker();
+        tracker.setCandidates(endpoint, "board-a", List.of(cardA));
+        tracker.setCandidates(endpoint, "board-b", List.of());
+        CountDownLatch workerStarted = new CountDownLatch(1);
+        CountDownLatch releaseWorker = new CountDownLatch(1);
+        AgentRunner runner = mock();
+        when(runner.run(any())).thenAnswer(invocation -> {
+            workerStarted.countDown();
+            try {
+                releaseWorker.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return AgentRunResult.fail("cancelled after card disappeared");
+        });
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
+
+        // when
+        orchestrator.start();
+        assertThat(workerStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        Path launchWorkspace = tempDir.resolve("work-a/TRELLO-workspace");
+        Path reloadedWorkspace = tempDir.resolve("work-b/TRELLO-workspace");
+        Files.createDirectories(launchWorkspace);
+        Files.createDirectories(reloadedWorkspace);
+        Files.writeString(launchWorkspace.resolve("launch.txt"), "launch");
+        Files.writeString(reloadedWorkspace.resolve("sentinel.txt"), "must survive");
+        tracker.removeCardState(endpoint, "board-a", "shared-card");
+        rewriteWorkflowWithTarget(workflow, endpoint, "board-b", "token-b", "command", "work-b");
+        orchestrator.tickNowForTests();
+        releaseWorker.countDown();
+        orchestrator.stop();
+
+        // then
+        assertThat(launchWorkspace).doesNotExist();
+        assertThat(reloadedWorkspace.resolve("sentinel.txt")).exists();
+    }
+
+    @Test
+    void reloadedDisabledStallTimeoutDoesNotSuppressLaunchTimeout() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        writeWorkflowWithStallTimeout(workflow, 1_000);
+        Instant now = Instant.parse("2026-07-10T12:00:00Z");
+        MutableClock clock = new MutableClock(now);
+        FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-stall", "Todo")));
+        AgentRunner runner = mock();
+        BlockingRun blocking = blockRunnerUntilCancelled(runner);
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner, clock, successfulWorkpadHandler());
+
+        // when
+        orchestrator.start();
+        assertThat(blocking.started().await(5, TimeUnit.SECONDS)).isTrue();
+        rewriteWorkflowWithStallTimeout(workflow, 0);
+        clock.advance(Duration.ofSeconds(2));
+        orchestrator.tickNowForTests();
+        RuntimeSnapshot snapshot = orchestrator.snapshot();
+        orchestrator.stop();
+
+        // then
+        assertThat(snapshot.running()).isEmpty();
+        assertThat(blocking.cancelled()).hasValueGreaterThanOrEqualTo(1);
+    }
+
+    @Test
+    void reloadedPositiveStallTimeoutDoesNotApplyToLaunchWithDisabledTimeout() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        writeWorkflowWithStallTimeout(workflow, 0);
+        Instant now = Instant.parse("2026-07-10T12:00:00Z");
+        MutableClock clock = new MutableClock(now);
+        FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-no-stall", "Todo")));
+        AgentRunner runner = mock();
+        BlockingRun blocking = blockRunnerUntilCancelled(runner);
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner, clock, successfulWorkpadHandler());
+
+        // when
+        orchestrator.start();
+        assertThat(blocking.started().await(5, TimeUnit.SECONDS)).isTrue();
+        rewriteWorkflowWithStallTimeout(workflow, 1_000);
+        clock.advance(Duration.ofSeconds(2));
+        orchestrator.tickNowForTests();
+        RuntimeSnapshot snapshot = orchestrator.snapshot();
+        orchestrator.stop();
+
+        // then
+        assertThat(snapshot.running()).hasSize(1);
     }
 }

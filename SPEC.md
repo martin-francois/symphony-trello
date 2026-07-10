@@ -1247,10 +1247,9 @@ Dynamic reload is REQUIRED:
 - The software MUST attempt to adjust live behavior to the new config, for example polling cadence,
   concurrency limits, active/terminal states, Codex settings, workspace paths/hooks, and prompt
   content for future runs.
-- Reloaded config applies to future dispatch, retry scheduling, reconciliation decisions, hook
-  execution, and agent launches.
-- Implementations are not REQUIRED to restart in-flight agent sessions automatically when config
-  changes.
+- Reloaded config applies to future dispatch, retry scheduling, and agent launches. In-flight agent
+  sessions are not restarted: their tracker reconciliation, stall policy, card release, hooks, and
+  workspace cleanup continue under the immutable config captured at launch until that session exits.
 - Extensions that manage their own listeners/resources, for example an HTTP server port change, MAY
   require restart unless the implementation explicitly supports live rebind.
 - Implementations SHOULD also re-validate/reload defensively during runtime operations, for example
@@ -1589,7 +1588,9 @@ The runtime counts cards by their current tracked state in the `running` map.
 Retry entry creation:
 
 - Cancel any existing retry timer for the same card.
-- Store `attempt`, `identifier`, `error`, `due_at_ms`, and new timer handle.
+- Store card ID and URL, `attempt`, `identifier`, `error`, scheduled and natural due times, owning
+  Codex command and physical tracker target, usage-limit classification, callback generation, and
+  the new timer handle.
 - Ensure the card ID remains in `claimed` while a retry is queued.
 
 Backoff formula:
@@ -1597,6 +1598,72 @@ Backoff formula:
 - Normal continuation retries after a clean worker exit use a short fixed delay of `1000` ms.
 - Failure-driven retries use `delay = min(10000 * 2^(attempt - 1), agent.max_retry_backoff_ms)`.
 - Power is capped by the configured max retry backoff, default `300000` / 5m.
+
+Structured Codex usage-limit handling:
+
+- A failure classified from the exact Codex app-server `codexErrorInfo` value
+  `usageLimitExceeded` MUST install a workflow-wide, process-local dispatch pause before subsequent
+  tracker I/O for that worker exit.
+- Message text alone MUST NOT activate the pause. Other structured errors, including invalid-model
+  and bad-request errors, continue through normal failure backoff.
+- The pause deadline SHOULD use the latest future `resetsAt` value among rate-limit windows whose
+  integral `usedPercent` is at least `100`. Missing, malformed, non-exhausted, or past reset data
+  MUST be ignored. If no valid reset remains, use `agent.max_retry_backoff_ms` from detection time.
+  A non-positive configured fallback MUST use a bounded nonzero safety floor rather than schedule a
+  hot loop.
+- Sparse rolling `account/rateLimits/updated` notifications MUST merge across all concurrent
+  app-server sessions launched by the same configured `codex.command` in the workflow process.
+  Different configured commands MUST use independent snapshot scopes so a workflow reload cannot
+  combine potentially different Codex accounts. Available primary and secondary window fields MUST
+  merge with the most recent window values. Every available non-null top-level metadata field,
+  including fields unknown to this implementation, MUST overlay the previous snapshot. Absent or
+  nullable unavailable values MUST NOT clear previously observed values. The merge MUST be atomic,
+  MUST occur only after the orchestrator accepts the event's worker identity as current, and the
+  resulting snapshot MUST be the value published to runtime state and exposed as `rate_limits`. A
+  notification whose entire `rateLimits` value is null, omitted, or not an object
+  MUST publish the retained canonical snapshot instead of its raw parameters. Before the first valid
+  snapshot, such a notification MAY remain observable with a canonical null payload, but it MUST NOT
+  fabricate runtime rate-limit state.
+- After a valid reload changes `codex.command`, the prior command's pause and deadline callback MUST
+  cease gating the new command. A usage-limit retry owned by the prior command MAY become an
+  immediately eligible ordinary retry under the new command only when its physical tracker target
+  is unchanged; unrelated retries MUST recover their original unpaused deadlines. Rate-limit
+  events, worker results, and deadline callbacks MUST remain attributed to their launch command and
+  MUST NOT install, extend, clear, or overwrite the new command's pause or snapshot. Invalid reloads
+  preserve the current command scope.
+- A physical tracker-target change—tracker kind, canonical endpoint, or resolved board—MUST NOT
+  transplant retries, attempts, claims, workpad ownership, card reconciliation, releases, or
+  workspace cleanup into the new target. Endpoint equivalence follows the transport boundary:
+  scheme and host case, a trailing DNS root dot, a default HTTP(S) port, percent-escape hex case,
+  and slashes removed only from the end of the whole raw configured endpoint before URI parsing,
+  exactly as the Trello client does, are equivalent. Slashes before a query or fragment are not
+  removed. Raw dot segments, different paths/ports/query/fragment/user-info, and absent
+  versus explicitly empty URI components remain distinct. Credential rotation and a selector change
+  that resolves to the same board remain the same physical target. In-flight workers retain their
+  launch config. Old-target retries are retired, while cards discovered on the new
+  target dispatch as fresh work. When `codex.command` is unchanged, its account-scoped pause remains,
+  but the old card, probe, and workpad ownership detach so the deadline selects a fresh candidate on
+  the new target. Managed-section cleanup MUST retain its canonical endpoint namespace, resolved
+  board, card, and owning config; a replacement section supersedes stale cleanup only for that same
+  physical target.
+- While paused, new candidate dispatch and retry checks MUST stop before tracker candidate or card
+  state I/O. Already-running workers MUST NOT be cancelled.
+- Existing retry entries MUST be deferred to at least the pause deadline without incrementing their
+  attempt. A later usage-limit result MAY extend, but MUST NOT shorten, the current deadline or
+  replace its original detection time.
+- At the deadline, exactly one card SHOULD be used as the availability recheck while other work
+  remains deferred. Prefer an affected usage-limit retry whose own deadline has arrived, then an
+  existing deferred retry whose own deadline has arrived, and then one eligible candidate fetched
+  as a controlled probe. The pause MUST NOT shorten an unrelated retry's later backoff deadline. A
+  repeated typed usage limit extends the pause; a completed or non-usage agent result from that
+  card-and-worker-bound probe clears it and releases deferred retries.
+- If the selected probe cannot start or is cancelled before producing a result, the pause MUST be
+  re-armed with an authoritative usage-limit retry instead of being cleared. If that card becomes
+  missing, terminal, inactive, or out of scope, retire it and transfer probe selection without
+  clearing the pause. When no eligible card exists, re-arm the pause for another bounded fallback
+  interval rather than polling in a hot loop.
+- Stale worker identities MUST NOT install, extend, or clear the pause.
+- Dispatch pause state and timers are in-memory runtime state and are not restored after restart.
 
 Retry handling behavior:
 
@@ -1882,6 +1949,12 @@ Completion conditions:
 - turn timeout (`turn_timeout_ms`) -> failure
 - subprocess exit -> failure
 
+Failure results MAY include a structured failure category and an optional earliest retry time. The
+Codex adapter MUST derive the usage-limit category only from the targeted protocol's exact
+structured `usageLimitExceeded` value. It MUST use the documented turn-error message for visible
+reason text and MUST NOT copy raw error details, account payloads, or rate-limit payloads into that
+result.
+
 Continuation processing:
 
 - If the worker decides to continue after a successful turn, it SHOULD start another turn on the same
@@ -2095,6 +2168,28 @@ Optional client-side tool extension:
   `trello_tools.allow_destructive_operations`; without it, the authoritative comment MUST show
   manual-cleanup guidance. A full fetched window with no managed footer MUST fail closed instead of
   creating a status that could duplicate an older comment outside the fetched window.
+- While a structured Codex usage-limit pause is active, implementations MAY maintain a bounded,
+  marker-delimited section in the authoritative workpad with the clean error message, next attempt
+  time, and rechecking state. This update MUST preserve non-managed workpad text, obey comment-write
+  and destructive-operation policy, and use the normal full-window and duplicate-workpad safety
+  rules. An agent-proposed workpad body containing either managed marker MUST be rejected with a
+  structured failure before cleanup-note stripping, normalization, or tracker I/O; agents cannot
+  create, replace, or remove this Symphony-owned section. Before any workpad mutation,
+  implementations MUST inspect every fetched duplicate workpad. Unbalanced or nested markers, or
+  more than one balanced section in one workpad, MUST be treated as malformed; managed sections in
+  more than one workpad MUST be treated as ambiguous. Both states MUST fail closed without changing
+  or deleting any comment. When exactly one older, non-authoritative duplicate owns the section,
+  destructive consolidation MUST copy it onto the authoritative workpad before deleting its former
+  owner. If destructive cleanup is disabled, or deletion of that owner fails, the operation MUST
+  report failure rather than claim safe ownership. Agent and orchestrator workpad updates for the
+  same card MUST serialize their complete fetch-and-write sequences so one update cannot erase the
+  other's newer text. A managed duplicate-workpad cleanup notice MUST remain idempotent across
+  repeated state updates.
+  Failure to update this optional visible section MUST NOT clear or bypass the dispatch pause. Failed
+  removals SHOULD retain capped, expiring cleanup ownership with retry delay. Cleanup MUST remove
+  every observed owned occurrence or report failure so ownership remains eligible for retry. After
+  restart, an implementation that encounters its stale managed marker in the normal prompt refresh
+  SHOULD remove it before dispatch, subject to the same comment-write policy.
 - Trello-visible status, workpad, handoff, and blocker text SHOULD be sufficient for a Trello board
   user who does not have shell or host access to understand why a card is waiting, blocked, or not
   moving. Local logs and diagnostics MAY include equivalent operator detail, but they MUST NOT be the
@@ -2501,6 +2596,9 @@ SHOULD return:
   - `total_tokens`
   - `seconds_running` (aggregate runtime seconds as of snapshot time, including active sessions)
 - `rate_limits` (latest coding-agent rate limit payload, if available)
+- `dispatch_pause` (`null` while idle, otherwise a stable code plus detection and deadline
+  timestamps; it MUST NOT include raw account or provider payloads or the configured command
+  string)
 
 RECOMMENDED snapshot error modes:
 
@@ -2658,6 +2756,7 @@ Minimum endpoints:
         "total_tokens": 7400,
         "seconds_running": 1834.2
       },
+      "dispatch_pause": null,
       "rate_limits": null
     }
     ```
@@ -3470,6 +3569,10 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - Abnormal worker exit increments retries with 10s-based exponential backoff
 - Retry backoff cap uses configured `agent.max_retry_backoff_ms`
 - Retry queue entries include attempt, due time, identifier, and error
+- Retry deferral retains the natural due time, owning command, tracker target, and callback
+  generation so pause clearing, reload, and stale callbacks cannot transplant or consume work
+- A tracker/board/workspace reload keeps in-flight reconciliation, release, and cleanup bound to the
+  launch config; old-target retries retire instead of becoming attempts for same-ID new-target cards
 - Stall detection kills stalled sessions and schedules retry
 - Slot exhaustion requeues retries with explicit error reason
 - If a snapshot API is implemented, it returns running rows, retry rows, token totals, and rate
@@ -3529,6 +3632,15 @@ Unless otherwise noted, Sections 17.1 through 17.7 are `Core Conformance`. Bulle
 - Logging sink failures do not crash orchestration
 - Trello credentials are redacted from logs
 - Token/rate-limit aggregation remains correct across repeated agent updates
+- Structured Codex usage-limit handling is activated only by the exact protocol category, selects a
+  valid exhausted-window reset or bounded fallback, suppresses pickup churn, and permits exactly one
+  availability probe at a deadline
+- Command reload isolates pauses, callbacks, retries, and rate-limit snapshots; tracker reload keeps
+  physical card, workpad, and workspace ownership in the originating endpoint/board scope
+- If a snapshot API is implemented, `dispatch_pause` is either null or exactly the stable code and
+  timestamps, without raw account/provider data or the configured command string
+- If managed usage workpad sections are implemented, marker ownership, duplicate handling, cleanup,
+  restart staleness, and agent/orchestrator serialization follow Section 10.5
 - If a human-readable status surface is implemented, it is driven from orchestrator state and does
   not affect correctness
 - If humanized event summaries are implemented, they cover key wrapper/agent event classes without

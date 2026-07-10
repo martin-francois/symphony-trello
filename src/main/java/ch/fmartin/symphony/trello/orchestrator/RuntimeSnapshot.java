@@ -11,6 +11,7 @@ public record RuntimeSnapshot(
         List<RunningRow> running,
         List<RetryRow> retrying,
         TokenTotals codexTotals,
+        DispatchPause dispatchPause,
         Object rateLimits) {
     public RuntimeSnapshot {
         running = List.copyOf(running);
@@ -48,4 +49,6 @@ public record RuntimeSnapshot(
             String cardId, String cardIdentifier, String cardUrl, int attempt, Instant dueAt, String error) {}
 
     public record TokenTotals(long inputTokens, long outputTokens, long totalTokens, double secondsRunning) {}
+
+    public record DispatchPause(String code, Instant detected, Instant until) {}
 }

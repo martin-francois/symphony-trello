@@ -598,6 +598,22 @@ retrying cards so you can distinguish "still working" from "needs human attentio
 maximum wait with
 [`agent.max_retry_backoff_ms`](#dispatch-controls).
 
+When Codex reports its structured usage-limit error, Symphony pauses new card pickup for the whole
+workflow until Codex's reported reset time, when one card rechecks availability. A repeated limit
+extends the pause. If no usable reset is available, Symphony waits for
+`agent.max_retry_backoff_ms`. Already-running cards continue. The affected card's `## Codex
+Workpad` shows the clean Codex message and next attempt when Trello comment writes are enabled, and
+the status page shows the active `CODEX_USAGE_LIMIT` pause. Concurrent cards launched by the same
+configured `codex.command` share the latest sparse rate-limit snapshot, so a reset reported to one
+worker remains available when another worker reports the limit. Available account metadata is also
+retained without letting absent or null fields erase an earlier value, but only events accepted from
+a current worker enter that shared snapshot. Typed usage-limit event summaries expose only the clean
+message, not raw provider or account details. A valid change to `codex.command` stops the old
+command's pause from gating the new command; late results and events remain attributed to the command
+that launched them. Late typed usage results and stale callbacks cannot change the new command's
+pause, while normal card lifecycle may create an ordinary retry under the new command when the
+Trello target is unchanged. Invalid workflow reloads keep the existing command scope unchanged.
+
 Diagnostics are safe to paste into public issues by default. They summarize local setup, connected
 boards, workflow files, health probes, and recent logs while hiding secrets and private context. Use
 `symphony-trello diagnostics` when asking for help. Use `--deep` when a maintainer needs deeper
@@ -1050,7 +1066,9 @@ when one active list, such as `Merging`, should run with lower concurrency than 
 
 `agent.max_retry_backoff_ms` caps the exponential retry delay after worker failures, timeouts, or
 stalls. Generated workflows keep the default five-minute cap. Lower it only when quick retries are
-more important than reducing load; raise it when repeated failures are noisy or expensive.
+more important than reducing load; raise it when repeated failures are noisy or expensive. It is
+also the fallback duration for a structured Codex usage limit that has no valid future reset time;
+non-positive values use a one-second safety floor for that pause.
 
 ### Allowed Host Paths And Sandbox
 
@@ -1296,8 +1314,8 @@ This Java implementation advertises the narrower handoff tools above.
 Useful endpoints:
 
 - `GET /` returns a small human-readable status page.
-- `GET /api/v1/state` returns running sessions, retry queue, token totals, and rate-limit data when
-  reported by Codex.
+- `GET /api/v1/state` returns running sessions, retry queue, token totals, any active dispatch pause,
+  and rate-limit data when reported by Codex.
 - `GET /api/v1/{card_identifier}` returns card-specific runtime details.
 - `POST /api/v1/refresh` queues an immediate poll/reconciliation cycle.
 

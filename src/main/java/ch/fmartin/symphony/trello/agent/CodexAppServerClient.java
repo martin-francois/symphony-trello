@@ -19,9 +19,12 @@ import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.time.DateTimeException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -30,6 +33,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
 import org.jboss.logging.Logger;
 
 @ApplicationScoped
@@ -39,6 +43,7 @@ public class CodexAppServerClient {
     private final ObjectMapper json;
     private final TrelloHandoffToolHandler trelloTools;
     private final Clock clock;
+    private final Map<String, RateLimitState> rateLimitsByCodexCommand = new ConcurrentHashMap<>();
 
     public CodexAppServerClient(ObjectMapper json, TrelloHandoffToolHandler trelloTools) {
         this(json, trelloTools, ApplicationClock.systemUtc());
@@ -152,7 +157,7 @@ public class CodexAppServerClient {
                     return AgentRunResult.fail("turn_interrupted: " + turnFailureSummary(completedTurn, completed));
                 }
                 if (!error.isMissingNode() && !error.isNull()) {
-                    return AgentRunResult.fail("turn_failed: " + summarize(error));
+                    return turnFailureResult("turn_failed", error, session);
                 }
                 if ("failed".equals(status)) {
                     return AgentRunResult.fail("turn_failed: " + turnFailureSummary(completedTurn, completed));
@@ -166,7 +171,9 @@ public class CodexAppServerClient {
             return AgentRunResult.ok();
         } catch (CodexAppServerTerminalException e) {
             process.destroyForcibly();
-            return AgentRunResult.fail(e.code() + ": " + e.getMessage());
+            return e.failureCategory() == AgentRunResult.FailureCategory.CODEX_USAGE_LIMIT
+                    ? AgentRunResult.codexUsageLimit(e.code() + ": " + e.getMessage(), e.retryNotBefore())
+                    : AgentRunResult.fail(e.code() + ": " + e.getMessage());
         } catch (TimeoutException e) {
             process.destroyForcibly();
             return AgentRunResult.fail("response_timeout: " + e.getMessage());
@@ -193,6 +200,10 @@ public class CodexAppServerClient {
         public static TurnDecision fail(String reason) {
             return new TurnDecision(null, reason);
         }
+    }
+
+    private static final class RateLimitState {
+        private JsonNode latest;
     }
 
     private ObjectNode threadStartParams(EffectiveConfig config, Path workspace) {
@@ -270,16 +281,53 @@ public class CodexAppServerClient {
         return status == null ? summarize(completed) : "turn status " + status;
     }
 
+    private AgentRunResult turnFailureResult(String code, JsonNode error, AppServerSession session) {
+        return isUsageLimitError(error)
+                ? AgentRunResult.codexUsageLimit(
+                        code + ": " + turnErrorMessage(error), session.usageLimitRetryNotBefore())
+                : AgentRunResult.fail(code + ": " + summarize(error));
+    }
+
+    private static String turnErrorMessage(JsonNode error) {
+        String message = error.path("message").asText(null);
+        return message == null || message.isBlank() ? "Codex turn failed" : message.strip();
+    }
+
+    private static boolean isUsageLimitError(JsonNode error) {
+        return error.path("codexErrorInfo").isTextual()
+                && "usageLimitExceeded".equals(error.path("codexErrorInfo").textValue());
+    }
+
     private static final class CodexAppServerTerminalException extends IOException {
         private final String code;
+        private final AgentRunResult.FailureCategory failureCategory;
+        private final Optional<Instant> retryNotBefore;
 
         private CodexAppServerTerminalException(String code, String message) {
+            this(code, message, AgentRunResult.FailureCategory.GENERIC, Optional.empty());
+        }
+
+        private CodexAppServerTerminalException(
+                String code,
+                String message,
+                AgentRunResult.FailureCategory failureCategory,
+                Optional<Instant> retryNotBefore) {
             super(message);
             this.code = code;
+            this.failureCategory = failureCategory;
+            this.retryNotBefore = retryNotBefore;
         }
 
         private String code() {
             return code;
+        }
+
+        private AgentRunResult.FailureCategory failureCategory() {
+            return failureCategory;
+        }
+
+        private Optional<Instant> retryNotBefore() {
+            return retryNotBefore;
         }
     }
 
@@ -297,6 +345,7 @@ public class CodexAppServerClient {
         private final Object turnCompletionLock = new Object();
         private final Object writerLock = new Object();
         private final AtomicReference<Throwable> readerFailure = new AtomicReference<>();
+        private final RateLimitState rateLimitState;
         private final CountDownLatch readerStarted = new CountDownLatch(1);
         private final BufferedWriter writer;
 
@@ -311,6 +360,8 @@ public class CodexAppServerClient {
             this.card = card;
             this.workerIdentity = workerIdentity;
             this.listener = listener;
+            this.rateLimitState =
+                    rateLimitsByCodexCommand.computeIfAbsent(config.codex().command(), ignored -> new RateLimitState());
             this.writer = new BufferedWriter(new OutputStreamWriter(process.getOutputStream(), StandardCharsets.UTF_8));
         }
 
@@ -466,8 +517,34 @@ public class CodexAppServerClient {
             String threadId = params.path("threadId").asText(null);
             String turnId = turnId(params);
             Map<String, Long> usage = extractUsage(method, params);
-            listener.onEvent(
-                    event(method, workerIdentity, process.pid(), threadId, turnId, summarize(params), usage, params));
+            if (Objects.equals(method, "account/rateLimits/updated")) {
+                synchronized (rateLimitState) {
+                    JsonNode update = params.path("rateLimits");
+                    JsonNode payload = mergedRateLimits(update);
+                    boolean accepted = listener.onEventAndReportAccepted(event(
+                            method,
+                            workerIdentity,
+                            process.pid(),
+                            threadId,
+                            turnId,
+                            summarize(params),
+                            usage,
+                            payload));
+                    if (accepted && update.isObject()) {
+                        rateLimitState.latest = payload.deepCopy();
+                    }
+                }
+                return;
+            }
+            listener.onEvent(event(
+                    method,
+                    workerIdentity,
+                    process.pid(),
+                    threadId,
+                    turnId,
+                    notificationSummary(method, params),
+                    usage,
+                    params));
             if (Objects.equals(method, "turn/completed") && turnId != null) {
                 CompletableFuture<JsonNode> future;
                 synchronized (turnCompletionLock) {
@@ -479,14 +556,113 @@ public class CodexAppServerClient {
                 }
                 future.complete(params);
             } else if (isTurnFailure(method) && turnId != null) {
-                completeTurnExceptionally(
-                        turnId, new CodexAppServerTerminalException("turn_failed", summarize(params)));
+                completeTurnExceptionally(turnId, terminalTurnFailure("turn_failed", turnError(params), params));
             } else if (isTurnCancellation(method) && turnId != null) {
                 completeTurnExceptionally(
                         turnId, new CodexAppServerTerminalException("turn_cancelled", summarize(params)));
             } else if (isTerminalError(method, params) && turnId != null) {
                 completeTurnExceptionally(
-                        turnId, new CodexAppServerTerminalException("turn_failed", summarize(params.path("error"))));
+                        turnId, terminalTurnFailure("turn_failed", params.path("error"), params.path("error")));
+            }
+        }
+
+        private JsonNode mergedRateLimits(JsonNode update) {
+            if (!update.isObject()) {
+                JsonNode latest = rateLimitState.latest;
+                return latest == null ? json.getNodeFactory().nullNode() : latest.deepCopy();
+            }
+            JsonNode previous = rateLimitState.latest;
+            ObjectNode merged = previous != null && previous.isObject() ? ((ObjectNode) previous).deepCopy() : object();
+            mergeAvailableRateLimitMetadata(merged, update);
+            mergeRateLimitWindow(merged, update, "primary");
+            mergeRateLimitWindow(merged, update, "secondary");
+            return merged;
+        }
+
+        private void mergeAvailableRateLimitMetadata(ObjectNode merged, JsonNode update) {
+            update.fieldNames().forEachRemaining(name -> {
+                if (!Objects.equals(name, "primary") && !Objects.equals(name, "secondary")) {
+                    mergeAvailableField(merged, update, name);
+                }
+            });
+        }
+
+        private void mergeRateLimitWindow(ObjectNode merged, JsonNode update, String name) {
+            JsonNode incoming = update.get(name);
+            if (incoming == null || incoming.isNull() || !incoming.isObject()) {
+                return;
+            }
+            JsonNode previous = merged.get(name);
+            ObjectNode window = previous != null && previous.isObject() ? ((ObjectNode) previous).deepCopy() : object();
+            incoming.fieldNames().forEachRemaining(field -> mergeAvailableField(window, incoming, field));
+            merged.set(name, window);
+        }
+
+        private void mergeAvailableField(ObjectNode merged, JsonNode update, String name) {
+            JsonNode available = update.get(name);
+            if (available != null && !available.isNull()) {
+                merged.set(name, available.deepCopy());
+            }
+        }
+
+        private CodexAppServerTerminalException terminalTurnFailure(
+                String code, JsonNode error, JsonNode messageFallback) {
+            if (isUsageLimitError(error)) {
+                return new CodexAppServerTerminalException(
+                        code,
+                        turnErrorMessage(error),
+                        AgentRunResult.FailureCategory.CODEX_USAGE_LIMIT,
+                        usageLimitRetryNotBefore());
+            }
+            return new CodexAppServerTerminalException(code, summarize(messageFallback));
+        }
+
+        private JsonNode turnError(JsonNode params) {
+            JsonNode error = params.path("turn").path("error");
+            return error.isMissingNode() || error.isNull() ? params : error;
+        }
+
+        private String notificationSummary(String method, JsonNode params) {
+            JsonNode error =
+                    switch (method) {
+                        case "turn/completed", "turn/failed" -> turnError(params);
+                        case "error" -> params.path("error");
+                        default -> json.getNodeFactory().missingNode();
+                    };
+            return isUsageLimitError(error) ? turnErrorMessage(error) : summarize(params);
+        }
+
+        private Optional<Instant> usageLimitRetryNotBefore() {
+            JsonNode snapshot;
+            synchronized (rateLimitState) {
+                snapshot = rateLimitState.latest;
+            }
+            if (snapshot == null || !snapshot.isObject()) {
+                return Optional.empty();
+            }
+            Instant now = clock.instant();
+            return Stream.of(snapshot.path("primary"), snapshot.path("secondary"))
+                    .map(window -> exhaustedWindowReset(window, now))
+                    .flatMap(Optional::stream)
+                    .max(Instant::compareTo);
+        }
+
+        private Optional<Instant> exhaustedWindowReset(JsonNode window, Instant now) {
+            JsonNode usedPercent = window.path("usedPercent");
+            JsonNode resetsAt = window.path("resetsAt");
+            if (!window.isObject()
+                    || !usedPercent.isIntegralNumber()
+                    || !usedPercent.canConvertToInt()
+                    || usedPercent.intValue() < 100
+                    || !resetsAt.isIntegralNumber()
+                    || !resetsAt.canConvertToLong()) {
+                return Optional.empty();
+            }
+            try {
+                Instant reset = Instant.ofEpochSecond(resetsAt.longValue());
+                return reset.isAfter(now) ? Optional.of(reset) : Optional.empty();
+            } catch (DateTimeException | ArithmeticException e) {
+                return Optional.empty();
             }
         }
 

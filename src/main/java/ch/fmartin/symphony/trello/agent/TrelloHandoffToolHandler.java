@@ -14,6 +14,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -51,13 +52,18 @@ public class TrelloHandoffToolHandler {
     private static final int ELLIPSIS_CODE_POINT_COUNT = 3;
     private static final int MAX_ACTION_ID_LENGTH = 128;
     private static final Pattern LOGICAL_LINE_BREAK = Pattern.compile("\\r\\n|[\\n\\r\\x{0085}\\x{2028}\\x{2029}]");
+    private static final int WORKPAD_LOCK_STRIPES = 64;
 
     private final ObjectMapper json;
     private final TrelloClient trello;
+    private final Object[] workpadLocks = new Object[WORKPAD_LOCK_STRIPES];
 
     public TrelloHandoffToolHandler(ObjectMapper json, TrelloClient trello) {
         this.json = json;
         this.trello = trello;
+        for (int index = 0; index < workpadLocks.length; index++) {
+            workpadLocks[index] = new Object();
+        }
     }
 
     public boolean shouldEnableExperimentalApi(EffectiveConfig config) {
@@ -86,7 +92,7 @@ public class TrelloHandoffToolHandler {
                             Map.of(
                                     "text",
                                     stringSchema(
-                                            "Full Markdown workpad body. Symphony ensures it starts with ## Codex Workpad.")),
+                                            "Full Markdown workpad body. Symphony ensures it starts with ## Codex Workpad. Do not include Symphony's managed Codex usage-section markers.")),
                             List.of("text"))));
             tools.add(tool(
                     UPDATE_BLOCKER_RECHECK_STATUS,
@@ -622,41 +628,142 @@ public class TrelloHandoffToolHandler {
         if (!config.trelloTools().allowComments()) {
             return failure("trello_comments_disabled", "Trello comments are disabled by trello_tools.allow_comments.");
         }
-        String text = workpadText(requiredText(arguments, "text"));
-        CardLookupResult lookup = trello.fetchCardStateForWorkpad(config, card.id());
-        if (lookup instanceof CardLookupResult.Missing) {
-            return failure("trello_workpad_card_missing", "Cannot update workpad because the Trello card is missing.");
+        String proposedText = requiredText(arguments, "text");
+        if (CodexUsageWorkpadSection.hasMalformedManagedSectionMarkers(proposedText)) {
+            return failure(
+                    "trello_workpad_managed_section_malformed",
+                    "Cannot update workpad because the proposed Codex usage section markers are malformed.");
         }
-        if (lookup instanceof CardLookupResult.Failed failed) {
-            return failure("trello_workpad_refresh_failed", failed.message());
+        if (CodexUsageWorkpadSection.containsManagedSectionMarker(proposedText)) {
+            return failure(
+                    "trello_workpad_managed_section_forbidden",
+                    "The Codex usage section is owned by Symphony and cannot be supplied by the workpad tool.");
         }
-        if (!(lookup instanceof CardLookupResult.Found found)) {
-            return failure("trello_workpad_refresh_failed", "Could not refresh the current Trello card.");
+        String text = workpadText(proposedText);
+        synchronized (workpadLock(card.id())) {
+            CardLookupResult lookup = trello.fetchCardStateForWorkpad(config, card.id());
+            if (lookup instanceof CardLookupResult.Missing) {
+                return failure(
+                        "trello_workpad_card_missing", "Cannot update workpad because the Trello card is missing.");
+            }
+            if (lookup instanceof CardLookupResult.Failed failed) {
+                return failure("trello_workpad_refresh_failed", failed.message());
+            }
+            if (!(lookup instanceof CardLookupResult.Found found)) {
+                return failure("trello_workpad_refresh_failed", "Could not refresh the current Trello card.");
+            }
+            return upsertAgentWorkpadComment(config, card.id(), found.card(), text);
         }
-        return upsertWorkpadComment(config, card.id(), found.card(), text);
     }
 
-    private ObjectNode upsertWorkpadComment(EffectiveConfig config, String cardId, Card currentCard, String text) {
-        List<Card.Comment> workpads =
-                currentCard.comments().stream().filter(this::isWorkpadComment).toList();
+    public boolean updateCodexUsageSection(EffectiveConfig config, String cardId, String section) {
+        if (!writesEnabled(config) || !config.trelloTools().allowComments()) {
+            return false;
+        }
+        try {
+            synchronized (workpadLock(cardId)) {
+                CardLookupResult lookup = trello.fetchCardStateForWorkpad(config, cardId);
+                if (!(lookup instanceof CardLookupResult.Found found)) {
+                    return false;
+                }
+                return upsertCodexUsageWorkpadComment(config, cardId, found.card(), section)
+                        .path("success")
+                        .asBoolean();
+            }
+        } catch (RuntimeException e) {
+            LOG.warnf("card_id=%s codex_usage_workpad=failed", cardId);
+            return false;
+        }
+    }
+
+    private ObjectNode upsertAgentWorkpadComment(EffectiveConfig config, String cardId, Card currentCard, String text) {
+        List<Card.Comment> workpads = workpadComments(currentCard);
         if (workpads.isEmpty()) {
             return createWorkpad(config, cardId, currentCard, text);
         }
-        // Trello lists comment actions newest first, so the first addressable workpad is the
-        // newest one and stays the authoritative comment deterministically.
-        Card.Comment primary = workpads.stream()
-                .filter(workpad -> !blank(workpad.id()))
-                .findFirst()
-                .orElseGet(workpads::getFirst);
+        ManagedWorkpadState managed = managedWorkpadState(workpads);
+        ObjectNode invalid = invalidManagedWorkpadState(managed);
+        if (invalid != null) {
+            return invalid;
+        }
+        Card.Comment primary = primaryWorkpad(workpads);
         if (blank(primary.id())) {
             return failure("trello_workpad_missing_action_id", "Existing workpad comment has no Trello action id.");
         }
+        boolean destructiveAllowed = config.trelloTools().allowDestructiveOperations();
+        Card.Comment nonPrimaryOwner = nonPrimaryManagedOwner(managed, primary);
+        if (nonPrimaryOwner != null && !destructiveAllowed) {
+            return failure(
+                    "trello_workpad_managed_section_non_primary",
+                    "Cannot safely update the authoritative workpad while an older duplicate owns the Codex usage section and destructive duplicate cleanup is disabled.");
+        }
+        String ownedText = managed.section() == null ? text : CodexUsageWorkpadSection.upsert(text, managed.section());
+        return updateExistingWorkpad(
+                config, cardId, workpads, primary, stripManualCleanupNotes(ownedText), nonPrimaryOwner);
+    }
+
+    private ObjectNode upsertCodexUsageWorkpadComment(
+            EffectiveConfig config, String cardId, Card currentCard, String section) {
+        List<Card.Comment> workpads = workpadComments(currentCard);
+        if (workpads.isEmpty()) {
+            if (commentWindowMayBeIncomplete(currentCard)) {
+                LOG.warnf("card_id=%s codex_usage_workpad=comment_window_incomplete", cardId);
+                return incompleteWorkpadWindowFailure();
+            }
+            if (section == null) {
+                return success(Map.of("status", "workpad_unchanged", "card_id", cardId));
+            }
+            String text = CodexUsageWorkpadSection.upsert(WORKPAD_MARKER, section);
+            return createWorkpad(config, cardId, currentCard, text);
+        }
+        ManagedWorkpadState managed = managedWorkpadState(workpads);
+        ObjectNode invalid = invalidManagedWorkpadState(managed);
+        if (invalid != null) {
+            LOG.warnf(
+                    "card_id=%s codex_usage_workpad=%s",
+                    cardId, managed.problem().logValue());
+            return invalid;
+        }
+        if (managed.section() == null && commentWindowMayBeIncomplete(currentCard)) {
+            LOG.warnf("card_id=%s codex_usage_workpad=comment_window_incomplete", cardId);
+            return incompleteWorkpadWindowFailure();
+        }
+        Card.Comment primary = primaryWorkpad(workpads);
+        if (blank(primary.id())) {
+            return failure("trello_workpad_missing_action_id", "Existing workpad comment has no Trello action id.");
+        }
+        boolean destructiveAllowed = config.trelloTools().allowDestructiveOperations();
+        Card.Comment nonPrimaryOwner = nonPrimaryManagedOwner(managed, primary);
+        if (nonPrimaryOwner != null && !destructiveAllowed) {
+            LOG.warnf("card_id=%s codex_usage_workpad=managed_section_non_primary", cardId);
+            return failure(
+                    "trello_workpad_managed_section_non_primary",
+                    "Cannot safely change the Codex usage section while an older duplicate owns it and destructive duplicate cleanup is disabled.");
+        }
+        String text = section == null
+                ? CodexUsageWorkpadSection.remove(primary.text())
+                : CodexUsageWorkpadSection.upsert(primary.text(), section);
+        String canonicalText = stripManualCleanupNotes(text);
+        if (workpads.size() == 1 && canonicalText.equals(primary.text())) {
+            return success(Map.of("status", "workpad_unchanged", "card_id", cardId));
+        }
+        return updateExistingWorkpad(config, cardId, workpads, primary, canonicalText, nonPrimaryOwner);
+    }
+
+    private ObjectNode updateExistingWorkpad(
+            EffectiveConfig config,
+            String cardId,
+            List<Card.Comment> workpads,
+            Card.Comment primary,
+            String canonicalText,
+            Card.Comment nonPrimaryManagedOwner) {
         int duplicatesFound = workpads.size() - 1;
         boolean destructiveAllowed = config.trelloTools().allowDestructiveOperations();
         // Without the destructive opt-in, the duplicates stay on the card, so the canonical
         // workpad itself must tell the next agent or human that manual cleanup is required.
-        String authoritativeText =
-                duplicatesFound > 0 && !destructiveAllowed ? text + manualCleanupNote(duplicatesFound) : text;
+        String authoritativeText = duplicatesFound > 0 && !destructiveAllowed
+                ? canonicalText + manualCleanupNote(duplicatesFound)
+                : canonicalText;
         // The authoritative update runs before any duplicate cleanup: if it fails, every workpad
         // stays in place and no comment content is lost to a delete that ran first.
         trello.updateComment(config, primary.id(), authoritativeText);
@@ -665,6 +772,19 @@ public class TrelloHandoffToolHandler {
         DuplicateCleanup cleanup = destructiveAllowed
                 ? removeDuplicateManagedComments(config, workpads, primary, "workpad_duplicate_delete")
                 : DuplicateCleanup.none();
+        if (nonPrimaryManagedOwner != null && !cleanup.removedActionIds().contains(nonPrimaryManagedOwner.id())) {
+            try {
+                trello.updateComment(config, primary.id(), primary.text());
+            } catch (RuntimeException e) {
+                LOG.warnf("workpad_managed_section_transfer_rollback outcome=failed action_id=%s", primary.id());
+                return failure(
+                        "trello_workpad_managed_section_transfer_rollback_failed",
+                        "The older workpad that owned the Codex usage section could not be removed, and restoring the authoritative workpad also failed. Managed-section ownership is ambiguous and must be repaired manually.");
+            }
+            return failure(
+                    "trello_workpad_managed_section_cleanup_failed",
+                    "The older duplicate that owned the Codex usage section could not be removed. The authoritative workpad was restored so the transfer can be retried safely.");
+        }
         return success(Map.of(
                 "status",
                 "workpad_updated",
@@ -680,6 +800,78 @@ public class TrelloHandoffToolHandler {
                 Integer.toString(cleanup.deleteFailed()),
                 "duplicate_workpads_cleanup_status",
                 cleanupStatus(duplicatesFound, destructiveAllowed, cleanup)));
+    }
+
+    private Object workpadLock(String cardId) {
+        int hash = cardId == null ? 0 : cardId.hashCode();
+        return workpadLocks[Math.floorMod(hash, workpadLocks.length)];
+    }
+
+    private List<Card.Comment> workpadComments(Card currentCard) {
+        return currentCard.comments().stream().filter(this::isWorkpadComment).toList();
+    }
+
+    private static Card.Comment primaryWorkpad(List<Card.Comment> workpads) {
+        return workpads.stream()
+                .filter(workpad -> !blank(workpad.id()))
+                .findFirst()
+                .orElseGet(workpads::getFirst);
+    }
+
+    private static ManagedWorkpadState managedWorkpadState(List<Card.Comment> workpads) {
+        Card.Comment owner = null;
+        String section = null;
+        for (Card.Comment workpad : workpads) {
+            if (CodexUsageWorkpadSection.hasMalformedManagedSectionMarkers(workpad.text())) {
+                return new ManagedWorkpadState(null, null, ManagedSectionProblem.MALFORMED);
+            }
+            String candidate = CodexUsageWorkpadSection.managedSection(workpad.text());
+            if (candidate == null) {
+                continue;
+            }
+            if (owner != null) {
+                return new ManagedWorkpadState(null, null, ManagedSectionProblem.AMBIGUOUS);
+            }
+            owner = workpad;
+            section = candidate;
+        }
+        return new ManagedWorkpadState(owner, section, ManagedSectionProblem.NONE);
+    }
+
+    private ObjectNode invalidManagedWorkpadState(ManagedWorkpadState managed) {
+        return switch (managed.problem()) {
+            case NONE -> null;
+            case MALFORMED ->
+                failure(
+                        "trello_workpad_managed_section_malformed",
+                        "Cannot update workpad because a Codex usage section is malformed or occurs more than once in one workpad.");
+            case AMBIGUOUS ->
+                failure(
+                        "trello_workpad_managed_section_ambiguous",
+                        "Cannot update workpad because more than one workpad contains a Codex usage section.");
+        };
+    }
+
+    private static Card.Comment nonPrimaryManagedOwner(ManagedWorkpadState managed, Card.Comment primary) {
+        return managed.owner() == null || managed.owner().equals(primary) ? null : managed.owner();
+    }
+
+    private record ManagedWorkpadState(Card.Comment owner, String section, ManagedSectionProblem problem) {}
+
+    private enum ManagedSectionProblem {
+        NONE("valid"),
+        MALFORMED("malformed_managed_section"),
+        AMBIGUOUS("ambiguous_managed_section");
+
+        private final String logValue;
+
+        ManagedSectionProblem(String logValue) {
+            this.logValue = logValue;
+        }
+
+        String logValue() {
+            return logValue;
+        }
     }
 
     private static String cleanupStatus(int duplicatesFound, boolean destructiveAllowed, DuplicateCleanup cleanup) {
@@ -708,12 +900,14 @@ public class TrelloHandoffToolHandler {
     /**
      * A managed comment family should have one authoritative comment, so destructive-policy cleanup
      * removes duplicates only after the authoritative state is safe. Failed or unaddressable deletes
-     * stay visible and are reported instead of disappearing from the cleanup totals.
+     * stay visible and are reported instead of disappearing from the cleanup totals. Workpad callers
+     * additionally fail when an undeleted duplicate owns the managed usage section.
      */
     private DuplicateCleanup removeDuplicateManagedComments(
             EffectiveConfig config, List<Card.Comment> managedComments, Card.Comment primary, String logEvent) {
         int removed = 0;
         int deleteFailed = 0;
+        List<String> removedActionIds = new ArrayList<>();
         for (Card.Comment duplicate : managedComments) {
             if (duplicate.equals(primary)) {
                 continue;
@@ -726,17 +920,18 @@ public class TrelloHandoffToolHandler {
             try {
                 trello.deleteComment(config, duplicate.id());
                 removed++;
+                removedActionIds.add(duplicate.id());
             } catch (RuntimeException e) {
                 deleteFailed++;
                 LOG.warnf(e, "%s outcome=failed action_id=%s", logEvent, duplicate.id());
             }
         }
-        return new DuplicateCleanup(removed, deleteFailed);
+        return new DuplicateCleanup(removed, deleteFailed, List.copyOf(removedActionIds));
     }
 
-    private record DuplicateCleanup(int removed, int deleteFailed) {
+    private record DuplicateCleanup(int removed, int deleteFailed, List<String> removedActionIds) {
         static DuplicateCleanup none() {
-            return new DuplicateCleanup(0, 0);
+            return new DuplicateCleanup(0, 0, List.of());
         }
     }
 
@@ -745,13 +940,21 @@ public class TrelloHandoffToolHandler {
     }
 
     private ObjectNode createWorkpad(EffectiveConfig config, String cardId, Card currentCard, String text) {
-        if (currentCard.comments().size() >= TrelloClient.WORKPAD_COMMENT_ACTION_LIMIT) {
-            return failure(
-                    "trello_workpad_comment_window_incomplete",
-                    "Cannot safely create a workpad because the fetched Trello comment window is full and an older workpad may exist.");
+        if (commentWindowMayBeIncomplete(currentCard)) {
+            return incompleteWorkpadWindowFailure();
         }
         Map<String, Object> created = trello.addComment(config, cardId, text);
         return success(Map.of("status", "workpad_created", "card_id", cardId, "action_id", string(created.get("id"))));
+    }
+
+    private static boolean commentWindowMayBeIncomplete(Card card) {
+        return card.comments().size() >= TrelloClient.WORKPAD_COMMENT_ACTION_LIMIT;
+    }
+
+    private ObjectNode incompleteWorkpadWindowFailure() {
+        return failure(
+                "trello_workpad_comment_window_incomplete",
+                "Cannot safely change the workpad because the fetched Trello comment window is full and an older workpad or managed section may exist.");
     }
 
     private static String workpadText(String text) {
