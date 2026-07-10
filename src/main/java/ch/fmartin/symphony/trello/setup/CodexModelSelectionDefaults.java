@@ -140,19 +140,19 @@ record CodexModelSelectionDefaults(
                         + ".");
     }
 
-    Optional<String> reasoningEffortForExplicitModelOverride(
+    Optional<String> reasoningEffortForSelectedModel(
             String model, CodexModelDefaults effectiveWorkflowDefaults, boolean preserveConfiguredReasoningEffort) {
-        if (blank(model) || preserveConfiguredReasoningEffort) {
+        if (blank(model)) {
             return Optional.empty();
         }
-        return reasoningEffortForModel(model)
-                .or(() -> fallbackReasoningEffortForExplicitModelOverride(effectiveWorkflowDefaults));
+        if (preserveConfiguredReasoningEffort) {
+            return Optional.ofNullable(effectiveWorkflowDefaults).map(CodexModelDefaults::reasoningEffort);
+        }
+        return reasoningEffortForModel(model).or(this::compatibilityFallbackReasoningEffort);
     }
 
-    Optional<String> fallbackReasoningEffortForExplicitModelOverride(CodexModelDefaults effectiveWorkflowDefaults) {
-        if (firstClassFieldsSupported
-                || (effectiveWorkflowDefaults != null && !blank(effectiveWorkflowDefaults.reasoningEffort()))
-                || blank(fallbackReasoningEffort)) {
+    private Optional<String> compatibilityFallbackReasoningEffort() {
+        if (firstClassFieldsSupported || blank(fallbackReasoningEffort)) {
             return Optional.empty();
         }
         return Optional.of(fallbackReasoningEffort);

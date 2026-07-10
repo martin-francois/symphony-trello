@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.CodexModelDefaults;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
@@ -199,7 +198,7 @@ final class CodexModelDefaultsResolverTest {
     }
 
     @Test
-    void searchesPaginatedModelListBeforeSelectingDefaultModel() throws Exception {
+    void keepsExactModelRecommendationFromLaterModelListPage() throws Exception {
         // given
         Path appServer = appServerScript(
                 """
@@ -209,7 +208,7 @@ final class CodexModelDefaultsResolverTest {
                       printf '%s\\n' '{"jsonrpc":"2.0","id":1,"result":{}}'
                       ;;
                     *'"method":"model/list"'*'"cursor":"page-2"'*)
-                      printf '%s\\n' '{"jsonrpc":"2.0","id":3,"result":{"data":[{"model":"gpt-6","defaultReasoningEffort":"high","isDefault":true}]}}'
+                      printf '%s\\n' '{"jsonrpc":"2.0","id":3,"result":{"data":[{"model":"gpt-5.6-sol","defaultReasoningEffort":"low","isDefault":true,"supportedReasoningEfforts":[{"reasoningEffort":"low","description":"Fast responses with lighter reasoning"},{"reasoningEffort":"ultra","description":"Maximum reasoning with automatic task delegation"}]}]}}'
                       ;;
                     *'"method":"model/list"'*)
                       printf '%s\\n' '{"jsonrpc":"2.0","id":2,"result":{"data":[{"model":"gpt-5.5","defaultReasoningEffort":"medium","isDefault":false}],"nextCursor":"page-2"}}'
@@ -219,10 +218,42 @@ final class CodexModelDefaultsResolverTest {
                 """);
 
         // when
-        CodexModelDefaults defaults = new CodexModelDefaultsResolver(json, List.of(appServer.toString())).resolve();
+        CodexModelSelectionDefaults defaults =
+                new CodexModelDefaultsResolver(json, List.of(appServer.toString())).resolveSelectionDefaults();
 
         // then
-        assertThat(defaults).isEqualTo(new CodexModelDefaults("gpt-6", "high"));
+        assertThat(defaults.defaults()).isEqualTo(new CodexModelDefaults("gpt-5.6-sol", "low"));
+        assertThat(defaults.reasoningEffortForModel("gpt-5.6-sol")).contains("low");
+        assertThat(defaults.reasoningEffortChoicesForModel("gpt-5.6-sol")).contains(List.of("low", "ultra"));
+        assertThat(defaults.reasoningEffortDescriptionForModel("gpt-5.6-sol", "ultra"))
+                .contains("Maximum reasoning with automatic task delegation");
+    }
+
+    @Test
+    void selectsCatalogDefaultModelWithoutInventingReasoningRecommendation() throws Exception {
+        // given
+        Path appServer = appServerScript(
+                """
+                while IFS= read -r line; do
+                  case "$line" in
+                    *'"method":"initialize"'*)
+                      printf '%s\\n' '{"jsonrpc":"2.0","id":1,"result":{}}'
+                      ;;
+                    *'"method":"model/list"'*)
+                      printf '%s\\n' '{"jsonrpc":"2.0","id":2,"result":{"data":[{"model":"gpt-no-default","isDefault":true,"supportedReasoningEfforts":[{"reasoningEffort":"low"},{"reasoningEffort":"high"}]},{"model":"gpt-other","defaultReasoningEffort":"medium","isDefault":false}]}}'
+                      ;;
+                  esac
+                done
+                """);
+
+        // when
+        CodexModelSelectionDefaults defaults =
+                new CodexModelDefaultsResolver(json, List.of(appServer.toString())).resolveSelectionDefaults();
+
+        // then
+        assertThat(defaults.defaults()).isEqualTo(CodexModelDefaults.partial("gpt-no-default", null));
+        assertThat(defaults.reasoningEffortForModel("gpt-no-default")).isEmpty();
+        assertThat(defaults.reasoningEffortChoicesForModel("gpt-no-default")).contains(List.of("low", "high"));
     }
 
     @Test
@@ -400,10 +431,7 @@ final class CodexModelDefaultsResolverTest {
     }
 
     private Path appServerScript(String body) throws Exception {
-        Path appServer = tempDir.resolve("codex-app-server");
-        Files.writeString(appServer, "#!/usr/bin/env bash\nset -euo pipefail\n" + body, StandardCharsets.UTF_8);
-        appServer.toFile().setExecutable(true);
-        return appServer;
+        return CodexModelAppServerFixture.create(tempDir, body);
     }
 
     private record CatalogControlCharacterScenario(String name, String model, String reasoningEffort) {

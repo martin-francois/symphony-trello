@@ -40,7 +40,7 @@ final class CodexModelSelectionFlow {
                 reasoningEffortOverride(options, selectionDefaults, defaults, modelOverride, model, reasoningEffort);
         if (options.codexReasoningEffort().isEmpty()) {
             displayReasoningEffortOptions(terminal, selectionDefaults, model, reasoningEffort);
-            String answer = terminal.readLine("Reasoning effort [" + defaultLabel(reasoningEffort) + "]: ");
+            String answer = terminal.readLine(reasoningEffortPrompt(reasoningEffort));
             if (!blank(answer)) {
                 reasoningEffort = selectionDefaults.validateReasoningEffortForModel(model, answer.strip());
                 reasoningEffortOverride = Optional.of(reasoningEffort);
@@ -76,9 +76,9 @@ final class CodexModelSelectionFlow {
                 return defaults.reasoningEffort();
             }
             return selectionDefaults
-                    .reasoningEffortForExplicitModelOverride(
+                    .reasoningEffortForSelectedModel(
                             model, defaults, selectionDefaults.preserveConfiguredReasoningEffort())
-                    .orElseGet(defaults::reasoningEffort);
+                    .orElse(null);
         }
         return defaults.reasoningEffort();
     }
@@ -102,7 +102,7 @@ final class CodexModelSelectionFlow {
             }
             if (modelOverride.isPresent()) {
                 return selectionDefaults
-                        .reasoningEffortForExplicitModelOverride(model, defaults, false)
+                        .reasoningEffortForSelectedModel(model, defaults, false)
                         .map(ignored -> reasoningEffort);
             }
             return selectionDefaults.reasoningEffortForModel(model).map(ignored -> reasoningEffort);
@@ -177,6 +177,10 @@ final class CodexModelSelectionFlow {
 
     private static String defaultLabel(String value) {
         return blank(value) ? "keep workflow default" : value;
+    }
+
+    private static String reasoningEffortPrompt(String reasoningEffort) {
+        return blank(reasoningEffort) ? "Reasoning effort: " : "Reasoning effort [" + reasoningEffort + "]: ";
     }
 
     private static boolean blank(String value) {

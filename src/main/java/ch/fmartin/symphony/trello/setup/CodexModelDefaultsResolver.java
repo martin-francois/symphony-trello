@@ -146,17 +146,17 @@ final class CodexModelDefaultsResolver {
             if (!reasoningEffortOptions.isEmpty()) {
                 reasoningEffortOptionsByModel.put(modelName, reasoningEffortOptions);
             }
-            String reasoningEffort = validatedCatalogText(model, "defaultReasoningEffort");
-            if (blank(reasoningEffort)) {
-                continue;
-            }
-            reasoningEffortsByModel.put(modelName, reasoningEffort);
             boolean modelIsDefault = model.path("isDefault").asBoolean(false);
             boolean modelIsHidden = model.path("hidden").asBoolean(false);
             if (!modelIsHidden && (selected == null || (!selectedIsDefault && modelIsDefault))) {
                 selected = model;
                 selectedIsDefault = modelIsDefault;
             }
+            String reasoningEffort = validatedCatalogText(model, "defaultReasoningEffort");
+            if (blank(reasoningEffort)) {
+                continue;
+            }
+            reasoningEffortsByModel.put(modelName, reasoningEffort);
         }
         if (selected == null) {
             return CodexModelSelectionDefaults.withReasoningEffortOptions(
@@ -164,12 +164,12 @@ final class CodexModelDefaultsResolver {
         }
         String modelName = validatedCatalogText(selected, "model");
         String reasoningEffort = validatedCatalogText(selected, "defaultReasoningEffort");
-        if (blank(modelName) || blank(reasoningEffort)) {
+        if (blank(modelName)) {
             return CodexModelSelectionDefaults.withReasoningEffortOptions(
                     CodexModelDefaults.fallback(), reasoningEffortsByModel, reasoningEffortOptionsByModel);
         }
         return CodexModelSelectionDefaults.withReasoningEffortOptions(
-                new CodexModelDefaults(modelName, reasoningEffort),
+                CodexModelDefaults.partial(modelName, reasoningEffort),
                 reasoningEffortsByModel,
                 reasoningEffortOptionsByModel);
     }
