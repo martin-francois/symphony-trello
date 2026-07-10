@@ -47,7 +47,7 @@ final class InstallerScriptLifecycleTest {
         Path userService = homeDirectory.resolve(".config/systemd/user/symphony-trello.service");
         Path autostartEnvironment = configDirectory.resolve("autostart.env");
         Path fakeLog = temporaryDirectory.resolve("fake-tools.log");
-        Map<String, String> environment = Map.of(
+        Map<String, String> environment = new LinkedHashMap<>(Map.of(
                 "PATH",
                 fakeBin + System.getProperty("path.separator") + System.getenv("PATH"),
                 "HOME",
@@ -67,7 +67,8 @@ final class InstallerScriptLifecycleTest {
                 "TRELLO_API_KEY",
                 "runtime-key-100%",
                 "TRELLO_API_TOKEN",
-                "runtime-token");
+                "runtime-token"));
+        environment.put("SYMPHONY_TRELLO_INSTALLER_COMPLETION", "preexisting");
 
         // when
         ProcessResult install = runWithPseudoTerminal(
@@ -195,7 +196,18 @@ final class InstallerScriptLifecycleTest {
                         "User systemd service installed: " + userService,
                         "User systemd service enabled: symphony-trello.service",
                         "User lingering enabled for reboot autostart.")
+                .containsSubsequence(
+                        "Starting managed workers...",
+                        "User systemd service installed: " + userService,
+                        "User systemd service enabled: symphony-trello.service",
+                        "User lingering enabled for reboot autostart.",
+                        "You're good to go - your Trello board is now a queue for Codex work.")
                 .doesNotContain("Device auth");
+        assertThat(install.output())
+                .containsOnlyOnce("You're good to go - your Trello board is now a queue for Codex work.");
+        assertThat(install.output().stripTrailing())
+                .endsWith("symphony-trello logs --workflow '" + configDirectory.resolve("WORKFLOW.lifecycle-board.md")
+                        + "'");
         assertThat(userServiceContentAfterInstall)
                 .contains(
                         "Description=Symphony for Trello managed local workers",
@@ -215,7 +227,7 @@ final class InstallerScriptLifecycleTest {
                         "SYMPHONY_HOME=\"" + symphonyHome + "\"",
                         "TRELLO_API_KEY=\"runtime-key-100%\"",
                         "TRELLO_API_TOKEN=\"runtime-token\"")
-                .doesNotContain("\nHOME=", "\nUSER=");
+                .doesNotContain("\nHOME=", "\nUSER=", "SYMPHONY_TRELLO_INSTALLER_COMPLETION");
         assertThat(picocliHelpResults).allSatisfy(result -> {
             assertThat(result.exitCode()).as(result.output()).isZero();
             assertThat(result.output()).containsAnyOf("Usage: symphony-trello", "symphony-trello test");
@@ -321,6 +333,15 @@ final class InstallerScriptLifecycleTest {
                         "app-present-before-exit",
                         "jar-stopped")
                 .doesNotContain("new-board --workflow");
+        assertThat(fakeLog).content().containsSubsequence("completion_mode=defer", "completion_mode=print");
+        List<String> managedStartInvocations = Files.readString(fakeLog, StandardCharsets.UTF_8)
+                .lines()
+                .filter(line -> line.contains("TrelloBoardSetupMain start"))
+                .filter(line -> line.contains(" --workflow ") || line.contains(" --all "))
+                .toList();
+        assertThat(managedStartInvocations).isNotEmpty().allSatisfy(line -> assertThat(line)
+                .contains("completion_mode=")
+                .doesNotContain("completion_mode=preexisting", "completion_mode=defer", "completion_mode=print"));
         List<String> isolatedInvocations = Files.readString(fakeLog, StandardCharsets.UTF_8)
                 .lines()
                 .filter(line -> line.startsWith("setup-cli "))

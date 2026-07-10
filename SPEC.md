@@ -3844,6 +3844,18 @@ When this profile is used:
   has been created, connected, imported, or selected for upgrade
 - setup MUST start the managed local worker in the simple path unless `--no-start` or an equivalent
   explicit skip option is used
+- the Java setup command MUST remain the sole owner of the final good-to-go handoff text. Installers
+  MUST defer that handoff until managed worker startup, service-manager configuration, lingering
+  reporting, and any direct-start fallback have completed successfully
+- the final installer handoff MUST be the last user-facing completion block, MUST pair every
+  connected Trello board with its normalized workflow path, and MUST end with
+  `symphony-trello status` plus one shell-correct `symphony-trello logs --workflow PATH` command for
+  each connected workflow. If setup or managed-worker handling leaves the install unsuccessful, the
+  installer MUST NOT print the handoff
+- installer-to-Java completion coordination MUST remain process-local and MUST NOT be written to an
+  autostart environment snapshot or inherited by a managed worker. A completion-only Java invocation
+  MUST load only the connected board manifest and MUST NOT run prerequisites, prompts, Trello or
+  Codex operations, worker starts, health/network checks, or file writes
 - the local CLI invoked through the managed-run wrapper MUST provide status, logs, start, and stop
   commands through Java lifecycle services
 - on Linux hosts with user systemd, setup SHOULD register an installer-managed user service that

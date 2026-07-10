@@ -35,6 +35,9 @@ public final class LocalSetup {
     private static final String CONFIG_DIR_ENV = "SYMPHONY_TRELLO_CONFIG_DIR";
     private static final String COMMAND_ENV = "SYMPHONY_TRELLO_COMMAND";
     private static final String CALLER_DIR_ENV = "SYMPHONY_TRELLO_CALLER_DIR";
+    static final String INSTALLER_COMPLETION_ENV = "SYMPHONY_TRELLO_INSTALLER_COMPLETION";
+    private static final String INSTALLER_COMPLETION_DEFER = "defer";
+    private static final String INSTALLER_COMPLETION_PRINT = "print";
     private static final Duration LOCAL_STATUS_TIMEOUT = Duration.ofMillis(500);
 
     private final TrelloBoardSetup boardSetup;
@@ -127,8 +130,13 @@ public final class LocalSetup {
         PrintStream out = borrowedOut(terminal); // NOPMD - Terminal owns the stream.
         PrintStream err = borrowedErr(terminal); // NOPMD - Terminal owns the stream.
         Options options = null;
+        boolean completionOnly = installerCompletionMode(INSTALLER_COMPLETION_PRINT);
         try {
             options = Options.from(request, environment);
+            if (completionOnly) {
+                printFinalHandoff(out, connectedBoards(options).loadForLifecycle(), options.command());
+                return 0;
+            }
 
             printHeader(out, options);
             if (!confirmWorkspaceRoot(options, terminal)) {
@@ -165,7 +173,7 @@ public final class LocalSetup {
                         out.println();
                         out.println("Keeping connected Trello boards.");
                         startExistingBoards(options, manifest, out);
-                        printMiniTutorial(out, manifest);
+                        printFinalHandoffUnlessDeferred(out, manifest, options.command());
                         return 0;
                     }
                     if (action == ExistingSetupAction.UPDATE_CODEX_ACCESS) {
@@ -242,16 +250,26 @@ public final class LocalSetup {
             out.println();
             out.println("Board:");
             out.println("  " + result.boardUrl());
-            out.println();
-            printMiniTutorial(
-                    out, githubIntegration.enabled(), workflowConfig.listConfiguration(result.workflowPath()));
+            printFinalHandoffUnlessDeferred(out, manifest, options.command());
             return 0;
         } catch (TrelloBoardSetupException | IllegalArgumentException | IOException e) {
             err.println("setup_failed code=%s message=%s".formatted(errorCode(e), e.getMessage()));
             Optional<Path> hintEnvPath = Optional.ofNullable(options).map(Options::envPath);
             SetupDiagnosticReporter.userActionHint(e, hintEnvPath).ifPresent(hint -> err.println("Next step: " + hint));
-            diagnosticReporter.reportFailure(e, request, terminal);
+            if (!completionOnly) {
+                diagnosticReporter.reportFailure(e, request, terminal);
+            }
             return CliExitCodes.SETUP_FAILURE;
+        }
+    }
+
+    private boolean installerCompletionMode(String expected) {
+        return expected.equals(environment.get(INSTALLER_COMPLETION_ENV));
+    }
+
+    private void printFinalHandoffUnlessDeferred(PrintStream out, ConnectedBoardManifest manifest, String cliCommand) {
+        if (!installerCompletionMode(INSTALLER_COMPLETION_DEFER)) {
+            printFinalHandoff(out, manifest, cliCommand);
         }
     }
 
@@ -1324,24 +1342,6 @@ public final class LocalSetup {
         out.println("  OK  Symphony is connected to " + DisplayNames.quotedName(board.boardName()));
     }
 
-    private void printMiniTutorial(PrintStream out, ConnectedBoardManifest manifest) {
-        if (manifest.boards().isEmpty()) {
-            return;
-        }
-        ConnectedBoard board = manifest.boards().getFirst();
-        out.println();
-        if (!board.boardUrl().isBlank()) {
-            out.println("Board:");
-            out.println("  " + board.boardUrl());
-            out.println();
-        }
-        printMiniTutorial(board, out);
-    }
-
-    private void printMiniTutorial(ConnectedBoard board, PrintStream out) {
-        printMiniTutorial(out, board.githubEnabled(), workflowConfig.listConfiguration(board.workflowPath()));
-    }
-
     private void stopBoard(Options options, String boardName, Path workflowPath) {
         ConnectedBoard board = connectedBoardsUnchecked(options)
                 .findByWorkflow(workflowPath)
@@ -1508,78 +1508,45 @@ public final class LocalSetup {
         return options.configDir().resolve(options.workflowPath()).normalize();
     }
 
-    private static void printMiniTutorial(
-            PrintStream out, boolean githubEnabled, WorkflowListConfiguration listConfiguration) {
-        String queueTarget = tutorialQueueTarget(listConfiguration);
-        String runningText = listConfiguration
-                .inProgressState()
-                .map(state -> "moves it to " + DisplayNames.quotedName(state) + ", runs Codex")
-                .orElse("runs Codex from that Trello list");
-        String doneTarget = tutorialDoneTarget(listConfiguration);
-        out.println("You're good to go - your Trello board is now a queue for Codex work.");
-        out.println("Create a Trello card with a clear task and move it to " + queueTarget + ".");
-        if (githubEnabled) {
-            out.println("Symphony picks it up, " + runningText + ", and opens or updates a pull request.");
-            out.println(
-                    "Review the PR. If you want changes, comment on the PR or Trello card, then move the Trello card back to "
-                            + queueTarget + ".");
-            if (listConfiguration.activeStates().stream()
-                    .anyMatch(state -> state.equalsIgnoreCase(TrelloBoardSetup.RECOMMENDED_MERGING_STATE))) {
-                out.println("When the PR is ready to merge, move the Trello card to "
-                        + code(TrelloBoardSetup.RECOMMENDED_MERGING_STATE)
-                        + "; Symphony will re-check it, merge it, and move the Trello card to " + doneTarget + ".");
-            } else {
-                out.println(
-                        "The merge step stays manual until a `Merging` Trello list and terminal Trello list are configured in the workflow.");
-            }
-            printConcurrencyHint(out);
-        } else {
-            out.println("Symphony picks it up, " + runningText + ", and keeps the Trello card updated.");
-            out.println(
-                    "Review the result and add Trello comments describing what should change. Move the Trello card back to "
-                            + queueTarget + " when you want Symphony to address them. If you accept it, move it to "
-                            + doneTarget + ".");
-            printConcurrencyHint(out);
-            out.println();
-            out.println(
-                    "PS: to add GitHub later, run `symphony-trello setup-local configure-github`. Symphony will add the GitHub PR flow to a connected board, including GitHub-specific Trello lists such as `Merging` when needed. In GitHub mode Symphony can create PRs and link them on the Trello card. `Merging` means: Symphony, please do final checks, merge this PR if safe, and move the Trello card to the configured terminal Trello list.");
+    private static void printFinalHandoff(PrintStream out, ConnectedBoardManifest manifest, String cliCommand) {
+        if (manifest.boards().isEmpty()) {
+            throw new TrelloBoardSetupException(
+                    "setup_manifest_unavailable",
+                    "No connected Trello boards are available for the installer completion handoff.");
         }
         out.println();
-        out.println("Read more:");
-        out.println("  Features: https://github.com/martin-francois/symphony-trello#current-capabilities");
-        out.println("  How it works: https://github.com/martin-francois/symphony-trello#how-it-works");
-        out.println("  Concurrency: https://github.com/martin-francois/symphony-trello#workflow-contract");
-    }
-
-    private static void printConcurrencyHint(PrintStream out) {
-        out.println(
-                "Use `agent.max_concurrent_agents` in `WORKFLOW.md` to control how many cards from this board are processed concurrently.");
-    }
-
-    private static String tutorialQueueTarget(WorkflowListConfiguration listConfiguration) {
-        return listConfiguration.activeStates().stream()
-                .filter(state -> listConfiguration.inProgressState().stream().noneMatch(state::equalsIgnoreCase))
-                .filter(state -> !state.equalsIgnoreCase(TrelloBoardSetup.RECOMMENDED_MERGING_STATE))
-                .findFirst()
-                .or(() -> listConfiguration.activeStates().stream().findFirst())
-                .map(DisplayNames::quotedName)
-                .orElse("a configured active Trello list");
-    }
-
-    private static String tutorialDoneTarget(WorkflowListConfiguration listConfiguration) {
-        return listConfiguration.terminalStates().stream()
-                .findFirst()
-                .map(DisplayNames::quotedName)
-                .orElse("a completed Trello list outside the active queue");
-    }
-
-    /**
-     * Backtick code formatting for fixed literal tokens only. External Trello names render
-     * through {@link DisplayNames#quotedName(String)} instead, because they can contain
-     * backticks and control characters that would break the backtick wrapping.
-     */
-    private static String code(String value) {
-        return "`" + value + "`";
+        if (manifest.boards().size() == 1) {
+            ConnectedBoard board = manifest.boards().getFirst();
+            out.println("You're good to go - your Trello board is now a queue for Codex work.");
+            out.println("Connected board: " + DisplayNames.quotedName(board.boardName()));
+            out.println("Workflow: " + board.workflowPath().toAbsolutePath().normalize());
+            out.println();
+            out.println("Create a Trello card with a clear task and move it to this workflow's configured queue list.");
+        } else {
+            out.println("You're good to go - your Trello boards are now queues for Codex work.");
+            out.println("Connected boards and workflows:");
+            manifest.boards().forEach(board -> {
+                out.println("  " + DisplayNames.quotedName(board.boardName()));
+                out.println(
+                        "    Workflow: " + board.workflowPath().toAbsolutePath().normalize());
+            });
+            out.println();
+            out.println(
+                    "Create a Trello card with a clear task and move it to the matching workflow's configured queue list.");
+        }
+        out.println();
+        out.println("Useful commands:");
+        String shell = SetupSystemProperties.get(ShellCommandRenderer.SHELL_PROPERTY);
+        String command = ShellCommandRenderer.executable(cliCommand, shell);
+        out.println("  " + command + " status");
+        manifest.boards()
+                .forEach(board -> out.println("  " + command + " logs --workflow "
+                        + ShellCommandRenderer.argument(
+                                board.workflowPath()
+                                        .toAbsolutePath()
+                                        .normalize()
+                                        .toString(),
+                                shell)));
     }
 
     private static String errorCode(Exception e) {

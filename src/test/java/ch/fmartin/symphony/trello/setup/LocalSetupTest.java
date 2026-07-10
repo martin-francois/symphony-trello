@@ -13,6 +13,7 @@ import static org.junit.jupiter.api.Assumptions.abort;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.setup.CodexModelSelectionDefaults.ReasoningEffortOption;
@@ -21,9 +22,7 @@ import ch.fmartin.symphony.trello.testsupport.TestEnv;
 import ch.fmartin.symphony.trello.testsupport.TestWorkflows;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.PrintStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
@@ -34,10 +33,11 @@ import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.ResourceLock;
+import org.junit.jupiter.api.parallel.Resources;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -1630,10 +1630,20 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "Starting Symphony",
                         "Symphony is connected to \"Local Queue\"",
                         "You're good to go - your Trello board is now a queue for Codex work.",
-                        "Symphony picks it up, moves it to \"In Progress\", runs Codex, and keeps the Trello card updated.",
-                        "GitHub PR flow to a connected board")
+                        "Connected board: \"Local Queue\"",
+                        "Workflow: " + workflow.toAbsolutePath().normalize(),
+                        "symphony-trello status",
+                        "symphony-trello logs --workflow '"
+                                + workflow.toAbsolutePath().normalize() + "'")
                 .stdoutDoesNotContain(
                         "TRELLO_API_TOKEN=token", "Log:", "workflow's Trello handoff lists", "\u2019", "\u2014");
+        assertThat(result.stdout())
+                .containsOnlyOnce("You're good to go - your Trello board is now a queue for Codex work.")
+                .containsOnlyOnce("Connected board: \"Local Queue\"")
+                .containsOnlyOnce("Workflow: " + workflow.toAbsolutePath().normalize());
+        assertThat(result.stdout().stripTrailing())
+                .endsWith("symphony-trello logs --workflow '"
+                        + workflow.toAbsolutePath().normalize() + "'");
         assertThat(trello.createdLists())
                 .containsExactly("Inbox", "Ready for Codex", "In Progress", "Blocked", "Human Review", "Done");
         assertThat(env).content(StandardCharsets.UTF_8).contains("TRELLO_API_KEY=key", "TRELLO_API_TOKEN=token");
@@ -1641,6 +1651,212 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         assertThatWorkflow(workflow).hasNoGithubFlow().doesNotHaveMerging().hasNetworkEnabledWorkspaceSandbox();
         assertThat(commands.startedWorkflows).containsExactly(workflow.toString());
         assertThat(commands.startedEnvFiles).containsExactly(env.toString());
+    }
+
+    @Test
+    void installerCompletionDeferSuppressesOnlyTheFinalHandoff() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.deferred-handoff.md");
+        Path env = tempDir.resolve(".env.deferred-handoff");
+        LocalSetup deferredSetup = setupWithEnvironment(installerCompletionEnvironment("defer"));
+
+        // when
+        SetupRunResult result = runSetup(
+                deferredSetup,
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Deferred Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "Symphony for Trello setup",
+                        "Board connected: \"Deferred Queue\"",
+                        "Starting Symphony",
+                        "Symphony is connected to \"Deferred Queue\"")
+                .stdoutDoesNotContain(
+                        "You're good to go",
+                        "Connected board:",
+                        "Workflow:",
+                        "Useful commands:",
+                        "symphony-trello status",
+                        "symphony-trello logs --workflow '"
+                                + workflow.toAbsolutePath().normalize() + "'");
+        assertThat(workflow).isRegularFile();
+        assertThat(fixture.manifestPath()).isRegularFile();
+        assertThat(commands.startedWorkflows).containsExactly(workflow.toString());
+    }
+
+    @Test
+    void installerCompletionPrintReadsOnlyTheManifestAndEndsWithLifecycleCommands() throws Exception {
+        // given
+        Path alphaWorkflow = tempDir.resolve("config/WORKFLOW.alpha.md");
+        Path betaWorkflow = tempDir.resolve("config/nested/WORKFLOW.beta.md");
+        writeManifest(
+                """
+                {"boards":[
+                  {"boardId":"board-1","boardKey":"alpha001","boardName":"Alpha Queue","boardUrl":"https://trello.example/alpha","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":18080,"githubEnabled":false,"additionalWritableRoots":[],"dangerFullAccess":false},
+                  {"boardId":"board-2","boardKey":"beta0002","boardName":"Beta Queue","boardUrl":"https://trello.example/beta","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":18081,"githubEnabled":true,"additionalWritableRoots":[],"dangerFullAccess":false}
+                ]}
+                """
+                        .formatted(
+                                json(alphaWorkflow),
+                                json(tempDir.resolve("config/.env.alpha")),
+                                json(tempDir.resolve("workspaces/alpha")),
+                                json(betaWorkflow),
+                                json(tempDir.resolve("config/.env.beta")),
+                                json(tempDir.resolve("workspaces/beta"))));
+        String manifestBefore = Files.readString(fixture.manifestPath(), StandardCharsets.UTF_8);
+        CommandRunner forbiddenCommands = command -> {
+            throw new AssertionError("completion-only setup must not run commands: " + String.join(" ", command));
+        };
+        LocalSetup completionSetup = new LocalSetup(
+                new TrelloBoardSetup(new ObjectMapper()),
+                forbiddenCommands,
+                installerCompletionEnvironment("print"),
+                new WorkflowConfigEditor(),
+                workerManager);
+
+        // when
+        SetupRunResult result = runSetup(completionSetup);
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "You're good to go - your Trello boards are now queues for Codex work.",
+                        "Connected boards and workflows:",
+                        "\"Alpha Queue\"",
+                        "Workflow: " + alphaWorkflow.toAbsolutePath().normalize(),
+                        "\"Beta Queue\"",
+                        "Workflow: " + betaWorkflow.toAbsolutePath().normalize(),
+                        "Useful commands:",
+                        "symphony-trello status",
+                        "symphony-trello logs --workflow '"
+                                + alphaWorkflow.toAbsolutePath().normalize() + "'",
+                        "symphony-trello logs --workflow '"
+                                + betaWorkflow.toAbsolutePath().normalize() + "'")
+                .stdoutDoesNotContain(
+                        "Symphony for Trello setup",
+                        "Checking prerequisites",
+                        "Starting Symphony",
+                        "\nTrello board\n",
+                        "https://trello.example",
+                        "\n  symphony-trello logs\n");
+        assertThat(result.stdout().stripTrailing())
+                .endsWith("symphony-trello logs --workflow '"
+                        + betaWorkflow.toAbsolutePath().normalize() + "'");
+        assertThat(fixture.manifestPath()).content(StandardCharsets.UTF_8).isEqualTo(manifestBefore);
+        assertThat(trello.memberLookups()).isEmpty();
+        assertThat(trello.workspaceLookups()).isEmpty();
+        assertThat(trello.createdLists()).isEmpty();
+        verifyNoInteractions(workerManager);
+    }
+
+    @ParameterizedTest(name = "installer completion command for {0}")
+    @ResourceLock(Resources.SYSTEM_PROPERTIES)
+    @ValueSource(strings = {"posix", "powershell", "cmd"})
+    void installerCompletionQuotesWorkflowLogCommandForInstalledShell(String shell) throws Exception {
+        // given
+        String fileName = "cmd".equals(shell) ? "Fran's \"queue\" workflow.md" : "Fran's $queue workflow.md";
+        Path workflow = tempDir.resolve("config/tricky paths").resolve(fileName);
+        String extension =
+                switch (shell) {
+                    case "powershell" -> ".ps1";
+                    case "cmd" -> ".cmd";
+                    default -> "";
+                };
+        Path command = tempDir.resolve("installed CLI/Fran's Symphony/symphony-trello" + extension);
+        writeManifest(
+                """
+                {"boards":[
+                  {"boardId":"board-1","boardKey":"alpha001","boardName":"Alpha Queue","boardUrl":"https://trello.example/alpha","workflowPath":"%s","envPath":"%s","workspaceRoot":"%s","serverPort":18080,"githubEnabled":false,"additionalWritableRoots":[],"dangerFullAccess":false}
+                ]}
+                """
+                        .formatted(
+                                json(workflow),
+                                json(tempDir.resolve("config/.env.alpha")),
+                                json(tempDir.resolve("workspaces/alpha"))));
+        LocalSetup completionSetup = setupWithEnvironment(installerCompletionEnvironment("print", command.toString()));
+        String previousShell = System.getProperty(ShellCommandRenderer.SHELL_PROPERTY);
+
+        try {
+            System.setProperty(ShellCommandRenderer.SHELL_PROPERTY, shell);
+
+            // when
+            SetupRunResult result = runSetup(completionSetup);
+
+            // then
+            String normalizedWorkflow = workflow.toAbsolutePath().normalize().toString();
+            String renderedCommand = ShellCommandRenderer.executable(command.toString(), shell);
+            result.assertSuccess()
+                    .stdoutContains(
+                            renderedCommand + " status",
+                            renderedCommand + " logs --workflow "
+                                    + ShellCommandRenderer.argument(normalizedWorkflow, shell));
+            assertThat(result.stdout())
+                    .doesNotContain("\n  symphony-trello status", "\n  symphony-trello logs --workflow");
+        } finally {
+            if (previousShell == null) {
+                System.clearProperty(ShellCommandRenderer.SHELL_PROPERTY);
+            } else {
+                System.setProperty(ShellCommandRenderer.SHELL_PROPERTY, previousShell);
+            }
+        }
+    }
+
+    @Test
+    void unknownInstallerCompletionValueKeepsTheNormalFinalHandoff() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.ordinary-handoff.md");
+        Path env = tempDir.resolve(".env.ordinary-handoff");
+        LocalSetup ordinarySetup = setupWithEnvironment(installerCompletionEnvironment("unexpected"));
+
+        // when
+        SetupRunResult result = runSetup(
+                ordinarySetup,
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Ordinary Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess().stdoutContains("You're good to go - your Trello board is now a queue for Codex work.");
+        assertThat(commands.startedWorkflows).containsExactly(workflow.toString());
+    }
+
+    private Map<String, String> installerCompletionEnvironment(String value) {
+        return installerCompletionEnvironment(value, "symphony-trello");
+    }
+
+    private Map<String, String> installerCompletionEnvironment(String value, String command) {
+        return Map.of(
+                "SYMPHONY_TRELLO_CONFIG_DIR",
+                fixture.configDir().toString(),
+                "SYMPHONY_TRELLO_COMMAND",
+                command,
+                "SYMPHONY_TRELLO_INSTALLER_COMPLETION",
+                value);
     }
 
     @Test
@@ -4518,11 +4734,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "Existing board lists",
                         "Queued-work list names",
                         "In-progress list name",
-                        "move it to \"Queue\"",
-                        "moves it to \"Working\"",
-                        "move it to \"Finished\"")
-                .stdoutDoesNotContain(
-                        "move it to \"Ready for Codex\"", "moves it to \"In Progress\"", "move it to \"Done\"");
+                        "Connected board: \"Imported Queue\"",
+                        "Workflow: " + workflow.toAbsolutePath().normalize());
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("- \"Queue\"", "in_progress_state: \"Working\"", "- \"Finished\"", "list_name \"Blocked\"");
@@ -4558,7 +4771,11 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // then
         Path workflow = tempDir.resolve("config").resolve("WORKFLOW.imported-queue.md");
         result.assertSuccess()
-                .stdoutContains("Choose board setup:", "Existing board lists", "moves it to \"Working\"")
+                .stdoutContains(
+                        "Choose board setup:",
+                        "Existing board lists",
+                        "Connected board: \"Imported Queue\"",
+                        "Workflow: " + workflow.toAbsolutePath().normalize())
                 .stdoutDoesNotContain("In-progress list name");
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
@@ -6003,11 +6220,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
-    void setupKeepTutorialEscapesControlCharacterWorkflowListNames() throws Exception {
+    void setupKeepHandoffUsesManifestWithoutRenderingWorkflowListNames() throws Exception {
         // given
-        // Workflow YAML can carry Trello list names containing quotes and control characters;
-        // the keep-existing tutorial must render them display-escaped on one physical line
-        // instead of letting a list name split or garble the tutorial text.
         Path workflow = tempDir.resolve("WORKFLOW.dirty-tutorial.md");
         Path env = tempDir.resolve(".env.dirty-tutorial");
         SetupRunResult firstResult = runSetup(
@@ -6041,32 +6255,9 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 .assertSuccess()
                 .stdoutContains(
                         "Keeping connected Trello boards.",
-                        "Create a Trello card with a clear task and move it to \"Ready\\nCodex\".",
-                        "Symphony picks it up, moves it to \"Doing\\tNow\", runs Codex",
-                        "If you accept it, move it to \"Done \\\"Q\\\"\".")
-                .stdoutDoesNotContain("Ready\nCodex", "Doing\tNow", "Done \"Q\"");
-    }
-
-    @Test
-    void setupTutorialUsesFirstEligibleQueueAndTerminalState() throws Exception {
-        // given
-        var lists = new WorkflowListConfiguration(
-                List.of("In Progress", "First Queue", "Second Queue"),
-                List.of("First Done", "Second Done"),
-                Optional.of("In Progress"),
-                Optional.empty(),
-                false,
-                false);
-
-        // when
-        String tutorial = miniTutorial(false, lists);
-
-        // then
-        assertThat(tutorial)
-                .contains(
-                        "Create a Trello card with a clear task and move it to \"First Queue\".",
-                        "move it to \"First Done\".")
-                .doesNotContain("move it to \"Second Done\".", "move it to \"Second Queue\".");
+                        "Connected board: \"Dirty Tutorial Queue\"",
+                        "Workflow: " + workflow.toAbsolutePath().normalize())
+                .stdoutDoesNotContain("Ready\\nCodex", "Doing\\tNow", "Done \\\"Q\\\"");
     }
 
     @Test
@@ -7568,9 +7759,11 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 .stdoutContains(
                         "GitHub CLI authenticated",
                         "You're good to go - your Trello board is now a queue for Codex work.",
-                        "Symphony picks it up, moves it to \"In Progress\", runs Codex, and opens or updates a pull request.",
-                        "Review the PR. If you want changes, comment on the PR or Trello card, then move the Trello card back to \"Ready for Codex\".",
-                        "When the PR is ready to merge, move the Trello card to `Merging`; Symphony will re-check it, merge it, and move the Trello card to \"Done\".")
+                        "Connected board: \"GitHub Queue\"",
+                        "Workflow: " + workflow.toAbsolutePath().normalize(),
+                        "symphony-trello status",
+                        "symphony-trello logs --workflow '"
+                                + workflow.toAbsolutePath().normalize() + "'")
                 .stdoutDoesNotContain("workflow's Trello handoff lists", "\u2019", "\u2014");
         assertThat(trello.createdLists())
                 .containsExactly(
@@ -7936,15 +8129,6 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 .map(line -> line.substring(line.lastIndexOf(':') + 1).trim())
                 .map(Integer::parseInt)
                 .orElseThrow(() -> new AssertionError("Expected server port selection line in setup output."));
-    }
-
-    private static String miniTutorial(boolean githubEnabled, WorkflowListConfiguration lists) throws Exception {
-        var output = new ByteArrayOutputStream();
-        var method = LocalSetup.class.getDeclaredMethod(
-                "printMiniTutorial", PrintStream.class, boolean.class, WorkflowListConfiguration.class);
-        method.setAccessible(true);
-        method.invoke(null, new PrintStream(output, true, StandardCharsets.UTF_8), githubEnabled, lists);
-        return output.toString(StandardCharsets.UTF_8);
     }
 
     private static boolean contains(int[] ports, int candidate) {

@@ -6,6 +6,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -23,8 +24,20 @@ abstract class ProcessHandleManagedProcessPlatform implements ManagedProcessPlat
                 .redirectOutput(ProcessBuilder.Redirect.appendTo(stdout.toFile()))
                 .redirectError(ProcessBuilder.Redirect.appendTo(stderr.toFile()));
         standardInputRedirect().ifPresent(input -> builder.redirectInput(ProcessBuilder.Redirect.from(input.toFile())));
-        builder.environment().putAll(environment);
+        configureWorkerEnvironment(builder.environment(), environment);
         return new ManagedProcessHandle(builder.start().pid());
+    }
+
+    static void configureWorkerEnvironment(
+            Map<String, String> inheritedEnvironment, Map<String, String> configuredEnvironment) {
+        inheritedEnvironment.putAll(withoutInstallerCompletionEnvironment(configuredEnvironment));
+        inheritedEnvironment.remove(LocalSetup.INSTALLER_COMPLETION_ENV);
+    }
+
+    static Map<String, String> withoutInstallerCompletionEnvironment(Map<String, String> environment) {
+        Map<String, String> sanitized = new LinkedHashMap<>(environment);
+        sanitized.remove(LocalSetup.INSTALLER_COMPLETION_ENV);
+        return Map.copyOf(sanitized);
     }
 
     @Override

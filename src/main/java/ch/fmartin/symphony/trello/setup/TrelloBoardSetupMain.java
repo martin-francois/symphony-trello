@@ -25,7 +25,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Stack;
 import java.util.concurrent.Callable;
-import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 import picocli.CommandLine;
 import picocli.CommandLine.ArgGroup;
@@ -56,10 +55,7 @@ import picocli.CommandLine.Spec;
         })
 public final class TrelloBoardSetupMain implements Callable<Integer> {
     private static final String CONFIG_DIR_PROPERTY = "symphony.trello.config.dir";
-    private static final String SHELL_PROPERTY = "symphony.trello.shell";
     private static final String CLI_COMMAND_PROPERTY = "symphony.trello.command";
-    private static final ThreadLocal<PropertyLookup> PROPERTY_LOOKUP =
-            ThreadLocal.withInitial(() -> System::getProperty);
 
     private final TrelloBoardSetupService boardSetup;
     private final LocalWorkerManager workerManager;
@@ -104,7 +100,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             PrintStream err,
             TrelloBoardSetup.CodexModelDefaults codexModelDefaults,
             Map<String, String> properties) {
-        return runWithPropertyLookup(properties::get, () -> run(args, out, err, codexModelDefaults));
+        return SetupSystemProperties.withLookup(properties::get, () -> run(args, out, err, codexModelDefaults));
     }
 
     static int run(
@@ -135,15 +131,6 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
     private static CodexModelSelectionDefaults codexModelSelectionDefaults(
             TrelloBoardSetup.CodexModelDefaults codexModelDefaults) {
         return CodexModelSelectionDefaults.of(codexModelDefaults);
-    }
-
-    private static int runWithPropertyLookup(PropertyLookup properties, IntSupplier run) {
-        PROPERTY_LOOKUP.set(properties);
-        try {
-            return run.getAsInt();
-        } finally {
-            PROPERTY_LOOKUP.remove();
-        }
     }
 
     private static BufferedReader standardInputReader() {
@@ -1076,35 +1063,21 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
     private static String installedCliCommand() {
         String configured = property(CLI_COMMAND_PROPERTY);
         if (configured == null || configured.isBlank()) {
-            return "symphony-trello";
+            return ShellCommandRenderer.DEFAULT_CLI_COMMAND;
         }
         return configured;
     }
 
     private static String shellCommand(String command) {
-        if ("powershell".equalsIgnoreCase(property(SHELL_PROPERTY)) && !"symphony-trello".equals(command)) {
-            return "& " + shellQuote(command);
-        }
-        return "symphony-trello".equals(command) ? command : shellQuote(command);
+        return ShellCommandRenderer.executable(command, property(ShellCommandRenderer.SHELL_PROPERTY));
     }
 
     private static String shellQuote(String value) {
-        String shell = property(SHELL_PROPERTY);
-        if ("powershell".equalsIgnoreCase(shell)) {
-            return "'" + value.replace("'", "''") + "'";
-        }
-        if ("cmd".equalsIgnoreCase(shell)) {
-            return "\"" + value.replace("\"", "\\\"") + "\"";
-        }
-        return "'" + value.replace("'", "'\\''") + "'";
+        return ShellCommandRenderer.argument(value, property(ShellCommandRenderer.SHELL_PROPERTY));
     }
 
     private static String property(String name) {
-        return PROPERTY_LOOKUP.get().get(name);
-    }
-
-    private interface PropertyLookup {
-        String get(String name);
+        return SetupSystemProperties.get(name);
     }
 
     private static String optionalListName(String value) {

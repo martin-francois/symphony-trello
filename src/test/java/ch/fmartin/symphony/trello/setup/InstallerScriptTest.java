@@ -5218,6 +5218,34 @@ final class InstallerScriptTest {
     }
 
     @Test
+    void powershellInstallerDryRunPreviewsSetupBeforeManagedWorkerStartupWhenAvailable() throws Exception {
+        // given
+        List<String> pwsh = powershellCommand();
+        assumeFalse(pwsh.isEmpty());
+
+        // when
+        ProcessResult result = run(
+                nonWindowsPowerShellEnvironment(),
+                command(pwsh, "-NoProfile", "-File", "./install.ps1", "--dry-run")
+                        .toArray(String[]::new));
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output())
+                .containsSubsequence(
+                        "Dry run: no files changed.",
+                        "Starting setup...",
+                        "WOULD run:",
+                        "symphony-trello.ps1 setup-local",
+                        "Starting managed workers...",
+                        "WOULD write autostart environment snapshot:",
+                        "WOULD write Windows autostart launcher:",
+                        "WOULD create Windows Scheduled Task:",
+                        "WOULD start managed workers through Windows Scheduled Task")
+                .doesNotContain("You're good to go");
+    }
+
+    @Test
     void powershellInstallerRejectsLeadingVVersionEnvironmentValueWhenAvailable() throws Exception {
         // given
         List<String> pwsh = powershellCommand();
@@ -6760,6 +6788,10 @@ final class InstallerScriptTest {
                         "launchctl bootstrap",
                         "EnvironmentVariables",
                         "autostart_environment_name",
+                        "SYMPHONY_TRELLO_INSTALLER_COMPLETION",
+                        "run_setup_local_with_deferred_completion",
+                        "start_managed_workers_without_installer_completion",
+                        "print_installer_completion",
                         "pid_command_line",
                         "is_live_managed_pid",
                         "-Dsymphony.trello.managed.app_home",
@@ -6808,6 +6840,14 @@ final class InstallerScriptTest {
                         "symphony-trello-autostart.ps1",
                         "autostart-env.ps1",
                         "Test-AutostartEnvironmentName",
+                        "$InstallerCompletionEnvironmentName = \"SYMPHONY_TRELLO_INSTALLER_COMPLETION\"",
+                        "$InstallerCompletionWasSet = Test-Path",
+                        "$InstallerCompletionPreviousValue = [Environment]::GetEnvironmentVariable",
+                        "Set-InstallerCompletionMode \"defer\"",
+                        "Clear-InstallerCompletionMode",
+                        "Start-ManagedWorkersWithoutInstallerCompletion",
+                        "Set-InstallerCompletionMode \"print\"",
+                        "Restore-InstallerCompletionEnvironment",
                         "Scheduled Task was installed but could not be started immediately",
                         "if (Install-StartupFolderCommand) {",
                         "Microsoft\\Windows\\Start Menu\\Programs\\Startup",
@@ -6907,6 +6947,66 @@ final class InstallerScriptTest {
         assertThat(powershellAppRemovalBlock).contains("Stop-ManagedProcesses", "Remove-WindowsAutostart");
         assertThat(powershellAppRemovalBlock.indexOf("Stop-ManagedProcesses"))
                 .isLessThan(powershellAppRemovalBlock.indexOf("Remove-WindowsAutostart"));
+    }
+
+    @Test
+    void installersOrderFinalHandoffAfterManagedWorkerSetupInSource() throws Exception {
+        // given
+        String posixInstaller = Files.readString(Path.of("install.sh"), StandardCharsets.UTF_8);
+        String powershellInstaller = Files.readString(Path.of("install.ps1"), StandardCharsets.UTF_8);
+        String posixOnboarding =
+                posixInstaller.substring(posixInstaller.lastIndexOf("if [[ \"$NO_ONBOARD\" == false ]]"));
+        String powershellOnboarding =
+                powershellInstaller.substring(powershellInstaller.lastIndexOf("if (-not $NoOnboard)"));
+        String posixAutostartFilter = posixInstaller.substring(
+                posixInstaller.indexOf("autostart_environment_name()"),
+                posixInstaller.indexOf("has_control_character()"));
+        String powershellAutostartFilter = powershellInstaller.substring(
+                powershellInstaller.indexOf("function Test-AutostartEnvironmentName"),
+                powershellInstaller.indexOf("function Write-AutostartEnvironmentFile"));
+        String powershellManagedWorkerBoundary = powershellInstaller.substring(
+                powershellInstaller.indexOf("function Start-ManagedWorkersWithoutInstallerCompletion"),
+                powershellInstaller.indexOf("function Get-InstalledAppVersionFallback"));
+
+        // when
+        int posixDeferredSetup = posixOnboarding.indexOf("run_setup_local_with_deferred_completion");
+        int posixManagedWorkers =
+                posixOnboarding.indexOf("start_managed_workers_without_installer_completion", posixDeferredSetup);
+        int posixFinalHandoff = posixOnboarding.indexOf("print_installer_completion");
+        int powershellDeferredSetup = powershellOnboarding.indexOf("Set-InstallerCompletionMode \"defer\"");
+        int powershellManagedWorkers =
+                powershellOnboarding.indexOf("Start-ManagedWorkersWithoutInstallerCompletion", powershellDeferredSetup);
+        int powershellFinalHandoff = powershellOnboarding.indexOf("Set-InstallerCompletionMode \"print\"");
+
+        // then
+        assertThat(posixDeferredSetup).isNotNegative().isLessThan(posixManagedWorkers);
+        assertThat(posixManagedWorkers).isLessThan(posixFinalHandoff);
+        assertThat(powershellDeferredSetup).isNotNegative().isLessThan(powershellManagedWorkers);
+        assertThat(powershellManagedWorkers).isLessThan(powershellFinalHandoff);
+        assertThat(powershellOnboarding.indexOf("Clear-InstallerCompletionMode"))
+                .isBetween(powershellDeferredSetup, powershellManagedWorkers);
+        assertThat(powershellOnboarding.indexOf("Restore-InstallerCompletionEnvironment"))
+                .isGreaterThan(powershellFinalHandoff);
+        assertThat(powershellOnboarding).doesNotContain("if ($DryRun)");
+        assertThat(posixInstaller)
+                .contains(
+                        "local -x \"$INSTALLER_COMPLETION_ENV=defer\"",
+                        "local -x \"$INSTALLER_COMPLETION_ENV=print\"",
+                        "unset \"$INSTALLER_COMPLETION_ENV\"")
+                .doesNotContain(
+                        "local -x SYMPHONY_TRELLO_INSTALLER_COMPLETION=", "unset SYMPHONY_TRELLO_INSTALLER_COMPLETION");
+        assertThat(posixAutostartFilter).contains("[[ \"$name\" != \"$INSTALLER_COMPLETION_ENV\" ]] || return 1");
+        assertThat(powershellAutostartFilter)
+                .contains("if ($Name -eq $InstallerCompletionEnvironmentName)", "return $false");
+        assertThat(powershellManagedWorkerBoundary)
+                .containsSubsequence(
+                        "try {",
+                        "Clear-InstallerCompletionMode",
+                        "Start-ManagedWorkers",
+                        "} finally {",
+                        "Restore-InstallerCompletionEnvironment");
+        assertThat(powershellOnboarding.substring(powershellOnboarding.indexOf("elseif ($RestartManagedWorkers)")))
+                .contains("Start-ManagedWorkersWithoutInstallerCompletion");
     }
 
     @Test
@@ -7105,6 +7205,125 @@ final class InstallerScriptTest {
                         "systemctl --user enable symphony-trello.service",
                         "systemctl --user restart symphony-trello.service",
                         "systemctl --user disable --now symphony-trello.service");
+    }
+
+    @MethodSource("posixInstallerHandoffScenarios")
+    @ParameterizedTest(name = "{0}")
+    void posixInstallerPrintsHandoffOnlyAfterManagedWorkerOutcome(InstallerHandoffScenario scenario) throws Exception {
+        // given
+        assumeTrue(commandExists("bash"));
+        assumeTrue(commandExists("git"));
+        assumeTrue(commandExists("script"));
+        Path installScript = Path.of("install.sh").toAbsolutePath();
+        Path sourceRepository = createSourceRepository(temporaryDirectory);
+        Path fakeBin = createFakeToolchain(temporaryDirectory);
+        Path home = temporaryDirectory.resolve("handoff-" + scenario.slug() + "-home");
+        Path symphonyHome = temporaryDirectory.resolve("handoff-" + scenario.slug() + "-symphony-home");
+        Path binDirectory = temporaryDirectory.resolve("handoff-" + scenario.slug() + "-bin");
+        Path fakeLog = temporaryDirectory.resolve("handoff-" + scenario.slug() + ".log");
+        Files.createDirectories(home);
+        Files.createFile(temporaryDirectory.resolve("codex-authenticated"));
+        Map<String, String> environment = new LinkedHashMap<>(Map.of(
+                "PATH",
+                fakeBin + File.pathSeparator + System.getenv("PATH"),
+                "HOME",
+                home.toString(),
+                "USER",
+                "symphony-test",
+                "SYMPHONY_TRELLO_REPO_URL",
+                sourceRepository.toUri().toString(),
+                "SYMPHONY_TRELLO_REF",
+                "main",
+                "SYMPHONY_HOME",
+                symphonyHome.toString(),
+                "SYMPHONY_FAKE_LOG",
+                fakeLog.toString()));
+        environment.putAll(scenario.environment());
+
+        try {
+
+            // when
+            ProcessResult result = runWithPseudoTerminal(
+                    environment,
+                    "api-key\napi-token\nHandoff Queue\n",
+                    "bash " + shellQuote(installScript.toString()) + " --no-update-path --bin-dir "
+                            + shellQuote(binDirectory.toString()));
+
+            // then
+            assertThat(result.output())
+                    .containsSubsequence(scenario.expectedOutput().toArray(String[]::new));
+            if (scenario.success()) {
+                result.assertSuccess();
+                assertThat(result.output())
+                        .containsOnlyOnce("You're good to go - your Trello board is now a queue for Codex work.");
+                assertThat(result.output().stripTrailing())
+                        .endsWith("symphony-trello logs --workflow '"
+                                + symphonyHome.resolve("config/WORKFLOW.handoff-queue.md") + "'");
+            } else {
+                assertThat(result.exitCode()).as(result.output()).isNotZero();
+                assertThat(result.output()).doesNotContain("You're good to go", "Useful commands:");
+            }
+        } finally {
+            Path installedCommand = binDirectory.resolve("symphony-trello");
+            if (Files.isExecutable(installedCommand)) {
+                run(environment, installedCommand.toString(), "stop").assertSuccess();
+            }
+        }
+    }
+
+    private static Stream<InstallerHandoffScenario> posixInstallerHandoffScenarios() {
+        return Stream.of(
+                new InstallerHandoffScenario(
+                        "lingering failure precedes handoff",
+                        Map.of("SYMPHONY_FAKE_LINGER_FAILURE", "1"),
+                        true,
+                        List.of(
+                                "Starting managed workers...",
+                                "User systemd service enabled: symphony-trello.service",
+                                "Could not enable user lingering. The service will start when the user session starts.",
+                                "You're good to go - your Trello board is now a queue for Codex work.")),
+                new InstallerHandoffScenario(
+                        "unavailable service manager falls back before handoff",
+                        Map.of("SYMPHONY_FAKE_SYSTEMD_UNAVAILABLE", "1"),
+                        true,
+                        List.of(
+                                "Starting managed workers...",
+                                "User systemd is unavailable in this session.",
+                                "Autostart service was not configured.",
+                                "start --all",
+                                "You're good to go - your Trello board is now a queue for Codex work.")),
+                new InstallerHandoffScenario(
+                        "failed service setup falls back before handoff",
+                        Map.of("SYMPHONY_FAKE_SYSTEMD_ENABLE_FAILURE", "1"),
+                        true,
+                        List.of(
+                                "Starting managed workers...",
+                                "Could not enable the user systemd service. Falling back to direct start.",
+                                "Autostart service was not configured.",
+                                "start --all",
+                                "You're good to go - your Trello board is now a queue for Codex work.")),
+                new InstallerHandoffScenario(
+                        "failed fallback start suppresses handoff",
+                        Map.of("SYMPHONY_FAKE_START_ALL_FAILURE", "1"),
+                        false,
+                        List.of(
+                                "Starting managed workers...",
+                                "Could not enable the user systemd service. Falling back to direct start.",
+                                "Autostart service was not configured.",
+                                "start --all",
+                                "managed start --all failed")));
+    }
+
+    private record InstallerHandoffScenario(
+            String name, Map<String, String> environment, boolean success, List<String> expectedOutput) {
+        String slug() {
+            return name.replace(' ', '-');
+        }
+
+        @Override
+        public String toString() {
+            return name;
+        }
     }
 
     @ParameterizedTest(name = "pinned ref type: {0}")
