@@ -115,6 +115,12 @@ public final class WorkflowAssertions {
         return this;
     }
 
+    public WorkflowAssertions hasRepositoryDefaults(String repositoryUrl, String repositoryPath) {
+        assertThat(content)
+                .contains("default_url: \"" + repositoryUrl + "\"", "default_path: \"" + repositoryPath + "\"");
+        return this;
+    }
+
     public WorkflowAssertions hasNoRepositoryDefaultUrl() {
         assertThat(content).contains("default_url: null");
         return this;

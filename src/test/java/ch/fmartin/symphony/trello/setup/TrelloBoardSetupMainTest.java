@@ -44,6 +44,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -65,6 +66,8 @@ final class TrelloBoardSetupMainTest {
     private static final String CONFIG_DIR_PROPERTY = "symphony.trello.config.dir";
     private static final String SHELL_PROPERTY = "symphony.trello.shell";
     private static final String CLI_COMMAND_PROPERTY = "symphony.trello.command";
+    private static final String REPOSITORY_URL_REFERENCE = "$SYNTHETIC_REPOSITORY_URL";
+    private static final String REPOSITORY_PATH_REFERENCE = "$SYNTHETIC_REPOSITORY_PATH";
     private static final List<String> TRELLO_CREDENTIAL_ENVIRONMENT_NAMES =
             List.of("TRELLO_API_KEY", "TRELLO_API_TOKEN", "SYMPHONY_TRELLO_DOTENV");
 
@@ -2256,6 +2259,48 @@ final class TrelloBoardSetupMainTest {
                                 + shellQuote(
                                         workflow.toAbsolutePath().normalize().toString()))
                 .doesNotContain("./mvnw quarkus:dev");
+    }
+
+    @MethodSource("forcedDirectRepositoryDefaultScenarios")
+    @ParameterizedTest(name = "{0}")
+    void forcedDirectSetupMergesRepositoryUrlWithExistingRawRepositoryDefaults(
+            DirectRepositoryDefaultsScenario scenario) throws Exception {
+        // given
+        Path workflow = tempDir.resolve("direct-repository-defaults-" + scenario.fileSuffix() + ".WORKFLOW.md");
+        Path manifest = tempDir.resolve("manifest-repository-defaults-" + scenario.fileSuffix() + ".json");
+        int serverPort = firstAvailableManagedPort();
+        Files.writeString(
+                workflow,
+                TestWorkflows.workflowWithRepositoryDefaults(
+                        "existing-board", serverPort, REPOSITORY_URL_REFERENCE, REPOSITORY_PATH_REFERENCE),
+                StandardCharsets.UTF_8);
+        SetupCommandBuilder command = scenario.newBoard()
+                ? SetupCommandBuilder.newBoard(endpoint()).name("Preserved Direct Defaults Queue")
+                : SetupCommandBuilder.importBoard(endpoint())
+                        .board("https://trello.com/b/input/existing-board")
+                        .active("Queue for Codex")
+                        .terminal("Released");
+        command.credentials("key", "token")
+                .workflow(workflow)
+                .manifest(manifest)
+                .option("--server-port", String.valueOf(serverPort))
+                .flag("--force");
+        scenario.explicitRepositoryUrl().ifPresent(url -> command.option("--repository-url", url));
+
+        // when
+        CliRunResult result = runCli(command.build());
+
+        // then
+        result.assertSuccess().stdoutContains("Repository clone URL saved in repository.default_url");
+        assertThatWorkflow(workflow).hasRepositoryDefaults(scenario.expectedRepositoryUrl(), REPOSITORY_PATH_REFERENCE);
+    }
+
+    private static Stream<DirectRepositoryDefaultsScenario> forcedDirectRepositoryDefaultScenarios() {
+        return Stream.of(
+                new DirectRepositoryDefaultsScenario(
+                        "new board preserves omitted URL", "new", true, Optional.empty(), REPOSITORY_URL_REFERENCE),
+                new DirectRepositoryDefaultsScenario(
+                        "import board replaces explicit URL only", "import", false, Optional.of(HTTPS), HTTPS));
     }
 
     @Test
@@ -7455,6 +7500,18 @@ final class TrelloBoardSetupMainTest {
     private record MainProcessResult(int exitCode, String stdout, String stderr) {
         String output() {
             return stdout + stderr;
+        }
+    }
+
+    private record DirectRepositoryDefaultsScenario(
+            String name,
+            String fileSuffix,
+            boolean newBoard,
+            Optional<String> explicitRepositoryUrl,
+            String expectedRepositoryUrl) {
+        @Override
+        public String toString() {
+            return name;
         }
     }
 

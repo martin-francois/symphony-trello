@@ -143,7 +143,7 @@ final class TrelloBoardConnector {
                         configuredLists.createMissingGithubLists(),
                         options.envPath(),
                         maxAgents.preservedFromWorkflow(),
-                        TrelloBoardSetup.RepositoryDefaults.withDefaultUrl(options.repositoryUrl())));
+                        repositoryDefaults(workflowPath, options.repositoryUrl())));
         return LocalSetup.SetupResult.from(result, githubIntegration);
     }
 
@@ -194,8 +194,13 @@ final class TrelloBoardConnector {
                                 options.envPath(),
                                 options.detectInProgressState(),
                                 maxAgents.preservedFromWorkflow(),
-                                TrelloBoardSetup.RepositoryDefaults.withDefaultUrl(options.repositoryUrl()))),
+                                repositoryDefaults(workflowPath, options.repositoryUrl()))),
                 githubIntegration);
+    }
+
+    private TrelloBoardSetup.RepositoryDefaults repositoryDefaults(
+            Path workflowPath, Optional<String> explicitRepositoryUrl) {
+        return workflowConfig.repositoryDefaults(workflowPath).withExplicitDefaultUrl(explicitRepositoryUrl);
     }
 
     private LocalSetup.Options configureCodexModel(LocalSetup.Options options, Path workflowPath, Terminal terminal)

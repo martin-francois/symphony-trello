@@ -18,6 +18,7 @@ import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.setup.CodexModelSelectionDefaults.ReasoningEffortOption;
 import ch.fmartin.symphony.trello.testsupport.SetupRunResult;
 import ch.fmartin.symphony.trello.testsupport.TestEnv;
+import ch.fmartin.symphony.trello.testsupport.TestWorkflows;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.ByteArrayOutputStream;
@@ -43,6 +44,9 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 final class LocalSetupTest extends LocalSetupFixtureSupport {
+    private static final String REPOSITORY_URL_REFERENCE = "$SYNTHETIC_REPOSITORY_URL";
+    private static final String REPOSITORY_PATH_REFERENCE = "$SYNTHETIC_REPOSITORY_PATH";
+
     @Test
     void dryRunReportsPlannedWorkflowWithoutChangingTrello() {
         // given
@@ -165,7 +169,62 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "https://example.invalid/team/project%C2%85injected.git",
                 "https://example.invalid:0/team/project.git",
                 "ssh://git@example.invalid:65536/team/project.git",
+                "https://example.invalid:2147483648/team/project.git",
+                "ssh://git@example.invalid:999999999999/team/project.git",
                 "not a repository URL");
+    }
+
+    @MethodSource("forcedConnectorRepositoryDefaultScenarios")
+    @ParameterizedTest(name = "{0}")
+    void forcedSetupMergesRepositoryUrlWithExistingRawRepositoryDefaults(
+            RepositoryDefaultsRegenerationScenario scenario) throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.repository-defaults-" + scenario.fileSuffix() + ".md");
+        Path env = tempDir.resolve(".env.repository-defaults-" + scenario.fileSuffix());
+        Files.writeString(
+                workflow,
+                TestWorkflows.workflowWithRepositoryDefaults(
+                        "existing-board", availablePort(), REPOSITORY_URL_REFERENCE, REPOSITORY_PATH_REFERENCE),
+                StandardCharsets.UTF_8);
+        String[] command = Stream.concat(
+                        Stream.of(
+                                "--non-interactive",
+                                "--endpoint",
+                                endpoint(),
+                                "--key",
+                                "key",
+                                "--token",
+                                "token",
+                                "--workflow",
+                                workflow.toString(),
+                                "--env",
+                                env.toString(),
+                                "--force",
+                                "--no-start",
+                                "--no-github"),
+                        scenario.options().stream())
+                .toArray(String[]::new);
+
+        // when
+        SetupRunResult result = runSetup(command);
+
+        // then
+        result.assertSuccess().stdoutContains("Repository clone URL saved in repository.default_url");
+        assertThatWorkflow(workflow).hasRepositoryDefaults(scenario.expectedRepositoryUrl(), REPOSITORY_PATH_REFERENCE);
+    }
+
+    private static Stream<RepositoryDefaultsRegenerationScenario> forcedConnectorRepositoryDefaultScenarios() {
+        return Stream.of(
+                new RepositoryDefaultsRegenerationScenario(
+                        "new board preserves omitted URL",
+                        "new",
+                        List.of("--board-name", "Preserved Defaults Queue"),
+                        REPOSITORY_URL_REFERENCE),
+                new RepositoryDefaultsRegenerationScenario(
+                        "existing board replaces explicit URL only",
+                        "import",
+                        List.of("--board", "board-1", "--repository-url", HTTPS),
+                        HTTPS));
     }
 
     @Test
@@ -3404,6 +3463,18 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         }
     }
 
+    private record RepositoryDefaultsRegenerationScenario(
+            String name, String fileSuffix, List<String> options, String expectedRepositoryUrl) {
+        private RepositoryDefaultsRegenerationScenario {
+            options = List.copyOf(options);
+        }
+
+        @Override
+        public String toString() {
+            return name;
+        }
+    }
+
     @Test
     void interactiveSetupPromptsForWorkspaceAccessAndSandboxAfterBoardSetup() throws Exception {
         // given
@@ -6411,8 +6482,6 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.github-upgrade-repository-defaults.md");
         Path env = tempDir.resolve(".env.github-upgrade-repository-defaults");
-        String repositoryUrlReference = "$SYNTHETIC_REPOSITORY_URL";
-        String repositoryPathReference = "$SYNTHETIC_REPOSITORY_PATH";
         SetupRunResult firstResult = runSetup(
                 "--non-interactive",
                 "--endpoint",
@@ -6432,8 +6501,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         Files.writeString(
                 workflow,
                 Files.readString(workflow, StandardCharsets.UTF_8)
-                        .replace("default_url: null", "default_url: " + repositoryUrlReference)
-                        .replace("default_path: null", "default_path: " + repositoryPathReference),
+                        .replace("default_url: null", "default_url: " + REPOSITORY_URL_REFERENCE)
+                        .replace("default_path: null", "default_path: " + REPOSITORY_PATH_REFERENCE),
                 StandardCharsets.UTF_8);
         commands.githubAuthenticated = true;
         commands.startedWorkflows.clear();
@@ -6451,8 +6520,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 .stdoutContains("GitHub workflow enabled for \"GitHub Upgrade Repository Defaults\"");
         Object repository = new WorkflowLoader().load(workflow).config().get("repository");
         assertThat(repository).isInstanceOfSatisfying(Map.class, defaults -> assertThat(defaults)
-                .containsEntry("default_url", repositoryUrlReference)
-                .containsEntry("default_path", repositoryPathReference));
+                .containsEntry("default_url", REPOSITORY_URL_REFERENCE)
+                .containsEntry("default_path", REPOSITORY_PATH_REFERENCE));
         assertThat(trello.createdLists()).containsExactly("Merging");
         assertThat(commands.stoppedWorkflows).containsExactly(workflow.toString());
         assertThat(commands.startedWorkflows).containsExactly(workflow.toString());

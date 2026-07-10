@@ -233,7 +233,8 @@ public final class LocalSetup {
             out.println("  OK  Board lists: " + quoted(result.lists()));
             out.println("  OK  Workflow written: "
                     + result.workflowPath().toAbsolutePath().normalize());
-            printRepositoryDefaultSummary(out, options.repositoryUrl(), result.workflowPath());
+            RepositoryDefaultSummary.printGuided(
+                    out, workflowConfig.repositoryDefaults(result.workflowPath()), result.workflowPath());
             out.println("  OK  Local server port selected for " + DisplayNames.quotedName(result.boardName()) + ": "
                     + result.serverPort());
             printWorkspaceAndSandboxSummary(options, out);
@@ -262,17 +263,6 @@ public final class LocalSetup {
         // file-valued parents, existing files without --force, and unwritable parents are
         // expected input errors before any dry-run plan or Trello member validation.
         boardSetup.preflightWorkflowWrite(options.workflowPath(), options.force());
-    }
-
-    private static void printRepositoryDefaultSummary(
-            PrintStream out, Optional<String> repositoryUrl, Path workflowPath) {
-        if (repositoryUrl.isPresent()) {
-            out.println("  OK  Repository clone URL saved in repository.default_url");
-        } else {
-            out.println("  OK  Repository clone URL not set; this workflow remains repository-general.");
-        }
-        out.println("      To add or change it later, edit repository.default_url in:");
-        out.println("        " + workflowPath.toAbsolutePath().normalize());
     }
 
     private static ConnectedBoardRepository connectedBoards(Options options) {
