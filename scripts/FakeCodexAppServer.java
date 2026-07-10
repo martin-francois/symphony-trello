@@ -66,6 +66,17 @@ public class FakeCodexAppServer {
             Thread.sleep(sleepMs);
         }
 
+        String usageLimitMatch = System.getenv("SYMPHONY_FAKE_CODEX_USAGE_LIMIT_MATCH");
+        if (usageLimitMatch != null && !usageLimitMatch.isBlank() && line.contains(usageLimitMatch)) {
+            completeWithUsageLimit(threadId, turnId);
+            return;
+        }
+
+        if (Boolean.parseBoolean(System.getenv("SYMPHONY_FAKE_CODEX_NO_HANDOFF"))) {
+            completeTurn(threadId, turnId, null);
+            return;
+        }
+
         String comment = System.getenv().getOrDefault("SYMPHONY_FAKE_CODEX_COMMENT", DEFAULT_COMMENT);
         String workpadResponse = requestTool(
                 10_000,
@@ -96,6 +107,17 @@ public class FakeCodexAppServer {
             recordSuccessfulCompletion(turnId);
         }
         completeTurn(threadId, turnId, moveError);
+    }
+
+    private static void completeWithUsageLimit(String threadId, String turnId) {
+        long resetsAt = Long.parseLong(
+                System.getenv().getOrDefault("SYMPHONY_FAKE_CODEX_USAGE_LIMIT_RESETS_AT", "4102444800"));
+        send(
+                "{\"method\":\"account/rateLimits/updated\",\"params\":{\"rateLimits\":{\"primary\":{\"usedPercent\":100,\"resetsAt\":%d},\"secondary\":null}}}"
+                        .formatted(resetsAt));
+        send(
+                "{\"method\":\"turn/completed\",\"params\":{\"threadId\":\"%s\",\"turn\":{\"id\":\"%s\",\"items\":[],\"status\":\"failed\",\"error\":{\"message\":\"Synthetic Codex usage limit.\",\"additionalDetails\":\"private account detail\",\"codexErrorInfo\":\"usageLimitExceeded\"}}}}"
+                        .formatted(jsonString(threadId), jsonString(turnId)));
     }
 
     private String requestTool(int requestId, String tool, String arguments) throws IOException {

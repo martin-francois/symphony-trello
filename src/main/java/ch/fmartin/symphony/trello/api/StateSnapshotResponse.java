@@ -15,6 +15,7 @@ record StateSnapshotResponse(
         List<RunningRow> running,
         List<RetryRow> retrying,
         TokenTotals codexTotals,
+        DispatchPause dispatchPause,
         Object rateLimits) {
     static StateSnapshotResponse from(RuntimeSnapshot snapshot) {
         return new StateSnapshotResponse(
@@ -24,6 +25,7 @@ record StateSnapshotResponse(
                 snapshot.running().stream().map(RunningRow::from).toList(),
                 snapshot.retrying().stream().map(RetryRow::from).toList(),
                 TokenTotals.from(snapshot.codexTotals()),
+                DispatchPause.from(snapshot.dispatchPause()),
                 snapshot.rateLimits());
     }
 
@@ -83,6 +85,13 @@ record StateSnapshotResponse(
         static TokenTotals from(RuntimeSnapshot.TokenTotals totals) {
             return new TokenTotals(
                     totals.inputTokens(), totals.outputTokens(), totals.totalTokens(), totals.secondsRunning());
+        }
+    }
+
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    record DispatchPause(String code, Instant detected, Instant until) {
+        static DispatchPause from(RuntimeSnapshot.DispatchPause pause) {
+            return pause == null ? null : new DispatchPause(pause.code(), pause.detected(), pause.until());
         }
     }
 }

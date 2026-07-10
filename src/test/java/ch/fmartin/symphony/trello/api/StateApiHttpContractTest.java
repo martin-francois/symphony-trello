@@ -25,6 +25,32 @@ import org.junit.jupiter.api.parallel.ExecutionMode;
 final class StateApiHttpContractTest {
 
     @Test
+    void stateEndpointSerializesAnIdleDispatchPauseAsNull() {
+        // given
+        SymphonyOrchestrator orchestrator = mock();
+        RuntimeSnapshot active = snapshotWithRunningAndRetryingCards();
+        when(orchestrator.snapshot())
+                .thenReturn(new RuntimeSnapshot(
+                        active.generatedAt(),
+                        active.counts(),
+                        active.routing(),
+                        active.running(),
+                        active.retrying(),
+                        active.codexTotals(),
+                        null,
+                        active.rateLimits()));
+        QuarkusMock.installMockForType(orchestrator, SymphonyOrchestrator.class);
+
+        // when
+        Response response = given().get("/api/v1/state");
+
+        // then
+        assertThat(response.statusCode()).isEqualTo(200);
+        Map<String, Object> payload = response.as(new TypeRef<>() {});
+        assertThat(payload).containsEntry("dispatch_pause", null);
+    }
+
+    @Test
     void stateEndpointSerializesSnapshotRowsWithSpecSnakeCaseJsonKeys() {
         // given
         SymphonyOrchestrator orchestrator = mock();
@@ -38,8 +64,16 @@ final class StateApiHttpContractTest {
         assertThat(response.statusCode()).isEqualTo(200);
         Map<String, Object> payload = response.as(new TypeRef<>() {});
         assertThat(payload)
-                .containsKeys("generated_at", "counts", "routing", "running", "retrying", "codex_totals", "rate_limits")
-                .doesNotContainKeys("generatedAt", "codexTotals", "rateLimits");
+                .containsKeys(
+                        "generated_at",
+                        "counts",
+                        "routing",
+                        "running",
+                        "retrying",
+                        "codex_totals",
+                        "dispatch_pause",
+                        "rate_limits")
+                .doesNotContainKeys("generatedAt", "codexTotals", "dispatchPause", "rateLimits");
 
         Map<String, Object> routing = map(payload.get("routing"));
         assertThat(routing)
@@ -97,6 +131,12 @@ final class StateApiHttpContractTest {
                 .containsKeys("input_tokens", "output_tokens", "total_tokens", "seconds_running")
                 .doesNotContainKeys("inputTokens", "outputTokens", "totalTokens", "secondsRunning");
 
+        assertThat(map(payload.get("dispatch_pause")))
+                .containsOnlyKeys("code", "detected", "until")
+                .containsEntry("code", "CODEX_USAGE_LIMIT")
+                .containsEntry("detected", "2026-02-24T20:15:31Z")
+                .containsEntry("until", "2026-02-24T21:15:30Z");
+
         Map<String, Object> rateLimits = map(payload.get("rate_limits"));
         assertThat(rateLimits)
                 .containsEntry("limitType", "tokens")
@@ -129,6 +169,10 @@ final class StateApiHttpContractTest {
                         Instant.parse("2026-02-24T20:16:00Z"),
                         "no available orchestrator slots")),
                 new RuntimeSnapshot.TokenTotals(5000, 2400, 7400, 1834.2),
+                new RuntimeSnapshot.DispatchPause(
+                        "CODEX_USAGE_LIMIT",
+                        Instant.parse("2026-02-24T20:15:31Z"),
+                        Instant.parse("2026-02-24T21:15:30Z")),
                 codexRateLimitsPayload());
     }
 

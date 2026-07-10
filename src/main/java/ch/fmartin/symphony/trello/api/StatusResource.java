@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.api;
 
+import ch.fmartin.symphony.trello.orchestrator.RuntimeSnapshot;
 import ch.fmartin.symphony.trello.orchestrator.SymphonyOrchestrator;
 import ch.fmartin.symphony.trello.time.ApplicationClock;
 import io.vertx.ext.web.RoutingContext;
@@ -76,6 +77,7 @@ public class StatusResource {
                 <body>
                   <h1>Symphony for Trello</h1>
                   <p><code>%s</code> running, <code>%s</code> retrying.</p>
+                  %s
                   <table>
                     <thead><tr><th>Card</th><th>State</th><th>Session</th><th>Last event</th><th>Turns</th></tr></thead>
                     <tbody>%s</tbody>
@@ -86,6 +88,7 @@ public class StatusResource {
                 .formatted(
                         snapshot.counts().running(),
                         snapshot.counts().retrying(),
+                        dispatchPauseBanner(snapshot.dispatchPause()),
                         snapshot.running().stream()
                                 .map(row -> "<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>"
                                         .formatted(
@@ -95,6 +98,17 @@ public class StatusResource {
                                                 escape(row.lastEvent()),
                                                 row.turnCount()))
                                 .reduce("", String::concat));
+    }
+
+    private static String dispatchPauseBanner(RuntimeSnapshot.DispatchPause pause) {
+        if (pause == null) {
+            return "";
+        }
+        return "<p role=\"status\">Codex dispatch is paused (<code>%s</code>). Detected <time>%s</time>; next attempt <time>%s</time>.</p>"
+                .formatted(
+                        escape(pause.code()),
+                        escape(pause.detected().toString()),
+                        escape(pause.until().toString()));
     }
 
     @GET

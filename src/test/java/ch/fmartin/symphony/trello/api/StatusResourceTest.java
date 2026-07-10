@@ -52,7 +52,37 @@ final class StatusResourceTest {
                 .contains("<code>1</code> running")
                 .contains("TRELLO-&lt;abc&gt;")
                 .contains("Ready &amp; Waiting")
-                .doesNotContain("TRELLO-<abc>");
+                .contains("CODEX_&lt;USAGE&gt;&amp;")
+                .doesNotContain("TRELLO-<abc>", "CODEX_<USAGE>&");
+    }
+
+    @Test
+    void statusBannerDoesNotRenderRateLimitAccountProviderOrCommandDetails() {
+        // given
+        RuntimeSnapshot base = snapshotWithRunningCard();
+        RuntimeSnapshot privateSnapshot = new RuntimeSnapshot(
+                base.generatedAt(),
+                base.counts(),
+                base.routing(),
+                base.running(),
+                base.retrying(),
+                base.codexTotals(),
+                base.dispatchPause(),
+                Map.of(
+                        "account", "private-account-marker",
+                        "provider", "private-provider-marker",
+                        "command", "private-command-marker"));
+        SymphonyOrchestrator orchestrator = mock();
+        when(orchestrator.snapshot()).thenReturn(privateSnapshot);
+        var resource = new StatusResource(orchestrator);
+
+        // when
+        String html = resource.index();
+
+        // then
+        assertThat(html)
+                .contains("CODEX_&lt;USAGE&gt;&amp;", "2026-05-05T00:00:03Z", "2026-05-05T01:00:00Z")
+                .doesNotContain("private-account-marker", "private-provider-marker", "private-command-marker");
     }
 
     @Test
@@ -209,6 +239,8 @@ final class StatusResourceTest {
                         Instant.parse("2026-05-05T00:01:00Z"),
                         "no available orchestrator slots")),
                 new RuntimeSnapshot.TokenTotals(4, 8, 12, 1.25),
+                new RuntimeSnapshot.DispatchPause(
+                        "CODEX_<USAGE>&", Instant.parse("2026-05-05T00:00:03Z"), Instant.parse("2026-05-05T01:00:00Z")),
                 null);
     }
 }

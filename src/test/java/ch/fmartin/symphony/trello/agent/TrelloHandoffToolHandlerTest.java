@@ -7,11 +7,18 @@ import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.listsJson;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.respond;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.trelloList;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import ch.fmartin.symphony.trello.TestCards;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
+import ch.fmartin.symphony.trello.domain.Card;
 import ch.fmartin.symphony.trello.testsupport.FakeTrelloServer;
+import ch.fmartin.symphony.trello.tracker.CardLookupResult;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -20,10 +27,16 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sun.net.httpserver.HttpExchange;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -61,6 +74,7 @@ final class TrelloHandoffToolHandlerTest {
     private final AtomicReference<Integer> cardStatus = new AtomicReference<>();
     private final AtomicReference<Integer> updateStatus = new AtomicReference<>(200);
     private final AtomicReference<Integer> deleteStatus = new AtomicReference<>(200);
+    private final AtomicInteger cardFetchCount = new AtomicInteger();
     private FakeTrelloServer trello;
 
     @TempDir
@@ -78,9 +92,10 @@ final class TrelloHandoffToolHandlerTest {
                                 trelloList("list-ready", "Ready for Codex", 1),
                                 trelloList("list-review", "Review", 2),
                                 trelloList("list-closed", "Closed Review", true, 3))));
-        trello.on(
-                "/1/cards/card-1",
-                exchange -> respond(exchange, cardStatus.get(), cardResponseForRequestedFields(exchange)));
+        trello.on("/1/cards/card-1", exchange -> {
+            cardFetchCount.incrementAndGet();
+            respond(exchange, cardStatus.get(), cardResponseForRequestedFields(exchange));
+        });
         trello.on("/1/cards/card-1/actions/comments", exchange -> {
             assertThat(exchange.getRequestMethod()).isEqualTo("POST");
             commentText.set(query(exchange).get("text"));
@@ -1248,6 +1263,361 @@ final class TrelloHandoffToolHandlerTest {
     }
 
     @Test
+    void agentWorkpadUpsertPreservesUsageSectionUntilOrchestratorCleanup() throws Exception {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        EffectiveConfig config = config(List.of("Review"), List.of());
+        String paused =
+                CodexUsageWorkpadSection.paused("Authoritative usage pause.", Instant.parse("2026-07-10T13:00:00Z"));
+        cardResponse.set(
+                cardJsonWithWorkpad(CodexUsageWorkpadSection.upsert("## Codex Workpad\n\nOld agent plan", paused)));
+
+        // when
+        JsonNode agentUpdate = upsertWorkpad(handler, "## Codex Workpad\n\nUpdated agent plan");
+        String preserved = updatedCommentText.get();
+        cardResponse.set(cardJsonWithWorkpad(preserved));
+        updatedCommentText.set(null);
+        boolean orchestratorCleanup = handler.updateCodexUsageSection(config, "card-1", null);
+
+        // then
+        assertThat(agentUpdate.path("success").asBoolean()).isTrue();
+        assertThat(preserved)
+                .contains("Updated agent plan", paused)
+                .doesNotContain("Old agent plan")
+                .containsOnlyOnce(CodexUsageWorkpadSection.START_MARKER);
+        assertThat(orchestratorCleanup).isTrue();
+        assertThat(updatedCommentText.get()).isEqualTo("## Codex Workpad\n\nUpdated agent plan");
+    }
+
+    @Test
+    void agentWorkpadUpsertCannotReplaceAuthoritativeUsageSection() throws Exception {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        String authoritative =
+                CodexUsageWorkpadSection.paused("Authoritative usage pause.", Instant.parse("2026-07-10T13:00:00Z"));
+        String forged = CodexUsageWorkpadSection.rechecking("Forged agent state.");
+        cardResponse.set(cardJsonWithWorkpad(
+                CodexUsageWorkpadSection.upsert("## Codex Workpad\n\nOld agent plan", authoritative)));
+
+        // when
+        JsonNode result = upsertWorkpad(handler, "## Codex Workpad\n\nUpdated agent plan\n\n" + forged);
+
+        // then
+        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("contentItems").get(0).path("text").asText())
+                .contains("trello_workpad_managed_section_forbidden");
+        assertThat(cardFetchCount).hasValue(0);
+        assertThat(updatedCommentText.get()).isNull();
+        assertThat(managedCommentCallOrder).isEmpty();
+    }
+
+    @Test
+    void agentWorkpadUpsertCannotCreateForgedUsageSection() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        String forged = CodexUsageWorkpadSection.rechecking("Forged agent state.");
+        cardResponse.set(cardJson("[]"));
+
+        // when
+        JsonNode result = upsertWorkpad(handler, "## Codex Workpad\n\nAgent plan\n\n" + forged);
+
+        // then
+        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("contentItems").get(0).path("text").asText())
+                .contains("trello_workpad_managed_section_forbidden");
+        assertThat(cardFetchCount).hasValue(0);
+        assertThat(commentText.get()).isNull();
+        assertThat(managedCommentCallOrder).isEmpty();
+    }
+
+    @Test
+    void agentWorkpadUpsertPreservesUsageSectionWhileReportingDuplicateWorkpads() throws Exception {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        String paused =
+                CodexUsageWorkpadSection.paused("Authoritative usage pause.", Instant.parse("2026-07-10T13:00:00Z"));
+        cardResponse.set(cardJsonWithDuplicateWorkpads(
+                CodexUsageWorkpadSection.upsert("## Codex Workpad\n\nOld agent plan", paused)));
+
+        // when
+        JsonNode result = upsertWorkpad(handler, "## Codex Workpad\n\nUpdated agent plan");
+
+        // then
+        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(updatedCommentText.get())
+                .contains("Updated agent plan", paused)
+                .containsOnlyOnce(CodexUsageWorkpadSection.START_MARKER)
+                .containsOnlyOnce(TrelloHandoffToolHandler.DUPLICATE_WORKPADS_NOTE_PREFIX);
+    }
+
+    @Test
+    void forgedAgentUsageSectionCannotMutateOrDeleteDuplicateWorkpads() throws Exception {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        String paused =
+                CodexUsageWorkpadSection.paused("Authoritative usage pause.", Instant.parse("2026-07-10T13:00:00Z"));
+        String forged = CodexUsageWorkpadSection.rechecking("Forged agent state.");
+        cardResponse.set(cardJsonWithDuplicateWorkpads(
+                CodexUsageWorkpadSection.upsert("## Codex Workpad\n\nOld agent plan", paused)));
+
+        // when
+        JsonNode result = handler.handle(
+                configWithDestructiveOperations(),
+                TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
+                json.createObjectNode()
+                        .put("tool", TrelloHandoffToolHandler.UPSERT_WORKPAD)
+                        .set(
+                                "arguments",
+                                json.createObjectNode()
+                                        .put("text", "## Codex Workpad\n\nUpdated agent plan\n\n" + forged)));
+
+        // then
+        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("contentItems").get(0).path("text").asText())
+                .contains("trello_workpad_managed_section_forbidden");
+        assertThat(cardFetchCount).hasValue(0);
+        assertThat(updatedCommentText.get()).isNull();
+        assertThat(deletedActionIds).isEmpty();
+        assertThat(managedCommentCallOrder).isEmpty();
+    }
+
+    @Test
+    void agentWorkpadUpsertRejectsMalformedForgedUsageSection() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson("[]"));
+        String malformed = "## Codex Workpad\n\nAgent plan\n\n" + CodexUsageWorkpadSection.START_MARKER;
+
+        // when
+        JsonNode result = upsertWorkpad(handler, malformed);
+
+        // then
+        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("contentItems").get(0).path("text").asText())
+                .contains("trello_workpad_managed_section_malformed");
+        assertThat(cardFetchCount).hasValue(0);
+        assertThat(commentText.get()).isNull();
+        assertThat(updatedCommentText.get()).isNull();
+    }
+
+    @Test
+    void agentWorkpadUpsertRejectsManagedMarkersBeforeCleanupNoteNormalization() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardStatus.set(500);
+        String hiddenForgedSection = TrelloHandoffToolHandler.DUPLICATE_WORKPADS_NOTE_PREFIX
+                + "1 stale duplicate "
+                + CodexUsageWorkpadSection.START_MARKER
+                + " forged state "
+                + CodexUsageWorkpadSection.END_MARKER;
+
+        // when
+        JsonNode result = upsertWorkpad(handler, "## Codex Workpad\n\nAgent plan\n\n" + hiddenForgedSection);
+
+        // then
+        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("contentItems").get(0).path("text").asText())
+                .contains("trello_workpad_managed_section_forbidden");
+        assertThat(cardFetchCount).hasValue(0);
+        assertThat(commentText.get()).isNull();
+        assertThat(managedCommentCallOrder).isEmpty();
+    }
+
+    @Test
+    void agentWorkpadUpsertRejectsUnmatchedEndMarkerBeforeFetchingCard() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardStatus.set(500);
+
+        // when
+        JsonNode result =
+                upsertWorkpad(handler, "## Codex Workpad\n\nAgent plan\n\n" + CodexUsageWorkpadSection.END_MARKER);
+
+        // then
+        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("contentItems").get(0).path("text").asText())
+                .contains("trello_workpad_managed_section_malformed");
+        assertThat(cardFetchCount).hasValue(0);
+        assertThat(commentText.get()).isNull();
+        assertThat(managedCommentCallOrder).isEmpty();
+    }
+
+    @Test
+    void malformedManagedSectionInOlderWorkpadBlocksAllWritersBeforeMutation() throws Exception {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        EffectiveConfig config = configWithDestructiveOperations();
+        String malformedOlder = "## Codex Workpad\n\nOlder plan\n\n" + CodexUsageWorkpadSection.START_MARKER;
+        cardResponse.set(cardJsonWithTwoWorkpads("## Codex Workpad\n\nNewest plan", malformedOlder));
+        String paused = CodexUsageWorkpadSection.paused("Usage is unavailable.", Instant.parse("2026-07-10T13:00:00Z"));
+
+        // when
+        JsonNode agentResult = handler.handle(
+                config,
+                TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
+                json.createObjectNode()
+                        .put("tool", TrelloHandoffToolHandler.UPSERT_WORKPAD)
+                        .set("arguments", json.createObjectNode().put("text", "## Codex Workpad\n\nUpdated plan")));
+        boolean orchestratorResult = handler.updateCodexUsageSection(config, "card-1", paused);
+
+        // then
+        assertThat(agentResult.path("success").asBoolean()).isFalse();
+        assertThat(agentResult.path("contentItems").get(0).path("text").asText())
+                .contains("trello_workpad_managed_section_malformed");
+        assertThat(orchestratorResult).isFalse();
+        assertThat(updatedCommentText.get()).isNull();
+        assertThat(deletedActionIds).isEmpty();
+        assertThat(managedCommentCallOrder).isEmpty();
+    }
+
+    @Test
+    void multipleManagedSectionsAcrossDuplicateWorkpadsBlockAllWritersBeforeMutation() throws Exception {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        EffectiveConfig config = configWithDestructiveOperations();
+        String primarySection =
+                CodexUsageWorkpadSection.paused("Primary state.", Instant.parse("2026-07-10T13:00:00Z"));
+        String olderSection = CodexUsageWorkpadSection.rechecking("Older state.");
+        cardResponse.set(cardJsonWithTwoWorkpads(
+                CodexUsageWorkpadSection.upsert("## Codex Workpad\n\nNewest plan", primarySection),
+                CodexUsageWorkpadSection.upsert("## Codex Workpad\n\nOlder plan", olderSection)));
+
+        // when
+        JsonNode agentResult = handler.handle(
+                config,
+                TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
+                json.createObjectNode()
+                        .put("tool", TrelloHandoffToolHandler.UPSERT_WORKPAD)
+                        .set("arguments", json.createObjectNode().put("text", "## Codex Workpad\n\nUpdated plan")));
+        boolean orchestratorResult = handler.updateCodexUsageSection(config, "card-1", null);
+
+        // then
+        assertThat(agentResult.path("success").asBoolean()).isFalse();
+        assertThat(agentResult.path("contentItems").get(0).path("text").asText())
+                .contains("trello_workpad_managed_section_ambiguous");
+        assertThat(orchestratorResult).isFalse();
+        assertThat(updatedCommentText.get()).isNull();
+        assertThat(deletedActionIds).isEmpty();
+        assertThat(managedCommentCallOrder).isEmpty();
+    }
+
+    @Test
+    void destructiveAgentConsolidationPreservesSectionOwnedByOlderWorkpad() throws Exception {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        String paused =
+                CodexUsageWorkpadSection.paused("Authoritative usage pause.", Instant.parse("2026-07-10T13:00:00Z"));
+        cardResponse.set(cardJsonWithTwoWorkpads(
+                "## Codex Workpad\n\nNewest plan",
+                CodexUsageWorkpadSection.upsert("## Codex Workpad\n\nOlder plan", paused)));
+
+        // when
+        JsonNode result = handler.handle(
+                configWithDestructiveOperations(),
+                TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
+                json.createObjectNode()
+                        .put("tool", TrelloHandoffToolHandler.UPSERT_WORKPAD)
+                        .set("arguments", json.createObjectNode().put("text", "## Codex Workpad\n\nUpdated plan")));
+
+        // then
+        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(updatedCommentText.get())
+                .contains("Updated plan", paused)
+                .containsOnlyOnce(CodexUsageWorkpadSection.START_MARKER);
+        assertThat(managedCommentCallOrder).containsExactly("update:action-workpad", "delete:action-workpad-older");
+    }
+
+    @Test
+    void failedOlderOwnerDeleteRollsBackTransferSoAHealthyRetryCanConsolidate() throws Exception {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        EffectiveConfig config = configWithDestructiveOperations();
+        String paused =
+                CodexUsageWorkpadSection.paused("Authoritative usage pause.", Instant.parse("2026-07-10T13:00:00Z"));
+        String olderWorkpad = CodexUsageWorkpadSection.upsert("## Codex Workpad\n\nOlder plan", paused);
+        cardResponse.set(cardJsonWithTwoWorkpads("## Codex Workpad\n\nNewest plan", olderWorkpad));
+        deleteStatus.set(500);
+
+        // when
+        JsonNode firstResult = handler.handle(
+                config,
+                TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
+                json.createObjectNode()
+                        .put("tool", TrelloHandoffToolHandler.UPSERT_WORKPAD)
+                        .set("arguments", json.createObjectNode().put("text", "## Codex Workpad\n\nUpdated plan")));
+        String rolledBackPrimary = updatedCommentText.get();
+
+        // then
+        assertThat(firstResult.path("success").asBoolean()).isFalse();
+        assertThat(firstResult.path("contentItems").get(0).path("text").asText())
+                .contains("trello_workpad_managed_section_cleanup_failed");
+        assertThat(rolledBackPrimary).isEqualTo("## Codex Workpad\n\nNewest plan");
+        assertThat(managedCommentCallOrder)
+                .containsExactly("update:action-workpad", "delete:action-workpad-older", "update:action-workpad");
+
+        // and when Trello recovers and the rolled-back state is read again
+        cardResponse.set(cardJsonWithTwoWorkpads(rolledBackPrimary, olderWorkpad));
+        deleteStatus.set(200);
+        managedCommentCallOrder.clear();
+        updatedCommentText.set(null);
+        JsonNode retryResult = handler.handle(
+                config,
+                TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
+                json.createObjectNode()
+                        .put("tool", TrelloHandoffToolHandler.UPSERT_WORKPAD)
+                        .set("arguments", json.createObjectNode().put("text", "## Codex Workpad\n\nRetry plan")));
+
+        // then the managed section is transferred and its former owner is removed
+        assertThat(retryResult.path("success").asBoolean()).isTrue();
+        assertThat(updatedCommentText.get())
+                .contains("Retry plan", paused)
+                .containsOnlyOnce(CodexUsageWorkpadSection.START_MARKER);
+        assertThat(managedCommentCallOrder).containsExactly("update:action-workpad", "delete:action-workpad-older");
+    }
+
+    @Test
+    void nonDestructiveAgentUpdateFailsClosedWhenOlderWorkpadOwnsSection() throws Exception {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        String paused =
+                CodexUsageWorkpadSection.paused("Authoritative usage pause.", Instant.parse("2026-07-10T13:00:00Z"));
+        cardResponse.set(cardJsonWithTwoWorkpads(
+                "## Codex Workpad\n\nNewest plan",
+                CodexUsageWorkpadSection.upsert("## Codex Workpad\n\nOlder plan", paused)));
+
+        // when
+        JsonNode result = upsertWorkpad(handler, "## Codex Workpad\n\nUpdated plan");
+
+        // then
+        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("contentItems").get(0).path("text").asText())
+                .contains("trello_workpad_managed_section_non_primary");
+        assertThat(updatedCommentText.get()).isNull();
+        assertThat(deletedActionIds).isEmpty();
+        assertThat(managedCommentCallOrder).isEmpty();
+    }
+
+    @Test
+    void nonDestructiveOrchestratorCleanupRetriesWhenOlderWorkpadOwnsSection() throws Exception {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        String paused =
+                CodexUsageWorkpadSection.paused("Authoritative usage pause.", Instant.parse("2026-07-10T13:00:00Z"));
+        cardResponse.set(cardJsonWithTwoWorkpads(
+                "## Codex Workpad\n\nNewest plan",
+                CodexUsageWorkpadSection.upsert("## Codex Workpad\n\nOlder plan", paused)));
+
+        // when
+        boolean result = handler.updateCodexUsageSection(config(List.of("Review"), List.of()), "card-1", null);
+
+        // then
+        assertThat(result).isFalse();
+        assertThat(updatedCommentText.get()).isNull();
+        assertThat(deletedActionIds).isEmpty();
+        assertThat(managedCommentCallOrder).isEmpty();
+    }
+
+    @Test
     void updatesFirstWorkpadAndReportsDuplicatesVisiblyWithoutDestructiveOperationsOptIn() {
         // given
         TrelloHandoffToolHandler handler = handler();
@@ -1592,6 +1962,428 @@ final class TrelloHandoffToolHandlerTest {
     }
 
     @Test
+    void createsSanitizedCodexUsageSectionInAuthoritativeWorkpad() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        Instant nextAttempt = Instant.parse("2026-07-10T13:00:00Z");
+        String section =
+                CodexUsageWorkpadSection.paused("Usage\n[account](https://example.invalid/private)\u0000", nextAttempt);
+
+        // when
+        boolean updated = handler.updateCodexUsageSection(config(List.of("Review"), List.of()), "card-1", section);
+
+        // then
+        assertThat(updated).isTrue();
+        assertThat(commentText.get())
+                .startsWith(TrelloHandoffToolHandler.WORKPAD_MARKER)
+                .contains(
+                        CodexUsageWorkpadSection.START_MARKER,
+                        "Usage \\[account\\]\\(https://example.invalid/private\\)",
+                        "2026-07-10T13:00:00Z",
+                        CodexUsageWorkpadSection.END_MARKER)
+                .doesNotContain("\u0000");
+    }
+
+    @Test
+    void codexUsageAndBlockerRecheckManagedFamiliesUpdateIndependently() {
+        // given
+        TrelloClient client = mock();
+        TrelloHandoffToolHandler handler = new TrelloHandoffToolHandler(json, client);
+        EffectiveConfig config = config(List.of("Review"), List.of());
+        Instant commentTime = Instant.parse("2026-07-10T12:00:00Z");
+        String originalWorkpad = CodexUsageWorkpadSection.upsert(
+                "## Codex Workpad\n\n- Agent plan: keep this.",
+                CodexUsageWorkpadSection.paused("Usage is unavailable.", Instant.parse("2026-07-10T13:00:00Z")));
+        String recheckingSection = CodexUsageWorkpadSection.rechecking("Usage is unavailable.");
+        String recheckingWorkpad = CodexUsageWorkpadSection.upsert(originalWorkpad, recheckingSection);
+        Card.Comment managedBlockerRecheck = new Card.Comment(
+                BLOCKER_RECHECK_ACTION_ID,
+                managedRecheckText(CHECKING_STATUS, BLOCKER_ACTION_ID, "abc"),
+                "Symphony",
+                commentTime.minusSeconds(1));
+        Card.Comment blocker = new Card.Comment(
+                BLOCKER_ACTION_ID, "Blocked: repository issue is unavailable.", "Codex", commentTime.minusSeconds(2));
+        Card beforeUsageUpdate = TestCards.cardWithComments(
+                "card-1",
+                "TRELLO-abc",
+                "Ready for Codex",
+                List.of(
+                        new Card.Comment("action-workpad", originalWorkpad, "Codex", commentTime),
+                        managedBlockerRecheck,
+                        blocker));
+        Card beforeBlockerUpdate = TestCards.cardWithComments(
+                "card-1",
+                "TRELLO-abc",
+                "Ready for Codex",
+                List.of(
+                        new Card.Comment("action-workpad", recheckingWorkpad, "Codex", commentTime),
+                        managedBlockerRecheck,
+                        blocker));
+        when(client.fetchCardStateForWorkpad(any(), eq("card-1")))
+                .thenReturn(
+                        new CardLookupResult.Found(beforeUsageUpdate), new CardLookupResult.Found(beforeBlockerUpdate));
+        List<Card.Comment> writes = new CopyOnWriteArrayList<>();
+        when(client.updateComment(any(), anyString(), anyString())).thenAnswer(invocation -> {
+            String actionId = invocation.getArgument(1);
+            String text = invocation.getArgument(2);
+            writes.add(new Card.Comment(actionId, text, "Symphony", commentTime));
+            return Map.of("id", actionId);
+        });
+
+        // when
+        boolean usageUpdated = handler.updateCodexUsageSection(config, "card-1", recheckingSection);
+        JsonNode blockerUpdated = updateBlockerRecheckStatus(handler, "resumed", config);
+
+        // then
+        assertThat(usageUpdated).isTrue();
+        assertThat(blockerUpdated.path("success").asBoolean()).isTrue();
+        assertThat(blockerUpdated.path("contentItems").get(0).path("text").asText())
+                .contains("resumed_work_confirmed");
+        assertThat(writes).extracting(Card.Comment::id).containsExactly("action-workpad", BLOCKER_RECHECK_ACTION_ID);
+        assertThat(writes.get(0).text())
+                .isEqualTo(recheckingWorkpad)
+                .contains("- Agent plan: keep this.", CodexUsageWorkpadSection.START_MARKER, recheckingSection)
+                .doesNotContain(
+                        TrelloHandoffToolHandler.BLOCKER_RECHECK_FOOTER_PREFIX,
+                        TrelloHandoffToolHandler.BLOCKER_RECHECK_FOOTER_SUFFIX);
+        assertThat(writes.get(1).text())
+                .contains(
+                        RESUMED_STATUS_PREFIX,
+                        TrelloHandoffToolHandler.BLOCKER_RECHECK_FOOTER_PREFIX,
+                        "#comment-" + BLOCKER_ACTION_ID,
+                        TrelloHandoffToolHandler.BLOCKER_RECHECK_FOOTER_SUFFIX)
+                .doesNotContain(
+                        CodexUsageWorkpadSection.START_MARKER,
+                        CodexUsageWorkpadSection.END_MARKER,
+                        "- Agent plan: keep this.");
+    }
+
+    @Test
+    void boundsTheSanitizedCodexUsageMessage() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        String oversizedMessage = "x".repeat(600);
+        String markdownHeavySection =
+                CodexUsageWorkpadSection.paused("[".repeat(600), Instant.parse("2026-07-10T13:00:00Z"));
+
+        // when
+        boolean updated = handler.updateCodexUsageSection(
+                config(List.of("Review"), List.of()),
+                "card-1",
+                CodexUsageWorkpadSection.paused(oversizedMessage, Instant.parse("2026-07-10T13:00:00Z")));
+
+        // then
+        assertThat(updated).isTrue();
+        assertThat(commentText.get())
+                .contains("- Message: " + "x".repeat(497) + "...\n")
+                .doesNotContain("x".repeat(498));
+        String markdownHeavyMessage = markdownHeavySection
+                .lines()
+                .filter(line -> line.startsWith("- Message: "))
+                .findFirst()
+                .orElseThrow()
+                .substring("- Message: ".length());
+        assertThat(markdownHeavyMessage.codePointCount(0, markdownHeavyMessage.length()))
+                .isLessThanOrEqualTo(500);
+        assertThat(markdownHeavyMessage).endsWith("...");
+    }
+
+    @Test
+    void normalizesUnicodeSeparatorsWhitespaceAndFormatControlsInUsageMessage() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        String unsafeMessage =
+                "alpha\u2028beta\u2029gamma\u00a0delta\u202eevil\u2066tail\u2069 &#x202e;entity &NewLine;break &lrm;mark";
+
+        // when
+        boolean updated = handler.updateCodexUsageSection(
+                config(List.of("Review"), List.of()),
+                "card-1",
+                CodexUsageWorkpadSection.paused(unsafeMessage, Instant.parse("2026-07-10T13:00:00Z")));
+
+        // then
+        assertThat(updated).isTrue();
+        assertThat(commentText.get())
+                .contains("- Message: alpha beta gamma delta evil tail \\&#x202e;entity \\&NewLine;break \\&lrm;mark\n")
+                .doesNotContain("\u2028", "\u2029", "\u202e", "\u2066", "\u2069");
+    }
+
+    @Test
+    void preservesReplacesAndRemovesOnlyTheManagedCodexUsageSectionIdempotently() throws Exception {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        EffectiveConfig config = config(List.of("Review"), List.of());
+        String original = "## Codex Workpad\n\n- User plan: keep this.";
+        cardResponse.set(cardJsonWithWorkpad(original));
+        String paused = CodexUsageWorkpadSection.paused("Usage is unavailable.", Instant.parse("2026-07-10T13:00:00Z"));
+
+        // when
+        boolean created = handler.updateCodexUsageSection(config, "card-1", paused);
+        String pausedWorkpad = updatedCommentText.get();
+        cardResponse.set(cardJsonWithWorkpad(pausedWorkpad));
+        updatedCommentText.set(null);
+        boolean unchanged = handler.updateCodexUsageSection(config, "card-1", paused);
+        boolean skippedIdenticalWrite = updatedCommentText.get() == null;
+        boolean rechecking = handler.updateCodexUsageSection(
+                config, "card-1", CodexUsageWorkpadSection.rechecking("Usage is unavailable."));
+        String recheckingWorkpad = updatedCommentText.get();
+        cardResponse.set(cardJsonWithWorkpad(recheckingWorkpad));
+        boolean removed = handler.updateCodexUsageSection(config, "card-1", null);
+
+        // then
+        assertThat(created).isTrue();
+        assertThat(pausedWorkpad)
+                .contains("- User plan: keep this.", "Paused after Codex reported a usage limit.")
+                .containsOnlyOnce(CodexUsageWorkpadSection.START_MARKER);
+        assertThat(unchanged).isTrue();
+        assertThat(skippedIdenticalWrite).isTrue();
+        assertThat(rechecking).isTrue();
+        assertThat(recheckingWorkpad)
+                .contains("- User plan: keep this.", "Rechecking Codex usage availability.")
+                .doesNotContain("Paused after Codex reported a usage limit.")
+                .containsOnlyOnce(CodexUsageWorkpadSection.START_MARKER);
+        assertThat(removed).isTrue();
+        assertThat(updatedCommentText.get()).isEqualTo(original);
+    }
+
+    @Test
+    void serializesAgentAndOrchestratorWorkpadReadModifyWriteForSameCard() throws Exception {
+        // given
+        TrelloClient client = mock();
+        TrelloHandoffToolHandler handler = new TrelloHandoffToolHandler(json, client);
+        EffectiveConfig config = config(List.of("Review"), List.of());
+        AtomicReference<Card> currentCard =
+                new AtomicReference<>(cardWithSingleWorkpad("## Codex Workpad\n\nOld agent plan"));
+        AtomicInteger fetches = new AtomicInteger();
+        CountDownLatch secondFetchEntered = new CountDownLatch(1);
+        when(client.fetchCardStateForWorkpad(any(), eq("card-1"))).thenAnswer(invocation -> {
+            if (fetches.incrementAndGet() == 2) {
+                secondFetchEntered.countDown();
+            }
+            return new CardLookupResult.Found(currentCard.get());
+        });
+
+        CountDownLatch firstUpdateEntered = new CountDownLatch(1);
+        CountDownLatch releaseFirstUpdate = new CountDownLatch(1);
+        AtomicBoolean firstUpdate = new AtomicBoolean(true);
+        List<String> writes = new CopyOnWriteArrayList<>();
+        when(client.updateComment(any(), eq("action-workpad"), anyString())).thenAnswer(invocation -> {
+            String value = invocation.getArgument(2);
+            if (firstUpdate.compareAndSet(true, false)) {
+                firstUpdateEntered.countDown();
+                assertThat(releaseFirstUpdate.await(5, TimeUnit.SECONDS)).isTrue();
+            }
+            writes.add(value);
+            currentCard.set(cardWithSingleWorkpad(value));
+            return Map.of("id", "action-workpad");
+        });
+
+        String agentText = "## Codex Workpad\n\nLatest agent body";
+        String paused = CodexUsageWorkpadSection.paused("Usage is unavailable.", Instant.parse("2026-07-10T13:00:00Z"));
+        CompletableFuture<JsonNode> agentUpdate = CompletableFuture.supplyAsync(() -> handler.handle(
+                config,
+                TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
+                json.createObjectNode()
+                        .put("tool", TrelloHandoffToolHandler.UPSERT_WORKPAD)
+                        .set("arguments", json.createObjectNode().put("text", agentText))));
+        assertThat(firstUpdateEntered.await(5, TimeUnit.SECONDS)).isTrue();
+
+        // when
+        CompletableFuture<Boolean> usageUpdate =
+                CompletableFuture.supplyAsync(() -> handler.updateCodexUsageSection(config, "card-1", paused));
+        boolean secondFetchOvertookFirstWrite = secondFetchEntered.await(250, TimeUnit.MILLISECONDS);
+        releaseFirstUpdate.countDown();
+
+        // then
+        assertThat(agentUpdate.get(5, TimeUnit.SECONDS).path("success").asBoolean())
+                .isTrue();
+        assertThat(usageUpdate.get(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(secondFetchOvertookFirstWrite)
+                .as("the second read must wait until the first read-modify-write has completed")
+                .isFalse();
+        assertThat(fetches).hasValue(2);
+        assertThat(writes).hasSize(2);
+        assertThat(currentCard.get().comments().getFirst().text())
+                .contains("Latest agent body", paused)
+                .containsOnlyOnce(CodexUsageWorkpadSection.START_MARKER);
+    }
+
+    @MethodSource("malformedManagedUsageSections")
+    @ParameterizedTest(name = "{0}")
+    void refusesMalformedManagedUsageSectionsWithoutLosingOrAccumulatingHumanNotes(
+            String scenario, String malformedWorkpad) throws Exception {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        EffectiveConfig config = config(List.of("Review"), List.of());
+        String paused = CodexUsageWorkpadSection.paused("Usage is unavailable.", Instant.parse("2026-07-10T13:00:00Z"));
+        cardResponse.set(cardJsonWithWorkpad(malformedWorkpad));
+
+        // when
+        String removed = CodexUsageWorkpadSection.remove(malformedWorkpad);
+        String upserted = CodexUsageWorkpadSection.upsert(malformedWorkpad, paused);
+        JsonNode agentUpsert = upsertWorkpad(handler, "## Codex Workpad\n\nReplacement agent plan");
+        boolean pauseUpdated = handler.updateCodexUsageSection(config, "card-1", paused);
+        boolean cleanupUpdated = handler.updateCodexUsageSection(config, "card-1", null);
+
+        // then
+        assertThat(scenario).isNotBlank();
+        assertThat(removed).isEqualTo(malformedWorkpad);
+        assertThat(upserted).isEqualTo(malformedWorkpad);
+        assertThat(agentUpsert.path("success").asBoolean()).isFalse();
+        assertThat(agentUpsert.path("contentItems").get(0).path("text").asText())
+                .contains("trello_workpad_managed_section_malformed");
+        assertThat(pauseUpdated).isFalse();
+        assertThat(cleanupUpdated).isFalse();
+        assertThat(updatedCommentText.get()).isNull();
+        assertThat(commentText.get()).isNull();
+        assertThat(managedCommentCallOrder).isEmpty();
+        assertThat(malformedWorkpad).contains("Human note after malformed section.");
+    }
+
+    @Test
+    void repeatedUsageUpdatesWithDuplicateWorkpadsKeepOneBoundedCleanupNotice() throws Exception {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        EffectiveConfig config = config(List.of("Review"), List.of());
+        String original = "## Codex Workpad\n\n- Human plan: keep this.";
+        cardResponse.set(cardJsonWithDuplicateWorkpads(original));
+
+        // when
+        boolean paused = handler.updateCodexUsageSection(
+                config,
+                "card-1",
+                CodexUsageWorkpadSection.paused("Usage is unavailable.", Instant.parse("2026-07-10T13:00:00Z")));
+        String pausedWorkpad = updatedCommentText.get();
+        cardResponse.set(cardJsonWithDuplicateWorkpads(pausedWorkpad));
+
+        boolean rechecking = handler.updateCodexUsageSection(
+                config, "card-1", CodexUsageWorkpadSection.rechecking("Usage is unavailable."));
+        String recheckingWorkpad = updatedCommentText.get();
+        cardResponse.set(cardJsonWithDuplicateWorkpads(recheckingWorkpad));
+
+        boolean cleaned = handler.updateCodexUsageSection(config, "card-1", null);
+        String cleanedWorkpad = updatedCommentText.get();
+
+        // then
+        assertThat(paused).isTrue();
+        assertThat(rechecking).isTrue();
+        assertThat(cleaned).isTrue();
+        assertThat(List.of(pausedWorkpad, recheckingWorkpad, cleanedWorkpad)).allSatisfy(workpad -> {
+            assertThat(workpad)
+                    .contains("- Human plan: keep this.")
+                    .containsOnlyOnce(TrelloHandoffToolHandler.DUPLICATE_WORKPADS_NOTE_PREFIX);
+            assertThat(workpad.length()).isLessThan(2_000);
+        });
+        assertThat(pausedWorkpad).containsOnlyOnce(CodexUsageWorkpadSection.START_MARKER);
+        assertThat(recheckingWorkpad).containsOnlyOnce(CodexUsageWorkpadSection.START_MARKER);
+        assertThat(cleanedWorkpad)
+                .doesNotContain(CodexUsageWorkpadSection.START_MARKER, CodexUsageWorkpadSection.END_MARKER);
+    }
+
+    @Test
+    void refusesCodexUsageWorkpadCreateWhenCommentWindowMayBeIncomplete() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson(commentActions(TrelloClient.WORKPAD_COMMENT_ACTION_LIMIT)));
+
+        // when
+        boolean updated = handler.updateCodexUsageSection(
+                config(List.of("Review"), List.of()),
+                "card-1",
+                CodexUsageWorkpadSection.paused("Usage is unavailable.", Instant.parse("2026-07-10T13:00:00Z")));
+
+        // then
+        assertThat(updated).isFalse();
+        assertThat(commentText.get()).isNull();
+        assertThat(updatedCommentText.get()).isNull();
+    }
+
+    @Test
+    void refusesCodexUsageCleanupWhenFullWindowMayHideTheEntireWorkpad() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson(commentActions(TrelloClient.WORKPAD_COMMENT_ACTION_LIMIT)));
+
+        // when
+        boolean updated = handler.updateCodexUsageSection(config(List.of("Review"), List.of()), "card-1", null);
+
+        // then
+        assertThat(updated).isFalse();
+        assertThat(commentText.get()).isNull();
+        assertThat(updatedCommentText.get()).isNull();
+        assertThat(managedCommentCallOrder).isEmpty();
+    }
+
+    @Test
+    void refusesCodexUsageSectionInsertWhenCommentWindowMayHideAnOlderOwner() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson(fullCommentWindowWithWorkpad()));
+
+        // when
+        boolean updated = handler.updateCodexUsageSection(
+                config(List.of("Review"), List.of()),
+                "card-1",
+                CodexUsageWorkpadSection.paused("Usage is unavailable.", Instant.parse("2026-07-10T13:00:00Z")));
+
+        // then
+        assertThat(updated).isFalse();
+        assertThat(commentText.get()).isNull();
+        assertThat(updatedCommentText.get()).isNull();
+        assertThat(managedCommentCallOrder).isEmpty();
+    }
+
+    @Test
+    void refusesCodexUsageSectionCleanupWhenCommentWindowMayHideAnOlderOwner() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson(fullCommentWindowWithWorkpad()));
+
+        // when
+        boolean updated = handler.updateCodexUsageSection(config(List.of("Review"), List.of()), "card-1", null);
+
+        // then
+        assertThat(updated).isFalse();
+        assertThat(commentText.get()).isNull();
+        assertThat(updatedCommentText.get()).isNull();
+        assertThat(managedCommentCallOrder).isEmpty();
+    }
+
+    @Test
+    void skipsCodexUsageWorkpadIOMutationsWhenWritesAreDisabled() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+
+        // when
+        boolean updated = handler.updateCodexUsageSection(
+                configWithWrites(false),
+                "card-1",
+                CodexUsageWorkpadSection.paused("Usage is unavailable.", Instant.parse("2026-07-10T13:00:00Z")));
+
+        // then
+        assertThat(updated).isFalse();
+        assertThat(commentText.get()).isNull();
+        assertThat(updatedCommentText.get()).isNull();
+    }
+
+    @Test
+    void skipsCodexUsageWorkpadIOMutationsWhenCommentWritesAreDisabled() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+
+        // when
+        boolean updated = handler.updateCodexUsageSection(
+                configWithComments(false),
+                "card-1",
+                CodexUsageWorkpadSection.paused("Usage is unavailable.", Instant.parse("2026-07-10T13:00:00Z")));
+
+        // then
+        assertThat(updated).isFalse();
+        assertThat(commentText.get()).isNull();
+        assertThat(updatedCommentText.get()).isNull();
+    }
+
+    @Test
     void movesCurrentCardToAllowedListName() {
         // given
         TrelloHandoffToolHandler handler = handler();
@@ -1765,12 +2557,16 @@ final class TrelloHandoffToolHandlerTest {
     }
 
     private JsonNode upsertWorkpad(TrelloHandoffToolHandler handler) {
+        return upsertWorkpad(handler, "## Codex Workpad\n\nUpdated plan");
+    }
+
+    private JsonNode upsertWorkpad(TrelloHandoffToolHandler handler, String text) {
         return handler.handle(
                 config(List.of("Review"), List.of()),
                 TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
                 json.createObjectNode()
                         .put("tool", TrelloHandoffToolHandler.UPSERT_WORKPAD)
-                        .set("arguments", json.createObjectNode().put("text", "## Codex Workpad\n\nUpdated plan")));
+                        .set("arguments", json.createObjectNode().put("text", text)));
     }
 
     private EffectiveConfig config(List<String> allowedMoveListNames, List<String> allowedMoveListIds) {
@@ -1843,6 +2639,40 @@ final class TrelloHandoffToolHandlerTest {
                         TrelloHandoffToolHandler.ADD_URL_ATTACHMENT,
                         urlAttachmentArguments(JsonNodeFactory.instance.objectNode()),
                         "name"));
+    }
+
+    private static Stream<Arguments> malformedManagedUsageSections() {
+        String heading = "## Codex Workpad\n\n- Human plan: keep this.\n\n";
+        String humanNote = "\n\n- Human note after malformed section.";
+        return Stream.of(
+                Arguments.of(
+                        "unmatched start marker",
+                        heading + CodexUsageWorkpadSection.START_MARKER + "\nOld managed text" + humanNote),
+                Arguments.of(
+                        "unmatched end marker",
+                        heading + "Old managed text\n" + CodexUsageWorkpadSection.END_MARKER + humanNote),
+                Arguments.of(
+                        "nested start marker",
+                        heading
+                                + CodexUsageWorkpadSection.START_MARKER
+                                + "\nOld managed text\n"
+                                + CodexUsageWorkpadSection.START_MARKER
+                                + "\nNested managed text\n"
+                                + CodexUsageWorkpadSection.END_MARKER
+                                + "\nOuter managed text\n"
+                                + CodexUsageWorkpadSection.END_MARKER
+                                + humanNote),
+                Arguments.of(
+                        "multiple balanced managed sections",
+                        heading
+                                + CodexUsageWorkpadSection.START_MARKER
+                                + "\nFirst managed text\n"
+                                + CodexUsageWorkpadSection.END_MARKER
+                                + "\n\n"
+                                + CodexUsageWorkpadSection.START_MARKER
+                                + "\nSecond managed text\n"
+                                + CodexUsageWorkpadSection.END_MARKER
+                                + humanNote));
     }
 
     private static ObjectNode objectArgument(String key, JsonNode value) {
@@ -1923,12 +2753,12 @@ final class TrelloHandoffToolHandlerTest {
                                         true,
                                         "allow_writes",
                                         allowWrites,
+                                        "allow_comments",
+                                        allowComments,
                                         "allowed_move_list_names",
                                         allowedMoveListNames,
                                         "allowed_move_list_ids",
                                         allowedMoveListIds,
-                                        "allow_comments",
-                                        allowComments,
                                         "allow_checklists",
                                         allowChecklists,
                                         "allow_url_attachments",
@@ -2003,10 +2833,16 @@ final class TrelloHandoffToolHandlerTest {
     }
 
     private static String managedRecheckText(String visibleStatus, String blockerActionId) {
+        return managedRecheckText(visibleStatus, blockerActionId, "SYNTH101");
+    }
+
+    private static String managedRecheckText(String visibleStatus, String blockerActionId, String cardShortLink) {
         return visibleStatus
                 + "\n\n"
                 + TrelloHandoffToolHandler.BLOCKER_RECHECK_FOOTER_PREFIX
-                + "https://trello.com/c/SYNTH101#comment-"
+                + "https://trello.com/c/"
+                + cardShortLink
+                + "#comment-"
                 + blockerActionId
                 + TrelloHandoffToolHandler.BLOCKER_RECHECK_FOOTER_SUFFIX;
     }
@@ -2026,6 +2862,41 @@ final class TrelloHandoffToolHandlerTest {
                 + commentAction(BLOCKER_ACTION_ID, "Blocked: repository mismatch")
                 + ",\n"
                 + regularComments.substring(1);
+    }
+
+    private static String fullCommentWindowWithWorkpad() {
+        String regularComments = commentActions(TrelloClient.WORKPAD_COMMENT_ACTION_LIMIT - 1);
+        return "[\n"
+                + commentAction("action-workpad", "## Codex Workpad\n\nVisible plan")
+                + ",\n"
+                + regularComments.substring(1);
+    }
+
+    private String cardJsonWithWorkpad(String text) throws Exception {
+        return cardJson("[{\"id\":\"action-workpad\",\"data\":{\"text\":"
+                + json.writeValueAsString(text)
+                + "},\"date\":\"2026-05-05T00:00:00.000Z\",\"memberCreator\":{\"fullName\":\"Codex\"}}]");
+    }
+
+    private String cardJsonWithDuplicateWorkpads(String primaryText) throws Exception {
+        return cardJsonWithTwoWorkpads(primaryText, "## Codex Workpad\n\nOlder duplicate");
+    }
+
+    private String cardJsonWithTwoWorkpads(String primaryText, String olderText) throws Exception {
+        return cardJson("[{\"id\":\"action-workpad\",\"data\":{\"text\":"
+                + json.writeValueAsString(primaryText)
+                + "},\"date\":\"2026-05-05T00:00:00.000Z\",\"memberCreator\":{\"fullName\":\"Codex\"}},"
+                + "{\"id\":\"action-workpad-older\",\"data\":{\"text\":"
+                + json.writeValueAsString(olderText)
+                + "},\"date\":\"2026-05-04T00:00:00.000Z\",\"memberCreator\":{\"fullName\":\"Codex\"}}]");
+    }
+
+    private static Card cardWithSingleWorkpad(String text) {
+        return TestCards.cardWithComments(
+                "card-1",
+                "TRELLO-abc",
+                "Ready for Codex",
+                List.of(new Card.Comment("action-workpad", text, "Codex", Instant.parse("2026-05-05T00:00:00Z"))));
     }
 
     private static String commentActions(int count) {
