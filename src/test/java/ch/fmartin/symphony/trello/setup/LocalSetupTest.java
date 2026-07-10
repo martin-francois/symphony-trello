@@ -349,6 +349,12 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "gpt-5.6-sol", List.of("low", "medium", "high", "xhigh", "max", "ultra"))));
     }
 
+    private LocalSetup setupWithCodexAppServer(Path appServer) {
+        return setupWithCodexSelectionDefaults(
+                () -> new CodexModelDefaultsResolver(new ObjectMapper(), List.of(appServer.toString()))
+                        .resolveSelectionDefaults());
+    }
+
     @MethodSource("blankSetupLocalOptionValues")
     @ParameterizedTest
     void dryRunRejectsBlankSetupOptionValuesBeforePlannedSetupOutput(BlankSetupLocalOption option) {
@@ -2277,35 +2283,24 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
-    void interactiveSetupUsesExactRecommendationFromLaterModelListPage() throws Exception {
+    void interactiveSetupPrefersTerraFromLaterModelListPageOverCatalogDefault() throws Exception {
         // given
-        Path appServer = CodexModelAppServerFixture.create(
+        Path appServer = CodexModelAppServerFixture.createPaginated(
                 tempDir,
                 """
-                while IFS= read -r line; do
-                  case "$line" in
-                    *'"method":"initialize"'*)
-                      printf '%s\\n' '{"jsonrpc":"2.0","id":1,"result":{}}'
-                      ;;
-                    *'"method":"model/list"'*'"cursor":"page-2"'*)
-                      printf '%s\\n' '{"jsonrpc":"2.0","id":3,"result":{"data":[{"model":"gpt-5.6-sol","defaultReasoningEffort":"low","isDefault":false,"supportedReasoningEfforts":[{"reasoningEffort":"low","description":"Fast responses with lighter reasoning"},{"reasoningEffort":"ultra","description":"Maximum reasoning with automatic task delegation"}]}]}}'
-                      ;;
-                    *'"method":"model/list"'*)
-                      printf '%s\\n' '{"jsonrpc":"2.0","id":2,"result":{"data":[{"model":"gpt-5.5","defaultReasoningEffort":"medium","isDefault":true}],"nextCursor":"page-2"}}'
-                      ;;
-                  esac
-                done
+                [{"model":"gpt-5.5","defaultReasoningEffort":"medium","isDefault":true}]
+                """,
+                """
+                [{"model":"gpt-5.6-terra","defaultReasoningEffort":"high","isDefault":false,"supportedReasoningEfforts":[{"reasoningEffort":"high","description":"Terra recommendation from Codex"},{"reasoningEffort":"max","description":"Deeper Terra reasoning"}]}]
                 """);
-        LocalSetup resolverBackedSetup = setupWithCodexSelectionDefaults(
-                () -> new CodexModelDefaultsResolver(new ObjectMapper(), List.of(appServer.toString()))
-                        .resolveSelectionDefaults());
+        LocalSetup resolverBackedSetup = setupWithCodexAppServer(appServer);
         Path workflow = tempDir.resolve("WORKFLOW.later-page-model-recommendation.md");
         Path env = tempDir.resolve(".env.later-page-model-recommendation");
 
         // when
         SetupRunResult result = runSetupWithInput(
                 resolverBackedSetup,
-                "gpt-5.6-sol\n\n\n\nn\nn\n",
+                "\n\n\n\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -2321,11 +2316,62 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--no-github");
 
         // then
-        result.assertSuccess().stdoutContains("Reasoning effort [low]: ");
+        result.assertSuccess()
+                .stdoutContains(
+                        "Model [gpt-5.6-terra]: ",
+                        "  high (default, current) - Terra recommendation from Codex",
+                        "Reasoning effort [high]: ");
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
-                .contains("model: \"gpt-5.6-sol\"", "reasoning_effort: \"low\"")
+                .contains("model: \"gpt-5.6-terra\"", "reasoning_effort: \"high\"")
                 .doesNotContain("reasoning_effort: \"medium\"");
+    }
+
+    @Test
+    void interactiveSetupOmitsReasoningWhenPreferredTerraHasNoRecommendation() throws Exception {
+        // given
+        Path appServer = CodexModelAppServerFixture.createPaginated(
+                tempDir,
+                """
+                [{"model":"gpt-5.5","defaultReasoningEffort":"medium","isDefault":true}]
+                """,
+                """
+                [{"model":"gpt-5.6-terra","isDefault":false,"supportedReasoningEfforts":[{"reasoningEffort":"low","description":"Faster Terra reasoning"},{"reasoningEffort":"high","description":"Deeper Terra reasoning"}]}]
+                """);
+        LocalSetup resolverBackedSetup = setupWithCodexAppServer(appServer);
+        Path workflow = tempDir.resolve("WORKFLOW.terra-without-recommendation.md");
+        Path env = tempDir.resolve(".env.terra-without-recommendation");
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                resolverBackedSetup,
+                "\n\n\n\n\nn\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Terra Without Recommendation Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "Model [gpt-5.6-terra]: ",
+                        "  low - Faster Terra reasoning",
+                        "  high - Deeper Terra reasoning",
+                        "Reasoning effort: ")
+                .stdoutDoesNotContain("Reasoning effort [medium]: ");
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-5.6-terra\"")
+                .doesNotContain("reasoning_effort:", "model: \"gpt-5.5\"");
     }
 
     @Test

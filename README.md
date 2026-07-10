@@ -1027,14 +1027,17 @@ current board count and token.
 
 ### Codex Command
 
-Generated workflows include a Codex section like this:
+A generated Codex section can look like this when Terra is available:
 
 ```yaml
 codex:
   command: codex app-server
-  model: gpt-5.5
-  reasoning_effort: medium
+  model: gpt-5.6-terra
 ```
+
+When the selected catalog entry has a non-blank reasoning recommendation, setup also writes
+`reasoning_effort` with that exact value. It omits the field when the selected entry has no
+recommendation.
 
 Symphony runs `codex.command` with `bash -lc` from the card workspace. Any command is acceptable if
 it starts a Codex app-server on stdio for the same OS user that runs Symphony. Examples include an
@@ -1042,30 +1045,44 @@ absolute path such as `/opt/codex/bin/codex app-server` or a small wrapper scrip
 environment before starting `codex app-server`.
 
 Generated workflows also make model selection explicit. During setup, Symphony calls the installed
-Codex CLI's `model/list` method for the default model, each model's recommended reasoning effort,
-and its advertised `supportedReasoningEfforts`. Guided setup prints the exact ordered efforts and
-descriptions advertised for the selected model; for example, `xhigh`, `max`, and `ultra` appear when
-that catalog entry supports them. It marks the model's advertised default and the effective current
-setup or workflow value. These markers are derived from the model default and current selection;
-they are not a fixed property of an effort name. Press Enter to keep the current value, or type
-another advertised value. An explicit `--codex-reasoning-effort` takes precedence, followed by an
-existing workflow value and then the exact selected model's recommendation. If model discovery
-succeeds but the selected model is absent or has no `defaultReasoningEffort`, guided setup shows
-`Reasoning effort:` without a bracketed recommendation. Press Enter to leave `reasoning_effort`
-unset. Non-interactive setup also omits the field instead of reusing another model's recommendation.
-A newly selected effort outside a non-empty advertised list is rejected with the accepted values.
+Codex CLI's `model/list` method for the available models, each model's recommended reasoning effort,
+and its advertised `supportedReasoningEfforts`. For a new workflow without a model override, setup
+first prefers an exact visible `gpt-5.6-terra` entry. If Terra is absent or hidden, it uses the first
+visible model marked `isDefault`; if no visible model is marked as the default, it uses the first
+visible usable model in catalog order. `gpt-5.6-sol` has no special fallback rule. It can be selected
+explicitly, preserved from an existing workflow, or selected through the same generic catalog rules
+as any other model. Explicit setup choices and existing workflow values still take precedence over
+this new-workflow recommendation.
+
+Guided setup prints the exact ordered efforts and descriptions advertised for the selected model;
+for example, `xhigh`, `max`, and `ultra` appear when that catalog entry supports them. It marks the
+model's advertised default and the effective current setup or workflow value. These markers are
+derived from the model default and current selection; they are not a fixed property of an effort
+name. Press Enter to keep the current value, or type another advertised value. An explicit
+`--codex-reasoning-effort` takes precedence, followed by an existing workflow value and then the
+exact selected model's recommendation. If supported discovery returns a usable catalog but the
+selected model is absent or has no `defaultReasoningEffort`, and neither an explicit effort nor an
+existing workflow effort has higher precedence, guided setup shows `Reasoning effort:` without a
+bracketed recommendation. Press Enter in that case to leave `reasoning_effort` unset.
+Non-interactive setup also omits the field instead of reusing another model's recommendation. A
+workflow that already omits `reasoning_effort` keeps that omission during forced regeneration unless
+you explicitly change the model or effort. A newly selected effort outside a non-empty advertised
+list is rejected with the accepted values.
 Symphony does not maintain a separate fixed effort list or display-name table. If the selected model
 does not advertise an effort list, guided setup says so and setup permits a non-blank pass-through
-value for compatibility with custom or older catalogs.
-Discovery retains hidden catalog entries so an explicitly selected or preserved model still gets its
-own choices, but setup never chooses a hidden model as the guided default.
+value for compatibility with custom or older catalogs. Discovery retains hidden catalog entries so
+an explicitly selected or preserved model still gets its own choices, but setup never chooses a
+hidden model as the guided default.
 To preserve its no-write guarantee, `setup-local --dry-run` does not launch Codex solely to discover
 the model catalog. It still validates input that is available without discovery; a real setup run
 performs model-specific effort validation before changing Trello or writing workflow files.
-If the model list is available but does not name a default, setup uses the first non-hidden returned
-model with a usable model id. That model's reasoning recommendation remains optional. If the model
-list is empty or lacks a usable model id, setup writes the fallback values shown above. A separately
-selected model still needs its own catalog recommendation; otherwise setup omits `reasoning_effort`.
+For a new workflow without an explicit or preserved model, supported discovery that returns an empty
+catalog or no visible usable model id writes the deterministic compatibility fallback `gpt-5.5`. It
+also writes `medium` when no explicit or preserved effort takes precedence; an explicit effort
+replaces `medium` without replacing the fallback model. This supported-empty or unusable catalog
+fallback is separate from a miss for an explicit or preserved model: that model still needs its own
+recommendation, or setup omits `reasoning_effort` when no explicit or preserved effort takes
+precedence.
 If the installed Codex app-server cannot answer the model-list request at all, setup omits the
 first-class model fields when the operator requested neither a model nor a reasoning effort. For
 compatibility with that older discovery path, an explicit model without an explicit or preserved

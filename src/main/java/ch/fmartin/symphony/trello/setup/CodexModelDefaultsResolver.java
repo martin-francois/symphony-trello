@@ -31,6 +31,7 @@ final class CodexModelDefaultsResolver {
     private static final System.Logger LOG = System.getLogger(CodexModelDefaultsResolver.class.getName());
     private static final String CLIENT_NAME = "symphony-trello-setup";
     private static final String DEVELOPMENT_VERSION = "development";
+    private static final String SYMPHONY_PREFERRED_CODEX_MODEL = "gpt-5.6-terra";
     private static final Duration READ_TIMEOUT = Duration.ofSeconds(5);
     private static final int MAX_MODEL_LIST_PAGES = 20;
     private static final Duration PROCESS_STOP_TIMEOUT = Duration.ofSeconds(2);
@@ -136,6 +137,7 @@ final class CodexModelDefaultsResolver {
         Map<String, String> reasoningEffortsByModel = new LinkedHashMap<>();
         Map<String, List<ReasoningEffortOption>> reasoningEffortOptionsByModel = new LinkedHashMap<>();
         JsonNode selected = null;
+        boolean selectedIsSymphonyPreferred = false;
         boolean selectedIsDefault = false;
         for (JsonNode model : models) {
             String modelName = validatedCatalogText(model, "model");
@@ -148,8 +150,16 @@ final class CodexModelDefaultsResolver {
             }
             boolean modelIsDefault = model.path("isDefault").asBoolean(false);
             boolean modelIsHidden = model.path("hidden").asBoolean(false);
-            if (!modelIsHidden && (selected == null || (!selectedIsDefault && modelIsDefault))) {
+            boolean modelIsSymphonyPreferred = SYMPHONY_PREFERRED_CODEX_MODEL.equals(modelName);
+            if (!modelIsHidden
+                    && shouldSelectModel(
+                            selected,
+                            selectedIsSymphonyPreferred,
+                            selectedIsDefault,
+                            modelIsSymphonyPreferred,
+                            modelIsDefault)) {
                 selected = model;
+                selectedIsSymphonyPreferred = modelIsSymphonyPreferred;
                 selectedIsDefault = modelIsDefault;
             }
             String reasoningEffort = validatedCatalogText(model, "defaultReasoningEffort");
@@ -172,6 +182,17 @@ final class CodexModelDefaultsResolver {
                 CodexModelDefaults.partial(modelName, reasoningEffort),
                 reasoningEffortsByModel,
                 reasoningEffortOptionsByModel);
+    }
+
+    private static boolean shouldSelectModel(
+            JsonNode selected,
+            boolean selectedIsSymphonyPreferred,
+            boolean selectedIsDefault,
+            boolean modelIsSymphonyPreferred,
+            boolean modelIsDefault) {
+        return selected == null
+                || (!selectedIsSymphonyPreferred
+                        && (modelIsSymphonyPreferred || (!selectedIsDefault && modelIsDefault)));
     }
 
     private static List<ReasoningEffortOption> supportedReasoningEfforts(JsonNode model) {

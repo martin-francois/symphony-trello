@@ -712,28 +712,44 @@ preserved model uses its own catalog choices, but default-model selection MUST i
 already available without side effects, dry-run MAY defer catalog-dependent validation; the real
 setup run MUST complete that validation before changing Trello or writing workflow files.
 
-Reasoning-effort selection MUST apply this precedence: an explicit setup effort, a preserved existing
-workflow effort, the exact selected model's non-blank `defaultReasoningEffort`, omission when
-supported discovery has no exact recommendation, then the compatibility fallback only when model
-discovery is unsupported. A successful catalog response MUST NOT reuse another model's recommendation
-when the selected model is absent or its `defaultReasoningEffort` is blank. In that case, guided setup
-MUST use an unbracketed `Reasoning effort:` prompt and accepting the prompt MUST omit
-`reasoning_effort` from the generated workflow.
+For a new workflow without an explicit or preserved model, catalog-derived model selection MUST use
+this precedence: the exact non-hidden `gpt-5.6-terra` entry when it has a usable model id, the first
+non-hidden usable entry marked `isDefault`, then the first non-hidden usable entry in catalog order.
+The Java setup flow MUST NOT treat `gpt-5.6-sol` as a special fallback when Terra is unavailable.
+An explicit setup model, a model newly typed during guided setup, or a preserved existing workflow
+model MUST take precedence over this catalog-derived recommendation. When no such model takes
+precedence and supported discovery returns an empty catalog or no visible usable model id, model
+selection MUST use the deterministic compatibility fallback `gpt-5.5`.
+
+Reasoning-effort selection MUST apply this precedence: an explicit setup effort; a preserved existing
+workflow effort or intentionally preserved workflow omission; `medium` when model selection used the
+deterministic supported-empty or unusable catalog fallback; the exact selected model's non-blank
+`defaultReasoningEffort`; then omission when supported discovery has no exact recommendation.
+Unsupported discovery follows its separate compatibility rules below. Except when the deterministic
+supported-empty or unusable catalog fallback model was selected, a successful catalog response MUST
+NOT reuse another model's recommendation when the selected model is absent or its
+`defaultReasoningEffort` is blank. In that case, guided setup MUST use an unbracketed
+`Reasoning effort:` prompt and accepting the prompt MUST omit `reasoning_effort` from the generated
+workflow. An explicit effort replaces the fallback model's `medium` effort without replacing its
+`gpt-5.5` model.
 
 The Java setup flow writes the selected `model` into generated workflows and writes
 `reasoning_effort` only when the precedence above resolves a value. It queries the installed Codex
-CLI with the app-server `model/list` method and uses the default model's recommendation when one is
-present. Guided setup prompts for the model and reasoning effort and accepts a recommendation when
-the operator presses Enter. Non-interactive setup follows the same resolution unless explicit setup
-options provide different values. Existing workflow values remain the source of truth for a Trello
-board and take precedence over discovered defaults during workflow regeneration. If the model list
-is available but does not mark a default, setup uses the first non-hidden returned model with a usable
-model id; that model MAY omit `defaultReasoningEffort`. If the list is empty or lacks a usable model
-id, setup writes `gpt-5.5` and `medium` for the fallback model. If the installed app-server cannot
-answer the model-list request, setup omits the first-class fields when neither a model nor a reasoning
-effort was explicitly requested so the generated workflow remains compatible with Codex versions
-that do not expose them. An explicit model request on that unsupported-discovery path uses `medium`
-as a compatibility fallback unless an explicit or preserved effort has higher precedence.
+CLI with the app-server `model/list` method and uses the exact selected model's recommendation when
+one is present. Guided setup prompts for the model and reasoning effort and accepts a recommendation
+when the operator presses Enter. Non-interactive setup follows the same resolution unless explicit
+setup options provide different values. Existing workflow values remain the source of truth for a
+Trello board and take precedence over discovered defaults during workflow regeneration. The selected
+catalog model MAY omit `defaultReasoningEffort`; setup MUST NOT supply a model-specific effort from a
+hard-coded Terra or Sol default. As the explicit supported-empty or unusable catalog exception, an
+empty list or a list without a visible usable model id MUST produce the deterministic compatibility
+fallback model `gpt-5.5` when catalog-derived model selection applies, and MUST pair it with `medium`
+when no explicit or preserved reasoning effort or omission takes precedence. If the installed
+app-server cannot answer the model-list request, setup omits the first-class fields when neither a
+model nor a reasoning effort was explicitly requested so the generated workflow remains compatible
+with Codex versions that do not expose them. An explicit model request on that unsupported-discovery
+path uses `medium` as a compatibility fallback unless an explicit or preserved effort has higher
+precedence.
 
 - `command` (string shell command)
   - Default: `codex app-server`
