@@ -114,16 +114,32 @@ commit and open pull requests. Topic-specific rules live in the pages linked und
   user-facing contract change. For documentation, tests, or internal-only work, record that there is
   no user-facing contract change instead of leaving the decision implicit. If the answer is not
   clear, mark the issue or PR as needing a maintainer decision before implementation proceeds.
+- Judge compatibility against previously supported behavior that succeeds end to end, not merely an
+  input that one intermediate layer accepted. Rejecting an input earlier when the authoritative
+  downstream system already rejects it is a compatible fail-fast improvement unless the documented
+  contract promises acceptance or pass-through. Record the downstream evidence in the pull request.
 - For a breaking change, write down what breaks and the migration path operators, contributors, or
   users should follow. Do not add hidden compatibility fallbacks merely to soften the break.
 - Breaking changes must use both Conventional Commit markers in the message that reaches `main`: `!`
   before the colon in the type or scope, and a `BREAKING CHANGE:` footer. The `!` makes the break
   visible in commit-title-only views, and the footer lets release automation include the reason and
-  migration path in the generated changelog. For squash-merged PRs, put `!` in the PR title and put
-  the footer in the squash commit body. For rebase-merged or intentionally multi-commit PRs, put
-  both markers in the retained commit that owns the breaking change. The footer must explain why the
-  break is necessary, what changed, and how users or operators migrate. Commitlint rejects breaking
-  messages that have only one marker.
+  migration path in the generated changelog. The pull request template records the intended result
+  in plain language. **Combine this pull request into one final commit** may defer the footer to the
+  final combined message. **Keep the individual commits** requires both markers in the retained
+  commit that owns the breaking behavior. Any branch commit containing either marker must contain
+  both, regardless of the selected result. Commitlint rejects incomplete marker-bearing commits.
+- As soon as a pull request is classified as breaking, make its title and merge-message source
+  breaking-ready; never mark the breaking-footer check as N/A. Before making a pull request ready,
+  verify that the compatibility selection, title, and retained commit messages agree. The PR metadata
+  validator checks the authoritative template's `Because`, `Breaks`, `Migration`, and `Alternative`
+  fields plus the PR title's `!`; it does not require a PR-body `BREAKING CHANGE:` field that the
+  template does not provide. The same command validates the explicit Commit History in Main choice
+  and cross-checks the PR commit range. Combine mode does not require a current branch commit with
+  breaking markers. Keep mode does. In both modes, either marker in a branch commit requires both
+  markers in that commit, a Breaking template selection, and `!` in the PR title. Commitlint
+  independently enforces both markers on each marker-bearing commit. Final merge review must ensure
+  the selected result matches the actual merge method and the message reaching `main` has both
+  breaking markers.
 - Do not add or retain product migrations, legacy-shape support, backward-compatibility shims,
   old-template fingerprints, historical-state fallbacks, or automatic upgrade code unless an
   explicit issue, specification change, or ADR defines the supported public contract.
@@ -252,6 +268,15 @@ optional verification. Follow this order:
   existing branch commit or squashing related local commits before pushing, unless the user
   explicitly asks for multiple commits or the change includes a refactor, which belongs in its own
   focused commit before the behavior-change commit.
+- In the pull request template, choose the intended history result in plain language. **Combine this
+  pull request into one final commit** means the branch commits are review steps; maintainers normally
+  use GitHub's squash merge. **Keep the individual commits** means each focused commit remains in
+  `main`; maintainers normally use GitHub's rebase merge or an equivalent history-preserving
+  fast-forward operation. The template's `(squash)` and `(rebase)` suffixes are optional hints, not
+  knowledge contributors need to make the choice. Do not infer the result from commit count.
+- Do not preemptively rewrite every older open pull request when the template contract changes. When
+  substantive work resumes on an older pull request, update its body to the current template before
+  considering it ready.
 - Synchronize feature branches by rebasing onto the latest default branch. Never create merge
   commits to update a pull request branch; after verifying the rewritten history, push it with
   `--force-with-lease` against the previously fetched remote head.
@@ -259,6 +284,11 @@ optional verification. Follow this order:
   Commit titled. Use one commit for the user-visible feature or fix and separate commits only for
   directly supporting cleanup or refactoring that belongs to the same cohesive change; unrelated work
   still belongs in a separate branch or pull request.
+- A pull request that keeps its individual commits must have coherent ownership. Keep implementation
+  and tests in their owning commit, verify each retained commit independently where practical, and do
+  not let a later commit silently repair an earlier commit that is presented as complete. Focused
+  refactoring and related general improvements may remain separate when each is independently useful
+  and belongs to the pull request's cohesive goal.
 - When the user asks to "clean the git history", rewrite the branch into reviewable commits with one
   commit per cohesive change. Keep refactors, formatting/tooling changes, documentation policy
   changes, and product behavior changes in separate commits unless the user explicitly asks for a
@@ -306,25 +336,29 @@ optional verification. Follow this order:
   exists without that link, manually link it through the issue or PR Development sidebar; do not
   retarget the PR to `main`, create a duplicate branch or PR, or disrupt the stack only to make the
   link appear.
-- The pull request title is linted in CI because the repository normally squash-merges with that
-  title. CI also lints pull request commit messages so intentionally multi-commit or rebase-merged
-  PRs keep release automation input clean. Before publishing a PR, run the same local check with the
-  exact title:
+- The pull request title is linted in CI because it supplies the subject when a pull request is
+  combined into one final commit. CI also lints pull request commit messages so a PR that keeps its
+  individual commits has clean release automation input. Before publishing a PR, run the same local
+  check with the exact title:
 
   ```bash
   scripts/commitlint-local title 'docs: describe static-analysis policy'
   ```
 
-  For a PR that may be rebase-merged or intentionally keeps multiple commits, also lint the commit
-  range with the stricter message config:
+  Also lint the commit range with the stricter message config:
 
   ```bash
   scripts/commitlint-local range origin/main HEAD
   ```
 
-- For a breaking change, verify the exact PR title and squash commit body, or the retained commit
-  message, use both `!` and a `BREAKING CHANGE:` footer. The footer must include the reason and
-  migration path because it feeds the generated changelog.
+- For a breaking change, verify the exact PR title and the message that will reach `main` use both
+  `!` and a `BREAKING CHANGE:` footer. The footer must include the reason and migration path because
+  it feeds the generated changelog. A PR that combines into one final commit may add the footer only
+  in the final combined body. A PR that keeps its individual commits must put both markers in the
+  retained commit that owns the break. In either mode, a branch commit containing either marker must
+  already contain both. PR metadata validation checks the title, visible template fields, declared
+  history result, and commit range; commitlint checks each branch message. Final merge review checks
+  that the selected result, actual merge method, and final message agree.
 - When the user asks for a concrete repo change, commit and push the completed change unless they
   explicitly ask not to.
 - When a branch already has a pull request authored by the authenticated GitHub user, check before
