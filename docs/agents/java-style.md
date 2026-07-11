@@ -153,6 +153,13 @@ skill's advice.
   semantics, blank handling, and immutability. Check this issue's state at most once per turn and
   remove this override when the issue is closed.
 - Streams issue
+  [#57](https://github.com/martinfrancois/java-streams-skill/issues/57): when an `Optional` or
+  collector lambda starts a nested stream pipeline that continues across lines, extract the
+  collection work into a domain-named helper and keep the outer lambda as short glue. Preserve
+  encounter order, equivalent-match semantics, null handling, and result mutability. Check this
+  issue's state at most once per turn before applying this override, and remove the override when the
+  issue is closed.
+- Streams issue
   [#51](https://github.com/martinfrancois/java-streams-skill/issues/51): use `findAny()` for
   equivalent matches, but keep `findFirst()` when encounter order is part of the product contract.
   When keeping `findFirst()`, make the first-match scenario executable in the owning test when the
@@ -170,6 +177,12 @@ skill's advice.
   boundaries such as checked prompting, checked IO, Trello writes, or comment upserts may use an
   explicit empty guard and one local value read. Do not force those branches into Optional lambdas or
   generic checked-Optional helpers.
+- Optional issue
+  [#67](https://github.com/martinfrancois/java-optionals-skill/issues/67): when Optional presence
+  gates a simple unchecked validation or other side effect, prefer `ifPresent(...)` when it keeps the
+  operation readable and preserves the exact value being validated. Keep `isPresent()` when presence
+  itself is the clearest boolean domain predicate and no value is read. Check this issue state at most
+  once per turn before applying this override, and remove the override when the issue is closed.
 - Optional issue
   [#71](https://github.com/martinfrancois/java-optionals-skill/issues/71): when an Optional fallback
   performs non-trivial work, preserve lazy fallback behavior and capture missed-trigger cases where

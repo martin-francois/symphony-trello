@@ -92,9 +92,7 @@ record CodexModelSelectionDefaults(
     }
 
     Optional<List<String>> reasoningEffortChoicesForModel(String model) {
-        return reasoningEffortOptionsForModel(model).map(options -> options.stream()
-                .map(ReasoningEffortOption::reasoningEffort)
-                .toList());
+        return reasoningEffortOptionsForModel(model).map(CodexModelSelectionDefaults::reasoningEffortNames);
     }
 
     Optional<List<ReasoningEffortOption>> reasoningEffortOptionsForModel(String model) {
@@ -109,11 +107,20 @@ record CodexModelSelectionDefaults(
             return Optional.empty();
         }
         return reasoningEffortOptionsForModel(model)
-                .flatMap(options -> options.stream()
-                        .filter(option -> option.reasoningEffort().equals(reasoningEffort.strip()))
-                        .findAny())
+                .flatMap(options -> reasoningEffortOption(options, reasoningEffort.strip()))
                 .map(ReasoningEffortOption::description)
                 .filter(description -> !blank(description));
+    }
+
+    private static List<String> reasoningEffortNames(List<ReasoningEffortOption> options) {
+        return options.stream().map(ReasoningEffortOption::reasoningEffort).toList();
+    }
+
+    private static Optional<ReasoningEffortOption> reasoningEffortOption(
+            List<ReasoningEffortOption> options, String reasoningEffort) {
+        return options.stream()
+                .filter(option -> option.reasoningEffort().equals(reasoningEffort))
+                .findAny();
     }
 
     String validateReasoningEffortForModel(String model, String reasoningEffort) {

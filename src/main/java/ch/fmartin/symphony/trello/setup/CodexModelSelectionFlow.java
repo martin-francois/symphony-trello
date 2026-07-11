@@ -135,9 +135,8 @@ final class CodexModelSelectionFlow {
         for (ReasoningEffortOption option : options) {
             terminal.info(reasoningEffortOptionLine(option, defaultReasoningEffort, currentReasoningEffort));
         }
-        boolean currentIsAdvertised =
-                options.stream().anyMatch(option -> option.reasoningEffort().equals(currentReasoningEffort));
-        if (!blank(currentReasoningEffort) && !currentIsAdvertised) {
+        if (!blank(currentReasoningEffort)
+                && options.stream().noneMatch(option -> option.reasoningEffort().equals(currentReasoningEffort))) {
             terminal.info("  " + currentReasoningEffort + " (current, not advertised; preserving workflow value)");
         }
     }
@@ -168,9 +167,8 @@ final class CodexModelSelectionFlow {
             CodexModelSelectionDefaults selectionDefaults,
             String model,
             String reasoningEffort) {
-        if (options.codexReasoningEffort().isPresent()) {
-            selectionDefaults.validateReasoningEffortForModel(model, reasoningEffort);
-        }
+        options.codexReasoningEffort()
+                .ifPresent(ignored -> selectionDefaults.validateReasoningEffortForModel(model, reasoningEffort));
     }
 
     private static String valueOrDefault(Optional<String> value, String defaultValue) {
