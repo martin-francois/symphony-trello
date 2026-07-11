@@ -103,6 +103,7 @@ public final class TrelloBoardSetup {
     private final ObjectMapper yaml;
     private final HttpClient httpClient;
     private final Supplier<CodexModelSelectionDefaults> codexModelSelectionDefaults;
+    private final Optional<CodexModelSelectionDefaults> codexModelSelectionDefaultsForDryRun;
     private final Optional<String> codexModelOverride;
     private final Optional<String> codexReasoningEffortOverride;
     private final IntPredicate portInUse;
@@ -116,7 +117,13 @@ public final class TrelloBoardSetup {
     }
 
     TrelloBoardSetup(ObjectMapper json, CodexModelSelectionDefaults codexModelSelectionDefaults) {
-        this(json, codexModelSelectionDefaultsSupplier(codexModelSelectionDefaults));
+        this(
+                json,
+                codexModelSelectionDefaultsSupplier(codexModelSelectionDefaults),
+                Optional.of(codexModelSelectionDefaults),
+                Optional.empty(),
+                Optional.empty(),
+                LocalHealthChecker::portAcceptsConnections);
     }
 
     TrelloBoardSetup(ObjectMapper json, Supplier<CodexModelSelectionDefaults> codexModelSelectionDefaults) {
@@ -125,12 +132,14 @@ public final class TrelloBoardSetup {
                 codexModelSelectionDefaults,
                 Optional.empty(),
                 Optional.empty(),
+                Optional.empty(),
                 LocalHealthChecker::portAcceptsConnections);
     }
 
     private TrelloBoardSetup(
             ObjectMapper json,
             Supplier<CodexModelSelectionDefaults> codexModelSelectionDefaults,
+            Optional<CodexModelSelectionDefaults> codexModelSelectionDefaultsForDryRun,
             Optional<String> codexModelOverride,
             Optional<String> codexReasoningEffortOverride,
             IntPredicate portInUse) {
@@ -140,6 +149,8 @@ public final class TrelloBoardSetup {
                 HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
         this.codexModelSelectionDefaults =
                 Objects.requireNonNull(codexModelSelectionDefaults, CODEX_MODEL_DEFAULTS_LABEL);
+        this.codexModelSelectionDefaultsForDryRun =
+                Objects.requireNonNull(codexModelSelectionDefaultsForDryRun, "codexModelSelectionDefaultsForDryRun");
         this.codexModelOverride = Objects.requireNonNull(codexModelOverride, "codexModelOverride");
         this.codexReasoningEffortOverride =
                 Objects.requireNonNull(codexReasoningEffortOverride, "codexReasoningEffortOverride");
@@ -153,7 +164,12 @@ public final class TrelloBoardSetup {
      */
     TrelloBoardSetup withPortProbe(IntPredicate probe) {
         return new TrelloBoardSetup(
-                json, codexModelSelectionDefaults, codexModelOverride, codexReasoningEffortOverride, probe);
+                json,
+                codexModelSelectionDefaults,
+                codexModelSelectionDefaultsForDryRun,
+                codexModelOverride,
+                codexReasoningEffortOverride,
+                probe);
     }
 
     /** Whether something on the loopback interface already accepts connections on the port. */
@@ -162,9 +178,11 @@ public final class TrelloBoardSetup {
     }
 
     TrelloBoardSetup withCodexModelDefaults(CodexModelDefaults codexModelDefaults) {
+        CodexModelSelectionDefaults selectionDefaults = CodexModelSelectionDefaults.of(codexModelDefaults);
         return new TrelloBoardSetup(
                 json,
-                codexModelSelectionDefaultsSupplier(CodexModelSelectionDefaults.of(codexModelDefaults)),
+                codexModelSelectionDefaultsSupplier(selectionDefaults),
+                Optional.of(selectionDefaults),
                 codexModelOverride,
                 codexReasoningEffortOverride,
                 portInUse);
@@ -185,6 +203,7 @@ public final class TrelloBoardSetup {
         return new TrelloBoardSetup(
                 json,
                 codexModelSelectionDefaultsSupplier(codexModelSelectionDefaults),
+                Optional.of(codexModelSelectionDefaults),
                 codexModelOverride,
                 codexReasoningEffortOverride,
                 portInUse);
@@ -194,6 +213,7 @@ public final class TrelloBoardSetup {
         request.validate();
         Path workflowPath = resolveNewBoardWorkflowPath(request);
         ensureWorkflowWritable(workflowPath, request.force());
+        CodexModelDefaults selectedCodexModelDefaults = codexModelDefaultsForWorkflow(workflowPath);
         int serverPort = resolveServerPort(workflowPath, request.serverPort(), request.force(), request.envPath());
         String workspaceId = resolveWorkspaceId(request);
         Map<String, Object> board = createBoard(request, workspaceId);
@@ -229,7 +249,7 @@ public final class TrelloBoardSetup {
                         serverPort,
                         request.maxConcurrentAgents(),
                         githubEnabled,
-                        codexModelDefaultsForWorkflow(workflowPath)));
+                        selectedCodexModelDefaults));
 
         return new NewBoardResult(
                 boardId, boardKey, request.boardName(), boardUrl, createdLists, workflowPath, serverPort);
@@ -401,6 +421,7 @@ public final class TrelloBoardSetup {
     public ImportBoardResult importExistingBoard(ImportBoardRequest request) {
         request.validate();
         preflightRequestedServerPort(request.workflowPath(), request.serverPort(), request.force(), request.envPath());
+        CodexModelDefaults selectedCodexModelDefaults = codexModelDefaultsForWorkflow(request.workflowPath());
         Map<String, Object> board = importBoardInfo(request);
         if (bool(board.get("closed"))) {
             throw new TrelloBoardSetupException(
@@ -490,7 +511,7 @@ public final class TrelloBoardSetup {
                         serverPort,
                         request.maxConcurrentAgents(),
                         request.githubIntegration().enabled(),
-                        codexModelDefaultsForWorkflow(request.workflowPath())));
+                        selectedCodexModelDefaults));
 
         return new ImportBoardResult(
                 resolvedBoardId,
@@ -527,6 +548,14 @@ public final class TrelloBoardSetup {
         return codexModelSelectionDefaults();
     }
 
+    /**
+     * Returns a catalog only when it was already materialized without process startup. Dynamic
+     * suppliers are intentionally absent because resolving one can initialize Codex-owned files.
+     */
+    Optional<CodexModelSelectionDefaults> resolvedCodexModelSelectionDefaultsForDryRun() {
+        return codexModelSelectionDefaultsForDryRun;
+    }
+
     CodexModelDefaults codexModelDefaultsForWorkflow(Path workflowPath) {
         return workflowCodexModelDefaults(workflowPath, codexModelSelectionDefaults())
                 .defaults();
@@ -536,28 +565,30 @@ public final class TrelloBoardSetup {
             Path workflowPath, CodexModelSelectionDefaults selectionDefaults) {
         CodexModelDefaults defaults = selectionDefaults.defaults();
         boolean hasOverrides = codexModelOverride.isPresent() || codexReasoningEffortOverride.isPresent();
+        WorkflowCodexModelDefaults effective;
         try {
-            WorkflowCodexModelDefaults effective = readWorkflowFrontMatter(workflowPath)
+            effective = readWorkflowFrontMatter(workflowPath)
                     .map(frontMatter -> preserveExistingCodexModelDefaults(frontMatter, defaults))
                     .orElseGet(() -> new WorkflowCodexModelDefaults(defaults, false, false));
-            return hasOverrides
-                    ? new WorkflowCodexModelDefaults(
-                            applyCodexModelOverrides(
-                                    effective.defaults(),
-                                    selectionDefaults,
-                                    effective.preserveConfiguredReasoningEffort()),
-                            effective.preserveConfiguredReasoningEffort(),
-                            effective.preserveReasoningEffortOmission())
-                    : effective;
         } catch (TrelloBoardSetupException e) {
-            CodexModelDefaults effective =
-                    hasOverrides ? applyCodexModelOverrides(defaults, selectionDefaults, false) : defaults;
-            return new WorkflowCodexModelDefaults(effective, false, false);
+            effective = new WorkflowCodexModelDefaults(defaults, false, false);
         }
+        if (!hasOverrides) {
+            return effective;
+        }
+        return new WorkflowCodexModelDefaults(
+                applyCodexModelOverrides(
+                        effective.defaults(), selectionDefaults, effective.preserveConfiguredReasoningEffort()),
+                effective.preserveConfiguredReasoningEffort(),
+                effective.preserveReasoningEffortOmission());
     }
 
     CodexModelSelectionDefaults codexModelSelectionDefaultsForWorkflow(Path workflowPath) {
-        CodexModelSelectionDefaults selectionDefaults = codexModelSelectionDefaults();
+        return codexModelSelectionDefaultsForWorkflow(workflowPath, codexModelSelectionDefaults());
+    }
+
+    CodexModelSelectionDefaults codexModelSelectionDefaultsForWorkflow(
+            Path workflowPath, CodexModelSelectionDefaults selectionDefaults) {
         WorkflowCodexModelDefaults workflowDefaults = workflowCodexModelDefaults(workflowPath, selectionDefaults);
         return selectionDefaults.withDefaults(
                 workflowDefaults.defaults(),
@@ -570,13 +601,14 @@ public final class TrelloBoardSetup {
             CodexModelSelectionDefaults selectionDefaults,
             boolean preserveConfiguredReasoningEffort) {
         String model = codexModelOverride.orElseGet(defaults::model);
-        return CodexModelDefaults.partial(
-                model,
-                codexReasoningEffortOverride
-                        .or(() -> codexModelOverride.flatMap(
-                                modelOverride -> selectionDefaults.reasoningEffortForExplicitModelOverride(
-                                        modelOverride, defaults, preserveConfiguredReasoningEffort)))
-                        .orElseGet(defaults::reasoningEffort));
+        String reasoningEffort = codexReasoningEffortOverride
+                .or(() -> codexModelOverride.flatMap(
+                        modelOverride -> selectionDefaults.reasoningEffortForExplicitModelOverride(
+                                modelOverride, defaults, preserveConfiguredReasoningEffort)))
+                .orElseGet(defaults::reasoningEffort);
+        codexReasoningEffortOverride.ifPresent(
+                ignored -> selectionDefaults.validateReasoningEffortForModel(model, reasoningEffort));
+        return CodexModelDefaults.partial(model, reasoningEffort);
     }
 
     private static WorkflowCodexModelDefaults preserveExistingCodexModelDefaults(

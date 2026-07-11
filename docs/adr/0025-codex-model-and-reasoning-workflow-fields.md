@@ -45,9 +45,24 @@ focused on launching app-server.
 
 During setup, the Java implementation starts the installed Codex app-server on stdio and calls
 `model/list`. Generated workflows use the model marked as the Codex default and that model's
-recommended reasoning effort. If the list does not mark a default, setup uses the first returned
-model. If `model/list` succeeds but returns an empty list or unusable model details, setup falls
-back to:
+recommended reasoning effort. If the list does not mark a default, setup uses the first non-hidden
+returned model with usable details. Each model's ordered `supportedReasoningEfforts` is the
+authoritative source for setup
+choices and descriptions. Guided setup displays that model's exact list with Codex-provided
+descriptions, so values such as `xhigh`, `max`, and `ultra` become available without a Symphony code
+change. It derives the default marker from the model's `defaultReasoningEffort` and the current
+marker from the effective setup or preserved workflow value. Setup rejects a newly selected value
+outside a non-empty advertised list and reports the accepted values. When a model does not advertise
+an effort list, guided setup says so and accepts the value as a pass-through setting for
+compatibility with custom or older catalogs. Setup retains hidden entries for explicit or preserved
+model ids while excluding them from default selection.
+
+This is compatible fail-fast validation: a newly selected effort outside the authoritative list
+cannot run successfully for that Codex model. No successfully working configuration is removed;
+existing workflow values stay preserved during regeneration and runtime workflow values remain
+pass-through settings.
+
+If `model/list` succeeds but returns an empty list or unusable model details, setup falls back to:
 
 ```yaml
 codex:
@@ -55,6 +70,11 @@ codex:
   model: gpt-5.5
   reasoning_effort: medium
 ```
+
+`setup-local --dry-run` does not start Codex solely for catalog discovery because app-server startup
+can initialize Codex-owned files. If no catalog is already available without side effects, dry-run
+defers model-specific effort validation and the real setup run performs it before any Trello or
+workflow mutation.
 
 The Java client sends `codex.model` as the app-server `model` field and sends
 `codex.reasoning_effort` as the turn `effort` field. If either workflow value is omitted, Symphony
@@ -70,10 +90,14 @@ workflow values are preserved during forced regeneration unless the user explici
 * Good, because generated workflows show the selected model and reasoning effort directly.
 * Good, because setup follows the installed Codex CLI recommendation at the time the board is
   connected.
+* Good, because effort choices follow the installed model catalog, including new values without a
+  Symphony release.
 * Good, because `codex.command` remains available for operators that need custom app-server launch
   configuration.
 * Good, because existing hand-written workflows without these fields continue to use their Codex
   defaults.
+* Neutral, because setup permits pass-through values when a model does not advertise its supported
+  efforts.
 * Bad, because the Java client must be updated if the app-server field names change.
 * Bad, because generated workflows do not silently change later when a new Codex model launches.
 * Bad, because setup needs a fallback path when Codex app-server cannot be queried.
@@ -85,7 +109,11 @@ contains `model` and `effort` when the workflow configures them and omits them w
 does not. Setup tests must assert generated workflows include explicit values when the model list is
 compatible, omit them when compatibility is unknown, and preserve existing workflow values during
 forced regeneration. Codex default resolver tests must assert setup honors the app-server
-`model/list` default and distinguishes fallback defaults from unsupported first-class fields.
+`model/list` default, retains exact per-model effort lists and descriptions, and distinguishes
+fallback defaults from unsupported first-class fields. Setup tests must also assert that every
+advertised model-specific choice is displayed in catalog order, default and current values are
+identified, an advertised `xhigh` value is accepted, an unsupported new value reports the accepted
+choices, and a missing capability list keeps pass-through compatibility.
 
 ## Pros and Cons of the Options
 
@@ -109,7 +137,8 @@ default values.
 * Good, because operators can review and change the values without editing shell command syntax.
 * Good, because the workflow values can be tested independently from the installed CLI defaults.
 * Good, because this follows the existing pass-through treatment for Codex-owned policy fields.
-* Neutral, because the configured strings are intentionally not validated against a Java enum.
+* Neutral, because configured strings are validated against the installed model catalog rather than
+  a Java enum.
 * Bad, because the mapping depends on the targeted app-server protocol version.
 * Bad, because generated workflows can lag behind the installed Codex CLI recommendation.
 
@@ -139,5 +168,9 @@ The schema used for this decision was inspected with:
 codex app-server generate-json-schema --out <dir>
 ```
 
-In Codex CLI 0.130.0, `ThreadStartParams` and `TurnStartParams` support `model`, and
-`TurnStartParams` supports `effort` for reasoning effort.
+In Codex CLI 0.144.0, `ThreadStartParams` and `TurnStartParams` support `model`, and
+`TurnStartParams` supports `effort` for reasoning effort. Each v2 model catalog entry includes
+`supportedReasoningEfforts`, whose entries expose `reasoningEffort` and `description`. The default is
+exposed separately as the model's `defaultReasoningEffort`; the catalog does not expose an effort
+display name or current flag. The schema defines `ReasoningEffort` as a non-empty string rather than
+a closed enum, so the selected model's catalog entry is the source of truth for supported values.

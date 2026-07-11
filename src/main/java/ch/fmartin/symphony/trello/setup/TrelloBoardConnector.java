@@ -40,14 +40,17 @@ final class TrelloBoardConnector {
             BoardSetupChoice choice,
             LocalSetup.Options options,
             TrelloCredentials credentials,
-            GitHubIntegration githubIntegration,
+            GitHubIntegrationResolution githubIntegrationResolution,
             ConnectedBoardManifest manifest,
+            CredentialPersistence credentialPersistence,
             Terminal terminal)
             throws IOException {
         if (choice == BoardSetupChoice.EXISTING) {
-            return importExistingBoard(options, credentials, githubIntegration, manifest, terminal);
+            return importExistingBoard(
+                    options, credentials, githubIntegrationResolution, manifest, credentialPersistence, terminal);
         }
-        return createRecommendedBoard(options, credentials, githubIntegration, manifest, terminal);
+        return createRecommendedBoard(
+                options, credentials, githubIntegrationResolution, manifest, credentialPersistence, terminal);
     }
 
     BoardSetupChoice chooseBoardSetup(LocalSetup.Options options, Terminal terminal) throws IOException {
@@ -76,7 +79,7 @@ final class TrelloBoardConnector {
         }
     }
 
-    private static Optional<Path> preflightWorkflowPath(LocalSetup.Options options) {
+    static Optional<Path> preflightWorkflowPath(LocalSetup.Options options) {
         if (options.workflowPathExplicit()) {
             return Optional.of(options.workflowPath());
         }
@@ -93,8 +96,9 @@ final class TrelloBoardConnector {
     private LocalSetup.SetupResult importExistingBoard(
             LocalSetup.Options options,
             TrelloCredentials credentials,
-            GitHubIntegration githubIntegration,
+            GitHubIntegrationResolution githubIntegrationResolution,
             ConnectedBoardManifest manifest,
+            CredentialPersistence credentialPersistence,
             Terminal terminal)
             throws IOException {
         String boardId = requestedBoardSelector(options, terminal);
@@ -114,10 +118,12 @@ final class TrelloBoardConnector {
                 new TrelloBoardSetup.BoardInfoRequest(options.endpoint(), credentials, parsedBoardId));
         List<String> openLists = boardSetup.getOpenBoardListNames(
                 new TrelloBoardSetup.BoardInfoRequest(options.endpoint(), credentials, boardInfo.boardId()));
-        ExistingBoardLists configuredLists = existingBoardLists(options, terminal, openLists, githubIntegration);
         Path workflowPath = resolveWorkflowPath(options, boardInfo.boardName());
         options = configureCodexModel(options, workflowPath, terminal);
+        GitHubIntegration githubIntegration = githubIntegrationResolution.resolve();
+        ExistingBoardLists configuredLists = existingBoardLists(options, terminal, openLists, githubIntegration);
         MaxAgentsSelection maxAgents = configureMaxAgents(options, workflowPath, terminal);
+        credentialPersistence.persist();
         TrelloBoardSetup.ImportBoardResult result = boardSetup(options)
                 .importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
                         options.endpoint(),
@@ -137,7 +143,7 @@ final class TrelloBoardConnector {
                         configuredLists.createMissingGithubLists(),
                         options.envPath(),
                         maxAgents.preservedFromWorkflow()));
-        return LocalSetup.SetupResult.from(result);
+        return LocalSetup.SetupResult.from(result, githubIntegration);
     }
 
     private static String requestedBoardSelector(LocalSetup.Options options, Terminal terminal) throws IOException {
@@ -151,8 +157,9 @@ final class TrelloBoardConnector {
     private LocalSetup.SetupResult createRecommendedBoard(
             LocalSetup.Options options,
             TrelloCredentials credentials,
-            GitHubIntegration githubIntegration,
+            GitHubIntegrationResolution githubIntegrationResolution,
             ConnectedBoardManifest manifest,
+            CredentialPersistence credentialPersistence,
             Terminal terminal)
             throws IOException {
         Optional<String> configuredBoardName = options.boardName().filter(name -> !blank(name));
@@ -166,30 +173,36 @@ final class TrelloBoardConnector {
         String workspaceId = workspaceId(options, workspaces, terminal);
         Path workflowPath = resolveWorkflowPath(options, boardName);
         options = configureCodexModel(options, workflowPath, terminal);
+        GitHubIntegration githubIntegration = githubIntegrationResolution.resolve();
         MaxAgentsSelection maxAgents = configureMaxAgents(options, workflowPath, terminal);
-        return LocalSetup.SetupResult.from(boardSetup(options)
-                .createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
-                        options.endpoint(),
-                        credentials,
-                        boardName,
-                        workspaceId,
-                        workflowPath,
-                        options.workspaceRoot(),
-                        localSetupServerPort(options, manifest, workflowPath),
-                        maxAgents.value(),
-                        options.force(),
-                        !options.workflowPathExplicit(),
-                        githubIntegration,
-                        options.envPath(),
-                        options.detectInProgressState(),
-                        maxAgents.preservedFromWorkflow())));
+        credentialPersistence.persist();
+        return LocalSetup.SetupResult.from(
+                boardSetup(options)
+                        .createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                                options.endpoint(),
+                                credentials,
+                                boardName,
+                                workspaceId,
+                                workflowPath,
+                                options.workspaceRoot(),
+                                localSetupServerPort(options, manifest, workflowPath),
+                                maxAgents.value(),
+                                options.force(),
+                                !options.workflowPathExplicit(),
+                                githubIntegration,
+                                options.envPath(),
+                                options.detectInProgressState(),
+                                maxAgents.preservedFromWorkflow())),
+                githubIntegration);
     }
 
     private LocalSetup.Options configureCodexModel(LocalSetup.Options options, Path workflowPath, Terminal terminal)
             throws IOException {
+        CodexModelSelectionDefaults catalog =
+                options.codexModelCatalog().orElseGet(boardSetup::resolvedCodexModelSelectionDefaults);
         CodexModelSelectionFlow.Selection selected = codexModelSelectionFlow.resolve(
-                options, boardSetup.codexModelSelectionDefaultsForWorkflow(workflowPath), terminal);
-        return options.withCodexModelSelection(selected);
+                options, boardSetup.codexModelSelectionDefaultsForWorkflow(workflowPath, catalog), terminal);
+        return options.withCodexModelCatalog(catalog).withCodexModelSelection(selected);
     }
 
     private TrelloBoardSetup boardSetup(LocalSetup.Options options) {
@@ -619,5 +632,15 @@ final class TrelloBoardConnector {
     enum BoardSetupChoice {
         NEW,
         EXISTING
+    }
+
+    @FunctionalInterface
+    interface CredentialPersistence {
+        void persist() throws IOException;
+    }
+
+    @FunctionalInterface
+    interface GitHubIntegrationResolution {
+        GitHubIntegration resolve() throws IOException;
     }
 }

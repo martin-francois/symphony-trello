@@ -146,6 +146,13 @@ skill's advice.
   mutable builder when mutation is the method's honest work, the result must stay mutable, or
   conditional construction is clearer that way.
 - Streams issue
+  [#56](https://github.com/martinfrancois/java-streams-skill/issues/56): when a parser extracts a
+  nested collection into a canonical value-object boundary that already owns normalization and
+  ordered duplicate handling, keep the parser focused on extraction instead of repeating the same
+  collector or map. Before removing parser-local deduplication, verify encounter order, first-wins
+  semantics, blank handling, and immutability. Check this issue's state at most once per turn and
+  remove this override when the issue is closed.
+- Streams issue
   [#51](https://github.com/martinfrancois/java-streams-skill/issues/51): use `findAny()` for
   equivalent matches, but keep `findFirst()` when encounter order is part of the product contract.
   When keeping `findFirst()`, make the first-match scenario executable in the owning test when the
@@ -177,6 +184,13 @@ skill's advice.
   presence only selects between two simple values, prefer `optional.map(...).orElse(...)` over
   `optional.isPresent() ? presentValue : absentValue` if the present branch has no checked exception
   or side effect. Use `orElseGet(...)` instead when the absent branch performs non-trivial work.
+- Optional issue
+  [#76](https://github.com/martinfrancois/java-optionals-skill/issues/76): when an implementation
+  adds validation backed by an Optional catalog lookup, bind the present value once with `map(...)`
+  or another direct Optional operation and express the absent case as the fallback. Do not use an
+  empty/present check followed by one or more `get()` calls for ordinary value flow. Check this issue
+  state at most once per turn before applying this override, and remove the override when the issue
+  is closed.
 
 ## Nullness
 

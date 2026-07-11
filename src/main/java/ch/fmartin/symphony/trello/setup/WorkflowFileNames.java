@@ -23,6 +23,12 @@ final class WorkflowFileNames {
         return WORKFLOW_FILE_PREFIX + slug + suffixSegment + WORKFLOW_FILE_EXTENSION;
     }
 
+    static boolean isGeneratedFileName(String fileName) {
+        return fileName != null
+                && fileName.startsWith(WORKFLOW_FILE_PREFIX)
+                && fileName.endsWith(WORKFLOW_FILE_EXTENSION);
+    }
+
     static String slug(String value, String blankFallback) {
         String slug =
                 value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-").replaceAll("(^-+|-+$)", "");

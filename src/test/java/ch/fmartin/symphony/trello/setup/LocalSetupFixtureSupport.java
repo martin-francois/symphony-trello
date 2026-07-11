@@ -17,6 +17,7 @@ import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.Map;
 import java.util.function.IntPredicate;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.io.TempDir;
@@ -118,6 +119,10 @@ abstract class LocalSetupFixtureSupport {
     }
 
     protected LocalSetup setupWithCodexSelectionDefaults(CodexModelSelectionDefaults codexDefaults) {
+        return setupWithBoardSetup(new TrelloBoardSetup(new ObjectMapper(), codexDefaults));
+    }
+
+    protected LocalSetup setupWithCodexSelectionDefaults(Supplier<CodexModelSelectionDefaults> codexDefaults) {
         return setupWithBoardSetup(new TrelloBoardSetup(new ObjectMapper(), codexDefaults));
     }
 

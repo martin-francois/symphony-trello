@@ -39,6 +39,7 @@ agent:
 codex:
   command: codex app-server
   model: gpt-5.5
+  # Choose an effort advertised for this model by the installed Codex CLI when available.
   reasoning_effort: medium
   approval_policy: never
   turn_sandbox_policy:

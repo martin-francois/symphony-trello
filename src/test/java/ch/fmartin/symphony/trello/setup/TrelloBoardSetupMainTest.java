@@ -4170,6 +4170,50 @@ final class TrelloBoardSetupMainTest {
                 .contains("model: \"gpt-explicit\"", "reasoning_effort: \"medium\"");
     }
 
+    @Test
+    void newBoardRejectsReasoningEffortOutsideAdvertisedChoicesBeforeTrelloRequest() {
+        // given
+        Path workflow = tempDir.resolve("unsupported-reasoning-new-board.WORKFLOW.md");
+        CodexModelSelectionDefaults catalog = new CodexModelSelectionDefaults(
+                new TrelloBoardSetup.CodexModelDefaults("gpt-default", "medium"),
+                Map.of("gpt-default", "medium"),
+                Map.of("gpt-default", List.of("low", "medium", "high", "xhigh")));
+
+        // when
+        CliRunResult result = runCliWithSelectionDefaults(
+                catalog,
+                "new-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--name",
+                "Unsupported Reasoning Queue",
+                "--workspace-id",
+                "workspace-1",
+                "--workflow",
+                workflow.toString(),
+                "--manifest",
+                tempDir.resolve(ConnectedBoardManifest.FILE_NAME).toString(),
+                "--codex-model",
+                "gpt-default",
+                "--codex-reasoning-effort",
+                "ultra");
+
+        // then
+        result.assertFailure(SETUP_FAILURE)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_choice",
+                        "Reasoning effort must be one of the values advertised for the selected model: "
+                                + "low, medium, high, xhigh.")
+                .stderrDoesNotContain("Troubleshooting report written");
+        assertThat(createdBoardName.get()).isNull();
+        assertThat(createdLists).isEmpty();
+        assertThat(workflow).doesNotExist();
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"--codex-model", "--codex-reasoning-effort"})
     void newBoardRejectsBlankCodexModelOverridesBeforeTrelloRequest(String optionName) {
@@ -5302,6 +5346,65 @@ final class TrelloBoardSetupMainTest {
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("model: \"gpt-default\"", "reasoning_effort: \"high\"");
+    }
+
+    @Test
+    void importBoardRejectsReasoningEffortUnsupportedByExistingModelBeforeTrelloRequest() throws IOException {
+        // given
+        Path workflow = tempDir.resolve("unsupported-existing-model-reasoning.WORKFLOW.md");
+        Files.writeString(
+                workflow,
+                """
+                ---
+                codex:
+                  command: codex app-server
+                  model: "gpt-existing"
+                  reasoning_effort: "high"
+                ---
+                Old body
+                """,
+                StandardCharsets.UTF_8);
+        CodexModelSelectionDefaults catalog = new CodexModelSelectionDefaults(
+                new TrelloBoardSetup.CodexModelDefaults("gpt-default", "medium"),
+                Map.of("gpt-default", "medium", "gpt-existing", "high"),
+                Map.of(
+                        "gpt-default", List.of("low", "medium", "high"),
+                        "gpt-existing", List.of("high", "xhigh")));
+
+        // when
+        CliRunResult result = runCliWithSelectionDefaults(
+                catalog,
+                "import-board",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board",
+                "https://trello.com/b/input/existing-board",
+                "--active",
+                "Queue for Codex",
+                "--terminal",
+                "Released",
+                "--workflow",
+                workflow.toString(),
+                "--manifest",
+                tempDir.resolve(ConnectedBoardManifest.FILE_NAME).toString(),
+                "--force",
+                "--codex-reasoning-effort",
+                "medium");
+
+        // then
+        result.assertFailure(SETUP_FAILURE)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_choice",
+                        "Reasoning effort must be one of the values advertised for the selected model: high, xhigh.")
+                .stderrDoesNotContain("Troubleshooting report written");
+        assertThat(boardInfoLookups).hasValue(0);
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-existing\"", "reasoning_effort: \"high\"", "Old body");
     }
 
     @Test

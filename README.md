@@ -346,7 +346,9 @@ Common setup command options:
 - `--codex-model MODEL`: write a Codex model into generated workflows without prompting. Omit it
   during guided setup to accept or edit the recommended model interactively.
 - `--codex-reasoning-effort EFFORT`: write a Codex reasoning effort into generated workflows
-  without prompting. Omit it during guided setup to accept or edit the recommended reasoning effort.
+  without prompting. When the selected model advertises supported efforts, the value must exactly
+  match one of them; setup reports the accepted values when it rejects a choice. If the model does
+  not advertise an effort list, the value remains a pass-through Codex setting.
 - `--force`: replace an existing workflow file. Use this only when you are fine losing the current
   generated workflow content.
 - `--key` and `--token`: pass Trello credentials directly for this one command instead of reading
@@ -1039,21 +1041,37 @@ it starts a Codex app-server on stdio for the same OS user that runs Symphony. E
 absolute path such as `/opt/codex/bin/codex app-server` or a small wrapper script that sets up the
 environment before starting `codex app-server`.
 
-Generated workflows also make model selection explicit. During guided setup, Symphony asks the
-installed Codex CLI which model and reasoning effort it recommends, then lets you press Enter to use
-those defaults or type different values. Non-interactive setup writes the recommended values unless
-you pass `--codex-model` or `--codex-reasoning-effort`. If the model list is available but does not
-name a default, setup uses the first returned model. If the model list is empty or lacks usable model
-details, setup writes the fallback values shown above. If the installed Codex app-server cannot
-answer the model-list request at all, setup omits the first-class model fields so the generated
-workflow remains compatible with older app-server versions.
+Generated workflows also make model selection explicit. During setup, Symphony calls the installed
+Codex CLI's `model/list` method for the default model, each model's recommended reasoning effort,
+and its advertised `supportedReasoningEfforts`. Guided setup prints the exact ordered efforts and
+descriptions advertised for the selected model; for example, `xhigh`, `max`, and `ultra` appear when
+that catalog entry supports them. It marks the model's advertised default and the effective current
+setup or workflow value. These markers are derived from the model default and current selection;
+they are not a fixed property of an effort name. Press Enter to keep the current value, or type
+another advertised value. Non-interactive setup writes the recommended values unless you pass
+`--codex-model` or `--codex-reasoning-effort`. A newly selected effort outside a non-empty advertised
+list is rejected with the accepted values. Symphony does not maintain a separate fixed effort list
+or display-name table. If the selected model does not advertise an effort list, guided setup says so
+and setup permits a non-blank pass-through value for compatibility with custom or older catalogs.
+Discovery retains hidden catalog entries so an explicitly selected or preserved model still gets its
+own choices, but setup never chooses a hidden model as the guided default.
+To preserve its no-write guarantee, `setup-local --dry-run` does not launch Codex solely to discover
+the model catalog. It still validates input that is available without discovery; a real setup run
+performs model-specific effort validation before changing Trello or writing workflow files.
+If the model list is available but does not name a default, setup uses the first non-hidden returned
+model with usable details. If the model list is empty or lacks usable model details, setup writes the
+fallback values shown above.
+If the installed Codex app-server cannot answer the model-list request at all, setup omits the
+first-class model fields so the generated workflow remains compatible with older app-server
+versions.
 
 `codex.model` maps to the app-server `model` request field. `codex.reasoning_effort` maps to the
 app-server turn `effort` field. Edit those workflow values to choose a different model or reasoning
-level. Existing workflow values remain the source of truth for that Trello board; setup preserves
-them when regenerating a workflow unless you pass `--codex-model`, pass
-`--codex-reasoning-effort`, or edit the workflow value. If either field is omitted, the installed
-Codex CLI/app-server default or `codex.command` configuration decides the value.
+level. Catalog validation applies when setup selects a new reasoning effort; runtime workflow values
+remain pass-through Codex settings. Existing workflow values remain the source of truth for that
+Trello board; setup preserves them when regenerating a workflow unless you pass `--codex-model`,
+pass `--codex-reasoning-effort`, or edit the workflow value. If either field is omitted, the
+installed Codex CLI/app-server default or `codex.command` configuration decides the value.
 
 `codex.turn_timeout_ms` limits a full Codex turn. `codex.read_timeout_ms` limits app-server startup
 and request/response reads. `codex.stall_timeout_ms` controls how long Symphony waits without Codex

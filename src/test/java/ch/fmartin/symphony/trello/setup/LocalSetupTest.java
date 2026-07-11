@@ -11,6 +11,7 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
+import ch.fmartin.symphony.trello.setup.CodexModelSelectionDefaults.ReasoningEffortOption;
 import ch.fmartin.symphony.trello.testsupport.SetupRunResult;
 import ch.fmartin.symphony.trello.testsupport.TestEnv;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
@@ -28,6 +29,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -155,6 +157,195 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 .stderrDoesNotContain("Troubleshooting report written")
                 .stdoutDoesNotContain("Dry run", "WOULD write workflows");
         assertThat(trello.createdLists()).isEmpty();
+    }
+
+    @Test
+    void dryRunRejectsReasoningEffortOutsideAdvertisedChoices() {
+        // given
+        LocalSetup catalogBackedSetup = setupWithDefaultReasoningCatalog();
+
+        // when
+        SetupRunResult result = runSetup(
+                catalogBackedSetup,
+                "--dry-run",
+                "--non-interactive",
+                "--no-start",
+                "--codex-model",
+                "gpt-5.5",
+                "--codex-reasoning-effort",
+                "ultra");
+
+        // then
+        result.assertFailure(SETUP_FAILURE)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_choice",
+                        "Reasoning effort must be one of the values advertised for the selected model: "
+                                + "low, medium, high, xhigh.")
+                .stderrDoesNotContain("Troubleshooting report written")
+                .stdoutDoesNotContain("Dry run", "WOULD write workflows");
+        assertThat(trello.createdLists()).isEmpty();
+    }
+
+    @Test
+    void dryRunDoesNotResolveDynamicCodexCatalog() {
+        // given
+        AtomicInteger resolutions = new AtomicInteger();
+        LocalSetup resolverBackedSetup = setupWithCodexSelectionDefaults(() -> {
+            resolutions.incrementAndGet();
+            return new CodexModelSelectionDefaults(
+                    new TrelloBoardSetup.CodexModelDefaults("gpt-5.5", "medium"),
+                    Map.of("gpt-5.5", "medium"),
+                    Map.of("gpt-5.5", List.of("low", "medium", "high", "xhigh")));
+        });
+
+        // when
+        SetupRunResult result = runSetup(
+                resolverBackedSetup,
+                "--dry-run",
+                "--non-interactive",
+                "--no-start",
+                "--codex-model",
+                "gpt-5.5",
+                "--codex-reasoning-effort",
+                "ultra");
+
+        // then
+        result.assertSuccess().stdoutContains("Dry run");
+        assertThat(resolutions).hasValue(0);
+        assertThat(trello.createdLists()).isEmpty();
+    }
+
+    @Test
+    void boardSelectorDryRunRejectsReasoningEffortOutsideCatalogDefaultModelChoices() {
+        // given
+        LocalSetup catalogBackedSetup = setupWithDefaultReasoningCatalog();
+
+        // when
+        SetupRunResult result = runSetup(
+                catalogBackedSetup,
+                "--dry-run",
+                "--non-interactive",
+                "--no-start",
+                "--board",
+                "abcdef12",
+                "--codex-reasoning-effort",
+                "ultra");
+
+        // then
+        result.assertFailure(SETUP_FAILURE)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_choice",
+                        "Reasoning effort must be one of the values advertised for the selected model: "
+                                + "low, medium, high, xhigh.")
+                .stdoutDoesNotContain("Dry run", "WOULD write workflows");
+        assertThat(trello.boardLookups()).isEmpty();
+        assertThat(trello.createdLists()).isEmpty();
+    }
+
+    @Test
+    void dryRunRejectsReasoningEffortOutsideImplicitForcedWorkflowModelChoices() throws IOException {
+        // given
+        LocalSetup catalogBackedSetup = setupWithSolReasoningCatalog();
+        Path configDir = tempDir.resolve("implicit-dry-run-workflow");
+        Files.createDirectories(configDir);
+        Path workflow = configDir.resolve(WorkflowFileNames.generatedFileName("Sol Queue", "trello-board", 1));
+        Files.writeString(
+                workflow,
+                """
+                ---
+                codex:
+                  command: codex app-server
+                  model: "gpt-5.6-sol"
+                  reasoning_effort: "low"
+                ---
+                Existing workflow
+                """,
+                StandardCharsets.UTF_8);
+
+        // when
+        SetupRunResult result = runSetup(
+                catalogBackedSetup,
+                "--dry-run",
+                "--non-interactive",
+                "--force",
+                "--no-start",
+                "--config-dir",
+                configDir.toString(),
+                "--board-name",
+                "Sol Queue",
+                "--codex-reasoning-effort",
+                "minimal");
+
+        // then
+        result.assertFailure(SETUP_FAILURE)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_choice",
+                        "Reasoning effort must be one of the values advertised for the selected model: "
+                                + "low, medium, high, xhigh, max, ultra.")
+                .stdoutDoesNotContain("Dry run", "WOULD write workflows");
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-5.6-sol\"", "reasoning_effort: \"low\"");
+        assertThat(trello.createdLists()).isEmpty();
+    }
+
+    @Test
+    void forcedBoardSelectorDryRunDefersValidationWhenGeneratedWorkflowModelIsUnknown() throws IOException {
+        // given
+        LocalSetup catalogBackedSetup = setupWithSolReasoningCatalog();
+        Path configDir = tempDir.resolve("forced-board-selector-dry-run");
+        Files.createDirectories(configDir);
+        Path workflow = configDir.resolve(WorkflowFileNames.generatedFileName("Sol Queue", "trello-board", 1));
+        Files.writeString(
+                workflow,
+                """
+                ---
+                codex:
+                  command: codex app-server
+                  model: "gpt-5.6-sol"
+                  reasoning_effort: "low"
+                ---
+                Existing workflow
+                """,
+                StandardCharsets.UTF_8);
+
+        // when
+        SetupRunResult result = runSetup(
+                catalogBackedSetup,
+                "--dry-run",
+                "--non-interactive",
+                "--force",
+                "--no-start",
+                "--config-dir",
+                configDir.toString(),
+                "--board",
+                "abcdef12",
+                "--codex-reasoning-effort",
+                "ultra");
+
+        // then
+        result.assertSuccess().stdoutContains("Dry run", "WOULD write workflow under: " + configDir);
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-5.6-sol\"", "reasoning_effort: \"low\"");
+        assertThat(trello.boardLookups()).isEmpty();
+        assertThat(trello.createdLists()).isEmpty();
+    }
+
+    private LocalSetup setupWithDefaultReasoningCatalog() {
+        return setupWithCodexSelectionDefaults(new CodexModelSelectionDefaults(
+                new TrelloBoardSetup.CodexModelDefaults("gpt-5.5", "medium"),
+                Map.of("gpt-5.5", "medium"),
+                Map.of("gpt-5.5", List.of("low", "medium", "high", "xhigh"))));
+    }
+
+    private LocalSetup setupWithSolReasoningCatalog() {
+        return setupWithCodexSelectionDefaults(new CodexModelSelectionDefaults(
+                new TrelloBoardSetup.CodexModelDefaults("gpt-5.5", "medium"),
+                Map.of("gpt-5.5", "medium", "gpt-5.6-sol", "low"),
+                Map.of(
+                        "gpt-5.5", List.of("low", "medium", "high", "xhigh"),
+                        "gpt-5.6-sol", List.of("low", "medium", "high", "xhigh", "max", "ultra"))));
     }
 
     @MethodSource("blankSetupLocalOptionValues")
@@ -1737,10 +1928,26 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
-    void interactiveSetupPromptsForCodexModelAndReasoningDefaults() throws Exception {
+    void interactiveSetupShowsSelectedModelsAdvertisedReasoningEfforts() throws Exception {
         // given
         LocalSetup modelBackedSetup =
-                setupWithCodexDefaults(new TrelloBoardSetup.CodexModelDefaults("gpt-recommended", "high"));
+                setupWithCodexSelectionDefaults(CodexModelSelectionDefaults.withReasoningEffortOptions(
+                        new TrelloBoardSetup.CodexModelDefaults("gpt-5.6-sol", "low"),
+                        Map.of("gpt-5.6-sol", "low"),
+                        Map.of(
+                                "gpt-5.6-sol",
+                                List.of(
+                                        new ReasoningEffortOption("low", "Fast responses with lighter reasoning"),
+                                        new ReasoningEffortOption(
+                                                "medium", "Balances speed and reasoning depth for everyday tasks"),
+                                        new ReasoningEffortOption(
+                                                "high", "Greater reasoning depth for complex problems"),
+                                        new ReasoningEffortOption(
+                                                "xhigh", "Extra high reasoning depth for complex problems"),
+                                        new ReasoningEffortOption(
+                                                "max", "Maximum reasoning depth for the hardest problems"),
+                                        new ReasoningEffortOption(
+                                                "ultra", "Maximum reasoning with automatic task delegation")))));
         Path workflow = tempDir.resolve("WORKFLOW.guided-model.md");
         Path env = tempDir.resolve(".env.guided-model");
 
@@ -1764,20 +1971,274 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         result.assertSuccess()
                 .stdoutContains(
                         "Codex model",
-                        "Model [gpt-recommended]: ",
-                        "Reasoning effort choices: minimal, low, medium, high",
-                        "Reasoning effort [high]: ");
+                        "Model [gpt-5.6-sol]: ",
+                        "Reasoning effort choices for gpt-5.6-sol:",
+                        "  low (default, current) - Fast responses with lighter reasoning",
+                        "  medium - Balances speed and reasoning depth for everyday tasks",
+                        "  high - Greater reasoning depth for complex problems",
+                        "  xhigh - Extra high reasoning depth for complex problems",
+                        "  max - Maximum reasoning depth for the hardest problems",
+                        "  ultra - Maximum reasoning with automatic task delegation",
+                        "Reasoning effort [low]: ");
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
-                .contains("model: \"gpt-recommended\"", "reasoning_effort: \"high\"");
+                .contains("model: \"gpt-5.6-sol\"", "reasoning_effort: \"low\"");
+    }
+
+    @Test
+    void interactiveSetupRejectsReasoningEffortOutsideAdvertisedChoices() throws Exception {
+        // given
+        LocalSetup modelBackedSetup = setupWithCodexSelectionDefaults(new CodexModelSelectionDefaults(
+                new TrelloBoardSetup.CodexModelDefaults("gpt-recommended", "high"),
+                Map.of("gpt-recommended", "high"),
+                Map.of("gpt-recommended", List.of("low", "medium", "high", "xhigh"))));
+        Path workflow = tempDir.resolve("WORKFLOW.invalid-reasoning-effort.md");
+        Path env = tempDir.resolve(".env.invalid-reasoning-effort");
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                modelBackedSetup,
+                "\n\n\nnot-supported\n\nn\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--github");
+
+        // then
+        result.assertFailure(SETUP_FAILURE)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_choice",
+                        "Reasoning effort must be one of the values advertised for the selected model: "
+                                + "low, medium, high, xhigh.")
+                .stderrDoesNotContain("Troubleshooting report written");
+        assertThat(env).doesNotExist();
+        assertThat(commands.githubLoginCommands).isEmpty();
+        assertThat(trello.boardLookups()).isEmpty();
+        assertThat(trello.createdLists()).isEmpty();
+        assertThat(workflow).doesNotExist();
+    }
+
+    @Test
+    void interactiveSetupWritesAdvertisedXhighReasoningEffort() throws Exception {
+        // given
+        LocalSetup modelBackedSetup = setupWithCodexSelectionDefaults(new CodexModelSelectionDefaults(
+                new TrelloBoardSetup.CodexModelDefaults("gpt-recommended", "medium"),
+                Map.of("gpt-recommended", "medium"),
+                Map.of("gpt-recommended", List.of("low", "medium", "high", "xhigh"))));
+        Path workflow = tempDir.resolve("WORKFLOW.xhigh-reasoning-effort.md");
+        Path env = tempDir.resolve(".env.xhigh-reasoning-effort");
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                modelBackedSetup,
+                "\n\n\nxhigh\n\nn\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github");
+
+        // then
+        result.assertSuccess().stdoutContains("Reasoning effort choices for gpt-recommended:", "  xhigh");
+        assertThat(workflow).content(StandardCharsets.UTF_8).contains("reasoning_effort: \"xhigh\"");
+    }
+
+    @Test
+    void nonInteractiveSetupRejectsReasoningEffortOutsideAdvertisedChoices() {
+        // given
+        LocalSetup modelBackedSetup = setupWithCodexSelectionDefaults(new CodexModelSelectionDefaults(
+                new TrelloBoardSetup.CodexModelDefaults("gpt-recommended", "medium"),
+                Map.of("gpt-recommended", "medium"),
+                Map.of("gpt-recommended", List.of("low", "medium", "high", "xhigh"))));
+        Path workflow = tempDir.resolve("WORKFLOW.invalid-explicit-reasoning-effort.md");
+        Path env = tempDir.resolve(".env.invalid-explicit-reasoning-effort");
+
+        // when
+        SetupRunResult result = runSetup(
+                modelBackedSetup,
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github",
+                "--codex-model",
+                "gpt-recommended",
+                "--codex-reasoning-effort",
+                "ultra");
+
+        // then
+        result.assertFailure(SETUP_FAILURE)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_choice",
+                        "Reasoning effort must be one of the values advertised for the selected model: "
+                                + "low, medium, high, xhigh.")
+                .stderrDoesNotContain("Troubleshooting report written");
+        assertThat(trello.memberLookups()).isEmpty();
+        assertThat(trello.workspaceLookups()).isEmpty();
+        assertThat(trello.boardLookups()).isEmpty();
+        assertThat(trello.createdLists()).isEmpty();
+        assertThat(workflow).doesNotExist();
+        assertThat(env).doesNotExist();
+    }
+
+    @Test
+    void nonInteractiveSetupReusesPreflightCodexModelCatalogSnapshot() throws Exception {
+        // given
+        CodexModelSelectionDefaults acceptedCatalog = new CodexModelSelectionDefaults(
+                new TrelloBoardSetup.CodexModelDefaults("gpt-5.5", "medium"),
+                Map.of("gpt-5.5", "medium", "gpt-5.6-sol", "low"),
+                Map.of("gpt-5.6-sol", List.of("low", "medium", "high", "xhigh", "max", "ultra")));
+        CodexModelSelectionDefaults changedCatalog = new CodexModelSelectionDefaults(
+                new TrelloBoardSetup.CodexModelDefaults("gpt-5.5", "medium"),
+                Map.of("gpt-5.5", "medium", "gpt-5.6-sol", "low"),
+                Map.of("gpt-5.6-sol", List.of("low")));
+        AtomicInteger resolutions = new AtomicInteger();
+        LocalSetup catalogBackedSetup = setupWithCodexSelectionDefaults(
+                () -> resolutions.getAndIncrement() == 0 ? acceptedCatalog : changedCatalog);
+        Path workflow = tempDir.resolve("WORKFLOW.single-codex-catalog-snapshot.md");
+        Path env = tempDir.resolve(".env.single-codex-catalog-snapshot");
+
+        // when
+        SetupRunResult result = runSetup(
+                catalogBackedSetup,
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github",
+                "--no-start",
+                "--codex-model",
+                "gpt-5.6-sol",
+                "--codex-reasoning-effort",
+                "ultra");
+
+        // then
+        result.assertSuccess();
+        assertThat(resolutions).hasValue(1);
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-5.6-sol\"", "reasoning_effort: \"ultra\"");
+    }
+
+    @Test
+    void interactiveSetupValidatesExplicitReasoningEffortAgainstSelectedModel() throws Exception {
+        // given
+        LocalSetup modelBackedSetup = setupWithCodexSelectionDefaults(new CodexModelSelectionDefaults(
+                new TrelloBoardSetup.CodexModelDefaults("gpt-recommended", "medium"),
+                Map.of("gpt-recommended", "medium", "gpt-selected", "ultra"),
+                Map.of(
+                        "gpt-recommended", List.of("low", "medium", "high"),
+                        "gpt-selected", List.of("high", "max", "ultra"))));
+        Path workflow = tempDir.resolve("WORKFLOW.selected-model-reasoning-effort.md");
+        Path env = tempDir.resolve(".env.selected-model-reasoning-effort");
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                modelBackedSetup,
+                "\n\ngpt-selected\n\nn\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github",
+                "--codex-reasoning-effort",
+                "ultra");
+
+        // then
+        result.assertSuccess();
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-selected\"", "reasoning_effort: \"ultra\"");
+    }
+
+    @Test
+    void interactiveSetupRejectsExplicitReasoningEffortUnsupportedBySelectedModel() throws Exception {
+        // given
+        LocalSetup modelBackedSetup = setupWithCodexSelectionDefaults(new CodexModelSelectionDefaults(
+                new TrelloBoardSetup.CodexModelDefaults("gpt-recommended", "medium"),
+                Map.of("gpt-recommended", "medium", "gpt-selected", "ultra"),
+                Map.of(
+                        "gpt-recommended", List.of("low", "medium", "high"),
+                        "gpt-selected", List.of("high", "max", "ultra"))));
+        Path workflow = tempDir.resolve("WORKFLOW.unsupported-selected-model-reasoning-effort.md");
+        Path env = tempDir.resolve(".env.unsupported-selected-model-reasoning-effort");
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                modelBackedSetup,
+                "\n\ngpt-selected\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--no-github",
+                "--codex-reasoning-effort",
+                "low");
+
+        // then
+        result.assertFailure(SETUP_FAILURE)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_choice",
+                        "Reasoning effort must be one of the values advertised for the selected model: "
+                                + "high, max, ultra.")
+                .stderrDoesNotContain("Troubleshooting report written");
+        assertThat(workflow).doesNotExist();
     }
 
     @Test
     void interactiveSetupUsesSelectedModelReasoningDefaultFromDiscoveredCatalog() throws Exception {
         // given
-        LocalSetup catalogBackedSetup = setupWithCodexSelectionDefaults(new CodexModelSelectionDefaults(
-                new TrelloBoardSetup.CodexModelDefaults("gpt-5.5", "medium"),
-                Map.of("gpt-5.5", "medium", "gpt-6", "high")));
+        LocalSetup catalogBackedSetup =
+                setupWithCodexSelectionDefaults(CodexModelSelectionDefaults.withReasoningEffortOptions(
+                        new TrelloBoardSetup.CodexModelDefaults("gpt-5.5", "medium"),
+                        Map.of("gpt-5.5", "medium", "gpt-6", "high"),
+                        Map.of(
+                                "gpt-5.5",
+                                List.of(new ReasoningEffortOption("medium", "Default-model description")),
+                                "gpt-6",
+                                List.of(
+                                        new ReasoningEffortOption("high", "Selected-model high description"),
+                                        new ReasoningEffortOption("max", "Selected-model max description"),
+                                        new ReasoningEffortOption("ultra", "Selected-model ultra description")))));
         Path workflow = tempDir.resolve("WORKFLOW.selected-catalog-model.md");
         Path env = tempDir.resolve(".env.selected-catalog-model");
 
@@ -1798,7 +2259,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--no-github");
 
         // then
-        result.assertSuccess().stdoutContains("Model [gpt-5.5]: ", "Reasoning effort [high]: ");
+        result.assertSuccess();
+        assertThatTranscript(result.stdout())
+                .containsSectionsInOrder(
+                        "Model [gpt-5.5]: ",
+                        "Reasoning effort choices for gpt-6:",
+                        "  high (default, current) - Selected-model high description",
+                        "  max - Selected-model max description",
+                        "  ultra - Selected-model ultra description",
+                        "Reasoning effort [high]: ");
+        assertThat(result.stdout()).doesNotContain("Default-model description");
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("model: \"gpt-6\"", "reasoning_effort: \"high\"")
@@ -1827,7 +2297,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--no-github");
 
         // then
-        result.assertSuccess();
+        result.assertSuccess()
+                .stdoutContains("Reasoning effort choices: not advertised for this model by the installed Codex CLI");
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("model: \"gpt-selected\"", "reasoning_effort: \"low\"");
@@ -1880,9 +2351,16 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     @Test
     void interactiveSetupPromptsWithExistingWorkflowCodexValuesWhenForced() throws Exception {
         // given
-        LocalSetup modelBackedSetup = setupWithCodexSelectionDefaults(new CodexModelSelectionDefaults(
-                new TrelloBoardSetup.CodexModelDefaults("gpt-recommended", "medium"),
-                Map.of("gpt-recommended", "medium", "gpt-6", "high")));
+        LocalSetup modelBackedSetup =
+                setupWithCodexSelectionDefaults(CodexModelSelectionDefaults.withReasoningEffortOptions(
+                        new TrelloBoardSetup.CodexModelDefaults("gpt-recommended", "medium"),
+                        Map.of("gpt-recommended", "medium", "gpt-5.6-sol", "low"),
+                        Map.of(
+                                "gpt-5.6-sol",
+                                List.of(
+                                        new ReasoningEffortOption("low", "Fast responses with lighter reasoning"),
+                                        new ReasoningEffortOption(
+                                                "ultra", "Maximum reasoning with automatic task delegation")))));
         Path workflow = tempDir.resolve("WORKFLOW.existing-model-prompt.md");
         Path env = tempDir.resolve(".env.existing-model-prompt");
         Files.writeString(
@@ -1891,8 +2369,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 ---
                 codex:
                   command: codex app-server
-                  model: "gpt-old"
-                  reasoning_effort: "low"
+                  model: "gpt-5.6-sol"
+                  reasoning_effort: "ultra"
                 ---
                 Old body
                 """,
@@ -1919,20 +2397,30 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // then
         result.assertSuccess()
-                .stdoutContains("Model [gpt-old]: ", "Reasoning effort [low]: ")
+                .stdoutContains(
+                        "Model [gpt-5.6-sol]: ",
+                        "  low (default) - Fast responses with lighter reasoning",
+                        "  ultra (current) - Maximum reasoning with automatic task delegation",
+                        "Reasoning effort [ultra]: ")
                 .stdoutDoesNotContain("Model [gpt-recommended]: ", "Reasoning effort [high]: ");
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
-                .contains("model: \"gpt-old\"", "reasoning_effort: \"low\"")
+                .contains("model: \"gpt-5.6-sol\"", "reasoning_effort: \"ultra\"")
                 .doesNotContain("gpt-recommended", "reasoning_effort: \"high\"");
     }
 
     @Test
     void interactiveSetupPreservesExistingReasoningWhenOnlyModelChanges() throws Exception {
         // given
-        LocalSetup catalogBackedSetup = setupWithCodexSelectionDefaults(new CodexModelSelectionDefaults(
-                new TrelloBoardSetup.CodexModelDefaults("gpt-5.5", "medium"),
-                Map.of("gpt-5.5", "medium", "gpt-6", "high")));
+        LocalSetup catalogBackedSetup =
+                setupWithCodexSelectionDefaults(CodexModelSelectionDefaults.withReasoningEffortOptions(
+                        new TrelloBoardSetup.CodexModelDefaults("gpt-5.5", "medium"),
+                        Map.of("gpt-5.5", "medium", "gpt-6", "high"),
+                        Map.of(
+                                "gpt-6",
+                                List.of(
+                                        new ReasoningEffortOption("high", "Selected-model default"),
+                                        new ReasoningEffortOption("max", "Selected-model maximum")))));
         Path workflow = tempDir.resolve("WORKFLOW.existing-reasoning-model-change.md");
         Path env = tempDir.resolve(".env.existing-reasoning-model-change");
         Files.writeString(
@@ -1968,9 +2456,15 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--no-github");
 
         // then
-        result.assertSuccess()
-                .stdoutContains("Model [gpt-old]: ", "Reasoning effort [low]: ")
-                .stdoutDoesNotContain("Reasoning effort [high]: ");
+        result.assertSuccess();
+        assertThatTranscript(result.stdout())
+                .containsSectionsInOrder(
+                        "Model [gpt-old]: ",
+                        "Reasoning effort choices for gpt-6:",
+                        "  high (default) - Selected-model default",
+                        "  max - Selected-model maximum",
+                        "  low (current, not advertised; preserving workflow value)",
+                        "Reasoning effort [low]: ");
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("model: \"gpt-6\"", "reasoning_effort: \"low\"")
@@ -2501,8 +2995,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // then
         result.assertSuccess()
-                .stdoutContains("Credentials loaded from environment variables")
-                .stdoutDoesNotContain("real-token");
+                .stdoutContains("Using Trello credentials...", "Credentials loaded from environment variables")
+                .stdoutDoesNotContain("Saving Trello credentials", "real-token");
         assertThat(env).doesNotExist();
     }
 
@@ -2574,7 +3068,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--no-github");
 
         // then
-        result.assertSuccess();
+        result.assertSuccess().stdoutContains("Saving Trello credentials...", "Credentials saved: " + env);
+        assertThat(result.stdout()).containsOnlyOnce("Saving Trello credentials...");
         assertThat(env)
                 .content(StandardCharsets.UTF_8)
                 .contains("TRELLO_API_TOKEN=prompt-token")
@@ -3546,7 +4041,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "n\n",
+                "\n\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -3589,7 +4084,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "2\nboard-1\nQueue\nFinished\nWorking\nBlocked\n\n\n\nn\nn\n",
+                "2\nboard-1\n\n\nQueue\nFinished\nWorking\nBlocked\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -3631,7 +4126,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "2\nboard-1\nQueue\nFinished\nBlocked\n\n\n\nn\nn\n",
+                "2\nboard-1\n\n\nQueue\nFinished\nBlocked\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -3667,7 +4162,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "2\nboard-1\nQueue\nFinished\nWorking\n-\n\n\n\nn\nn\n",
+                "2\nboard-1\n\n\nQueue\nFinished\nWorking\n-\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -3701,7 +4196,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "2\nboard-1\n-\n-\n\n\n\nn\nn\n",
+                "2\nboard-1\n\n\n-\n-\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -5337,8 +5832,81 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void configureGithubRejectsInvalidReasoningEffortBeforeCredentialOrTrelloSideEffects() throws Exception {
+        // given
+        LocalSetup catalogBackedSetup = setupWithCodexSelectionDefaults(new CodexModelSelectionDefaults(
+                new TrelloBoardSetup.CodexModelDefaults("gpt-catalog", "medium"),
+                Map.of("gpt-catalog", "medium"),
+                Map.of("gpt-catalog", List.of("low", "medium", "high"))));
+        Path workflow = tempDir.resolve("WORKFLOW.github-upgrade-invalid-effort.md");
+        Path env = tempDir.resolve(".env.github-upgrade-invalid-effort");
+        SetupRunResult firstResult = runSetup(
+                catalogBackedSetup,
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "GitHub Invalid Effort",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--codex-model",
+                "gpt-catalog",
+                "--codex-reasoning-effort",
+                "low",
+                "--no-github");
+        firstResult.assertSuccess();
+        commands.githubAuthenticated = true;
+        Files.delete(env);
+        int memberLookupsBeforeUpgrade = trello.memberLookups().size();
+
+        // when
+        SetupRunResult secondResult = runSetup(
+                catalogBackedSetup,
+                "configure-github",
+                "--non-interactive",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "new-key",
+                "--token",
+                "new-token",
+                "--codex-reasoning-effort",
+                "ultra");
+
+        // then
+        secondResult
+                .assertFailure(SETUP_FAILURE)
+                .stderrContains(
+                        "setup_failed code=setup_invalid_choice",
+                        "Reasoning effort must be one of the values advertised for the selected model: "
+                                + "low, medium, high.");
+        assertThat(trello.memberLookups()).hasSize(memberLookupsBeforeUpgrade);
+        assertThat(env).doesNotExist();
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-catalog\"", "reasoning_effort: \"low\"");
+    }
+
+    @Test
     void configureGithubAppliesExplicitCodexModelOverrides() throws Exception {
         // given
+        CodexModelSelectionDefaults acceptedCatalog = new CodexModelSelectionDefaults(
+                new TrelloBoardSetup.CodexModelDefaults("gpt-default", "medium"),
+                Map.of("gpt-default", "medium", "gpt-new", "high"),
+                Map.of("gpt-new", List.of("high", "max")));
+        CodexModelSelectionDefaults changedCatalog = new CodexModelSelectionDefaults(
+                new TrelloBoardSetup.CodexModelDefaults("gpt-default", "medium"),
+                Map.of("gpt-default", "medium", "gpt-new", "low"),
+                Map.of("gpt-new", List.of("low")));
+        AtomicInteger resolutions = new AtomicInteger();
+        LocalSetup catalogBackedSetup = setupWithCodexSelectionDefaults(
+                () -> resolutions.getAndIncrement() == 0 ? acceptedCatalog : changedCatalog);
         Path workflow = tempDir.resolve("WORKFLOW.github-upgrade-model.md");
         Path env = tempDir.resolve(".env");
         SetupRunResult firstResult = runSetup(
@@ -5368,6 +5936,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult secondResult = runSetup(
+                catalogBackedSetup,
                 "configure-github",
                 "--non-interactive",
                 "--endpoint",
@@ -5392,6 +5961,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         assertThat(trello.createdLists()).containsExactly("Merging");
         assertThat(commands.stoppedWorkflows).containsExactly(workflow.toString());
         assertThat(commands.startedWorkflows).containsExactly(workflow.toString());
+        assertThat(resolutions).hasValue(1);
     }
 
     @Test
@@ -6593,7 +7163,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "y\n\n\n\nn\nn\n",
+                "\n\ny\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -6627,7 +7197,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // when
         SetupRunResult result = runSetupWithInput(
                 windowsSetup,
-                "y\n\n\n\nn\nn\n",
+                "\n\ny\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -6690,6 +7260,57 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 .stdoutContains("Can this machine open a browser for Codex login? [Y/n]")
                 .stdoutDoesNotContain("Device auth");
         assertThat(commands.codexLoginCommands).containsExactly("codex login --device-auth");
+    }
+
+    @Test
+    void interactiveSetupResolvesCodexCatalogAfterCompletingLogin() throws Exception {
+        // given
+        CodexModelSelectionDefaults preLoginCatalog = new CodexModelSelectionDefaults(
+                new TrelloBoardSetup.CodexModelDefaults("gpt-selected", "low"),
+                Map.of("gpt-selected", "low"),
+                Map.of("gpt-selected", List.of("low")));
+        CodexModelSelectionDefaults postLoginCatalog = new CodexModelSelectionDefaults(
+                new TrelloBoardSetup.CodexModelDefaults("gpt-selected", "high"),
+                Map.of("gpt-selected", "high"),
+                Map.of("gpt-selected", List.of("low", "high")));
+        AtomicInteger resolutions = new AtomicInteger();
+        LocalSetup loginAwareSetup = setupWithCodexSelectionDefaults(() -> {
+            resolutions.incrementAndGet();
+            return commands.codexAuthenticated ? postLoginCatalog : preLoginCatalog;
+        });
+        Path workflow = tempDir.resolve("WORKFLOW.codex-login-catalog.md");
+        Path env = tempDir.resolve(".env.codex-login-catalog");
+        commands.codexAuthenticated = false;
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                loginAwareSetup,
+                "n\n\n\n\nn\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--board-name",
+                "Codex Login Catalog Queue",
+                "--workflow",
+                workflow.toString(),
+                "--env",
+                env.toString(),
+                "--codex-model",
+                "gpt-selected",
+                "--codex-reasoning-effort",
+                "high",
+                "--no-github");
+
+        // then
+        result.assertSuccess().stdoutContains("Can this machine open a browser for Codex login? [Y/n]");
+        assertThat(commands.codexLoginCommands).containsExactly("codex login --device-auth");
+        assertThat(resolutions).hasValue(1);
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("model: \"gpt-selected\"", "reasoning_effort: \"high\"");
     }
 
     @MethodSource("nonInteractiveGithubFailureScenarios")
