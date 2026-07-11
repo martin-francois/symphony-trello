@@ -248,7 +248,7 @@ public final class LocalSetup {
             return 0;
         } catch (TrelloBoardSetupException | IllegalArgumentException | IOException e) {
             err.println("setup_failed code=%s message=%s".formatted(errorCode(e), e.getMessage()));
-            Optional<Path> hintEnvPath = options == null ? Optional.empty() : Optional.of(options.envPath());
+            Optional<Path> hintEnvPath = Optional.ofNullable(options).map(Options::envPath);
             SetupDiagnosticReporter.userActionHint(e, hintEnvPath).ifPresent(hint -> err.println("Next step: " + hint));
             diagnosticReporter.reportFailure(e, request, terminal);
             return CliExitCodes.SETUP_FAILURE;
@@ -1841,19 +1841,20 @@ public final class LocalSetup {
         }
 
         private static Path callerDirectory(Map<String, String> environment) {
-            String configured = environment.get(CALLER_DIR_ENV);
-            if (!blank(configured)) {
-                return Path.of(configured).toAbsolutePath().normalize();
-            }
-            return Path.of(".").toAbsolutePath().normalize();
+            return configuredPath(environment, CALLER_DIR_ENV)
+                    .map(path -> path.toAbsolutePath().normalize())
+                    .orElseGet(() -> Path.of(".").toAbsolutePath().normalize());
         }
 
         private static Path defaultWorkspaceRoot(Map<String, String> environment) {
-            String configured = environment.get("SYMPHONY_TRELLO_WORKSPACE_ROOT");
-            if (!blank(configured)) {
-                return Path.of(configured);
-            }
-            return TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT;
+            return configuredPath(environment, "SYMPHONY_TRELLO_WORKSPACE_ROOT")
+                    .orElse(TrelloBoardSetup.DEFAULT_WORKSPACE_ROOT);
+        }
+
+        private static Optional<Path> configuredPath(Map<String, String> environment, String name) {
+            return Optional.ofNullable(environment.get(name))
+                    .filter(value -> !blank(value))
+                    .map(Path::of);
         }
 
         boolean hasExplicitBoardSetupRequest() {
@@ -1869,22 +1870,17 @@ public final class LocalSetup {
         }
 
         private boolean hasNonAccessWorkflowUpdateRequest() {
-            return workspaceId.isPresent()
-                    || repositoryUrl.isPresent()
-                    || !activeStates.isEmpty()
-                    || !terminalStates.isEmpty()
-                    || inProgressState != null
-                    || !detectInProgressState
-                    || !blank(blockedState)
-                    || workflowPathExplicit
-                    || workspaceRootExplicit
-                    || serverPort.isPresent()
+            return hasBoardWorkflowUpdateRequest()
                     || maxAgentsExplicit
                     || codexModel.isPresent()
                     || codexReasoningEffort.isPresent();
         }
 
         private boolean hasNonCodexModelWorkflowUpdateRequest() {
+            return hasBoardWorkflowUpdateRequest();
+        }
+
+        private boolean hasBoardWorkflowUpdateRequest() {
             return workspaceId.isPresent()
                     || repositoryUrl.isPresent()
                     || !activeStates.isEmpty()

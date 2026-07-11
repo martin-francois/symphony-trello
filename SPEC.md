@@ -940,7 +940,7 @@ and MUST mention prerequisite checklist items for dependent Trello cards before 
 into an active list.
 
 During guided `setup-local` board creation or import, setup MUST ask exactly one optional repository
-clone URL question, `Repository clone URL (optional; press Enter for none):`. A blank answer MUST
+clone URL question, `If this board is for one Git repository, enter its clone URL; press Enter for a general-purpose board:`. A blank answer MUST
 keep both generated repository defaults null and retain the
 repository-general behavior. A supplied answer MUST populate `repository.default_url`. The regular
 `setup-local`, direct `new-board`, and direct `import-board` paths MUST also accept

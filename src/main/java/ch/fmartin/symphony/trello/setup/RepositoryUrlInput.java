@@ -5,7 +5,8 @@ import ch.fmartin.symphony.trello.repository.RepositorySourceSelection;
 import java.util.Optional;
 
 final class RepositoryUrlInput {
-    static final String PROMPT = "Repository clone URL (optional; press Enter for none):";
+    static final String PROMPT =
+            "If this board is for one Git repository, enter its clone URL; press Enter for a general-purpose board:";
     private static final String GUIDANCE =
             "--repository-url must be a credential-free HTTP(S), username-only SSH, SCP-style SSH, or file URL without a query or fragment.";
     private static final RepositorySourceResolver RESOLVER = new RepositorySourceResolver();

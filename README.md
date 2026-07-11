@@ -458,7 +458,7 @@ default once. Then cards do not need to repeat the repository URL.
 Guided `setup-local` asks:
 
 ```text
-Repository clone URL (optional; press Enter for none):
+If this board is for one Git repository, enter its clone URL; press Enter for a general-purpose board:
 ```
 
 Enter the clone URL to save it as `repository.default_url`, or press Enter to keep the workflow

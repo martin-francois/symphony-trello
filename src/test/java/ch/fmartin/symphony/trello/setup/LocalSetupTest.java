@@ -63,7 +63,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "Dry run",
                         "WOULD write workflow:",
                         workflow.toAbsolutePath().normalize().toString())
-                .stdoutDoesNotContain("Repository clone URL (optional; press Enter for none):");
+                .stdoutDoesNotContain(RepositoryUrlInput.PROMPT);
         assertThat(trello.createdLists()).isEmpty();
     }
 
@@ -77,9 +77,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--dry-run", "--non-interactive", "--repository-url", repositoryUrl, "--board-name", "URL Queue");
 
         // then
-        result.assertSuccess()
-                .stdoutContains("Dry run")
-                .stdoutDoesNotContain(repositoryUrl, "Repository clone URL (optional; press Enter for none):");
+        result.assertSuccess().stdoutContains("Dry run").stdoutDoesNotContain(repositoryUrl, RepositoryUrlInput.PROMPT);
         assertThat(trello.memberLookups()).isEmpty();
         assertThat(trello.workspaceLookups()).isEmpty();
         assertThat(trello.createdLists()).isEmpty();
@@ -95,9 +93,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 "--dry-run", "--non-interactive", "--repository-url", repositoryUrl, "--board-name", "File URL Queue");
 
         // then
-        result.assertSuccess()
-                .stdoutContains("Dry run")
-                .stdoutDoesNotContain(repositoryUrl, "Repository clone URL (optional; press Enter for none):");
+        result.assertSuccess().stdoutContains("Dry run").stdoutDoesNotContain(repositoryUrl, RepositoryUrlInput.PROMPT);
         assertThat(trello.memberLookups()).isEmpty();
         assertThat(trello.workspaceLookups()).isEmpty();
         assertThat(trello.createdLists()).isEmpty();
@@ -3502,7 +3498,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         result.assertSuccess()
                 .stdoutContains(
                         "Trello board",
-                        "Repository clone URL (optional; press Enter for none): ",
+                        RepositoryUrlInput.PROMPT + " ",
                         "Repository clone URL not set; this workflow remains repository-general.",
                         "To add or change it later, edit repository.default_url in:",
                         workflow.toAbsolutePath().normalize().toString(),
@@ -3547,7 +3543,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         // then
         result.assertSuccess()
                 .stdoutContains(
-                        "Repository clone URL (optional; press Enter for none): ",
+                        RepositoryUrlInput.PROMPT + " ",
                         "Repository clone URL saved in repository.default_url",
                         "To add or change it later, edit repository.default_url in:",
                         workflow.toAbsolutePath().normalize().toString())
@@ -3590,7 +3586,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
 
         // then
         result.assertFailure(SETUP_FAILURE)
-                .stdoutContains("Repository clone URL (optional; press Enter for none): ")
+                .stdoutContains(RepositoryUrlInput.PROMPT + " ")
                 .stdoutDoesNotContain(invalidRepositoryUrl, "Checking Codex login", "Validating Trello")
                 .stderrContains(
                         "setup_failed code=setup_invalid_repository_url",
