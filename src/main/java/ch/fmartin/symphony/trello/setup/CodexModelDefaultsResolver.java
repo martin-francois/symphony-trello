@@ -3,6 +3,7 @@ package ch.fmartin.symphony.trello.setup;
 import static com.google.common.base.Preconditions.checkArgument;
 
 import ch.fmartin.symphony.trello.process.ProcessEnvironment;
+import ch.fmartin.symphony.trello.setup.CodexModelSelectionDefaults.ReasoningEffortOption;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.CodexModelDefaults;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -121,7 +122,7 @@ final class CodexModelDefaultsResolver {
     }
 
     private ObjectNode modelListParams(String cursor) {
-        ObjectNode params = object("includeHidden", false);
+        ObjectNode params = object("includeHidden", true);
         if (!blank(cursor)) {
             params.put("cursor", cursor);
         }
@@ -133,31 +134,64 @@ final class CodexModelDefaultsResolver {
             return CodexModelSelectionDefaults.of(CodexModelDefaults.fallback());
         }
         Map<String, String> reasoningEffortsByModel = new LinkedHashMap<>();
+        Map<String, List<ReasoningEffortOption>> reasoningEffortOptionsByModel = new LinkedHashMap<>();
         JsonNode selected = null;
         boolean selectedIsDefault = false;
         for (JsonNode model : models) {
-            String modelName = model.path("model").asText(null);
-            String reasoningEffort = model.path("defaultReasoningEffort").asText(null);
-            if (blank(modelName) || blank(reasoningEffort)) {
+            String modelName = validatedCatalogText(model, "model");
+            if (blank(modelName)) {
+                continue;
+            }
+            List<ReasoningEffortOption> reasoningEffortOptions = supportedReasoningEfforts(model);
+            if (!reasoningEffortOptions.isEmpty()) {
+                reasoningEffortOptionsByModel.put(modelName, reasoningEffortOptions);
+            }
+            String reasoningEffort = validatedCatalogText(model, "defaultReasoningEffort");
+            if (blank(reasoningEffort)) {
                 continue;
             }
             reasoningEffortsByModel.put(modelName, reasoningEffort);
             boolean modelIsDefault = model.path("isDefault").asBoolean(false);
-            if (selected == null || (!selectedIsDefault && modelIsDefault)) {
+            boolean modelIsHidden = model.path("hidden").asBoolean(false);
+            if (!modelIsHidden && (selected == null || (!selectedIsDefault && modelIsDefault))) {
                 selected = model;
                 selectedIsDefault = modelIsDefault;
             }
         }
         if (selected == null) {
-            return CodexModelSelectionDefaults.of(CodexModelDefaults.fallback());
+            return CodexModelSelectionDefaults.withReasoningEffortOptions(
+                    CodexModelDefaults.fallback(), reasoningEffortsByModel, reasoningEffortOptionsByModel);
         }
-        String modelName = selected.path("model").asText(null);
-        String reasoningEffort = selected.path("defaultReasoningEffort").asText(null);
+        String modelName = validatedCatalogText(selected, "model");
+        String reasoningEffort = validatedCatalogText(selected, "defaultReasoningEffort");
         if (blank(modelName) || blank(reasoningEffort)) {
-            return CodexModelSelectionDefaults.of(CodexModelDefaults.fallback());
+            return CodexModelSelectionDefaults.withReasoningEffortOptions(
+                    CodexModelDefaults.fallback(), reasoningEffortsByModel, reasoningEffortOptionsByModel);
         }
-        return new CodexModelSelectionDefaults(
-                new CodexModelDefaults(modelName, reasoningEffort), reasoningEffortsByModel);
+        return CodexModelSelectionDefaults.withReasoningEffortOptions(
+                new CodexModelDefaults(modelName, reasoningEffort),
+                reasoningEffortsByModel,
+                reasoningEffortOptionsByModel);
+    }
+
+    private static List<ReasoningEffortOption> supportedReasoningEfforts(JsonNode model) {
+        return model.path("supportedReasoningEfforts")
+                .valueStream()
+                .filter(option -> !blank(option.path("reasoningEffort").asText(null)))
+                .map(CodexModelDefaultsResolver::reasoningEffortOption)
+                .toList();
+    }
+
+    private static ReasoningEffortOption reasoningEffortOption(JsonNode option) {
+        return new ReasoningEffortOption(
+                option.path("reasoningEffort").asText(null),
+                option.path("description").asText(null));
+    }
+
+    private static String validatedCatalogText(JsonNode value, String fieldName) {
+        String text = value.path(fieldName).asText(null);
+        CodexModelSelectionDefaults.checkNoControlCharacters(text, fieldName);
+        return text;
     }
 
     private JsonNode readResponse(AppServerResponseReader reader, int id) throws IOException {

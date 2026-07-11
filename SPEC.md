@@ -694,7 +694,23 @@ hand-maintained enum in this spec. The Java implementation maps `codex.model` to
 installed Codex schema, run
 `codex app-server generate-json-schema --out <dir>` and inspect the generated definitions. The
 generated schema is version-specific to the installed Codex binary. Implementations MAY validate
-these fields locally if they want stricter startup checks.
+other pass-through Codex fields locally if they want stricter startup checks.
+
+The Java setup flow additionally uses `model/list` as the capability source for reasoning-effort
+selection. For the selected catalog model, it reads the exact ordered non-blank
+`supportedReasoningEfforts[].reasoningEffort` values and their non-blank `description` values. When
+that list is non-empty, guided setup MUST display every value in catalog order, MUST display each
+advertised description, MUST identify the model's `defaultReasoningEffort`, and MUST identify the
+effective current setup or workflow value when it is advertised. Every newly typed or
+option-provided effort MUST match the advertised values; a rejection MUST identify the accepted
+values. Setup MUST NOT replace or supplement the catalog with a hand-maintained effort list or label
+table. When no effort list is advertised for the selected model, guided setup MUST say so and setup
+MUST accept a non-blank pass-through value rather than guess what that Codex version supports.
+Discovery MUST retain capability metadata for hidden model entries so an explicitly selected or
+preserved model uses its own catalog choices, but default-model selection MUST ignore hidden entries.
+`setup-local --dry-run` MUST NOT launch Codex solely to discover this catalog. When no catalog is
+already available without side effects, dry-run MAY defer catalog-dependent validation; the real
+setup run MUST complete that validation before changing Trello or writing workflow files.
 
 The Java setup flow writes explicit `model` and `reasoning_effort` values into generated workflows.
 It queries the installed Codex CLI with the app-server `model/list` method and uses the default
@@ -703,10 +719,10 @@ accepts the recommended values when the operator presses Enter. Non-interactive 
 recommended values unless explicit setup options provide different values. Existing workflow values
 remain the source of truth for a Trello board and take precedence over discovered defaults during
 workflow regeneration. If the model list is available but does not mark a default, setup uses the
-first returned model. If the list is empty or lacks usable model details, setup writes `gpt-5.5` and
-`medium`. If the installed app-server cannot answer the model-list request, setup omits the
-first-class fields so the generated workflow remains compatible with Codex versions that do not
-expose them.
+first non-hidden returned model with usable details. If the list is empty or lacks usable model
+details, setup writes `gpt-5.5` and `medium`. If the installed app-server cannot answer the model-list
+request, setup omits the first-class fields so the generated workflow remains compatible with Codex
+versions that do not expose them.
 
 - `command` (string shell command)
   - Default: `codex app-server`
@@ -722,6 +738,8 @@ expose them.
   - Default: implementation-defined.
   - When configured and supported by the targeted app-server schema, pass it through as the app-server
     reasoning effort field. The Java implementation uses the turn `effort` request field.
+  - The Java runtime treats configured workflow values as pass-through settings. Catalog validation
+    applies only while setup selects a new value.
 - `approval_policy` (Codex `AskForApproval` value)
   - Default: implementation-defined.
 - `thread_sandbox` (Codex `SandboxMode` value)

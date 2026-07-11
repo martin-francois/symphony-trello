@@ -144,6 +144,7 @@ final class TrelloCredentialStoreTest {
                 options.maxAgentsExplicit(),
                 options.codexModel(),
                 options.codexReasoningEffort(),
+                options.codexModelCatalog(),
                 options.codexModelDefaults(),
                 env,
                 options.additionalWritableRoots(),

@@ -1,13 +1,12 @@
 package ch.fmartin.symphony.trello.setup;
 
+import ch.fmartin.symphony.trello.setup.CodexModelSelectionDefaults.ReasoningEffortOption;
 import java.io.IOException;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
-import java.util.stream.Stream;
 
 final class CodexModelSelectionFlow {
-    private static final List<String> REASONING_EFFORTS = List.of("minimal", "low", "medium", "high");
-
     Selection resolve(LocalSetup.Options options, CodexModelSelectionDefaults selectionDefaults, Terminal terminal)
             throws IOException {
         TrelloBoardSetup.CodexModelDefaults defaults = selectionDefaults.defaults();
@@ -20,6 +19,7 @@ final class CodexModelSelectionFlow {
         Optional<String> reasoningEffortOverride =
                 reasoningEffortOverride(options, selectionDefaults, defaults, modelOverride, model, reasoningEffort);
         if (options.nonInteractive()) {
+            validateExplicitReasoningEffort(options, selectionDefaults, model, reasoningEffort);
             return new Selection(
                     TrelloBoardSetup.CodexModelDefaults.partial(model, reasoningEffort),
                     modelOverride,
@@ -39,13 +39,14 @@ final class CodexModelSelectionFlow {
         reasoningEffortOverride =
                 reasoningEffortOverride(options, selectionDefaults, defaults, modelOverride, model, reasoningEffort);
         if (options.codexReasoningEffort().isEmpty()) {
-            terminal.info("Reasoning effort choices: " + String.join(", ", reasoningChoices(reasoningEffort)));
+            displayReasoningEffortOptions(terminal, selectionDefaults, model, reasoningEffort);
             String answer = terminal.readLine("Reasoning effort [" + defaultLabel(reasoningEffort) + "]: ");
             if (!blank(answer)) {
-                reasoningEffort = answer.strip();
+                reasoningEffort = selectionDefaults.validateReasoningEffortForModel(model, answer.strip());
                 reasoningEffortOverride = Optional.of(reasoningEffort);
             }
         }
+        validateExplicitReasoningEffort(options, selectionDefaults, model, reasoningEffort);
         return new Selection(
                 TrelloBoardSetup.CodexModelDefaults.partial(model, reasoningEffort),
                 modelOverride,
@@ -109,16 +110,67 @@ final class CodexModelSelectionFlow {
         return Optional.empty();
     }
 
-    private static List<String> reasoningChoices(String selected) {
-        if (blank(selected)) {
-            return REASONING_EFFORTS;
+    private static void displayReasoningEffortOptions(
+            Terminal terminal,
+            CodexModelSelectionDefaults selectionDefaults,
+            String model,
+            String currentReasoningEffort) {
+        selectionDefaults
+                .reasoningEffortOptionsForModel(model)
+                .ifPresentOrElse(
+                        options -> displayAdvertisedReasoningEffortOptions(
+                                terminal, selectionDefaults, model, currentReasoningEffort, options),
+                        () -> terminal.info(
+                                "Reasoning effort choices: not advertised for this model by the installed Codex CLI"));
+    }
+
+    private static void displayAdvertisedReasoningEffortOptions(
+            Terminal terminal,
+            CodexModelSelectionDefaults selectionDefaults,
+            String model,
+            String currentReasoningEffort,
+            List<ReasoningEffortOption> options) {
+        terminal.info("Reasoning effort choices for " + model + ":");
+        Optional<String> defaultReasoningEffort = selectionDefaults.reasoningEffortForModel(model);
+        for (ReasoningEffortOption option : options) {
+            terminal.info(reasoningEffortOptionLine(option, defaultReasoningEffort, currentReasoningEffort));
         }
-        if (REASONING_EFFORTS.contains(selected)) {
-            return REASONING_EFFORTS;
+        boolean currentIsAdvertised =
+                options.stream().anyMatch(option -> option.reasoningEffort().equals(currentReasoningEffort));
+        if (!blank(currentReasoningEffort) && !currentIsAdvertised) {
+            terminal.info("  " + currentReasoningEffort + " (current, not advertised; preserving workflow value)");
         }
-        return Stream.concat(Stream.of(selected), REASONING_EFFORTS.stream())
-                .distinct()
-                .toList();
+    }
+
+    private static String reasoningEffortOptionLine(
+            ReasoningEffortOption option, Optional<String> defaultReasoningEffort, String currentReasoningEffort) {
+        String markers =
+                reasoningEffortMarkers(option.reasoningEffort(), defaultReasoningEffort, currentReasoningEffort);
+        String description = blank(option.description()) ? "" : " - " + option.description();
+        return "  " + option.reasoningEffort() + markers + description;
+    }
+
+    private static String reasoningEffortMarkers(
+            String reasoningEffort, Optional<String> defaultReasoningEffort, String currentReasoningEffort) {
+        boolean isDefault = defaultReasoningEffort.map(reasoningEffort::equals).orElse(false);
+        boolean isCurrent = Objects.equals(reasoningEffort, currentReasoningEffort);
+        if (isDefault && isCurrent) {
+            return " (default, current)";
+        }
+        if (isDefault) {
+            return " (default)";
+        }
+        return isCurrent ? " (current)" : "";
+    }
+
+    private static void validateExplicitReasoningEffort(
+            LocalSetup.Options options,
+            CodexModelSelectionDefaults selectionDefaults,
+            String model,
+            String reasoningEffort) {
+        if (options.codexReasoningEffort().isPresent()) {
+            selectionDefaults.validateReasoningEffortForModel(model, reasoningEffort);
+        }
     }
 
     private static String valueOrDefault(Optional<String> value, String defaultValue) {

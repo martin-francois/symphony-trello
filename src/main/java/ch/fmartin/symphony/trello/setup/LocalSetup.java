@@ -142,6 +142,7 @@ public final class LocalSetup {
             if (options.repairPort()) {
                 return repairPort(options, out);
             }
+            options = validatePreflightCodexReasoningEffort(options, prerequisites);
             if (options.dryRun()) {
                 rejectInvalidUnconnectedBoardSelector(connectedBoardsUnchecked(options), options);
                 boardConnector.rejectDryRunNewBoardInProgress(options);
@@ -180,6 +181,7 @@ public final class LocalSetup {
             TrelloBoardConnector.BoardSetupChoice boardSetupChoice = boardConnector.chooseBoardSetup(options, terminal);
             boardConnector.preflightRequestedServerPort(options, manifest);
             codexAuthFlow.ensureAuthenticated(prerequisites, options, terminal);
+            options = validatePreflightCodexReasoningEffort(options);
 
             preflightLocalWorkflowWrite(options);
             CredentialSelection credentialSelection = credentials(options, options.envPath(), terminal);
@@ -189,20 +191,31 @@ public final class LocalSetup {
             out.println();
             out.println("Validating Trello...");
             out.println("  OK  Connected to Trello as \"" + memberInfo.displayName() + "\"");
-            if (credentialSelection.persist()) {
-                writeEnv(credentialSelection, options.envPath(), terminal);
-            } else {
+            if (!credentialSelection.persist()) {
                 out.println();
-                out.println("Saving Trello credentials...");
+                out.println("Using Trello credentials...");
                 out.println(
                         "  OK  Credentials loaded from " + credentialSelection.sourceDescription(options.envPath()));
                 out.println("  OK  Trello API key: " + TrelloCredentialStore.redact(credentials.apiKey()));
                 out.println("  OK  Trello token: " + TrelloCredentialStore.redact(credentials.apiToken()));
             }
 
-            GitHubIntegration githubIntegration = resolveGitHubIntegration(options, prerequisites, terminal);
+            Options githubOptions = options;
+            TrelloBoardConnector.GitHubIntegrationResolution githubIntegrationResolution =
+                    () -> resolveGitHubIntegration(githubOptions, prerequisites, terminal);
+            Path credentialEnvPath = options.envPath();
+            TrelloBoardConnector.CredentialPersistence credentialPersistence = credentialSelection.persist()
+                    ? () -> writeEnv(credentialSelection, credentialEnvPath, terminal)
+                    : () -> {};
             SetupResult result = boardConnector.createOrConnectBoard(
-                    boardSetupChoice, options, credentials, githubIntegration, manifest, terminal);
+                    boardSetupChoice,
+                    options,
+                    credentials,
+                    githubIntegrationResolution,
+                    manifest,
+                    credentialPersistence,
+                    terminal);
+            GitHubIntegration githubIntegration = result.githubIntegration();
             options = configureCodexAccess(options, terminal);
             applyCodexAccess(options, result.workflowPath());
             ConnectedBoard connectedBoard = ConnectedBoard.from(result, options, githubIntegration);
@@ -652,9 +665,73 @@ public final class LocalSetup {
     }
 
     private Options configureCodexModel(Options options, Path workflowPath, Terminal terminal) throws IOException {
+        CodexModelSelectionDefaults catalog =
+                options.codexModelCatalog().orElseGet(boardSetup::resolvedCodexModelSelectionDefaults);
         CodexModelSelectionFlow.Selection selected = new CodexModelSelectionFlow()
-                .resolve(options, boardSetup.codexModelSelectionDefaultsForWorkflow(workflowPath), terminal);
-        return options.withCodexModelSelection(selected);
+                .resolve(options, boardSetup.codexModelSelectionDefaultsForWorkflow(workflowPath, catalog), terminal);
+        return options.withCodexModelCatalog(catalog).withCodexModelSelection(selected);
+    }
+
+    private Options validatePreflightCodexReasoningEffort(Options options) {
+        return options.codexReasoningEffort()
+                .filter(ignored -> codexModelKnownDuringPreflight(options))
+                .map(reasoningEffort -> validatePreflightCodexReasoningEffort(options, reasoningEffort))
+                .orElse(options);
+    }
+
+    private Options validatePreflightCodexReasoningEffort(Options options, Prerequisites prerequisites) {
+        if (!options.dryRun() && !prerequisites.codexAuth().available()) {
+            // Login can refresh model access, so dynamic catalog validation waits until authentication.
+            return options;
+        }
+        return validatePreflightCodexReasoningEffort(options);
+    }
+
+    private Options validatePreflightCodexReasoningEffort(Options options, String reasoningEffort) {
+        Optional<Path> workflowPath = TrelloBoardConnector.preflightWorkflowPath(options);
+        if (options.codexModel().isEmpty() && workflowPath.isEmpty() && !preflightUsesCatalogDefaultModel(options)) {
+            return options;
+        }
+        if (options.dryRun()) {
+            return boardSetup
+                    .resolvedCodexModelSelectionDefaultsForDryRun()
+                    .map(catalog ->
+                            validatePreflightCodexReasoningEffort(options, reasoningEffort, workflowPath, catalog))
+                    .orElse(options);
+        }
+        CodexModelSelectionDefaults catalog =
+                options.codexModelCatalog().orElseGet(boardSetup::resolvedCodexModelSelectionDefaults);
+        return validatePreflightCodexReasoningEffort(options, reasoningEffort, workflowPath, catalog);
+    }
+
+    private Options validatePreflightCodexReasoningEffort(
+            Options options, String reasoningEffort, Optional<Path> workflowPath, CodexModelSelectionDefaults catalog) {
+        CodexModelSelectionDefaults selectionDefaults = options.codexModel()
+                .map(ignored -> catalog)
+                .or(() -> workflowPath.map(path -> boardSetup.codexModelSelectionDefaultsForWorkflow(path, catalog)))
+                .orElse(catalog);
+        String model = options.codexModel().orElseGet(selectionDefaults.defaults()::model);
+        selectionDefaults.validateReasoningEffortForModel(model, reasoningEffort);
+        return options.withCodexModelCatalog(catalog);
+    }
+
+    private static boolean codexModelKnownDuringPreflight(Options options) {
+        return options.codexModel().isPresent()
+                || (!options.configureGithub() && (options.dryRun() || options.nonInteractive()));
+    }
+
+    private static boolean preflightUsesCatalogDefaultModel(Options options) {
+        if (!options.force() || options.existingBoardId().isEmpty() || !Files.isDirectory(options.configDir())) {
+            return true;
+        }
+        try (var files = Files.list(options.configDir())) {
+            return files.filter(Files::isRegularFile)
+                    .map(PathNames::fileName)
+                    .noneMatch(WorkflowFileNames::isGeneratedFileName);
+        } catch (IOException ignored) {
+            // An unreadable directory could contain the forced board's workflow, so its model is unknown.
+            return false;
+        }
     }
 
     private static boolean confirmWorkspaceRoot(Options options, Terminal terminal) throws IOException {
@@ -1010,6 +1087,9 @@ public final class LocalSetup {
             out.println("GitHub upgrade cancelled.");
             return;
         }
+        if (options.hasExplicitCodexModelRequest()) {
+            options = configureCodexModel(options, board.workflowPath(), terminal);
+        }
 
         CredentialSelection credentialSelection = credentials(options, board.envPath(), terminal);
         TrelloCredentials credentials = credentialSelection.credentials();
@@ -1023,9 +1103,6 @@ public final class LocalSetup {
         }
 
         resolveGitHubIntegration(options, prerequisites(), terminal);
-        if (options.hasExplicitCodexModelRequest()) {
-            options = configureCodexModel(options, board.workflowPath(), terminal);
-        }
         BoardHealth previousHealth = healthChecker.boardHealth(board);
         ensureManagedRestartPossible(options, board, previousHealth);
         TrelloBoardSetup selectedBoardSetup = boardSetupWithCodexModel(options);
@@ -1539,6 +1616,7 @@ public final class LocalSetup {
             boolean maxAgentsExplicit,
             Optional<String> codexModel,
             Optional<String> codexReasoningEffort,
+            Optional<CodexModelSelectionDefaults> codexModelCatalog,
             Optional<TrelloBoardSetup.CodexModelDefaults> codexModelDefaults,
             Path envPath,
             List<Path> additionalWritableRoots,
@@ -1615,6 +1693,7 @@ public final class LocalSetup {
                     request.codexModel(),
                     request.codexReasoningEffort(),
                     Optional.empty(),
+                    Optional.empty(),
                     envPath,
                     List.copyOf(additionalWritableRoots),
                     request.allowAllPaths(),
@@ -1672,6 +1751,7 @@ public final class LocalSetup {
                     maxAgentsExplicit,
                     codexModel,
                     codexReasoningEffort,
+                    codexModelCatalog,
                     codexModelDefaults,
                     envPath,
                     additionalWritableRoots,
@@ -1764,6 +1844,49 @@ public final class LocalSetup {
             return codexModel.isPresent() || codexReasoningEffort.isPresent();
         }
 
+        Options withCodexModelCatalog(CodexModelSelectionDefaults catalog) {
+            return new Options(
+                    check,
+                    dryRun,
+                    repairPort,
+                    nonInteractive,
+                    force,
+                    forceNewSetup,
+                    configureGithub,
+                    githubMode,
+                    apiKey,
+                    apiToken,
+                    boardName,
+                    existingBoardId,
+                    workspaceId,
+                    activeStates,
+                    terminalStates,
+                    inProgressState,
+                    detectInProgressState,
+                    blockedState,
+                    workflowPath,
+                    workflowPathExplicit,
+                    workspaceRoot,
+                    workspaceRootExplicit,
+                    configDir,
+                    manifestPath,
+                    serverPort,
+                    maxAgents,
+                    maxAgentsExplicit,
+                    codexModel,
+                    codexReasoningEffort,
+                    Optional.of(catalog),
+                    codexModelDefaults,
+                    envPath,
+                    additionalWritableRoots,
+                    allowAllPaths,
+                    dangerFullAccess,
+                    noStart,
+                    command,
+                    endpoint,
+                    callerDirectory);
+        }
+
         Options withCodexModelSelection(CodexModelSelectionFlow.Selection selected) {
             return new Options(
                     check,
@@ -1795,6 +1918,7 @@ public final class LocalSetup {
                     maxAgentsExplicit,
                     codexModel.or(selected::modelOverride),
                     codexReasoningEffort.or(selected::reasoningEffortOverride),
+                    codexModelCatalog,
                     Optional.of(selected.defaults()),
                     envPath,
                     additionalWritableRoots,
@@ -1814,8 +1938,9 @@ public final class LocalSetup {
             String boardUrl,
             List<String> lists,
             Path workflowPath,
-            int serverPort) {
-        static SetupResult from(TrelloBoardSetup.NewBoardResult result) {
+            int serverPort,
+            GitHubIntegration githubIntegration) {
+        static SetupResult from(TrelloBoardSetup.NewBoardResult result, GitHubIntegration githubIntegration) {
             return new SetupResult(
                     result.boardId(),
                     result.boardKey(),
@@ -1823,10 +1948,11 @@ public final class LocalSetup {
                     result.boardUrl(),
                     result.lists(),
                     result.workflowPath(),
-                    result.serverPort());
+                    result.serverPort(),
+                    githubIntegration);
         }
 
-        static SetupResult from(TrelloBoardSetup.ImportBoardResult result) {
+        static SetupResult from(TrelloBoardSetup.ImportBoardResult result, GitHubIntegration githubIntegration) {
             return new SetupResult(
                     result.boardId(),
                     result.boardKey(),
@@ -1834,7 +1960,8 @@ public final class LocalSetup {
                     result.boardUrl(),
                     result.openLists(),
                     result.workflowPath(),
-                    result.serverPort());
+                    result.serverPort(),
+                    githubIntegration);
         }
     }
 
