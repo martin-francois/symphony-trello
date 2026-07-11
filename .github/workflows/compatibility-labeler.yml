@@ -5,12 +5,18 @@ name: compatibility-labeler
 on:
   pull_request_target:
     types: [opened, edited, reopened, synchronize]
+    # pull_request_target does not honor [skip ci]. Release Please only changes these files.
+    paths-ignore:
+      - .release-please-manifest.json
+      - CHANGELOG.md
+      - install.ps1
+      - install.sh
+      - pom.xml
   issues:
     types: [opened, edited]
 
 jobs:
   sync-breaking-label:
-    if: ${{ !startsWith(github.head_ref, 'release-please--branches--') }}
     runs-on: ubuntu-latest
     permissions:
       issues: write

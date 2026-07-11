@@ -79,6 +79,36 @@ final class ReleaseWorkflowTest {
     }
 
     @Test
+    void releasePleasePullRequestsDoNotCreateCiChecks() throws IOException {
+        // given
+        Path releaseConfig = Path.of("release-please-config.json");
+        Path labelerWorkflow = Path.of(".github/workflows/compatibility-labeler.yml");
+        Path codeRabbitConfig = Path.of(".coderabbit.yaml");
+
+        // when
+        String releaseSource = Files.readString(releaseConfig);
+        String labelerSource = Files.readString(labelerWorkflow);
+        String codeRabbitSource = Files.readString(codeRabbitConfig);
+
+        // then
+        assertThat(releaseSource)
+                .contains(
+                        "\"pull-request-title-pattern\": \"chore${scope}: release${component} ${version} [skip ci]\"",
+                        "\"group-pull-request-title-pattern\": \"chore${scope}: release${component} ${version} [skip ci]\"");
+        assertThat(labelerSource)
+                .contains(
+                        "pull_request_target:",
+                        "paths-ignore:",
+                        "- .release-please-manifest.json",
+                        "- CHANGELOG.md",
+                        "- install.ps1",
+                        "- install.sh",
+                        "- pom.xml")
+                .doesNotContain("startsWith(github.head_ref, 'release-please--branches--')");
+        assertThat(codeRabbitSource).contains("ignore_title_keywords:", "- \"[skip ci]\"");
+    }
+
+    @Test
     void releaseWorkflowUploadsAndVerifiesEveryPublicDownloadAsset() throws IOException {
         // given
         Path workflow = Path.of(".github/workflows/release-please.yml");
