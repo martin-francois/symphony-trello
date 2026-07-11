@@ -147,6 +147,16 @@ or rationale and leave the thread unresolved for the reviewer. Resolve review
 threads only when the user explicitly asks you to do so. If resolution was not
 requested, do not claim the thread was resolved.
 
+When a reply reports a code, test, documentation, configuration, or PR-metadata
+change, the reply must name the short commit hash containing the change and
+include fenced code blocks showing the final relevant code, text, or
+configuration. Include enough surrounding context to review the result without
+hunting through the diff. A prose summary, file link, or commit link does not
+replace the final snippet. Use multiple focused blocks when one comment caused
+changes in multiple relevant places. When no file content changed, say that
+explicitly and give the rationale or validation evidence instead of inventing a
+snippet.
+
 If the PR title, body, branch, labels, or linked card references no longer
 match the work actually completed, update the PR metadata before handoff.
 

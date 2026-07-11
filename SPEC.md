@@ -1006,6 +1006,12 @@ authenticated GitHub user is allowed to resolve them. If a thread cannot be reso
 permissions, API support, or ambiguity, the workflow MUST record that clearly and MUST NOT claim the
 thread was resolved.
 
+When a review reply reports a code, test, documentation, configuration, or PR-metadata change,
+generated workflows MUST require the reply to name the short commit hash containing the change and
+show the final relevant code, text, or configuration in fenced code blocks with enough context for
+review without opening the diff. A prose summary or link MUST NOT replace the final snippet. When no
+file content changed, the reply MUST say so explicitly and provide rationale or validation evidence.
+
 Before `Human Review`, the generated workflow tells Codex to classify PR check state rather than
 blocking on any non-green check:
 

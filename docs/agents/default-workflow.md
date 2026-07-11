@@ -273,10 +273,14 @@ optional verification. Follow this order:
   changes into the existing PR commit unless the user explicitly asks. Run the Codex review/fix loop
   before pushing, reply on GitHub to every handled review comment or thread, and push the updated
   branch. Do not resolve GitHub review threads after replying; leave them for the reviewer to resolve
-  unless the user explicitly asks you to resolve them. When a review reply says code changed, include
-  the final code in a fenced code block with enough surrounding context that the reviewer can
-  understand the change without hunting through the diff. This requirement applies to all review comment
-  handling in this repository. If the user also asks to squash the
+  unless the user explicitly asks you to resolve them. When a review reply reports a code, test,
+  documentation, configuration, or PR-metadata change, name the short commit hash that contains the
+  change and include the final relevant code, text, or configuration in fenced code blocks with enough
+  surrounding context that the reviewer can understand it without hunting through the diff. A prose
+  summary, file link, or commit link does not replace the required final snippet. When no file content
+  changed, say that explicitly and give the rationale or validation evidence instead of inventing a
+  snippet. This requirement applies to all review comment handling in this repository. If the user also
+  asks to squash the
   already-pushed PR commits first, squash them into one base commit before adding the separate
   review-response commit.
 - Keep `feat/issue-35-plan-b-onboarding` as a single commit on top of `main`; amend or squash and

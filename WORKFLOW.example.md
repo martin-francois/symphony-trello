@@ -275,6 +275,13 @@ review comment is blocking until it is addressed with code, tests, docs, or PR m
 with a justified response in the right thread. Do not decline correctness feedback without concrete
 validation.
 
+When a reply reports a code, test, documentation, configuration, or PR-metadata change, name the short
+commit hash containing the change and include fenced code blocks with the final relevant code, text, or
+configuration and enough context to review it without hunting through the diff. A prose summary, file
+link, or commit link does not replace the final snippet. Use multiple focused blocks when one comment
+caused changes in multiple relevant places. When no file content changed, say that explicitly and give
+the rationale or validation evidence instead of inventing a snippet.
+
 Classify PR checks before deciding handoff:
 
 - If a failing check is related to the card's changes, the current branch, or can be reproduced by
