@@ -285,6 +285,16 @@ optional verification. Follow this order:
   commit fully implements the issue and should close it on merge. If the change only adds guidance,
   creates a prerequisite, documents a decision, or implements part of the issue, use a non-closing
   reference such as `Refs #123` and state what remains.
+- Make every implementing pull request visible in the issue's GitHub Development section. For a PR
+  targeting the default branch, use the correct closing keyword and verify the PR appears in the
+  issue's `closedByPullRequestsReferences`. GitHub ignores closing keywords on PRs that target any
+  other branch.
+- For a stacked PR, create the issue-linked branch before making the pull request, for example with
+  `gh issue develop 123 --base <stack-base> --name <branch>`, then open the PR from that branch and
+  verify that GitHub replaced the Development branch link with the PR link. If a stacked PR already
+  exists without that link, manually link it through the issue or PR Development sidebar; do not
+  retarget the PR to `main`, create a duplicate branch or PR, or disrupt the stack only to make the
+  link appear.
 - The pull request title is linted in CI because the repository normally squash-merges with that
   title. CI also lints pull request commit messages so intentionally multi-commit or rebase-merged
   PRs keep release automation input clean. Before publishing a PR, run the same local check with the
