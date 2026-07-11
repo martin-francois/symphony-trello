@@ -11,6 +11,9 @@ parallel safety. Live end-to-end and deployed-verification rules live in
 
 - Follow the testing pyramid: fast focused unit tests first, broader integration tests where shared
   contracts or external boundaries are involved.
+- Run standalone script tests in required CI through a project command that discovers every
+  supported `scripts/**/*.test.*` file. Do not list only the test files that exist today. Strictly
+  type-check TypeScript scripts before running their tests.
 - Structure unit tests with `// given`, `// when`, and `// then` sections separated by blank lines.
 - Test names and assertion descriptions should make failures actionable without requiring a debug
   session.

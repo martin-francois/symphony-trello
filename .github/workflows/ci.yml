@@ -58,6 +58,27 @@ jobs:
       - name: Validate Renovate config
         run: pnpm dlx --package renovate renovate-config-validator renovate.json
 
+  script-tests:
+    if: ${{ !startsWith(github.head_ref, 'release-please--branches--') }}
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "24"
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.3.0 --activate
+      - name: Install script tooling
+        run: pnpm install --frozen-lockfile
+      - name: Type-check and test scripts
+        run: pnpm run verify:scripts
+
   test:
     # ADR 0048 keeps this job on 2 vCPU and uses a lower hosted JUnit parallelism
     # than the local Maven default to minimize normalized Blacksmith cost.

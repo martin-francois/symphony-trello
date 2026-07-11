@@ -29,12 +29,16 @@ user-visible change, write `None`.
 
 ## Compatibility Decision
 
-### What changes for existing users?
-- [ ] No visible change
-- [ ] Could break existing usage
-- [ ] Unsure
+Choose one option.
 
-If this may break existing usage (or if you are unsure), fill these fields:
+- [ ] Compatible: no previously supported, working usage stops working
+- [ ] Breaking: previously supported, working usage stops working
+- [ ] Unsure: maintainer decision required
+
+Why did you choose this option?
+`Because ...`
+
+If you choose `Breaking`, please fill out the following:
 
 What breaks:
 `Breaks: ...`
@@ -46,6 +50,16 @@ Alternative:
 `Alternative: ...`
 
 If this is not a breaking change, you can leave all three fields blank.
+
+## Commit History in Main
+
+Choose one option based on how this pull request should appear in `main`, not on the Git command used
+to merge it.
+
+- [ ] Combine this pull request into one final commit. The branch commits are review steps and do not
+      need to remain separate in `main`. (squash)
+- [ ] Keep the individual commits. Each commit is independently meaningful and should remain visible
+      in `main`. (rebase)
 
 ## Root Cause And Guardrail
 
@@ -85,9 +99,10 @@ explain why.
 
 - [ ] Docs updated, or N/A
 - [ ] ADR updated for architecture decisions or tradeoffs, or N/A
-- [ ] PR title or squash title uses Conventional Commits and is release-note ready
-- [ ] Breaking changes include a `BREAKING CHANGE:` footer with reason and migration path in the
-      squash commit body or retained commit, or N/A
+- [ ] PR title and every commit that will remain in `main` use Conventional Commits and are
+      release-note ready
+- [ ] Compatibility and commit-history choices are complete. For a breaking change, the message
+      reaching `main` contains both required breaking markers.
 - [ ] Live E2E/deployment notes included when behavior or deployment changed, or N/A
 - [ ] Redaction checked: no Trello credentials, Codex auth files, GitHub tokens, private board links,
       account names, private host paths, or deployment-specific paths

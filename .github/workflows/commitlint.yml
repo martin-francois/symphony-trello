@@ -15,6 +15,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 0
+          persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha }}
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
@@ -45,6 +46,14 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           printf '%s\n' "$PR_TITLE" | "$COMMITLINT_BIN" --config "$COMMITLINT_TITLE_CONFIG"
+      - name: Check compatibility metadata
+        if: ${{ !endsWith(github.actor, '[bot]') }}
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: node scripts/check-pr-compatibility-metadata.ts
       - name: Lint pull request commits
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}

@@ -105,12 +105,10 @@ Before submitting changes:
   or types whose nullness contracts have been reviewed.
 - Document non-obvious design choices in `docs/adr/`.
 - Keep refactors separate from behavior changes when practical.
-- Use a Conventional Commit PR title or squash commit title when the change is merged. CI checks
-  pull request titles with commitlint because the release automation uses those titles for normal
-  squash merges. CI also checks pull request commit messages so rebase-merged or intentionally
-  multi-commit PRs keep release automation input clean. Messages that reach `main` must be
-  release-note ready so the automation can choose the next SemVer version and update
-  [CHANGELOG.md](CHANGELOG.md).
+- Use a Conventional Commit PR title. In the pull request template, also choose whether the change
+  should become one final commit in `main` or keep its individual commits. CI checks the title and
+  branch commits so every message that may reach `main` is release-note ready. Release automation
+  uses those messages to choose the next SemVer version and update [CHANGELOG.md](CHANGELOG.md).
 
 `./mvnw -q spotless:check verify` remains the default local validation command. It runs Spotless
 formatting checks, curated PMD source checks, CPD duplication checks, selected Error Prone and Picnic
@@ -224,31 +222,63 @@ SYMPHONY_TRELLO_TEST_PWSH=./scripts/pwsh-docker.sh ./mvnw -Dtest=InstallerScript
 
 ## Commit Style
 
-Use Conventional Commits. For a PR with one logical change, maintainers squash the PR and use the PR
-title as the source of truth for changelog and version bump decisions:
+Use Conventional Commits. The pull request template asks how the change should appear in `main`:
+
+- **Combine this pull request into one final commit.** The branch commits are review steps. They do
+  not need to remain separate in `main`. Maintainers normally use GitHub's squash merge and review
+  the final combined commit message before merging.
+- **Keep the individual commits.** Each commit is independently meaningful and remains visible in
+  `main`. Maintainers normally use GitHub's rebase merge or an equivalent history-preserving
+  fast-forward operation. Every retained commit must be coherent and green.
+
+The template includes `(squash)` and `(rebase)` as short hints for experienced contributors, but the
+plain-language result is the required choice. Contributors do not need to choose or understand a Git
+command. GitHub merge commits are disabled for this repository.
+
+For a pull request that becomes one final commit, the PR title is the normal source of truth for
+changelog and version bump decisions:
 
 - `feat: add retry snapshot endpoint`
 - `fix: suppress stale worker exit retries`
 - `test: cover archived-list Trello normalization`
 - `docs: document production safety posture`
 
-Each PR must still cover one cohesive change. If a feature or bug fix needs directly related cleanup
-or refactoring to make that change correct or maintainable, keep those as separate focused commits.
-Use one commit for the user-visible feature or fix and separate commits for each dedicated type of
-supporting cleanup or refactoring. Unrelated cleanup, refactoring, formatting, dependency changes,
-or tooling changes belong in a separate PR. Maintainers may rebase-merge cohesive multi-commit PRs
-without squashing, so every commit title should be a useful Conventional Commit.
+Each PR must still cover one cohesive change. Focused refactoring and related general improvements
+may remain separate when they are independently meaningful and belong to that cohesive goal. A PR
+that selects **Keep the individual commits** must have clear commit ownership: implementation and
+tests belong in their owning commit, and a later commit must not silently repair an earlier commit
+that is presented as complete. Unrelated cleanup, formatting, dependency changes, or tooling changes
+belong in a separate PR.
 
 Use `feat:` for user-visible additions and `fix:` for user-visible bug fixes. Breaking changes must
 use both Conventional Commit markers in the message that reaches `main`: `!` before the colon in the
-type or scope, such as `feat!:` or `feat(installer)!:`, and a `BREAKING CHANGE:` footer. The `!`
-makes the break visible in commit-title-only views, and the footer gives release automation the
-breaking-change changelog entry users rely on for manual action. For squash-merged PRs, put `!` in
-the PR title and put the footer in the squash commit body. For rebase-merged or intentionally
-multi-commit PRs, put both markers in the retained commit that owns the breaking change. The footer
-should explain why the break is necessary, what changed, and how users or operators migrate.
-Commitlint rejects breaking messages that have only one marker. Do not edit `CHANGELOG.md` manually;
-the release automation updates it.
+type or scope, such as `feat!:` or `feat(installer)!:`, and a `BREAKING CHANGE:` footer. The footer
+explains why the break is necessary, what changed, and how users or operators migrate.
+
+- For **Combine this pull request into one final commit**, put `!` in the PR title. CI does not
+  require a branch commit to contain the footer because the final combined message does not exist
+  yet. Before merging, maintainers must add and verify a non-placeholder `BREAKING CHANGE:` footer in
+  the final combined commit body.
+- For **Keep the individual commits**, put both markers in the retained commit that owns the breaking
+  behavior. CI requires at least one such complete commit.
+
+In either mode, a branch commit that contains either marker must contain both markers. It also
+requires a Breaking template decision and `!` in the PR title. Commitlint independently rejects an
+incomplete marker-bearing commit. Do not edit `CHANGELOG.md` manually; release automation updates it.
+
+The checked-in pull request template is the metadata contract. Select exactly one compatibility
+decision and exactly one commit-history result. Replace the `` `Because ...` `` rationale. A Breaking
+selection also requires non-placeholder `` `Breaks: ...` ``, `` `Migration: ...` ``, and
+`` `Alternative: ...` `` fields and `!` in the PR title. `Compatibility:` is not a template field,
+and the PR body does not provide a `BREAKING CHANGE:` input.
+
+The metadata command validates these visible fields, the title, the declared history result, and the
+base-to-head commit range. Commitlint validates each branch commit independently. Final merge review
+checks that the actual merge method matches the declared result and that the message reaching `main`
+contains both breaking markers when required.
+
+Older open pull requests do not need a preemptive body edit. They must adopt the current template
+metadata when they next receive substantive work after this contract merges.
 
 Before opening or retitling a pull request, run the same title check that CI uses:
 
@@ -256,9 +286,8 @@ Before opening or retitling a pull request, run the same title check that CI use
 scripts/commitlint-local title 'docs: describe static-analysis policy'
 ```
 
-Replace the sample title with the exact pull request title. Normal squash-merge PRs are covered by
-that PR-title check. For multi-commit PRs that maintainers may rebase-merge, check the commit range
-too. This stricter message check enforces that breaking commits use both `!` and a
+Replace the sample title with the exact pull request title. Also check the commit range. This stricter
+message check enforces that every marker-bearing branch commit uses both `!` and a
 `BREAKING CHANGE:` footer:
 
 ```bash
