@@ -97,7 +97,8 @@ final class LocalAgentRunnerTest {
                 .contains("- Selected by: workflow repository.default_url")
                 .contains("- Type: URL")
                 .contains("- Credential-free remote: " + repositoryUrl)
-                .contains("only when the current Trello card names no explicit repository URL or local checkout path");
+                .contains("only when the current Trello card supplies no explicit source")
+                .contains("no unambiguous repository identity in ordinary task context");
     }
 
     @Test
@@ -161,7 +162,7 @@ final class LocalAgentRunnerTest {
     }
 
     @Test
-    void includesOnlyUrlDefaultWhenUrlAndPathAreConfigured() {
+    void includesUrlIdentityAndConfiguredPathCheckoutCandidateWhenBothAreConfigured() {
         // given
         String repositoryUrl = "https://example.invalid/team/project.git";
         Path lowerPriorityPath =
@@ -177,8 +178,11 @@ final class LocalAgentRunnerTest {
                 .contains("- Type: URL")
                 .contains("- Credential-free remote: " + repositoryUrl)
                 .doesNotContain("- Type: local path")
-                .doesNotContain(lowerPriorityPath.toString());
-        assertThat(config.repository().defaultPath()).isNull();
+                .contains("- Configured checkout path candidate: " + lowerPriorityPath)
+                .contains("use that configured path before\n   searching for another local checkout")
+                .contains(
+                        "only when read-only remote inspection confirms that it\n   matches the selected repository identity");
+        assertThat(config.repository().defaultPath()).isEqualTo(lowerPriorityPath);
     }
 
     @MethodSource("missingOrBlankUrlDefaults")
@@ -218,10 +222,249 @@ final class LocalAgentRunnerTest {
     }
 
     @Test
-    void keepsExplicitCardSourcePromptAuthoritativeWhenWorkflowDefaultExists() {
+    void fullyQualifiedIssueTargetWithoutRepositoryDefaultIsNotARepositorySourceBlocker() {
+        // given
+        String issueTarget = "https://github.example/team/project/issues/123";
+        EffectiveConfig config = configWithRepository(Map.of());
+        Card card = TestCards.cardWithText(
+                "card-1",
+                "TRELLO-direct-issue-target",
+                "Ready for Codex",
+                "Update the linked issue",
+                "Add a status note to " + issueTarget + ". Do not change repository files.",
+                List.of());
+
+        // when
+        String prompt = promptPassedToCodex(config, "Task target: " + issueTarget, card);
+
+        // then
+        assertThat(prompt)
+                .contains("Task target: " + issueTarget)
+                .contains("- Status: no selected source")
+                .contains("A fully qualified GitHub issue or pull request URL is a direct external target")
+                .contains("do not require a repository checkout for that API action")
+                .contains("The absence of a selected repository is not a blocker by itself");
+    }
+
+    @Test
+    void repositoryChangingCardReceivesCompleteCheckoutPreparationOrder() {
+        // given
+        EffectiveConfig config = configWithRepository(Map.of());
+        String cardTask = "Change README.md in https://github.example/target/project and prepare a pull request.";
+
+        // when
+        String prompt = promptPassedToCodex(config, cardTask);
+
+        // then
+        String normalizedPrompt = prompt.replaceAll("\\s+", " ");
+        assertThat(normalizedPrompt)
+                .containsSubsequence(
+                        "## Repository Checkout Preparation",
+                        "If a configured checkout path candidate is shown above",
+                        "Otherwise, search the local checkouts that this run can access",
+                        "If one matching local repository exists, reuse it and do not clone the repository again",
+                        "If no matching local repository exists, clone the selected repository",
+                        "fetch the remote default branch before creating the task worktree",
+                        "Create a separate task worktree",
+                        "freshly fetched remote default branch")
+                .contains("Match a local checkout by repository identity from its configured Git remotes")
+                .contains(
+                        "Do not match by directory name, current branch, proximity, prior cards, or workspace residue")
+                .contains("If the card explicitly requests another branch, ref, base, or checkout arrangement")
+                .contains("follow that instruction instead of the default-branch worktree behavior");
+    }
+
+    @Test
+    void runtimeNoSourceContextSupersedesLegacyUnconditionalMissingSourceBlocker() {
+        // given
+        String persistedLegacyPrompt =
+                """
+                If no source is selected or the selected source is missing, unreadable, unclonable, or lacks required
+                repository/auth context, move the Trello card to `Blocked` with path-safe guidance instead of
+                guessing.
+
+                Summarize the supplied release schedule. No repository action.
+                """
+                        .strip();
+        EffectiveConfig config = configWithRepository(Map.of());
+
+        // when
+        String prompt = promptPassedToCodex(config, persistedLegacyPrompt);
+
+        // then
+        assertThat(prompt)
+                .startsWith(persistedLegacyPrompt)
+                .containsSubsequence(
+                        "If no source is selected or the selected source is missing",
+                        "## Repository Source Context",
+                        "- Status: no selected source",
+                        "This final runtime repository-source context is authoritative",
+                        "Ignore any earlier unconditional instruction to block solely because no repository source is selected",
+                        "Classify the current task before deciding whether the missing source is a blocker")
+                .contains("Repository-independent work without repository-relative references can run");
+    }
+
+    @MethodSource("repositoryNeedDecisionScenarios")
+    @ParameterizedTest(name = "{0}")
+    void repositoryNeedDecisionTableReachesAgentBoundary(
+            String scenario,
+            String cardTask,
+            Map<String, Object> repository,
+            String expectedStatus,
+            List<String> expectedInstructions) {
+        // given
+        EffectiveConfig config = configWithRepository(repository);
+
+        // when
+        String prompt = promptPassedToCodex(config, cardTask);
+
+        // then
+        assertThat(prompt)
+                .as(scenario)
+                .contains(cardTask)
+                .contains(expectedStatus)
+                .contains(expectedInstructions.toArray(String[]::new));
+    }
+
+    @MethodSource("directTargetsWithMalformedFallback")
+    @ParameterizedTest(name = "{0}")
+    void directApiTargetOverridesMalformedWorkflowFallbackWithoutCheckout(String scenario, String cardTask) {
+        // given
+        EffectiveConfig config = configWithRepository(Map.of("default_url", "ftp://source.example/team/default.git"));
+
+        // when
+        String prompt = promptPassedToCodex(config, cardTask);
+
+        // then
+        assertThat(prompt)
+                .as(scenario)
+                .contains(cardTask)
+                .contains("- Status: invalid workflow fallback")
+                .contains("exactly one unambiguous repository identity")
+                .contains("ignore this unused workflow fallback")
+                .contains("A fully qualified GitHub issue or pull request URL is a direct external target")
+                .contains("For an API-only action, act directly on that target and do not create a checkout")
+                .doesNotContain("ftp://source.example/team/default.git");
+    }
+
+    @MethodSource("repositoryChangingIdentityFormsWithMalformedFallback")
+    @ParameterizedTest(name = "{0}")
+    void repositoryChangingCardIdentityOverridesMalformedWorkflowFallback(String scenario, String cardTask) {
+        // given
+        EffectiveConfig config = configWithRepository(Map.of("default_url", "ftp://source.example/team/default.git"));
+
+        // when
+        String prompt = promptPassedToCodex(config, cardTask);
+
+        // then
+        assertThat(prompt)
+                .as(scenario)
+                .contains(cardTask)
+                .contains("- Status: invalid workflow fallback")
+                .contains("ignore this unused workflow fallback and use the card repository identity")
+                .contains("full repository, issue, pull request, or file URL; owner/repository notation")
+                .contains("prepare a checkout only because the requested work needs repository files")
+                .doesNotContain("ftp://source.example/team/default.git");
+    }
+
+    @Test
+    void malformedWorkflowUrlWithNoCardIdentityBlocksAndDoesNotPromoteConfiguredPath() {
+        // given
+        Path defaultPath =
+                tempDir.resolve("lower-priority-checkout").toAbsolutePath().normalize();
+        EffectiveConfig config = configWithRepository(
+                Map.of("default_url", "ftp://source.example/team/default.git", "default_path", defaultPath.toString()));
+        String cardTask = "Add a status note to #123. Do not change files.";
+
+        // when
+        String prompt = promptPassedToCodex(config, cardTask);
+
+        // then
+        assertThat(prompt)
+                .contains(cardTask)
+                .contains("- Status: invalid workflow fallback")
+                .contains("If the card supplies no repository identity, block unconditionally")
+                .contains("even when the task would otherwise be repository-independent")
+                .contains("A lower-priority configured path never establishes repository identity")
+                .contains("Do not promote it over this invalid selected workflow URL")
+                .contains("- Configured checkout path candidate: " + defaultPath)
+                .contains("only after card context supplies exactly one repository identity")
+                .doesNotContain("if this fallback is required");
+    }
+
+    @Test
+    void conflictingCardIdentitiesBlockInsteadOfOverridingMalformedWorkflowFallback() {
+        // given
+        EffectiveConfig config = configWithRepository(Map.of("default_url", "ftp://source.example/team/default.git"));
+        String cardTask = "Change files in https://github.example/team/one and https://github.example/team/two.";
+
+        // when
+        String prompt = promptPassedToCodex(config, cardTask);
+
+        // then
+        assertThat(prompt)
+                .contains(cardTask)
+                .contains("If card context supplies conflicting repository identities, block")
+                .contains("Do not select one arbitrarily")
+                .doesNotContain("if this fallback is required");
+    }
+
+    @Test
+    void fullyQualifiedIssueTargetRemainsDirectWhenDefaultNamesAnotherRepository() {
+        // given
+        String issueTarget = "https://github.example/target/project/issues/123";
+        EffectiveConfig config = configWithRepository(Map.of("default_url", "https://source.example/team/default.git"));
+
+        // when
+        String prompt = promptPassedToCodex(config, "Add a status note to " + issueTarget + ". No file changes.");
+
+        // then
+        assertThat(prompt)
+                .contains("Add a status note to " + issueTarget)
+                .contains("- Repository identity: source.example/team/default")
+                .contains("A fully qualified GitHub issue or pull request URL remains its own direct target")
+                .contains("even when it names a repository other than the selected source")
+                .contains(
+                        "Do not create or reuse a task checkout unless the classified task requires repository files");
+    }
+
+    @Test
+    void defaultPathRequiresAnExplicitUnambiguousCompatibleRemoteBeforeResolvingShorthand() {
+        // given
+        Path repositoryPath = tempDir.resolve("local-default").toAbsolutePath().normalize();
+        EffectiveConfig config = configWithRepository(Map.of("default_path", repositoryPath.toString()));
+
+        // when
+        String prompt = promptPassedToCodex(config, "Add a status note to #123. Do not change files.");
+
+        // then
+        assertLocalSourceIdentityPolicy(prompt);
+    }
+
+    @Test
+    void fileUrlRequiresAnExplicitUnambiguousCompatibleRemoteBeforeResolvingShorthand() {
+        // given
+        String repositoryUrl = tempDir.resolve("file-url-default")
+                .toAbsolutePath()
+                .normalize()
+                .toUri()
+                .toString();
+        EffectiveConfig config = configWithRepository(Map.of("default_url", repositoryUrl));
+
+        // when
+        String prompt = promptPassedToCodex(config, "Add a status note to #123. Do not change files.");
+
+        // then
+        assertLocalSourceIdentityPolicy(prompt);
+    }
+
+    @Test
+    void explicitRemoteKeepsConfiguredPathCandidateButSuppressesDifferentWorkflowUrl() {
         // given
         String cardRepository = "https://example.invalid/card-specific.git";
-        EffectiveConfig config = configWithRepository(Map.of("default_url", "https://example.invalid/default.git"));
+        Path defaultPath = tempDir.resolve("default-checkout");
+        EffectiveConfig config = configWithRepository(
+                Map.of("default_url", "https://example.invalid/default.git", "default_path", defaultPath.toString()));
         Card card = TestCards.cardWithText(
                 "card-1",
                 "TRELLO-explicit-source",
@@ -239,13 +482,81 @@ final class LocalAgentRunnerTest {
                 .contains("- Selected by: explicit Trello card source")
                 .contains("- Credential-free remote: " + cardRepository)
                 .contains("Explicit Trello card repository sources are authoritative and suppress workflow defaults")
-                .doesNotContain("https://example.invalid/default.git");
+                .doesNotContain("https://example.invalid/default.git")
+                .contains("- Configured checkout path candidate: "
+                        + defaultPath.toAbsolutePath().normalize())
+                .contains("never establishes or replaces repository identity")
+                .contains("only when read-only inspection of its Git remotes confirms")
+                .contains("matches the repository identity already selected from the card")
+                .contains(
+                        "Do not assume that it matches merely because the path and a workflow URL were configured together");
+    }
+
+    @Test
+    void explicitRemoteKeepsMatchingConfiguredPathCandidateAtFinalPromptBoundary() {
+        // given
+        String cardRepository = "https://example.invalid/team/project.git";
+        Path defaultPath = tempDir.resolve("matching-checkout");
+        EffectiveConfig config =
+                configWithRepository(Map.of("default_url", cardRepository, "default_path", defaultPath.toString()));
+        Card card = TestCards.cardWithText(
+                "card-1",
+                "TRELLO-explicit-matching-source",
+                "Ready for Codex",
+                "Implement feature",
+                "Repository URL: " + cardRepository,
+                List.of());
+
+        // when
+        String prompt = promptPassedToCodex(config, "Card task", card);
+
+        // then
+        assertThat(prompt)
+                .contains("- Selected by: explicit Trello card source")
+                .contains("- Credential-free remote: " + cardRepository)
+                .contains("- Configured checkout path candidate: "
+                        + defaultPath.toAbsolutePath().normalize())
+                .containsSubsequence(
+                        "Configured checkout path candidate",
+                        "use that configured path before",
+                        "searching for another local checkout")
+                .contains("Never use a configured path for a different repository");
+    }
+
+    @Test
+    void explicitLocalSourceDoesNotReceiveASecondPathCandidateAtFinalPromptBoundary() {
+        // given
+        Path selectedPath =
+                tempDir.resolve("selected-checkout").toAbsolutePath().normalize();
+        Path defaultPath =
+                tempDir.resolve("configured-checkout").toAbsolutePath().normalize();
+        EffectiveConfig config = configWithRepository(Map.of("default_path", defaultPath.toString()));
+        Card card = TestCards.cardWithText(
+                "card-1",
+                "TRELLO-explicit-local-source",
+                "Ready for Codex",
+                "Implement feature",
+                "Repository path: " + selectedPath,
+                List.of());
+
+        // when
+        String prompt = promptPassedToCodex(config, "Card task", card);
+
+        // then
+        assertThat(prompt)
+                .contains("- Selected by: explicit Trello card source")
+                .contains("- Resolved local path: " + selectedPath)
+                .doesNotContain("Configured checkout path candidate")
+                .doesNotContain(defaultPath.toString());
     }
 
     @Test
     void invalidExplicitCardSourceDoesNotFallBackToWorkflowDefaultInPrompt() {
         // given
-        EffectiveConfig config = configWithRepository(Map.of("default_url", "https://example.invalid/default.git"));
+        Path defaultPath =
+                tempDir.resolve("configured-checkout").toAbsolutePath().normalize();
+        EffectiveConfig config = configWithRepository(
+                Map.of("default_url", "https://example.invalid/default.git", "default_path", defaultPath.toString()));
         Card card = TestCards.cardWithText(
                 "card-1",
                 "TRELLO-invalid-source",
@@ -262,7 +573,10 @@ final class LocalAgentRunnerTest {
                 .contains("- Status: invalid selected source")
                 .contains("- Code: repository_remote_unsupported")
                 .contains("Do not use workflow defaults or other lower-priority fallbacks")
-                .doesNotContain("https://example.invalid/default.git");
+                .doesNotContain("https://example.invalid/default.git")
+                .doesNotContain(defaultPath.toString())
+                .doesNotContain("Configured checkout path candidate")
+                .doesNotContain("## Repository Checkout Preparation");
     }
 
     @Test
@@ -351,7 +665,7 @@ final class LocalAgentRunnerTest {
 
         // then
         assertThat(prompt)
-                .contains("- Status: invalid selected source")
+                .contains("- Status: invalid workflow fallback")
                 .contains("- Code: repository_remote_credentials_unsupported")
                 .contains("Use a credential helper or SSH")
                 .doesNotContain("token")
@@ -408,6 +722,35 @@ final class LocalAgentRunnerTest {
         // then
         Path workspace = config.workspace().root().resolve("TRELLO-path-skill-default");
         assertThat(prompt).contains("hand-authored prompt").contains("- Resolved local path: " + repositoryPath);
+        assertThat(workspace.resolve(".codex")).doesNotExist();
+        assertThat(workspace.resolve(".git/info/exclude")).doesNotExist();
+    }
+
+    @Test
+    void explicitRemoteCandidateSkillPathDoesNotTriggerBundledSkillInstallation() {
+        // given
+        String repositoryUrl = "https://example.invalid/team/project.git";
+        Path repositoryPath = tempDir.resolve(".codex/skills/symphony-trello-candidate")
+                .toAbsolutePath()
+                .normalize();
+        EffectiveConfig config =
+                configWithRepository(Map.of("default_url", repositoryUrl, "default_path", repositoryPath.toString()));
+        Card card = TestCards.cardWithText(
+                "card-1",
+                "TRELLO-candidate-skill-path",
+                "Ready for Codex",
+                "Implement feature",
+                "Repository URL: " + repositoryUrl,
+                List.of());
+
+        // when
+        String prompt = promptPassedToCodex(config, "hand-authored prompt", card);
+
+        // then
+        Path workspace = config.workspace().root().resolve("TRELLO-candidate-skill-path");
+        assertThat(prompt)
+                .contains("hand-authored prompt")
+                .contains("- Configured checkout path candidate: " + repositoryPath);
         assertThat(workspace.resolve(".codex")).doesNotExist();
         assertThat(workspace.resolve(".git/info/exclude")).doesNotExist();
     }
@@ -656,6 +999,127 @@ final class LocalAgentRunnerTest {
         return Stream.of(
                 Arguments.of("missing-defaults", Map.of()),
                 Arguments.of("blank-defaults", Map.of("REPOSITORY_URL", " ", "REPOSITORY_PATH", "\t")));
+    }
+
+    private static void assertLocalSourceIdentityPolicy(String prompt) {
+        assertThat(prompt)
+                .contains("Add a status note to #123. Do not change files.")
+                .contains("- Status: selected")
+                .contains("- Type: local path")
+                .contains(
+                        "use this local source only when read-only inspection finds exactly one explicit, unambiguous compatible remote")
+                .contains("If no such remote supplies identity, block")
+                .contains("Request a fully qualified repository URL together with the issue or pull request number")
+                .doesNotContain("A selected source supplies repository identity for repository-relative references");
+    }
+
+    private static Stream<Arguments> repositoryNeedDecisionScenarios() {
+        Map<String, Object> noDefault = Map.of();
+        Map<String, Object> validDefault = Map.of("default_url", "https://source.example/team/default.git");
+        return Stream.of(
+                Arguments.of(
+                        "repository-independent task without a default runs",
+                        "Summarize the supplied release schedule. No repository action.",
+                        noDefault,
+                        "- Status: no selected source",
+                        List.of(
+                                "The absence of a selected repository is not a blocker by itself",
+                                "Repository-independent work without repository-relative references can run")),
+                Arguments.of(
+                        "fully qualified issue URL without a default stays direct",
+                        "Add a status note to https://github.example/target/project/issues/123. No file changes.",
+                        noDefault,
+                        "- Status: no selected source",
+                        List.of(
+                                "A fully qualified GitHub issue or pull request URL is a direct external target",
+                                "do not require a repository checkout for that API action")),
+                Arguments.of(
+                        "bare issue reference without identity blocks",
+                        "Add a status note to #123. Do not change files.",
+                        noDefault,
+                        "- Status: no selected source",
+                        List.of(
+                                "Block only when the required repository identity is absent",
+                                "Do not infer repository identity from unrelated checkouts")),
+                Arguments.of(
+                        "bare issue reference uses valid selected identity without checkout",
+                        "Add a status note to #123. Do not change files.",
+                        validDefault,
+                        "- Status: selected",
+                        List.of(
+                                "- Repository identity: source.example/team/default",
+                                "This selected remote source supplies repository identity for repository-relative references",
+                                "Do not create or reuse a task checkout unless the classified task requires repository files")),
+                Arguments.of(
+                        "repository-changing task without an identity blocks",
+                        "Change the requested source file and prepare a pull request.",
+                        noDefault,
+                        "- Status: no selected source",
+                        List.of(
+                                "Block only when the required repository identity is absent",
+                                "when the required checkout cannot be prepared")),
+                Arguments.of(
+                        "repository-changing task with an unlabelled full repository URL runs",
+                        "Change README.md in https://github.example/target/project and prepare a pull request.",
+                        noDefault,
+                        "- Status: no selected source",
+                        List.of(
+                                "A single unambiguous repository identity in the Trello card is sufficient",
+                                "derive its normal credential-free clone URL",
+                                "prepare a writable checkout when the requested work needs repository files")),
+                Arguments.of(
+                        "malformed configured default blocks an independent task",
+                        "Summarize the supplied release schedule. No repository action.",
+                        Map.of("default_url", "ftp://source.example/team/default.git"),
+                        "- Status: invalid workflow fallback",
+                        List.of(
+                                "If the card supplies no repository identity, block unconditionally",
+                                "even when the task would otherwise be repository-independent",
+                                "Do not treat it as absent or use a lower-priority fallback")),
+                Arguments.of(
+                        "unambiguous card repository overrides a malformed workflow fallback",
+                        "Change README.md in https://github.example/target/project and prepare a pull request.",
+                        Map.of("default_url", "ftp://source.example/team/default.git"),
+                        "- Status: invalid workflow fallback",
+                        List.of(
+                                "If card context supplies exactly one repository identity",
+                                "ignore this unused workflow fallback and use the card repository identity",
+                                "derive the card repository's normal credential-free clone URL")),
+                Arguments.of(
+                        "valid default keeps independent task independent and guards later unusability",
+                        "Summarize the supplied release schedule. No repository action.",
+                        validDefault,
+                        "- Status: selected",
+                        List.of(
+                                "does not by itself make the task repository-changing",
+                                "Do not create or reuse a task checkout unless the classified task requires repository files",
+                                "If this workflow fallback is actually needed",
+                                "Do not block because an unused fallback is unavailable")));
+    }
+
+    private static Stream<Arguments> directTargetsWithMalformedFallback() {
+        return Stream.of(
+                Arguments.of(
+                        "full issue URL remains checkout-free",
+                        "Comment on https://github.example/target/project/issues/123. Do not change files."),
+                Arguments.of(
+                        "full pull-request URL remains checkout-free",
+                        "Comment on https://github.example/target/project/pull/456. Do not change files."));
+    }
+
+    private static Stream<Arguments> repositoryChangingIdentityFormsWithMalformedFallback() {
+        return Stream.of(
+                Arguments.of(
+                        "full repository URL",
+                        "Change README.md in https://github.example/target/project and prepare a pull request."),
+                Arguments.of(
+                        "full issue URL",
+                        "Fix the code requested by https://github.example/target/project/issues/123."),
+                Arguments.of(
+                        "full pull-request URL", "Update files for https://github.example/target/project/pull/456."),
+                Arguments.of(
+                        "full repository file URL", "Edit https://github.example/target/project/blob/main/README.md."),
+                Arguments.of("owner/repository", "Change README.md in target/project and prepare a pull request."));
     }
 
     private static void blockUntilInterruptedOrTimedOut() throws InterruptedException {

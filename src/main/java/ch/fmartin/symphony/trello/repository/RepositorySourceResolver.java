@@ -88,8 +88,12 @@ public final class RepositorySourceResolver {
 
     private RepositorySourceSelection workflowDefault(EffectiveConfig.RepositoryConfig repository) {
         if (repository.defaultUrl() != null) {
-            return parse(
+            RepositorySourceSelection selection = parse(
                     repository.defaultUrl(), RepositorySource.Origin.WORKFLOW_DEFAULT_URL, SourceMode.REMOTE_OR_FILE);
+            if (selection.status() == RepositorySourceSelection.Status.INVALID_SELECTED) {
+                return RepositorySourceSelection.invalidWorkflowFallback(selection.problem());
+            }
+            return selection;
         }
         if (repository.defaultPath() != null) {
             return RepositorySourceSelection.selected(new RepositorySource(

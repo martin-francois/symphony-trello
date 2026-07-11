@@ -478,17 +478,73 @@ Use the normal clone URL for the project. Generic Git remotes supported by the w
 valid too; the repository does not have to be hosted on GitHub. Do not include credentials, query
 strings, or fragments.
 
-With this setting, Symphony gives Codex that repository context for every card handled by the
-workflow. A card can still override the workflow default when it needs a different repository by
-including one labelled line in the title, description, or a Trello comment:
+With this setting, Symphony gives Codex fallback repository context for cards handled by the
+workflow. A card can override the workflow default when it clearly identifies a different
+repository. A labelled source line is the most explicit form:
 
 ```text
 Repository URL: https://github.com/OTHER-OWNER/OTHER-REPO.git
 ```
 
-The selected source order is: card repository source, then `repository.default_url`, then
-`repository.default_path`, then no selected repository. For local repositories, use
-`repository.default_path` instead of `repository.default_url`.
+The effective order is: explicit card repository source, then one unambiguous repository identity
+in ordinary card task context, then `repository.default_url`, then `repository.default_path`, then
+no repository. For local repositories, use `repository.default_path` instead of
+`repository.default_url`.
+
+A selected source provides repository context. It does not make every card a repository-changing
+task, and Codex should not create a checkout unless the card needs repository files. A fully
+qualified GitHub issue or pull request URL remains its own direct API target, even when it names a
+different repository. A full repository, issue, pull-request, or file URL, `owner/repository`, or
+equivalent unambiguous card context supplies repository identity without requiring a special label.
+Codex derives the normal credential-free clone URL from that identity only when the requested work
+needs repository files. A selected remote URL also includes repository identity. For a selected local path
+or `file://` source, Codex uses a repository-relative issue or pull request reference only when
+read-only inspection finds exactly one explicit, unambiguous compatible remote. Otherwise, Codex
+blocks and requests a fully qualified repository URL together with the issue or pull request number.
+It does not derive identity from the local path, directory name, or branch.
+
+Codex validates an explicit selected source with a read-only probe before it works on the card. A
+workflow default is validated only when the card does not identify another repository. Validation does
+not create a checkout or write to the selected source. A malformed, unavailable, unreadable, or
+uncheckoutable selected source blocks the card even when the requested work would otherwise be
+repository-independent. When no source is selected, repository-independent work and direct fully
+qualified API targets can proceed. Codex must not infer repository identity from unrelated checkouts,
+earlier cards, or files left in the workspace.
+
+If `repository.default_url` remains malformed after compatibility normalization, exactly one
+unambiguous card repository identity overrides that unused fallback. Full issue and pull-request URLs
+remain checkout-free for API-only work; repository-changing work may use a full repository, issue,
+pull-request, or file URL, `owner/repository`, or equivalent single identity. With no card identity,
+the malformed workflow URL blocks unconditionally, including for repository-independent work. With
+conflicting card identities, Codex blocks rather than choosing one. A lower-priority
+`repository.default_path` never supplies identity or replaces the malformed selected URL; after one
+card identity overrides the URL, the path is only a checkout candidate whose Git remotes must match
+that identity.
+
+When a task needs repository files, Codex prepares the checkout only after selecting one repository
+identity. A configured `repository.default_path` remains a candidate when the selected identity is a
+remote, including an explicit card remote, but it is used first only after read-only inspection proves
+its Git remotes match that identity. The configured path never establishes identity, and Codex does
+not assume it matches merely because it was configured with a workflow URL. An explicitly selected
+local path is already the selected checkout and does not receive a second configured path candidate.
+Otherwise, Codex searches accessible local checkouts and compares their Git remotes with the selected
+identity; one matching checkout is reused without cloning, while an ambiguous match blocks. Codex
+clones only when no matching local repository exists. For either a reused or new repository, it
+fetches the remote default branch before creating a separate task worktree from that freshly fetched
+branch. A card that
+explicitly requests another branch, ref, base, or checkout arrangement overrides this default. Local
+directory names, current branches, earlier cards, and workspace residue never establish repository
+identity.
+
+Existing workflow files keep compatibility for `repository.default_url` values wrapped like prose
+tokens or followed by prose punctuation. Symphony removes that outer punctuation before validation.
+A default URL that is valid after this normalization is a selected source, not a malformed one.
+Existing persisted `WORKFLOW.md` files also do not need regeneration for repository-need
+classification. Symphony appends a final authoritative runtime repository-source context after the
+workflow prompt. When that context reports no selected source, it explicitly supersedes legacy
+instructions that blocked unconditionally on a missing source and requires the current task to be
+classified first. "No selected source" does not mean "no repository": Codex still uses a single
+unambiguous repository identity in ordinary card context.
 
 Move a card to `Merging` when you have reviewed it and want Codex to merge the PR. `Merging` tells
 Codex to do final checks, review PR comments and checks, follow the repository's merge policy, and
@@ -745,7 +801,9 @@ repository:
 ```
 
 Use `repository.default_url` when every card in this workflow belongs to the same GitHub repository.
-Use `repository.default_path` when every card should use the same local repository checkout.
+Use `repository.default_path` when every card should use the same local repository checkout. You may
+set both for the same repository: the URL remains the fallback identity and clone source, while the
+path is the first checkout candidate and is used only when its Git remote matches that identity.
 
 Operationally, use the board like this:
 

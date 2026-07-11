@@ -169,10 +169,15 @@ final class RepositorySourceResolverTest {
         assertThat(selection.problem().code()).isEqualTo("repository_remote_unsupported");
     }
 
-    @Test
-    void ignoresUnlabelledOrdinaryWebLinks() {
+    @CsvSource({
+        "See https://github.example/team/project.git for background.",
+        "Update https://github.example/team/project/issues/123.",
+        "Review https://github.example/team/project/pull/123."
+    })
+    @ParameterizedTest(name = "{0}")
+    void ignoresUnlabelledOrdinaryWebLinks(String description) {
         // given
-        Card card = cardWithDescription("See https://github.example/team/project.git for background.");
+        Card card = cardWithDescription(description);
 
         // when
         RepositorySourceSelection selection = resolver.select(card, noDefault());

@@ -44,6 +44,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 final class TrelloBoardSetupTest {
+    private static final String REPOSITORY_POLICY_HEADING = "## Classify Repository Need Before Source Blocking";
+    private static final String REPOSITORY_SOURCE_PRECEDENCE_HEADING = "## Repository Source Precedence";
+
     private FakeTrelloServer trello;
     private TrelloBoardSetup setup;
     private final List<String> createdLists = new ArrayList<>();
@@ -607,12 +610,13 @@ final class TrelloBoardSetupTest {
                 .contains("default_path: null")
                 .contains("## Repository Source Precedence")
                 .contains("1. An explicit Trello card repository URL or local checkout path.")
-                .contains("2. Workflow `repository.default_url`.")
-                .contains("3. Workflow `repository.default_path`.")
-                .contains("4. No selected repository.")
+                .contains("2. One unambiguous repository identity in ordinary Trello card task context.")
+                .contains("3. Workflow `repository.default_url`.")
+                .contains("4. Workflow `repository.default_path`.")
+                .contains("5. No selected repository.")
                 .contains("Repository URL: <url>")
                 .contains("Repository path: <path>")
-                .contains("Ordinary unlabelled web links are not selected as repositories")
+                .contains("Ordinary unlabelled web links are not explicit source declarations")
                 .contains("Each source declaration is read from one logical line")
                 .contains("URL labels and `repository.default_url` accept credential-free HTTP(S)")
                 .contains("Path and checkout labels accept local checkout paths")
@@ -620,16 +624,25 @@ final class TrelloBoardSetupTest {
                 .contains("A valid selected source wins and suppresses lower-priority fallbacks")
                 .contains("An invalid explicit Trello card source\nblocks instead of falling back")
                 .contains("Repository preparation is workflow-owned in this phase")
-                .contains("For a selected repository URL, create or reuse a\nwritable checkout")
-                .contains("For a selected local checkout path, treat that\npath as source context")
-                .contains("clone from it into the current per-card workspace")
-                .contains("do not inherit the source checkout's current branch")
-                .contains("repository's default branch")
-                .contains("the Trello card clearly requests another base")
-                .contains("Do not edit the shared checkout directly")
-                .contains("direct work, the checkout is writable")
-                .contains("Git metadata writes when the card asks for direct commits")
-                .contains("does not by itself guarantee that direct checkout commits can\nupdate Git metadata")
+                .contains("## Repository Checkout Preparation")
+                .contains("use that configured path before\n   searching for another local checkout")
+                .contains("search the local checkouts that this run can access")
+                .contains("identity from its configured Git remotes")
+                .contains("reuse it and do not clone")
+                .contains("the repository again")
+                .contains("If no matching local repository exists, clone the selected repository")
+                .contains("the remote default branch before creating the task worktree")
+                .contains("Create a separate task worktree")
+                .contains("freshly fetched remote default branch")
+                .contains("explicitly requests another branch, ref, base, or checkout arrangement")
+                .contains("instruction instead of the default-branch worktree behavior")
+                .contains("Do not edit a shared checkout worktree directly")
+                .contains("direct work,")
+                .contains("the checkout is writable")
+                .contains("Git metadata writes")
+                .contains("when the card asks for direct commits")
+                .contains("does not by itself guarantee that direct checkout commits can")
+                .contains("update Git metadata")
                 .contains("move the Trello card to \"Blocked\" with path-safe guidance instead of guessing")
                 .contains("## Completion Bar Before \"Human Review\"")
                 .contains("A pull request exists and is linked in the workpad and handoff comment")
@@ -738,6 +751,105 @@ final class TrelloBoardSetupTest {
     }
 
     @Test
+    void generatedWorkflowCoversRepositoryNeedDecisionTableBeforeSourceBlocking() throws IOException {
+        // given
+        Path workflow = tempDir.resolve("repository-need-policy.md");
+
+        // when
+        setup.createRecommendedBoard(new TrelloBoardSetup.NewBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "Repository Need Policy",
+                null,
+                workflow,
+                Path.of("./workspaces"),
+                null,
+                1,
+                false,
+                false));
+
+        // then
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("Classify Repository Need Before Source Blocking")
+                .contains(
+                        "final runtime `Repository Source Context` after this persisted workflow prompt",
+                        "authoritative for repository-source selection, task classification, and source blocker",
+                        "decisions.")
+                .contains(
+                        "ignore that earlier unconditional missing-source blocker",
+                        "classify the current task before deciding",
+                        "whether the missing source is a blocker")
+                .contains("Inspect repository state only when", "the task uses repository identity or files")
+                .contains("When a repository is involved, also determine its state, branch")
+                .contains("Do not", "require branch or commit evidence when no repository changed")
+                .doesNotContain("Read the Trello description carefully, inspect the repository")
+                .doesNotContain("Determine the current list, repository state")
+                .contains(
+                        "Repository-independent work without repository-relative references can run without a selected source")
+                .contains("A fully qualified GitHub issue or pull request URL is a direct external target")
+                .contains("Do not clone its repository when the", "card only asks for an API action")
+                .contains("One unambiguous repository identity in ordinary card context is sufficient")
+                .contains("derive the normal credential-free clone URL")
+                .contains("A selected remote URL also includes", "repository identity without requiring a checkout")
+                .contains(
+                        "A selected local source can provide identity only",
+                        "when read-only inspection finds exactly one explicit, unambiguous compatible remote")
+                .contains(
+                        "If no such remote",
+                        "supplies identity, block and request a fully qualified repository URL together with the issue or pull",
+                        "request number")
+                .contains("Do not derive repository identity from the local path, directory name, or branch")
+                .doesNotContain("A usable selected source can")
+                .contains("Block only when required repository identity is absent, conflicting, or unusable")
+                .contains(
+                        "Existing",
+                        "`repository.default_url` values preserve compatibility by normalizing outer token wrapping and trailing")
+                .contains("A normalized default URL reported as selected is not malformed")
+                .doesNotContain("workflow defaults preserve compatibility")
+                .contains(
+                        "If a workflow `repository.default_url` remains malformed after compatibility normalization",
+                        "card context supplies exactly one unambiguous repository identity",
+                        "ignore the malformed workflow",
+                        "fallback and use the card identity",
+                        "full repository, issue, pull-request, or file URL",
+                        "`owner/repository`")
+                .contains(
+                        "If card context supplies no repository identity, the malformed workflow URL is the selected invalid",
+                        "source. Block unconditionally, even for repository-independent work")
+                .contains(
+                        "If card context supplies conflicting repository identities, block instead of selecting one",
+                        "arbitrarily")
+                .contains(
+                        "For API-only work, a full issue or pull-request URL remains a direct target and needs no checkout")
+                .doesNotContain("if this fallback is required")
+                .contains(
+                        "An explicit Trello card source that wins selection must be validated even when the task is repository-independent")
+                .contains("A workflow default is only a fallback")
+                .contains("Use a read-only probe")
+                .contains("Do not create a checkout or write to the selected source during validation")
+                .doesNotContain("disposable probe")
+                .contains("A malformed, unavailable, unreadable, or uncheckoutable selected source must block")
+                .contains(
+                        "A valid selected source does not turn repository-independent work into repository-changing work")
+                .contains(
+                        "Do not infer repository identity from unrelated checkouts, prior Trello cards, or leftover workspace contents");
+
+        String generatedWorkflow = Files.readString(workflow, StandardCharsets.UTF_8);
+        assertThat(generatedWorkflow.replaceAll("\\s+", " "))
+                .contains(
+                        "A lower-priority `repository.default_path` never establishes repository identity",
+                        "only after exactly one card repository identity overrides the malformed URL",
+                        "read-only inspection of the path's Git remotes confirms that identity");
+        String generatedPolicy = repositoryPolicySection(generatedWorkflow);
+        String examplePolicy =
+                repositoryPolicySection(Files.readString(Path.of("WORKFLOW.example.md"), StandardCharsets.UTF_8));
+        assertThat(examplePolicy)
+                .as("shipped workflow example repository policy")
+                .isEqualToNormalizingWhitespace(generatedPolicy);
+    }
+
+    @Test
     void createsNonGithubRecommendedBoardListsAndWorkflow() {
         // given
         Path workflow = tempDir.resolve("non-github-workflow.md");
@@ -771,14 +883,17 @@ final class TrelloBoardSetupTest {
                 .contains("## Repository Source Precedence")
                 .contains("Workflow `repository.default_url`")
                 .contains("Workflow `repository.default_path`")
-                .contains("clone from it into the current per-card workspace")
-                .contains("do not inherit the source checkout's current branch")
-                .contains("repository's default branch")
-                .contains("the Trello card clearly requests another base")
+                .contains("## Repository Checkout Preparation")
+                .contains("search the local checkouts that this run can access")
+                .contains("freshly fetched remote default branch")
+                .contains("explicitly requests another branch, ref, base, or checkout arrangement")
                 .contains("explicitly requests direct work")
-                .contains("direct work, the checkout is writable")
-                .contains("Git metadata writes when the card asks for direct commits")
-                .contains("does not by itself guarantee that direct checkout commits can\nupdate Git metadata")
+                .contains("direct work,")
+                .contains("the checkout is writable")
+                .contains("Git metadata writes")
+                .contains("when the card asks for direct commits")
+                .contains("does not by itself guarantee that direct checkout commits can")
+                .contains("update Git metadata")
                 .contains("move the Trello card to \"Blocked\" with path-safe guidance instead of guessing")
                 .contains("## Local And Non-GitHub Repository Work")
                 .contains("do not require GitHub auth")
@@ -930,19 +1045,23 @@ final class TrelloBoardSetupTest {
                 .contains("default_path: null")
                 .contains("## Repository Source Precedence")
                 .contains("1. An explicit Trello card repository URL or local checkout path.")
-                .contains("2. Workflow `repository.default_url`.")
-                .contains("3. Workflow `repository.default_path`.")
-                .contains("4. No selected repository.")
+                .contains("2. One unambiguous repository identity in ordinary Trello card task context.")
+                .contains("3. Workflow `repository.default_url`.")
+                .contains("4. Workflow `repository.default_path`.")
+                .contains("5. No selected repository.")
                 .contains("Repository URL: <url>")
-                .contains("Ordinary unlabelled web links are not selected as repositories")
-                .contains("clone from it into the current per-card workspace")
-                .contains("do not inherit the source checkout's current branch")
-                .contains("repository's default branch")
-                .contains("the Trello card clearly requests another base")
+                .contains("Ordinary unlabelled web links are not explicit source declarations")
+                .contains("## Repository Checkout Preparation")
+                .contains("search the local checkouts that this run can access")
+                .contains("freshly fetched remote default branch")
+                .contains("explicitly requests another branch, ref, base, or checkout arrangement")
                 .contains("explicitly requests direct work")
-                .contains("direct work, the checkout is writable")
-                .contains("Git metadata writes when the card asks for direct commits")
-                .contains("does not by itself guarantee that direct checkout commits can\nupdate Git metadata")
+                .contains("direct work,")
+                .contains("the checkout is writable")
+                .contains("Git metadata writes")
+                .contains("when the card asks for direct commits")
+                .contains("does not by itself guarantee that direct checkout commits can")
+                .contains("update Git metadata")
                 .contains("move the Trello card to \"Blocked\" with path-safe guidance instead of guessing")
                 .contains("workspace-local skills")
                 .contains("after workspace sync hooks")
@@ -994,16 +1113,18 @@ final class TrelloBoardSetupTest {
                 .contains("`Proceed anyway`")
                 .contains("## Repository Source Precedence")
                 .contains("Repository URL: <url>")
-                .contains("Ordinary unlabelled web links are not selected as repositories")
-                .contains("For a selected local checkout path, treat that")
-                .contains("clone from it into the current per-card workspace")
-                .contains("do not inherit the source checkout's current branch")
-                .contains("repository's default branch")
-                .contains("the Trello card clearly requests another base")
+                .contains("Ordinary unlabelled web links are not explicit source declarations")
+                .contains("## Repository Checkout Preparation")
+                .contains("search the local checkouts that this run can access")
+                .contains("freshly fetched remote default branch")
+                .contains("explicitly requests another branch, ref, base, or checkout arrangement")
                 .contains("explicitly requests direct work")
-                .contains("direct work, the checkout is writable")
-                .contains("Git metadata writes when the card asks for direct commits")
-                .contains("does not by itself guarantee that direct checkout commits can\nupdate Git metadata")
+                .contains("direct work,")
+                .contains("the checkout is writable")
+                .contains("Git metadata writes")
+                .contains("when the card asks for direct commits")
+                .contains("does not by itself guarantee that direct checkout commits can")
+                .contains("update Git metadata")
                 .contains("move the Trello card to \"Human Review\" with path-safe guidance instead of guessing");
     }
 
@@ -1033,15 +1154,17 @@ final class TrelloBoardSetupTest {
                 .contains("Scheduler-enforced prerequisites come only from normal Trello checklists")
                 .contains("`Proceed anyway`")
                 .contains("## Repository Source Precedence")
-                .contains("For a selected local checkout path, treat that")
-                .contains("clone from it into the current per-card workspace")
-                .contains("do not inherit the source checkout's current branch")
-                .contains("repository's default branch")
-                .contains("the Trello card clearly requests another base")
+                .contains("## Repository Checkout Preparation")
+                .contains("search the local checkouts that this run can access")
+                .contains("freshly fetched remote default branch")
+                .contains("explicitly requests another branch, ref, base, or checkout arrangement")
                 .contains("explicitly requests direct work")
-                .contains("direct work, the checkout is writable")
-                .contains("Git metadata writes when the card asks for direct commits")
-                .contains("does not by itself guarantee that direct checkout commits can\nupdate Git metadata")
+                .contains("direct work,")
+                .contains("the checkout is writable")
+                .contains("Git metadata writes")
+                .contains("when the card asks for direct commits")
+                .contains("does not by itself guarantee that direct checkout commits can")
+                .contains("update Git metadata")
                 .contains("record a path-safe blocker in the workpad")
                 .contains("operator must move the Trello card to the appropriate blocked list")
                 .doesNotContain("move the Trello card to \"Done\" with path-safe guidance");
@@ -1453,15 +1576,17 @@ final class TrelloBoardSetupTest {
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("## Repository Source Precedence")
-                .contains("For a selected local checkout path, treat that")
-                .contains("clone from it into the current per-card workspace")
-                .contains("do not inherit the source checkout's current branch")
-                .contains("repository's default branch")
-                .contains("the Trello card clearly requests another base")
+                .contains("## Repository Checkout Preparation")
+                .contains("search the local checkouts that this run can access")
+                .contains("freshly fetched remote default branch")
+                .contains("explicitly requests another branch, ref, base, or checkout arrangement")
                 .contains("explicitly requests direct work")
-                .contains("direct work, the checkout is writable")
-                .contains("Git metadata writes when the card asks for direct commits")
-                .contains("does not by itself guarantee that direct checkout commits can\nupdate Git metadata")
+                .contains("direct work,")
+                .contains("the checkout is writable")
+                .contains("Git metadata writes")
+                .contains("when the card asks for direct commits")
+                .contains("does not by itself guarantee that direct checkout commits can")
+                .contains("update Git metadata")
                 .contains("move the Trello card to \"Needs Help\" with path-safe guidance instead of guessing")
                 .contains("Do not move the card to \"Review\"")
                 .contains("card to \"Review\" or merging from Merging")
@@ -2769,6 +2894,16 @@ final class TrelloBoardSetupTest {
 
     private static EffectiveConfig resolve(Path workflow) {
         return new ConfigResolver().resolve(new WorkflowLoader().load(workflow));
+    }
+
+    private static String repositoryPolicySection(String workflow) {
+        int start = workflow.indexOf(REPOSITORY_POLICY_HEADING);
+        assertThat(start).as("repository policy heading offset").isGreaterThanOrEqualTo(0);
+        int precedence = workflow.indexOf(REPOSITORY_SOURCE_PRECEDENCE_HEADING, start);
+        assertThat(precedence).as("repository source precedence heading offset").isGreaterThan(start);
+        int end = workflow.indexOf("\n## ", precedence + REPOSITORY_SOURCE_PRECEDENCE_HEADING.length());
+        assertThat(end).as("next workflow section heading offset").isGreaterThan(precedence);
+        return workflow.substring(start, end);
     }
 
     private static void writeExistingWorkflow(Path workflow, String codexFields) throws IOException {
