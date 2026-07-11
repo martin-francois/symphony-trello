@@ -7,24 +7,34 @@ import org.jspecify.annotations.Nullable;
 
 @NullMarked
 public record RepositorySourceSelection(
-        Status status, @Nullable RepositorySource source, @Nullable RepositorySourceProblem problem) {
+        Status status,
+        @Nullable RepositorySource source,
+        @Nullable RepositorySourceProblem problem,
+        boolean invalidWorkflowFallback) {
     public RepositorySourceSelection {
         checkArgument(status != null, "Repository source selection status is required");
         checkArgument(status != Status.SELECTED || source != null, "Selected repository source is required");
         checkArgument(
                 status != Status.INVALID_SELECTED || problem != null, "Invalid repository source problem is required");
+        checkArgument(
+                !invalidWorkflowFallback || status == Status.INVALID_SELECTED,
+                "Only an invalid workflow fallback can carry fallback state");
     }
 
     public static RepositorySourceSelection selected(RepositorySource source) {
-        return new RepositorySourceSelection(Status.SELECTED, source, null);
+        return new RepositorySourceSelection(Status.SELECTED, source, null, false);
     }
 
     public static RepositorySourceSelection invalid(RepositorySourceProblem problem) {
-        return new RepositorySourceSelection(Status.INVALID_SELECTED, null, problem);
+        return new RepositorySourceSelection(Status.INVALID_SELECTED, null, problem, false);
+    }
+
+    public static RepositorySourceSelection invalidWorkflowFallback(RepositorySourceProblem problem) {
+        return new RepositorySourceSelection(Status.INVALID_SELECTED, null, problem, true);
     }
 
     public static RepositorySourceSelection none() {
-        return new RepositorySourceSelection(Status.NONE, null, null);
+        return new RepositorySourceSelection(Status.NONE, null, null, false);
     }
 
     public enum Status {

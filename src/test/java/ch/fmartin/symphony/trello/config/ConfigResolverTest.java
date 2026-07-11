@@ -261,7 +261,7 @@ final class ConfigResolverTest {
     }
 
     @Test
-    void repositoryDefaultUrlTakesPrecedenceOverRepositoryDefaultPath() throws Exception {
+    void repositoryDefaultUrlKeepsRepositoryDefaultPathAsCheckoutCandidate() throws Exception {
         // given
         Path workflow = writeDefaultWorkflow(
                 "WORKFLOW.repository-url-over-path.md",
@@ -277,7 +277,10 @@ final class ConfigResolverTest {
 
         // then
         assertThat(config.repository().defaultUrl()).isEqualTo("https://github.com/example/project.git");
-        assertThat(config.repository().defaultPath()).isNull();
+        assertThat(config.repository().defaultPath())
+                .isEqualTo(tempDir.resolve("../repositories/project")
+                        .toAbsolutePath()
+                        .normalize());
         assertThat(config.repository().selectedDefaultSource()).isEqualTo(EffectiveConfig.DefaultSource.URL);
     }
 
@@ -298,7 +301,7 @@ final class ConfigResolverTest {
     }
 
     @Test
-    void environmentRepositoryDefaultUrlSuppressesMalformedLowerPriorityEnvironmentPath() {
+    void environmentRepositoryDefaultUrlIgnoresMalformedLowerPriorityEnvironmentPath() {
         // given
         AtomicInteger pathEnvironmentRequests = new AtomicInteger();
         ConfigResolver resolver = new ConfigResolver(name -> switch (name) {
@@ -318,7 +321,7 @@ final class ConfigResolverTest {
         // then
         assertThat(config.repository().defaultUrl()).isEqualTo("ssh://git@example.com/team/project.git");
         assertThat(config.repository().defaultPath()).isNull();
-        assertThat(pathEnvironmentRequests).hasValue(0);
+        assertThat(pathEnvironmentRequests).hasValue(1);
     }
 
     @MethodSource("missingOrBlankUrlWithValidPath")

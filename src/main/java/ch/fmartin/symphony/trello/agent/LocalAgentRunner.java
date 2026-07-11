@@ -116,8 +116,10 @@ public class LocalAgentRunner implements AgentRunner {
     private String withRepositorySourceContext(AgentRunRequest request) {
         return withRepositorySourceContext(
                 request.prompt(),
-                RepositorySourcePrompt.render(repositorySources.select(
-                        request.card(), request.config().repository())));
+                RepositorySourcePrompt.render(
+                        repositorySources.select(
+                                request.card(), request.config().repository()),
+                        request.config().repository()));
     }
 
     private static String withRepositorySourceContext(String prompt, String repositoryContext) {

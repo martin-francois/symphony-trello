@@ -259,9 +259,20 @@ public class ConfigResolver {
     private EffectiveConfig.RepositoryConfig repositoryConfig(Path workflowDirectory, Map<String, Object> repository) {
         String defaultUrl = optionalEnvironmentString(repository, "default_url");
         if (defaultUrl != null) {
-            return new EffectiveConfig.RepositoryConfig(defaultUrl, null);
+            return new EffectiveConfig.RepositoryConfig(
+                    defaultUrl, optionalLowerPriorityRepositoryPath(workflowDirectory, repository));
         }
         return new EffectiveConfig.RepositoryConfig(null, optionalRepositoryPath(workflowDirectory, repository));
+    }
+
+    private Path optionalLowerPriorityRepositoryPath(Path workflowDirectory, Map<String, Object> repository) {
+        try {
+            return optionalRepositoryPath(workflowDirectory, repository);
+        } catch (ConfigException ignored) {
+            // The URL remains the selected source. An unusable lower-priority path cannot be a
+            // checkout candidate and retains the existing URL-over-path compatibility behavior.
+            return null;
+        }
     }
 
     private String secret(

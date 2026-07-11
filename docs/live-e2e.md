@@ -84,6 +84,77 @@ reaches `Human Review`, and that the output file contains the run id.
 Use the manual sections below when you need a step-by-step reproduction, real-Codex coverage,
 deployment troubleshooting, or a scenario the Java harness does not automate yet.
 
+## Optional Repository-Need Classification Matrix
+
+Use this opt-in procedure to verify repository-source classification with real Codex, real Trello,
+and real GitHub. The deterministic tests verify the generated and runtime prompt contract; they do
+not prove how a model follows that contract.
+
+Before starting, obtain explicit authority to create and remove two run-scoped private GitHub sandbox
+repositories, their issues, and one disposable Trello board. Use a GitHub CLI login that can comment
+on the sandbox issues and remove the repositories during cleanup. Configure the workflow to use the
+build under test and real `codex app-server`.
+
+1. Create a unique run id, a disposable Trello board with the generated active/review/blocked lists,
+   two private sandbox repositories, and one issue in each repository.
+2. Keep one repository as `<workflow-default-repository>` and the other as
+   `<direct-target-repository>`.
+3. For each table row, update the workflow default as shown, restart or reload the worker, create a
+   fresh Trello card with the task text, and move it to `Ready for Codex`.
+4. After every non-blocked row, verify the card reaches `Human Review`, `/api/v1/state` drains, and no
+   new blocker comment appears. For API-only rows, inspect the per-card workspace and verify Codex did
+   not create a Git checkout or repository clone; workspace-local Symphony skill files may exist.
+5. After every blocked row, verify the card reaches `Blocked`, the workpad gives the expected safe
+   reason, and no GitHub issue or repository was changed.
+
+| Card task | Workflow default | Required live result |
+| --- | --- | --- |
+| Perform a repository-independent Trello-only status action with no repository-relative reference. | None | Run and hand off without a checkout. |
+| Add a status note to the full issue URL in `<direct-target-repository>` and do not change files. | None | Comment on that exact issue, hand off, and create no checkout. |
+| Add a status note to the full pull-request URL in `<direct-target-repository>` and do not change files. | None | Comment on that exact pull request, hand off, and create no checkout. |
+| Add a status note to the full issue URL in `<direct-target-repository>` and do not change files. | Malformed `<workflow-default-repository>` URL | Ignore the malformed fallback, comment on that exact issue, hand off, and create no checkout. |
+| Add a status note to the full pull-request URL in `<direct-target-repository>` and do not change files. | Malformed `<workflow-default-repository>` URL | Ignore the malformed fallback, comment on that exact pull request, hand off, and create no checkout. |
+| Add a status note to a bare `#<issue-number>` reference. | None | Move to `Blocked` because repository identity is ambiguous; do not comment on either issue. |
+| Add a status note to a bare `#<issue-number>` reference. | Valid `<workflow-default-repository>` clone URL | Resolve the issue in the default repository, comment, hand off, and create no checkout. |
+| Add a status note to a bare `#<issue-number>` reference. | Malformed workflow URL plus a valid lower-priority path | Move to `Blocked`; the path must not replace the invalid selected URL or establish identity. |
+| Change a repository file in the repository identified by a full repository, issue, pull-request, or file URL and prepare the normal review artifact. | None | Resolve that repository, prepare its checkout, change the file, and hand off. |
+| Change a repository file in the repository clearly identified as `owner/repository` and prepare the normal review artifact. | None | Resolve that repository, prepare its checkout, change the file, and hand off. |
+| Change a repository file using each identity form above or `owner/repository`. | Malformed `<workflow-default-repository>` URL | Ignore the malformed fallback, select the single card repository, prepare a checkout because files are needed, and hand off. |
+| Change a repository file while naming two conflicting repository identities. | Any malformed fallback | Move to `Blocked`; do not choose one card identity or use the fallback. |
+| Change a repository file without identifying any repository. | None | Move to `Blocked` because repository identity is ambiguous. |
+| Perform the repository-independent status action. | A `repository.default_url` value that remains invalid after compatibility normalization, or a valid-looking source that a read-only probe proves unavailable, unreadable, or uncheckoutable | Move to `Blocked`; do not treat the broken selected source as absent. |
+| Perform the repository-independent status action. | Valid `<workflow-default-repository>` clone URL | Run and hand off; validate the selected source read-only and create no checkout. |
+
+For each full-URL row, keep the workflow default absent. In a second targeted check, configure the
+other repository as the valid default and repeat the direct-target task; the card's repository must
+still win and must not be replaced by the default repository identity.
+
+For checkout-candidate coverage, configure remote repository A together with path P, then select A
+from an explicit card remote and repeat with a different workflow URL B. In both cases A remains the
+identity, P appears only as a candidate, and P is used before general discovery only after read-only
+inspection proves its Git remotes match A. The test must not infer that P belongs to A merely because
+P and a workflow URL were configured together. Repeat with an explicitly selected local path L and
+verify P is not emitted as a second candidate.
+
+For a local-source identity check, configure the default as a local path and then as the equivalent
+`file://` URL. A bare issue reference may run only when read-only inspection finds exactly one
+explicit, unambiguous compatible remote. Remove that remote or make the compatible remote selection
+ambiguous and repeat the card; it must move to `Blocked` and request a fully qualified repository URL
+together with the issue or pull request number without deriving identity from the path, directory
+name, or branch.
+
+Archive the disposable Trello board and remove both private sandbox repositories after collecting the
+sanitized result. Do not reuse production cards, boards, issues, or repositories for this procedure.
+
+A targeted real-Trello/real-Codex row was executed for
+[GitHub issue #545](https://github.com/martin-francois/symphony-trello/issues/545) using one disposable
+board and an unmodified legacy generated workflow with no repository default. Before deployment, a
+local-only repository-changing card that identified a public repository with an ordinary full URL
+moved to `Blocked`. After deployment, a fresh equivalent card reached `Human Review`, state drained,
+the expected file existed in the per-card checkout, and no blocker comment appeared. The board was
+archived after verification; no GitHub repository, issue, pull request, or branch was mutated. The
+broader multi-repository matrix remains opt-in and requires its full external-resource authority.
+
 ## What To Verify
 
 Use a unique run id such as `live-e2e-YYYYMMDD-HHMMSS`.

@@ -137,18 +137,65 @@ starts, so they are available even when the target repository does not provide i
   is Merging.
 - `.codex/skills/symphony-trello-debug/SKILL.md` when diagnosing a stuck or retrying run.
 
+## Classify Repository Need Before Source Blocking
+
+Symphony appends a final runtime `Repository Source Context` after this persisted workflow prompt.
+That final context is authoritative for repository-source selection, task classification, and source
+blocker decisions. If an older workflow instruction says to block unconditionally when no source is
+selected, ignore that earlier unconditional missing-source blocker and classify the current task
+before deciding whether the missing source is a blocker.
+
+Classify the requested work before treating repository context as a blocker:
+
+- Repository-independent work without repository-relative references can run without a selected
+  source.
+- A fully qualified GitHub issue or pull request URL is a direct external target. Use it as written,
+  even when it names a repository other than the selected source. Do not clone its repository when
+  the card only asks for an API action.
+- One unambiguous repository identity in ordinary card context is sufficient even without a source
+  label. It can come from a full repository, issue, pull-request, or file URL; `owner/repository`;
+  or equivalent context that clearly identifies one repository. Use that identity for
+  repository-relative references. When the work needs repository files, derive the normal
+  credential-free clone URL and prepare a writable checkout in the per-card workspace. Do not clone
+  for an API-only action.
+- A selected remote URL also includes repository identity without requiring a checkout. A selected local source can provide
+  identity only when read-only inspection finds exactly one explicit, unambiguous compatible remote.
+  If no such remote supplies identity, block and request a fully qualified repository URL together
+  with the issue or pull request number. Do not derive repository identity from the local path,
+  directory name, or branch.
+- Block only when required repository identity is absent, conflicting, or unusable, or when a
+  required checkout cannot be prepared.
+
+An explicit Trello card source that wins selection must be validated even when
+the task is repository-independent. Use a read-only probe that can confirm the source is available,
+readable, and can support a checkout. Do not create a checkout or write to the selected source during
+validation. Source validation does not make the task repository-changing and must not create or reuse
+the task checkout unless the classified task needs repository files. A malformed, unavailable,
+unreadable, or uncheckoutable selected source must block; do not treat a broken selected source as if
+no source were configured. A valid selected source does not turn repository-independent work into
+repository-changing work.
+
+A workflow default is only a fallback. Before validating or preparing it, inspect ordinary card
+context for one unambiguous repository identity. That card identity takes precedence; do not validate
+an unused default that names another repository.
+
+Do not infer repository identity from unrelated checkouts, prior Trello cards, or leftover workspace
+contents.
+
 ## Repository Source Precedence
 
 Select repository source context in this order:
 
 1. An explicit Trello card repository URL or local checkout path.
-2. Workflow `repository.default_url`.
-3. Workflow `repository.default_path`.
-4. No selected repository.
+2. One unambiguous repository identity in ordinary Trello card task context.
+3. Workflow `repository.default_url`.
+4. Workflow `repository.default_path`.
+5. No selected repository.
 
 Name an explicit Trello card source with a line such as `Repository URL: <url>`,
 `Repository path: <path>`, `Local checkout: <path>`, or `Repository: <url-or-path>` in the title,
-description, or a Trello comment. Ordinary unlabelled web links are not selected as repositories.
+description, or a Trello comment. Ordinary unlabelled web links are not explicit source declarations,
+but clear task context can still supply the repository identity described above.
 Each source declaration is read from one logical line. If multiple declarations are present, they
 must all name the same source. URL labels and `repository.default_url` accept credential-free
 HTTP(S), username-only `ssh://`, SCP-style SSH such as `git@example.com:team/project.git`, and
@@ -156,30 +203,77 @@ HTTP(S), username-only `ssh://`, SCP-style SSH such as `git@example.com:team/pro
 accept either form. HTTP(S) source URLs must not include user info, query strings, or fragments. URI
 paths may keep safe percent-encoding, but encoded or literal control characters are invalid.
 
+Runtime repository-source context is authoritative for `repository.default_url` validation. Existing
+`repository.default_url` values preserve compatibility by normalizing outer token wrapping and
+trailing prose punctuation before validation. A normalized default URL reported as selected is not
+malformed; a value that remains invalid after that compatibility normalization blocks.
+
+If a workflow `repository.default_url` remains malformed after compatibility normalization, apply
+these exhaustive branches:
+
+- If card context supplies exactly one unambiguous repository identity, ignore the malformed
+  workflow fallback and use the card identity. A full repository, issue, pull-request, or file URL;
+  `owner/repository`; or equivalent single identity can override it. Prepare a checkout only when
+  the requested work needs repository files.
+- For API-only work, a full issue or pull-request URL remains a direct target and needs no checkout.
+- If card context supplies no repository identity, the malformed workflow URL is the selected
+  invalid source. Block unconditionally, even for repository-independent work. Do not treat it as
+  absent.
+- If card context supplies conflicting repository identities, block instead of selecting one
+  arbitrarily.
+- A lower-priority `repository.default_path` never establishes repository identity and cannot
+  replace the malformed selected URL. Consider it as a checkout candidate only after exactly one
+  card repository identity overrides the malformed URL and read-only inspection of the path's Git
+  remotes confirms that identity. An invalid lower-priority path does not affect a higher-priority
+  valid URL.
+
 A valid selected source wins and suppresses lower-priority fallbacks. Do not validate or use an
 unselected fallback once a higher-priority source is selected. An invalid explicit Trello card source
-blocks instead of falling back to workflow defaults. Do not infer a repository from previous Trello
-cards, unrelated host checkouts, branch names, or leftover workspace contents.
+blocks instead of falling back to workflow defaults.
 
-Repository preparation is workflow-owned in this phase. For a selected repository URL, create or
-reuse a writable checkout under the current per-card workspace. For a selected local checkout path,
-treat that path as source context by default and clone from it into the current per-card workspace
-before implementation. After cloning from a local checkout, do not inherit the source checkout's
-current branch as the task base. Start new task work from the repository's default branch when it is
-discoverable unless the Trello card clearly requests another base. Do not edit the shared checkout
-directly unless the Trello card explicitly requests direct work, the checkout is writable, and
-deployment filesystem policy permits it, including Git metadata writes when the task needs direct
-commits. `--add-path <checkout>` grants extra filesystem access, but it is not a direct-checkout
-commit guarantee. If Git metadata is not writable, clone into the workspace, leave a patch, or block
-with path-safe guidance.
+Repository preparation is workflow-owned in this phase.
 
-If no source is selected or the selected source is missing, unreadable, unclonable, or lacks required
-repository/auth context, move the Trello card to `Blocked` with path-safe guidance instead of
-guessing.
+## Repository Checkout Preparation
+
+Apply this section only when the classified task needs repository files. Repository identity must
+already be selected from the card or workflow before local checkout discovery starts.
+
+1. If a selected local checkout path is shown above, use that repository. If a configured checkout
+   path candidate is shown above, inspect its Git remotes first and use that configured path before
+   searching for another local checkout, but only when read-only remote inspection confirms that it
+   matches the selected repository identity. Never use a configured path for a different repository.
+2. Otherwise, search the local checkouts that this run can access. Match a local checkout by repository
+   identity from its configured Git remotes. Do not match by directory name, current branch, proximity,
+   prior cards, or workspace residue. If one matching local repository exists, reuse it and do not clone
+   the repository again. If multiple matching repositories make the choice unsafe, block instead of
+   guessing.
+3. If no matching local repository exists, clone the selected repository from its normal
+   credential-free clone source into a repository-control directory inside the per-card workspace. Do
+   not clone merely because an existing matching checkout is on another branch or has local changes.
+4. From the chosen existing or newly cloned repository, determine the remote default branch, then fetch
+   the remote default branch before creating the task worktree. Create a separate task worktree inside
+   the per-card workspace from the freshly fetched remote default branch. Do not implement the task in
+   an arbitrary existing working tree, and do not modify the shared checkout worktree.
+5. If the card explicitly requests another branch, ref, base, or checkout arrangement, follow that
+   instruction instead of the default-branch worktree behavior. Fetch the requested remote ref before
+   creating the task worktree when a fetch is required.
+
+If a selected local repository cannot be read, fetched, or used to create the required task worktree,
+block with path-safe guidance instead of silently cloning another copy or editing an arbitrary checkout.
+
+Do not edit a shared checkout worktree directly unless the Trello card explicitly requests direct work,
+the checkout is writable, and deployment filesystem policy permits it, including Git metadata writes
+when the card asks for direct commits. `--add-path <checkout>` only adds the checkout as a writable root;
+it does not by itself guarantee that direct checkout commits can update Git metadata.
+
+When the classification above requires a blocker because repository identity or a checkout is
+missing, or because the selected source is invalid or unusable, move the Trello card to "Blocked"
+with path-safe guidance instead of guessing.
 
 ## Execution Flow
 
-1. Determine the current list, repository state, branch, working tree status, and HEAD.
+1. Determine the current list. When a repository is involved, also determine its state, branch,
+   working tree status, and HEAD.
 2. Read the full Trello card description and all rendered Trello comments before editing.
 3. Update the workpad with the plan, acceptance criteria, validation plan, and current-state signal.
 4. Sync with the repository default branch before implementation when a Git repository is involved.
@@ -255,8 +349,8 @@ unrelated human-owned work; move the card to "Blocked" with the exact mismatch i
 This PR requirement applies when the card asks for code, documentation, configuration, tests, or
 other version-controlled repository changes. It does not apply when the card explicitly asks for a
 local-only investigation, says not to push, or requires no repository change. In those cases,
-explain the local-only result and the workspace/branch/commit evidence in the workpad and handoff
-comment.
+explain the local-only or repository-independent result and only the evidence that applies in the
+workpad and handoff comment. Do not require branch or commit evidence when no repository changed.
 
 If GitHub auth, push permission, branch protection, or repository policy prevents a required PR, try
 the fallback strategies in `.codex/skills/symphony-trello-push-pr/SKILL.md`. If a PR is still
