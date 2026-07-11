@@ -57,6 +57,18 @@ parallel safety. Live end-to-end and deployed-verification rules live in
   intentionally blocking fakes, prefer an interruptible blocking primitive such as
   `CountDownLatch.await(...)` with a timeout, and make the helper name or test setup explain why a
   condition wait would not express the test better.
+- Every added or changed concurrency mechanism—including `synchronized`, locks, atomics, concurrent
+  collections, volatile state, task scheduling, and stale-callback guards—must have a realistic
+  automated unit test, or an integration test when the race cannot be represented at unit level.
+  The test must run in the normal CI suite and reproduce the race or visibility failure that the
+  mechanism prevents. Prefer assertions on the domain invariant so replacing the implementation
+  with another correct concurrency mechanism keeps the test green.
+- Before finalizing concurrency code, run the owning test against a temporary mutation that removes
+  or disables the protection and confirm it fails for the intended race-specific reason, then
+  restore the implementation and confirm the same test passes. Use deterministic latches, barriers,
+  controlled executors, or callbacks to force the interleaving; do not depend on repeated execution
+  or timing luck. Map each concurrency mechanism changed by the pull request to its owning test in
+  the pull request validation notes.
 
 ## Regression tests
 

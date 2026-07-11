@@ -18,6 +18,25 @@ References.
 - Keep code ASCII unless an existing file or domain requirement clearly needs Unicode.
 - Avoid unrelated metadata churn and broad rewrites.
 
+## Reuse and dependency selection
+
+- Prefer a well-maintained dependency over hand-written infrastructure when it materially reduces
+  code or complexity and the resulting API remains readable. Do not reject a library merely because
+  it adds a dependency; compare the whole implementation, operational, security, and maintenance
+  cost against keeping the custom code.
+- A new library candidate must have an upstream release within the previous 12 months, an
+  unarchived repository, no deprecation or unmaintained notice, an open-source license compatible
+  with this project, and at least 100 GitHub stars. Verify each condition from current primary
+  sources when making the recommendation rather than relying on remembered metadata.
+- Also evaluate Java compatibility, security history, API stability, transitive dependency size,
+  platform coverage, and native/runtime requirements. A candidate that meets the minimum activity,
+  license, and popularity bar may still be rejected when it increases operational complexity or
+  does not replace enough custom behavior; record that concrete trade-off in the issue or review.
+- Before adding a dependency, inspect existing declared dependencies and the Java standard library
+  for the same capability. Do not couple source code to an undeclared transitive dependency. Treat a
+  new runtime or build dependency as an architecture decision when its lifecycle or platform impact
+  is non-trivial, and update the owning ADR or add one when required by the ADR policy.
+
 ## Streams and Optional
 
 - Prefer immutable collection results by default. Use `List.of`, `Set.of`, `Map.of`,
