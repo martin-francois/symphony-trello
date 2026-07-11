@@ -283,6 +283,13 @@ optional verification. Follow this order:
   asks to squash the
   already-pushed PR commits first, squash them into one base commit before adding the separate
   review-response commit.
+- When authoring new inline review feedback, collect all comments for that pull request before
+  publishing them. Create one pending review containing the complete comment set, then submit that
+  review once at the end so contributors receive one review notification instead of one notification
+  per comment. Do not create or submit a separate review for each comment. After submission, query the
+  pull request reviews and verify that the authenticated user has no review left in `PENDING` state.
+  Review replies belong to their existing threads and cannot be combined into a new review; post those
+  only after all code and validation work is complete.
 - Keep `feat/issue-35-plan-b-onboarding` as a single commit on top of `main`; amend or squash and
   force-push when changing that branch.
 - Use closing keywords such as `Closes #123`, `Fixes #123`, or `Resolves #123` only when the PR or
