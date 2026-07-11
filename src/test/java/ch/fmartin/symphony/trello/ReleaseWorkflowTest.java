@@ -121,7 +121,9 @@ final class ReleaseWorkflowTest {
                         "commit_status: false",
                         "review_status: false",
                         "ignore_title_keywords:",
-                        "- \"[skip ci]\"");
+                        "- \"[skip ci]\"",
+                        "ignore_usernames:",
+                        "- \"github-actions[bot]\"");
     }
 
     @Test
