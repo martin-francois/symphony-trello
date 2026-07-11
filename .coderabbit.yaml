@@ -2,6 +2,7 @@
 
 reviews:
   commit_status: false
+  review_status: false
   auto_review:
     ignore_title_keywords:
       - "[skip ci]"

@@ -117,7 +117,11 @@ final class ReleaseWorkflowTest {
                         "- install.sh",
                         "- pom.xml");
         assertThat(codeRabbitSource)
-                .contains("commit_status: false", "ignore_title_keywords:", "- \"[skip ci]\"");
+                .contains(
+                        "commit_status: false",
+                        "review_status: false",
+                        "ignore_title_keywords:",
+                        "- \"[skip ci]\"");
     }
 
     @Test
