@@ -83,11 +83,13 @@ final class ReleaseWorkflowTest {
         // given
         Path releaseConfig = Path.of("release-please-config.json");
         Path labelerWorkflow = Path.of(".github/workflows/compatibility-labeler.yml");
+        Path codeQlWorkflow = Path.of(".github/workflows/codeql.yml");
         Path codeRabbitConfig = Path.of(".coderabbit.yaml");
 
         // when
         String releaseSource = Files.readString(releaseConfig);
         String labelerSource = Files.readString(labelerWorkflow);
+        String codeQlSource = Files.readString(codeQlWorkflow);
         String codeRabbitSource = Files.readString(codeRabbitConfig);
 
         // then
@@ -105,7 +107,17 @@ final class ReleaseWorkflowTest {
                         "- install.sh",
                         "- pom.xml")
                 .doesNotContain("startsWith(github.head_ref, 'release-please--branches--')");
-        assertThat(codeRabbitSource).contains("ignore_title_keywords:", "- \"[skip ci]\"");
+        assertThat(codeQlSource)
+                .contains(
+                        "pull_request:",
+                        "paths-ignore:",
+                        "- .release-please-manifest.json",
+                        "- CHANGELOG.md",
+                        "- install.ps1",
+                        "- install.sh",
+                        "- pom.xml");
+        assertThat(codeRabbitSource)
+                .contains("commit_status: false", "ignore_title_keywords:", "- \"[skip ci]\"");
     }
 
     @Test
