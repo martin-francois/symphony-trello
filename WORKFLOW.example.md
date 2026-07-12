@@ -91,17 +91,64 @@ Maintain one Trello workpad comment by calling trello_upsert_workpad. Reuse the 
 with `## Codex Workpad`; do not create separate progress comments. Keep it current with the plan,
 acceptance criteria, progress, validation evidence, blockers, and handoff notes.
 
+## Stale Blocker Recheck
+
+The rendered prompt contains only recent Trello comments, so do not use it to decide whether a stale
+blocker exists. Before changing code, always call trello_update_blocker_recheck_status with status
+`checking`. The tool inspects the deep current-card comment window and classifies the newest ordinary
+comment after ignoring the `## Codex Workpad` and Symphony-managed prerequisite comments. A
+Symphony-managed recheck status ends with the exact `Managed by Symphony` footer and a link to the
+qualifying blocker comment on the current card. Similar visible text, or a link to another card,
+remains an ordinary comment. Do not scan past a newer ordinary human comment to find an older blocker.
+The comment qualifies only when its first non-blank line starts with `Blocked:` or `Blocked by ...`,
+matched without case sensitivity; a human discussion that merely contains the word `blocked` does
+not qualify.
+
+The newest ordinary `Blocked:` or `Blocked by ...` comment is the comment being rechecked; leave it
+unchanged. Call `checking` to create or update a separate Symphony-managed status comment.
+
+Make the initial `checking` call before any Codex-requested pickup move or workpad write. When a
+blocker qualifies, this call is the first Codex-requested Trello write. When the tool returns
+`blocker_recheck_not_needed`, continue without creating a managed status. Only after the call succeeds
+may you request a move or update the workpad. Symphony's automatic pre-dispatch move may already have
+happened before Codex starts.
+
+If the initial `checking` call returns a tool failure, including
+`trello_blocker_recheck_refresh_failed` or `trello_blocker_recheck_card_missing`, stop the current
+attempt. Do not test the blocker, call `resumed`, or request another Trello write. Report the failure
+in the final response; the next dispatched retry must begin with `checking` again. Do not use the
+ordinary blocked handoff after this failure because its comment, workpad, or move would be an unsafe
+later Trello write.
+
+Always make that initial `checking` call before testing whether a blocker still applies or making
+another Trello write.
+The absence of an existing managed recheck comment is not a reason to skip this call; `checking`
+creates the managed comment. If the recheck succeeds and that blocker no longer applies, call the
+same tool with status `resumed`. Do this before continuing the implementation. If the `resumed` call
+returns any tool failure, including `trello_blocker_recheck_stale`,
+`trello_blocker_recheck_not_started`, `trello_blocker_recheck_refresh_failed`, or
+`trello_blocker_recheck_card_missing`, stop the current attempt. Do not claim that work resumed, use
+the ordinary blocked handoff, or request another Trello write. Report the failure in the final
+response; the next dispatched retry must begin with `checking` again. A stale result means the newly
+qualifying blocker must enter its own `checking` episode before it can resume. If the recheck fails
+or the card is still blocked, do not call `resumed`; update the workpad and follow the blocked handoff
+instead. A failed not-yet-resumed episode must stay in `checking` and must not claim that work resumed.
+Repeated pickup and retry calls reuse the same managed status comment. An already-resumed retry for
+the same blocker comment retains its last-confirmed resumed state. A new qualifying blocker comment
+starts a new action-bound recheck episode and must enter `checking` before it can resume.
+
 ## Operating Posture
 
 This is an unattended orchestration run. Do not ask a human to perform routine follow-up actions.
 Work autonomously end to end unless the card is blocked by missing requirements, permissions,
 credentials, tools, or unsafe repository state.
 
-Start by determining the current Trello list and route from that list. Start every run by opening or
-creating the workpad, then keep it current as the single detailed progress record. Spend extra effort
-up front on planning and validation design before implementation. Reproduce bugs or capture a
-concrete current-state signal before changing behavior. When meaningful out-of-scope improvements
-are discovered, record them as separate follow-up work instead of expanding this card.
+Start by determining the current Trello list and route from that list. After the required initial
+`checking` call classifies the deep comment window, open or create the workpad, then keep it current
+as the single detailed progress record. Spend extra effort up front on planning and validation design
+before implementation. Reproduce bugs or capture a concrete current-state signal before changing
+behavior. When meaningful out-of-scope improvements are discovered, record them as separate follow-up
+work instead of expanding this card.
 
 Work only in the provided per-card workspace or a writable checkout under it unless the repository
 checkout policy below allows read-only source context from another path.
@@ -275,7 +322,8 @@ with path-safe guidance instead of guessing.
 1. Determine the current list. When a repository is involved, also determine its state, branch,
    working tree status, and HEAD.
 2. Read the full Trello card description and all rendered Trello comments before editing.
-3. Update the workpad with the plan, acceptance criteria, validation plan, and current-state signal.
+3. Call `checking` to classify stale blockers from the deep comment window; then update the workpad
+   with the plan, acceptance criteria, validation plan, and current-state signal.
 4. Sync with the repository default branch before implementation when a Git repository is involved.
 5. Implement the smallest maintainable change that satisfies the card.
 6. Keep the workpad checklist current when scope, risks, validation, or blockers change.

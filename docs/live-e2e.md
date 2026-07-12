@@ -766,6 +766,176 @@ problem. A workflow with a configured blocked handoff list should move blocked c
 active list. A workflow without a blocked list should move blocked cards to the review handoff list
 when one is configured.
 
+### Opt-In Regression Scenario: Stale Blocker Recheck Status
+
+Use this manual scenario only with an approved disposable Trello board, disposable card, and
+disposable private repositories. Require an explicit operator opt-in such as
+`SYMPHONY_RUN_STALE_BLOCKER_LIVE_E2E=1`; stop if it is absent. This scenario mutates Trello and
+GitHub and must not use a normal project board or repository.
+
+1. Create disposable repository A without the issue named by the card and disposable repository B
+   with that issue. Configure the generated workflow for repository A.
+2. Create the disposable card in `Ready for Codex`, let the repository lookup fail, and verify the
+   card reaches `Blocked` with an ordinary comment whose first non-blank line starts with
+   `Blocked:` and explains the repository mismatch.
+3. Point the card or workflow at repository B, move the card back to `Ready for Codex`, and observe
+   the single managed blocker-recheck comment first report
+   `Checking whether this card is still blocked...` After the repository lookup succeeds, verify
+   that same comment reports
+   `No longer blocked; working on ...`; no second managed status comment may be created.
+4. Repeat from a fresh disposable card without correcting repository A. Requeue it and verify the
+   managed comment remains at `Checking whether this card is still blocked...` The card must never
+   show `No longer blocked; working on ...` while the mismatch remains.
+5. Trigger a safe pickup retry for each variant. Fetch up to 1000 `commentCard` actions from the
+   Trello API and assert exactly one action ends with the exact `Managed by Symphony` footer and a
+   current-card `#comment-ACTION_ID` link. Verify repeated `checking` or `resumed` calls update that
+   action rather than creating another comment.
+6. Compare the raw action text with the rendered Trello card. The API text must retain both
+   the exact human-readable Symphony footer and the permalink for the qualifying blocker action.
+   The rendered footer must identify Symphony, expose no raw HTML marker, and let a board member open
+   the comment being rechecked.
+7. Archive the disposable board, delete the disposable repositories, and retain only redacted
+   assertion results under `target/`.
+
+Status for this exact repository-A/repository-B procedure: not executed. The separate observed run
+below used a pre-seeded stale blocker and repository-independent work. The still-blocked variant,
+safe pickup retries, the 1000-action duplicate check, source-action permalink check, and rendered
+footer-link check therefore remain unexecuted for this procedure.
+
+#### Observed Run: 2026-07-11 Pre-Seeded Stale Blocker
+
+This is historical evidence for a narrower procedure; it is not a claim that the reusable
+repository-A/repository-B procedure above ran.
+
+- Affected deployed revision:
+  `d2b84755b7f1afa8592d5d1702923e9c6cae63a5`.
+- Fixed deployed code revision:
+  `8b523cf9e71f5d115f8f8572c6c81c2a169368ee`.
+- No stale-blocker runtime implementation changed after the live-tested revision. Later
+  generated-contract clarifications and their verification limits are recorded in the follow-up
+  below.
+- Two already-disposable Trello boards were used, with a fresh card on each board. Each generated
+  workflow used `Ready for Codex`, `In Progress`, `Human Review`, `Done`, and `Blocked`, disabled
+  GitHub integration, allowed one concurrent agent, and ran an isolated worker on a distinct local
+  port. Both workers loaded the repository-authorized deployed Trello credentials. No credential,
+  board id, card id, or private URL is retained here.
+- Trello and Codex were real. The workers ran the checked-out revision's packaged application and
+  the generated workflow's unmodified `codex app-server` command; no fake provider or scripted
+  Codex response was used.
+- The two cards used the same relevant input. Each started in `Ready for Codex` with this task:
+
+  ```text
+  This is a repository-independent verification task. Add a concise completion comment and move
+  this card to Human Review. Do not read or change any repository.
+  ```
+
+  Each also had this pre-seeded ordinary comment:
+
+  ```text
+  Blocked: waiting for repository context that this revised task no longer needs.
+  ```
+
+- The affected revision reached `Human Review` and its orchestration state drained, but Trello API
+  polling found zero managed blocker-recheck comments. The card therefore completed without the
+  required visible superseding status.
+- On the fixed revision, Trello API polling first found the managed comment in the visible
+  `Checking whether this card is still blocked...` state. Only after the Codex recheck succeeded did
+  the same Trello action change to the visible `No longer blocked; working on ...` state.
+- The fixed card then reached `Human Review`, and the orchestration state drained to zero running
+  plus retrying workers. The API result contained exactly one managed blocker-recheck action, and
+  the action id observed while checking equalled the action id observed after resumption.
+- The API polling necessarily observed the raw `<!-- symphony-trello:blocker-recheck -->` marker
+  used to identify the managed action. It did not inspect the raw source-action marker or separately
+  prove in the rendered Trello UI that either marker was hidden.
+- A still-blocked card and an explicit safe pickup retry were not run. Retry/idempotency beyond the
+  single successful episode, including the reusable procedure's 1000-action query, remains
+  unexecuted. The terminal state proved no worker was retrying at completion, but did not record the
+  complete retry history.
+- Both disposable boards were archived successfully after the run, and temporary credential-path
+  references were removed. Disposable repositories were not created, so repository cleanup was not
+  applicable.
+
+The observed run maps to the reusable procedure as follows: its pre-seeded ordinary blocker
+replaced steps 1 and 2; its identical before-and-after repository-independent task exercised the
+successful-recheck transition in step 3; steps 4 through 6 remain unexecuted except for the single
+managed-action count and raw managed-marker observations described above; and step 7 archived the
+boards while repository deletion was not applicable.
+
+#### Observed Follow-Up: 2026-07-12 Same-Card Recheck And Readable Footer
+
+This follow-up used one disposable card to verify the generated-workflow clarification and then the
+human-readable managed-comment identity. It did not execute the repository-A/repository-B procedure.
+
+- Initial deployed revision: `f3aff30e92c88f1e2cf384b7922cba9252eb02c1`. With a pre-seeded
+  ordinary blocker and a repository-independent replacement task, real Codex moved the card to
+  `Human Review` without calling `checking`; no managed recheck comment existed. The retained workpad
+  showed that Codex had mistaken the absence of a managed marker on the ordinary blocker for a reason
+  to skip the recheck.
+- Clarified generated-contract revision: `f8a8a882059e3bceaba5ead9424647d28c5ab20b`.
+  With the same card, task, blocker comment, lists, and generated workflow settings, real Codex first
+  created the visible checking status and then updated that same action to resumed. The operator
+  observed that Trello rendered the two raw HTML identity markers as visible comment text.
+- Readable-footer deployed code revision: `4a635cd2cacc77a197585374939bf719164a037b`.
+  The same card was reset to `Inbox` with the same task and ordinary blocker, the generated workflow
+  was regenerated from this revision, and the card was moved to `Ready for Codex`.
+- Review-loop ordering revision: `e440af3ec2614d57804dae2b50f8b693e83becff`. A scoped Codex
+  review found that pickup and workpad instructions could contradict the rule that `checking` must
+  precede Codex-requested Trello writes. The generated contract was clarified, then deployed against
+  the same reset card.
+- Final reviewed and live-tested revision: `0aa4294b2d19087c9385b688e56e1916e8fccdaa`.
+  Follow-up Codex and CodeRabbit reviews aligned the numbered execution flow, distinguished
+  Symphony's automatic pre-dispatch move from Codex-requested writes, kept the tool-disabled
+  workflow free of an unavailable `checking` instruction, required a readable managed footer to
+  link to an existing ordinary blocker comment on the same card, and made the initial `checking`
+  call classify the deep comment window rather than relying on the recent comments rendered to
+  Codex. It also makes a failed initial call stop before another Trello write and keeps the reusable
+  skill's mandatory call conditional on the tool being advertised. The same card replayed
+  successfully on this exact revision. The later extension below records subsequent evidence and
+  generated-contract amendments separately.
+- The workflow used `Ready for Codex`, `In Progress`, `Human Review`, `Done`, and `Blocked`, disabled
+  GitHub integration, allowed one concurrent agent, and ran an isolated worker on a local port. The
+  worker loaded the repository-authorized Trello credentials. Trello and Codex were real; no fake
+  provider or scripted response was used.
+- API polling observed `In Progress` with no managed status, then exactly one managed action in
+  `Checking whether this card is still blocked...`, then that same action in
+  `No longer blocked; working on ...`, and finally `Human Review`. The local state API then reported
+  zero running and zero retrying workers.
+- On all ordering replays, including the final reviewed revision, polling observed
+  `checking` while the existing workpad was still unchanged. It later observed `resumed` while the
+  workpad was still unchanged, followed by the workpad update and handoff. This proves the managed
+  status preceded the first Codex-requested workpad write. Symphony's own deterministic pickup move
+  to `In Progress` still occurs before the Codex session and is not a Codex-requested tool write.
+- The final Trello API result contained exactly one exact Symphony-managed footer and zero raw HTML
+  markers. Its `#comment-ACTION_ID` fragment matched the retained ordinary blocker action, and that
+  linked action remained readable. The operator confirmed that the rendered footer contained no raw
+  marker text and that its link opened the correct blocker comment.
+- The first successful clarification replay and the readable-footer replay used the same relevant
+  inputs and steps. The first `Ready for Codex` move was made in the Trello UI and the second through
+  the Trello API; that actor difference did not change the recheck input or lifecycle.
+- A later extension deployed exact revision
+  `3b3c633c11590c4054d66848b1f89755b58a4379` with the same real Trello and real Codex
+  configuration. The card instead requested work in an intentionally unavailable public GitHub
+  repository and retained an ordinary blocker explaining that failure. On the first pickup, the
+  managed action visibly entered `Checking whether this card is still blocked...`; the repository
+  probe remained blocked, the card returned to `Blocked`, and the managed action did not claim
+  resumption.
+- Without changing the card task or restoring repository access, the operator moved the same card
+  from `Blocked` to `Ready for Codex` for an explicit safe retry. The retry reused the same managed
+  Trello action, visibly remained in `checking`, and returned the card to `Blocked` after a second
+  real Codex probe. The retry created a newer ordinary blocker handoff but did not create a second
+  managed status.
+- After the retry, an independent Trello API query requested up to 1000 comment actions. All five
+  available actions were returned; exactly one used the exact Symphony-managed footer, zero
+  contained the retired raw HTML marker, and the managed footer's action fragment matched a
+  retained ordinary blocker action on the same card. This extension therefore executed the
+  still-blocked, safe-retry, duplicate-count, and raw-marker rows that the earlier replay left
+  unexecuted. No runtime implementation changed after this deployed revision. The final PR head adds
+  this evidence record and fail-closed instructions for a failed `resumed` tool call. That failure
+  path is covered deterministically but was not triggered during this live replay.
+- The disposable board was archived successfully. No disposable repository was created, so
+  repository cleanup was not applicable. Temporary credentials and raw card artifacts remained only
+  in ignored local `target/` storage until final verification and were then removed.
+
 ### Regression Scenario: In-Progress List Shows Only Running Work
 
 Observed on 2026-05-07 against a real Trello board:

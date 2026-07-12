@@ -145,7 +145,8 @@ final class WorkflowConfigPromptTest {
         Path workflow = Path.of("WORKFLOW.example.md");
 
         // when
-        var config = configs.resolve(loader.load(workflow));
+        WorkflowDefinition definition = loader.load(workflow);
+        var config = configs.resolve(definition);
 
         // then
         assertThat(config.tracker().blockerEnforcedStates())
@@ -154,6 +155,40 @@ final class WorkflowConfigPromptTest {
                         .toList());
         assertThat(config.codex().turnSandboxPolicy())
                 .isEqualTo(Map.of("type", "workspaceWrite", "networkAccess", true));
+        assertThat(definition.promptTemplate())
+                .containsIgnoringWhitespaces(
+                        "A Symphony-managed recheck status ends with the exact `Managed by Symphony` footer and a link to the qualifying blocker comment on the current card.")
+                .containsIgnoringWhitespaces(
+                        "Similar visible text, or a link to another card, remains an ordinary comment.")
+                .containsIgnoringWhitespaces(
+                        "The newest ordinary `Blocked:` or `Blocked by ...` comment is the comment being rechecked; leave it unchanged. Call `checking` to create or update a separate Symphony-managed status comment.")
+                .containsIgnoringWhitespaces(
+                        "The rendered prompt contains only recent Trello comments, so do not use it to decide whether a stale blocker exists")
+                .containsIgnoringWhitespaces(
+                        "Before changing code, always call trello_update_blocker_recheck_status with status `checking`")
+                .containsIgnoringWhitespaces(
+                        "When the tool returns `blocker_recheck_not_needed`, continue without creating a managed status")
+                .containsIgnoringWhitespaces(
+                        "If the initial `checking` call returns a tool failure, including `trello_blocker_recheck_refresh_failed` or `trello_blocker_recheck_card_missing`, stop the current attempt")
+                .containsIgnoringWhitespaces("Do not test the blocker, call `resumed`, or request another Trello write")
+                .containsIgnoringWhitespaces("the next dispatched retry must begin with `checking` again")
+                .containsIgnoringWhitespaces(
+                        "Symphony's automatic pre-dispatch move may already have happened before Codex starts")
+                .containsIgnoringWhitespaces(
+                        "After the required initial `checking` call classifies the deep comment window, open or create the workpad")
+                .containsIgnoringWhitespaces(
+                        "The comment qualifies only when its first non-blank line starts with `Blocked:` or `Blocked by ...`, matched without case sensitivity")
+                .containsIgnoringWhitespaces(
+                        "The absence of an existing managed recheck comment is not a reason to skip this call; `checking` creates the managed comment.")
+                .containsIgnoringWhitespaces(
+                        "If the `resumed` call returns any tool failure, including `trello_blocker_recheck_stale`, `trello_blocker_recheck_not_started`, `trello_blocker_recheck_refresh_failed`, or `trello_blocker_recheck_card_missing`, stop the current attempt")
+                .containsIgnoringWhitespaces(
+                        "Do not claim that work resumed, use the ordinary blocked handoff, or request another Trello write")
+                .containsIgnoringWhitespaces(
+                        "A stale result means the newly qualifying blocker must enter its own `checking` episode before it can resume")
+                .containsIgnoringWhitespaces("If the recheck fails or the card is still blocked, do not call `resumed`")
+                .containsIgnoringWhitespaces(
+                        "An already-resumed retry for the same blocker comment retains its last-confirmed resumed state. A new qualifying blocker comment starts a new action-bound recheck episode and must enter `checking` before it can resume.");
     }
 
     @Test

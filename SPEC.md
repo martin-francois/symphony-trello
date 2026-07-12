@@ -2039,7 +2039,8 @@ Optional client-side tool extension:
   allow flags.
 - For write-capable operations, implementations SHOULD prefer typed high-level tools, for example
   `trello_add_comment`, `trello_upsert_workpad`, `trello_move_current_card`,
-  `trello_upsert_checklist_item`, and `trello_add_url_attachment`.
+  `trello_update_blocker_recheck_status`, `trello_upsert_checklist_item`, and
+  `trello_add_url_attachment`.
 - Implementations MAY ship only a subset of typed high-level tools when generated or documented
   workflows need only that subset. Unsupported tool names still MUST return a structured tool
   failure instead of stalling the session.
@@ -2050,6 +2051,50 @@ Optional client-side tool extension:
   authoritative workpad first and report the duplicate cleanup outcome in the tool result. Deleting
   the duplicate comments needs `trello_tools.allow_destructive_operations`; without that opt-in the
   updated workpad text SHOULD make the required manual cleanup visible on the card.
+- The Java implementation exposes `trello_update_blocker_recheck_status` for a generated-workflow
+  stale-blocker recheck. Its `status` is `checking` or `resumed`. The tool reads a deep current-card
+  comment window and classifies only the newest ordinary comment after excluding the Codex workpad,
+  Symphony-managed prerequisite comments, and exact canonical blocker-recheck comments. A canonical
+  blocker-recheck comment ends with the exact human-readable `Managed by Symphony` Markdown footer.
+  Its link MUST point to the qualifying comment action on the current Trello card. Similar visible
+  text, a malformed link, or a link to another card remains ordinary. The tool MUST NOT scan past a
+  newer ordinary human comment.
+- That newest ordinary comment is a blocker handoff only when its first non-blank line starts with
+  `Blocked:` or `Blocked by ...`, matched without case sensitivity. An ordinary discussion that only
+  contains the word `blocked` MUST NOT qualify.
+- `checking` creates or updates one managed blocker-recheck comment and binds it to the qualifying
+  blocker comment action. A repeated `checking` call for that same action is idempotent. A managed
+  `resumed` state for the same blocker MUST NOT regress on a continuation or retry. A newer qualifying
+  blocker action MUST re-enter `checking` on the same managed comment.
+- The rendered prompt's recent-comment window MUST NOT determine whether a stale blocker exists. The
+  workflow MUST always call `checking` before testing for a blocker or making another Codex-requested
+  Trello write, so the tool can classify its deep current-card comment window. A no-blocker result
+  MUST create no managed status. When a blocker qualifies, it is the comment being rechecked and MUST
+  remain unchanged; `checking` creates or updates a separate Symphony-managed status. The absence of
+  an existing managed recheck comment MUST NOT suppress that call. A configured automatic
+  pre-dispatch move MAY occur before the Codex session starts.
+- If the initial `checking` call returns a tool failure, including a refresh failure or missing-card
+  result, the workflow MUST stop that attempt without testing the blocker, calling `resumed`, or
+  requesting another Trello write. It MUST report the failure in the final response and begin the next
+  dispatched retry with `checking` again. It MUST NOT use the ordinary blocked handoff after this
+  failure because its comment, workpad, or move would violate the required write ordering.
+- `resumed` MUST fail unless the newest ordinary comment is the qualifying blocker handoff and that
+  action-bound recheck episode has first entered managed `checking`. Retrying an already managed
+  `resumed` state for the same blocker action MUST succeed idempotently and stay resumed. Only the
+  workflow's successful semantic recheck may make the first `resumed` request. A failed or
+  still-blocked not-yet-resumed episode MUST remain in `checking`; an already-resumed episode retains
+  its last-confirmed state until a newer qualifying blocker action starts a new episode. The resumed
+  message is `No longer blocked; working on <short task summary>.`
+- If a `resumed` request returns any tool failure, including a stale, not-started, refresh-failure,
+  or missing-card result, the workflow MUST stop that attempt without claiming resumed work, using
+  the ordinary blocked handoff, or requesting another Trello write. It MUST report the failure in
+  the final response and begin the next dispatched retry with `checking` again. A stale result means
+  the newly qualifying blocker MUST enter its own `checking` episode before it can resume.
+- Repeated pickup and retry MUST NOT create blocker-recheck comment spam. If several exact managed
+  comments exist, the newest addressable one is authoritative. Duplicate deletion requires
+  `trello_tools.allow_destructive_operations`; without it, the authoritative comment MUST show
+  manual-cleanup guidance. A full fetched window with no managed footer MUST fail closed instead of
+  creating a status that could duplicate an older comment outside the fetched window.
 - Trello-visible status, workpad, handoff, and blocker text SHOULD be sufficient for a Trello board
   user who does not have shell or host access to understand why a card is waiting, blocked, or not
   moving. Local logs and diagnostics MAY include equivalent operator detail, but they MUST NOT be the
@@ -2342,8 +2387,9 @@ Trello Workflow Conformance:
 - The configured Trello tool MUST enforce `trello_tools` or a documented equivalent local policy.
 - Write-capable workflows MUST support the specific Trello writes they instruct the agent to
   perform. For the recommended workflow in this Java implementation, that means adding a comment to
-  the current card, upserting the single `## Codex Workpad` comment, and moving the current card to
-  an allowed board-local list.
+  the current card, upserting the single `## Codex Workpad` comment, maintaining the managed
+  blocker-recheck status when an exact stale blocker handoff qualifies, and moving the current card
+  to an allowed board-local list.
 - Java implementation extension: Trello-facing markdown written by `trello_add_comment` and
   `trello_upsert_workpad` escapes a GitHub issue reference such as `#2076` when it would be the
   first visible text of a paragraph or unordered bullet item. This avoids Trello rendering issue
@@ -3585,6 +3631,8 @@ Required when the workflow expects the agent to perform Trello handoff transitio
 - Ability to move the current card to allowed board-local lists.
 - Ability to maintain the current-card `## Codex Workpad` comment when the workflow uses the workpad
   pattern and `trello_tools.allow_comments` permits it.
+- Ability to maintain the current-card managed blocker-recheck status when the generated workflow
+  detects an exact stale blocker handoff and `trello_tools.allow_comments` permits it.
 - Ability to add or update checklist items on the current card when the workflow asks for checklist
   writes and `trello_tools.allow_checklists` permits it.
 - Ability to add policy-enabled URL attachments, such as GitHub PR links, when the workflow asks for

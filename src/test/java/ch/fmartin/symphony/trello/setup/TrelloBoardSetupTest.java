@@ -663,6 +663,7 @@ final class TrelloBoardSetupTest {
                 .contains("polling:")
                 .contains("interval_ms: " + ConfigDefaults.GENERATED_WORKFLOW_POLLING_INTERVAL_MS)
                 .contains("max_concurrent_agents: " + ConfigDefaults.DEFAULT_SETUP_MAX_CONCURRENT_AGENTS);
+        assertGeneratedStaleBlockerRecheckPolicy(workflow);
         assertThat(result.serverPort()).isEqualTo(expectedPort);
         EffectiveConfig config = resolve(workflow);
         assertThat(config.tracker().boardId()).isEqualTo("abc123");
@@ -1075,6 +1076,7 @@ final class TrelloBoardSetupTest {
                 .contains("## Completion Bar Before \"Human Review\"")
                 .contains("move the card to \"Done\"")
                 .contains("max_concurrent_agents: 2");
+        assertGeneratedStaleBlockerRecheckPolicy(workflow);
         assertThat(result.serverPort()).isEqualTo(expectedPort);
         EffectiveConfig config = resolve(workflow);
         assertThat(config.tracker().boardId()).isEqualTo("SYNTH001");
@@ -1083,6 +1085,38 @@ final class TrelloBoardSetupTest {
         assertThat(config.workspace().root()).isEqualTo(workflow.getParent().resolve("agent-workspaces"));
         assertThat(config.polling().interval()).isEqualTo(ConfigDefaults.GENERATED_WORKFLOW_POLLING_INTERVAL);
         assertThat(config.repository().selectedDefaultSource()).isEqualTo(EffectiveConfig.DefaultSource.NONE);
+    }
+
+    @Test
+    void workflowWithoutTrelloHandoffToolsDoesNotRequestBlockerRecheckWrites() {
+        // given
+        boardListsResponse.set(listsJson(trelloList("list-ready", "Ready for Codex", 1)));
+        Path workflow = tempDir.resolve("read-only-workflow.md");
+
+        // when
+        setup.importExistingBoard(new TrelloBoardSetup.ImportBoardRequest(
+                endpoint(),
+                new TrelloBoardSetup.TrelloCredentials("key", "token"),
+                "input",
+                List.of("Ready for Codex"),
+                List.of(),
+                null,
+                workflow,
+                Path.of("./agent-workspaces"),
+                2,
+                false));
+
+        // then
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("trello_tools:\n  enabled: false\n  allow_writes: false")
+                .contains(
+                        "Record the plan, acceptance criteria, validation plan, and current-state signal for the final response.")
+                .doesNotContain("required initial `checking` call")
+                .doesNotContain("## Stale Blocker Recheck");
+        EffectiveConfig config = resolve(workflow);
+        assertThat(config.trelloTools().enabled()).isFalse();
+        assertThat(config.trelloTools().allowWrites()).isFalse();
     }
 
     @Test
@@ -2904,6 +2938,51 @@ final class TrelloBoardSetupTest {
         int end = workflow.indexOf("\n## ", precedence + REPOSITORY_SOURCE_PRECEDENCE_HEADING.length());
         assertThat(end).as("next workflow section heading offset").isGreaterThan(precedence);
         return workflow.substring(start, end);
+    }
+
+    private static void assertGeneratedStaleBlockerRecheckPolicy(Path workflow) {
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("## Stale Blocker Recheck")
+                .contains("trello_update_blocker_recheck_status")
+                .containsIgnoringWhitespaces("newest ordinary comment")
+                .containsIgnoringWhitespaces("exact `Managed by Symphony` footer")
+                .containsIgnoringWhitespaces("a link to the qualifying blocker comment on the current card")
+                .containsIgnoringWhitespaces(
+                        "The newest ordinary `Blocked:` or `Blocked by ...` comment is the comment being rechecked; leave it unchanged")
+                .containsIgnoringWhitespaces(
+                        "Call `checking` to create or update a separate Symphony-managed status comment")
+                .containsIgnoringWhitespaces(
+                        "The rendered prompt contains only recent Trello comments, so do not use it to decide whether a stale blocker exists")
+                .containsIgnoringWhitespaces(
+                        "Before changing code, always call trello_update_blocker_recheck_status with status `checking`")
+                .containsIgnoringWhitespaces(
+                        "When the tool returns `blocker_recheck_not_needed`, continue without creating a managed status")
+                .containsIgnoringWhitespaces(
+                        "If the initial `checking` call returns a tool failure, including `trello_blocker_recheck_refresh_failed` or `trello_blocker_recheck_card_missing`, stop the current attempt")
+                .containsIgnoringWhitespaces("Do not test the blocker, call `resumed`, or request another Trello write")
+                .containsIgnoringWhitespaces("the next dispatched retry must begin with `checking` again")
+                .containsIgnoringWhitespaces(
+                        "Symphony's automatic pre-dispatch move may already have happened before Codex starts")
+                .containsIgnoringWhitespaces(
+                        "After the required initial `checking` call classifies the deep comment window, open or create the workpad")
+                .containsIgnoringWhitespaces(
+                        "Call `checking` to classify stale blockers from the deep comment window; then update the workpad")
+                .containsIgnoringWhitespaces(
+                        "The absence of an existing managed recheck comment is not a reason to skip this call")
+                .containsIgnoringWhitespaces("Do not scan past a newer ordinary human comment")
+                .containsIgnoringWhitespaces("matched without case sensitivity")
+                .containsIgnoringWhitespaces("status `checking`")
+                .contains("status `resumed`")
+                .containsIgnoringWhitespaces(
+                        "If the `resumed` call returns any tool failure, including `trello_blocker_recheck_stale`, `trello_blocker_recheck_not_started`, `trello_blocker_recheck_refresh_failed`, or `trello_blocker_recheck_card_missing`, stop the current attempt")
+                .containsIgnoringWhitespaces(
+                        "Do not claim that work resumed, use the ordinary blocked handoff, or request another Trello write")
+                .containsIgnoringWhitespaces(
+                        "A stale result means the newly qualifying blocker must enter its own `checking` episode before it can resume")
+                .contains("must not claim that work resumed")
+                .containsIgnoringWhitespaces(
+                        "An already-resumed retry for the same blocker comment retains its last-confirmed resumed state. A new qualifying blocker comment starts a new action-bound recheck episode and must enter `checking` before it can resume.");
     }
 
     private static void writeExistingWorkflow(Path workflow, String codexFields) throws IOException {
