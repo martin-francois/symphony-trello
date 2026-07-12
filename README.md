@@ -686,8 +686,10 @@ transports, and stops after the first recognized entry. Unknown parameters on a 
 are skipped without decoding. Recognized values follow systemd's pinned sd-bus parser: raw UTF-8 and
 raw characters other than the address delimiters are accepted, `%` requires two hexadecimal digits,
 and downstream checks use the decoded C-string prefix before the first decoded NUL. Unix socket
-limits count bytes, `unixexec` indexes use sd-bus's base-10 `strtoul` rules, and machine PIDs use its
-base-aware `parse_pid` rules. A malformed recognized field under those exact downstream rules invokes
+limits count bytes. On supported Linux amd64/arm64, `unixexec` indexes use sd-bus's base-10
+`strtoul` result narrowed from 64-bit `unsigned long` to 32-bit `unsigned` before checking slots 0
+through 256; aliases and holes use that narrowed slot. Machine PIDs use sd-bus's base-aware
+`parse_pid` rules. A malformed recognized field under those exact downstream rules invokes
 the runtime fallback, while a usable recognized entry preserves the complete original address without
 pre-validating later entries. Status derives
 `DBUS_SESSION_BUS_ADDRESS` from a runtime only when its `bus` entry is a real Unix socket. Only when

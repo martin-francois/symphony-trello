@@ -25,6 +25,11 @@ import org.junit.jupiter.params.provider.MethodSource;
 final class SystemdSessionBusResolverTest {
     private static final String XDG_RUNTIME_DIRECTORY = "XDG_RUNTIME_DIR";
     private static final String DBUS_SESSION_BUS_ADDRESS = "DBUS_SESSION_BUS_ADDRESS";
+    private static final String C_UINT_MODULUS = "4294967296";
+    private static final String C_UINT_MODULUS_PLUS_ONE = "4294967297";
+    private static final String C_UINT_MODULUS_PLUS_256 = "4294967552";
+    private static final String C_ULONG_MAX = "18446744073709551615";
+    private static final String C_ULONG_MAX_PLUS_ONE = "18446744073709551616";
 
     @TempDir
     Path tempDir;
@@ -226,7 +231,21 @@ final class SystemdSessionBusResolverTest {
                 namedAddress("raw UTF-8 Unix path above byte limit", "unix:path=/" + "a".repeat(105) + "é"),
                 namedAddress("raw UTF-8 abstract above byte limit", "unix:abstract=" + "a".repeat(105) + "é"),
                 namedAddress("unixexec index above maximum", "unixexec:path=/bin/false,argv257=value"),
-                namedAddress("unixexec index overflow", "unixexec:path=/bin/false,argv18446744073709551616=value"),
+                namedAddress(
+                        "unixexec post-conversion index above maximum",
+                        "unixexec:path=/bin/false,argv4294967553=value"),
+                namedAddress(
+                        "unixexec unsigned-long maximum narrows above slot maximum",
+                        "unixexec:path=/bin/false,argv" + C_ULONG_MAX + "=value"),
+                namedAddress(
+                        "unixexec unsigned-long overflow",
+                        "unixexec:path=/bin/false,argv" + C_ULONG_MAX_PLUS_ONE + "=value"),
+                namedAddress(
+                        "unixexec large alias leaves slot one missing",
+                        "unixexec:path=/bin/false,argv4294967298=value"),
+                namedAddress(
+                        "unixexec aliases do not conceal a post-conversion hole",
+                        "unixexec:path=/bin/false,argv1=one,argv4294967299=three"),
                 namedAddress("unixexec negative nonzero index", "unixexec:path=/bin/false,argv-1=value"),
                 namedAddress("unixexec missing equals", "unixexec:path=/bin/false,argv1"),
                 namedAddress("unixexec trailing junk before equals", "unixexec:path=/bin/false,argv1x=value"),
@@ -290,6 +309,92 @@ final class SystemdSessionBusResolverTest {
         assertThat(result.arguments()).hasSize(257).containsKeys(0, 1, 256);
         assertDbusBytes(result.arguments().get(0), "/bin/false");
         assertDbusBytes(result.arguments().get(256), "value-256");
+    }
+
+    @MethodSource("unixexecUnsignedNarrowingAliases")
+    @ParameterizedTest(name = "{0}")
+    void unixexecNarrowsUnsignedLongAliasesToCUnsignedSlots(
+            String parameterText, int expectedSlot, String expectedValue) {
+        // given
+        // The parameterized case supplies one complete unixexec parameter list and its resolved slot.
+
+        // when
+        SystemdSessionBusResolver.UnixExecAddress result =
+                SystemdSessionBusResolver.parseUnixExecAddress(parameterText).orElseThrow();
+
+        // then
+        assertDbusBytes(result.arguments().get(expectedSlot), expectedValue);
+        assertThat(result.arguments()).containsKey(0);
+        if (expectedSlot > 0) {
+            assertDbusBytes(result.arguments().get(0), "/bin/false");
+        }
+    }
+
+    private static Stream<Arguments> unixexecUnsignedNarrowingAliases() {
+        return Stream.of(
+                Arguments.of(
+                        Named.named(
+                                "2^32 resolves to slot zero", "path=/bin/false,argv" + C_UINT_MODULUS + "=large-zero"),
+                        0,
+                        "large-zero"),
+                Arguments.of(
+                        Named.named(
+                                "2^32 plus one resolves to slot one",
+                                "path=/bin/false,argv" + C_UINT_MODULUS_PLUS_ONE + "=large-one"),
+                        1,
+                        "large-one"),
+                Arguments.of(
+                        Named.named(
+                                "2 times 2^32 plus one resolves to slot one",
+                                "path=/bin/false,argv8589934593=twice-wrapped-one"),
+                        1,
+                        "twice-wrapped-one"),
+                Arguments.of(
+                        Named.named(
+                                "negative unsigned-long value narrows to slot one",
+                                "path=/bin/false,argv-4294967295=negative-one"),
+                        1,
+                        "negative-one"),
+                Arguments.of(
+                        Named.named(
+                                "whitespace plus and leading zeroes precede conversion",
+                                "path=/bin/false,argv +04294967297=decorated-one"),
+                        1,
+                        "decorated-one"));
+    }
+
+    @Test
+    void unixexecUsesLastValueForOrdinaryAndLargeAliasesOfTheSameSlot() {
+        // given
+        String parameters = "path=/bin/false,argv1=ordinary,argv" + C_UINT_MODULUS_PLUS_ONE + "=large";
+
+        // when
+        SystemdSessionBusResolver.UnixExecAddress result =
+                SystemdSessionBusResolver.parseUnixExecAddress(parameters).orElseThrow();
+
+        // then
+        assertDbusBytes(result.arguments().get(0), "/bin/false");
+        assertDbusBytes(result.arguments().get(1), "large");
+    }
+
+    @Test
+    void unixexecAcceptsAConvertedAliasForSlot256AfterACompletePrefix() {
+        // given
+        StringBuilder parameters = new StringBuilder("path=/bin/false");
+        for (int index = 1; index < 256; index++) {
+            parameters.append(",argv").append(index).append("=value-").append(index);
+        }
+        parameters.append(",argv").append(C_UINT_MODULUS_PLUS_256).append("=large-256");
+
+        // when
+        SystemdSessionBusResolver.UnixExecAddress result = SystemdSessionBusResolver.parseUnixExecAddress(
+                        parameters.toString())
+                .orElseThrow();
+
+        // then
+        assertThat(result.arguments()).hasSize(257).containsKeys(0, 1, 256);
+        assertDbusBytes(result.arguments().get(0), "/bin/false");
+        assertDbusBytes(result.arguments().get(256), "large-256");
     }
 
     private static void assertDbusBytes(SystemdSessionBusResolver.DbusValue actual, String expected) {

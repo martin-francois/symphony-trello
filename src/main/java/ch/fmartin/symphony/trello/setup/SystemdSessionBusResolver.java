@@ -24,8 +24,10 @@ final class SystemdSessionBusResolver {
     private static final long DBUS_UNIX_LEGACY_INVALID_ID = 65_535L;
     private static final int DBUS_UNIXEXEC_MAX_ARGUMENT_INDEX = 256;
     private static final int DBUS_MACHINE_NAME_MAX_BYTES = 64;
+    private static final int DBUS_C_UNSIGNED_BITS = 32;
     private static final BigInteger DBUS_ULONG_MODULUS = BigInteger.ONE.shiftLeft(Long.SIZE);
     private static final BigInteger DBUS_ULONG_MAX = DBUS_ULONG_MODULUS.subtract(BigInteger.ONE);
+    private static final BigInteger DBUS_UINT_MODULUS = BigInteger.ONE.shiftLeft(DBUS_C_UNSIGNED_BITS);
     private static final BigInteger DBUS_PID_MAX = BigInteger.valueOf(Integer.MAX_VALUE);
     private static final String SYSTEMD_NUMERIC_WHITESPACE = " \t\n\r";
     private static final String C_NUMERIC_WHITESPACE = SYSTEMD_NUMERIC_WHITESPACE + "\f\u000B";
@@ -327,8 +329,11 @@ final class SystemdSessionBusResolver {
             return Optional.empty();
         }
         BigInteger parsed = negative && magnitude.signum() != 0 ? DBUS_ULONG_MODULUS.subtract(magnitude) : magnitude;
-        return parsed.compareTo(BigInteger.valueOf(DBUS_UNIXEXEC_MAX_ARGUMENT_INDEX)) <= 0
-                ? Optional.of(new UnixExecArgumentKey(parsed.intValue(), cursor + 1))
+        // Linux amd64 and arm64 use LP64: strtoul() returns a 64-bit unsigned long, but systemd's
+        // parse_exec_address() assigns it to 32-bit C unsigned before checking and selecting the slot.
+        BigInteger resolvedSlot = parsed.mod(DBUS_UINT_MODULUS);
+        return resolvedSlot.compareTo(BigInteger.valueOf(DBUS_UNIXEXEC_MAX_ARGUMENT_INDEX)) <= 0
+                ? Optional.of(new UnixExecArgumentKey(resolvedSlot.intValue(), cursor + 1))
                 : Optional.empty();
     }
 

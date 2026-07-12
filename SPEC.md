@@ -4174,12 +4174,16 @@ When this profile is used:
   preserve the complete original address string without pre-validating later entries. A malformed
   recognized entry encountered before any usable recognized entry MUST invalidate the inherited
   address and MUST NOT suppress the standard-runtime fallback. `unixexec` argument keys MUST mirror
-  `strtoul(<suffix>, ..., 10)`: the empty suffix denotes index zero; leading base-10 whitespace,
-  `+`, leading-zero aliases, and negative zero use the resolved numeric slot; overflow, negative
-  nonzero values, trailing junk, indexes above 256, and holes from `argv1` through the highest index
-  are invalid. A later value for the same resolved slot MUST overwrite the earlier one, and when an
-  argument vector exists without index zero, the decoded path supplies `argv0`. Address validation
-  MUST NOT perform a
+  `parse_exec_address` on the supported Linux amd64/arm64 LP64 ABI: base-10
+  `strtoul(<suffix>, ..., 10)` first produces a 64-bit C `unsigned long`, then assignment to 32-bit C
+  `unsigned` narrows it modulo 2^32 before validation or slot selection. The empty suffix denotes
+  zero; leading C numeric whitespace, an optional sign, decimal leading zeroes, and negative values
+  retain `strtoul` semantics. Slots 0 through 256 after narrowing are valid; a post-conversion slot
+  above 256, `unsigned long` overflow, trailing junk, a missing `=`, or a hole from slot 1 through the
+  highest resolved slot is invalid. Textually different keys that resolve to the same post-conversion
+  slot are aliases, and the later value MUST overwrite the earlier value. When an argument vector
+  exists and no key resolves to slot zero, the decoded path supplies `argv0`. The complete accepted
+  address MUST remain unchanged. Address validation MUST NOT perform a
   connection, DNS, service lookup, or other reachability probe. For either caller or standard
   runtime, status MUST derive
   `DBUS_SESSION_BUS_ADDRESS=unix:path=<runtime directory>/bus` only when `bus` is a real Unix-domain

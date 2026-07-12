@@ -110,9 +110,10 @@ This decision remains implemented when:
   `ActiveState`;
 * resolver and status tests cover caller-bus precedence, caller-runtime precedence, standard-runtime
   fallback, ordered address lists, skipped unknown parameters, raw recognized values, malformed
-  percent triplets, decoded-NUL C-string prefixes, UTF-8 byte limits, `unixexec` numeric slots,
-  machine PID grammar, original address preservation, invalid inherited values, unavailable manager
-  state, timeout, interruption, and cleanup;
+  percent triplets, decoded-NUL C-string prefixes, UTF-8 byte limits, `unixexec` unsigned-long to
+  unsigned slot conversion, alias overwrites and post-conversion holes, machine PID grammar,
+  original address preservation, invalid inherited values, unavailable manager state, timeout,
+  interruption, and cleanup;
 * no D-Bus or libsystemd runtime dependency is added without evidence from issue #564; and
 * `./mvnw -q spotless:check verify` passes.
 
@@ -168,9 +169,13 @@ The sd-bus compatibility oracle for this decision is systemd commit
 address-start path in `src/libsystemd/sd-bus/sd-bus.c`. Those functions establish that unknown
 parameters are skipped without decoding, while `parse_address_key` copies every raw byte other than
 its delimiters and gives `%` the only special decoding role. Downstream C consumers observe the prefix
-before a decoded NUL, and Unix socket limits use `strlen` byte counts. `parse_exec_address` applies
-base-10 `strtoul` to the suffix after `argv`, overwrites the resolved numeric slot, rejects holes, and
-supplies the path as a missing `argv0`. `parse_container_unix_address` delegates PIDs to `parse_pid`
+before a decoded NUL, and Unix socket limits use `strlen` byte counts. In `parse_exec_address`, the
+slot variable is C `unsigned`: the 64-bit `unsigned long` returned by base-10 `strtoul` is assigned to
+that 32-bit variable before the `ul > 256` check. Both supported Linux amd64 and arm64 deployments use
+this LP64 conversion, so the selected slot is the `strtoul` result modulo 2^32. The narrowed slot owns
+the range check, array allocation, last-value-wins alias overwrite, and hole detection; the decoded
+path supplies a missing `argv0`. Values for which `strtoul` reports overflow remain invalid.
+`parse_container_unix_address` delegates PIDs to `parse_pid`
 and base-auto `safe_atolu`, while UID and GID retain their separate strict parsers. TCP host and port
 values, including raw IPv6 and service names, reach `getaddrinfo`; a later address entry is not parsed
 until an earlier connection attempt needs fallback. The Java resolver deliberately performs no DNS,

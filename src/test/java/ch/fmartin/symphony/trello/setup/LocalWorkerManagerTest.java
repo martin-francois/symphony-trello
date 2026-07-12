@@ -1156,6 +1156,16 @@ final class LocalWorkerManagerTest {
                 Arguments.of(Named.named("accepted raw space", "unix:path=/tmp/bus socket"), true),
                 Arguments.of(Named.named("accepted raw IPv6 host", "tcp:host=::1,port=ssh"), true),
                 Arguments.of(
+                        Named.named(
+                                "accepted unixexec alias narrowed to slot zero",
+                                "unixexec:path=/bin/false,argv4294967296=bridge"),
+                        true),
+                Arguments.of(
+                        Named.named(
+                                "rejected unixexec alias narrowed to slot 257",
+                                "unixexec:path=/bin/false,argv4294967553=value"),
+                        false),
+                Arguments.of(
                         Named.named("usable first and malformed unused later", "unix:path=/tmp/bus;unix:path"), true),
                 Arguments.of(Named.named("malformed first recognized entry", "unix:path;unix:path=/tmp/bus"), false));
     }
