@@ -1,13 +1,16 @@
 package ch.fmartin.symphony.trello.setup;
 
 import java.io.IOException;
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -21,6 +24,11 @@ final class SystemdSessionBusResolver {
     private static final long DBUS_UNIX_LEGACY_INVALID_ID = 65_535L;
     private static final int DBUS_UNIXEXEC_MAX_ARGUMENT_INDEX = 256;
     private static final int DBUS_MACHINE_NAME_MAX_BYTES = 64;
+    private static final BigInteger DBUS_ULONG_MODULUS = BigInteger.ONE.shiftLeft(Long.SIZE);
+    private static final BigInteger DBUS_ULONG_MAX = DBUS_ULONG_MODULUS.subtract(BigInteger.ONE);
+    private static final BigInteger DBUS_PID_MAX = BigInteger.valueOf(Integer.MAX_VALUE);
+    private static final String SYSTEMD_NUMERIC_WHITESPACE = " \t\n\r";
+    private static final String C_NUMERIC_WHITESPACE = SYSTEMD_NUMERIC_WHITESPACE + "\f\u000B";
     private static final int DBUS_GUID_HEX_LENGTH = 32;
     private static final int DBUS_GUID_UUID_LENGTH = 36;
     private static final Set<Integer> DBUS_GUID_UUID_DASH_INDEXES = Set.of(8, 13, 18, 23);
@@ -92,7 +100,7 @@ final class SystemdSessionBusResolver {
         StringBuilder escaped = new StringBuilder(value.length());
         for (byte current : value.getBytes(StandardCharsets.UTF_8)) {
             int unsigned = Byte.toUnsignedInt(current);
-            if (isDbusOptionallyEscapedByte(unsigned)) {
+            if (isDbusAddressUnescapedByte(unsigned)) {
                 escaped.append((char) unsigned);
             } else {
                 escaped.append('%');
@@ -146,7 +154,7 @@ final class SystemdSessionBusResolver {
     }
 
     private static Optional<String> validDbusAddress(String value) {
-        if (value == null || value.isBlank()) {
+        if (value == null || value.isBlank() || value.indexOf('\0') >= 0) {
             return Optional.empty();
         }
         for (String address : value.split(";", -1)) {
@@ -206,7 +214,7 @@ final class SystemdSessionBusResolver {
                         .filter(parameters -> validTcpFamily(parameters.get("family")))
                         .filter(SystemdSessionBusResolver::validOptionalDbusGuid)
                         .isPresent();
-            case "unixexec" -> validUnixExecAddress(parameterText);
+            case "unixexec" -> parseUnixExecAddress(parameterText).isPresent();
             case "x-machine-unix" ->
                 recognizedAddressParameters(parameterText, DBUS_MACHINE_KEYS)
                         .filter(SystemdSessionBusResolver::validMachineAddress)
@@ -235,11 +243,12 @@ final class SystemdSessionBusResolver {
         if (encodedId == null) {
             return true;
         }
-        Optional<String> decodedId = decodedAsciiDbusValue(encodedId);
-        if (decodedId.isEmpty()) {
-            return false;
-        }
-        String idValue = decodedId.orElseThrow();
+        return decodedAsciiDbusValue(encodedId)
+                .filter(SystemdSessionBusResolver::isValidUnixId)
+                .isPresent();
+    }
+
+    private static boolean isValidUnixId(String idValue) {
         if (numericValue(idValue).isEmpty() || (idValue.length() > 1 && idValue.startsWith("0"))) {
             return false;
         }
@@ -251,57 +260,76 @@ final class SystemdSessionBusResolver {
         }
     }
 
-    private static boolean validUnixExecAddress(String parameterText) {
+    static Optional<UnixExecAddress> parseUnixExecAddress(String parameterText) {
         Map<String, String> namedParameters = new HashMap<>();
-        Set<Integer> argumentIndexes = new HashSet<>();
+        Map<Integer, DbusValue> arguments = new HashMap<>();
         int highestArgumentIndex = 0;
         for (String parameter : parameterText.split(",", -1)) {
             if (parameter.startsWith("guid=") || parameter.startsWith("path=")) {
                 int separator = parameter.indexOf('=');
                 String key = parameter.substring(0, separator);
                 if (namedParameters.putIfAbsent(key, parameter.substring(separator + 1)) != null) {
-                    return false;
+                    return Optional.empty();
                 }
                 continue;
             }
             if (!parameter.startsWith("argv")) {
                 continue;
             }
-            Optional<Integer> argumentIndex = unixExecArgumentIndex(parameter);
-            if (argumentIndex.isEmpty()
-                    || decodedDbusValue(parameter.substring(parameter.indexOf('=') + 1))
-                            .isEmpty()) {
-                return false;
+            Optional<UnixExecArgumentKey> argumentKey = unixExecArgumentKey(parameter);
+            if (argumentKey.isEmpty()) {
+                return Optional.empty();
             }
-            argumentIndexes.add(argumentIndex.orElseThrow());
-            highestArgumentIndex = Math.max(highestArgumentIndex, argumentIndex.orElseThrow());
+            UnixExecArgumentKey key = argumentKey.get();
+            Optional<DbusValue> argument = decodedDbusValue(parameter.substring(key.valueStart()));
+            if (argument.isEmpty()) {
+                return Optional.empty();
+            }
+            arguments.put(key.index(), argument.get());
+            highestArgumentIndex = Math.max(highestArgumentIndex, key.index());
         }
-        if (!validNonEmptyDecodedDbusValue(namedParameters.get("path")) || !validOptionalDbusGuid(namedParameters)) {
-            return false;
+        Optional<DbusValue> path = decodedDbusValue(namedParameters.get("path")).filter(value -> !value.isEmpty());
+        if (path.isEmpty() || !validOptionalDbusGuid(namedParameters)) {
+            return Optional.empty();
         }
+        DbusValue executablePath = path.get();
         for (int argumentIndex = 1; argumentIndex <= highestArgumentIndex; argumentIndex++) {
-            if (!argumentIndexes.contains(argumentIndex)) {
-                return false;
+            if (!arguments.containsKey(argumentIndex)) {
+                return Optional.empty();
             }
         }
-        return true;
+        if (!arguments.isEmpty()) {
+            arguments.putIfAbsent(0, executablePath);
+        }
+        return Optional.of(new UnixExecAddress(executablePath, arguments));
     }
 
-    private static Optional<Integer> unixExecArgumentIndex(String parameter) {
-        int indexEnd = "argv".length();
-        while (indexEnd < parameter.length() && isAsciiDigit(parameter.charAt(indexEnd))) {
-            indexEnd++;
+    private static Optional<UnixExecArgumentKey> unixExecArgumentKey(String parameter) {
+        int start = "argv".length();
+        if (start < parameter.length() && parameter.charAt(start) == '=') {
+            return Optional.of(new UnixExecArgumentKey(0, start + 1));
         }
-        if (indexEnd >= parameter.length() || parameter.charAt(indexEnd) != '=') {
+        int cursor = skipNumericWhitespace(parameter, start, C_NUMERIC_WHITESPACE);
+        boolean negative = false;
+        if (cursor < parameter.length() && (parameter.charAt(cursor) == '+' || parameter.charAt(cursor) == '-')) {
+            negative = parameter.charAt(cursor) == '-';
+            cursor++;
+        }
+        int digitsStart = cursor;
+        while (cursor < parameter.length() && isAsciiDigit(parameter.charAt(cursor))) {
+            cursor++;
+        }
+        if (cursor == digitsStart || cursor >= parameter.length() || parameter.charAt(cursor) != '=') {
             return Optional.empty();
         }
-        String index = parameter.substring("argv".length(), indexEnd);
-        try {
-            int parsedIndex = index.isEmpty() ? 0 : Integer.parseInt(index);
-            return parsedIndex <= DBUS_UNIXEXEC_MAX_ARGUMENT_INDEX ? Optional.of(parsedIndex) : Optional.empty();
-        } catch (NumberFormatException invalidIndex) {
+        BigInteger magnitude = new BigInteger(parameter.substring(digitsStart, cursor));
+        if (magnitude.compareTo(DBUS_ULONG_MAX) > 0) {
             return Optional.empty();
         }
+        BigInteger parsed = negative && magnitude.signum() != 0 ? DBUS_ULONG_MODULUS.subtract(magnitude) : magnitude;
+        return parsed.compareTo(BigInteger.valueOf(DBUS_UNIXEXEC_MAX_ARGUMENT_INDEX)) <= 0
+                ? Optional.of(new UnixExecArgumentKey(parsed.intValue(), cursor + 1))
+                : Optional.empty();
     }
 
     private static boolean validMachineAddress(Map<String, String> parameters) {
@@ -389,49 +417,55 @@ final class SystemdSessionBusResolver {
     }
 
     private static boolean validMachinePid(String encodedPid) {
-        Optional<String> pid = decodedAsciiDbusValue(encodedPid);
-        if (pid.isEmpty() || numericValue(pid.orElseThrow()).isEmpty()) {
-            return false;
-        }
-        try {
-            return Integer.parseInt(pid.orElseThrow()) > 0;
-        } catch (NumberFormatException invalidPid) {
-            return false;
-        }
+        return decodedAsciiDbusValue(encodedPid)
+                .flatMap(SystemdSessionBusResolver::systemdUnsignedLong)
+                .filter(pid -> pid.signum() > 0)
+                .filter(pid -> pid.compareTo(DBUS_PID_MAX) <= 0)
+                .isPresent();
     }
 
     private static Optional<String> decodedAsciiDbusValue(String value) {
-        return decodedDbusValue(value).filter(decoded -> decoded.chars().allMatch(character -> character <= 0x7F));
+        return decodedDbusValue(value).flatMap(DbusValue::asciiText);
     }
 
-    private static Optional<String> decodedDbusValue(String value) {
+    private static Optional<DbusValue> decodedDbusValue(String value) {
         if (value == null) {
             return Optional.empty();
         }
-        StringBuilder decoded = new StringBuilder(value.length());
+        List<Integer> decoded = new ArrayList<>(value.length());
         int index = 0;
         while (index < value.length()) {
-            int current = value.charAt(index);
+            int current = value.codePointAt(index);
             if (current == '%') {
                 if (index + 2 >= value.length()) {
                     return Optional.empty();
                 }
-                int high = Character.digit(value.charAt(index + 1), 16);
-                int low = Character.digit(value.charAt(index + 2), 16);
-                if (high < 0 || low < 0) {
+                int high = asciiDigitValue(value.charAt(index + 1));
+                int low = asciiDigitValue(value.charAt(index + 2));
+                if (high < 0 || high > 15 || low < 0 || low > 15) {
                     return Optional.empty();
                 }
                 current = high * 16 + low;
                 index += 3;
             } else {
-                if (!isDbusOptionallyEscapedByte(current)) {
+                if (current == 0) {
+                    break;
+                }
+                if (Character.isSurrogate(value.charAt(index)) && !Character.isSupplementaryCodePoint(current)) {
                     return Optional.empty();
                 }
-                index++;
+                byte[] rawBytes = new String(Character.toChars(current)).getBytes(StandardCharsets.UTF_8);
+                for (byte rawByte : rawBytes) {
+                    decoded.add(Byte.toUnsignedInt(rawByte));
+                }
+                index += Character.charCount(current);
+                continue;
             }
-            decoded.append((char) current);
+            decoded.add(current);
         }
-        return Optional.of(decoded.toString());
+        int cStringLength = decoded.indexOf(0);
+        List<Integer> cStringBytes = cStringLength >= 0 ? decoded.subList(0, cStringLength) : decoded;
+        return Optional.of(new DbusValue(cStringBytes));
     }
 
     private static boolean validNonEmptyDecodedDbusValue(String encodedValue) {
@@ -440,10 +474,77 @@ final class SystemdSessionBusResolver {
 
     private static boolean validDecodedDbusByteLength(String encodedValue, int maximumBytes) {
         return decodedDbusValue(encodedValue)
-                .filter(decoded -> !decoded.isEmpty())
-                .filter(decoded -> decoded.length() <= maximumBytes)
-                .filter(decoded -> decoded.indexOf('\0') < 0)
+                .filter(value -> !value.isEmpty())
+                .filter(value -> value.byteLength() <= maximumBytes)
                 .isPresent();
+    }
+
+    private static Optional<BigInteger> systemdUnsignedLong(String value) {
+        int start = skipNumericWhitespace(value, 0, SYSTEMD_NUMERIC_WHITESPACE);
+        if (start >= value.length()) {
+            return Optional.empty();
+        }
+        boolean hasSign = value.charAt(start) == '+' || value.charAt(start) == '-';
+        boolean negative = hasSign && value.charAt(start) == '-';
+        int digitsStart = hasSign ? start + 1 : start;
+        if (digitsStart >= value.length()) {
+            return Optional.empty();
+        }
+
+        int base = 10;
+        int prefixLength = 0;
+        if (!hasSign && startsWithIgnoreCase(value, digitsStart, "0b")) {
+            base = 2;
+            prefixLength = 2;
+        } else if (!hasSign && startsWithIgnoreCase(value, digitsStart, "0o")) {
+            base = 8;
+            prefixLength = 2;
+        } else if (startsWithIgnoreCase(value, digitsStart, "0x")) {
+            base = 16;
+            prefixLength = 2;
+        } else if (value.charAt(digitsStart) == '0' && digitsStart + 1 < value.length()) {
+            base = 8;
+        }
+
+        int numberStart = digitsStart + prefixLength;
+        if (numberStart >= value.length()) {
+            return Optional.empty();
+        }
+        for (int index = numberStart; index < value.length(); index++) {
+            if (asciiDigitValue(value.charAt(index)) < 0 || asciiDigitValue(value.charAt(index)) >= base) {
+                return Optional.empty();
+            }
+        }
+        BigInteger parsed = new BigInteger(value.substring(numberStart), base);
+        if (parsed.compareTo(DBUS_ULONG_MAX) > 0 || negative && parsed.signum() != 0) {
+            return Optional.empty();
+        }
+        return Optional.of(parsed);
+    }
+
+    private static int skipNumericWhitespace(String value, int start, String whitespace) {
+        int index = start;
+        while (index < value.length() && whitespace.indexOf(value.charAt(index)) >= 0) {
+            index++;
+        }
+        return index;
+    }
+
+    private static boolean startsWithIgnoreCase(String value, int start, String prefix) {
+        return value.regionMatches(true, start, prefix, 0, prefix.length());
+    }
+
+    private static int asciiDigitValue(char character) {
+        if (character >= '0' && character <= '9') {
+            return character - '0';
+        }
+        if (character >= 'a' && character <= 'f') {
+            return character - 'a' + 10;
+        }
+        if (character >= 'A' && character <= 'F') {
+            return character - 'A' + 10;
+        }
+        return -1;
     }
 
     private static boolean isAsciiLetter(int character) {
@@ -454,7 +555,7 @@ final class SystemdSessionBusResolver {
         return character >= '0' && character <= '9';
     }
 
-    private static boolean isDbusOptionallyEscapedByte(int character) {
+    private static boolean isDbusAddressUnescapedByte(int character) {
         return isAsciiLetter(character)
                 || isAsciiDigit(character)
                 || character == '-'
@@ -469,4 +570,37 @@ final class SystemdSessionBusResolver {
                 || (character >= 'a' && character <= 'f')
                 || (character >= 'A' && character <= 'F');
     }
+
+    record DbusValue(List<Integer> bytes) {
+        DbusValue {
+            bytes = List.copyOf(bytes);
+        }
+
+        int byteLength() {
+            return bytes.size();
+        }
+
+        boolean isEmpty() {
+            return bytes.isEmpty();
+        }
+
+        Optional<String> asciiText() {
+            StringBuilder text = new StringBuilder(bytes.size());
+            for (int value : bytes) {
+                if (value > 0x7F) {
+                    return Optional.empty();
+                }
+                text.append((char) value);
+            }
+            return Optional.of(text.toString());
+        }
+    }
+
+    record UnixExecAddress(DbusValue path, Map<Integer, DbusValue> arguments) {
+        UnixExecAddress {
+            arguments = Map.copyOf(arguments);
+        }
+    }
+
+    private record UnixExecArgumentKey(int index, int valueStart) {}
 }

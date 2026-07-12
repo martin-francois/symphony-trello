@@ -66,9 +66,10 @@ and systemd-interface integration.
 
 `LocalWorkerManager` owns worker lifecycle and interprets the three requested systemd properties.
 `SystemdSessionBusResolver` owns only the environment selection and syntax validation needed by the
-command. It follows sd-bus address ordering, skips unknown transport parameters as raw text, validates
-recognized fields, and returns the complete inherited address after the first usable recognized
-entry. It does not establish connectivity. `ProcessCommandRunner` owns the bounded process lifecycle,
+command. It follows sd-bus address ordering, skips unknown transport parameters as raw text, applies
+the pinned recognized-value and downstream field parsers, and returns the complete inherited address
+after the first usable recognized entry. It does not establish connectivity. `ProcessCommandRunner`
+owns the bounded process lifecycle,
 and the one `systemctl` query establishes actual manager availability. This separation keeps the
 Linux-specific grammar out of worker lifecycle code while retaining a small internal boundary between
 components.
@@ -108,9 +109,10 @@ This decision remains implemented when:
 * Linux status uses one bounded `systemctl --user show` query for `LoadState`, `UnitFileState`, and
   `ActiveState`;
 * resolver and status tests cover caller-bus precedence, caller-runtime precedence, standard-runtime
-  fallback, ordered address lists, skipped unknown parameters, strict recognized fields, original
-  address preservation, invalid inherited values, unavailable manager state, timeout, interruption,
-  and cleanup;
+  fallback, ordered address lists, skipped unknown parameters, raw recognized values, malformed
+  percent triplets, decoded-NUL C-string prefixes, UTF-8 byte limits, `unixexec` numeric slots,
+  machine PID grammar, original address preservation, invalid inherited values, unavailable manager
+  state, timeout, interruption, and cleanup;
 * no D-Bus or libsystemd runtime dependency is added without evidence from issue #564; and
 * `./mvnw -q spotless:check verify` passes.
 
@@ -164,11 +166,20 @@ The sd-bus compatibility oracle for this decision is systemd commit
 `9a09141caeb45876f9258de0b96e5c09eb428648`, specifically `parse_address_key`,
 `skip_address_key`, the Unix, TCP, `unixexec`, and `x-machine-unix` parsers, and the ordered
 address-start path in `src/libsystemd/sd-bus/sd-bus.c`. Those functions establish that unknown
-parameters are skipped without decoding, recognized fields are decoded strictly, `unixexec` argument
-aliases use their numeric index, TCP services are passed to `getaddrinfo`, and a later entry is not
-parsed until an earlier connection attempt needs fallback. The Java resolver deliberately performs no
-DNS, service, connection, or reachability probe and preserves the complete original address for
-sd-bus.
+parameters are skipped without decoding, while `parse_address_key` copies every raw byte other than
+its delimiters and gives `%` the only special decoding role. Downstream C consumers observe the prefix
+before a decoded NUL, and Unix socket limits use `strlen` byte counts. `parse_exec_address` applies
+base-10 `strtoul` to the suffix after `argv`, overwrites the resolved numeric slot, rejects holes, and
+supplies the path as a missing `argv0`. `parse_container_unix_address` delegates PIDs to `parse_pid`
+and base-auto `safe_atolu`, while UID and GID retain their separate strict parsers. TCP host and port
+values, including raw IPv6 and service names, reach `getaddrinfo`; a later address entry is not parsed
+until an earlier connection attempt needs fallback. The Java resolver deliberately performs no DNS,
+service, connection, or reachability probe and preserves the complete original address for sd-bus.
+
+The resolver intentionally rejects a Java `String` containing an embedded raw NUL before passing it
+to `ProcessBuilder`: operating-system environment strings terminate at NUL and cannot supply such a
+value. This does not reject an end-to-end caller address. Percent-decoded NUL remains supported with
+the pinned C-string-prefix behavior.
 
 The initial implementation omitted this ADR even though the review compared multiple meaningful
 dependency and architecture choices. That contradicted the repository's ADR discipline. The agent

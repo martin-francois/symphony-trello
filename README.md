@@ -683,9 +683,13 @@ valid `XDG_RUNTIME_DIR` so systemd's private runtime endpoint remains usable. Ex
 runtime directories are forwarded unchanged, including whitespace at a path-component boundary.
 For an address list, the resolver examines entries from left to right, skips empty and unsupported
 transports, and stops after the first recognized entry. Unknown parameters on a recognized transport
-are skipped without decoding; recognized fields remain strictly validated. A malformed recognized
-entry before any usable entry invokes the runtime fallback, while a usable recognized entry preserves
-the complete original address without pre-validating later entries. Status derives
+are skipped without decoding. Recognized values follow systemd's pinned sd-bus parser: raw UTF-8 and
+raw characters other than the address delimiters are accepted, `%` requires two hexadecimal digits,
+and downstream checks use the decoded C-string prefix before the first decoded NUL. Unix socket
+limits count bytes, `unixexec` indexes use sd-bus's base-10 `strtoul` rules, and machine PIDs use its
+base-aware `parse_pid` rules. A malformed recognized field under those exact downstream rules invokes
+the runtime fallback, while a usable recognized entry preserves the complete original address without
+pre-validating later entries. Status derives
 `DBUS_SESSION_BUS_ADDRESS` from a runtime only when its `bus` entry is a real Unix socket. Only when
 neither caller value is usable does it try the effective user's standard `/run/user/<uid>` runtime
 and bus. The query receives either the selected bus address or the selected runtime directory, never

@@ -4148,24 +4148,38 @@ When this profile is used:
   directory. A valid caller runtime directory MUST be a nonblank, existing absolute directory and
   MUST be forwarded unchanged, including whitespace at a path-component boundary. A valid caller
   bus address means a syntactically usable candidate accepted by systemctl's sd-bus client:
-  Unix `path` with 1 to 107 decoded non-NUL bytes or `abstract` with 1 to 106 decoded non-NUL bytes,
+  Unix `path` with a decoded C-string prefix of 1 to 107 bytes or `abstract` with a decoded C-string
+  prefix of 1 to 106 bytes,
   optionally with `uid` and `gid`; each credential value MUST decode to unsigned 32-bit decimal with
   no sign or leading zero except the value `0`, and MUST exclude `65535` and `4294967295`; TCP `host`
   plus a nonblank `port` string, including service-name syntax; `unixexec` with a nonempty
   `path`, optional `argv0`, and contiguous `argv1` through at most `argv256`, whose argument values
   may be empty; or `x-machine-unix` with exactly one of `machine` and `pid`. A machine MUST decode to
-  `.host` or a systemd-compatible hostname of at most 64 ASCII bytes, and a PID MUST decode to a
-  decimal value from 1 through 2147483647. An optional GUID MUST decode to either 32 hexadecimal
+  `.host` or a systemd-compatible hostname of at most 64 ASCII bytes. A PID MUST follow the pinned
+  `parse_pid` and base-auto `safe_atolu` grammar: leading systemd whitespace and `+` are accepted;
+  decimal, C-style hexadecimal and octal, and systemd's `0b` and `0o` prefixes are accepted; zero,
+  negative nonzero values, overflow, trailing junk, and values outside positive `pid_t` are rejected.
+  An optional GUID MUST decode to either 32 hexadecimal
   digits or the dashed 8-4-4-4-12 form, case-insensitively. A semicolon-separated fallback list MUST
   be evaluated from left to right. Empty entries and unsupported transports, including libdbus-only
   `autolaunch` and `nonce-tcp`, MUST be skipped. For a recognized transport, unknown parameter
-  segments MUST be skipped as raw text without decoding or validation, while recognized fields MUST
-  be decoded and validated strictly. The first syntactically usable recognized entry MUST accept and
+  segments MUST be skipped as raw text without decoding or validation. Recognized values MUST follow
+  the pinned `parse_address_key` grammar rather than the generic D-Bus optional-escape subset: raw
+  bytes are copied until raw comma, semicolon, or NUL; raw UTF-8 counts by encoded bytes; `%` MUST be
+  followed by exactly two ASCII hexadecimal digits; and downstream field validation MUST use the
+  decoded C-string prefix before the first decoded NUL. Percent-encoded comma and semicolon MUST
+  remain value data while their raw forms remain delimiters. Known duplicate fields, malformed
+  percent triplets, missing required fields, and values rejected by the pinned downstream parser MUST
+  invalidate that recognized entry. The first syntactically usable recognized entry MUST accept and
   preserve the complete original address string without pre-validating later entries. A malformed
   recognized entry encountered before any usable recognized entry MUST invalidate the inherited
-  address and MUST NOT suppress the standard-runtime fallback. `unixexec` argument keys MUST use
-  their resolved numeric indexes, so leading-zero aliases overwrite the same argument slot and holes
-  from `argv1` through the highest index remain invalid. Address validation MUST NOT perform a
+  address and MUST NOT suppress the standard-runtime fallback. `unixexec` argument keys MUST mirror
+  `strtoul(<suffix>, ..., 10)`: the empty suffix denotes index zero; leading base-10 whitespace,
+  `+`, leading-zero aliases, and negative zero use the resolved numeric slot; overflow, negative
+  nonzero values, trailing junk, indexes above 256, and holes from `argv1` through the highest index
+  are invalid. A later value for the same resolved slot MUST overwrite the earlier one, and when an
+  argument vector exists without index zero, the decoded path supplies `argv0`. Address validation
+  MUST NOT perform a
   connection, DNS, service lookup, or other reachability probe. For either caller or standard
   runtime, status MUST derive
   `DBUS_SESSION_BUS_ADDRESS=unix:path=<runtime directory>/bus` only when `bus` is a real Unix-domain

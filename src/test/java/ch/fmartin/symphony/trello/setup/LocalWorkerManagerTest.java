@@ -1152,6 +1152,9 @@ final class LocalWorkerManagerTest {
     private static Stream<Arguments> orderedCallerAddressStatusScenarios() {
         return Stream.of(
                 Arguments.of(Named.named("accepted unknown parameter", "unix:path=/tmp/bus,future-option=%ZZ"), true),
+                Arguments.of(Named.named("accepted raw plus", "unix:path=/tmp/bus+socket"), true),
+                Arguments.of(Named.named("accepted raw space", "unix:path=/tmp/bus socket"), true),
+                Arguments.of(Named.named("accepted raw IPv6 host", "tcp:host=::1,port=ssh"), true),
                 Arguments.of(
                         Named.named("usable first and malformed unused later", "unix:path=/tmp/bus;unix:path"), true),
                 Arguments.of(Named.named("malformed first recognized entry", "unix:path;unix:path=/tmp/bus"), false));
@@ -1170,6 +1173,9 @@ final class LocalWorkerManagerTest {
                 namedArgument(
                         "percent-encoded Unix socket credentials",
                         "unix:path=/run/user/1000/bus,uid=%31%30%30%30,gid=%31%30%30%30"),
+                namedArgument(
+                        "decoded NUL suffix in strict Unix credential",
+                        "unix:path=/run/user/1000/bus,uid=1000%00ignored"),
                 namedArgument("multiple key/value pairs", "tcp:host=localhost,port=1234,family=ipv4"),
                 namedArgument("trailing unknown empty parameter", "unix:path=/run/user/1000/bus,"),
                 namedArgument(
@@ -1183,6 +1189,13 @@ final class LocalWorkerManagerTest {
                         "autolaunch:scope=ignored value;unix:path=/run/user/1000/bus"),
                 namedArgument("escaped value bytes", "unix:abstract=custom%2Dbus%3Aaddress"),
                 namedArgument("escaped whitespace", "unix:path=/run/user/1000/session%20bus"),
+                namedArgument("raw whitespace", "unix:path=/run/user/1000/session bus"),
+                namedArgument(
+                        "raw whitespace in first usable address",
+                        "unix:path=/run/user/1000/session bus;unix:path=/run/user/1000/bus"),
+                namedArgument("raw reserved byte", "unix:path=/run/user/1000/bus:extra"),
+                namedArgument("decoded NUL suffix in Unix path", "unix:path=/run/user/1000/bus%00suffix"),
+                namedArgument("decoded NUL suffix in abstract name", "unix:abstract=user%00bus"),
                 namedArgument(
                         "plain lower-case guid", "unix:path=/run/user/1000/bus,guid=00112233445566778899aabbccddeeff"),
                 namedArgument(
@@ -1269,8 +1282,6 @@ final class LocalWorkerManagerTest {
                 namedArgument("overlong Unix socket path", "unix:path=/" + "a".repeat(107)),
                 namedArgument("overlong percent-encoded Unix socket path", "unix:path=/" + "%C3%A9".repeat(54)),
                 namedArgument("overlong abstract Unix socket", "unix:abstract=" + "a".repeat(107)),
-                namedArgument("Unix socket path with decoded NUL", "unix:path=/run/user/1000/bus%00suffix"),
-                namedArgument("abstract Unix socket with decoded NUL", "unix:abstract=user%00bus"),
                 namedArgument("Unix socket user with leading zero", "unix:path=/run/user/1000/bus,uid=01000"),
                 namedArgument("Unix socket user with plus sign", "unix:path=/run/user/1000/bus,uid=%2B1000"),
                 namedArgument("Unix socket user with minus sign", "unix:path=/run/user/1000/bus,uid=-1"),
@@ -1293,14 +1304,9 @@ final class LocalWorkerManagerTest {
                 namedArgument(
                         "malformed dashed guid",
                         "unix:path=/run/user/1000/bus,guid=00112233-4455-6677-8899a-abbccddeeff"),
-                namedArgument("unescaped whitespace", "unix:path=/run/user/1000/session bus"),
-                namedArgument(
-                        "unescaped whitespace in recognized fallback",
-                        "unix:path=/run/user/1000/session bus;unix:path=/run/user/1000/bus"),
                 namedArgument("control byte", "unix:path=/run/user/1000/bus\u0000suffix"),
                 namedArgument("truncated percent escape", "unix:path=/run/user/1000/bus%2"),
-                namedArgument("non-hex percent escape", "unix:path=/run/user/1000/bus%GG"),
-                namedArgument("unescaped reserved byte", "unix:path=/run/user/1000/bus:extra"));
+                namedArgument("non-hex percent escape", "unix:path=/run/user/1000/bus%GG"));
     }
 
     @Test
