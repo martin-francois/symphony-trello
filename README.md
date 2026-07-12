@@ -558,7 +558,17 @@ next human action.
 `Blocked` is for work that needs attention before Codex can continue. Common examples are missing
 credentials, missing allowed file access, unclear requirements, failing external services, or a PR
 state that cannot be resolved automatically. After fixing the problem, move the card back to
-`Ready for Codex` so Codex can continue with the new context.
+`Ready for Codex` so Codex can continue with the new context. When the newest ordinary Trello
+comment is an explicit `Blocked:` or `Blocked by ...` handoff, the generated workflow keeps one
+managed blocker-recheck status. Because the rendered prompt contains only recent comments, Codex
+first calls the status tool to classify the deep comment window. A no-blocker result creates no
+comment. When a blocker qualifies, the `Blocked:` comment is the comment being rechecked and stays
+unchanged. The tool creates or updates a separate managed comment to show that the blocker is being
+checked. It says that work resumed only after Codex confirms the old blocker no longer applies. The
+managed comment ends with a readable Symphony label and a link to the comment being rechecked;
+Symphony uses that exact footer to recognize the comment it may safely update.
+If the initial status call fails, the run stops without another Trello write and retries the initial
+check on the next dispatch rather than publishing an unsafe later handoff.
 
 Each card gets its own local workspace. That separation makes it easier to inspect the files for one
 task, avoids mixing unrelated changes, and lets Symphony clean up terminal work later. By default,
@@ -1240,11 +1250,13 @@ repository's local `git config user.name`, `git config user.email`, and
 
 ### Trello Write Controls
 
-The recommended workflow gives Codex three scoped Trello handoff tools:
+The recommended workflow gives Codex four scoped Trello handoff tools:
 
 - `trello_add_comment`: add a comment to the current card.
 - `trello_upsert_workpad`: create or update the single `## Codex Workpad` comment on the current
   card.
+- `trello_update_blocker_recheck_status`: reuse one managed status while Codex checks a stale
+  blocker handoff, then mark work as resumed only after the recheck succeeds.
 - `trello_move_current_card`: move the current card to a configured board-local list such as
   `In Progress`, `Human Review`, or `Blocked`.
 

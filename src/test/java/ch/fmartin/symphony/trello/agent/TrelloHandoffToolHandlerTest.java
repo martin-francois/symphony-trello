@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.agent;
 
 import static ch.fmartin.symphony.trello.TestHttpExchange.query;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.boardJson;
+import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.jsonEscaped;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.listsJson;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.respond;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.trelloList;
@@ -34,13 +35,19 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 final class TrelloHandoffToolHandlerTest {
+    private static final String BLOCKER_ACTION_ID = "action-blocker";
+    private static final String BLOCKER_RECHECK_ACTION_ID = "action-blocker-recheck";
+    private static final String CHECKING_STATUS = TrelloHandoffToolHandler.BLOCKER_RECHECK_CHECKING;
+    private static final String RESUMED_STATUS_PREFIX = TrelloHandoffToolHandler.RESUMED_WORK_PREFIX;
+
     private final ObjectMapper json = new ObjectMapper();
     private final AtomicReference<String> commentText = new AtomicReference<>();
     private final AtomicReference<String> updatedCommentText = new AtomicReference<>();
     private final List<String> deletedActionIds = new CopyOnWriteArrayList<>();
-    private final List<String> workpadCallOrder = new CopyOnWriteArrayList<>();
+    private final List<String> managedCommentCallOrder = new CopyOnWriteArrayList<>();
     private final List<String> checklistRequests = new CopyOnWriteArrayList<>();
     private final AtomicReference<String> movedToListId = new AtomicReference<>();
     private final AtomicReference<String> createdChecklistName = new AtomicReference<>();
@@ -81,7 +88,7 @@ final class TrelloHandoffToolHandlerTest {
         });
         trello.on("/1/actions/action-workpad-older", exchange -> {
             assertThat(exchange.getRequestMethod()).isEqualTo("DELETE");
-            workpadCallOrder.add("delete:action-workpad-older");
+            managedCommentCallOrder.add("delete:action-workpad-older");
             if (deleteStatus.get() == 200) {
                 deletedActionIds.add("action-workpad-older");
             }
@@ -89,7 +96,7 @@ final class TrelloHandoffToolHandlerTest {
         });
         trello.on("/1/actions/action-workpad-oldest", exchange -> {
             assertThat(exchange.getRequestMethod()).isEqualTo("DELETE");
-            workpadCallOrder.add("delete:action-workpad-oldest");
+            managedCommentCallOrder.add("delete:action-workpad-oldest");
             if (deleteStatus.get() == 200) {
                 deletedActionIds.add("action-workpad-oldest");
             }
@@ -97,11 +104,35 @@ final class TrelloHandoffToolHandlerTest {
         });
         trello.on("/1/actions/action-workpad/text", exchange -> {
             assertThat(exchange.getRequestMethod()).isEqualTo("PUT");
-            workpadCallOrder.add("update:action-workpad");
+            managedCommentCallOrder.add("update:action-workpad");
             if (updateStatus.get() == 200) {
                 updatedCommentText.set(query(exchange).get("value"));
             }
             respond(exchange, updateStatus.get(), "{\"id\":\"action-workpad\"}");
+        });
+        trello.on("/1/actions/" + BLOCKER_RECHECK_ACTION_ID + "/text", exchange -> {
+            assertThat(exchange.getRequestMethod()).isEqualTo("PUT");
+            managedCommentCallOrder.add("update:" + BLOCKER_RECHECK_ACTION_ID);
+            if (updateStatus.get() == 200) {
+                updatedCommentText.set(query(exchange).get("value"));
+            }
+            respond(exchange, updateStatus.get(), "{\"id\":\"" + BLOCKER_RECHECK_ACTION_ID + "\"}");
+        });
+        trello.on("/1/actions/action-blocker-recheck-older", exchange -> {
+            assertThat(exchange.getRequestMethod()).isEqualTo("DELETE");
+            managedCommentCallOrder.add("delete:action-blocker-recheck-older");
+            if (deleteStatus.get() == 200) {
+                deletedActionIds.add("action-blocker-recheck-older");
+            }
+            respond(exchange, deleteStatus.get(), "{}");
+        });
+        trello.on("/1/actions/action-blocker-recheck-older/text", exchange -> {
+            assertThat(exchange.getRequestMethod()).isEqualTo("PUT");
+            managedCommentCallOrder.add("update:action-blocker-recheck-older");
+            if (updateStatus.get() == 200) {
+                updatedCommentText.set(query(exchange).get("value"));
+            }
+            respond(exchange, updateStatus.get(), "{\"id\":\"action-blocker-recheck-older\"}");
         });
         trello.on("/1/cards/card-1/idList", exchange -> {
             assertThat(exchange.getRequestMethod()).isEqualTo("PUT");
@@ -161,10 +192,18 @@ final class TrelloHandoffToolHandlerTest {
                 .containsExactly(
                         TrelloHandoffToolHandler.ADD_COMMENT,
                         TrelloHandoffToolHandler.UPSERT_WORKPAD,
+                        TrelloHandoffToolHandler.UPDATE_BLOCKER_RECHECK_STATUS,
                         TrelloHandoffToolHandler.UPSERT_CHECKLIST_ITEM,
                         TrelloHandoffToolHandler.ADD_URL_ATTACHMENT,
                         TrelloHandoffToolHandler.MOVE_CURRENT_CARD);
-        assertThat(tools.get(2).path("inputSchema").path("required").toString())
+        assertThat(tools.get(2)
+                        .path("inputSchema")
+                        .path("properties")
+                        .path("status")
+                        .path("enum")
+                        .toString())
+                .isEqualTo("[\"checking\",\"resumed\"]");
+        assertThat(tools.get(3).path("inputSchema").path("required").toString())
                 .isEqualTo("[\"checklist_name\",\"item_name\",\"complete\"]");
     }
 
@@ -182,6 +221,7 @@ final class TrelloHandoffToolHandlerTest {
                 .containsExactly(
                         TrelloHandoffToolHandler.ADD_COMMENT,
                         TrelloHandoffToolHandler.UPSERT_WORKPAD,
+                        TrelloHandoffToolHandler.UPDATE_BLOCKER_RECHECK_STATUS,
                         TrelloHandoffToolHandler.MOVE_CURRENT_CARD);
     }
 
@@ -489,6 +529,697 @@ final class TrelloHandoffToolHandlerTest {
     }
 
     @Test
+    void repositoryMismatchRequeueStartsManagedBlockerRecheckStatus() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson(
+                "Implement #20",
+                actionsJson(commentAction(
+                        BLOCKER_ACTION_ID, "Blocked: GitHub issue #20 was not found in the configured repository."))));
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "checking");
+
+        // then
+        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(commentText.get())
+                .startsWith("Checking whether this card is still blocked...")
+                .contains("_Managed by Symphony · [View the comment explaining why this card was previously blocked](")
+                .contains("https://trello.com/c/SYNTH101#comment-" + BLOCKER_ACTION_ID)
+                .doesNotContain("<!--");
+        assertThat(updatedCommentText.get()).isNull();
+    }
+
+    @Test
+    void commentsDisabledRejectsBlockerRecheckBeforeRefreshingOrMutatingTheCard() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardStatus.set(500);
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "checking", configWithComments(false));
+
+        // then
+        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("contentItems").get(0).path("text").asText())
+                .contains("trello_comments_disabled")
+                .doesNotContain("trello_blocker_recheck_refresh_failed");
+        assertNoManagedCommentMutation();
+    }
+
+    @Test
+    void missingCardFailsBlockerRecheckWithoutMutatingTrello() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardStatus.set(404);
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "checking");
+
+        // then
+        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("contentItems").get(0).path("text").asText())
+                .contains("trello_blocker_recheck_card_missing");
+        assertNoManagedCommentMutation();
+    }
+
+    @Test
+    void failedCardRefreshFailsBlockerRecheckWithoutMutatingTrello() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardStatus.set(500);
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "checking");
+
+        // then
+        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("contentItems").get(0).path("text").asText())
+                .contains("trello_blocker_recheck_refresh_failed");
+        assertNoManagedCommentMutation();
+    }
+
+    @Test
+    void blockerClassificationUsesTheFirstNonBlankLogicalLine() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson(actionsJson(commentAction(
+                BLOCKER_ACTION_ID, " \r\n\u2028Blocked by a missing repository issue\nDetails follow."))));
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "checking");
+
+        // then
+        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(commentText.get()).contains(CHECKING_STATUS);
+    }
+
+    @Test
+    void blockerClassificationMatchesExactPrefixWithoutCaseSensitivity() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson(actionsJson(commentAction(BLOCKER_ACTION_ID, "blocked: missing permission"))));
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "checking");
+
+        // then
+        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(commentText.get()).contains(CHECKING_STATUS);
+    }
+
+    @Test
+    void blockerDiscussionStartingWithSimilarWordIsNotAStatusHandoff() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson(
+                actionsJson(commentAction("action-human", "Blocked workflow ideas belong in a separate discussion."))));
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "checking");
+
+        // then
+        assertThat(result.path("contentItems").get(0).path("text").asText()).contains("blocker_recheck_not_needed");
+        assertThat(commentText.get()).isNull();
+    }
+
+    @ParameterizedTest(name = "escaped control {0}")
+    @ValueSource(strings = {"\\u000b", "\\u000c"})
+    void verticalTabAndFormFeedDoNotCreateNewLogicalLinesForBlockerClassification(String escapedControl) {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson(actionsJson(
+                """
+                {
+                  "id":"action-human",
+                  "data":{"text":"Blocked by%sdiscussion that is not an exact status prefix"},
+                  "date":"2026-05-05T00:00:00.000Z",
+                  "memberCreator":{"fullName":"Codex"}
+                }
+                """
+                        .formatted(escapedControl))));
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "checking");
+
+        // then
+        assertThat(result.path("contentItems").get(0).path("text").asText()).contains("blocker_recheck_not_needed");
+        assertThat(commentText.get()).isNull();
+    }
+
+    @Test
+    void successfulRepositoryRecheckUpdatesManagedStatusToResumedWork() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson(
+                "Implement #20",
+                actionsJson(
+                        managedRecheckAction(BLOCKER_RECHECK_ACTION_ID, CHECKING_STATUS, BLOCKER_ACTION_ID),
+                        commentAction(
+                                BLOCKER_ACTION_ID,
+                                "Blocked: GitHub issue #20 was not found in the configured repository."))));
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "resumed");
+
+        // then
+        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("contentItems").get(0).path("text").asText()).contains("resumed_work_confirmed");
+        assertThat(updatedCommentText.get())
+                .contains("No longer blocked; working on Implement #20.")
+                .contains("https://trello.com/c/SYNTH101#comment-" + BLOCKER_ACTION_ID)
+                .doesNotContain("<!--");
+        assertThat(commentText.get()).isNull();
+    }
+
+    @Test
+    void refusesToClaimResumedWorkBeforeBlockerRecheckStarts() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(
+                cardJson(actionsJson(commentAction(BLOCKER_ACTION_ID, "Blocked by missing repository issue"))));
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "resumed");
+
+        // then
+        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("contentItems").get(0).path("text").asText())
+                .contains("trello_blocker_recheck_not_started");
+        assertThat(commentText.get()).isNull();
+        assertThat(updatedCommentText.get()).isNull();
+    }
+
+    @Test
+    void stillBlockedRecheckCannotConfirmAgainstAnewerBlockerHandoff() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson(actionsJson(
+                commentAction("action-blocker-new", "Blocked by GitHub issue #20 still being unavailable"),
+                managedRecheckAction(BLOCKER_RECHECK_ACTION_ID, CHECKING_STATUS, BLOCKER_ACTION_ID),
+                commentAction(BLOCKER_ACTION_ID, "Blocked: GitHub issue #20 was not found"))));
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "resumed");
+
+        // then
+        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("contentItems").get(0).path("text").asText()).contains("trello_blocker_recheck_stale");
+        assertThat(updatedCommentText.get()).isNull();
+        assertThat(commentText.get()).isNull();
+    }
+
+    @Test
+    void normalPickupDoesNotCreateBlockerRecheckStatus() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(
+                cardJson(actionsJson(commentAction("action-human", "Please implement the requested change."))));
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "checking");
+
+        // then
+        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("contentItems").get(0).path("text").asText()).contains("blocker_recheck_not_needed");
+        assertThat(commentText.get()).isNull();
+        assertThat(updatedCommentText.get()).isNull();
+    }
+
+    @Test
+    void workpadAndPrerequisiteStatusesAreExcludedBeforeClassifyingBlockerHandoff() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson(actionsJson(
+                commentAction("action-workpad", "## Codex Workpad\n\nBlocked: internal plan note"),
+                commentAction(
+                        "action-prerequisite",
+                        TrelloClient.PREREQUISITE_STATUS_COMMENT_MARKER + "\n\nBlocked by a prerequisite"),
+                commentAction(BLOCKER_ACTION_ID, "Blocked: GitHub issue #20 was not found"))));
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "checking");
+
+        // then
+        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(commentText.get()).contains(CHECKING_STATUS, "#comment-" + BLOCKER_ACTION_ID);
+    }
+
+    @MethodSource("managedFamilyHeadings")
+    @ParameterizedTest(name = "managed heading {0}")
+    @SuppressWarnings("JUnitValueSource") // A multiline ValueSource is misread as a test body by TestConventionTest.
+    void leadingWhitespaceBeforeManagedFamilyHeadingMakesItAnOrdinaryNewerComment(String managedHeading) {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson(actionsJson(
+                commentAction("action-newer", "  " + managedHeading + "\n\nHuman follow-up"),
+                commentAction(BLOCKER_ACTION_ID, "Blocked: older repository mismatch"))));
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "checking");
+
+        // then
+        assertThat(result.path("contentItems").get(0).path("text").asText()).contains("blocker_recheck_not_needed");
+        assertThat(commentText.get()).isNull();
+    }
+
+    @Test
+    void newerHumanDiscussionSupersedesOlderBlockerHandoff() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson(actionsJson(
+                commentAction("action-human", "We discussed the blocked workflow and supplied new context."),
+                commentAction(BLOCKER_ACTION_ID, "Blocked: GitHub issue #20 was not found"))));
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "checking");
+
+        // then
+        assertThat(result.path("contentItems").get(0).path("text").asText()).contains("blocker_recheck_not_needed");
+        assertThat(commentText.get()).isNull();
+        assertThat(updatedCommentText.get()).isNull();
+    }
+
+    @Test
+    void managedCheckingStatusMakesCrashRetryIdempotent() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson(actionsJson(
+                managedRecheckAction(BLOCKER_RECHECK_ACTION_ID, CHECKING_STATUS, BLOCKER_ACTION_ID),
+                commentAction(BLOCKER_ACTION_ID, "Blocked: transient repository mismatch"))));
+
+        // when
+        JsonNode firstRetry = updateBlockerRecheckStatus(handler, "checking");
+        JsonNode secondRetry = updateBlockerRecheckStatus(handler, "checking");
+
+        // then
+        assertThat(firstRetry.path("contentItems").get(0).path("text").asText())
+                .contains("blocker_recheck_already_started");
+        assertThat(secondRetry.path("contentItems").get(0).path("text").asText())
+                .contains("blocker_recheck_already_started");
+        assertThat(commentText.get()).isNull();
+        assertThat(updatedCommentText.get()).isNull();
+    }
+
+    @Test
+    void priorResumedStatusDoesNotRegressToCheckingForTheSameBlocker() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson(actionsJson(
+                managedRecheckAction(
+                        BLOCKER_RECHECK_ACTION_ID,
+                        "No longer blocked; working on Implement feature.",
+                        BLOCKER_ACTION_ID),
+                commentAction(BLOCKER_ACTION_ID, "Blocked: transient repository mismatch"))));
+
+        // when
+        JsonNode checking = updateBlockerRecheckStatus(handler, "checking");
+        JsonNode resumed = updateBlockerRecheckStatus(handler, "resumed");
+
+        // then
+        assertThat(checking.path("contentItems").get(0).path("text").asText())
+                .contains("resumed_work_already_confirmed");
+        assertThat(resumed.path("contentItems").get(0).path("text").asText())
+                .contains("resumed_work_already_confirmed");
+        assertThat(commentText.get()).isNull();
+        assertThat(updatedCommentText.get()).isNull();
+    }
+
+    @Test
+    void newerBlockerAfterPriorResumedStatusReentersCheckingOnTheSameManagedComment() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson(actionsJson(
+                commentAction("action-blocker-new", "Blocked by a new missing permission"),
+                managedRecheckAction(
+                        BLOCKER_RECHECK_ACTION_ID,
+                        "No longer blocked; working on Implement feature.",
+                        BLOCKER_ACTION_ID),
+                commentAction(BLOCKER_ACTION_ID, "Blocked: old repository mismatch"))));
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "checking");
+
+        // then
+        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(updatedCommentText.get())
+                .contains(CHECKING_STATUS, "#comment-action-blocker-new")
+                .doesNotContain("No longer blocked");
+        assertThat(commentText.get()).isNull();
+    }
+
+    @Test
+    void fullCommentWindowRefusesToCreatePossiblyDuplicateManagedStatus() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson(fullCommentWindowWithBlocker()));
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "checking");
+
+        // then
+        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("contentItems").get(0).path("text").asText())
+                .contains("trello_blocker_recheck_comment_window_incomplete");
+        assertThat(commentText.get()).isNull();
+    }
+
+    @Test
+    void blockerWithoutActionIdCannotStartManagedRecheck() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson(actionsJson(commentAction(null, "Blocked: missing source action id"))));
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "checking");
+
+        // then
+        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("contentItems").get(0).path("text").asText())
+                .contains("trello_blocker_recheck_missing_source_id");
+        assertThat(commentText.get()).isNull();
+    }
+
+    @Test
+    void managedStatusesWithoutActionIdsDoNotCauseAnotherStatusToBeCreated() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson(actionsJson(
+                managedRecheckAction(null, CHECKING_STATUS, BLOCKER_ACTION_ID),
+                commentAction(BLOCKER_ACTION_ID, "Blocked: repository mismatch"))));
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "checking");
+
+        // then
+        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("contentItems").get(0).path("text").asText())
+                .contains("trello_blocker_recheck_missing_action_id");
+        assertThat(commentText.get()).isNull();
+        assertThat(updatedCommentText.get()).isNull();
+    }
+
+    @Test
+    void newestAddressableManagedStatusWinsWhenANewerDuplicateHasNoActionId() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson(actionsJson(
+                managedRecheckAction(null, CHECKING_STATUS, BLOCKER_ACTION_ID),
+                managedRecheckAction("action-blocker-recheck-older", CHECKING_STATUS, BLOCKER_ACTION_ID),
+                commentAction(BLOCKER_ACTION_ID, "Blocked: repository mismatch"))));
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "checking");
+
+        // then
+        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("contentItems").get(0).path("text").asText())
+                .contains("\"action_id\":\"action-blocker-recheck-older\"", "\"duplicate_statuses_found\":\"1\"");
+        assertThat(updatedCommentText.get()).contains(TrelloHandoffToolHandler.DUPLICATE_BLOCKER_RECHECK_NOTE_PREFIX);
+        assertThat(commentText.get()).isNull();
+    }
+
+    @Test
+    void rejectsUnknownBlockerRecheckStateBeforeReadingOrMutatingTrello() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "complete");
+
+        // then
+        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("contentItems").get(0).path("text").asText()).contains("invalid_blocker_recheck_status");
+        assertThat(commentText.get()).isNull();
+        assertThat(updatedCommentText.get()).isNull();
+    }
+
+    @Test
+    void duplicateStatusesStayVisibleWithManualCleanupNoteWhenDeletesAreDisabled() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson(actionsJson(
+                managedRecheckAction(BLOCKER_RECHECK_ACTION_ID, CHECKING_STATUS, BLOCKER_ACTION_ID),
+                managedRecheckAction("action-blocker-recheck-older", CHECKING_STATUS, BLOCKER_ACTION_ID),
+                commentAction(BLOCKER_ACTION_ID, "Blocked: repository mismatch"))));
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "checking");
+
+        // then
+        assertThat(result.path("contentItems").get(0).path("text").asText())
+                .contains("\"duplicate_statuses_found\":\"1\"", "skipped_destructive_operations_disabled");
+        assertThat(updatedCommentText.get())
+                .contains(TrelloHandoffToolHandler.DUPLICATE_BLOCKER_RECHECK_NOTE_PREFIX)
+                .contains("delete the duplicate blocker recheck comments manually")
+                .endsWith("https://trello.com/c/SYNTH101#comment-" + BLOCKER_ACTION_ID + ")_");
+        assertThat(deletedActionIds).isEmpty();
+    }
+
+    @Test
+    void destructivePolicyRemovesDuplicateStatusAfterAuthoritativeStateIsSafe() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson(actionsJson(
+                managedRecheckAction(BLOCKER_RECHECK_ACTION_ID, CHECKING_STATUS, BLOCKER_ACTION_ID),
+                managedRecheckAction("action-blocker-recheck-older", CHECKING_STATUS, BLOCKER_ACTION_ID),
+                commentAction(BLOCKER_ACTION_ID, "Blocked: repository mismatch"))));
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "resumed", configWithDestructiveOperations());
+
+        // then
+        assertThat(result.path("contentItems").get(0).path("text").asText())
+                .contains("\"duplicate_statuses_removed\":\"1\"", "\"duplicate_statuses_cleanup_status\":\"removed\"");
+        assertThat(deletedActionIds).containsExactly("action-blocker-recheck-older");
+        assertThat(managedCommentCallOrder)
+                .as("the authoritative blocker recheck update must run before any duplicate delete")
+                .containsExactly("update:" + BLOCKER_RECHECK_ACTION_ID, "delete:action-blocker-recheck-older");
+    }
+
+    @Test
+    void failedAuthoritativeStatusUpdateDoesNotDeleteDuplicateStatuses() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        updateStatus.set(500);
+        cardResponse.set(cardJson(actionsJson(
+                commentAction("action-blocker-new", "Blocked by a new missing permission"),
+                managedRecheckAction(BLOCKER_RECHECK_ACTION_ID, CHECKING_STATUS, BLOCKER_ACTION_ID),
+                managedRecheckAction("action-blocker-recheck-older", CHECKING_STATUS, BLOCKER_ACTION_ID),
+                commentAction(BLOCKER_ACTION_ID, "Blocked: old repository mismatch"))));
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "checking", configWithDestructiveOperations());
+
+        // then
+        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(deletedActionIds).isEmpty();
+        assertThat(commentText.get()).isNull();
+    }
+
+    @Test
+    void duplicateStatusDeleteFailureKeepsAuthoritativeUpdateSuccessfulAndReportsFailure() {
+        // Expected WARN: duplicate cleanup is best effort after the authoritative status is safe.
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        deleteStatus.set(500);
+        cardResponse.set(cardJson(actionsJson(
+                managedRecheckAction(BLOCKER_RECHECK_ACTION_ID, CHECKING_STATUS, BLOCKER_ACTION_ID),
+                managedRecheckAction("action-blocker-recheck-older", CHECKING_STATUS, BLOCKER_ACTION_ID),
+                commentAction(BLOCKER_ACTION_ID, "Blocked: repository mismatch"))));
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "checking", configWithDestructiveOperations());
+
+        // then
+        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("contentItems").get(0).path("text").asText())
+                .contains("\"duplicate_statuses_delete_failed\":\"1\"", "delete_failed");
+        assertThat(deletedActionIds).isEmpty();
+    }
+
+    @Test
+    void humanCommentUsingVisibleRecheckHeadingIsNeverTreatedAsManaged() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson(actionsJson(
+                commentAction(
+                        "action-human",
+                        "## Symphony Blocker Recheck\n\nA human discussion that must not be edited or deleted."),
+                commentAction(BLOCKER_ACTION_ID, "Blocked: older repository mismatch"))));
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "checking", configWithDestructiveOperations());
+
+        // then
+        assertThat(result.path("contentItems").get(0).path("text").asText()).contains("blocker_recheck_not_needed");
+        assertThat(updatedCommentText.get()).isNull();
+        assertThat(deletedActionIds).isEmpty();
+    }
+
+    @Test
+    void footerLinkForAnotherCardIsNeverTreatedAsManaged() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        String otherCardFooter = TrelloHandoffToolHandler.BLOCKER_RECHECK_FOOTER_PREFIX
+                + "https://trello.com/c/DIFFERENT_CARD#comment-action-human"
+                + TrelloHandoffToolHandler.BLOCKER_RECHECK_FOOTER_SUFFIX;
+        cardResponse.set(cardJson(actionsJson(
+                commentAction("action-human", CHECKING_STATUS + "\n\n" + otherCardFooter),
+                commentAction(BLOCKER_ACTION_ID, "Blocked: older repository mismatch"))));
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "checking");
+
+        // then
+        assertThat(result.path("contentItems").get(0).path("text").asText()).contains("blocker_recheck_not_needed");
+        assertThat(commentText.get()).isNull();
+        assertThat(updatedCommentText.get()).isNull();
+    }
+
+    @Test
+    void footerLinkToMissingActionIsNeverTreatedAsManaged() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson(actionsJson(
+                commentAction("action-human", managedRecheckText(CHECKING_STATUS, "action-missing")),
+                commentAction(BLOCKER_ACTION_ID, "Blocked: older repository mismatch"))));
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "checking");
+
+        // then
+        assertThat(result.path("contentItems").get(0).path("text").asText()).contains("blocker_recheck_not_needed");
+        assertThat(commentText.get()).isNull();
+        assertThat(updatedCommentText.get()).isNull();
+        assertThat(deletedActionIds).isEmpty();
+    }
+
+    @Test
+    void footerLinkToOrdinaryNonBlockerActionIsNeverTreatedAsManaged() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson(actionsJson(
+                commentAction("action-human", managedRecheckText(CHECKING_STATUS, "action-discussion")),
+                commentAction("action-discussion", "The repository mismatch was discussed."),
+                commentAction(BLOCKER_ACTION_ID, "Blocked: older repository mismatch"))));
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "checking");
+
+        // then
+        assertThat(result.path("contentItems").get(0).path("text").asText()).contains("blocker_recheck_not_needed");
+        assertThat(commentText.get()).isNull();
+        assertThat(updatedCommentText.get()).isNull();
+        assertThat(deletedActionIds).isEmpty();
+    }
+
+    @Test
+    void previousPrivateMarkerIsNotRetainedAsACompatibilityAlias() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson(actionsJson(
+                commentAction(
+                        "action-old-marker",
+                        "<!-- symphony-trello:blocker-recheck -->\n\n"
+                                + CHECKING_STATUS
+                                + "\n\n<!-- symphony-blocker-comment: "
+                                + BLOCKER_ACTION_ID
+                                + " -->"),
+                commentAction(BLOCKER_ACTION_ID, "Blocked: older repository mismatch"))));
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "checking");
+
+        // then
+        assertThat(result.path("contentItems").get(0).path("text").asText()).contains("blocker_recheck_not_needed");
+        assertThat(commentText.get()).isNull();
+        assertThat(updatedCommentText.get()).isNull();
+    }
+
+    @Test
+    void exactManagedFooterStillIdentifiesStatusWhenVisibleTextHasLeadingWhitespace() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson(actionsJson(
+                commentAction(BLOCKER_RECHECK_ACTION_ID, "  " + managedRecheckText(CHECKING_STATUS, BLOCKER_ACTION_ID)),
+                commentAction(BLOCKER_ACTION_ID, "Blocked: older repository mismatch"))));
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "checking");
+
+        // then
+        assertThat(result.path("contentItems").get(0).path("text").asText()).contains("blocker_recheck_started");
+        assertThat(commentText.get()).isNull();
+        assertThat(updatedCommentText.get()).isEqualTo(managedRecheckText(CHECKING_STATUS, BLOCKER_ACTION_ID));
+    }
+
+    @Test
+    void resumedTaskSummaryNeutralizesMarkupControlsAndStaysWithinCodePointLimit() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        String unsafeTitle = "Fix [link](https://example.invalid) <script> @reviewer\r\nnext\u2028\u202E **bold** "
+                + "\uD83D\uDE80".repeat(150)
+                + ".";
+        cardResponse.set(cardJson(
+                unsafeTitle,
+                actionsJson(
+                        managedRecheckAction(BLOCKER_RECHECK_ACTION_ID, CHECKING_STATUS, BLOCKER_ACTION_ID),
+                        commentAction(BLOCKER_ACTION_ID, "Blocked: repository mismatch"))));
+
+        // when
+        JsonNode result = updateBlockerRecheckStatus(handler, "resumed");
+
+        // then
+        assertThat(result.path("success").asBoolean()).isTrue();
+        String visibleStatus = resumedStatusLine(updatedCommentText.get());
+        String summary = visibleStatus.substring(RESUMED_STATUS_PREFIX.length());
+        assertThat(summary.codePointCount(0, summary.length())).isLessThanOrEqualTo(120);
+        assertThat(visibleStatus)
+                .doesNotContain("\r", "\u2028", "\u202E", "[", "]", "(", ")", "<", ">", "**", "https:", "@reviewer")
+                .doesNotEndWith("....");
+    }
+
+    @Test
+    void resumedTaskSummaryDoesNotDuplicateExistingSentencePunctuation() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson(
+                "Implement #20.",
+                actionsJson(
+                        managedRecheckAction(BLOCKER_RECHECK_ACTION_ID, CHECKING_STATUS, BLOCKER_ACTION_ID),
+                        commentAction(BLOCKER_ACTION_ID, "Blocked: repository mismatch"))));
+
+        // when
+        updateBlockerRecheckStatus(handler, "resumed");
+
+        // then
+        assertThat(updatedCommentText.get())
+                .contains("No longer blocked; working on Implement #20.")
+                .doesNotContain("Implement #20..");
+    }
+
+    @Test
+    void resumedTaskSummaryFinalSentenceHonorsCodePointLimit() {
+        // given
+        TrelloHandoffToolHandler handler = handler();
+        cardResponse.set(cardJson(
+                "x".repeat(119),
+                actionsJson(
+                        managedRecheckAction(BLOCKER_RECHECK_ACTION_ID, CHECKING_STATUS, BLOCKER_ACTION_ID),
+                        commentAction(BLOCKER_ACTION_ID, "Blocked: repository mismatch"))));
+
+        // when
+        updateBlockerRecheckStatus(handler, "resumed");
+
+        // then
+        String visibleStatus = resumedStatusLine(updatedCommentText.get());
+        String summary = visibleStatus.substring(RESUMED_STATUS_PREFIX.length());
+        assertThat(summary.codePointCount(0, summary.length())).isEqualTo(120);
+        assertThat(summary).endsWith(".");
+    }
+
+    @Test
     void updatesExistingWorkpadCommentInsteadOfCreatingDuplicate() {
         // given
         TrelloHandoffToolHandler handler = handler();
@@ -606,7 +1337,7 @@ final class TrelloHandoffToolHandlerTest {
                 .as("the destructive opt-in cleans the card, so no manual-cleanup note is added")
                 .isEqualTo("## Codex Workpad\n\nUpdated plan");
         assertThat(deletedActionIds).containsExactly("action-workpad-older");
-        assertThat(workpadCallOrder)
+        assertThat(managedCommentCallOrder)
                 .as("the authoritative update must run before any duplicate delete")
                 .containsExactly("update:action-workpad", "delete:action-workpad-older");
         assertThat(commentText.get()).isNull();
@@ -627,7 +1358,7 @@ final class TrelloHandoffToolHandlerTest {
         assertThat(deletedActionIds)
                 .as("a failed authoritative update must leave every workpad in place")
                 .isEmpty();
-        assertThat(workpadCallOrder).containsExactly("update:action-workpad");
+        assertThat(managedCommentCallOrder).containsExactly("update:action-workpad");
         assertThat(commentText.get()).isNull();
     }
 
@@ -754,7 +1485,7 @@ final class TrelloHandoffToolHandlerTest {
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains("trello_workpad_missing_action_id");
         assertThat(deletedActionIds).isEmpty();
-        assertThat(workpadCallOrder).isEmpty();
+        assertThat(managedCommentCallOrder).isEmpty();
         assertThat(commentText.get()).as("must not create a third workpad").isNull();
     }
 
@@ -991,6 +1722,20 @@ final class TrelloHandoffToolHandlerTest {
         return new TrelloHandoffToolHandler(json, new TrelloClient(json));
     }
 
+    private JsonNode updateBlockerRecheckStatus(TrelloHandoffToolHandler handler, String status) {
+        return updateBlockerRecheckStatus(handler, status, config(List.of("Review"), List.of()));
+    }
+
+    private JsonNode updateBlockerRecheckStatus(
+            TrelloHandoffToolHandler handler, String status, EffectiveConfig effectiveConfig) {
+        return handler.handle(
+                effectiveConfig,
+                TestCards.card("card-1", "TRELLO-abc", "Ready for Codex"),
+                json.createObjectNode()
+                        .put("tool", TrelloHandoffToolHandler.UPDATE_BLOCKER_RECHECK_STATUS)
+                        .set("arguments", json.createObjectNode().put("status", status)));
+    }
+
     private JsonNode moveToListId(TrelloHandoffToolHandler handler, String listId) {
         return handler.handle(
                 config(List.of(), List.of(listId)),
@@ -1036,13 +1781,24 @@ final class TrelloHandoffToolHandlerTest {
         return config(allowWrites, List.of("Review"), List.of(), false);
     }
 
+    private EffectiveConfig configWithComments(boolean allowComments) {
+        return config(true, List.of("Review"), List.of(), allowComments, false, false, false);
+    }
+
     private EffectiveConfig configWithChecklistAndAttachmentWrites(
             boolean allowChecklists, boolean allowUrlAttachments) {
-        return config(true, List.of("Review"), List.of(), allowChecklists, allowUrlAttachments, false);
+        return config(true, List.of("Review"), List.of(), true, allowChecklists, allowUrlAttachments, false);
     }
 
     private EffectiveConfig configWithDestructiveOperations() {
         return config(true, List.of("Review"), List.of(), true);
+    }
+
+    private static Stream<String> managedFamilyHeadings() {
+        return Stream.of(
+                TrelloHandoffToolHandler.WORKPAD_MARKER,
+                TrelloClient.PREREQUISITE_STATUS_COMMENT_MARKER,
+                TrelloClient.WAITING_COMMENT_MARKER);
     }
 
     private static Stream<Arguments> nonStringToolStringArguments() {
@@ -1058,6 +1814,11 @@ final class TrelloHandoffToolHandlerTest {
                         objectArgument(
                                 "text", JsonNodeFactory.instance.arrayNode().add("Plan")),
                         "text"),
+                Arguments.of(
+                        "blocker recheck status object",
+                        TrelloHandoffToolHandler.UPDATE_BLOCKER_RECHECK_STATUS,
+                        objectArgument("status", JsonNodeFactory.instance.objectNode()),
+                        "status"),
                 Arguments.of(
                         "checklist name number",
                         TrelloHandoffToolHandler.UPSERT_CHECKLIST_ITEM,
@@ -1128,13 +1889,15 @@ final class TrelloHandoffToolHandlerTest {
             List<String> allowedMoveListNames,
             List<String> allowedMoveListIds,
             boolean allowDestructiveOperations) {
-        return config(allowWrites, allowedMoveListNames, allowedMoveListIds, true, true, allowDestructiveOperations);
+        return config(
+                allowWrites, allowedMoveListNames, allowedMoveListIds, true, true, true, allowDestructiveOperations);
     }
 
     private EffectiveConfig config(
             boolean allowWrites,
             List<String> allowedMoveListNames,
             List<String> allowedMoveListIds,
+            boolean allowComments,
             boolean allowChecklists,
             boolean allowUrlAttachments,
             boolean allowDestructiveOperations) {
@@ -1164,6 +1927,8 @@ final class TrelloHandoffToolHandlerTest {
                                         allowedMoveListNames,
                                         "allowed_move_list_ids",
                                         allowedMoveListIds,
+                                        "allow_comments",
+                                        allowComments,
                                         "allow_checklists",
                                         allowChecklists,
                                         "allow_url_attachments",
@@ -1172,6 +1937,13 @@ final class TrelloHandoffToolHandlerTest {
                                         allowDestructiveOperations)),
                         ""))
                 .withResolvedBoardId("board-1");
+    }
+
+    private void assertNoManagedCommentMutation() {
+        assertThat(commentText.get()).isNull();
+        assertThat(updatedCommentText.get()).isNull();
+        assertThat(deletedActionIds).isEmpty();
+        assertThat(movedToListId.get()).isNull();
     }
 
     private String cardResponseForRequestedFields(HttpExchange exchange) {
@@ -1184,16 +1956,20 @@ final class TrelloHandoffToolHandlerTest {
     }
 
     private static String cardJson(String actionsJson) {
+        return cardJson("Implement feature", actionsJson);
+    }
+
+    private static String cardJson(String title, String actionsJson) {
         return """
                 {
                   "id":"card-1",
-                  "name":"Implement feature",
+                  "name":"%s",
                   "desc":"Description",
                   "idList":"list-ready",
                   "idBoard":"board-1",
                   "closed":false,
                   "idShort":1,
-                  "shortLink":"abc",
+                  "shortLink":"SYNTH101",
                   "shortUrl":"https://trello.com/c/SYNTH101",
                   "url":"https://trello.com/c/SYNTH101",
                   "labels":[],
@@ -1202,7 +1978,54 @@ final class TrelloHandoffToolHandlerTest {
                   "actions":%s
                 }
                 """
-                .formatted(actionsJson);
+                .formatted(jsonEscaped(title), actionsJson);
+    }
+
+    private static String actionsJson(String... actions) {
+        return "[\n" + String.join(",\n", actions) + "\n]";
+    }
+
+    private static String commentAction(String actionId, String text) {
+        String id = actionId == null ? "" : "\"id\":\"" + jsonEscaped(actionId) + "\",";
+        return """
+                {
+                  %s
+                  "data":{"text":"%s"},
+                  "date":"2026-05-05T00:00:00.000Z",
+                  "memberCreator":{"fullName":"Codex"}
+                }
+                """
+                .formatted(id, jsonEscaped(text));
+    }
+
+    private static String managedRecheckAction(String actionId, String visibleStatus, String blockerActionId) {
+        return commentAction(actionId, managedRecheckText(visibleStatus, blockerActionId));
+    }
+
+    private static String managedRecheckText(String visibleStatus, String blockerActionId) {
+        return visibleStatus
+                + "\n\n"
+                + TrelloHandoffToolHandler.BLOCKER_RECHECK_FOOTER_PREFIX
+                + "https://trello.com/c/SYNTH101#comment-"
+                + blockerActionId
+                + TrelloHandoffToolHandler.BLOCKER_RECHECK_FOOTER_SUFFIX;
+    }
+
+    private static String resumedStatusLine(String comment) {
+        int start = comment.indexOf(RESUMED_STATUS_PREFIX);
+        if (start < 0) {
+            throw new AssertionError("Managed comment has no resumed-work status line");
+        }
+        int end = comment.indexOf('\n', start);
+        return end < 0 ? comment.substring(start) : comment.substring(start, end);
+    }
+
+    private static String fullCommentWindowWithBlocker() {
+        String regularComments = commentActions(TrelloClient.WORKPAD_COMMENT_ACTION_LIMIT - 1);
+        return "[\n"
+                + commentAction(BLOCKER_ACTION_ID, "Blocked: repository mismatch")
+                + ",\n"
+                + regularComments.substring(1);
     }
 
     private static String commentActions(int count) {

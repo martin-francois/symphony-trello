@@ -148,7 +148,48 @@ final class CodexSkillStructureTest {
                 .contains("existing PR")
                 .contains("delete the workpad")
                 .contains("create a new branch")
-                .contains("Do not create duplicate progress summary comments");
+                .contains("Do not create duplicate progress summary comments")
+                .contains("trello_update_blocker_recheck_status")
+                .containsIgnoringWhitespaces("newest ordinary comment")
+                .containsIgnoringWhitespaces("exact `Managed by Symphony` footer")
+                .containsIgnoringWhitespaces("a link to the qualifying blocker comment on the current card")
+                .containsIgnoringWhitespaces(
+                        "The newest ordinary `Blocked:` or `Blocked by ...` comment is the comment being rechecked; leave it unchanged")
+                .containsIgnoringWhitespaces(
+                        "Call `checking` to create or update a separate Symphony-managed status comment")
+                .containsIgnoringWhitespaces(
+                        "The rendered prompt contains only recent Trello comments, so do not use it to decide whether a stale blocker exists")
+                .containsIgnoringWhitespaces(
+                        "This section applies only when `trello_update_blocker_recheck_status` is advertised")
+                .containsIgnoringWhitespaces(
+                        "When it is unavailable, do not attempt a managed recheck write; follow the workflow's tool-disabled final-response or manual handoff path")
+                .containsIgnoringWhitespaces(
+                        "When the tool is advertised, always call it with status `checking` before changing code")
+                .containsIgnoringWhitespaces(
+                        "When the tool returns `blocker_recheck_not_needed`, continue without creating a managed status")
+                .containsIgnoringWhitespaces(
+                        "If the initial `checking` call returns a tool failure, including `trello_blocker_recheck_refresh_failed` or `trello_blocker_recheck_card_missing`, stop the current attempt")
+                .containsIgnoringWhitespaces("Do not test the blocker, call `resumed`, or request another Trello write")
+                .containsIgnoringWhitespaces("the next dispatched retry must begin with `checking` again")
+                .containsIgnoringWhitespaces(
+                        "Symphony's automatic pre-dispatch move may already have happened before Codex starts")
+                .containsIgnoringWhitespaces(
+                        "The absence of an existing managed recheck comment is not a reason to skip this call")
+                .contains("`Blocked:`")
+                .contains("`Blocked by ...`")
+                .contains("matched without case sensitivity")
+                .containsIgnoringWhitespaces("status `checking`")
+                .contains("status `resumed`")
+                .containsIgnoringWhitespaces(
+                        "If the `resumed` call returns any tool failure, including `trello_blocker_recheck_stale`, `trello_blocker_recheck_not_started`, `trello_blocker_recheck_refresh_failed`, or `trello_blocker_recheck_card_missing`, stop the current attempt")
+                .containsIgnoringWhitespaces(
+                        "Do not claim that work resumed, use the ordinary blocked handoff, or request another Trello write")
+                .containsIgnoringWhitespaces(
+                        "A stale result means the newly qualifying blocker must enter its own `checking` episode before it can resume")
+                .contains("scan past a newer ordinary human comment")
+                .contains("claim that work resumed")
+                .containsIgnoringWhitespaces(
+                        "An already-resumed retry for the same blocker comment retains its last-confirmed resumed state. A new qualifying blocker comment starts a new action-bound recheck episode and must enter `checking` before it can resume.");
     }
 
     @Test
