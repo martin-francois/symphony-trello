@@ -678,19 +678,22 @@ each connected workflow. If setup or managed worker startup fails, the installer
 printing that completion block.
 
 On Linux, `symphony-trello status` checks the user systemd manager without changing the service. It
-keeps a valid, systemctl-compatible `DBUS_SESSION_BUS_ADDRESS`, or otherwise keeps a valid
-`XDG_RUNTIME_DIR` so systemd's private runtime endpoint remains usable. Existing absolute runtime
-directories are forwarded unchanged, including whitespace at a path-component boundary.
-Libdbus-only transports that
-systemctl cannot consume do not suppress the runtime fallback. In a fallback list, empty and
-unsupported entries are ignored when a later systemctl-compatible entry is usable; a malformed
-systemctl transport invalidates the inherited address. Status derives
+keeps a syntactically usable, systemctl-compatible `DBUS_SESSION_BUS_ADDRESS`, or otherwise keeps a
+valid `XDG_RUNTIME_DIR` so systemd's private runtime endpoint remains usable. Existing absolute
+runtime directories are forwarded unchanged, including whitespace at a path-component boundary.
+For an address list, the resolver examines entries from left to right, skips empty and unsupported
+transports, and stops after the first recognized entry. Unknown parameters on a recognized transport
+are skipped without decoding; recognized fields remain strictly validated. A malformed recognized
+entry before any usable entry invokes the runtime fallback, while a usable recognized entry preserves
+the complete original address without pre-validating later entries. Status derives
 `DBUS_SESSION_BUS_ADDRESS` from a runtime only when its `bus` entry is a real Unix socket. Only when
 neither caller value is usable does it try the effective user's standard `/run/user/<uid>` runtime
 and bus. The query receives either the selected bus address or the selected runtime directory, never
 both, so systemctl cannot let its private-runtime endpoint shadow the selected session bus. Invalid
 inherited values are removed from the query subprocess, derived bus paths use D-Bus percent-encoding,
-and the calling environment is unchanged. The autostart row reports
+and the calling environment is unchanged. The resolver does not prove that a candidate is reachable;
+the single bounded `systemctl --user show` query determines actual manager availability. The
+autostart row reports
 `manager=available` with separate unit, enabled, and active states.
 If the current shell still cannot reach user systemd, it reports `manager=unavailable` and explains
 that the worker rows below are checked independently. A running worker can therefore be healthy even

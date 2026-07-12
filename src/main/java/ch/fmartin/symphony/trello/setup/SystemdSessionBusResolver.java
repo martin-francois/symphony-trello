@@ -24,6 +24,9 @@ final class SystemdSessionBusResolver {
     private static final int DBUS_GUID_HEX_LENGTH = 32;
     private static final int DBUS_GUID_UUID_LENGTH = 36;
     private static final Set<Integer> DBUS_GUID_UUID_DASH_INDEXES = Set.of(8, 13, 18, 23);
+    private static final Set<String> DBUS_UNIX_KEYS = Set.of("guid", "path", "abstract", "uid", "gid");
+    private static final Set<String> DBUS_TCP_KEYS = Set.of("guid", "host", "port", "family");
+    private static final Set<String> DBUS_MACHINE_KEYS = Set.of("guid", "machine", "pid");
     private static final String XDG_RUNTIME_DIRECTORY = "XDG_RUNTIME_DIR";
     private static final String DBUS_SESSION_BUS_ADDRESS = "DBUS_SESSION_BUS_ADDRESS";
 
@@ -146,7 +149,6 @@ final class SystemdSessionBusResolver {
         if (value == null || value.isBlank()) {
             return Optional.empty();
         }
-        boolean hasUsableAddress = false;
         for (String address : value.split(";", -1)) {
             int separator = address.indexOf(':');
             if (separator <= 0) {
@@ -156,14 +158,11 @@ final class SystemdSessionBusResolver {
             if (!isSystemdBusTransport(transport)) {
                 continue;
             }
-            hasUsableAddress = true;
-            if (dbusAddressParameters(address, separator + 1)
-                    .filter(parameters -> isSystemdBusAddress(transport, parameters))
-                    .isEmpty()) {
-                return Optional.empty();
-            }
+            return isSyntacticallyUsableAddress(transport, address.substring(separator + 1))
+                    ? Optional.of(value)
+                    : Optional.empty();
         }
-        return hasUsableAddress ? Optional.of(value) : Optional.empty();
+        return Optional.empty();
     }
 
     private static boolean isSystemdBusTransport(String transport) {
@@ -173,48 +172,51 @@ final class SystemdSessionBusResolver {
         };
     }
 
-    private static Optional<Map<String, String>> dbusAddressParameters(String address, int start) {
-        if (start >= address.length()) {
-            return Optional.empty();
-        }
+    private static Optional<Map<String, String>> recognizedAddressParameters(
+            String parameterText, Set<String> recognizedKeys) {
         Map<String, String> parameters = new HashMap<>();
-        for (String parameter : address.substring(start).split(",", -1)) {
-            int valueSeparator = parameter.indexOf('=');
-            if (valueSeparator <= 0
-                    || valueSeparator != parameter.lastIndexOf('=')
-                    || !isDbusIdentifier(parameter, 0, valueSeparator)
-                    || !isDbusEscapedValue(parameter, valueSeparator + 1, parameter.length())) {
-                return Optional.empty();
-            }
-            String key = parameter.substring(0, valueSeparator);
-            String previous = parameters.putIfAbsent(key, parameter.substring(valueSeparator + 1));
-            if (previous != null) {
-                return Optional.empty();
+        for (String parameter : parameterText.split(",", -1)) {
+            for (String key : recognizedKeys) {
+                String prefix = key + "=";
+                if (parameter.startsWith(prefix)) {
+                    String previous = parameters.putIfAbsent(key, parameter.substring(prefix.length()));
+                    if (previous != null) {
+                        return Optional.empty();
+                    }
+                    break;
+                }
             }
         }
         return Optional.of(Map.copyOf(parameters));
     }
 
-    private static boolean isSystemdBusAddress(String transport, Map<String, String> parameters) {
-        // systemctl uses systemd's sd-bus parser, whose connectable transport set is narrower than
-        // libdbus (notably excluding autolaunch and nonce-tcp).
+    private static boolean isSyntacticallyUsableAddress(String transport, String parameterText) {
+        // systemctl uses systemd's sd-bus parser, whose supported transport set is narrower than
+        // libdbus (notably excluding autolaunch and nonce-tcp). Unknown transport parameters are
+        // skipped as raw text; only fields recognized by the selected transport are decoded.
         return switch (transport) {
-            case "unix" -> validUnixAddress(parameters);
+            case "unix" ->
+                recognizedAddressParameters(parameterText, DBUS_UNIX_KEYS)
+                        .filter(SystemdSessionBusResolver::validUnixAddress)
+                        .isPresent();
             case "tcp" ->
-                hasOnlyKeys(parameters, "guid", "host", "port", "family")
-                        && validNonEmptyDecodedDbusValue(parameters.get("host"))
-                        && validTcpPort(parameters.get("port"))
-                        && validTcpFamily(parameters.get("family"))
-                        && validOptionalDbusGuid(parameters);
-            case "unixexec" -> validUnixExecAddress(parameters);
-            case "x-machine-unix" -> validMachineAddress(parameters);
+                recognizedAddressParameters(parameterText, DBUS_TCP_KEYS)
+                        .filter(parameters -> validNonEmptyDecodedDbusValue(parameters.get("host")))
+                        .filter(parameters -> validNonEmptyDecodedDbusValue(parameters.get("port")))
+                        .filter(parameters -> validTcpFamily(parameters.get("family")))
+                        .filter(SystemdSessionBusResolver::validOptionalDbusGuid)
+                        .isPresent();
+            case "unixexec" -> validUnixExecAddress(parameterText);
+            case "x-machine-unix" ->
+                recognizedAddressParameters(parameterText, DBUS_MACHINE_KEYS)
+                        .filter(SystemdSessionBusResolver::validMachineAddress)
+                        .isPresent();
             default -> false;
         };
     }
 
     private static boolean validUnixAddress(Map<String, String> parameters) {
-        if (!hasOnlyKeys(parameters, "guid", "path", "abstract", "uid", "gid")
-                || !validOptionalDbusGuid(parameters)
+        if (!validOptionalDbusGuid(parameters)
                 || !validOptionalUnixId(parameters.get("uid"))
                 || !validOptionalUnixId(parameters.get("gid"))) {
             return false;
@@ -249,21 +251,33 @@ final class SystemdSessionBusResolver {
         }
     }
 
-    private static boolean validUnixExecAddress(Map<String, String> parameters) {
-        if (!validNonEmptyDecodedDbusValue(parameters.get("path")) || !validOptionalDbusGuid(parameters)) {
-            return false;
-        }
+    private static boolean validUnixExecAddress(String parameterText) {
+        Map<String, String> namedParameters = new HashMap<>();
         Set<Integer> argumentIndexes = new HashSet<>();
         int highestArgumentIndex = 0;
-        for (String key : parameters.keySet()) {
-            if (key.equals("guid") || key.equals("path")) {
+        for (String parameter : parameterText.split(",", -1)) {
+            if (parameter.startsWith("guid=") || parameter.startsWith("path=")) {
+                int separator = parameter.indexOf('=');
+                String key = parameter.substring(0, separator);
+                if (namedParameters.putIfAbsent(key, parameter.substring(separator + 1)) != null) {
+                    return false;
+                }
                 continue;
             }
-            int argumentIndex = unixExecArgumentIndex(key);
-            if (argumentIndex < 0 || !argumentIndexes.add(argumentIndex)) {
+            if (!parameter.startsWith("argv")) {
+                continue;
+            }
+            Optional<Integer> argumentIndex = unixExecArgumentIndex(parameter);
+            if (argumentIndex.isEmpty()
+                    || decodedDbusValue(parameter.substring(parameter.indexOf('=') + 1))
+                            .isEmpty()) {
                 return false;
             }
-            highestArgumentIndex = Math.max(highestArgumentIndex, argumentIndex);
+            argumentIndexes.add(argumentIndex.orElseThrow());
+            highestArgumentIndex = Math.max(highestArgumentIndex, argumentIndex.orElseThrow());
+        }
+        if (!validNonEmptyDecodedDbusValue(namedParameters.get("path")) || !validOptionalDbusGuid(namedParameters)) {
+            return false;
         }
         for (int argumentIndex = 1; argumentIndex <= highestArgumentIndex; argumentIndex++) {
             if (!argumentIndexes.contains(argumentIndex)) {
@@ -273,24 +287,25 @@ final class SystemdSessionBusResolver {
         return true;
     }
 
-    private static int unixExecArgumentIndex(String key) {
-        if (!key.startsWith("argv") || key.length() == "argv".length()) {
-            return -1;
+    private static Optional<Integer> unixExecArgumentIndex(String parameter) {
+        int indexEnd = "argv".length();
+        while (indexEnd < parameter.length() && isAsciiDigit(parameter.charAt(indexEnd))) {
+            indexEnd++;
         }
-        String index = key.substring("argv".length());
-        if (numericValue(index).isEmpty()) {
-            return -1;
+        if (indexEnd >= parameter.length() || parameter.charAt(indexEnd) != '=') {
+            return Optional.empty();
         }
+        String index = parameter.substring("argv".length(), indexEnd);
         try {
-            int parsedIndex = Integer.parseInt(index);
-            return parsedIndex <= DBUS_UNIXEXEC_MAX_ARGUMENT_INDEX ? parsedIndex : -1;
+            int parsedIndex = index.isEmpty() ? 0 : Integer.parseInt(index);
+            return parsedIndex <= DBUS_UNIXEXEC_MAX_ARGUMENT_INDEX ? Optional.of(parsedIndex) : Optional.empty();
         } catch (NumberFormatException invalidIndex) {
-            return -1;
+            return Optional.empty();
         }
     }
 
     private static boolean validMachineAddress(Map<String, String> parameters) {
-        if (!hasOnlyKeys(parameters, "guid", "machine", "pid") || !validOptionalDbusGuid(parameters)) {
+        if (!validOptionalDbusGuid(parameters)) {
             return false;
         }
         boolean hasMachine = parameters.containsKey("machine");
@@ -338,11 +353,6 @@ final class SystemdSessionBusResolver {
         return !dot && !hyphen;
     }
 
-    private static boolean hasOnlyKeys(Map<String, String> parameters, String... allowedKeys) {
-        Set<String> allowed = Set.of(allowedKeys);
-        return allowed.containsAll(parameters.keySet());
-    }
-
     private static boolean validOptionalDbusGuid(Map<String, String> parameters) {
         String encodedGuid = parameters.get("guid");
         if (encodedGuid == null) {
@@ -367,22 +377,6 @@ final class SystemdSessionBusResolver {
             }
         }
         return true;
-    }
-
-    private static boolean validTcpPort(String encodedPort) {
-        if (encodedPort == null) {
-            return false;
-        }
-        Optional<String> port = decodedAsciiDbusValue(encodedPort);
-        if (port.isEmpty() || numericValue(port.orElseThrow()).isEmpty()) {
-            return false;
-        }
-        try {
-            int numericPort = Integer.parseInt(port.orElseThrow());
-            return numericPort >= 1 && numericPort <= 65535;
-        } catch (NumberFormatException invalidPort) {
-            return false;
-        }
     }
 
     private static boolean validTcpFamily(String encodedFamily) {
@@ -419,10 +413,20 @@ final class SystemdSessionBusResolver {
         while (index < value.length()) {
             int current = value.charAt(index);
             if (current == '%') {
-                current = Character.digit(value.charAt(index + 1), 16) * 16
-                        + Character.digit(value.charAt(index + 2), 16);
+                if (index + 2 >= value.length()) {
+                    return Optional.empty();
+                }
+                int high = Character.digit(value.charAt(index + 1), 16);
+                int low = Character.digit(value.charAt(index + 2), 16);
+                if (high < 0 || low < 0) {
+                    return Optional.empty();
+                }
+                current = high * 16 + low;
                 index += 3;
             } else {
+                if (!isDbusOptionallyEscapedByte(current)) {
+                    return Optional.empty();
+                }
                 index++;
             }
             decoded.append((char) current);
@@ -442,44 +446,12 @@ final class SystemdSessionBusResolver {
                 .isPresent();
     }
 
-    private static boolean isDbusIdentifier(String value, int start, int end) {
-        if (start >= end || !isAsciiLetter(value.charAt(start))) {
-            return false;
-        }
-        for (int index = start + 1; index < end; index++) {
-            char character = value.charAt(index);
-            if (!isAsciiLetter(character) && !isAsciiDigit(character) && character != '-' && character != '_') {
-                return false;
-            }
-        }
-        return true;
-    }
-
     private static boolean isAsciiLetter(int character) {
         return (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z');
     }
 
     private static boolean isAsciiDigit(int character) {
         return character >= '0' && character <= '9';
-    }
-
-    private static boolean isDbusEscapedValue(String value, int start, int end) {
-        int index = start;
-        while (index < end) {
-            char character = value.charAt(index);
-            if (isDbusOptionallyEscapedByte(character)) {
-                index++;
-                continue;
-            }
-            if (character != '%'
-                    || index + 2 >= end
-                    || !isAsciiHexDigit(value.charAt(index + 1))
-                    || !isAsciiHexDigit(value.charAt(index + 2))) {
-                return false;
-            }
-            index += 3;
-        }
-        return true;
     }
 
     private static boolean isDbusOptionallyEscapedByte(int character) {

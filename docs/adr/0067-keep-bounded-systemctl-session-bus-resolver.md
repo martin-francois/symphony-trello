@@ -7,6 +7,7 @@ consulted:
   - SPEC.md
   - src/main/java/ch/fmartin/symphony/trello/setup/LocalWorkerManager.java
   - src/main/java/ch/fmartin/symphony/trello/setup/SystemdSessionBusResolver.java
+  - "[systemd sd-bus source at 9a09141c](https://github.com/systemd/systemd/blob/9a09141caeb45876f9258de0b96e5c09eb428648/src/libsystemd/sd-bus/sd-bus.c)"
   - "[GitHub PR #558](https://github.com/martin-francois/symphony-trello/pull/558)"
   - "[GitHub issue #564](https://github.com/martin-francois/symphony-trello/issues/564)"
   - "[dbus-java repository](https://github.com/hypfvieh/dbus-java)"
@@ -24,11 +25,11 @@ inactive or missing service. It makes one bounded `systemctl --user show` query 
 That query may run from a shell that has a valid session-bus address, only an XDG runtime directory,
 invalid inherited connection hints, or neither hint.
 
-The contract in `SPEC.md` defines which values are safe to pass to `systemctl`, their precedence, and
-the standard `/run/user/<uid>` fallback. PR #558 originally implemented this logic inside
-`LocalWorkerManager`. Review moved it into the package-private `SystemdSessionBusResolver`, but the
-resolver still contains substantial D-Bus address validation. A maintained library could be easier to
-read and maintain if it replaces enough of this boundary.
+The contract in `SPEC.md` defines which values are syntactically usable candidates for `systemctl`,
+their precedence, and the standard `/run/user/<uid>` fallback. PR #558 originally implemented this
+logic inside `LocalWorkerManager`. Review moved it into the package-private
+`SystemdSessionBusResolver`, but the resolver still contains substantial D-Bus address validation. A
+maintained library could be easier to read and maintain if it replaces enough of this boundary.
 
 The dependency research gate requires a release within the previous 12 months, an unarchived and
 non-deprecated project, a compatible open-source license, and at least 100 GitHub stars. On
@@ -64,9 +65,13 @@ preserves the tested contract without expanding a status correctness fix into a 
 and systemd-interface integration.
 
 `LocalWorkerManager` owns worker lifecycle and interprets the three requested systemd properties.
-`SystemdSessionBusResolver` owns only the environment selection and validation needed by the command.
-`ProcessCommandRunner` owns the bounded process lifecycle. This separation keeps the Linux-specific
-grammar out of worker lifecycle code while retaining a small internal boundary between components.
+`SystemdSessionBusResolver` owns only the environment selection and syntax validation needed by the
+command. It follows sd-bus address ordering, skips unknown transport parameters as raw text, validates
+recognized fields, and returns the complete inherited address after the first usable recognized
+entry. It does not establish connectivity. `ProcessCommandRunner` owns the bounded process lifecycle,
+and the one `systemctl` query establishes actual manager availability. This separation keeps the
+Linux-specific grammar out of worker lifecycle code while retaining a small internal boundary between
+components.
 
 dbus-java is the only credible dedicated dependency found during this review. It provides connection,
 proxy, and transport modules, but adopting it is not a drop-in replacement for the current resolver.
@@ -85,6 +90,8 @@ modes. If adoption is recommended, it must update or supersede this ADR.
 * Good, because the current implementation remains deterministic and fully testable without a live
   D-Bus connection.
 * Good, because Linux session-bus mechanics are isolated in one package-private class.
+* Good, because the resolver leaves connection attempts, TCP service resolution, and later address
+  fallback to sd-bus instead of probing them from Java.
 * Good, because a maintained dependency remains preferred if the spike proves it is genuinely
   simpler.
 * Bad, because the repository temporarily owns D-Bus address validation code and its regression
@@ -101,7 +108,9 @@ This decision remains implemented when:
 * Linux status uses one bounded `systemctl --user show` query for `LoadState`, `UnitFileState`, and
   `ActiveState`;
 * resolver and status tests cover caller-bus precedence, caller-runtime precedence, standard-runtime
-  fallback, invalid inherited values, unavailable manager state, timeout, interruption, and cleanup;
+  fallback, ordered address lists, skipped unknown parameters, strict recognized fields, original
+  address preservation, invalid inherited values, unavailable manager state, timeout, interruption,
+  and cleanup;
 * no D-Bus or libsystemd runtime dependency is added without evidence from issue #564; and
 * `./mvnw -q spotless:check verify` passes.
 
@@ -151,7 +160,21 @@ read unit properties.
 
 ## More Information
 
+The sd-bus compatibility oracle for this decision is systemd commit
+`9a09141caeb45876f9258de0b96e5c09eb428648`, specifically `parse_address_key`,
+`skip_address_key`, the Unix, TCP, `unixexec`, and `x-machine-unix` parsers, and the ordered
+address-start path in `src/libsystemd/sd-bus/sd-bus.c`. Those functions establish that unknown
+parameters are skipped without decoding, recognized fields are decoded strictly, `unixexec` argument
+aliases use their numeric index, TCP services are passed to `getaddrinfo`, and a later entry is not
+parsed until an earlier connection attempt needs fallback. The Java resolver deliberately performs no
+DNS, service, connection, or reachability probe and preserves the complete original address for
+sd-bus.
+
 The initial implementation omitted this ADR even though the review compared multiple meaningful
 dependency and architecture choices. That contradicted the repository's ADR discipline. The agent
 guidance is strengthened separately on `main` so a review reply that recommends keeping custom code
 after dependency research cannot be posted before the ADR and any required spike issue exist.
+
+[GitHub issue #564](https://github.com/martin-francois/symphony-trello/issues/564) remains the owner of
+only the optional dbus-java architecture spike. This compatibility correction does not change that
+deferred scope.

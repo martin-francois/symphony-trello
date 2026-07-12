@@ -14,6 +14,7 @@ import static org.mockito.Mockito.mockConstruction;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
@@ -1104,6 +1105,58 @@ final class LocalWorkerManagerTest {
         verify(fixture.commandRunner, never()).run("id", "-u");
     }
 
+    @MethodSource("orderedCallerAddressStatusScenarios")
+    @ParameterizedTest(name = "{0}")
+    void statusUsesOrderedSdBusAddressSemanticsWithoutChangingStructuredOutput(
+            String sessionBusAddress, boolean callerBusWins) throws Exception {
+        // given
+        Path home = tempDir.resolve("linux-ordered-address-home");
+        Path callerRuntime = tempDir.resolve("linux-ordered-address-runtime");
+        Files.createDirectories(callerRuntime);
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(
+                tempDir,
+                Map.of(
+                        "SYMPHONY_TRELLO_TEST_OS",
+                        "Linux",
+                        "SYMPHONY_TRELLO_TEST_HOME",
+                        home.toString(),
+                        "XDG_RUNTIME_DIR",
+                        callerRuntime.toString(),
+                        "DBUS_SESSION_BUS_ADDRESS",
+                        sessionBusAddress));
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        CommandEnvironment expectedEnvironment = callerBusWins
+                ? new CommandEnvironment(
+                        Map.of("DBUS_SESSION_BUS_ADDRESS", sessionBusAddress), Set.of("XDG_RUNTIME_DIR"))
+                : new CommandEnvironment(
+                        Map.of("XDG_RUNTIME_DIR", callerRuntime.toString()), Set.of("DBUS_SESSION_BUS_ADDRESS"));
+        stubSystemdStatus(
+                fixture, expectedEnvironment, new CommandResult(0, systemdStatusOutput("loaded", "enabled", "active")));
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
+
+        // then
+        assertThat(result.exitCode()).isZero();
+        assertThat(result.stdout())
+                .isEqualTo(("autostart linux_user_systemd service=symphony-trello.service unit=installed"
+                                + " manager=available enabled=enabled active=active path=%s%n%n"
+                                + "stopped \"Queue\"%n")
+                        .formatted(home.resolve(".config/systemd/user/symphony-trello.service")));
+        verifySystemdStatusQuery(fixture, expectedEnvironment);
+        verify(fixture.commandRunner, never()).run("id", "-u");
+        verifyNoMoreInteractions(fixture.commandRunner);
+    }
+
+    private static Stream<Arguments> orderedCallerAddressStatusScenarios() {
+        return Stream.of(
+                Arguments.of(Named.named("accepted unknown parameter", "unix:path=/tmp/bus,future-option=%ZZ"), true),
+                Arguments.of(
+                        Named.named("usable first and malformed unused later", "unix:path=/tmp/bus;unix:path"), true),
+                Arguments.of(Named.named("malformed first recognized entry", "unix:path;unix:path=/tmp/bus"), false));
+    }
+
     private static Stream<Arguments> validDbusAddresses() {
         return Stream.of(
                 namedArgument("one key/value", "unix:path=/run/user/1000/bus"),
@@ -1118,6 +1171,7 @@ final class LocalWorkerManagerTest {
                         "percent-encoded Unix socket credentials",
                         "unix:path=/run/user/1000/bus,uid=%31%30%30%30,gid=%31%30%30%30"),
                 namedArgument("multiple key/value pairs", "tcp:host=localhost,port=1234,family=ipv4"),
+                namedArgument("trailing unknown empty parameter", "unix:path=/run/user/1000/bus,"),
                 namedArgument(
                         "multiple fallback addresses", "unix:path=/run/user/1000/bus;tcp:host=localhost,port=1234"),
                 namedArgument(
@@ -1140,6 +1194,9 @@ final class LocalWorkerManagerTest {
                 namedArgument(
                         "executed subprocess argv zero and empty argument",
                         "unixexec:path=/bin/false,argv0=custom-name,argv01="),
+                namedArgument(
+                        "executed subprocess numeric argument alias overwrite",
+                        "unixexec:path=/bin/false,argv1=first,argv01=second"),
                 namedArgument("executed subprocess maximum argument", contiguousUnixExecAddress(256)),
                 namedArgument("machine by name", "x-machine-unix:machine=build-container"),
                 namedArgument("machine by escaped name", "x-machine-unix:machine=build%2Dcontainer"),
@@ -1207,7 +1264,6 @@ final class LocalWorkerManagerTest {
                 namedArgument("colon-only parameter text", "unix::"),
                 namedArgument("empty key", "unix:=/run/user/1000/bus"),
                 namedArgument("empty value", "unix:path="),
-                namedArgument("empty parameter", "unix:path=/run/user/1000/bus,"),
                 namedArgument("listenable Unix runtime", "unix:runtime=yes"),
                 namedArgument("Unix path and abstract", "unix:path=/run/user/1000/bus,abstract=user-bus"),
                 namedArgument("overlong Unix socket path", "unix:path=/" + "a".repeat(107)),
@@ -1229,9 +1285,6 @@ final class LocalWorkerManagerTest {
                 namedArgument("unixexec with empty path", "unixexec:path="),
                 namedArgument("unixexec with argument gap", "unixexec:path=/bin/false,argv2=argument"),
                 namedArgument("unixexec with argument above maximum", "unixexec:path=/bin/false,argv257=argument"),
-                namedArgument(
-                        "unixexec with duplicate resolved argument",
-                        "unixexec:path=/bin/false,argv1=first,argv01=second"),
                 namedArgument("machine with name and pid", "x-machine-unix:machine=build-container,pid=1234"),
                 namedArgument("machine with invalid hostname", "x-machine-unix:machine=bad_name"),
                 namedArgument("machine with escaped invalid hostname", "x-machine-unix:machine=bad%5Fname"),

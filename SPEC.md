@@ -4147,21 +4147,27 @@ When this profile is used:
   usable SHOULD status derive the effective user's standard `/run/user/<numeric uid>` runtime
   directory. A valid caller runtime directory MUST be a nonblank, existing absolute directory and
   MUST be forwarded unchanged, including whitespace at a path-component boundary. A valid caller
-  bus address means a syntactically valid, connectable form accepted by systemctl's sd-bus client:
+  bus address means a syntactically usable candidate accepted by systemctl's sd-bus client:
   Unix `path` with 1 to 107 decoded non-NUL bytes or `abstract` with 1 to 106 decoded non-NUL bytes,
   optionally with `uid` and `gid`; each credential value MUST decode to unsigned 32-bit decimal with
   no sign or leading zero except the value `0`, and MUST exclude `65535` and `4294967295`; TCP `host`
-  plus a valid nonzero `port`; `unixexec` with a nonempty
+  plus a nonblank `port` string, including service-name syntax; `unixexec` with a nonempty
   `path`, optional `argv0`, and contiguous `argv1` through at most `argv256`, whose argument values
   may be empty; or `x-machine-unix` with exactly one of `machine` and `pid`. A machine MUST decode to
   `.host` or a systemd-compatible hostname of at most 64 ASCII bytes, and a PID MUST decode to a
   decimal value from 1 through 2147483647. An optional GUID MUST decode to either 32 hexadecimal
   digits or the dashed 8-4-4-4-12 form, case-insensitively. A semicolon-separated fallback list MUST
-  contain at least one valid supported entry. Empty entries and unsupported transports, including
-  libdbus-only `autolaunch` and `nonce-tcp`, MUST be skipped as sd-bus skips them; a malformed
-  recognized transport, a listen-only form, an unsupported parameter on a recognized transport, or
-  a malformed escaped value MUST invalidate the inherited address and MUST NOT suppress the
-  standard-runtime fallback. For either caller or standard runtime, status MUST derive
+  be evaluated from left to right. Empty entries and unsupported transports, including libdbus-only
+  `autolaunch` and `nonce-tcp`, MUST be skipped. For a recognized transport, unknown parameter
+  segments MUST be skipped as raw text without decoding or validation, while recognized fields MUST
+  be decoded and validated strictly. The first syntactically usable recognized entry MUST accept and
+  preserve the complete original address string without pre-validating later entries. A malformed
+  recognized entry encountered before any usable recognized entry MUST invalidate the inherited
+  address and MUST NOT suppress the standard-runtime fallback. `unixexec` argument keys MUST use
+  their resolved numeric indexes, so leading-zero aliases overwrite the same argument slot and holes
+  from `argv1` through the highest index remain invalid. Address validation MUST NOT perform a
+  connection, DNS, service lookup, or other reachability probe. For either caller or standard
+  runtime, status MUST derive
   `DBUS_SESSION_BUS_ADDRESS=unix:path=<runtime directory>/bus` only when `bus` is a real Unix-domain
   socket. A derived address value MUST encode the runtime path as UTF-8 and D-Bus-percent-escape every
   byte outside `[-0-9A-Za-z_/.*]`. The query subprocess MUST receive exactly one selected connection
@@ -4169,7 +4175,8 @@ When this profile is used:
   runtime directory MUST remove `DBUS_SESSION_BUS_ADDRESS`. Invalid inherited values MUST be removed
   from the query subprocess unless replaced by a valid override. Only `XDG_RUNTIME_DIR` and
   `DBUS_SESSION_BUS_ADDRESS` may be overridden or removed, and status MUST NOT mutate the calling
-  process environment
+  process environment. The one bounded `systemctl --user show` query, rather than Java-side address
+  validation, MUST determine actual manager availability
 - Linux lifecycle status MUST distinguish `manager=available` from `manager=unavailable`, report
   unit state as `installed`, `not_installed`, or `unknown`, enabled state as `enabled`, `disabled`, or
   `unknown`, and active state as `active`, `inactive`, `failed`, or `unknown`. A failed, timed-out,
