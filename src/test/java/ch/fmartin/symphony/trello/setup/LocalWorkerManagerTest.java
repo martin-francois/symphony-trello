@@ -18,14 +18,19 @@ import static org.mockito.Mockito.when;
 
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import java.io.IOException;
+import java.net.StandardProtocolFamily;
+import java.net.UnixDomainSocketAddress;
+import java.nio.channels.ServerSocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -34,6 +39,7 @@ import java.util.concurrent.locks.LockSupport;
 import java.util.function.BiFunction;
 import java.util.function.BooleanSupplier;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -44,6 +50,9 @@ import org.mockito.MockedConstruction;
 
 final class LocalWorkerManagerTest {
     private static final long MISSING_WORKFLOW_STATE_PID = 42L;
+    private static final String TEST_USER_ID = "1000";
+    private static final String USER_SYSTEMD_UNAVAILABLE_EXPLANATION_FOR_TESTS =
+            "User systemd state is unavailable from this shell/session; worker state below is checked independently.";
 
     @TempDir
     Path tempDir;
@@ -917,21 +926,64 @@ final class LocalWorkerManagerTest {
                 .isZero();
     }
 
-    @Test
-    void statusReportsLinuxUserSystemdAutostartState() throws Exception {
+    @MethodSource("unavailableSystemdQueryResults")
+    @ParameterizedTest(name = "{0}")
+    void statusSeparatesUnavailableUserSystemdFromHealthyManagedWorker(CommandResult systemdQueryResult)
+            throws Exception {
         // given
         Path home = tempDir.resolve("linux-home");
+        LinuxStatusEnvironment systemdEnvironment = linuxEnvironment(home);
+        LocalWorkerManagerTestFixture fixture =
+                new LocalWorkerManagerTestFixture(tempDir, systemdEnvironment.managerEnvironment());
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        fixture.stubManagedPidWithHealth(board, 42, fixture.sameWorkflow(board));
+        Path service = home.resolve(".config/systemd/user/symphony-trello.service");
+        Files.createDirectories(service.getParent());
+        Files.writeString(service, "[Unit]\n", StandardCharsets.UTF_8);
+        stubSystemdStatus(fixture, systemdEnvironment.queryEnvironment(), systemdQueryResult);
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "autostart linux_user_systemd",
+                        "unit=installed",
+                        "manager=unavailable",
+                        "enabled=unknown",
+                        "active=unknown",
+                        USER_SYSTEMD_UNAVAILABLE_EXPLANATION_FOR_TESTS,
+                        "\n\nrunning \"Queue\" pid=42 http://127.0.0.1:18080")
+                .stdoutDoesNotContain("private systemd detail");
+        verifySystemdStatusQuery(fixture, systemdEnvironment.queryEnvironment());
+    }
+
+    @Test
+    void statusRecoversMissingUserSystemdEnvironment() throws Exception {
+        // given
+        Path home = tempDir.resolve("linux-home");
+        StandardRuntimeEnvironment standardRuntime = standardRuntimeEnvironment();
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(
-                tempDir, Map.of("SYMPHONY_TRELLO_TEST_OS", "Linux", "SYMPHONY_TRELLO_TEST_HOME", home.toString()));
+                tempDir,
+                Map.of(
+                        "SYMPHONY_TRELLO_TEST_OS",
+                        "Linux",
+                        "SYMPHONY_TRELLO_TEST_HOME",
+                        home.toString(),
+                        "SYMPHONY_TRELLO_TEST_RUNTIME_ROOT",
+                        standardRuntime.runtimeRoot().toString()));
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
         Path service = home.resolve(".config/systemd/user/symphony-trello.service");
         Files.createDirectories(service.getParent());
         Files.writeString(service, "[Unit]\n", StandardCharsets.UTF_8);
-        when(fixture.commandRunner.run("systemctl", "--user", "is-enabled", "symphony-trello.service"))
-                .thenReturn(new CommandResult(0, "enabled\n"));
-        when(fixture.commandRunner.run("systemctl", "--user", "is-active", "symphony-trello.service"))
-                .thenReturn(new CommandResult(0, "active\n"));
+        when(fixture.commandRunner.run("id", "-u")).thenReturn(new CommandResult(0, TEST_USER_ID + "\n"));
+        stubSystemdStatus(
+                fixture,
+                standardRuntime.queryEnvironment(),
+                new CommandResult(0, systemdStatusOutput("loaded", "enabled", "active")));
 
         // when
         WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
@@ -942,9 +994,703 @@ final class LocalWorkerManagerTest {
                         "autostart linux_user_systemd",
                         "service=symphony-trello.service",
                         "unit=installed",
+                        "manager=available",
                         "enabled=enabled",
                         "active=active",
-                        service.toString());
+                        service.toString(),
+                        "\n\nstopped \"Queue\"");
+        verifySystemdStatusQuery(fixture, standardRuntime.queryEnvironment());
+        verify(fixture.commandRunner).run("id", "-u");
+    }
+
+    @Test
+    void statusLetsValidSessionBusWinOverCallerRuntime() throws Exception {
+        // given
+        Path home = tempDir.resolve("linux-home");
+        String runtimeDirectory = tempDir.resolve("custom-user-runtime").toString();
+        Files.createDirectories(Path.of(runtimeDirectory));
+        String sessionBusAddress = "unix:abstract=custom-user-bus";
+        Map<String, String> environment = Map.of(
+                "SYMPHONY_TRELLO_TEST_OS",
+                "Linux",
+                "SYMPHONY_TRELLO_TEST_HOME",
+                home.toString(),
+                "XDG_RUNTIME_DIR",
+                runtimeDirectory,
+                "DBUS_SESSION_BUS_ADDRESS",
+                sessionBusAddress);
+        CommandEnvironment expectedEnvironment = new CommandEnvironment(
+                Map.of("DBUS_SESSION_BUS_ADDRESS", sessionBusAddress), Set.of("XDG_RUNTIME_DIR"));
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir, environment);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        stubSystemdStatus(
+                fixture,
+                expectedEnvironment,
+                new CommandResult(0, systemdStatusOutput("loaded", "disabled", "inactive")));
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("manager=available", "enabled=disabled", "active=inactive", "\n\nstopped \"Queue\"");
+        verifySystemdStatusQuery(fixture, expectedEnvironment);
+        verify(fixture.commandRunner, never()).run("id", "-u");
+    }
+
+    @Test
+    void statusRemovesInvalidInheritedRuntimeWhenValidSessionBusAlreadySuffices() throws Exception {
+        // given
+        Path home = tempDir.resolve("linux-home");
+        String sessionBusAddress = "unix:abstract=caller-user-bus";
+        CommandEnvironment expectedEnvironment = new CommandEnvironment(
+                Map.of("DBUS_SESSION_BUS_ADDRESS", sessionBusAddress), Set.of("XDG_RUNTIME_DIR"));
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(
+                tempDir,
+                Map.of(
+                        "SYMPHONY_TRELLO_TEST_OS",
+                        "Linux",
+                        "SYMPHONY_TRELLO_TEST_HOME",
+                        home.toString(),
+                        "XDG_RUNTIME_DIR",
+                        "relative/runtime",
+                        "DBUS_SESSION_BUS_ADDRESS",
+                        sessionBusAddress));
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        stubSystemdStatus(
+                fixture, expectedEnvironment, new CommandResult(0, systemdStatusOutput("loaded", "enabled", "active")));
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
+
+        // then
+        result.assertSuccess().stdoutContains("manager=available", "enabled=enabled", "active=active");
+        verifySystemdStatusQuery(fixture, expectedEnvironment);
+        verify(fixture.commandRunner, never()).run("id", "-u");
+    }
+
+    @MethodSource("validDbusAddresses")
+    @ParameterizedTest(name = "{0}")
+    void statusPreservesValidDbusAddressSyntax(String sessionBusAddress) throws Exception {
+        // given
+        Path home = tempDir.resolve("linux-home");
+        Path runtimeDirectory = tempDir.resolve("custom-user-runtime");
+        Files.createDirectories(runtimeDirectory);
+        Map<String, String> environment = Map.of(
+                "SYMPHONY_TRELLO_TEST_OS",
+                "Linux",
+                "SYMPHONY_TRELLO_TEST_HOME",
+                home.toString(),
+                "XDG_RUNTIME_DIR",
+                runtimeDirectory.toString(),
+                "DBUS_SESSION_BUS_ADDRESS",
+                sessionBusAddress);
+        CommandEnvironment expectedEnvironment = new CommandEnvironment(
+                Map.of("DBUS_SESSION_BUS_ADDRESS", sessionBusAddress), Set.of("XDG_RUNTIME_DIR"));
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir, environment);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        stubSystemdStatus(
+                fixture, expectedEnvironment, new CommandResult(0, systemdStatusOutput("loaded", "enabled", "active")));
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
+
+        // then
+        result.assertSuccess().stdoutContains("manager=available", "enabled=enabled", "active=active");
+        verifySystemdStatusQuery(fixture, expectedEnvironment);
+        verify(fixture.commandRunner, never()).run("id", "-u");
+    }
+
+    private static Stream<Arguments> validDbusAddresses() {
+        return Stream.of(
+                namedArgument("one key/value", "unix:path=/run/user/1000/bus"),
+                namedArgument("abstract Unix socket", "unix:abstract=custom-user-bus"),
+                namedArgument("maximum Unix socket path", "unix:path=/" + "a".repeat(106)),
+                namedArgument("maximum percent-encoded Unix socket path", "unix:path=/" + "%C3%A9".repeat(53)),
+                namedArgument("maximum abstract Unix socket", "unix:abstract=" + "a".repeat(106)),
+                namedArgument("Unix socket user", "unix:path=/run/user/1000/bus,uid=1000"),
+                namedArgument(
+                        "Unix socket root user and maximum group", "unix:path=/run/user/1000/bus,uid=0,gid=4294967294"),
+                namedArgument(
+                        "percent-encoded Unix socket credentials",
+                        "unix:path=/run/user/1000/bus,uid=%31%30%30%30,gid=%31%30%30%30"),
+                namedArgument("multiple key/value pairs", "tcp:host=localhost,port=1234,family=ipv4"),
+                namedArgument(
+                        "multiple fallback addresses", "unix:path=/run/user/1000/bus;tcp:host=localhost,port=1234"),
+                namedArgument(
+                        "empty and unsupported fallback entries",
+                        ";autolaunch:;nonce-tcp:host=localhost,port=1234,noncefile=/tmp/nonce;;"
+                                + "unix:path=/run/user/1000/bus;"),
+                namedArgument(
+                        "whitespace inside unsupported fallback entry",
+                        "autolaunch:scope=ignored value;unix:path=/run/user/1000/bus"),
+                namedArgument("escaped value bytes", "unix:abstract=custom%2Dbus%3Aaddress"),
+                namedArgument("escaped whitespace", "unix:path=/run/user/1000/session%20bus"),
+                namedArgument(
+                        "plain lower-case guid", "unix:path=/run/user/1000/bus,guid=00112233445566778899aabbccddeeff"),
+                namedArgument(
+                        "dashed upper-case guid",
+                        "unix:path=/run/user/1000/bus,guid=00112233-4455-6677-8899-AABBCCDDEEFF"),
+                namedArgument(
+                        "executed subprocess",
+                        "unixexec:path=/usr/bin/ssh,argv1=-W,argv2=%25h%3A%25p,argv3=example.invalid"),
+                namedArgument(
+                        "executed subprocess argv zero and empty argument",
+                        "unixexec:path=/bin/false,argv0=custom-name,argv01="),
+                namedArgument("executed subprocess maximum argument", contiguousUnixExecAddress(256)),
+                namedArgument("machine by name", "x-machine-unix:machine=build-container"),
+                namedArgument("machine by escaped name", "x-machine-unix:machine=build%2Dcontainer"),
+                namedArgument("host machine", "x-machine-unix:machine=.host"),
+                namedArgument("maximum machine name", "x-machine-unix:machine=" + "a".repeat(64)),
+                namedArgument("machine by pid", "x-machine-unix:pid=1234"),
+                namedArgument("machine by maximum pid", "x-machine-unix:pid=%32%31%34%37%34%38%33%36%34%37"));
+    }
+
+    private static String contiguousUnixExecAddress(int highestArgumentIndex) {
+        StringBuilder address = new StringBuilder("unixexec:path=/bin/false");
+        for (int index = 1; index <= highestArgumentIndex; index++) {
+            address.append(",argv").append(index).append("=argument");
+        }
+        return address.toString();
+    }
+
+    @MethodSource("invalidDbusAddresses")
+    @ParameterizedTest(name = "{0}")
+    void statusReplacesInvalidUserSystemdEnvironmentWithStandardValues(String invalidSessionBusAddress)
+            throws Exception {
+        // given
+        Path home = tempDir.resolve("linux-home");
+        StandardRuntimeEnvironment standardRuntime = standardRuntimeEnvironment();
+        Map<String, String> environment = Map.of(
+                "SYMPHONY_TRELLO_TEST_OS",
+                "Linux",
+                "SYMPHONY_TRELLO_TEST_HOME",
+                home.toString(),
+                "SYMPHONY_TRELLO_TEST_UID",
+                TEST_USER_ID,
+                "SYMPHONY_TRELLO_TEST_RUNTIME_ROOT",
+                standardRuntime.runtimeRoot().toString(),
+                "XDG_RUNTIME_DIR",
+                "relative/runtime",
+                "DBUS_SESSION_BUS_ADDRESS",
+                invalidSessionBusAddress);
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir, environment);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        stubSystemdStatus(
+                fixture,
+                standardRuntime.queryEnvironment(),
+                new CommandResult(0, systemdStatusOutput("loaded", "enabled", "active")));
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("manager=available", "enabled=enabled", "active=active", "\n\nstopped \"Queue\"");
+        verifySystemdStatusQuery(fixture, standardRuntime.queryEnvironment());
+        verify(fixture.commandRunner, never()).run("id", "-u");
+    }
+
+    private static Stream<Arguments> invalidDbusAddresses() {
+        return Stream.of(
+                namedArgument("missing transport separator", "not-a-dbus-address"),
+                namedArgument("unsupported transport", "custom:path=/run/user/1000/bus"),
+                namedArgument("libdbus autolaunch transport", "autolaunch:"),
+                namedArgument("configured libdbus autolaunch transport", "autolaunch:scope=%2Auser"),
+                namedArgument("libdbus nonce transport", "nonce-tcp:host=localhost,port=1234,noncefile=/tmp/nonce"),
+                namedArgument("missing key/value separator", "unix:path"),
+                namedArgument("empty non-autolaunch parameter list", "unix:"),
+                namedArgument("colon-only parameter text", "unix::"),
+                namedArgument("empty key", "unix:=/run/user/1000/bus"),
+                namedArgument("empty value", "unix:path="),
+                namedArgument("empty parameter", "unix:path=/run/user/1000/bus,"),
+                namedArgument("listenable Unix runtime", "unix:runtime=yes"),
+                namedArgument("Unix path and abstract", "unix:path=/run/user/1000/bus,abstract=user-bus"),
+                namedArgument("overlong Unix socket path", "unix:path=/" + "a".repeat(107)),
+                namedArgument("overlong percent-encoded Unix socket path", "unix:path=/" + "%C3%A9".repeat(54)),
+                namedArgument("overlong abstract Unix socket", "unix:abstract=" + "a".repeat(107)),
+                namedArgument("Unix socket path with decoded NUL", "unix:path=/run/user/1000/bus%00suffix"),
+                namedArgument("abstract Unix socket with decoded NUL", "unix:abstract=user%00bus"),
+                namedArgument("Unix socket user with leading zero", "unix:path=/run/user/1000/bus,uid=01000"),
+                namedArgument("Unix socket user with plus sign", "unix:path=/run/user/1000/bus,uid=%2B1000"),
+                namedArgument("Unix socket user with minus sign", "unix:path=/run/user/1000/bus,uid=-1"),
+                namedArgument("Unix socket nonnumeric user", "unix:path=/run/user/1000/bus,uid=worker"),
+                namedArgument("Unix socket legacy invalid user", "unix:path=/run/user/1000/bus,uid=65535"),
+                namedArgument("Unix socket invalid user sentinel", "unix:path=/run/user/1000/bus,uid=4294967295"),
+                namedArgument("Unix socket user above uint32", "unix:path=/run/user/1000/bus,uid=4294967296"),
+                namedArgument("Unix socket group with whitespace", "unix:path=/run/user/1000/bus,gid=%201000"),
+                namedArgument("TCP without host or port", "tcp:family=ipv4"),
+                namedArgument("TCP unsupported family", "tcp:host=localhost,family=local"),
+                namedArgument("unixexec without path", "unixexec:argv1=example"),
+                namedArgument("unixexec with empty path", "unixexec:path="),
+                namedArgument("unixexec with argument gap", "unixexec:path=/bin/false,argv2=argument"),
+                namedArgument("unixexec with argument above maximum", "unixexec:path=/bin/false,argv257=argument"),
+                namedArgument(
+                        "unixexec with duplicate resolved argument",
+                        "unixexec:path=/bin/false,argv1=first,argv01=second"),
+                namedArgument("machine with name and pid", "x-machine-unix:machine=build-container,pid=1234"),
+                namedArgument("machine with invalid hostname", "x-machine-unix:machine=bad_name"),
+                namedArgument("machine with escaped invalid hostname", "x-machine-unix:machine=bad%5Fname"),
+                namedArgument("machine name above maximum", "x-machine-unix:machine=" + "a".repeat(65)),
+                namedArgument("machine pid above maximum", "x-machine-unix:pid=2147483648"),
+                namedArgument(
+                        "malformed dashed guid",
+                        "unix:path=/run/user/1000/bus,guid=00112233-4455-6677-8899a-abbccddeeff"),
+                namedArgument("unescaped whitespace", "unix:path=/run/user/1000/session bus"),
+                namedArgument(
+                        "unescaped whitespace in recognized fallback",
+                        "unix:path=/run/user/1000/session bus;unix:path=/run/user/1000/bus"),
+                namedArgument("control byte", "unix:path=/run/user/1000/bus\u0000suffix"),
+                namedArgument("truncated percent escape", "unix:path=/run/user/1000/bus%2"),
+                namedArgument("non-hex percent escape", "unix:path=/run/user/1000/bus%GG"),
+                namedArgument("unescaped reserved byte", "unix:path=/run/user/1000/bus:extra"));
+    }
+
+    @Test
+    void statusUsesEffectiveUidInsteadOfStaleExportedUidForStandardRuntimeFallback() throws Exception {
+        // given
+        Path home = tempDir.resolve("linux-home");
+        StandardRuntimeEnvironment standardRuntime = standardRuntimeEnvironment();
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(
+                tempDir,
+                Map.of(
+                        "SYMPHONY_TRELLO_TEST_OS",
+                        "Linux",
+                        "SYMPHONY_TRELLO_TEST_HOME",
+                        home.toString(),
+                        "SYMPHONY_TRELLO_TEST_RUNTIME_ROOT",
+                        standardRuntime.runtimeRoot().toString(),
+                        "UID",
+                        "9999"));
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        when(fixture.commandRunner.run("id", "-u")).thenReturn(new CommandResult(0, TEST_USER_ID + "\n"));
+        stubSystemdStatus(
+                fixture,
+                standardRuntime.queryEnvironment(),
+                new CommandResult(0, systemdStatusOutput("loaded", "enabled", "active")));
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
+
+        // then
+        result.assertSuccess().stdoutContains("manager=available", "enabled=enabled", "active=active");
+        verifySystemdStatusQuery(fixture, standardRuntime.queryEnvironment());
+        verify(fixture.commandRunner).run("id", "-u");
+    }
+
+    @Test
+    void statusPreservesCallerRuntimeWithoutBusForSystemdPrivateFallback() throws Exception {
+        // given
+        Path home = tempDir.resolve("linux-home");
+        Path callerRuntime = tempDir.resolve("caller-runtime-without-bus");
+        Files.createDirectories(callerRuntime);
+        Path systemdPrivate = callerRuntime.resolve("systemd/private");
+        Files.createDirectories(systemdPrivate.getParent());
+        try (ServerSocketChannel channel = ServerSocketChannel.open(StandardProtocolFamily.UNIX)) {
+            channel.bind(UnixDomainSocketAddress.of(systemdPrivate));
+        }
+        StandardRuntimeEnvironment standardRuntime = standardRuntimeEnvironment();
+        CommandEnvironment expectedEnvironment = new CommandEnvironment(
+                Map.of("XDG_RUNTIME_DIR", callerRuntime.toString()), Set.of("DBUS_SESSION_BUS_ADDRESS"));
+        LocalWorkerManagerTestFixture fixture = linuxStatusFixture(
+                home,
+                Map.of(
+                        "SYMPHONY_TRELLO_TEST_RUNTIME_ROOT",
+                        standardRuntime.runtimeRoot().toString(),
+                        "XDG_RUNTIME_DIR",
+                        callerRuntime.toString()));
+
+        // when
+        WorkerRunResult result = statusWithAvailableSystemd(fixture, expectedEnvironment);
+
+        // then
+        result.assertSuccess().stdoutContains("manager=available", "enabled=enabled", "active=active");
+        verifySystemdStatusQuery(fixture, expectedEnvironment);
+        verify(fixture.commandRunner, never()).run("id", "-u");
+    }
+
+    @MethodSource("runtimeDirectoryNamesWithBoundaryWhitespace")
+    @ParameterizedTest(name = "{0}")
+    void statusPreservesCallerRuntimeWithBoundaryWhitespace(String runtimeDirectoryName) throws Exception {
+        // given
+        Path home = tempDir.resolve("linux-home");
+        Path callerRuntime = tempDir.resolve(runtimeDirectoryName);
+        Files.createDirectories(callerRuntime);
+        CommandEnvironment expectedEnvironment = new CommandEnvironment(
+                Map.of("XDG_RUNTIME_DIR", callerRuntime.toString()), Set.of("DBUS_SESSION_BUS_ADDRESS"));
+        LocalWorkerManagerTestFixture fixture =
+                linuxStatusFixture(home, Map.of("XDG_RUNTIME_DIR", callerRuntime.toString()));
+
+        // when
+        WorkerRunResult result = statusWithAvailableSystemd(fixture, expectedEnvironment);
+
+        // then
+        result.assertSuccess().stdoutContains("manager=available", "enabled=enabled", "active=active");
+        verifySystemdStatusQuery(fixture, expectedEnvironment);
+        verify(fixture.commandRunner, never()).run("id", "-u");
+    }
+
+    private static Stream<Arguments> runtimeDirectoryNamesWithBoundaryWhitespace() {
+        return Stream.of(
+                namedArgument("leading whitespace", " caller-runtime"),
+                namedArgument("trailing whitespace", "caller-runtime "));
+    }
+
+    @Test
+    void statusRemovesInvalidSessionBusWhilePreservingCallerRuntimeForSystemdPrivate() throws Exception {
+        // given
+        Path home = tempDir.resolve("linux-home");
+        Path callerRuntime = tempDir.resolve("caller-runtime-with-private");
+        Path systemdPrivate = callerRuntime.resolve("systemd/private");
+        Files.createDirectories(systemdPrivate.getParent());
+        try (ServerSocketChannel channel = ServerSocketChannel.open(StandardProtocolFamily.UNIX)) {
+            channel.bind(UnixDomainSocketAddress.of(systemdPrivate));
+        }
+        CommandEnvironment expectedEnvironment = new CommandEnvironment(
+                Map.of("XDG_RUNTIME_DIR", callerRuntime.toString()), Set.of("DBUS_SESSION_BUS_ADDRESS"));
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(
+                tempDir,
+                Map.of(
+                        "SYMPHONY_TRELLO_TEST_OS",
+                        "Linux",
+                        "SYMPHONY_TRELLO_TEST_HOME",
+                        home.toString(),
+                        "XDG_RUNTIME_DIR",
+                        callerRuntime.toString(),
+                        "DBUS_SESSION_BUS_ADDRESS",
+                        "unix:path"));
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        stubSystemdStatus(
+                fixture, expectedEnvironment, new CommandResult(0, systemdStatusOutput("loaded", "enabled", "active")));
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
+
+        // then
+        result.assertSuccess().stdoutContains("manager=available", "enabled=enabled", "active=active");
+        verifySystemdStatusQuery(fixture, expectedEnvironment);
+        verify(fixture.commandRunner, never()).run("id", "-u");
+    }
+
+    @Test
+    void statusHonestlyReportsUnavailableWhenCallerRuntimeHasNoUsableEndpoint() throws Exception {
+        // given
+        Path home = tempDir.resolve("linux-home");
+        Path callerRuntime = tempDir.resolve("caller-runtime-without-endpoint");
+        Files.createDirectories(callerRuntime);
+        CommandEnvironment expectedEnvironment = new CommandEnvironment(
+                Map.of("XDG_RUNTIME_DIR", callerRuntime.toString()), Set.of("DBUS_SESSION_BUS_ADDRESS"));
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(
+                tempDir,
+                Map.of(
+                        "SYMPHONY_TRELLO_TEST_OS",
+                        "Linux",
+                        "SYMPHONY_TRELLO_TEST_HOME",
+                        home.toString(),
+                        "XDG_RUNTIME_DIR",
+                        callerRuntime.toString()));
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "manager=unavailable",
+                        "enabled=unknown",
+                        "active=unknown",
+                        USER_SYSTEMD_UNAVAILABLE_EXPLANATION_FOR_TESTS);
+        verifySystemdStatusQuery(fixture, expectedEnvironment);
+        verify(fixture.commandRunner, never()).run("id", "-u");
+    }
+
+    @Test
+    void statusUsesCallerRuntimeBusWithoutResolvingUid() throws Exception {
+        // given
+        Path home = tempDir.resolve("linux-home");
+        Path callerRuntime = tempDir.resolve("caller-runtime-with-bus");
+        Files.createDirectories(callerRuntime);
+        Path callerBus = callerRuntime.resolve("bus");
+        try (ServerSocketChannel channel = ServerSocketChannel.open(StandardProtocolFamily.UNIX)) {
+            channel.bind(UnixDomainSocketAddress.of(callerBus));
+            RuntimeBusStatusScenario statusScenario =
+                    runtimeBusStatusScenario(home, callerRuntime, "unix:path=" + callerBus);
+
+            // when
+            WorkerRunResult result =
+                    statusScenario.fixture().status(statusScenario.fixture().statusRequest("Queue"));
+
+            // then
+            assertAvailableRuntimeBusStatus(statusScenario, result);
+        }
+    }
+
+    @MethodSource("runtimePathsRequiringDbusEscaping")
+    @ParameterizedTest(name = "{0}")
+    void statusEscapesDerivedRuntimeBusAddress(String runtimeDirectoryName, String escapedRuntimeDirectoryName)
+            throws Exception {
+        // given
+        Path home = tempDir.resolve("linux-home");
+        Path callerRuntime = tempDir.resolve(runtimeDirectoryName);
+        Files.createDirectories(callerRuntime);
+        Path callerBus = callerRuntime.resolve("bus");
+        try (ServerSocketChannel channel = ServerSocketChannel.open(StandardProtocolFamily.UNIX)) {
+            channel.bind(UnixDomainSocketAddress.of(callerBus));
+            String escapedBusAddress =
+                    "unix:path=" + tempDir.resolve(escapedRuntimeDirectoryName).resolve("bus");
+            RuntimeBusStatusScenario statusScenario = runtimeBusStatusScenario(home, callerRuntime, escapedBusAddress);
+
+            // when
+            WorkerRunResult result =
+                    statusScenario.fixture().status(statusScenario.fixture().statusRequest("Queue"));
+
+            // then
+            assertAvailableRuntimeBusStatus(statusScenario, result);
+        }
+    }
+
+    private static Stream<Arguments> runtimePathsRequiringDbusEscaping() {
+        return Stream.of(
+                Arguments.of(Named.named("reserved comma", "caller,runtime"), "caller%2Cruntime"),
+                Arguments.of(Named.named("UTF-8 bytes", "caller-rüntime"), "caller-r%C3%BCntime"),
+                Arguments.of(Named.named("backslash", "caller\\runtime"), "caller%5Cruntime"));
+    }
+
+    private RuntimeBusStatusScenario runtimeBusStatusScenario(Path home, Path callerRuntime, String expectedBusAddress)
+            throws Exception {
+        CommandEnvironment expectedEnvironment = new CommandEnvironment(
+                Map.of("DBUS_SESSION_BUS_ADDRESS", expectedBusAddress), Set.of("XDG_RUNTIME_DIR"));
+        LocalWorkerManagerTestFixture fixture =
+                linuxStatusFixture(home, Map.of("XDG_RUNTIME_DIR", callerRuntime.toString()));
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        stubSystemdStatus(
+                fixture, expectedEnvironment, new CommandResult(0, systemdStatusOutput("loaded", "enabled", "active")));
+        return new RuntimeBusStatusScenario(fixture, expectedEnvironment);
+    }
+
+    private static void assertAvailableRuntimeBusStatus(RuntimeBusStatusScenario scenario, WorkerRunResult result) {
+        result.assertSuccess().stdoutContains("manager=available", "enabled=enabled", "active=active");
+        verifySystemdStatusQuery(scenario.fixture(), scenario.expectedEnvironment());
+        verify(scenario.fixture().commandRunner, never()).run("id", "-u");
+    }
+
+    @Test
+    void statusDoesNotResolveUidWhenValidSessionBusAddressAlreadySuffices() throws Exception {
+        // given
+        Path home = tempDir.resolve("linux-home");
+        String sessionBusAddress = "unix:abstract=caller-user-bus";
+        CommandEnvironment expectedEnvironment = new CommandEnvironment(
+                Map.of("DBUS_SESSION_BUS_ADDRESS", sessionBusAddress), Set.of("XDG_RUNTIME_DIR"));
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(
+                tempDir,
+                Map.of(
+                        "SYMPHONY_TRELLO_TEST_OS",
+                        "Linux",
+                        "SYMPHONY_TRELLO_TEST_HOME",
+                        home.toString(),
+                        "DBUS_SESSION_BUS_ADDRESS",
+                        sessionBusAddress,
+                        "UID",
+                        "9999"));
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        stubSystemdStatus(
+                fixture, expectedEnvironment, new CommandResult(0, systemdStatusOutput("loaded", "enabled", "active")));
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
+
+        // then
+        result.assertSuccess().stdoutContains("manager=available", "enabled=enabled", "active=active");
+        verifySystemdStatusQuery(fixture, expectedEnvironment);
+        verify(fixture.commandRunner, never()).run("id", "-u");
+    }
+
+    @MethodSource("reachableSystemdStateScenarios")
+    @ParameterizedTest(name = "{0}")
+    void statusReportsReachableUserSystemdStateMatrix(
+            boolean installedAtExpectedPath,
+            String systemdOutput,
+            String expectedUnit,
+            String expectedEnabled,
+            String expectedActive)
+            throws Exception {
+        // given
+        Path home = tempDir.resolve("linux-home");
+        LinuxStatusEnvironment systemdEnvironment = linuxEnvironment(home);
+        LocalWorkerManagerTestFixture fixture =
+                new LocalWorkerManagerTestFixture(tempDir, systemdEnvironment.managerEnvironment());
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        if (installedAtExpectedPath) {
+            Path service = home.resolve(".config/systemd/user/symphony-trello.service");
+            Files.createDirectories(service.getParent());
+            Files.writeString(service, "[Unit]\n", StandardCharsets.UTF_8);
+        }
+        stubSystemdStatus(fixture, systemdEnvironment.queryEnvironment(), new CommandResult(0, systemdOutput));
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "manager=available",
+                        "unit=" + expectedUnit,
+                        "enabled=" + expectedEnabled,
+                        "active=" + expectedActive,
+                        "\n\nstopped \"Queue\"")
+                .stdoutDoesNotContain(USER_SYSTEMD_UNAVAILABLE_EXPLANATION_FOR_TESTS);
+        verifySystemdStatusQuery(fixture, systemdEnvironment.queryEnvironment());
+    }
+
+    private static Stream<Arguments> unavailableSystemdQueryResults() {
+        return Stream.of(
+                namedArgument("nonzero exit", new CommandResult(1, "private systemd detail: nonzero\n")),
+                namedArgument("launch failure", CommandResult.launchFailed("private systemd detail: launch\n")),
+                namedArgument(
+                        "timeout",
+                        new CommandResult(CommandResult.TIMED_OUT_EXIT_CODE, "private systemd detail: timeout\n")),
+                namedArgument(
+                        "interruption",
+                        new CommandResult(
+                                CommandResult.INTERRUPTED_EXIT_CODE, "private systemd detail: interruption\n")));
+    }
+
+    private static Stream<Arguments> reachableSystemdStateScenarios() {
+        return Stream.of(
+                Arguments.of(
+                        Named.named("disabled and inactive", true),
+                        systemdStatusOutput("loaded", "disabled", "inactive"),
+                        "installed",
+                        "disabled",
+                        "inactive"),
+                Arguments.of(
+                        Named.named("enabled and failed", true),
+                        systemdStatusOutput("loaded", "enabled", "failed"),
+                        "installed",
+                        "enabled",
+                        "failed"),
+                Arguments.of(
+                        Named.named("unit not found", false),
+                        systemdStatusOutput("not-found", "", "inactive"),
+                        "not_installed",
+                        "unknown",
+                        "inactive"),
+                Arguments.of(
+                        Named.named("unknown categories", false),
+                        systemdStatusOutput("error", "static", "activating"),
+                        "unknown",
+                        "unknown",
+                        "unknown"));
+    }
+
+    private static <T> Arguments namedArgument(String name, T argument) {
+        return Arguments.of(Named.named(name, argument));
+    }
+
+    private static LinuxStatusEnvironment linuxEnvironment(Path home) throws IOException {
+        Path runtimeDirectory = home.resolve("caller-runtime");
+        Files.createDirectories(runtimeDirectory);
+        String sessionBusAddress = "unix:abstract=caller-user-bus";
+        return new LinuxStatusEnvironment(
+                Map.of(
+                        "SYMPHONY_TRELLO_TEST_OS",
+                        "Linux",
+                        "SYMPHONY_TRELLO_TEST_HOME",
+                        home.toString(),
+                        "XDG_RUNTIME_DIR",
+                        runtimeDirectory.toString(),
+                        "DBUS_SESSION_BUS_ADDRESS",
+                        sessionBusAddress),
+                new CommandEnvironment(
+                        Map.of("DBUS_SESSION_BUS_ADDRESS", sessionBusAddress), Set.of("XDG_RUNTIME_DIR")));
+    }
+
+    private StandardRuntimeEnvironment standardRuntimeEnvironment() throws IOException {
+        Path runtimeRoot = tempDir.resolve("run-user");
+        Path runtimeDirectory = runtimeRoot.resolve(TEST_USER_ID);
+        Files.createDirectories(runtimeDirectory);
+        Path bus = runtimeDirectory.resolve("bus");
+        try (ServerSocketChannel channel = ServerSocketChannel.open(StandardProtocolFamily.UNIX)) {
+            channel.bind(UnixDomainSocketAddress.of(bus));
+        }
+        return new StandardRuntimeEnvironment(
+                runtimeRoot,
+                new CommandEnvironment(
+                        Map.of("DBUS_SESSION_BUS_ADDRESS", "unix:path=" + bus), Set.of("XDG_RUNTIME_DIR")));
+    }
+
+    private LocalWorkerManagerTestFixture linuxStatusFixture(Path home, Map<String, String> environmentOverrides) {
+        Map<String, String> environment = new HashMap<>();
+        environment.put("SYMPHONY_TRELLO_TEST_OS", "Linux");
+        environment.put("SYMPHONY_TRELLO_TEST_HOME", home.toString());
+        environment.putAll(environmentOverrides);
+        return new LocalWorkerManagerTestFixture(tempDir, environment);
+    }
+
+    private static WorkerRunResult statusWithAvailableSystemd(
+            LocalWorkerManagerTestFixture fixture, CommandEnvironment environment) throws Exception {
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        stubSystemdStatus(
+                fixture, environment, new CommandResult(0, systemdStatusOutput("loaded", "enabled", "active")));
+        return fixture.status(fixture.statusRequest("Queue"));
+    }
+
+    private static String systemdStatusOutput(String loadState, String unitFileState, String activeState) {
+        return "ActiveState=%s%nLoadState=%s%nUnitFileState=%s%n".formatted(activeState, loadState, unitFileState);
+    }
+
+    private static void stubSystemdStatus(
+            LocalWorkerManagerTestFixture fixture, Map<String, String> environmentOverrides, CommandResult result) {
+        stubSystemdStatus(fixture, CommandEnvironment.withOverrides(environmentOverrides), result);
+    }
+
+    private static void stubSystemdStatus(
+            LocalWorkerManagerTestFixture fixture, CommandEnvironment environment, CommandResult result) {
+        when(fixture.commandRunner.run(
+                        environment,
+                        "systemctl",
+                        "--user",
+                        "show",
+                        "symphony-trello.service",
+                        "--property=LoadState",
+                        "--property=UnitFileState",
+                        "--property=ActiveState",
+                        "--no-pager"))
+                .thenReturn(result);
+    }
+
+    private static void verifySystemdStatusQuery(
+            LocalWorkerManagerTestFixture fixture, Map<String, String> environmentOverrides) {
+        verifySystemdStatusQuery(fixture, CommandEnvironment.withOverrides(environmentOverrides));
+    }
+
+    private static void verifySystemdStatusQuery(
+            LocalWorkerManagerTestFixture fixture, CommandEnvironment environment) {
+        verify(fixture.commandRunner)
+                .run(
+                        environment,
+                        "systemctl",
+                        "--user",
+                        "show",
+                        "symphony-trello.service",
+                        "--property=LoadState",
+                        "--property=UnitFileState",
+                        "--property=ActiveState",
+                        "--no-pager");
+        verify(fixture.commandRunner, never()).run("systemctl", "--user", "is-enabled", "symphony-trello.service");
+        verify(fixture.commandRunner, never()).run("systemctl", "--user", "is-active", "symphony-trello.service");
     }
 
     @Test
@@ -979,6 +1725,34 @@ final class LocalWorkerManagerTest {
                         "plist=installed",
                         "loaded=loaded",
                         plist.toString());
+    }
+
+    @Test
+    void statusFallsBackFromInvalidConfiguredUserIdToNumericEffectiveUserId() throws Exception {
+        // given
+        Path home = tempDir.resolve("mac-home-invalid-configured-uid");
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(
+                tempDir,
+                Map.of(
+                        "SYMPHONY_TRELLO_TEST_OS",
+                        "Darwin",
+                        "SYMPHONY_TRELLO_TEST_HOME",
+                        home.toString(),
+                        "SYMPHONY_TRELLO_TEST_UID",
+                        "not-numeric"));
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        when(fixture.commandRunner.run("id", "-u")).thenReturn(new CommandResult(0, "501\n"));
+        when(fixture.commandRunner.run("launchctl", "print", "gui/501/ch.fmartin.symphony-trello"))
+                .thenReturn(new CommandResult(0, "loaded\n"));
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
+
+        // then
+        result.assertSuccess().stdoutContains("autostart macos_launchagent", "loaded=loaded");
+        verify(fixture.commandRunner).run("id", "-u");
+        verify(fixture.commandRunner).run("launchctl", "print", "gui/501/ch.fmartin.symphony-trello");
     }
 
     @Test
@@ -4022,6 +4796,14 @@ final class LocalWorkerManagerTest {
 
     private record PostStopSameWorkflow(
             LocalWorkerManagerTestFixture fixture, ConnectedBoard board, long reportedPid) {}
+
+    private record LinuxStatusEnvironment(
+            Map<String, String> managerEnvironment, CommandEnvironment queryEnvironment) {}
+
+    private record StandardRuntimeEnvironment(Path runtimeRoot, CommandEnvironment queryEnvironment) {}
+
+    private record RuntimeBusStatusScenario(
+            LocalWorkerManagerTestFixture fixture, CommandEnvironment expectedEnvironment) {}
 
     private record StalePidScenario(
             ConnectedBoard board, ManagedProcessStore.ManagedProcessFiles files, String pidToken) {}

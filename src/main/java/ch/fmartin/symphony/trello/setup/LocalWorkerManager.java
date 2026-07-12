@@ -28,6 +28,8 @@ import java.util.function.Function;
 final class LocalWorkerManager {
     private static final int STARTUP_LOG_BYTE_LIMIT = 128 * 1024;
     private static final String SYSTEMD_SERVICE_NAME = "symphony-trello.service";
+    private static final String USER_SYSTEMD_UNAVAILABLE_EXPLANATION =
+            "User systemd state is unavailable from this shell/session; worker state below is checked independently.";
     private static final String LAUNCH_AGENT_LABEL = "ch.fmartin.symphony-trello";
     private static final String WINDOWS_SCHEDULED_TASK_NAME = "Symphony for Trello";
     private static final String WINDOWS_STARTUP_COMMAND_NAME = "Symphony for Trello.cmd";
@@ -40,6 +42,7 @@ final class LocalWorkerManager {
     private final LocalLogTailer logTailer;
     private final TrelloCredentialPreflight credentialPreflight;
     private final CommandRunner commandRunner;
+    private final SystemdSessionBusResolver systemdSessionBusResolver;
 
     /**
      * Verifies resolved Trello credentials against the configured endpoint before a worker launch.
@@ -99,6 +102,7 @@ final class LocalWorkerManager {
         this.logTailer = logTailer;
         this.credentialPreflight = credentialPreflight;
         this.commandRunner = commandRunner;
+        this.systemdSessionBusResolver = new SystemdSessionBusResolver(this.environment, commandRunner);
     }
 
     private static TrelloCredentialPreflight defaultCredentialPreflight() {
@@ -858,7 +862,7 @@ final class LocalWorkerManager {
         List<ConnectedBoard> boards =
                 selectForStatus(manifest, request.board(), request.workflow(), paths.defaultEnvPath());
         boards = withDefaultEnvForExplicitWorkflow(paths, request.workflow(), boards);
-        out.println(serviceManagerStatus());
+        serviceManagerStatus().printTo(out);
         if (boards.isEmpty()) {
             printPidFileStatus(paths, out);
             return 0;
@@ -904,7 +908,7 @@ final class LocalWorkerManager {
         return 0;
     }
 
-    private String serviceManagerStatus() {
+    private ServiceManagerStatus serviceManagerStatus() {
         String osName = environment.getOrDefault("SYMPHONY_TRELLO_TEST_OS", System.getProperty("os.name", ""));
         String normalized = osName.toLowerCase(Locale.ROOT);
         Path home = Path.of(environment.getOrDefault("SYMPHONY_TRELLO_TEST_HOME", System.getProperty("user.home", "")));
@@ -912,39 +916,87 @@ final class LocalWorkerManager {
             return linuxServiceManagerStatus(home);
         }
         if (normalized.contains("mac") || normalized.contains("darwin")) {
-            return macosServiceManagerStatus(home);
+            return ServiceManagerStatus.singleLine(macosServiceManagerStatus(home));
         }
         if (normalized.contains("windows")) {
-            return windowsServiceManagerStatus();
+            return ServiceManagerStatus.singleLine(windowsServiceManagerStatus());
         }
-        return "autostart unsupported platform=" + osName + " manual_recovery=\"symphony-trello start --all\"";
+        return ServiceManagerStatus.singleLine(
+                "autostart unsupported platform=" + osName + " manual_recovery=\"symphony-trello start --all\"");
     }
 
-    private String linuxServiceManagerStatus(Path home) {
+    private ServiceManagerStatus linuxServiceManagerStatus(Path home) {
         Path servicePath = home.resolve(".config/systemd/user").resolve(SYSTEMD_SERVICE_NAME);
-        String installed = Files.isRegularFile(servicePath) ? "installed" : "not_installed";
-        String enabled = commandRunner
-                        .run("systemctl", "--user", "is-enabled", SYSTEMD_SERVICE_NAME)
-                        .success()
-                ? "enabled"
-                : "not_enabled_or_unavailable";
-        String active = commandRunner
-                        .run("systemctl", "--user", "is-active", SYSTEMD_SERVICE_NAME)
-                        .success()
-                ? "active"
-                : "not_active_or_unavailable";
-        return "autostart linux_user_systemd service=" + SYSTEMD_SERVICE_NAME + " unit=" + installed + " enabled="
-                + enabled + " active=" + active + " path=" + servicePath;
+        boolean installedAtExpectedPath = Files.isRegularFile(servicePath);
+        CommandResult query = commandRunner.run(
+                systemdSessionBusResolver.resolve(),
+                "systemctl",
+                "--user",
+                "show",
+                SYSTEMD_SERVICE_NAME,
+                "--property=LoadState",
+                "--property=UnitFileState",
+                "--property=ActiveState",
+                "--no-pager");
+        boolean managerAvailable = query.success();
+        SystemdServiceState state = managerAvailable
+                ? parseSystemdServiceState(query.output(), installedAtExpectedPath)
+                : SystemdServiceState.unavailable(installedAtExpectedPath);
+        String summary = "autostart linux_user_systemd service=" + SYSTEMD_SERVICE_NAME + " unit=" + state.unit()
+                + " manager=" + (managerAvailable ? "available" : "unavailable") + " enabled=" + state.enabled()
+                + " active=" + state.active() + " path=" + servicePath;
+        return new ServiceManagerStatus(
+                summary, managerAvailable ? Optional.empty() : Optional.of(USER_SYSTEMD_UNAVAILABLE_EXPLANATION), true);
+    }
+
+    private static SystemdServiceState parseSystemdServiceState(String output, boolean installedAtExpectedPath) {
+        String loadState = systemdProperty(output, "LoadState").orElse("");
+        String unit =
+                switch (loadState) {
+                    case "loaded" -> "installed";
+                    case "not-found" -> installedAtExpectedPath ? "installed" : "not_installed";
+                    default -> installedAtExpectedPath ? "installed" : "unknown";
+                };
+        String enabled = systemdProperty(output, "UnitFileState")
+                .map(value -> switch (value) {
+                    case "enabled" -> "enabled";
+                    case "disabled" -> "disabled";
+                    default -> "unknown";
+                })
+                .orElse("unknown");
+        String active = systemdProperty(output, "ActiveState")
+                .map(value -> switch (value) {
+                    case "active" -> "active";
+                    case "inactive" -> "inactive";
+                    case "failed" -> "failed";
+                    default -> "unknown";
+                })
+                .orElse("unknown");
+        return new SystemdServiceState(unit, enabled, active);
+    }
+
+    private static Optional<String> systemdProperty(String output, String property) {
+        String prefix = property + "=";
+        List<String> values = output.lines()
+                .filter(line -> line.startsWith(prefix))
+                .map(line -> line.substring(prefix.length()))
+                .toList();
+        return values.size() == 1 && !values.getFirst().isBlank() ? Optional.of(values.getFirst()) : Optional.empty();
     }
 
     private String macosServiceManagerStatus(Path home) {
         Path launchAgent = home.resolve("Library/LaunchAgents").resolve(LAUNCH_AGENT_LABEL + ".plist");
         String installed = Files.isRegularFile(launchAgent) ? "installed" : "not_installed";
-        String loaded = commandRunner
-                        .run("launchctl", "print", "gui/" + currentUserId() + "/" + LAUNCH_AGENT_LABEL)
-                        .success()
-                ? "loaded"
-                : "not_loaded_or_unavailable";
+        Optional<String> currentUserId = UserIdResolver.resolve(environment, commandRunner);
+        String loaded = "not_loaded_or_unavailable";
+        if (currentUserId.isPresent()) {
+            String userId = currentUserId.get();
+            if (commandRunner
+                    .run("launchctl", "print", "gui/" + userId + "/" + LAUNCH_AGENT_LABEL)
+                    .success()) {
+                loaded = "loaded";
+            }
+        }
         return "autostart macos_launchagent label=" + LAUNCH_AGENT_LABEL + " plist=" + installed + " loaded=" + loaded
                 + " path=" + launchAgent;
     }
@@ -961,14 +1013,6 @@ final class LocalWorkerManager {
                 + " startup_command=" + startup + " startup_path=" + startupCommand;
     }
 
-    private String currentUserId() {
-        String configured = environment.get("SYMPHONY_TRELLO_TEST_UID");
-        if (configured != null && !configured.isBlank()) {
-            return configured;
-        }
-        return commandRunner.run("id", "-u").output().trim();
-    }
-
     private Path windowsStartupCommandPath() {
         String appData = environment.get("APPDATA");
         Path profileRoot = appData == null || appData.isBlank()
@@ -979,6 +1023,27 @@ final class LocalWorkerManager {
         return profileRoot
                 .resolve("Microsoft/Windows/Start Menu/Programs/Startup")
                 .resolve(WINDOWS_STARTUP_COMMAND_NAME);
+    }
+
+    private record ServiceManagerStatus(String summary, Optional<String> detail, boolean separateWorkerRows) {
+        private static ServiceManagerStatus singleLine(String summary) {
+            return new ServiceManagerStatus(summary, Optional.empty(), false);
+        }
+
+        private void printTo(PrintStream out) {
+            out.println(summary);
+            detail.ifPresent(out::println);
+            if (separateWorkerRows) {
+                out.println();
+            }
+        }
+    }
+
+    private record SystemdServiceState(String unit, String enabled, String active) {
+        private static SystemdServiceState unavailable(boolean installedAtExpectedPath) {
+            return new SystemdServiceState(
+                    installedAtExpectedPath ? "installed" : "not_installed", "unknown", "unknown");
+        }
     }
 
     private static Set<String> duplicateBoardNames(List<ConnectedBoard> boards) {

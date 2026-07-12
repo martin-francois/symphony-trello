@@ -22,14 +22,20 @@ final class ProcessCommandRunner implements CommandRunner {
 
     @Override
     public CommandResult run(String... command) {
+        return run(CommandEnvironment.inherited(), command);
+    }
+
+    @Override
+    public CommandResult run(CommandEnvironment environment, String... command) {
         Path outputFile = null;
         Process process = null;
         try {
             outputFile = Files.createTempFile("symphony-trello-command-", ".log");
-            process = new ProcessBuilder(command)
-                    .redirectErrorStream(true)
-                    .redirectOutput(outputFile.toFile())
-                    .start();
+            ProcessBuilder processBuilder =
+                    new ProcessBuilder(command).redirectErrorStream(true).redirectOutput(outputFile.toFile());
+            environment.removals().forEach(processBuilder.environment()::remove);
+            processBuilder.environment().putAll(environment.overrides());
+            process = processBuilder.start();
             if (!process.waitFor(commandTimeout.toMillis(), TimeUnit.MILLISECONDS)) {
                 process.destroyForcibly();
                 process.waitFor(1, TimeUnit.SECONDS);

@@ -4138,6 +4138,47 @@ When this profile is used:
   Codex operations, worker starts, health/network checks, or file writes
 - the local CLI invoked through the managed-run wrapper MUST provide status, logs, start, and stop
   commands through Java lifecycle services
+- on Linux, lifecycle status MUST use one bounded `systemctl --user show` query for `LoadState`,
+  `UnitFileState`, and `ActiveState`. Environment selection for that query MUST use this precedence:
+  a valid caller-provided `DBUS_SESSION_BUS_ADDRESS` wins without resolving a numeric user ID; when
+  no valid bus address exists, a valid caller-provided `XDG_RUNTIME_DIR` MUST be preserved without
+  resolving a numeric user ID or replacing it merely because `<runtime directory>/bus` is absent,
+  because `<runtime directory>/systemd/private` may still be usable; only when neither value is
+  usable SHOULD status derive the effective user's standard `/run/user/<numeric uid>` runtime
+  directory. A valid caller runtime directory MUST be a nonblank, existing absolute directory and
+  MUST be forwarded unchanged, including whitespace at a path-component boundary. A valid caller
+  bus address means a syntactically valid, connectable form accepted by systemctl's sd-bus client:
+  Unix `path` with 1 to 107 decoded non-NUL bytes or `abstract` with 1 to 106 decoded non-NUL bytes,
+  optionally with `uid` and `gid`; each credential value MUST decode to unsigned 32-bit decimal with
+  no sign or leading zero except the value `0`, and MUST exclude `65535` and `4294967295`; TCP `host`
+  plus a valid nonzero `port`; `unixexec` with a nonempty
+  `path`, optional `argv0`, and contiguous `argv1` through at most `argv256`, whose argument values
+  may be empty; or `x-machine-unix` with exactly one of `machine` and `pid`. A machine MUST decode to
+  `.host` or a systemd-compatible hostname of at most 64 ASCII bytes, and a PID MUST decode to a
+  decimal value from 1 through 2147483647. An optional GUID MUST decode to either 32 hexadecimal
+  digits or the dashed 8-4-4-4-12 form, case-insensitively. A semicolon-separated fallback list MUST
+  contain at least one valid supported entry. Empty entries and unsupported transports, including
+  libdbus-only `autolaunch` and `nonce-tcp`, MUST be skipped as sd-bus skips them; a malformed
+  recognized transport, a listen-only form, an unsupported parameter on a recognized transport, or
+  a malformed escaped value MUST invalidate the inherited address and MUST NOT suppress the
+  standard-runtime fallback. For either caller or standard runtime, status MUST derive
+  `DBUS_SESSION_BUS_ADDRESS=unix:path=<runtime directory>/bus` only when `bus` is a real Unix-domain
+  socket. A derived address value MUST encode the runtime path as UTF-8 and D-Bus-percent-escape every
+  byte outside `[-0-9A-Za-z_/.*]`. The query subprocess MUST receive exactly one selected connection
+  hint: selecting an explicit or derived bus address MUST remove `XDG_RUNTIME_DIR`, while selecting a
+  runtime directory MUST remove `DBUS_SESSION_BUS_ADDRESS`. Invalid inherited values MUST be removed
+  from the query subprocess unless replaced by a valid override. Only `XDG_RUNTIME_DIR` and
+  `DBUS_SESSION_BUS_ADDRESS` may be overridden or removed, and status MUST NOT mutate the calling
+  process environment
+- Linux lifecycle status MUST distinguish `manager=available` from `manager=unavailable`, report
+  unit state as `installed`, `not_installed`, or `unknown`, enabled state as `enabled`, `disabled`, or
+  `unknown`, and active state as `active`, `inactive`, `failed`, or `unknown`. A failed, timed-out,
+  interrupted, or nonzero manager query MUST report unavailable and unknown manager-owned states
+  without printing raw command output or changing the status command's successful exit. It MUST say
+  `User systemd state is unavailable from this shell/session; worker state below is checked
+  independently.` when unavailable. Linux status MUST print a blank line between the autostart
+  diagnostics and worker rows whether the manager is available or unavailable, then check managed
+  worker state independently. Status MUST NOT start, stop, enable, or disable the service
 - on Linux hosts with user systemd, setup SHOULD register an installer-managed user service that
   starts connected boards with `start --all` on login or reboot when the host allows user lingering
 - on macOS hosts, setup SHOULD register an installer-managed per-user LaunchAgent that starts

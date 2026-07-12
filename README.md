@@ -677,6 +677,26 @@ connected Trello board with its normalized workflow path and ends with useful ch
 each connected workflow. If setup or managed worker startup fails, the installer exits without
 printing that completion block.
 
+On Linux, `symphony-trello status` checks the user systemd manager without changing the service. It
+keeps a valid, systemctl-compatible `DBUS_SESSION_BUS_ADDRESS`, or otherwise keeps a valid
+`XDG_RUNTIME_DIR` so systemd's private runtime endpoint remains usable. Existing absolute runtime
+directories are forwarded unchanged, including whitespace at a path-component boundary.
+Libdbus-only transports that
+systemctl cannot consume do not suppress the runtime fallback. In a fallback list, empty and
+unsupported entries are ignored when a later systemctl-compatible entry is usable; a malformed
+systemctl transport invalidates the inherited address. Status derives
+`DBUS_SESSION_BUS_ADDRESS` from a runtime only when its `bus` entry is a real Unix socket. Only when
+neither caller value is usable does it try the effective user's standard `/run/user/<uid>` runtime
+and bus. The query receives either the selected bus address or the selected runtime directory, never
+both, so systemctl cannot let its private-runtime endpoint shadow the selected session bus. Invalid
+inherited values are removed from the query subprocess, derived bus paths use D-Bus percent-encoding,
+and the calling environment is unchanged. The autostart row reports
+`manager=available` with separate unit, enabled, and active states.
+If the current shell still cannot reach user systemd, it reports `manager=unavailable` and explains
+that the worker rows below are checked independently. A running worker can therefore be healthy even
+when service-manager state is unavailable from that shell. A blank line separates the Linux
+autostart diagnostics from the worker rows in either case.
+
 Setup saves Trello credentials that you type or pass directly. If credentials already come from real
 environment variables or an existing `.env` file, setup uses them without copying them into another
 file for setup. For managed autostart, the installer writes a private autostart environment snapshot

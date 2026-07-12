@@ -3,6 +3,7 @@ package ch.fmartin.symphony.trello.setup;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.mock;
@@ -60,6 +61,10 @@ final class LocalWorkerManagerTestFixture {
         this.credentialPreflight = mock();
         this.commandRunner = mock();
         when(commandRunner.run(any(String[].class)))
+                .thenReturn(new CommandResult(CommandResult.COMMAND_NOT_FOUND_EXIT_CODE, ""));
+        when(commandRunner.run(anyMap(), any(String[].class)))
+                .thenReturn(new CommandResult(CommandResult.COMMAND_NOT_FOUND_EXIT_CODE, ""));
+        when(commandRunner.run(any(CommandEnvironment.class), any(String[].class)))
                 .thenReturn(new CommandResult(CommandResult.COMMAND_NOT_FOUND_EXIT_CODE, ""));
         this.manager = new LocalWorkerManager(
                 environment,

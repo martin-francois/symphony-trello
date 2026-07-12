@@ -6,6 +6,8 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeAll;
@@ -13,6 +15,7 @@ import org.junit.jupiter.api.Test;
 
 final class ProcessCommandRunnerTest {
     private static final String BASH = "/bin/bash";
+    private static final String OVERLAY_KEY = "SYMPHONY_TRELLO_COMMAND_RUNNER_TEST_OVERLAY";
 
     @BeforeAll
     static void assumeBash() {
@@ -30,6 +33,47 @@ final class ProcessCommandRunnerTest {
         // then
         assertThat(result.exitCode()).isZero();
         assertThat(result.output()).hasSize(200000);
+    }
+
+    @Test
+    void runAppliesEnvironmentOverlayWithoutReplacingInheritedEnvironment() {
+        // given
+        assumeTrue(System.getenv(OVERLAY_KEY) == null);
+        ProcessCommandRunner runner = new ProcessCommandRunner(Duration.ofSeconds(2));
+
+        // when
+        CommandResult result = runner.run(
+                Map.of(OVERLAY_KEY, "overlay-value"),
+                BASH,
+                "-c",
+                "printf '%s|%s' \"$" + OVERLAY_KEY + "\" \"${PATH:+path-present}\"");
+
+        // then
+        assertThat(result.exitCode()).isZero();
+        assertThat(result.output()).isEqualTo("overlay-value|path-present");
+        assertThat(System.getenv(OVERLAY_KEY)).isNull();
+    }
+
+    @Test
+    void runRemovesSelectedInheritedEnvironmentValuesBeforeApplyingOverrides() {
+        // given
+        assumeTrue(System.getenv("HOME") != null);
+        assumeTrue(System.getenv(OVERLAY_KEY) == null);
+        ProcessCommandRunner runner = new ProcessCommandRunner(Duration.ofSeconds(2));
+        CommandEnvironment environment = new CommandEnvironment(Map.of(OVERLAY_KEY, "overlay-value"), Set.of("HOME"));
+
+        // when
+        CommandResult result = runner.run(
+                environment,
+                BASH,
+                "-c",
+                "printf '%s|%s|%s' \"$" + OVERLAY_KEY + "\" \"${HOME-unset}\" \"${PATH:+path-present}\"");
+
+        // then
+        assertThat(result.exitCode()).isZero();
+        assertThat(result.output()).isEqualTo("overlay-value|unset|path-present");
+        assertThat(System.getenv("HOME")).isNotNull();
+        assertThat(System.getenv(OVERLAY_KEY)).isNull();
     }
 
     @Test
