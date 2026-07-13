@@ -456,7 +456,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
 
     @Command(
             name = "status",
-            description = "Show managed local Symphony worker status.",
+            description = "Show the current runtime state of selected Symphony workflows.",
             versionProvider = TrelloBoardSetupMain.ProjectVersion.class,
             mixinStandardHelpOptions = true)
     static final class StatusCommand implements Callable<Integer> {

@@ -91,6 +91,16 @@ class ArchitectureTest {
             .because("picocli commands should delegate lifecycle commands through LocalWorkerManager");
 
     @ArchTest
+    static final ArchRule LOCAL_WORKER_STATUS_DOES_NOT_INVOKE_EXTERNAL_COMMANDS = noClasses()
+            .that()
+            .haveFullyQualifiedName("ch.fmartin.symphony.trello.setup.LocalWorkerManager")
+            .should()
+            .dependOnClassesThat()
+            .haveFullyQualifiedName("ch.fmartin.symphony.trello.setup.CommandRunner")
+            .because("normal worker status must use managed process identity and the local-status endpoint, not "
+                    + "platform service-manager commands");
+
+    @ArchTest
     static final ArchRule EXTRACTED_SETUP_FLOWS_DO_NOT_WRITE_TO_RAW_PRINT_STREAMS = noClasses()
             .that(extractedSetupFlowClasses())
             .should()
