@@ -75,6 +75,260 @@ final class InstallerScriptTest {
     }
 
     @Test
+    void posixFixtureSuppressesInheritedRepositoryEnvironmentControls() throws Exception {
+        // given
+        assumeFalse(isWindows());
+        assumeTrue(commandExists("bash"));
+        Map<String, String> inheritedControls = Map.ofEntries(
+                Map.entry("SYMPHONY_HOME", "inherited-home-sentinel"),
+                Map.entry("SYMPHONY_TRELLO_CONFIG_DIR", "inherited-config-sentinel"),
+                Map.entry("SYMPHONY_TRELLO_WORKSPACE_ROOT", "inherited-workspace-sentinel"),
+                Map.entry("SYMPHONY_TRELLO_STATE_HOME", "inherited-state-sentinel"),
+                Map.entry("SYMPHONY_TRELLO_VERSION", "inherited-version-sentinel"),
+                Map.entry("SYMPHONY_TRELLO_RELEASE_TAG", "inherited-tag-sentinel"),
+                Map.entry("SYMPHONY_TRELLO_RELEASE_BASE_URL", "https://example.invalid/inherited-release"),
+                Map.entry("SYMPHONY_TRELLO_REPO_URL", "https://example.invalid/inherited-repository.git"),
+                Map.entry("SYMPHONY_TRELLO_REF", "inherited-ref-sentinel"),
+                Map.entry("SYMPHONY_TRELLO_INSTALL_SOURCE", "inherited-source-sentinel"),
+                Map.entry("SYMPHONY_TRELLO_TEST_INHERITED", "inherited-test-sentinel"),
+                Map.entry("sYmPhOnY_FUTURE_CONTROL", "inherited-mixed-case-sentinel"));
+        String inheritedNames = String.join(" ", inheritedControls.keySet());
+        ProcessBuilder processBuilder = new ProcessBuilder(
+                "bash",
+                "-c",
+                "for name in " + inheritedNames + "; do printf '%s\\n' \"${!name}\"; done; "
+                        + "printf 'fixture-os=%s\\nunrelated=%s\\n' "
+                        + "\"${SYMPHONY_TRELLO_TEST_OS:-}\" \"${UNRELATED_HOST_CONTROL:-}\"");
+        processBuilder.environment().putAll(inheritedControls);
+        processBuilder.environment().put("UNRELATED_HOST_CONTROL", "unrelated-host-sentinel");
+
+        // when
+        ProcessResult result = run(Map.of(), processBuilder);
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output()).doesNotContain(inheritedControls.values().toArray(String[]::new));
+        assertThat(result.output()).contains("unrelated=unrelated-host-sentinel");
+        if (System.getProperty("os.name", "").equalsIgnoreCase("Linux")) {
+            assertThat(result.output()).contains("fixture-os=Linux");
+        }
+    }
+
+    @Test
+    void posixFixtureKeepsExplicitRepositoryEnvironmentControlsAuthoritative() throws Exception {
+        // given
+        assumeFalse(isWindows());
+        assumeTrue(commandExists("bash"));
+        Path explicitSymphonyHome = temporaryDirectory.resolve("explicit-symphony-home");
+        Path explicitConfigDirectory = temporaryDirectory.resolve("explicit-config");
+        Map<String, String> explicitEnvironment = Map.of(
+                "SYMPHONY_HOME", explicitSymphonyHome.toString(),
+                "SYMPHONY_TRELLO_CONFIG_DIR", explicitConfigDirectory.toString(),
+                "SYMPHONY_TRELLO_INSTALL_SOURCE", "release-archive");
+        ProcessBuilder processBuilder = new ProcessBuilder(
+                "bash",
+                "-c",
+                "printf '%s\\n%s\\n%s' \"$SYMPHONY_HOME\" \"$SYMPHONY_TRELLO_CONFIG_DIR\" "
+                        + "\"$SYMPHONY_TRELLO_INSTALL_SOURCE\"");
+        processBuilder.environment().put("SYMPHONY_HOME", "inherited-home-sentinel");
+        processBuilder.environment().put("SYMPHONY_TRELLO_CONFIG_DIR", "inherited-config-sentinel");
+        processBuilder.environment().put("SYMPHONY_TRELLO_INSTALL_SOURCE", "inherited-source-sentinel");
+
+        // when
+        ProcessResult result = run(explicitEnvironment, processBuilder);
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output())
+                .isEqualTo(String.join(
+                        "\n", explicitSymphonyHome.toString(), explicitConfigDirectory.toString(), "release-archive"))
+                .doesNotContain("inherited-home-sentinel", "inherited-config-sentinel", "inherited-source-sentinel");
+    }
+
+    @Test
+    void posixPublicInstallerDryRunUsesDefaultsInsteadOfInheritedRepositoryControls() throws Exception {
+        // given
+        assumeFalse(isWindows());
+        assumeTrue(commandExists("bash"));
+        Path inheritedHome = temporaryDirectory.resolve("inherited-home-sentinel");
+        ProcessBuilder processBuilder = new ProcessBuilder("bash", "install.sh", "--dry-run", "--no-onboard");
+        processBuilder.environment().put("SYMPHONY_HOME", inheritedHome.toString());
+        processBuilder.environment().put("SYMPHONY_TRELLO_INSTALL_SOURCE", "inherited-source-sentinel");
+        processBuilder
+                .environment()
+                .put("SYMPHONY_TRELLO_REPO_URL", "https://example.invalid/inherited-repository.git");
+        processBuilder.environment().put("SYMPHONY_TRELLO_REF", "inherited-ref-sentinel");
+
+        // when
+        ProcessResult result = run(Map.of(), processBuilder);
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output())
+                .contains(
+                        "Symphony for Trello installer",
+                        "Install source: release-archive",
+                        "Dry run: no files changed.",
+                        "WOULD download release archive:")
+                .doesNotContain(
+                        inheritedHome.toString(),
+                        "inherited-source-sentinel",
+                        "https://example.invalid/inherited-repository.git",
+                        "inherited-ref-sentinel");
+        Path generatedHome = installerHomeFromDryRunOutput(result.output());
+        assertThat(generatedHome).doesNotExist();
+        assertThat(generatedHome.getFileName().toString()).startsWith("symphony-trello-installer-home-");
+        assertThat(inheritedHome).doesNotExist();
+        assertThat(regularFilesUnder(temporaryDirectory)).isEmpty();
+    }
+
+    @Test
+    void posixExplicitInstallSourceSuppressesInheritedRepositoryFallbacks() throws Exception {
+        // given
+        assumeFalse(isWindows());
+        assumeTrue(commandExists("bash"));
+        ProcessBuilder processBuilder = new ProcessBuilder(
+                "bash",
+                "-c",
+                "if [[ -n ${SYMPHONY_TRELLO_REPO_URL:-} || -n ${SYMPHONY_TRELLO_REF:-} ]]; then "
+                        + "printf 'inherited fallback reached child'; exit 91; fi; "
+                        + "exec bash install.sh --dry-run --no-onboard");
+        processBuilder.environment().put("SYMPHONY_TRELLO_INSTALL_SOURCE", "inherited-source-sentinel");
+        processBuilder.environment().put("SYMPHONY_TRELLO_REPO_URL", "not-a-valid-repository");
+        processBuilder.environment().put("SYMPHONY_TRELLO_REF", "refs/heads/not-a-valid-ref");
+
+        // when
+        ProcessResult result = run(Map.of("SYMPHONY_TRELLO_INSTALL_SOURCE", "release-archive"), processBuilder);
+
+        // then
+        result.assertSuccess();
+        assertThat(result.output())
+                .contains("Install source: release-archive", "Dry run: no files changed.")
+                .doesNotContain(
+                        "inherited fallback reached child",
+                        "inherited-source-sentinel",
+                        "not-a-valid-repository",
+                        "refs/heads/not-a-valid-ref");
+    }
+
+    @Test
+    void repositoryEnvironmentControlPrefixIsCaseInsensitive() {
+        // given
+        String upperCaseControl = "SYMPHONY_HOME";
+        String mixedCaseControl = "sYmPhOnY_future_control";
+        String incompletePrefix = "SYMPHONY";
+        String unrelatedControl = "NOT_SYMPHONY_CONTROL";
+
+        // when
+        boolean upperCaseMatches = isRepositoryEnvironmentControl(upperCaseControl);
+        boolean mixedCaseMatches = isRepositoryEnvironmentControl(mixedCaseControl);
+        boolean incompletePrefixMatches = isRepositoryEnvironmentControl(incompletePrefix);
+        boolean unrelatedMatches = isRepositoryEnvironmentControl(unrelatedControl);
+
+        // then
+        assertThat(upperCaseMatches).isTrue();
+        assertThat(mixedCaseMatches).isTrue();
+        assertThat(incompletePrefixMatches).isFalse();
+        assertThat(unrelatedMatches).isFalse();
+    }
+
+    private static Path installerHomeFromDryRunOutput(String output) {
+        String installPrefix = "Install: ";
+        Path appDirectory = output.lines()
+                .filter(line -> line.startsWith(installPrefix))
+                .map(line -> Path.of(line.substring(installPrefix.length())))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("Installer output did not contain an install path"));
+        return appDirectory.getParent().getParent().getParent().getParent();
+    }
+
+    @Test
+    void posixFixtureIsolatesTheDefaultHomeDistroAndJavaFromTheHost() throws Exception {
+        // given
+        assumeFalse(isWindows());
+        assumeTrue(commandExists("bash"));
+        Path capturedEnvironment = temporaryDirectory.resolve("captured-environment");
+
+        // when
+        ProcessResult result = run(
+                Map.of("SYMPHONY_FAKE_LOG", capturedEnvironment.toString()),
+                "bash",
+                "-c",
+                "printf '%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n' "
+                        + "\"$HOME\" \"${SYMPHONY_TRELLO_TEST_OS:-}\" \"${SYMPHONY_TRELLO_TEST_OS_ID:-}\" "
+                        + "\"$(command -v java)\" \"${SYMPHONY_TRELLO_TEST_HOME_FS_SOURCE:-}\" "
+                        + "\"${SYMPHONY_TRELLO_TEST_ROOT_FS_SOURCE:-}\" "
+                        + "\"${SYMPHONY_TRELLO_TEST_VAR_FS_SOURCE:-}\" "
+                        + "\"${SYMPHONY_TRELLO_TEST_HOME_SIZE_KB:-}\" "
+                        + "\"${SYMPHONY_TRELLO_TEST_VAR_SIZE_KB:-}\" > \"$SYMPHONY_FAKE_LOG\"");
+
+        // then
+        result.assertSuccess();
+        List<String> environment = Files.readAllLines(capturedEnvironment, StandardCharsets.UTF_8);
+        Path isolatedHome = Path.of(environment.get(0));
+        assertThat(isolatedHome).isAbsolute().doesNotExist();
+        assertThat(isolatedHome.startsWith(Path.of("").toAbsolutePath())).isFalse();
+        if (System.getProperty("os.name", "").equalsIgnoreCase("Linux")) {
+            assertThat(environment.get(1)).isEqualTo("Linux");
+            assertThat(environment.get(2)).isEqualTo("debian");
+        }
+        assertThat(Path.of(environment.get(3)).toRealPath())
+                .isEqualTo(
+                        Path.of(System.getProperty("java.home"), "bin", "java").toRealPath());
+        if (System.getProperty("os.name", "").equalsIgnoreCase("Linux")) {
+            assertThat(environment.subList(4, 7)).containsExactly("fixture-root", "fixture-root", "fixture-root");
+            assertThat(environment.subList(7, 9)).containsExactly("1048576", "1048576");
+        }
+    }
+
+    @Test
+    void posixFixtureUsesDistinctStableHomesForAbsoluteSymphonyHomes() throws Exception {
+        // given
+        assumeFalse(isWindows());
+        assumeTrue(commandExists("bash"));
+        Path firstSymphonyHome = temporaryDirectory.resolve("first-symphony-home");
+        Path secondSymphonyHome = temporaryDirectory.resolve("second-symphony-home");
+
+        // when
+        ProcessResult first =
+                run(Map.of("SYMPHONY_HOME", firstSymphonyHome.toString()), "bash", "-c", "printf '%s' \"$HOME\"");
+        ProcessResult second =
+                run(Map.of("SYMPHONY_HOME", secondSymphonyHome.toString()), "bash", "-c", "printf '%s' \"$HOME\"");
+        ProcessResult repeatedFirst =
+                run(Map.of("SYMPHONY_HOME", firstSymphonyHome.toString()), "bash", "-c", "printf '%s' \"$HOME\"");
+
+        // then
+        first.assertSuccess();
+        second.assertSuccess();
+        repeatedFirst.assertSuccess();
+        Path firstHome = Path.of(first.output());
+        Path secondHome = Path.of(second.output());
+        assertThat(firstHome.getParent()).isEqualTo(temporaryDirectory);
+        assertThat(firstHome).isDirectory();
+        assertThat(firstHome.getFileName().toString()).isEqualTo("first-symphony-home-user-home");
+        assertThat(secondHome.getParent()).isEqualTo(temporaryDirectory);
+        assertThat(secondHome).isDirectory().isNotEqualTo(firstHome);
+        assertThat(secondHome.getFileName().toString()).isEqualTo("second-symphony-home-user-home");
+        assertThat(Path.of(repeatedFirst.output())).isEqualTo(firstHome);
+    }
+
+    @Test
+    void posixFixtureUsesTemporaryHomeWhenSymphonyHomeHasNoParent() throws Exception {
+        // given
+        assumeFalse(isWindows());
+        assumeTrue(commandExists("bash"));
+
+        // when
+        ProcessResult result = run(Map.of("SYMPHONY_HOME", "/"), "bash", "-c", "printf '%s' \"$HOME\"");
+
+        // then
+        result.assertSuccess();
+        Path isolatedHome = Path.of(result.output());
+        assertThat(isolatedHome).isAbsolute().doesNotExist();
+        assertThat(isolatedHome.startsWith(Path.of("").toAbsolutePath())).isFalse();
+    }
+
+    @Test
     void posixInstallerUsesXdgSplitLayoutByDefault() throws Exception {
         // given
         assumeTrue(commandExists("bash"));
@@ -343,11 +597,9 @@ final class InstallerScriptTest {
         Files.createDirectories(home);
         Files.createDirectories(varPath);
         Map<String, String> environment = new LinkedHashMap<>(microOsLayoutEnvironment(home, varPath, usersRoot));
-        environment.remove("SYMPHONY_TRELLO_TEST_HOME_FS_SOURCE");
-        environment.remove("SYMPHONY_TRELLO_TEST_ROOT_FS_SOURCE");
-        environment.remove("SYMPHONY_TRELLO_TEST_VAR_FS_SOURCE");
-        environment.remove("SYMPHONY_TRELLO_TEST_HOME_SIZE_KB");
-        environment.remove("SYMPHONY_TRELLO_TEST_VAR_SIZE_KB");
+        environment.put("SYMPHONY_TRELLO_TEST_HOME_FS_SOURCE", "homefs");
+        environment.put("SYMPHONY_TRELLO_TEST_ROOT_FS_SOURCE", "rootfs");
+        environment.put("SYMPHONY_TRELLO_TEST_VAR_FS_SOURCE", "varfs");
 
         // when
         ProcessResult result = run(environment, "bash", "install.sh", "--dry-run", "--no-onboard");
