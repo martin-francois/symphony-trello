@@ -162,6 +162,24 @@ scan_explicit_file() {
   scan_stream_file "$file" "$file"
 }
 
+path_has_symlink_component() {
+  local remaining="$1"
+  local component
+  local prefix=""
+
+  while true; do
+    component="${remaining%%/*}"
+    prefix="${prefix:+$prefix/}$component"
+    if [ -L "$prefix" ]; then
+      return 0
+    fi
+    if [[ "$remaining" != */* ]]; then
+      return 1
+    fi
+    remaining="${remaining#*/}"
+  done
+}
+
 if [ "$stdin" = true ]; then
   stdin_file="$(mktemp)"
   temporary_files+=("$stdin_file")
@@ -193,8 +211,43 @@ done
 
 if [ "$worktree" = true ]; then
   git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "--worktree requires a Git worktree"
+  worktree_root="$(git rev-parse --show-toplevel)" || die "Could not resolve Git worktree root"
+  cd "$worktree_root" || die "Could not enter Git worktree root: $worktree_root"
   printf 'check-private-context: scanning worktree\n' >&2
-  run_scan_pair dir .
+  worktree_file_list="$(mktemp)"
+  temporary_files+=("$worktree_file_list")
+  if ! git ls-files -z --cached --others --exclude-standard >"$worktree_file_list"; then
+    die "Could not enumerate Git worktree files"
+  fi
+  argument_max="$(getconf ARG_MAX)" || die "Could not determine the command argument limit"
+  [[ "$argument_max" =~ ^[0-9]+$ ]] || die "Invalid command argument limit: $argument_max"
+  worktree_batch_limit=$((argument_max / 4))
+  if [ "$worktree_batch_limit" -gt 262144 ]; then
+    worktree_batch_limit=262144
+  fi
+  worktree_files=()
+  worktree_batch_bytes=0
+  while IFS= read -r -d '' file; do
+    if [ -f "$file" ] && ! path_has_symlink_component "$file" &&
+      [ "$file" != "config/betterleaks/private-context.toml" ]; then
+      worktree_file="./$file"
+      worktree_file_bytes="$(
+        LC_ALL=C
+        printf '%s' "${#worktree_file}"
+      )"
+      if [ "${#worktree_files[@]}" -gt 0 ] &&
+        [ "$((worktree_batch_bytes + worktree_file_bytes + 1))" -gt "$worktree_batch_limit" ]; then
+        run_scan_pair dir "${worktree_files[@]}"
+        worktree_files=()
+        worktree_batch_bytes=0
+      fi
+      worktree_files+=("$worktree_file")
+      worktree_batch_bytes=$((worktree_batch_bytes + worktree_file_bytes + 1))
+    fi
+  done <"$worktree_file_list"
+  if [ "${#worktree_files[@]}" -gt 0 ]; then
+    run_scan_pair dir "${worktree_files[@]}"
+  fi
 fi
 
 if [ "$finding_status" -ne 0 ]; then

@@ -19,7 +19,12 @@ printf '%s\n' 'text to post' | scripts/check-private-context --stdin --label git
 ```
 
 The scanner checks BetterLeaks' built-in rules and the project-specific rules. Findings are printed
-with redacted matched values. The project-specific rules catch:
+with redacted matched values. Worktree scans cover regular tracked files and non-ignored untracked
+files reported by the current Git worktree, using Git's own ignore rules so generated dependencies
+and other ignored build inputs are not mistaken for repository content. Opaque nested repositories
+are scanned separately from their own root. The private-context rule file itself is reviewed as
+configuration rather than scanned as content, because its detection examples intentionally match
+its own rules. The project-specific rules catch:
 
 - Trello board and card URLs with non-synthetic short links.
 - Live-looking 24-character Trello ids.
