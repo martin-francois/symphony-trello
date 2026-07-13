@@ -113,10 +113,12 @@ jobs:
           java-version: "25"
           cache: maven
       - name: PowerShell installer dry runs
+        shell: pwsh
         run: |
           .\install.ps1 --dry-run --no-onboard
           .\uninstall.ps1 --dry-run --yes
       - name: PowerShell static analysis
+        shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           if (-not (Get-Module -ListAvailable -Name PSScriptAnalyzer)) {
