@@ -57,8 +57,10 @@ existing analyzers.
 
 The project adds `config/semgrep/symphony-policy.yml` and selected Semgrep registry packs in a
 separate `Semgrep` GitHub Actions workflow. The workflow calls `./scripts/semgrep-docker.sh`, which
-uses a pinned Semgrep Docker image, runs with `--metrics=off`, and does not require a Semgrep
-account.
+uses a pinned Semgrep container image, runs with `--metrics=off` and `--disable-version-check`, and
+does not require a Semgrep account. Renovate owns image update discovery instead of an extra version
+request and notice during verification. The wrapper defaults to Docker and accepts an explicit
+Podman selection through `SYMPHONY_TRELLO_CONTAINER_RUNTIME=podman`.
 
 The accepted local rules check:
 
@@ -113,7 +115,7 @@ The explicit registry pack `p/default` was also evaluated with:
 semgrep scan --config p/default --metrics=off --json .
 ```
 
-Using `semgrep/semgrep:1.164.0`, it selected 1,059 community rules, ran 354 rules on 280
+Using `docker.io/semgrep/semgrep:1.164.0`, it selected 1,059 community rules, ran 354 rules on 280
 tracked files, and reported 20 findings:
 
 * 13 `java.lang.security.audit.command-injection-process-builder` findings.
@@ -145,7 +147,7 @@ remaining relevant Semgrep registry packs on 2026-06-02. The discovery method wa
   Java rulesets;
 * query the Semgrep registry rulesets API and filter actual public rulesets by this repository's
   languages, file types, and concerns;
-* run relevant registry pack ids with `semgrep/semgrep:1.164.0`, `--metrics=off`, and the same
+* run relevant registry pack ids with `docker.io/semgrep/semgrep:1.164.0`, `--metrics=off`, and the same
   tracked-file behavior used by local checks;
 * classify all reported findings before deciding whether a pack should become blocking.
 
@@ -222,6 +224,9 @@ Run:
 ```bash
 ./scripts/semgrep-docker.sh
 ```
+
+On a Podman host, run
+`SYMPHONY_TRELLO_CONTAINER_RUNTIME=podman ./scripts/semgrep-docker.sh` instead.
 
 Also run:
 

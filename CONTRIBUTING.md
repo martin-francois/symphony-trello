@@ -178,6 +178,16 @@ same local rules with:
 ./scripts/semgrep-docker.sh
 ```
 
+The repository's container wrappers use Docker by default. On a Linux host using Podman, select it
+explicitly so direct wrapper calls use Podman rather than a Docker-compatibility shim.
+`check-private-context` honors that selection only when it falls back to containerized BetterLeaks;
+an installed native BetterLeaks binary remains its first choice:
+
+```bash
+SYMPHONY_TRELLO_CONTAINER_RUNTIME=podman ./scripts/semgrep-docker.sh
+SYMPHONY_TRELLO_CONTAINER_RUNTIME=podman scripts/check-private-context --worktree
+```
+
 Use rule-specific `nosemgrep` comments only for true false positives and include a reason. CodeQL is
 a hosted repository code-scanning layer and is not part of normal local `verify`. Hosted dashboards
 can add signal, but they must not replace local checks contributors can run, fix, and rerun.
@@ -219,6 +229,8 @@ container:
 ./scripts/pwsh-docker.sh -NoProfile -File ./uninstall.ps1 --dry-run --yes
 SYMPHONY_TRELLO_TEST_PWSH=./scripts/pwsh-docker.sh ./mvnw -Dtest=InstallerScriptTest test
 ```
+
+Prefix these commands with `SYMPHONY_TRELLO_CONTAINER_RUNTIME=podman` on a Podman host.
 
 ## Commit Style
 

@@ -18,6 +18,9 @@ scripts/check-private-context --git-range origin/main..HEAD
 printf '%s\n' 'text to post' | scripts/check-private-context --stdin --label github-body
 ```
 
+When native BetterLeaks is unavailable, the scanner's container fallback uses Docker by default.
+Set `SYMPHONY_TRELLO_CONTAINER_RUNTIME=podman` on a Podman host to call Podman directly.
+
 The scanner checks BetterLeaks' built-in rules and the project-specific rules. Findings are printed
 with redacted matched values. Worktree scans cover regular tracked files and non-ignored untracked
 files reported by the current Git worktree, using Git's own ignore rules so generated dependencies

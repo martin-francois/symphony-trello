@@ -6,9 +6,17 @@ set -euo pipefail
 IMAGE="${SYMPHONY_TRELLO_PWSH_DOCKER_IMAGE:-mcr.microsoft.com/dotnet/sdk:8.0}"
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_root="$(cd -- "$script_dir/.." && pwd -P)"
+container_runtime="${SYMPHONY_TRELLO_CONTAINER_RUNTIME:-docker}"
 
-if ! command -v docker >/dev/null 2>&1; then
-  echo "Docker is required to run PowerShell through $IMAGE." >&2
+case "$container_runtime" in
+docker | podman) ;;
+*)
+  printf 'SYMPHONY_TRELLO_CONTAINER_RUNTIME must be docker or podman\n' >&2
+  exit 2
+  ;;
+esac
+if ! command -v "$container_runtime" >/dev/null 2>&1; then
+  printf '%s is required to run PowerShell through %s\n' "$container_runtime" "$IMAGE" >&2
   exit 127
 fi
 
@@ -41,7 +49,13 @@ case "$PWD" in
 *) docker_mounts+=(-v "$PWD:$PWD") ;;
 esac
 
-exec docker run --rm \
+container_user_namespace=()
+if [ "$container_runtime" = "podman" ]; then
+  container_user_namespace+=(--userns=keep-id)
+fi
+
+exec "$container_runtime" run --rm --security-opt label=disable \
+  "${container_user_namespace[@]}" \
   --user "$(id -u):$(id -g)" \
   "${docker_environment[@]}" \
   "${docker_mounts[@]}" \

@@ -70,6 +70,9 @@ The repository keeps `scripts/pwsh-docker.sh` for local Linux verification:
 SYMPHONY_TRELLO_TEST_PWSH=./scripts/pwsh-docker.sh ./mvnw -Dtest=InstallerScriptTest test
 ```
 
+The wrapper uses Docker by default. On a Podman host, prefix a command with
+`SYMPHONY_TRELLO_CONTAINER_RUNTIME=podman` to call Podman directly.
+
 By default, `scripts/pwsh-docker.sh` sets
 `SYMPHONY_TRELLO_ALLOW_NON_WINDOWS_PWSH_FOR_TEST=1` so the Windows-only platform guard can be
 exercised from Linux. Maintainers can set `SYMPHONY_TRELLO_PWSH_ALLOW_NON_WINDOWS_TEST_RUNTIME=0`
