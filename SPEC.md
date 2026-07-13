@@ -918,11 +918,13 @@ This Java implementation provides:
   workflow through the existing loopback `/api/v1/local-status` identity probe and managed PID
   ownership checks. A responding endpoint counts as the expected worker only when its workflow and
   board identity match. Each selected workflow MUST be evaluated and printed independently, and the
-  command MUST remain read-only. It MUST NOT query systemd, launchd, Windows Task Scheduler, or any
-  other platform service manager, and MUST NOT report whether autostart is installed, enabled,
-  active, or expected after login or reboot. A responding local worker does not prove that every
-  downstream Trello, GitHub, Codex, or network operation is succeeding. Installer-managed autostart
-  remains a setup and deployment concern.
+  command MUST remain read-only. An unexpected failure while collecting one workflow's local status
+  evidence MUST produce the sanitized row `invalid "<board>" local status evidence
+  (setup_status_evidence_unavailable)` without suppressing later selected workflows. It MUST NOT
+  query systemd, launchd, Windows Task Scheduler, or any other platform service manager, and MUST
+  NOT report whether autostart is installed, enabled, active, or expected after login or reboot. A
+  responding local worker does not prove that every downstream Trello, GitHub, Codex, or network
+  operation is succeeding. Installer-managed autostart remains a setup and deployment concern.
 - `logs [--board NAME | --workflow PATH] [--follow]`: prints or follows managed local worker logs
 - `diagnostics [--board NAME | --workflow PATH] [--output PATH] [--json] [--deep]
   [--show-private-context [--lookup TOKEN]]`:

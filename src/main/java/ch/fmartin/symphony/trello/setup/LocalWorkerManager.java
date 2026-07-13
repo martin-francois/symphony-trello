@@ -844,37 +844,43 @@ final class LocalWorkerManager {
         Set<String> duplicateBoardNames = duplicateBoardNames(boards);
         for (ConnectedBoard board : boards) {
             String boardLabel = statusBoardLabel(board, duplicateBoardNames);
-            ManagedProcessStore.ManagedProcessFiles files = store.files(board.workflowPath());
-            WorkflowValidation workflowDiagnostics = workflowConfig.diagnosticsValidation(
-                    board.workflowPath(), WorkflowEnvironmentResolver.resolver(environment, board.envPath()));
-            if (!workflowDiagnostics.ok()) {
-                out.println("invalid " + boardLabel + " " + workflowDiagnostics.message()
-                        + " in that board's workflow file");
-                continue;
-            }
-            Long pid = store.readPid(files.pidFile());
-            BoardHealth health;
             try {
-                health = healthChecker.boardHealth(board);
+                printWorkflowStatus(paths, store, board, boardLabel, out);
             } catch (TrelloBoardSetupException failure) {
                 out.println("invalid " + boardLabel + " local status configuration (" + failure.code() + ")");
-                continue;
             } catch (RuntimeException failure) {
-                out.println("invalid " + boardLabel + " local status probe failed");
-                continue;
-            }
-            boolean livePid = pid != null && platform.isAlive(pid);
-            boolean managedPid = livePid && platform.isManaged(pid, paths.appHome(), board.workflowPath());
-            if (managedPid) {
-                printManagedStatus(boardLabel, pid, health, out);
-            } else {
-                verifiedManagedWorkerPid(paths, board, health)
-                        .ifPresentOrElse(
-                                verifiedPid -> printVerifiedWorkerStatus(boardLabel, pid, health, verifiedPid, out),
-                                () -> printUnverifiedStatus(paths, files, boardLabel, pid, livePid, health, out));
+                out.println("invalid " + boardLabel + " local status evidence (setup_status_evidence_unavailable)");
             }
         }
         return 0;
+    }
+
+    private void printWorkflowStatus(
+            LocalWorkerPaths paths,
+            ManagedProcessStore store,
+            ConnectedBoard board,
+            String boardLabel,
+            PrintStream out) {
+        ManagedProcessStore.ManagedProcessFiles files = store.files(board.workflowPath());
+        WorkflowValidation workflowDiagnostics = workflowConfig.diagnosticsValidation(
+                board.workflowPath(), WorkflowEnvironmentResolver.resolver(environment, board.envPath()));
+        if (!workflowDiagnostics.ok()) {
+            out.println(
+                    "invalid " + boardLabel + " " + workflowDiagnostics.message() + " in that board's workflow file");
+            return;
+        }
+        Long pid = store.readPid(files.pidFile());
+        BoardHealth health = healthChecker.boardHealth(board);
+        boolean livePid = pid != null && platform.isAlive(pid);
+        boolean managedPid = livePid && platform.isManaged(pid, paths.appHome(), board.workflowPath());
+        if (managedPid) {
+            printManagedStatus(boardLabel, pid, health, out);
+            return;
+        }
+        verifiedManagedWorkerPid(paths, board, health)
+                .ifPresentOrElse(
+                        verifiedPid -> printVerifiedWorkerStatus(boardLabel, pid, health, verifiedPid, out),
+                        () -> printUnverifiedStatus(paths, files, boardLabel, pid, livePid, health, out));
     }
 
     private static void printManagedStatus(String boardLabel, long pid, BoardHealth health, PrintStream out) {
