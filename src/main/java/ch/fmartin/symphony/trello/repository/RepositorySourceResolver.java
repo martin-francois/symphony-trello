@@ -1,7 +1,10 @@
 package ch.fmartin.symphony.trello.repository;
 
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.SLASHES;
+
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import ch.fmartin.symphony.trello.domain.Card;
+import com.google.common.base.CharMatcher;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.InvalidPathException;
@@ -13,6 +16,8 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 public final class RepositorySourceResolver {
+    private static final CharMatcher LEADING_TOKEN_PUNCTUATION = CharMatcher.anyOf("<([{");
+    private static final CharMatcher TRAILING_TOKEN_PUNCTUATION = CharMatcher.anyOf(".,;:)>]}");
     private static final int URI_PORT_ABSENT = -1;
     private static final int MIN_URI_PORT = 1;
     private static final int MAX_URI_PORT = 65_535;
@@ -394,14 +399,7 @@ public final class RepositorySourceResolver {
     }
 
     private static String stripTokenPunctuation(String value) {
-        String stripped = value.strip();
-        while (!stripped.isEmpty() && "<([{".indexOf(stripped.charAt(0)) >= 0) {
-            stripped = stripped.substring(1);
-        }
-        while (!stripped.isEmpty() && ".,;:)>]}".indexOf(stripped.charAt(stripped.length() - 1)) >= 0) {
-            stripped = stripped.substring(0, stripped.length() - 1);
-        }
-        return stripped;
+        return TRAILING_TOKEN_PUNCTUATION.trimTrailingFrom(LEADING_TOKEN_PUNCTUATION.trimLeadingFrom(value.strip()));
     }
 
     private static String stripAngleBrackets(String value) {
@@ -413,14 +411,7 @@ public final class RepositorySourceResolver {
     }
 
     private static String stripSlashes(String value) {
-        String stripped = value.strip();
-        while (stripped.startsWith("/")) {
-            stripped = stripped.substring(1);
-        }
-        while (stripped.endsWith("/")) {
-            stripped = stripped.substring(0, stripped.length() - 1);
-        }
-        return stripped;
+        return SLASHES.trimFrom(value.strip());
     }
 
     private static String lower(String value) {
@@ -455,11 +446,11 @@ public final class RepositorySourceResolver {
     }
 
     private static boolean unsafeRawComponent(String value) {
-        return value != null && value.chars().anyMatch(RepositorySourceText::unsafePromptLineCharacter);
+        return RepositorySourceText.unsafePromptLine(value);
     }
 
     private static boolean unsafeDecodedComponent(String value) {
-        return value != null && value.chars().anyMatch(RepositorySourceText::unsafePromptLineCharacter);
+        return RepositorySourceText.unsafePromptLine(value);
     }
 
     private static boolean hasQueryOrFragment(URI uri) {

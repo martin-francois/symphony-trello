@@ -42,6 +42,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.parallel.ResourceLock;
@@ -1139,6 +1140,49 @@ final class SymphonyOrchestratorTest {
                     .extracting(CardDebugDetails.EventInfo::event)
                     .contains("turn/started");
         });
+    }
+
+    @Test
+    void cardDetailsRetainOnlyTheNewestFiftyAgentEventsInOrder() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        writeWorkflow(workflow, "60000", "");
+        FakeTracker tracker = new FakeTracker(List.of(TestCards.card("card-1", "TRELLO-abc", "Todo")));
+        AgentRunner runner = mock();
+        doAnswer(invocation -> {
+                    AgentRunner.AgentRunRequest request = invocation.getArgument(0);
+                    for (int index = 0; index < 55; index++) {
+                        request.listener()
+                                .onEvent(new AgentEvent(
+                                        "event-" + index,
+                                        COMMENT_TIME,
+                                        request.workerIdentity(),
+                                        123L,
+                                        "thread-1",
+                                        "turn-1",
+                                        "message-" + index,
+                                        Map.of(),
+                                        new ObjectMapper().createObjectNode()));
+                    }
+                    return AgentRunResult.fail("boom");
+                })
+                .when(runner)
+                .run(any());
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
+
+        // when
+        orchestrator.start();
+        waitUntil(() -> orchestrator.snapshot().counts().retrying() == 1);
+        var details = orchestrator.cardDetails("TRELLO-abc");
+        orchestrator.stop();
+
+        // then
+        List<String> expectedEvents =
+                IntStream.range(5, 55).mapToObj(index -> "event-" + index).toList();
+        assertThat(details).hasValueSatisfying(detail -> assertThat(detail.recentEvents())
+                .hasSize(50)
+                .extracting(CardDebugDetails.EventInfo::event)
+                .containsExactlyElementsOf(expectedEvents));
     }
 
     @Test

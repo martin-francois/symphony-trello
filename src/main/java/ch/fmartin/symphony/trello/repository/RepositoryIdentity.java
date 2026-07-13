@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.repository;
 
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.SLASHES;
 import static com.google.common.base.Preconditions.checkArgument;
 
 import java.util.Locale;
@@ -8,6 +9,7 @@ import org.jspecify.annotations.Nullable;
 
 @NullMarked
 public record RepositoryIdentity(String host, String repositoryPath) {
+
     public RepositoryIdentity {
         checkArgument(!blank(host), "Repository host is required");
         checkArgument(!blank(repositoryPath), "Repository path is required");
@@ -25,14 +27,7 @@ public record RepositoryIdentity(String host, String repositoryPath) {
     }
 
     private static String stripSlashes(String value) {
-        String stripped = value.strip();
-        while (stripped.startsWith("/")) {
-            stripped = stripped.substring(1);
-        }
-        while (stripped.endsWith("/")) {
-            stripped = stripped.substring(0, stripped.length() - 1);
-        }
-        return stripped;
+        return SLASHES.trimFrom(value.strip());
     }
 
     private static String stripGitSuffix(String value) {

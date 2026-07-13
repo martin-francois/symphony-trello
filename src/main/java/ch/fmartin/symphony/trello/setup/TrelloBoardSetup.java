@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.SLASHES;
 import static com.google.common.base.Preconditions.checkArgument;
 
 import ch.fmartin.symphony.trello.TrelloEnvironment;
@@ -735,7 +736,7 @@ public final class TrelloBoardSetup {
         String queryString = query.entrySet().stream()
                 .map(entry -> encode(entry.getKey()) + "=" + encode(entry.getValue()))
                 .collect(Collectors.joining("&"));
-        String base = endpoint.toString().replaceAll("/+$", "");
+        String base = SLASHES.trimTrailingFrom(endpoint.toString());
         return URI.create(base + "/" + normalizedPath + (queryString.isBlank() ? "" : "?" + queryString));
     }
 

@@ -3,6 +3,8 @@ package ch.fmartin.symphony.trello.config;
 import ch.fmartin.symphony.trello.TrelloEnvironment;
 import ch.fmartin.symphony.trello.workflow.CodexSandboxPolicy;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
+import com.google.common.base.CharMatcher;
+import com.google.common.base.Splitter;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.io.File;
 import java.io.IOException;
@@ -13,18 +15,18 @@ import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.function.Function;
-import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 @ApplicationScoped
 public class ConfigResolver {
+    private static final CharMatcher LINE_BREAK = CharMatcher.anyOf("\r\n");
+    private static final Splitter PATH_SEPARATOR = Splitter.on(File.pathSeparator);
     private static final String FILE_SECRET_PREFIX = "file:";
     private static final int MAX_SECRET_BYTES = 64 * 1024;
 
@@ -312,11 +314,7 @@ public class ConfigResolver {
     }
 
     private static String stripTrailingLineBreaks(String value) {
-        String stripped = value;
-        while (stripped.endsWith("\n") || stripped.endsWith("\r")) {
-            stripped = stripped.substring(0, stripped.length() - 1);
-        }
-        return stripped;
+        return LINE_BREAK.trimTrailingFrom(value);
     }
 
     private static void validateEndpoint(String endpoint) {
@@ -395,7 +393,7 @@ public class ConfigResolver {
         Stream<Path> configuredRoots = list(codex, "additional_writable_roots", List.of()).stream()
                 .map(value -> path(workflowDirectory, value));
         Stream<Path> environmentRoots = environmentValue("SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS").stream()
-                .flatMap(value -> Arrays.stream(value.split(Pattern.quote(File.pathSeparator))))
+                .flatMap(PATH_SEPARATOR::splitToStream)
                 .map(String::trim)
                 .filter(value -> !value.isBlank())
                 .map(value -> path(workflowDirectory, value));

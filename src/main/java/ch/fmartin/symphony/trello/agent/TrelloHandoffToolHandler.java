@@ -12,6 +12,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.google.common.base.Splitter;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.net.URI;
 import java.util.ArrayList;
@@ -20,7 +21,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.PrimitiveIterator;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.jboss.logging.Logger;
 import org.jspecify.annotations.Nullable;
@@ -51,7 +51,7 @@ public class TrelloHandoffToolHandler {
     private static final int TASK_SUMMARY_BODY_CODE_POINT_LIMIT = VISIBLE_TASK_SUMMARY_CODE_POINT_LIMIT - 1;
     private static final int ELLIPSIS_CODE_POINT_COUNT = 3;
     private static final int MAX_ACTION_ID_LENGTH = 128;
-    private static final Pattern LOGICAL_LINE_BREAK = Pattern.compile("\\r\\n|[\\n\\r\\x{0085}\\x{2028}\\x{2029}]");
+    private static final Splitter LOGICAL_LINE_BREAK = Splitter.onPattern("\\r\\n|[\\n\\r\\x{0085}\\x{2028}\\x{2029}]");
     private static final int WORKPAD_LOCK_STRIPES = 64;
 
     private final ObjectMapper json;
@@ -456,7 +456,7 @@ public class TrelloHandoffToolHandler {
         if (text == null) {
             return "";
         }
-        for (String line : LOGICAL_LINE_BREAK.split(text, -1)) {
+        for (String line : LOGICAL_LINE_BREAK.split(text)) {
             String stripped = line.strip();
             if (!stripped.isEmpty()) {
                 return stripped;

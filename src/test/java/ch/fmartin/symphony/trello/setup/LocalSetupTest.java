@@ -4747,6 +4747,40 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     }
 
     @Test
+    void interactiveExistingBoardListCsvRetainsJavaTrimSemantics() throws Exception {
+        // given
+        trello.givenRawBoardListsJson(
+                """
+                [
+                  {"id":"list-1","name":"Queue","closed":false,"pos":1},
+                  {"id":"list-2","name":"\u2002Review\u2002","closed":false,"pos":2},
+                  {"id":"list-3","name":"Working","closed":false,"pos":3},
+                  {"id":"list-4","name":"Blocked","closed":false,"pos":4},
+                  {"id":"list-5","name":"Finished","closed":false,"pos":5}
+                ]
+                """);
+
+        // when
+        SetupRunResult result = runSetupWithInput(
+                "2\n\nboard-1\n\n\n\u0004Queue\u0004,\u2002Review\u2002\n\u0004Finished\u0004\nWorking\nBlocked\n\nn\nn\n",
+                "--endpoint",
+                endpoint(),
+                "--key",
+                "key",
+                "--token",
+                "token",
+                "--no-github");
+
+        // then
+        Path workflow = tempDir.resolve("config").resolve("WORKFLOW.imported-queue.md");
+        result.assertSuccess();
+        assertThat(workflow)
+                .content(StandardCharsets.UTF_8)
+                .contains("- \"Queue\"", "- \"\u2002Review\u2002\"", "- \"Finished\"")
+                .doesNotContain("\u0004");
+    }
+
+    @Test
     void interactiveExistingBoardSetupAcceptsExplicitInProgressWithoutBoardArgument() throws Exception {
         // given
         trello.givenRawBoardListsJson(

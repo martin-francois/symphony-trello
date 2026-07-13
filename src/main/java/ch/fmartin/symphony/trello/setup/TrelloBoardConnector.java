@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static ch.fmartin.symphony.trello.CommaSeparatedValues.javaTrimmedNonEmptyFields;
+
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.GitHubIntegration;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.TrelloCredentials;
@@ -12,7 +14,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 final class TrelloBoardConnector {
@@ -332,10 +333,10 @@ final class TrelloBoardConnector {
             terminal.info("Existing board lists");
             terminal.info("Open lists: " + DisplayNames.quotedList(openListNames));
             if (activeStates.isEmpty()) {
-                activeStates = promptCsv(terminal, "Queued-work list names, comma-separated: ");
+                activeStates = promptCommaSeparatedListNames(terminal, "Queued-work list names, comma-separated: ");
             }
             if (terminalStates.isEmpty()) {
-                terminalStates = promptCsv(terminal, "Done list names, comma-separated: ");
+                terminalStates = promptCommaSeparatedListNames(terminal, "Done list names, comma-separated: ");
             }
             if (options.detectInProgressState()) {
                 inProgressState = promptOptionalList(terminal, "In-progress list name", inProgressState, null);
@@ -371,8 +372,8 @@ final class TrelloBoardConnector {
                 .findAny();
     }
 
-    private static List<String> promptCsv(Terminal terminal, String prompt) throws IOException {
-        return csv(terminal.readLine(prompt));
+    private static List<String> promptCommaSeparatedListNames(Terminal terminal, String prompt) throws IOException {
+        return javaTrimmedNonEmptyFields(terminal.readLine(prompt));
     }
 
     private static String promptOptionalList(Terminal terminal, String label, String detected, String disabledValue)
@@ -611,17 +612,6 @@ final class TrelloBoardConnector {
 
     static String fallbackSlug(String value) {
         return slug(blank(value) ? DEFAULT_BOARD_NAME : value);
-    }
-
-    private static List<String> csv(String value) {
-        if (blank(value)) {
-            return List.of();
-        }
-        return Pattern.compile(",")
-                .splitAsStream(value)
-                .map(String::trim)
-                .filter(part -> !part.isEmpty())
-                .toList();
     }
 
     private static boolean blank(String value) {

@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.tracker;
 
+import static com.google.common.base.Strings.nullToEmpty;
+
 import com.google.common.base.Ascii;
 import com.google.common.base.CharMatcher;
 import java.util.ArrayList;
@@ -24,7 +26,7 @@ final class TrelloCardReferenceParser {
     private TrelloCardReferenceParser() {}
 
     static Optional<TrelloCardReference> exactReference(String text) {
-        String trimmed = text == null ? "" : text.strip();
+        String trimmed = nullToEmpty(text).strip();
         if (trimmed.isEmpty()) {
             return Optional.empty();
         }

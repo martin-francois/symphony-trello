@@ -87,6 +87,19 @@ final class WorkspaceAccessFlowTest {
     }
 
     @Test
+    void additionalPathCsvRetainsJavaTrimSemantics() throws Exception {
+        // given
+        LocalSetup.Options options = SetupOptionFactory.options(tempDir);
+        RecordingTerminal terminal = new RecordingTerminal("y", "\u0004project\u0004,\u2002project\u2002");
+
+        // when
+        List<Path> paths = new WorkspaceAccessFlow().resolve(options, terminal);
+
+        // then
+        assertThat(paths).containsExactly(tempDir.resolve("project"), tempDir.resolve("\u2002project\u2002"));
+    }
+
+    @Test
     void broadFilesystemPathNeedsSecondConfirmation() throws Exception {
         // given
         LocalSetup.Options options = SetupOptionFactory.options(tempDir);

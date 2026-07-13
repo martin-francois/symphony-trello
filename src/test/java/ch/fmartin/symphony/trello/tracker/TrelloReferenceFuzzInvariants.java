@@ -1,13 +1,14 @@
 package ch.fmartin.symphony.trello.tracker;
 
 import ch.fmartin.symphony.trello.domain.Card;
-import java.util.Arrays;
+import com.google.common.base.Splitter;
 import java.util.List;
 
 public final class TrelloReferenceFuzzInvariants {
     public static final int MAX_TEXT_LENGTH = 2_048;
     public static final int MAX_CHECKLIST_ITEMS = 8;
     private static final String TRELLO_CARD_URL_PREFIX = "https://trello.com/c/";
+    private static final Splitter LOGICAL_LINE_BREAK = Splitter.onPattern("\\R");
 
     private TrelloReferenceFuzzInvariants() {}
 
@@ -74,7 +75,8 @@ public final class TrelloReferenceFuzzInvariants {
     }
 
     private static List<Card.ChecklistItem> checklistItems(String text) {
-        return Arrays.stream(text.split("\\R", -1))
+        return LOGICAL_LINE_BREAK
+                .splitToStream(text)
                 .limit(MAX_CHECKLIST_ITEMS)
                 .map(item -> new Card.ChecklistItem("item-" + Integer.toUnsignedString(item.hashCode()), item, false))
                 .toList();

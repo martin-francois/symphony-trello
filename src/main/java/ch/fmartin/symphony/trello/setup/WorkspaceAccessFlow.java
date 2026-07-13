@@ -1,10 +1,11 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static ch.fmartin.symphony.trello.CommaSeparatedValues.javaTrimmedNonEmptyFields;
+
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Pattern;
 
 final class WorkspaceAccessFlow {
     List<Path> resolve(LocalSetup.Options options, Terminal terminal) throws IOException {
@@ -36,7 +37,7 @@ final class WorkspaceAccessFlow {
             terminal.info(
                     "  Local setup relies on Codex sandbox behavior and normal OS permissions, not OS-level filesystem isolation.");
             String answer = terminal.readLine("Additional paths, comma-separated: ");
-            for (String part : csv(answer)) {
+            for (String part : javaTrimmedNonEmptyFields(answer)) {
                 Path path = resolveAccessPath(part, options.callerDirectory());
                 if (isBroadAccessPath(path) && !confirmBroadAccess(terminal)) {
                     continue;
@@ -105,16 +106,5 @@ final class WorkspaceAccessFlow {
                 "Adding / grants broad recursive read/write access to all files and folders Symphony can normally access.");
         terminal.info("If you meant your home directory or one project, use ~ or that project directory instead.");
         return PromptSupport.yes(terminal, "Allow / anyway? [y/N] ");
-    }
-
-    private static List<String> csv(String value) {
-        if (value == null || value.isBlank()) {
-            return List.of();
-        }
-        return Pattern.compile(",")
-                .splitAsStream(value)
-                .map(String::trim)
-                .filter(part -> !part.isEmpty())
-                .toList();
     }
 }

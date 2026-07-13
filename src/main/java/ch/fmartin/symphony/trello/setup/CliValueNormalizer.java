@@ -1,7 +1,8 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static ch.fmartin.symphony.trello.CommaSeparatedValues.preservingEmptyFields;
+
 import java.nio.file.Path;
-import java.util.Arrays;
 import java.util.List;
 
 final class CliValueNormalizer {
@@ -19,7 +20,7 @@ final class CliValueNormalizer {
     }
 
     static List<String> commaSeparatedValues(String value) {
-        return Arrays.asList(value.split(",", -1));
+        return preservingEmptyFields(value);
     }
 
     static List<Path> commaSeparatedPaths(String value) {

@@ -16,6 +16,12 @@ References.
 - Use Java 25 LTS language/runtime features where they make the code clearer, but do not be clever
   for its own sake.
 - Keep code ASCII unless an existing file or domain requirement clearly needs Unicode.
+- Give Java Unicode escapes used as character data a domain name before use, including escapes in
+  literals, regular expressions, fixtures, and similar data. Bind `\\uXXXX` syntax to a constant
+  whose name identifies the character or intentional character group, and use that constant at call
+  sites and in test scenario tables. Search for the same code point before adding a constant so
+  coupled validation and rendering rules share one definition instead of accumulating parallel
+  escapes. This rule does not apply to escapes shown only in identifiers or explanatory comments.
 - Avoid unrelated metadata churn and broad rewrites.
 
 ## Reuse and dependency selection
@@ -36,6 +42,17 @@ References.
   for the same capability. Do not couple source code to an undeclared transitive dependency. Treat a
   new runtime or build dependency as an architecture decision when its lifecycle or platform impact
   is non-trivial, and update the owning ADR or add one when required by the ADR policy.
+- Guava is a directly declared dependency. Before writing or retaining small character-boundary
+  loops, delimiter-only regex splitting, null-to-empty String adapters, immutable collection
+  collectors, or manually capped FIFO queues, check the matching Guava API (`CharMatcher`,
+  `Splitter`, `Strings`, immutable collectors, or `EvictingQueue`) against the exact resolved Guava
+  version. Use it when it removes custom mechanism and makes the intended semantics more obvious.
+  Preserve the original contract explicitly: `Splitter` keeps empty fields unless configured not to;
+  `CharMatcher` operates on UTF-16 characters and must not replace a code-point or domain-specific
+  Unicode parser; `Strings.nullToEmpty` is for immediate String normalization, not for erasing a
+  meaningful nullable state; and immutable or bounded collections must preserve order, duplicate,
+  null, and mutation behavior. Prefer the JDK or focused custom code when the Guava form is longer,
+  less domain-specific, or semantically different; do not perform broad mechanical collection churn.
 
 ## Streams and Optional
 
@@ -55,12 +72,16 @@ References.
   choice with the same non-default collection rule below. Do not use ambiguous JDK collectors such as
   `Collectors.toSet()` because it does not specify the result type or mutability, and the repository
   enforces Picnic's `CollectorMutability` check.
-- When code directly chooses a non-default collection implementation such as `LinkedHashMap`,
-  `LinkedHashSet`, `TreeMap`, `TreeSet`, `ArrayDeque`, a sequenced collection, or
-  `Collectors.toCollection(...)`, make the reason obvious at the allocation site. Add a short
-  comment when the surrounding names do not already explain the need for encounter order, sorted
-  order, deque semantics, mutability, duplicate handling, or fast membership checks. If the code
-  avoids an obvious API such as `toSet()`, state the specific reason that obvious API is not used.
+- Whenever code chooses a concrete data structure other than an array, `ArrayList`, `HashMap`,
+  `HashSet`, or an immutable counterpart, explain the required semantics at the allocation site.
+  This includes `LinkedHashMap`, `LinkedHashSet`, `TreeMap`, `TreeSet`, `ArrayDeque`, bounded queues,
+  sequenced collections, and `Collectors.toCollection(...)`. A precise surrounding name may carry
+  the explanation; otherwise add a short comment that leads with the domain or resource reason for
+  the choice, then names the required encounter order, sorted order, eviction, deque semantics,
+  mutability, duplicate handling, or membership performance. Describing only what the structure
+  does or how it works is insufficient when it does not explain why that behavior is needed. If the
+  code avoids an obvious API such as `toSet()`, state the specific reason that obvious API is not
+  used.
 - Treat stream and Optional refactors as behavior-preserving by default. Before accepting a skill
   suggestion, verify mutability, encounter order, duplicate handling, parser splitting, laziness,
   exception behavior, nullability, prompt ordering, and side-effect boundaries. If a better-looking
@@ -280,6 +301,11 @@ skill's advice.
   reviewer points out duplicated edits or says two places must change together, treat that as an
   immediate refactoring requirement in the current scope rather than leaving another parallel copy
   for a later pass.
+- Before declaring a `CharMatcher`, `Splitter`, or similar reusable parser constant, search
+  production and test code for the same construction and semantic family. When the behavior would
+  need to change together, centralize it under a domain-named matcher or parsing operation; do not
+  leave identical package-local constants or ambiguous names such as `CSV` for a simple
+  comma-separated value list.
 - Apply the same centralization rule to test scenario data. When a repeated literal appears across
   rows of one parameterized test, scenario factory, fake fixture, or state-machine table, assume it
   is one coupled concept unless the test names or scenario fields make it clear that each occurrence

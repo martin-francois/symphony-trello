@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.agent;
 
+import static ch.fmartin.symphony.trello.CommaSeparatedValues.preservingEmptyFields;
 import static ch.fmartin.symphony.trello.TestHttpExchange.query;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.boardJson;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.jsonEscaped;
@@ -28,7 +29,6 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sun.net.httpserver.HttpExchange;
 import java.nio.file.Path;
 import java.time.Instant;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -2779,7 +2779,7 @@ final class TrelloHandoffToolHandlerTest {
     private String cardResponseForRequestedFields(HttpExchange exchange) {
         String response = cardResponse.get();
         String actionFields = query(exchange).getOrDefault("action_fields", "");
-        if (Arrays.asList(actionFields.split(",")).contains("id")) {
+        if (preservingEmptyFields(actionFields).contains("id")) {
             return response;
         }
         return response.replace("\"id\":\"action-workpad\",", "");

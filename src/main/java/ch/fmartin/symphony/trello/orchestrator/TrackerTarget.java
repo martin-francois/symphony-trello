@@ -1,5 +1,8 @@
 package ch.fmartin.symphony.trello.orchestrator;
 
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.DOTS;
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.SLASHES;
+
 import ch.fmartin.symphony.trello.Sha3;
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import java.net.URI;
@@ -21,12 +24,10 @@ record TrackerTarget(String kind, String endpointFingerprint, String resolvedBoa
     }
 
     private static String canonicalEndpoint(String endpoint) {
-        URI uri = URI.create(endpoint.replaceAll("/+$", ""));
+        URI uri = URI.create(SLASHES.trimTrailingFrom(endpoint));
         String scheme = uri.getScheme().toLowerCase(Locale.ROOT);
-        String host = uri.getHost().toLowerCase(Locale.ROOT);
-        while (host.endsWith(".") && host.length() > 1) {
-            host = host.substring(0, host.length() - 1);
-        }
+        String hostWithoutTrailingDots = DOTS.trimTrailingFrom(uri.getHost().toLowerCase(Locale.ROOT));
+        String host = hostWithoutTrailingDots.isEmpty() ? "." : hostWithoutTrailingDots;
         int port = uri.getPort();
         if (("http".equals(scheme) && port == 80) || ("https".equals(scheme) && port == 443)) {
             port = -1;

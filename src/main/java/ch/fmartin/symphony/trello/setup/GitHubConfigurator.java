@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static com.google.common.base.Strings.nullToEmpty;
+
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.GitHubIntegration;
 import java.io.IOException;
 import java.util.Locale;
@@ -193,8 +195,7 @@ final class GitHubConfigurator {
     }
 
     private String normalizedOsName() {
-        String value = osName.get();
-        return value == null ? "" : value.toLowerCase(Locale.ROOT);
+        return nullToEmpty(osName.get()).toLowerCase(Locale.ROOT);
     }
 
     private static void printGithubLaterCommands(Terminal terminal) {

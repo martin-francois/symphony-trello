@@ -1,5 +1,8 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.DOTS;
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.SLASHES;
+
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Locale;
@@ -38,11 +41,7 @@ final class TrelloApiEndpoint {
     }
 
     private static String canonicalHost(String host) {
-        String normalized = host.toLowerCase(Locale.ROOT);
-        while (normalized.endsWith(".")) {
-            normalized = normalized.substring(0, normalized.length() - 1);
-        }
-        return normalized;
+        return DOTS.trimTrailingFrom(host.toLowerCase(Locale.ROOT));
     }
 
     private static String normalizePath(String path, boolean officialTrelloHost) {
@@ -60,11 +59,8 @@ final class TrelloApiEndpoint {
     }
 
     private static String stripTrailingSlashes(String path) {
-        int end = path.length();
-        while (end > 1 && path.charAt(end - 1) == '/') {
-            end--;
-        }
-        return path.substring(0, end);
+        String stripped = SLASHES.trimTrailingFrom(path);
+        return stripped.isEmpty() ? "/" : stripped;
     }
 
     private static TrelloBoardSetupException invalidEndpoint() {
