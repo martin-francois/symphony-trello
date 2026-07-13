@@ -1,6 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
-import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNSAFE_SINGLE_LINE_CHARACTERS;
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.ISO_CONTROL_CHARACTERS;
 import static com.google.common.base.Preconditions.checkArgument;
 
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.CodexModelDefaults;
@@ -220,7 +220,7 @@ record CodexModelSelectionDefaults(
 
     static void checkNoControlCharacters(String value, String name) {
         checkArgument(
-                value == null || UNSAFE_SINGLE_LINE_CHARACTERS.matchesNoneOf(value),
+                value == null || ISO_CONTROL_CHARACTERS.matchesNoneOf(value),
                 "%s must not contain control characters",
                 name);
     }

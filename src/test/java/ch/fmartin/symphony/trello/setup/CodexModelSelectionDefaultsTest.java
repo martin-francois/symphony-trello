@@ -63,7 +63,7 @@ final class CodexModelSelectionDefaultsTest {
         assertThat(defaults.reasoningEffortChoicesForModel("duplicate")).contains(List.of("medium"));
     }
 
-    @MethodSource("unsafeSingleLineCharacters")
+    @MethodSource("isoControlCharacters")
     @ParameterizedTest
     void reasoningEffortOptionRejectsControlCharactersInReasoningEffort(int controlCharacter) {
         // given
@@ -78,7 +78,7 @@ final class CodexModelSelectionDefaultsTest {
                 .withMessage("reasoningEffort must not contain control characters");
     }
 
-    @MethodSource("unsafeSingleLineCharacters")
+    @MethodSource("isoControlCharacters")
     @ParameterizedTest
     void reasoningEffortOptionRejectsControlCharactersInDescription(int controlCharacter) {
         // given
@@ -93,7 +93,37 @@ final class CodexModelSelectionDefaultsTest {
                 .withMessage("description must not contain control characters");
     }
 
-    private static IntStream unsafeSingleLineCharacters() {
-        return IntStream.of(0, '\n', '\r', 0x1B, 0x85, UNICODE_LINE_SEPARATOR, UNICODE_PARAGRAPH_SEPARATOR);
+    @MethodSource("unicodeLineSeparators")
+    @ParameterizedTest
+    void reasoningEffortOptionPreservesUnicodeLineSeparatorInReasoningEffort(int separator) {
+        // given
+        String reasoningEffort = "high" + Character.toString(separator) + "effort";
+
+        // when
+        ReasoningEffortOption option = new ReasoningEffortOption(reasoningEffort, "Deep reasoning");
+
+        // then
+        assertThat(option.reasoningEffort()).isEqualTo(reasoningEffort);
+    }
+
+    @MethodSource("unicodeLineSeparators")
+    @ParameterizedTest
+    void reasoningEffortOptionPreservesUnicodeLineSeparatorInDescription(int separator) {
+        // given
+        String description = "Deep" + Character.toString(separator) + "reasoning";
+
+        // when
+        ReasoningEffortOption option = new ReasoningEffortOption("high", description);
+
+        // then
+        assertThat(option.description()).isEqualTo(description);
+    }
+
+    private static IntStream isoControlCharacters() {
+        return IntStream.of(0, '\n', '\r', 0x1B, 0x85);
+    }
+
+    private static IntStream unicodeLineSeparators() {
+        return IntStream.of(UNICODE_LINE_SEPARATOR, UNICODE_PARAGRAPH_SEPARATOR);
     }
 }
