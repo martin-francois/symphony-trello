@@ -1522,23 +1522,10 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                         scenario.requests().get("command-a"),
                         COMMENT_TIME,
                         new ObjectMapper().createObjectNode().put("account", "A")));
-        scenario.tracker().setCandidates(List.of(scenario.first(), scenario.second()));
-        rewriteWorkflowWithCommand(
-                workflow,
-                "command-b",
-                """
-                agent:
-                  max_concurrent_agents: 2
-                """);
-        scenario.orchestrator().tickNowForTests();
-        assertThat(scenario.workersStarted().await(5, TimeUnit.SECONDS)).isTrue();
-        scenario.requests()
-                .get("command-b")
+        AgentRunner.AgentRunRequest commandBRequest = dispatchCommandB(workflow, scenario);
+        commandBRequest
                 .listener()
-                .onEvent(rateLimitEvent(
-                        scenario.requests().get("command-b"),
-                        COMMENT_TIME.plusSeconds(1),
-                        new ObjectMapper().nullNode()));
+                .onEvent(rateLimitEvent(commandBRequest, COMMENT_TIME.plusSeconds(1), new ObjectMapper().nullNode()));
         RuntimeSnapshot snapshot = scenario.orchestrator().snapshot();
         scenario.releaseWorkers().countDown();
         scenario.orchestrator().stop();
@@ -1556,21 +1543,11 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         // when
         scenario.orchestrator().start();
         waitUntil(() -> scenario.requests().containsKey("command-a"));
-        scenario.tracker().setCandidates(List.of(scenario.first(), scenario.second()));
-        rewriteWorkflowWithCommand(
-                workflow,
-                "command-b",
-                """
-                agent:
-                  max_concurrent_agents: 2
-                """);
-        scenario.orchestrator().tickNowForTests();
-        assertThat(scenario.workersStarted().await(5, TimeUnit.SECONDS)).isTrue();
-        scenario.requests()
-                .get("command-b")
+        AgentRunner.AgentRunRequest commandBRequest = dispatchCommandB(workflow, scenario);
+        commandBRequest
                 .listener()
                 .onEvent(rateLimitEvent(
-                        scenario.requests().get("command-b"),
+                        commandBRequest,
                         COMMENT_TIME,
                         new ObjectMapper().createObjectNode().put("account", "B")));
         scenario.requests()
@@ -1588,6 +1565,22 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         assertThat(snapshot.rateLimits().toString())
                 .contains("\"account\":\"B\"")
                 .doesNotContain("A");
+    }
+
+    private static AgentRunner.AgentRunRequest dispatchCommandB(Path workflow, ConcurrentCommandScenario scenario)
+            throws Exception {
+        scenario.tracker().setCandidates(List.of(scenario.first(), scenario.second()));
+        rewriteWorkflowWithCommand(
+                workflow,
+                "command-b",
+                """
+                agent:
+                  max_concurrent_agents: 2
+                """);
+        scenario.orchestrator().tickNowForTests();
+        assertThat(scenario.workersStarted().await(5, TimeUnit.SECONDS)).isTrue();
+        waitUntil(() -> scenario.requests().containsKey("command-b"));
+        return scenario.requests().get("command-b");
     }
 
     @Test
