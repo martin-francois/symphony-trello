@@ -67,7 +67,7 @@ final class ReleaseWorkflowTest {
     }
 
     @Test
-    void releasePleaseConfigsCreateDraftReleasesForImmutableAssetPublication() throws IOException {
+    void releasePleaseConfigCreatesDraftReleasesAndRefreshesGeneratedMetadata() throws IOException {
         // given
         Path normalConfig = Path.of("release-please-config.json");
 
@@ -75,7 +75,7 @@ final class ReleaseWorkflowTest {
         String normalSource = Files.readString(normalConfig);
 
         // then
-        assertThat(normalSource).contains("\"draft\": true", "\"force-tag-creation\": true");
+        assertThat(normalSource).contains("\"draft\": true", "\"force-tag-creation\": true", "\"always-update\": true");
     }
 
     @Test

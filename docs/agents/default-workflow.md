@@ -277,6 +277,9 @@ optional verification. Follow this order:
 - Do not preemptively rewrite every older open pull request when the template contract changes. When
   substantive work resumes on an older pull request, update its body to the current template before
   considering it ready.
+- Treat Release Please pull request titles and bodies as generated metadata. Do not normalize its
+  body to the general pull request template or manually edit version text: Release Please parses that
+  body when updating the PR. Put extra review or verification evidence in a comment instead.
 - Synchronize feature branches by rebasing onto the latest default branch. Never create merge
   commits to update a pull request branch; after verifying the rewritten history, push it with
   `--force-with-lease` against the previously fetched remote head.

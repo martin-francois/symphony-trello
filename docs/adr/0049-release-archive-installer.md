@@ -53,6 +53,10 @@ while the release is still a draft. It verifies every expected asset and then pu
 Release assets are built from tag-local source, scripts, and installer templates. Development test
 tags that predate the packaging script are not supported by the public release asset workflow.
 
+Release Please owns its generated pull request title and body. It is configured to refresh both on
+every update; contributors keep the generated body intact so Release Please can recognize the pull
+request on later runs.
+
 Release asset uploads do not clobber existing assets. If a public release is wrong or incomplete,
 publish a new patch release instead of replacing assets on the existing release. The workflow still
 verifies that all public download assets exist after upload, so a partial upload is visible
