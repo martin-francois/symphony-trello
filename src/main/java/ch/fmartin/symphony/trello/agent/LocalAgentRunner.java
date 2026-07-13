@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.agent;
 
+import static com.google.common.base.Strings.nullToEmpty;
+
 import ch.fmartin.symphony.trello.codex.CodexSkillCatalog;
 import ch.fmartin.symphony.trello.prompt.PromptRenderer;
 import ch.fmartin.symphony.trello.repository.RepositorySourcePrompt;
@@ -123,7 +125,7 @@ public class LocalAgentRunner implements AgentRunner {
     }
 
     private static String withRepositorySourceContext(String prompt, String repositoryContext) {
-        String basePrompt = prompt == null ? "" : prompt.stripTrailing();
+        String basePrompt = nullToEmpty(prompt).stripTrailing();
         return basePrompt + "\n\n" + repositoryContext;
     }
 

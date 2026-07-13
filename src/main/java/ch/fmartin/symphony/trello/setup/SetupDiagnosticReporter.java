@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.SLASHES;
+
 import ch.fmartin.symphony.trello.TrelloEnvironment;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
 import ch.fmartin.symphony.trello.config.LocalEnvironment;
@@ -105,7 +107,9 @@ final class SetupDiagnosticReporter {
     private static final Pattern PRIVATE_CONTEXT_LOOKUP_TOKEN = Pattern.compile("(?:[0-9a-f]{12}|<path:[0-9a-f]{12}>)");
     private static final Pattern TRELLO_OBJECT_ID = Pattern.compile("\\b[0-9a-f]{24}\\b", Pattern.CASE_INSENSITIVE);
     private static final Splitter LINE_BREAK_SPLITTER = Splitter.onPattern("\\R");
-    private static final CharMatcher POSIX_PATH_START = CharMatcher.is('/');
+    private static final Splitter PATH_SEPARATOR_SPLITTER = Splitter.on(File.pathSeparator);
+    private static final Splitter WINDOWS_PATH_SEPARATOR_SPLITTER = Splitter.on(';');
+    private static final CharMatcher POSIX_PATH_START = SLASHES;
     private static final CharMatcher URL_AUTHORITY_TERMINATOR =
             CharMatcher.whitespace().or(CharMatcher.anyOf("/?#")).precomputed();
     private static final CharMatcher TOKEN_TERMINATOR =
@@ -1280,14 +1284,16 @@ final class SetupDiagnosticReporter {
     }
 
     private Stream<Path> posixPathEntries(String path) {
-        return Stream.of(path.split(Pattern.quote(File.pathSeparator)))
+        return PATH_SEPARATOR_SPLITTER
+                .splitToStream(path)
                 .map(String::trim)
                 .filter(entry -> !entry.isBlank())
                 .flatMap(SetupDiagnosticReporter::pathIfValid);
     }
 
     private Stream<Path> windowsPathEntries(String path) {
-        return Stream.of(path.split(Pattern.quote(";")))
+        return WINDOWS_PATH_SEPARATOR_SPLITTER
+                .splitToStream(path)
                 .map(String::trim)
                 .filter(entry -> !entry.isBlank())
                 .map(SetupDiagnosticReporter::unquote)
@@ -1312,7 +1318,8 @@ final class SetupDiagnosticReporter {
     private List<String> windowsPathExtensions() {
         return environmentValue("PATHEXT")
                 .filter(value -> !value.isBlank())
-                .map(value -> Stream.of(value.split(Pattern.quote(";")))
+                .map(value -> WINDOWS_PATH_SEPARATOR_SPLITTER
+                        .splitToStream(value)
                         .map(String::trim)
                         .filter(extension -> !extension.isBlank())
                         .toList())

@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.ISO_CONTROL_CHARACTERS;
 import static com.google.common.collect.ImmutableSet.toImmutableSet;
 
 import ch.fmartin.symphony.trello.CliExitCodes;
@@ -7,6 +8,7 @@ import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.GitHubIntegration;
 import ch.fmartin.symphony.trello.setup.TrelloBoardSetup.TrelloCredentials;
 import ch.fmartin.symphony.trello.setup.TrelloCredentialStore.CredentialSelection;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.base.CharMatcher;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -30,6 +32,8 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public final class LocalSetup {
+    private static final CharMatcher UNSAFE_COMMAND_SELECTOR_CHARACTER =
+            CharMatcher.anyOf("\"\\$`!%").or(ISO_CONTROL_CHARACTERS).precomputed();
     private static final Path DEFAULT_ENV_PATH = Path.of(".env");
     private static final String DEFAULT_COMMAND = "symphony-trello";
     private static final String CONFIG_DIR_ENV = "SYMPHONY_TRELLO_CONFIG_DIR";
@@ -481,16 +485,7 @@ public final class LocalSetup {
      * in POSIX shells, PowerShell, and cmd.
      */
     private static boolean commandSafeSelector(String value) {
-        return value != null
-                && !value.isBlank()
-                && value.chars()
-                        .noneMatch(c -> c == '"'
-                                || c == '\\'
-                                || c == '$'
-                                || c == '`'
-                                || c == '!'
-                                || c == '%'
-                                || Character.isISOControl(c));
+        return value != null && !value.isBlank() && UNSAFE_COMMAND_SELECTOR_CHARACTER.matchesNoneOf(value);
     }
 
     private boolean checkTrelloCredentials(Options options, ConnectedBoard board, PrintStream out) {

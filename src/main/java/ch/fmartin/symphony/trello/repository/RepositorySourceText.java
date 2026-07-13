@@ -1,5 +1,6 @@
 package ch.fmartin.symphony.trello.repository;
 
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNSAFE_SINGLE_LINE_CHARACTERS;
 import static com.google.common.base.Preconditions.checkArgument;
 
 import org.jspecify.annotations.NullMarked;
@@ -14,13 +15,10 @@ final class RepositorySourceText {
     }
 
     static boolean safePromptLine(@Nullable String value) {
-        return value != null && value.codePoints().noneMatch(RepositorySourceText::unsafePromptLineCharacter);
+        return value != null && UNSAFE_SINGLE_LINE_CHARACTERS.matchesNoneOf(value);
     }
 
-    static boolean unsafePromptLineCharacter(int codePoint) {
-        int type = Character.getType(codePoint);
-        return Character.isISOControl(codePoint)
-                || type == Character.LINE_SEPARATOR
-                || type == Character.PARAGRAPH_SEPARATOR;
+    static boolean unsafePromptLine(@Nullable String value) {
+        return value != null && UNSAFE_SINGLE_LINE_CHARACTERS.matchesAnyOf(value);
     }
 }

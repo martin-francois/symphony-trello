@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.api;
 
+import static com.google.common.base.Strings.nullToEmpty;
+
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.MediaType;
@@ -46,6 +48,6 @@ public class ApiExceptionMapper implements ExceptionMapper<Throwable> {
     }
 
     private static Map<String, Object> error(String code, String message) {
-        return Map.of("error", Map.of("code", code, "message", message == null ? "" : message));
+        return Map.of("error", Map.of("code", code, "message", nullToEmpty(message)));
     }
 }

@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.orchestrator;
 
 import static com.google.common.base.Preconditions.checkState;
+import static com.google.common.collect.ImmutableSet.toImmutableSet;
 
 import ch.fmartin.symphony.trello.Sha3;
 import ch.fmartin.symphony.trello.agent.AgentEvent;
@@ -23,6 +24,7 @@ import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import ch.fmartin.symphony.trello.workflow.WorkflowException;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
 import ch.fmartin.symphony.trello.workspace.WorkspaceManager;
+import com.google.common.collect.EvictingQueue;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import java.io.IOException;
@@ -40,7 +42,6 @@ import java.nio.file.WatchService;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayDeque;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -108,7 +109,9 @@ public class SymphonyOrchestrator {
     private final Set<RuntimeCardKey> claimed = new HashSet<>();
     private final Set<RuntimeCardKey> completed = new HashSet<>();
     private final LinkedHashMap<String, Instant> ignoredWorkers = new LinkedHashMap<>();
-    private final Map<RuntimeCardKey, ArrayDeque<CardDebugDetails.EventInfo>> recentEvents = new HashMap<>();
+    // Bound each card's diagnostic history so long sessions cannot grow memory and API responses
+    // indefinitely; EvictingQueue retains the newest events in chronological order.
+    private final Map<RuntimeCardKey, EvictingQueue<CardDebugDetails.EventInfo>> recentEvents = new HashMap<>();
     private final Map<UsageWorkpadTarget, UsageWorkpadState> usageWorkpadMessages = new LinkedHashMap<>();
     private final LinkedHashMap<UsageWorkpadTarget, UsageWorkpadCleanup> pendingUsageWorkpadCleanup =
             new LinkedHashMap<>();
@@ -2008,11 +2011,8 @@ public class SymphonyOrchestrator {
         if (requiredLabels.stream().anyMatch(String::isBlank)) {
             return false;
         }
-        Set<String> cardLabels = card.labels().stream()
-                .map(StateNames::normalize)
-                // HashSet gives fast label membership checks; toSet() is avoided because it does not
-                // specify the result type or mutability.
-                .collect(Collectors.toCollection(HashSet::new));
+        Set<String> cardLabels =
+                card.labels().stream().map(StateNames::normalize).collect(toImmutableSet());
         return cardLabels.containsAll(requiredLabels);
     }
 
@@ -2333,12 +2333,14 @@ public class SymphonyOrchestrator {
     }
 
     private void addRecentEvent(RuntimeCardKey cardKey, CardDebugDetails.EventInfo event) {
-        ArrayDeque<CardDebugDetails.EventInfo> events =
-                recentEvents.computeIfAbsent(cardKey, ignored -> new ArrayDeque<>());
-        events.addLast(event);
-        while (events.size() > RECENT_EVENT_LIMIT) {
-            events.removeFirst();
-        }
+        recentEvents
+                .computeIfAbsent(cardKey, ignored -> EvictingQueue.create(RECENT_EVENT_LIMIT))
+                .add(event);
+    }
+
+    private List<CardDebugDetails.EventInfo> recentEventsFor(RuntimeCardKey cardKey) {
+        EvictingQueue<CardDebugDetails.EventInfo> events = recentEvents.get(cardKey);
+        return events == null ? List.of() : List.copyOf(events);
     }
 
     private synchronized void removeExpiredIgnoredWorkers() {
@@ -2428,7 +2430,7 @@ public class SymphonyOrchestrator {
                 detailsSelection.runningRow(),
                 detailsSelection.retryRow(),
                 new CardDebugDetails.LogInfo(List.of()),
-                List.copyOf(recentEvents.getOrDefault(detailsSelection.cardKey(), new ArrayDeque<>())),
+                recentEventsFor(detailsSelection.cardKey()),
                 detailsSelection.lastError(),
                 Map.of()));
     }

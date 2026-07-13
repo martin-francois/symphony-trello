@@ -1,9 +1,14 @@
 package ch.fmartin.symphony.trello.setup;
 
 import ch.fmartin.symphony.trello.Sha3;
+import com.google.common.base.CharMatcher;
 import java.util.Locale;
 
 final class WorkflowFileNames {
+    private static final CharMatcher NON_SLUG_CHARACTER = CharMatcher.inRange('a', 'z')
+            .or(CharMatcher.inRange('0', '9'))
+            .negate()
+            .precomputed();
     private static final String WORKFLOW_FILE_PREFIX = "WORKFLOW.";
     private static final String WORKFLOW_FILE_EXTENSION = ".md";
     private static final int MAX_GENERATED_WORKFLOW_FILE_NAME_LENGTH = 127;
@@ -30,8 +35,7 @@ final class WorkflowFileNames {
     }
 
     static String slug(String value, String blankFallback) {
-        String slug =
-                value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-").replaceAll("(^-+|-+$)", "");
+        String slug = NON_SLUG_CHARACTER.trimAndCollapseFrom(value.toLowerCase(Locale.ROOT), '-');
         return slug.isBlank() ? blankFallback : slug;
     }
 

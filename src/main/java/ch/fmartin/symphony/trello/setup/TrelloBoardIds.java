@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
+import static com.google.common.base.Strings.nullToEmpty;
+
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Locale;
@@ -16,10 +18,7 @@ final class TrelloBoardIds {
     }
 
     static String parseConnectedBoardSelector(String value) {
-        if (value == null) {
-            return "";
-        }
-        String selector = value.strip();
+        String selector = nullToEmpty(value).strip();
         if (selector.isEmpty()) {
             return selector;
         }
@@ -28,10 +27,7 @@ final class TrelloBoardIds {
     }
 
     static String parseStoredBoardUrl(String value) {
-        if (value == null) {
-            return "";
-        }
-        String selector = value.strip();
+        String selector = nullToEmpty(value).strip();
         if (selector.isEmpty()) {
             return selector;
         }
@@ -39,7 +35,7 @@ final class TrelloBoardIds {
     }
 
     static String parseImportBoardSelector(String value) {
-        String selector = value == null ? "" : value.strip();
+        String selector = nullToEmpty(value).strip();
         if (selector.isEmpty()) {
             return selector;
         }

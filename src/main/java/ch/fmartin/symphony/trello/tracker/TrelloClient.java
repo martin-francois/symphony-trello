@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.tracker;
 
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.SLASHES;
+import static com.google.common.base.Strings.nullToEmpty;
 import static com.google.common.collect.ImmutableSet.toImmutableSet;
 
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
@@ -1158,7 +1160,7 @@ public class TrelloClient implements TrackerClient {
             return "";
         }
         String text = string(dataMap.get("text"));
-        return text == null ? "" : text;
+        return nullToEmpty(text);
     }
 
     private static String commentAuthor(Object memberCreator) {
@@ -1359,7 +1361,7 @@ public class TrelloClient implements TrackerClient {
         String queryString = query.entrySet().stream()
                 .map(entry -> encode(entry.getKey()) + "=" + encode(entry.getValue()))
                 .collect(Collectors.joining("&"));
-        String endpoint = config.tracker().endpoint().replaceAll("/+$", "");
+        String endpoint = SLASHES.trimTrailingFrom(config.tracker().endpoint());
         return URI.create(endpoint + "/" + normalizedPath + (queryString.isBlank() ? "" : "?" + queryString));
     }
 
@@ -1495,10 +1497,6 @@ public class TrelloClient implements TrackerClient {
 
     private static boolean blank(String value) {
         return value == null || value.isBlank();
-    }
-
-    private static String nullToEmpty(String value) {
-        return value == null ? "" : value;
     }
 
     private static String encodeSegment(String value) {

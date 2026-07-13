@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
-import com.google.common.base.CharMatcher;
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.ISO_CONTROL_CHARACTERS;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -13,8 +14,6 @@ import java.util.function.Predicate;
 import java.util.regex.Pattern;
 
 final class CliInputValidation {
-    private static final CharMatcher CONTROL_CHARACTERS =
-            CharMatcher.javaIsoControl().precomputed();
     private static final Set<String> STANDARD_STREAM_DEVICE_PATHS = Set.of(
             "/dev/stdin",
             "/dev/stdout",
@@ -106,7 +105,7 @@ final class CliInputValidation {
         if (value == null) {
             return;
         }
-        if (CONTROL_CHARACTERS.matchesAnyOf(value)) {
+        if (ISO_CONTROL_CHARACTERS.matchesAnyOf(value)) {
             throw new TrelloBoardSetupException(
                     "setup_invalid_arguments", optionName + " must not contain control characters.");
         }
@@ -117,7 +116,7 @@ final class CliInputValidation {
     }
 
     static String safeCliMessage(String message) {
-        if (message == null || !CONTROL_CHARACTERS.matchesAnyOf(message)) {
+        if (message == null || !ISO_CONTROL_CHARACTERS.matchesAnyOf(message)) {
             return message;
         }
         StringBuilder safe = new StringBuilder(message.length());
@@ -126,7 +125,7 @@ final class CliInputValidation {
     }
 
     static String safeDiagnosticsText(String message) {
-        if (message == null || !CONTROL_CHARACTERS.matchesAnyOf(message)) {
+        if (message == null || !ISO_CONTROL_CHARACTERS.matchesAnyOf(message)) {
             return message;
         }
         StringBuilder safe = new StringBuilder(message.length());
