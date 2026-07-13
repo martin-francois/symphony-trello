@@ -484,6 +484,9 @@ final class LocalWorkerManager {
     }
 
     private Optional<Long> verifiedManagedWorkerPid(LocalWorkerPaths paths, ConnectedBoard board, BoardHealth health) {
+        if (health.kind() != BoardHealthKind.SAME_WORKFLOW) {
+            return Optional.empty();
+        }
         return health.workerPid()
                 .filter(pid -> platform.isAlive(pid) && platform.isManaged(pid, paths.appHome(), board.workflowPath()));
     }
@@ -850,31 +853,74 @@ final class LocalWorkerManager {
                 continue;
             }
             Long pid = store.readPid(files.pidFile());
-            BoardHealth health = healthChecker.boardHealth(board);
-            if (pid != null
-                    && platform.isAlive(pid)
-                    && platform.isManaged(pid, paths.appHome(), board.workflowPath())
-                    && health.kind() == BoardHealthKind.SAME_WORKFLOW) {
-                out.println("running " + boardLabel + " pid=" + pid + " "
-                        + LocalHealthChecker.localServerUrl(health.port()));
-            } else if (pid != null
-                    && platform.isAlive(pid)
-                    && platform.isManaged(pid, paths.appHome(), board.workflowPath())) {
-                out.println("unhealthy " + boardLabel + " pid=" + pid + " "
-                        + LocalHealthChecker.localServerUrl(health.port()) + " (" + health.kind() + ")");
-            } else if (pid != null && platform.isAlive(pid)) {
-                out.println("stale " + boardLabel + " pid=" + pid + " does not belong to this install"
-                        + " pid_file_token=" + pathToken(paths, files.pidFile()));
+            BoardHealth health;
+            try {
+                health = healthChecker.boardHealth(board);
+            } catch (TrelloBoardSetupException failure) {
+                out.println("invalid " + boardLabel + " local status configuration (" + failure.code() + ")");
+                continue;
+            } catch (RuntimeException failure) {
+                out.println("invalid " + boardLabel + " local status probe failed");
+                continue;
+            }
+            boolean livePid = pid != null && platform.isAlive(pid);
+            boolean managedPid = livePid && platform.isManaged(pid, paths.appHome(), board.workflowPath());
+            if (managedPid) {
+                printManagedStatus(boardLabel, pid, health, out);
             } else {
-                if (health.kind() == BoardHealthKind.SAME_WORKFLOW) {
-                    out.println("running " + boardLabel + " " + LocalHealthChecker.localServerUrl(health.port())
-                            + " (untracked, no managed pid)");
-                } else {
-                    out.println("stopped " + boardLabel);
-                }
+                verifiedManagedWorkerPid(paths, board, health)
+                        .ifPresentOrElse(
+                                verifiedPid -> printVerifiedWorkerStatus(boardLabel, pid, health, verifiedPid, out),
+                                () -> printUnverifiedStatus(paths, files, boardLabel, pid, livePid, health, out));
             }
         }
         return 0;
+    }
+
+    private static void printManagedStatus(String boardLabel, long pid, BoardHealth health, PrintStream out) {
+        boolean matchingEndpointPid = health.kind() == BoardHealthKind.SAME_WORKFLOW
+                && health.workerPid()
+                        .filter(reportedPid -> reportedPid.equals(pid))
+                        .isPresent();
+        if (matchingEndpointPid) {
+            out.println(
+                    "running " + boardLabel + " pid=" + pid + " " + LocalHealthChecker.localServerUrl(health.port()));
+            return;
+        }
+        String reason = health.kind() == BoardHealthKind.SAME_WORKFLOW
+                ? "WORKER_PID_MISMATCH"
+                : health.kind().toString();
+        out.println("unhealthy " + boardLabel + " pid=" + pid + " " + LocalHealthChecker.localServerUrl(health.port())
+                + " (" + reason + ")");
+    }
+
+    private static void printVerifiedWorkerStatus(
+            String boardLabel, Long recordedPid, BoardHealth health, long verifiedPid, PrintStream out) {
+        String tracking = recordedPid == null ? "untracked, no managed pid" : "stale managed pid=" + recordedPid;
+        out.println("running " + boardLabel + " pid=" + verifiedPid + " "
+                + LocalHealthChecker.localServerUrl(health.port()) + " (" + tracking + ")");
+    }
+
+    private static void printUnverifiedStatus(
+            LocalWorkerPaths paths,
+            ManagedProcessStore.ManagedProcessFiles files,
+            String boardLabel,
+            Long pid,
+            boolean livePid,
+            BoardHealth health,
+            PrintStream out) {
+        if (livePid) {
+            out.println("stale " + boardLabel + " pid=" + pid + " does not belong to this install pid_file_token="
+                    + pathToken(paths, files.pidFile()));
+        } else if (health.kind() == BoardHealthKind.SAME_WORKFLOW) {
+            out.println("unhealthy " + boardLabel + " " + LocalHealthChecker.localServerUrl(health.port())
+                    + " (UNVERIFIED_WORKER_PID)");
+        } else if (health.kind() == BoardHealthKind.STOPPED) {
+            out.println("stopped " + boardLabel);
+        } else {
+            out.println("unhealthy " + boardLabel + " " + LocalHealthChecker.localServerUrl(health.port()) + " ("
+                    + health.kind() + ")");
+        }
     }
 
     private static Set<String> duplicateBoardNames(List<ConnectedBoard> boards) {
@@ -1114,7 +1160,8 @@ final class LocalWorkerManager {
             Long pid = store.readPid(pidFile);
             String label = stateFileLabel(pidFile);
             if (pid != null && platform.isAlive(pid) && platform.isManaged(pid, paths.appHome())) {
-                out.println("running " + label + " pid=" + pid);
+                out.println("untracked " + label + " pid=" + pid
+                        + " (no connected workflow metadata; runtime identity not verified)");
             } else if (pid != null && platform.isAlive(pid)) {
                 out.println("stale " + label + " pid=" + pid + " does not belong to this install pid_file_token="
                         + pathToken(paths, pidFile));
