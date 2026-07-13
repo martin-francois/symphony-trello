@@ -41,6 +41,14 @@ final class ReleaseWorkflowTest {
                         "release tag does not contain scripts/package-release-assets.sh",
                         "bash \"$release_script\"",
                         "\"${{ steps.release-assets.outputs.asset_dir }}\"",
+                        "Attest release assets",
+                        "uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1",
+                        "subject-path: ${{ steps.release-assets.outputs.asset_dir }}/*",
+                        "create-storage-record: false",
+                        "Add release provenance asset",
+                        "${{ steps.attest-release-assets.outputs.bundle-path }}",
+                        "release provenance bundle was not created",
+                        "symphony-trello-${{ steps.release-assets.outputs.version }}.intoto.jsonl",
                         "existing_assets=\"$(gh release view \"$RELEASE_TAG\" --json assets --jq '.assets[].name')\"",
                         "grep -Fx -- \"$asset\" <<<\"$existing_assets\"",
                         "release already contains expected public assets; refusing same-tag asset reuse",
@@ -62,6 +70,9 @@ final class ReleaseWorkflowTest {
                 "path: target/release-source");
         assertAppearsBefore(
                 source, "gh release view \"$RELEASE_TAG\" --repo \"$GITHUB_REPOSITORY\"", "Build release assets");
+        assertAppearsBefore(source, "Build release assets", "Attest release assets");
+        assertAppearsBefore(source, "Attest release assets", "Add release provenance asset");
+        assertAppearsBefore(source, "Add release provenance asset", "Upload release assets");
         assertAppearsBefore(source, "Upload release assets", "Verify release assets");
         assertAppearsBefore(source, "Verify release assets", "Publish release");
     }
@@ -142,6 +153,7 @@ final class ReleaseWorkflowTest {
                         "\"uninstall.sh\"",
                         "\"uninstall.ps1\"",
                         "\"checksums.txt\"",
+                        "\"symphony-trello-$RELEASE_VERSION.intoto.jsonl\"",
                         "\"symphony-trello-$RELEASE_VERSION.tar.gz\"",
                         "\"symphony-trello-$RELEASE_VERSION.zip\"",
                         "release asset was not built: $asset",

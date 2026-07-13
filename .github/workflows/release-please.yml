@@ -12,7 +12,9 @@ jobs:
     name: Create or update release PR
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
+      attestations: write
       contents: write
+      id-token: write
       issues: write
       pull-requests: write
     steps:
@@ -87,6 +89,23 @@ jobs:
           bash "$release_script" \
             "${{ steps.release-assets.outputs.version }}" \
             "${{ steps.release-assets.outputs.asset_dir }}"
+      - name: Attest release assets
+        id: attest-release-assets
+        if: ${{ steps.release-assets.outputs.upload_assets == 'true' }}
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        with:
+          subject-path: ${{ steps.release-assets.outputs.asset_dir }}/*
+          create-storage-record: false
+      - name: Add release provenance asset
+        if: ${{ steps.release-assets.outputs.upload_assets == 'true' }}
+        run: |
+          provenance="${{ steps.attest-release-assets.outputs.bundle-path }}"
+          if [ ! -f "$provenance" ]; then
+            echo "release provenance bundle was not created" >&2
+            exit 2
+          fi
+          cp "$provenance" \
+            "${{ steps.release-assets.outputs.asset_dir }}/symphony-trello-${{ steps.release-assets.outputs.version }}.intoto.jsonl"
       - name: Upload release assets
         if: ${{ steps.release-assets.outputs.upload_assets == 'true' }}
         env:
@@ -102,6 +121,7 @@ jobs:
             "uninstall.sh"
             "uninstall.ps1"
             "checksums.txt"
+            "symphony-trello-$RELEASE_VERSION.intoto.jsonl"
             "symphony-trello-$RELEASE_VERSION.tar.gz"
             "symphony-trello-$RELEASE_VERSION.zip"
           )
@@ -134,6 +154,7 @@ jobs:
             "uninstall.sh"
             "uninstall.ps1"
             "checksums.txt"
+            "symphony-trello-$RELEASE_VERSION.intoto.jsonl"
             "symphony-trello-$RELEASE_VERSION.tar.gz"
             "symphony-trello-$RELEASE_VERSION.zip"
           )
