@@ -129,6 +129,46 @@ final class TestConventionTest {
     }
 
     @Test
+    void mavenTestForksAuthorizeJazzerInstrumentationOnJava25() throws IOException {
+        // given
+        String pom = Files.readString(Path.of("pom.xml"));
+        String permissions =
+                "<test.jvm.instrumentation.args>-XX:+EnableDynamicAgentLoading --enable-native-access=ALL-UNNAMED</test.jvm.instrumentation.args>";
+        String testForkArguments =
+                "<argLine>@{argLine} ${test.jvm.instrumentation.args} -Xshare:off -javaagent:${org.mockito:mockito-core:jar}</argLine>";
+
+        // when
+        String surefirePlugin = mavenPluginBlock(pom, "maven-surefire-plugin");
+        String failsafePlugin = mavenPluginBlock(pom, "maven-failsafe-plugin");
+
+        // then
+        assertThat(pom).containsOnlyOnce(permissions);
+        assertThat(surefirePlugin)
+                .as("Surefire should use the explicit Java 25 instrumentation permissions")
+                .containsOnlyOnce(testForkArguments);
+        assertThat(failsafePlugin)
+                .as("Failsafe should use the explicit Java 25 instrumentation permissions")
+                .containsOnlyOnce(testForkArguments);
+    }
+
+    private static String mavenPluginBlock(String pom, String artifactId) {
+        String artifact = "<artifactId>" + artifactId + "</artifactId>";
+        int artifactStart = pom.indexOf(artifact);
+        assertThat(artifactStart)
+                .as("Maven plugin %s should be configured", artifactId)
+                .isNotNegative();
+        int pluginStart = pom.lastIndexOf("<plugin>", artifactStart);
+        int pluginEnd = pom.indexOf("</plugin>", artifactStart);
+        assertThat(pluginStart)
+                .as("Maven plugin %s should have an opening element", artifactId)
+                .isNotNegative();
+        assertThat(pluginEnd)
+                .as("Maven plugin %s should have a closing element", artifactId)
+                .isNotNegative();
+        return pom.substring(pluginStart, pluginEnd + "</plugin>".length());
+    }
+
+    @Test
     void representativeJavaBoundariesUseJSpecifyAnnotations() throws IOException {
         // given
         List<Path> nullMarkedBoundaries = List.of(

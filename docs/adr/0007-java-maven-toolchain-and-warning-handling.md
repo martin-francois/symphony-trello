@@ -2,7 +2,12 @@
 status: accepted
 date: 2026-05-05
 decision-makers: [François Martin, Codex]
-consulted: [Mockito documentation, Maven Wrapper behavior, Java 25 runtime behavior]
+consulted:
+  - Mockito documentation
+  - Maven Wrapper behavior
+  - Java 25 runtime behavior
+  - Jazzer pull request 820
+  - JEP 472
 informed: [Future maintainers]
 ---
 
@@ -12,7 +17,8 @@ informed: [Future maintainers]
 
 The project targets Java 25 LTS while using Maven 3 after deciding not to continue with Maven 4. Java
 25 emits warnings for some older library behavior, including Maven's embedded Guice stack and
-Mockito's inline mock maker when it self-attaches at test runtime.
+Mockito's inline mock maker when it self-attaches at test runtime. Jazzer's JUnit integration also
+loads its Byte Buddy agent dynamically and its native rules library through an unnamed module.
 
 How should the build stay on Maven 3, keep warning output useful, and avoid brittle JVM or local
 repository hacks?
@@ -24,6 +30,7 @@ repository hacks?
 * Keep the Maven wrapper generated from the official Maven Wrapper plugin.
 * Avoid noisy warnings that hide real build failures.
 * Use Mockito's documented Java-agent setup instead of runtime self-attachment.
+* Explicitly authorize the instrumentation and native access used by the test-only Jazzer runtime.
 * Avoid hand-built local Maven repository paths in Surefire configuration.
 
 ## Considered Options
@@ -45,6 +52,8 @@ Generated Automatic Dependency Submission is disabled in repository settings. De
 * Good, because Maven starts through a current generated wrapper script.
 * Good, because `.mvn/jvm.config` suppresses Java 25 Unsafe warnings globally.
 * Good, because Mockito uses a startup `-javaagent` instead of dynamic self-attachment.
+* Good, because Surefire and Failsafe explicitly authorize Jazzer's dynamic agent and native rules
+  library instead of leaving Java 25 warnings unresolved.
 * Good, because `maven-dependency-plugin:properties` resolves the Mockito jar path without a
   brittle local repository expression.
 * Bad, because the build has additional Surefire and dependency-plugin configuration.
@@ -53,7 +62,8 @@ Generated Automatic Dependency Submission is disabled in repository settings. De
 
 Run `./mvnw -q -v`, `./mvnw -q -Dtest=LocalAgentRunnerTest test`, and
 `./mvnw -q spotless:check verify`. These commands should not emit the old Maven Jansi warning,
-Mockito self-attachment warning, dynamic agent loading warning, CDS warning, or Maven/Guice Unsafe warning.
+Mockito self-attachment warning, Jazzer dynamic-agent or native-access warning, CDS warning, or
+Maven/Guice Unsafe warning.
 
 ## Pros and Cons of the Options
 
@@ -111,3 +121,9 @@ Point Surefire directly at the Mockito jar in the local Maven repository.
 
 The relevant Mockito guidance is the Java 21+ section in Mockito's documentation. The current build
 keeps this logic in `pom.xml` so CI and local test runs behave the same way.
+
+[Jazzer pull request 820](https://github.com/CodeIntelligenceTesting/jazzer/pull/820) documents
+`-XX:+EnableDynamicAgentLoading` as the JUnit JVM option for acknowledging Jazzer's intentional
+dynamic agent load on current JDKs. [JEP 472](https://openjdk.org/jeps/472) documents
+`--enable-native-access=ALL-UNNAMED` for code on the class path that intentionally performs native
+access. These permissions apply only to forked test JVMs; they do not alter the application runtime.
