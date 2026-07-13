@@ -925,7 +925,7 @@ final class LocalWorkerManagerTest {
                 tempDir, Map.of("SYMPHONY_TRELLO_TEST_OS", "Linux", "SYMPHONY_TRELLO_TEST_HOME", home.toString()));
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
-        fixture.stubManagedPidWithHealth(board, 42, fixture.sameWorkflow(board));
+        fixture.stubManagedPidWithHealth(board, 42, fixture.sameWorkflowWithPid(board, 42));
 
         // when
         WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
@@ -985,7 +985,7 @@ final class LocalWorkerManagerTest {
         ConnectedBoard invalid = fixture.connectedBoard("board-invalid", "Invalid", "04-invalid");
         Files.writeString(invalid.workflowPath(), "plain body\n", StandardCharsets.UTF_8);
         fixture.save(running, stopped, wrongWorkflow, invalid);
-        fixture.stubManagedPidWithHealth(running, 41, fixture.sameWorkflow(running));
+        fixture.stubManagedPidWithHealth(running, 41, fixture.sameWorkflowWithPid(running, 41));
         fixture.stubManagedPidWithHealth(wrongWorkflow, 42, fixture.wrongWorkflow(wrongWorkflow));
 
         // when
@@ -1004,6 +1004,27 @@ final class LocalWorkerManagerTest {
                 .extracting(line -> line.substring(0, line.indexOf(' ')))
                 .containsExactly("running", "stopped", "unhealthy", "invalid");
         verify(fixture.healthChecker, never()).boardHealth(invalid);
+    }
+
+    @MethodSource("statusHealthProbeFailures")
+    @ParameterizedTest(name = "{0}")
+    void statusReportsHealthProbeFailureAndContinuesWithSiblings(
+            String ignoredDescription, RuntimeException failure, String expectedStatus) throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard broken = fixture.connectedBoard("board-broken", "Broken", "01-broken");
+        ConnectedBoard stopped = fixture.connectedBoard("board-stopped", "Stopped", "02-stopped");
+        fixture.save(broken, stopped);
+        when(fixture.healthChecker.boardHealth(broken)).thenThrow(failure);
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusAllRequest());
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(expectedStatus, "stopped \"Stopped\"")
+                .stdoutDoesNotContain("private context");
+        verify(fixture.healthChecker).boardHealth(stopped);
     }
 
     @Test
@@ -1888,12 +1909,46 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
+    void statusReportsUnhealthyWhenEndpointPidDoesNotMatchManagedPid() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        fixture.stubManagedPidWithHealth(board, 42, fixture.sameWorkflowWithPid(board, 99));
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("unhealthy \"Queue\" pid=42", "WORKER_PID_MISMATCH")
+                .stdoutDoesNotContain("running \"Queue\"");
+    }
+
+    @Test
+    void statusReportsUnhealthyWhenMatchingEndpointOmitsWorkerPid() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        fixture.stubManagedPidWithHealth(board, 42, fixture.sameWorkflow(board));
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("unhealthy \"Queue\" pid=42", "WORKER_PID_MISMATCH")
+                .stdoutDoesNotContain("running \"Queue\"");
+    }
+
+    @Test
     void statusReportsUntrackedRunningWorkerWhenPidFileIsMissingButHealthMatches() throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
-        when(fixture.healthChecker.boardHealth(board)).thenReturn(fixture.sameWorkflow(board));
+        stubUntrackedStatusHealth(fixture, board, 73, true);
 
         // when
         WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
@@ -1902,6 +1957,66 @@ final class LocalWorkerManagerTest {
         result.assertSuccess()
                 .stdoutContains("running \"Queue\"", "untracked, no managed pid")
                 .stdoutDoesNotContain("stopped \"Queue\"");
+    }
+
+    @Test
+    void statusRejectsUntrackedEndpointWhoseReportedPidIsNotManaged() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        stubUntrackedStatusHealth(fixture, board, 73, false);
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("unhealthy \"Queue\"", "UNVERIFIED_WORKER_PID")
+                .stdoutDoesNotContain("running \"Queue\"");
+    }
+
+    @Test
+    void statusRejectsManagedEndpointPidWhenWorkflowIdentityDoesNotMatch() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        when(fixture.healthChecker.boardHealth(board))
+                .thenReturn(new BoardHealth(
+                        BoardHealthKind.WRONG_WORKFLOW,
+                        board.serverPort(),
+                        Optional.of(board.workflowPath().toString()),
+                        Optional.of("different-board"),
+                        Optional.of(73L)));
+        when(fixture.platform.isAlive(73L)).thenReturn(true);
+        when(fixture.platform.isManaged(73L, fixture.paths.appHome(), board.workflowPath()))
+                .thenReturn(true);
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("unhealthy \"Queue\"", "WRONG_WORKFLOW")
+                .stdoutDoesNotContain("running \"Queue\"");
+    }
+
+    @Test
+    void statusReportsForeignPortWithoutManagedPidAsUnhealthy() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        when(fixture.healthChecker.boardHealth(board)).thenReturn(portUsed(board));
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("unhealthy \"Queue\"", "PORT_USED")
+                .stdoutDoesNotContain("running \"Queue\"", "stopped \"Queue\"");
     }
 
     @Test
@@ -1927,6 +2042,32 @@ final class LocalWorkerManagerTest {
                         fixture.paths.stateHome().toString(),
                         fixture.paths.appHome().toString(),
                         tempDir.toString());
+        assertThat(files.pidFile()).exists().content(StandardCharsets.UTF_8).isEqualTo("42");
+    }
+
+    @Test
+    void statusPrefersVerifiedReplacementWorkerOverStaleManagedPidMetadata() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        ManagedProcessStore.ManagedProcessFiles files = fixture.writeManagedPid(board, 42);
+        when(fixture.platform.isAlive(42L)).thenReturn(true);
+        when(fixture.platform.isManaged(42L, fixture.paths.appHome(), board.workflowPath()))
+                .thenReturn(false);
+        when(fixture.healthChecker.boardHealth(board)).thenReturn(fixture.sameWorkflowWithPid(board, 73));
+        when(fixture.platform.isAlive(73L)).thenReturn(true);
+        when(fixture.platform.isManaged(73L, fixture.paths.appHome(), board.workflowPath()))
+                .thenReturn(true);
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("running \"Queue\" pid=73", "stale managed pid=42")
+                .stdoutDoesNotContain("stale \"Queue\" pid=42", "UNVERIFIED_WORKER_PID");
+        assertThat(files.pidFile()).exists().content(StandardCharsets.UTF_8).isEqualTo("42");
     }
 
     @Test
@@ -2034,7 +2175,7 @@ final class LocalWorkerManagerTest {
                 Files.readString(board.workflowPath(), StandardCharsets.UTF_8).replace("port: 18080", "port: 18081"),
                 StandardCharsets.UTF_8);
         fixture.save(board);
-        when(fixture.healthChecker.boardHealth(board)).thenReturn(fixture.sameWorkflow(board));
+        stubUntrackedStatusHealth(fixture, board, 73, true);
 
         // when
         WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
@@ -2369,7 +2510,10 @@ final class LocalWorkerManagerTest {
         ConnectedBoard first = fixture.connectedBoard("board-1", "Duplicate", "duplicate-one");
         ConnectedBoard second = fixture.connectedBoard("board-2", "Duplicate", "duplicate-two");
         fixture.save(first, second);
-        when(fixture.healthChecker.boardHealth(second)).thenReturn(fixture.sameWorkflow(second));
+        when(fixture.healthChecker.boardHealth(second)).thenReturn(fixture.sameWorkflowWithPid(second, 73));
+        when(fixture.platform.isAlive(73)).thenReturn(true);
+        when(fixture.platform.isManaged(73, fixture.paths.appHome(), second.workflowPath()))
+                .thenReturn(true);
 
         // when
         Throwable thrown = catchThrowable(() -> fixture.status(fixture.statusRequest("Duplicate")));
@@ -3448,7 +3592,7 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
-    void statusFallbackReportsHashFreeLabels() throws Exception {
+    void statusFallbackReportsUnverifiedManagedProcessWithoutClaimingRuntimeHealth() throws Exception {
         // given
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
         ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
@@ -3462,8 +3606,10 @@ final class LocalWorkerManagerTest {
 
         // then
         result.assertSuccess()
-                .stdoutContains("running WORKFLOW.fallback.md pid=41")
-                .stdoutDoesNotContain("running WORKFLOW.fallback.md.");
+                .stdoutContains(
+                        "untracked WORKFLOW.fallback.md pid=41",
+                        "no connected workflow metadata; runtime identity not verified")
+                .stdoutDoesNotContain("running WORKFLOW.fallback.md", "untracked WORKFLOW.fallback.md.");
     }
 
     @Test
@@ -3492,6 +3638,7 @@ final class LocalWorkerManagerTest {
                         pidFile.toString(),
                         fixture.paths.stateHome().toString(),
                         tempDir.toString());
+        assertThat(pidFile).exists().content(StandardCharsets.UTF_8).isEqualTo("42");
     }
 
     @Test
@@ -4110,6 +4257,24 @@ final class LocalWorkerManagerTest {
         when(fixture.healthChecker.boardHealth(board)).thenReturn(fixture.sameWorkflowWithPid(board, workerPid));
         stubWorkerProcessState(fixture, board, workerPid, managed);
         return workerPid;
+    }
+
+    private static void stubUntrackedStatusHealth(
+            LocalWorkerManagerTestFixture fixture, ConnectedBoard board, long workerPid, boolean managed) {
+        when(fixture.healthChecker.boardHealth(board)).thenReturn(fixture.sameWorkflowWithPid(board, workerPid));
+        stubWorkerProcessState(fixture, board, workerPid, managed);
+    }
+
+    private static Stream<Arguments> statusHealthProbeFailures() {
+        return Stream.of(
+                Arguments.of(
+                        "configuration failure",
+                        new TrelloBoardSetupException("setup_invalid_server_port", "private context"),
+                        "invalid \"Broken\" local status configuration (setup_invalid_server_port)"),
+                Arguments.of(
+                        "unexpected failure",
+                        new IllegalStateException("private context"),
+                        "invalid \"Broken\" local status probe failed"));
     }
 
     private static void stubWorkerProcessState(
