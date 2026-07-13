@@ -61,6 +61,11 @@ combines that response with the existing managed PID ownership model. Existing r
 including running, stopped, stale, untracked, invalid, wrong-workflow, and foreign-port outcomes,
 remain available where the underlying evidence supports them.
 
+Each workflow owns its complete evidence boundary. An unexpected runtime failure while validating
+its workflow, reading its PID, probing its endpoint, checking process ownership, or classifying its
+result produces one sanitized invalid row; it does not suppress later workflow rows or expose the
+exception details.
+
 Normal `status` makes no systemd, launchd, or Windows Task Scheduler call and prints no platform
 autostart row. It does not claim whether a workflow will start after login or reboot. Installer and
 lifecycle autostart behavior remains supported and owned by installation, setup, start, stop,
@@ -90,7 +95,8 @@ This decision remains implemented when:
 * the normal status caller graph has no `CommandRunner` or platform service-manager dependency;
 * Linux, macOS, and Windows status tests produce workflow rows without autostart output;
 * public tests cover matching and nonmatching `/api/v1/local-status` identity responses, managed and
-  untracked workers, stale PID ownership, invalid workflows, and mixed multi-workflow output;
+  untracked workers, stale PID ownership, invalid workflows, isolated evidence failures, and mixed
+  multi-workflow output;
 * no custom D-Bus parser or direct D-Bus dependency exists in the implementation;
 * installer and lifecycle autostart tests remain green; and
 * README, CLI help, and `SPEC.md` describe the same runtime-only status contract.

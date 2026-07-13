@@ -33,6 +33,10 @@ final class LocalWorkerManagerTestFixture {
     }
 
     LocalWorkerManagerTestFixture(Path tempDir, Map<String, String> environment) {
+        this(tempDir, environment, new WorkflowConfigEditor());
+    }
+
+    LocalWorkerManagerTestFixture(Path tempDir, Map<String, String> environment, WorkflowConfigEditor workflowConfig) {
         this.paths = LocalWorkerPaths.from(
                 Optional.of(tempDir.resolve("app")),
                 Optional.of(tempDir.resolve("config")),
@@ -58,12 +62,7 @@ final class LocalWorkerManagerTestFixture {
                         Optional.empty()));
         this.credentialPreflight = mock();
         this.manager = new LocalWorkerManager(
-                environment,
-                new WorkflowConfigEditor(),
-                healthChecker,
-                platform,
-                new LocalLogTailer(),
-                credentialPreflight);
+                environment, workflowConfig, healthChecker, platform, new LocalLogTailer(), credentialPreflight);
     }
 
     WorkerRunResult start(StartWorkerRequest request) throws Exception {

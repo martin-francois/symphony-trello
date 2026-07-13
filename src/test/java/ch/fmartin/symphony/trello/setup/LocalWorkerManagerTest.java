@@ -10,6 +10,7 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockConstruction;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -1015,6 +1016,7 @@ final class LocalWorkerManagerTest {
         ConnectedBoard broken = fixture.connectedBoard("board-broken", "Broken", "01-broken");
         ConnectedBoard stopped = fixture.connectedBoard("board-stopped", "Stopped", "02-stopped");
         fixture.save(broken, stopped);
+        ManagedProcessStore.ManagedProcessFiles files = fixture.writeManagedPid(broken, 42);
         when(fixture.healthChecker.boardHealth(broken)).thenThrow(failure);
 
         // when
@@ -1023,8 +1025,71 @@ final class LocalWorkerManagerTest {
         // then
         result.assertSuccess()
                 .stdoutContains(expectedStatus, "stopped \"Stopped\"")
-                .stdoutDoesNotContain("private context");
-        verify(fixture.healthChecker).boardHealth(stopped);
+                .stdoutDoesNotContain("private context", failure.getClass().getSimpleName());
+        assertThat(result.stdout().lines().toList()).containsExactly(expectedStatus, "stopped \"Stopped\"");
+        assertStatusEvidenceFailureIsReadOnlyAndContinues(fixture, files, stopped);
+    }
+
+    @Test
+    void statusContainsUncheckedWorkflowDiagnosticsFailureAndContinuesWithSiblings() throws Exception {
+        // given
+        WorkflowConfigEditor workflowConfig = mock();
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir, Map.of(), workflowConfig);
+        ConnectedBoard broken = fixture.connectedBoard("board-broken", "Broken", "01-broken");
+        ConnectedBoard stopped = fixture.connectedBoard("board-stopped", "Stopped", "02-stopped");
+        fixture.save(broken, stopped);
+        ManagedProcessStore.ManagedProcessFiles files = fixture.writeManagedPid(broken, 42);
+        IllegalStateException failure =
+                new IllegalStateException("private workflow environment and local path context");
+        when(workflowConfig.diagnosticsValidation(eq(broken.workflowPath()), any()))
+                .thenThrow(failure);
+        when(workflowConfig.diagnosticsValidation(eq(stopped.workflowPath()), any()))
+                .thenReturn(WorkflowValidation.valid());
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusAllRequest());
+
+        // then
+        assertIsolatedStatusEvidenceFailure(result, failure);
+        verify(fixture.healthChecker, never()).boardHealth(broken);
+        assertStatusEvidenceFailureIsReadOnlyAndContinues(fixture, files, stopped);
+    }
+
+    @Test
+    void statusContainsUncheckedProcessEvidenceFailureAndContinuesWithSiblings() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard broken = fixture.connectedBoard("board-broken", "Broken", "01-broken");
+        ConnectedBoard stopped = fixture.connectedBoard("board-stopped", "Stopped", "02-stopped");
+        fixture.save(broken, stopped);
+        ManagedProcessStore.ManagedProcessFiles files = fixture.writeManagedPid(broken, 42);
+        IllegalStateException failure = new IllegalStateException("private process evidence context");
+        when(fixture.platform.isAlive(42)).thenThrow(failure);
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusAllRequest());
+
+        // then
+        assertIsolatedStatusEvidenceFailure(result, failure);
+        assertStatusEvidenceFailureIsReadOnlyAndContinues(fixture, files, stopped);
+    }
+
+    @Test
+    void statusDoesNotCatchErrorsFromPerWorkflowEvidence() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard broken = fixture.connectedBoard("board-broken", "Broken", "01-broken");
+        ConnectedBoard stopped = fixture.connectedBoard("board-stopped", "Stopped", "02-stopped");
+        fixture.save(broken, stopped);
+        AssertionError failure = new AssertionError("fatal evidence failure");
+        when(fixture.healthChecker.boardHealth(broken)).thenThrow(failure);
+
+        // when
+        Throwable thrown = catchThrowable(() -> fixture.status(fixture.statusAllRequest()));
+
+        // then
+        assertThat(thrown).isSameAs(failure);
+        verify(fixture.healthChecker, never()).boardHealth(stopped);
     }
 
     @Test
@@ -4274,7 +4339,30 @@ final class LocalWorkerManagerTest {
                 Arguments.of(
                         "unexpected failure",
                         new IllegalStateException("private context"),
-                        "invalid \"Broken\" local status probe failed"));
+                        "invalid \"Broken\" local status evidence (setup_status_evidence_unavailable)"));
+    }
+
+    private static void assertIsolatedStatusEvidenceFailure(WorkerRunResult result, RuntimeException failure) {
+        String failureRow = "invalid \"Broken\" local status evidence (setup_status_evidence_unavailable)";
+        result.assertSuccess()
+                .stdoutDoesNotContain(
+                        failure.getMessage(),
+                        failure.getClass().getSimpleName(),
+                        "private workflow environment",
+                        "local path context",
+                        "private process evidence");
+        assertThat(result.stdout().lines().toList()).containsExactly(failureRow, "stopped \"Stopped\"");
+    }
+
+    private static void assertStatusEvidenceFailureIsReadOnlyAndContinues(
+            LocalWorkerManagerTestFixture fixture,
+            ManagedProcessStore.ManagedProcessFiles files,
+            ConnectedBoard stopped)
+            throws IOException {
+        assertThat(files.pidFile()).exists().content(StandardCharsets.UTF_8).isEqualTo("42");
+        verify(fixture.healthChecker).boardHealth(stopped);
+        verify(fixture.platform, never()).start(any(), any(), any(), any(), any());
+        verify(fixture.platform, never()).stop(anyLong(), any(Duration.class), any(Duration.class));
     }
 
     private static void stubWorkerProcessState(
