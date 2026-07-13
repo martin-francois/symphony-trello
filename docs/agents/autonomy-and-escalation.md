@@ -21,6 +21,21 @@ this repository.
   scope. When offering more than one improvement, label the options with letters and say the user can
   reply with letters such as `A` or `AD` to choose multiple options. If Codex cannot make an
   improvement itself, explain the exact user action needed instead of only saying it cannot be done.
+- Treat an inability to complete repository-required verification because a tool, dependency,
+  environment capability, permission, or workflow facility is unavailable or needs a workaround as
+  unresolved friction. Also treat an unexpected warning or error from a tool, dependency,
+  environment, permission, or workflow step as friction until it is fixed or explained, even when
+  the step exits successfully. Expected diagnostics deliberately induced and asserted by a test are
+  not friction merely because they contain warning or error text. Likewise, a normal test or
+  assertion failure is not automatically friction; treat it as a defect or finding to diagnose and
+  fix. Classify a nonzero command as friction only after evidence separates an execution-environment
+  limitation from a code or test failure. Do not silently ignore affected checks or unexpected
+  diagnostics, call the complete gate passed, or hide the gap under a generic "environmental
+  limitation." State the command, affected checks or diagnostics, evidence for the classification,
+  substitute evidence used, and remaining verification gap. When practical, compare the unchanged
+  base in the same environment or inspect the trusted hosted equivalent on the exact tested tree.
+  Then adapt the environment or keep the limitation explicit through handoff; a green substitute
+  check does not retroactively turn the locally incomplete verification into a pass.
 
 ## Review before finalizing
 

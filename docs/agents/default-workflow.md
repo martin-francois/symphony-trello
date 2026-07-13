@@ -246,6 +246,14 @@ optional verification. Follow this order:
   `SYMPHONY_TRELLO_TEST_PWSH=./scripts/pwsh-docker.sh` for Java tests that support a configurable
   PowerShell command, or run `./scripts/pwsh-docker.sh` directly for script checks. Do not report
   PowerShell as skipped only because `pwsh` is missing if Docker is available.
+- When required verification cannot execute reliably because a tool, dependency, host capability,
+  permission, or workflow facility is unavailable, treat that as unresolved friction. An ordinary
+  code or test failure is a defect to diagnose and fix, not automatically friction. An unexpected,
+  unresolved warning or error from a verification step is friction even when the step exits zero;
+  expected diagnostics deliberately exercised by a passing test are not. Follow
+  [Autonomy & escalation](autonomy-and-escalation.md#deciding-versus-asking): establish which case
+  applies, report actual friction immediately, state substitute evidence and the remaining gap, and
+  keep mentioning unresolved friction through handoff.
 - When validating repository-local Codex skills with the external skill-creator quick validator, use
   `scripts/validate-codex-skill <skill-dir>` instead of calling `quick_validate.py` directly. The
   wrapper creates a cached isolated Python environment with pinned PyYAML so validation does not
