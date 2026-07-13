@@ -1,5 +1,7 @@
 # Symphony for Trello
 
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/martin-francois/symphony-trello/badge)](https://scorecard.dev/viewer/?uri=github.com/martin-francois/symphony-trello)
+
 Symphony for Trello lets Codex work from Trello cards. Use it when prompts and terminal history are
 not enough, and you want a clear board that shows what Codex should do, what is running, and what is
 ready for review.

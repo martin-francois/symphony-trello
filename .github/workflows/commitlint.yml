@@ -4,6 +4,8 @@ on:
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review, edited]
 
+permissions: read-all
+
 jobs:
   commitlint:
     if: ${{ !startsWith(github.head_ref, 'release-please--branches--') }}

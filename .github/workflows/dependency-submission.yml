@@ -10,13 +10,14 @@ on:
       - '.github/workflows/dependency-submission.yml'
       - '.mvn/jvm.config'
 
-permissions:
-  contents: write
+permissions: read-all
 
 jobs:
   dependency-submission:
     if: ${{ !startsWith(github.head_ref, 'release-please--branches--') }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
