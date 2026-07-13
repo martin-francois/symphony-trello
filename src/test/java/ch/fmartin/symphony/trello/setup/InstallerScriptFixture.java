@@ -5,8 +5,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -15,6 +18,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 final class InstallerScriptFixture {
+    private static final String REPOSITORY_ENVIRONMENT_PREFIX = "SYMPHONY_";
     private static final Pattern POSIX_INSTALLER_DEFAULT_VERSION =
             Pattern.compile("(?m)^DEFAULT_VERSION=\"([^\"]+)\" # x-release-please-version$");
 
@@ -42,28 +46,38 @@ final class InstallerScriptFixture {
     static ProcessResult runWithPseudoTerminal(Map<String, String> environment, String input, String command)
             throws IOException, InterruptedException {
         ProcessBuilder processBuilder = new ProcessBuilder("script", "-q", "-e", "-c", command, "/dev/null");
-        applyTestEnvironment(processBuilder, environment);
-        return run(processBuilder, input, 60);
+        return runWithTestEnvironment(environment, processBuilder, input);
     }
 
     static ProcessResult run(Map<String, String> environment, String... command)
             throws IOException, InterruptedException {
-        ProcessBuilder processBuilder = new ProcessBuilder(command);
-        applyTestEnvironment(processBuilder, environment);
-        return run(processBuilder, "", 60);
+        return run(environment, new ProcessBuilder(command));
     }
 
     static ProcessResult run(Map<String, String> environment, Path workingDirectory, String... command)
             throws IOException, InterruptedException {
         ProcessBuilder processBuilder = new ProcessBuilder(command);
         processBuilder.directory(workingDirectory.toFile());
-        applyTestEnvironment(processBuilder, environment);
-        return run(processBuilder, "", 60);
+        return run(environment, processBuilder);
     }
 
-    private static void applyTestEnvironment(ProcessBuilder processBuilder, Map<String, String> environment)
-            throws IOException {
+    static ProcessResult run(Map<String, String> environment, ProcessBuilder processBuilder)
+            throws IOException, InterruptedException {
+        return runWithTestEnvironment(environment, processBuilder, "");
+    }
+
+    private static ProcessResult runWithTestEnvironment(
+            Map<String, String> environment, ProcessBuilder processBuilder, String input)
+            throws IOException, InterruptedException {
+        try (AppliedTestEnvironment ignored = applyTestEnvironment(processBuilder, environment)) {
+            return run(processBuilder, input, 60);
+        }
+    }
+
+    private static AppliedTestEnvironment applyTestEnvironment(
+            ProcessBuilder processBuilder, Map<String, String> environment) throws IOException {
         Map<String, String> processEnvironment = processBuilder.environment();
+        processEnvironment.keySet().removeIf(InstallerScriptFixture::isRepositoryEnvironmentControl);
         if (!environment.containsKey("PATH")) {
             String inheritedPath = processEnvironment.getOrDefault("PATH", "");
             String javaBin = Path.of(System.getProperty("java.home"), "bin").toString();
@@ -76,17 +90,38 @@ final class InstallerScriptFixture {
             }
         }
         processEnvironment.putAll(environment);
-        applyDeterministicLinuxDistro(processEnvironment, environment);
+        if (!environment.containsKey("SYMPHONY_TRELLO_TEST_OS") && isLinux()) {
+            processEnvironment.put("SYMPHONY_TRELLO_TEST_OS", "Linux");
+        }
+        applyDeterministicLinuxDistro(processEnvironment);
+        applyDeterministicLinuxFilesystem(processEnvironment);
+        List<Path> cleanupRoots = List.of();
         if (!environment.containsKey("HOME") && !isWindows()) {
-            Path home = defaultPosixHome(environment);
+            String symphonyHome = environment.get("SYMPHONY_HOME");
+            Path home;
+            Path symphonyHomePath = symphonyHome == null || symphonyHome.isBlank() ? null : Path.of(symphonyHome);
+            if (symphonyHomePath != null
+                    && symphonyHomePath.isAbsolute()
+                    && symphonyHomePath.getParent() != null
+                    && symphonyHomePath.getFileName() != null) {
+                Files.createDirectories(symphonyHomePath.getParent());
+                home = symphonyHomePath.resolveSibling(symphonyHomePath.getFileName() + "-user-home");
+            } else {
+                home = Files.createTempDirectory("symphony-trello-installer-home-");
+                cleanupRoots = List.of(home);
+            }
             Files.createDirectories(home);
             processEnvironment.put("HOME", home.toString());
         }
+        return new AppliedTestEnvironment(cleanupRoots);
     }
 
-    private static void applyDeterministicLinuxDistro(
-            Map<String, String> processEnvironment, Map<String, String> environment) {
-        if (!"Linux".equals(environment.get("SYMPHONY_TRELLO_TEST_OS"))) {
+    static boolean isRepositoryEnvironmentControl(String name) {
+        return name.regionMatches(true, 0, REPOSITORY_ENVIRONMENT_PREFIX, 0, REPOSITORY_ENVIRONMENT_PREFIX.length());
+    }
+
+    private static void applyDeterministicLinuxDistro(Map<String, String> processEnvironment) {
+        if (!"Linux".equals(processEnvironment.get("SYMPHONY_TRELLO_TEST_OS"))) {
             return;
         }
         processEnvironment.putIfAbsent("SYMPHONY_TRELLO_TEST_OS_ID", "debian");
@@ -94,15 +129,41 @@ final class InstallerScriptFixture {
         processEnvironment.putIfAbsent("SYMPHONY_TRELLO_TEST_OS_PRETTY_NAME", "Debian GNU/Linux");
     }
 
-    private static Path defaultPosixHome(Map<String, String> environment) {
-        String symphonyHome = environment.get("SYMPHONY_HOME");
-        if (symphonyHome != null && !symphonyHome.isBlank()) {
-            Path symphonyHomePath = Path.of(symphonyHome);
-            if (symphonyHomePath.isAbsolute()) {
-                return symphonyHomePath.resolveSibling("user-home");
-            }
+    private static void applyDeterministicLinuxFilesystem(Map<String, String> processEnvironment) {
+        if (!"Linux".equals(processEnvironment.get("SYMPHONY_TRELLO_TEST_OS"))) {
+            return;
         }
-        return Path.of("target", "installer-script-test-home").toAbsolutePath();
+        processEnvironment.putIfAbsent("SYMPHONY_TRELLO_TEST_HOME_FS_SOURCE", "fixture-root");
+        processEnvironment.putIfAbsent("SYMPHONY_TRELLO_TEST_ROOT_FS_SOURCE", "fixture-root");
+        processEnvironment.putIfAbsent("SYMPHONY_TRELLO_TEST_VAR_FS_SOURCE", "fixture-root");
+        processEnvironment.putIfAbsent("SYMPHONY_TRELLO_TEST_HOME_SIZE_KB", "1048576");
+        processEnvironment.putIfAbsent("SYMPHONY_TRELLO_TEST_VAR_SIZE_KB", "1048576");
+    }
+
+    private static boolean isLinux() {
+        return System.getProperty("os.name", "").equalsIgnoreCase("Linux");
+    }
+
+    private static void deleteRecursively(Path root) throws IOException {
+        if (!Files.exists(root)) {
+            return;
+        }
+        Files.walkFileTree(root, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
+                Files.delete(file);
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult postVisitDirectory(Path directory, IOException failure) throws IOException {
+                if (failure != null) {
+                    throw failure;
+                }
+                Files.delete(directory);
+                return FileVisitResult.CONTINUE;
+            }
+        });
     }
 
     static ProcessResult run(ProcessBuilder processBuilder, String input, int timeoutSeconds)
@@ -893,6 +954,15 @@ final class InstallerScriptFixture {
     record ProcessResult(int exitCode, String output) {
         void assertSuccess() {
             assertThat(exitCode).as(output).isZero();
+        }
+    }
+
+    private record AppliedTestEnvironment(List<Path> cleanupRoots) implements AutoCloseable {
+        @Override
+        public void close() throws IOException {
+            for (Path cleanupRoot : cleanupRoots) {
+                deleteRecursively(cleanupRoot);
+            }
         }
     }
 }
