@@ -1619,6 +1619,7 @@ final class SymphonyOrchestratorTest {
                 .isEqualTo("TRELLO-first"));
     }
 
+    // TODO Flaky: #579
     @Test
     void sameRawCardIdAcrossTargetsRunsIndependentlyWithoutCrossRemoval() throws Exception {
         // given
