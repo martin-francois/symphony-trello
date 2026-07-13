@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.setup;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -63,6 +64,12 @@ final class InstallerScriptFixture {
     private static void applyTestEnvironment(ProcessBuilder processBuilder, Map<String, String> environment)
             throws IOException {
         Map<String, String> processEnvironment = processBuilder.environment();
+        if (!environment.containsKey("PATH")) {
+            String inheritedPath = processEnvironment.getOrDefault("PATH", "");
+            String javaBin = Path.of(System.getProperty("java.home"), "bin").toString();
+            processEnvironment.put(
+                    "PATH", inheritedPath.isEmpty() ? javaBin : javaBin + File.pathSeparator + inheritedPath);
+        }
         for (String xdgHome : List.of("XDG_DATA_HOME", "XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME")) {
             if (!environment.containsKey(xdgHome)) {
                 processEnvironment.remove(xdgHome);
