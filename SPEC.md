@@ -914,7 +914,15 @@ This Java implementation provides:
   cannot safely imply every connected Trello board's credentials.
 - `stop [--board NAME | --workflow PATH]`: stops one managed local worker, or all connected workers
   when no selector is provided
-- `status [--board NAME | --workflow PATH]`: reports managed local worker health
+- `status [--board NAME | --workflow PATH]`: reports the current runtime state of every selected
+  workflow through the existing loopback `/api/v1/local-status` identity probe and managed PID
+  ownership checks. A responding endpoint counts as the expected worker only when its workflow and
+  board identity match. Each selected workflow MUST be evaluated and printed independently, and the
+  command MUST remain read-only. It MUST NOT query systemd, launchd, Windows Task Scheduler, or any
+  other platform service manager, and MUST NOT report whether autostart is installed, enabled,
+  active, or expected after login or reboot. A responding local worker does not prove that every
+  downstream Trello, GitHub, Codex, or network operation is succeeding. Installer-managed autostart
+  remains a setup and deployment concern.
 - `logs [--board NAME | --workflow PATH] [--follow]`: prints or follows managed local worker logs
 - `diagnostics [--board NAME | --workflow PATH] [--output PATH] [--json] [--deep]
   [--show-private-context [--lookup TOKEN]]`:
@@ -2825,6 +2833,8 @@ Minimum endpoints:
   - Loopback-only worker identity probe used by the managed local lifecycle commands, for example
     `setup-local check`, `start`, and `status`, to verify that the process answering on a port
     manages the expected workflow file and Trello board.
+  - Normal `status` evaluates this identity response together with managed PID ownership for each
+    selected workflow. It does not use platform service-manager state as a runtime-health signal.
   - Returns the resolved Trello board ID, the configured board id/key, the selected workflow path,
     and the worker process id.
   - Requests from non-loopback clients receive `404` so the endpoint and the local paths it exposes

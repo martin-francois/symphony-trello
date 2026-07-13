@@ -1856,6 +1856,20 @@ final class TrelloBoardSetupMainTest {
         result.assertSuccess().stdoutContains(expectedUsage).stderrEmpty();
     }
 
+    @Test
+    void statusHelpDescribesWorkflowRuntimeStateWithoutAutostartClaims() {
+        // given
+
+        // when
+        CliRunResult result = runCli("status", "--help");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains("Show the current runtime state of selected Symphony workflows.")
+                .stdoutDoesNotContain("autostart", "systemd", "launchctl", "Task Scheduler")
+                .stderrEmpty();
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"new-board", "import-board"})
     void directSetupHelpDocumentsRepositoryUrlOption(String command) {

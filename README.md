@@ -663,7 +663,11 @@ the missing `Merging` list when needed.
 
 With WSL2, browser login may open in Windows; if that is awkward, choose device login when setup asks
 whether the machine can open a browser. The managed `start`, `stop`, `status`, and `logs` commands
-are the public lifecycle controls for connected boards. On Linux hosts with user systemd, the
+are the public lifecycle controls for connected boards. `status` reports whether each selected
+workflow is currently responding as the expected local Symphony worker; use `logs` when a worker is
+not responding. It does not inspect autostart configuration or say whether a worker will start after
+login or reboot. Installer-managed autostart remains supported and can be investigated through setup
+checks, installer output, logs, or native platform tools when needed. On Linux hosts with user systemd, the
 installer registers a user service that runs `symphony-trello start --all` for connected boards on
 login or reboot when user lingering can be enabled. On macOS it registers a per-user LaunchAgent. On
 Windows it creates a per-user Scheduled Task, falling back to a Startup-folder command if task

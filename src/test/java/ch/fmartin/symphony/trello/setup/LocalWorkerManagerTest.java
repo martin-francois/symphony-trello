@@ -918,37 +918,26 @@ final class LocalWorkerManagerTest {
     }
 
     @Test
-    void statusReportsLinuxUserSystemdAutostartState() throws Exception {
+    void statusReportsLinuxRuntimeHealthWithoutQueryingSystemd() throws Exception {
         // given
         Path home = tempDir.resolve("linux-home");
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(
                 tempDir, Map.of("SYMPHONY_TRELLO_TEST_OS", "Linux", "SYMPHONY_TRELLO_TEST_HOME", home.toString()));
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
-        Path service = home.resolve(".config/systemd/user/symphony-trello.service");
-        Files.createDirectories(service.getParent());
-        Files.writeString(service, "[Unit]\n", StandardCharsets.UTF_8);
-        when(fixture.commandRunner.run("systemctl", "--user", "is-enabled", "symphony-trello.service"))
-                .thenReturn(new CommandResult(0, "enabled\n"));
-        when(fixture.commandRunner.run("systemctl", "--user", "is-active", "symphony-trello.service"))
-                .thenReturn(new CommandResult(0, "active\n"));
+        fixture.stubManagedPidWithHealth(board, 42, fixture.sameWorkflow(board));
 
         // when
         WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
 
         // then
         result.assertSuccess()
-                .stdoutContains(
-                        "autostart linux_user_systemd",
-                        "service=symphony-trello.service",
-                        "unit=installed",
-                        "enabled=enabled",
-                        "active=active",
-                        service.toString());
+                .stdoutContains("running \"Queue\" pid=42")
+                .stdoutDoesNotContain("autostart", "systemd", "unavailable");
     }
 
     @Test
-    void statusReportsMacosLaunchAgentAutostartState() throws Exception {
+    void statusReportsMacosRuntimeHealthWithoutQueryingLaunchctl() throws Exception {
         // given
         Path home = tempDir.resolve("mac-home");
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(
@@ -962,50 +951,59 @@ final class LocalWorkerManagerTest {
                         "501"));
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
-        Path plist = home.resolve("Library/LaunchAgents/ch.fmartin.symphony-trello.plist");
-        Files.createDirectories(plist.getParent());
-        Files.writeString(plist, "<plist/>\n", StandardCharsets.UTF_8);
-        when(fixture.commandRunner.run("launchctl", "print", "gui/501/ch.fmartin.symphony-trello"))
-                .thenReturn(new CommandResult(0, "loaded\n"));
 
         // when
         WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
 
         // then
-        result.assertSuccess()
-                .stdoutContains(
-                        "autostart macos_launchagent",
-                        "label=ch.fmartin.symphony-trello",
-                        "plist=installed",
-                        "loaded=loaded",
-                        plist.toString());
+        result.assertSuccess().stdoutContains("stopped \"Queue\"").stdoutDoesNotContain("autostart", "LaunchAgent");
     }
 
     @Test
-    void statusReportsWindowsScheduledTaskAndStartupFallbackState() throws Exception {
+    void statusReportsWindowsRuntimeHealthWithoutQueryingTaskScheduler() throws Exception {
         // given
         Path appData = tempDir.resolve("windows-appdata");
         LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(
                 tempDir, Map.of("SYMPHONY_TRELLO_TEST_OS", "Windows 11", "APPDATA", appData.toString()));
         ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
         fixture.save(board);
-        Path startupCommand = appData.resolve("Microsoft/Windows/Start Menu/Programs/Startup/Symphony for Trello.cmd");
-        Files.createDirectories(startupCommand.getParent());
-        Files.writeString(startupCommand, "@echo off\n", StandardCharsets.UTF_8);
-        when(fixture.commandRunner.run("schtasks.exe", "/Query", "/TN", "Symphony for Trello"))
-                .thenReturn(new CommandResult(0, "TaskName: Symphony for Trello\n"));
 
         // when
         WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
 
         // then
+        result.assertSuccess().stdoutContains("stopped \"Queue\"").stdoutDoesNotContain("autostart", "scheduled_task");
+    }
+
+    @Test
+    void statusReportsEverySelectedWorkflowIndependentlyWithoutAutostartOutput() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard running = fixture.connectedBoard("board-running", "Running", "01-running");
+        ConnectedBoard stopped = fixture.connectedBoard("board-stopped", "Stopped", "02-stopped");
+        ConnectedBoard wrongWorkflow = fixture.connectedBoard("board-wrong", "Wrong", "03-wrong");
+        ConnectedBoard invalid = fixture.connectedBoard("board-invalid", "Invalid", "04-invalid");
+        Files.writeString(invalid.workflowPath(), "plain body\n", StandardCharsets.UTF_8);
+        fixture.save(running, stopped, wrongWorkflow, invalid);
+        fixture.stubManagedPidWithHealth(running, 41, fixture.sameWorkflow(running));
+        fixture.stubManagedPidWithHealth(wrongWorkflow, 42, fixture.wrongWorkflow(wrongWorkflow));
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusAllRequest());
+
+        // then
         result.assertSuccess()
                 .stdoutContains(
-                        "autostart windows",
-                        "task=\"Symphony for Trello\"",
-                        "scheduled_task=installed",
-                        "startup_command=installed",
-                        startupCommand.toString());
+                        "running \"Running\" pid=41",
+                        "stopped \"Stopped\"",
+                        "unhealthy \"Wrong\" pid=42",
+                        "WRONG_WORKFLOW",
+                        "invalid \"Invalid\"")
+                .stdoutDoesNotContain("autostart", "systemctl", "launchctl", "schtasks", "\n\n");
+        assertThat(result.stdout().lines().toList())
+                .extracting(line -> line.substring(0, line.indexOf(' ')))
+                .containsExactly("running", "stopped", "unhealthy", "invalid");
+        verify(fixture.healthChecker, never()).boardHealth(invalid);
     }
 
     @Test
@@ -1929,6 +1927,22 @@ final class LocalWorkerManagerTest {
                         fixture.paths.stateHome().toString(),
                         fixture.paths.appHome().toString(),
                         tempDir.toString());
+    }
+
+    @Test
+    void statusLeavesDeadManagedPidStateUnchanged() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        ManagedProcessStore.ManagedProcessFiles files = fixture.writeManagedPid(board, 42);
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusRequest("Queue"));
+
+        // then
+        result.assertSuccess().stdoutContains("stopped \"Queue\"");
+        assertThat(files.pidFile()).exists().content(StandardCharsets.UTF_8).isEqualTo("42");
     }
 
     @Test
@@ -3478,6 +3492,23 @@ final class LocalWorkerManagerTest {
                         pidFile.toString(),
                         fixture.paths.stateHome().toString(),
                         tempDir.toString());
+    }
+
+    @Test
+    void statusFallbackLeavesDeadManagedPidStateUnchanged() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ManagedProcessStore store = new ManagedProcessStore(fixture.paths.stateHome());
+        Path workflow = fixture.paths.configDir().resolve("WORKFLOW.dead.md");
+        Path pidFile = store.files(workflow).pidFile();
+        store.writePid(pidFile, 42);
+
+        // when
+        WorkerRunResult result = fixture.status(fixture.statusAllRequest());
+
+        // then
+        result.assertSuccess().stdoutContains("stopped WORKFLOW.dead.md");
+        assertThat(pidFile).exists().content(StandardCharsets.UTF_8).isEqualTo("42");
     }
 
     @Test

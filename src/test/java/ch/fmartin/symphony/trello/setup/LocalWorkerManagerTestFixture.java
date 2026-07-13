@@ -26,7 +26,6 @@ final class LocalWorkerManagerTestFixture {
     final ManagedProcessPlatform platform;
     final LocalHealthChecker healthChecker;
     final LocalWorkerManager.TrelloCredentialPreflight credentialPreflight;
-    final CommandRunner commandRunner;
     final LocalWorkerManager manager;
 
     LocalWorkerManagerTestFixture(Path tempDir) {
@@ -58,17 +57,13 @@ final class LocalWorkerManagerTestFixture {
                         Optional.empty(),
                         Optional.empty()));
         this.credentialPreflight = mock();
-        this.commandRunner = mock();
-        when(commandRunner.run(any(String[].class)))
-                .thenReturn(new CommandResult(CommandResult.COMMAND_NOT_FOUND_EXIT_CODE, ""));
         this.manager = new LocalWorkerManager(
                 environment,
                 new WorkflowConfigEditor(),
                 healthChecker,
                 platform,
                 new LocalLogTailer(),
-                credentialPreflight,
-                commandRunner);
+                credentialPreflight);
     }
 
     WorkerRunResult start(StartWorkerRequest request) throws Exception {
