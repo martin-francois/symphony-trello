@@ -286,6 +286,170 @@ final class PrivateContextScannerScriptTest {
                 .doesNotContain(PRIVATE_TRELLO_URL, "AbCd1234");
     }
 
+    @Test
+    void scansTheWholeWorktreeWhenInvokedFromASubdirectory() throws Exception {
+        // given
+        assumeToolsAvailable();
+        assumeTrue(commandExists("git"));
+        initializeGitRepository();
+        Path subdirectory = Files.createDirectories(tempDir.resolve("nested"));
+        Files.writeString(
+                tempDir.resolve("untracked.md"), "board " + PRIVATE_TRELLO_URL + "\n", StandardCharsets.UTF_8);
+
+        // when
+        ProcessResult result = run(scannerEnvironment(), subdirectory, scanner().toString(), "--worktree");
+
+        // then
+        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.output())
+                .contains("trello-url-private-context")
+                .doesNotContain(PRIVATE_TRELLO_URL, "AbCd1234");
+    }
+
+    @Test
+    void ignoresGitIgnoredWorktreeFiles() throws Exception {
+        // given
+        assumeToolsAvailable();
+        assumeTrue(commandExists("git"));
+        initializeGitRepository();
+        Files.writeString(tempDir.resolve(".gitignore"), "node_modules/\n", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve("tracked.md"), "tracked\n", StandardCharsets.UTF_8);
+        run(Map.of(), tempDir, "git", "add", ".gitignore", "tracked.md").assertSuccess();
+        run(Map.of(), tempDir, "git", "commit", "-m", "test: ignore dependencies")
+                .assertSuccess();
+        Path ignoredDirectory = Files.createDirectories(tempDir.resolve("node_modules"));
+        Files.writeString(
+                ignoredDirectory.resolve("dependency.md"),
+                "ignored board " + PRIVATE_TRELLO_URL + "\n",
+                StandardCharsets.UTF_8);
+
+        // when
+        ProcessResult result = run(scannerEnvironment(), tempDir, scanner().toString(), "--worktree");
+
+        // then
+        result.assertSuccess();
+    }
+
+    @Test
+    void scansTrackedFilesEvenWhenTheyMatchAnIgnoreRule() throws Exception {
+        // given
+        assumeToolsAvailable();
+        assumeTrue(commandExists("git"));
+        initializeGitRepository();
+        Files.writeString(tempDir.resolve("tracked.md"), "tracked\n", StandardCharsets.UTF_8);
+        run(Map.of(), tempDir, "git", "add", "tracked.md").assertSuccess();
+        run(Map.of(), tempDir, "git", "commit", "-m", "test: add tracked note").assertSuccess();
+        Files.writeString(tempDir.resolve(".gitignore"), "tracked.md\n", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve("tracked.md"), "board " + PRIVATE_TRELLO_URL + "\n", StandardCharsets.UTF_8);
+
+        // when
+        ProcessResult result = run(scannerEnvironment(), tempDir, scanner().toString(), "--worktree");
+
+        // then
+        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.output())
+                .contains("trello-url-private-context")
+                .doesNotContain(PRIVATE_TRELLO_URL, "AbCd1234");
+    }
+
+    @Test
+    void scansNonIgnoredWorktreeFilesWhoseNamesStartWithDash() throws Exception {
+        // given
+        assumeToolsAvailable();
+        assumeTrue(commandExists("git"));
+        initializeGitRepository();
+        Files.writeString(tempDir.resolve("-note.md"), "board " + PRIVATE_TRELLO_URL + "\n", StandardCharsets.UTF_8);
+
+        // when
+        ProcessResult result = run(scannerEnvironment(), tempDir, scanner().toString(), "--worktree");
+
+        // then
+        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.output())
+                .contains("trello-url-private-context")
+                .doesNotContain(PRIVATE_TRELLO_URL, "AbCd1234");
+    }
+
+    @Test
+    void failsClosedWhenGitCannotEnumerateWorktreeFiles() throws Exception {
+        // given
+        assumeToolsAvailable();
+        assumeTrue(commandExists("git"));
+        initializeGitRepository();
+        Files.writeString(tempDir.resolve(".git/index"), "invalid index", StandardCharsets.UTF_8);
+
+        // when
+        ProcessResult result = run(scannerEnvironment(), tempDir, scanner().toString(), "--worktree");
+
+        // then
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.output()).contains("Could not enumerate Git worktree files");
+    }
+
+    @Test
+    void doesNotDescendIntoAnOpaqueNestedRepository() throws Exception {
+        // given
+        assumeToolsAvailable();
+        assumeTrue(commandExists("git"));
+        initializeGitRepository();
+        Path nestedRepository = Files.createDirectories(tempDir.resolve("nested"));
+        run(Map.of(), nestedRepository, "git", "init", "-b", "main").assertSuccess();
+        Files.writeString(
+                nestedRepository.resolve("note.md"), "board " + PRIVATE_TRELLO_URL + "\n", StandardCharsets.UTF_8);
+
+        // when
+        ProcessResult result = run(scannerEnvironment(), tempDir, scanner().toString(), "--worktree");
+
+        // then
+        result.assertSuccess();
+    }
+
+    @Test
+    void excludesThePrivateContextRuleFileFromScanningItself() throws Exception {
+        // given
+        assumeToolsAvailable();
+        assumeTrue(commandExists("git"));
+        initializeGitRepository();
+        Path configDirectory = Files.createDirectories(tempDir.resolve("config/betterleaks"));
+        Files.writeString(
+                configDirectory.resolve("private-context.toml"),
+                "example = \"" + PRIVATE_TRELLO_URL + "\"\n",
+                StandardCharsets.UTF_8);
+        run(Map.of(), tempDir, "git", "add", "config/betterleaks/private-context.toml")
+                .assertSuccess();
+
+        // when
+        ProcessResult result = run(scannerEnvironment(), tempDir, scanner().toString(), "--worktree");
+
+        // then
+        result.assertSuccess();
+    }
+
+    @Test
+    void doesNotFollowASymlinkedParentOutsideTheWorktree() throws Exception {
+        // given
+        assumeToolsAvailable();
+        assumeTrue(commandExists("git"));
+        initializeGitRepository();
+        Path trackedDirectory = Files.createDirectories(tempDir.resolve("tracked"));
+        Files.writeString(trackedDirectory.resolve("note.md"), "clean\n", StandardCharsets.UTF_8);
+        Files.writeString(tempDir.resolve(".gitignore"), ".ignored-outside/\n", StandardCharsets.UTF_8);
+        run(Map.of(), tempDir, "git", "add", ".gitignore", "tracked/note.md").assertSuccess();
+        run(Map.of(), tempDir, "git", "commit", "-m", "test: add tracked note").assertSuccess();
+        Path outsideDirectory = Files.createDirectories(tempDir.resolve(".ignored-outside"));
+        Files.writeString(
+                outsideDirectory.resolve("note.md"), "board " + PRIVATE_TRELLO_URL + "\n", StandardCharsets.UTF_8);
+        Files.delete(trackedDirectory.resolve("note.md"));
+        Files.delete(trackedDirectory);
+        Files.createSymbolicLink(tempDir.resolve("tracked"), outsideDirectory);
+
+        // when
+        ProcessResult result = run(scannerEnvironment(), tempDir, scanner().toString(), "--worktree");
+
+        // then
+        result.assertSuccess();
+    }
+
     private ProcessResult runScanner(String input, String... arguments) throws Exception {
         return runScannerWithEnvironment(scannerEnvironment(), input, arguments);
     }

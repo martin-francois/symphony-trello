@@ -91,6 +91,16 @@ Renovate. The accepted private-context rules live in `config/betterleaks/private
 * worktree scans; and
 * commit-range scans.
 
+Worktree scans obtain their file set from Git: every regular tracked file and every non-ignored
+untracked file reported individually by the current worktree is scanned, while ignored dependency
+and build trees are excluded. Opaque nested repositories are not recursively traversed; run the
+scanner from a nested repository's own root to apply that repository's ignore rules. Git remains
+the source of truth for ignore behavior, and tracked files remain in scope even when a later ignore
+rule matches their path. The wrapper batches the resulting file arguments below the platform limit
+and fails closed when Git cannot enumerate the worktree. The private-context rule file is excluded
+from content scans because its rule examples intentionally match the patterns it defines; changes
+to that configuration remain subject to direct review and the repository's other checks.
+
 GitHub Secret Scanning remains the hosted protection for repository history and GitHub-hosted issue,
 pull request, review, and comment text that matches GitHub-supported patterns. The hosted baseline
 is documented in [`docs/security/github-secret-scanning.md`](../security/github-secret-scanning.md).
@@ -150,6 +160,8 @@ scanner behavior on this repository instead of using a maintained engine.
   Free organization plan.
 * Good, because pull request scans run trusted scanner code and config against untrusted pull
   request content.
+* Good, because local worktree scans avoid unrelated findings and I/O from Git-ignored dependency
+  and build trees without excluding tracked or non-ignored untracked content.
 * Good, because the BetterLeaks image pin is visible to Renovate.
 * Good, because the rejected hand-rolled and generic `gh` wrapper directions are recorded for future
   maintainers.
