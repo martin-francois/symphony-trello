@@ -245,7 +245,10 @@ optional verification. Follow this order:
   PowerShell installer tests use native `pwsh` automatically on Windows. On Linux, set
   `SYMPHONY_TRELLO_TEST_PWSH=./scripts/pwsh-docker.sh` for Java tests that support a configurable
   PowerShell command, or run `./scripts/pwsh-docker.sh` directly for script checks. Do not report
-  PowerShell as skipped only because `pwsh` is missing if Docker is available.
+  PowerShell as skipped only because `pwsh` is missing if a container runtime is available. The
+  repository wrappers default to Docker; on a Podman host, set
+  `SYMPHONY_TRELLO_CONTAINER_RUNTIME=podman` so verification calls Podman directly without a
+  compatibility-wrapper notice.
 - When required verification cannot execute reliably because a tool, dependency, host capability,
   permission, or workflow facility is unavailable, treat that as unresolved friction. An ordinary
   code or test failure is a defect to diagnose and fix, not automatically friction. An unexpected,

@@ -83,7 +83,9 @@ workflows, redacted JSON output that can be post-processed by the wrapper, and a
 integration that works well for agents and CI.
 
 The project pins BetterLeaks through `scripts/betterleaks-docker.sh` and tracks the image with
-Renovate. The accepted private-context rules live in `config/betterleaks/private-context.toml`.
+Renovate. The wrapper defaults to Docker and accepts an explicit Podman selection through
+`SYMPHONY_TRELLO_CONTAINER_RUNTIME=podman`. The accepted private-context rules live in
+`config/betterleaks/private-context.toml`.
 `scripts/check-private-context` is the local entry point for:
 
 * stdin text before manually posting copied diagnostic output;

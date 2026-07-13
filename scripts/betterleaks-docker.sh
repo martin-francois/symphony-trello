@@ -6,6 +6,19 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 project_root="$(cd "$script_dir/.." && pwd -P)"
 scan_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd -P)"
 work_dir="$(pwd -P)"
+container_runtime="${SYMPHONY_TRELLO_CONTAINER_RUNTIME:-docker}"
+
+case "$container_runtime" in
+docker | podman) ;;
+*)
+  printf 'SYMPHONY_TRELLO_CONTAINER_RUNTIME must be docker or podman\n' >&2
+  exit 2
+  ;;
+esac
+if ! command -v "$container_runtime" >/dev/null 2>&1; then
+  printf '%s is required to run BetterLeaks in a container\n' "$container_runtime" >&2
+  exit 127
+fi
 
 docker_args=(
   run
@@ -20,8 +33,12 @@ docker_args=(
   -v "$project_root:$project_root:ro"
 )
 
+if [ "$container_runtime" = "podman" ]; then
+  docker_args+=(--userns=keep-id)
+fi
+
 if [[ "$scan_root" != "$project_root" ]]; then
   docker_args+=(-v "$scan_root:$scan_root:ro")
 fi
 
-exec docker "${docker_args[@]}" "$image" "$@"
+exec "$container_runtime" "${docker_args[@]}" "$image" "$@"
