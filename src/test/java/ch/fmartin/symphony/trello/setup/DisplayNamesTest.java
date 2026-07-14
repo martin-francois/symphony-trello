@@ -9,9 +9,13 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 final class DisplayNamesTest {
+    private static final String ESCAPE_IN_DISPLAY_NAME = "\u001B";
+    private static final String NUL_IN_DISPLAY_NAME = "\u0000";
+    private static final String NON_ASCII_DISPLAY_NAME = "\u00E9\u00FC\u4E16";
+
     @MethodSource("escapedNames")
-    @ParameterizedTest
-    void quotedNameEscapesAmbiguousAndControlCharacters(String name, String expected) {
+    @ParameterizedTest(name = "{0}")
+    void quotedNameEscapesAmbiguousAndControlCharacters(String scenario, String name, String expected) {
         // given
         String input = name;
 
@@ -19,23 +23,26 @@ final class DisplayNamesTest {
         String quoted = DisplayNames.quotedName(input);
 
         // then
-        assertThat(quoted).isEqualTo(expected);
-        assertThat(quoted).doesNotContain("\n", "\r", "\t", "\u001B", "\u0000");
+        assertThat(quoted).as(scenario).isEqualTo(expected);
+        assertThat(quoted).doesNotContain("\n", "\r", "\t", ESCAPE_IN_DISPLAY_NAME, NUL_IN_DISPLAY_NAME);
     }
 
     private static Stream<Arguments> escapedNames() {
         return Stream.of(
-                Arguments.of("Plain Board", "\"Plain Board\""),
-                Arguments.of("Has \"quotes\"", "\"Has \\\"quotes\\\"\""),
-                Arguments.of("Back\\slash", "\"Back\\\\slash\""),
-                Arguments.of("Line\nBreak", "\"Line\\nBreak\""),
-                Arguments.of("Carriage\rReturn", "\"Carriage\\rReturn\""),
-                Arguments.of("Tab\tStop", "\"Tab\\tStop\""),
-                Arguments.of("Esc\u001BSeq", "\"Esc\\u001BSeq\""),
-                Arguments.of("Null\u0000Byte", "\"Null\\u0000Byte\""),
-                Arguments.of("Unicode \u00E9\u00FC\u4E16", "\"Unicode \u00E9\u00FC\u4E16\""),
-                Arguments.of("Slash/Name", "\"Slash/Name\""),
-                Arguments.of(null, "\"\""));
+                Arguments.of("plain name", "Plain Board", "\"Plain Board\""),
+                Arguments.of("quoted name", "Has \"quotes\"", "\"Has \\\"quotes\\\"\""),
+                Arguments.of("backslash in name", "Back\\slash", "\"Back\\\\slash\""),
+                Arguments.of("line feed in name", "Line\nBreak", "\"Line\\nBreak\""),
+                Arguments.of("carriage return in name", "Carriage\rReturn", "\"Carriage\\rReturn\""),
+                Arguments.of("tab in name", "Tab\tStop", "\"Tab\\tStop\""),
+                Arguments.of("escape control in name", "Esc" + ESCAPE_IN_DISPLAY_NAME + "Seq", "\"Esc\\u001BSeq\""),
+                Arguments.of("NUL in name", "Null" + NUL_IN_DISPLAY_NAME + "Byte", "\"Null\\u0000Byte\""),
+                Arguments.of(
+                        "non-ASCII display name",
+                        "Unicode " + NON_ASCII_DISPLAY_NAME,
+                        "\"Unicode " + NON_ASCII_DISPLAY_NAME + "\""),
+                Arguments.of("slash in name", "Slash/Name", "\"Slash/Name\""),
+                Arguments.of("missing name", null, "\"\""));
     }
 
     @MethodSource("escapedLists")

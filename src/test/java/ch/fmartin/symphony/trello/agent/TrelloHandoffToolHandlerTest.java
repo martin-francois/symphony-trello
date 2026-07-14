@@ -2,6 +2,8 @@ package ch.fmartin.symphony.trello.agent;
 
 import static ch.fmartin.symphony.trello.CommaSeparatedValues.preservingEmptyFields;
 import static ch.fmartin.symphony.trello.TestHttpExchange.query;
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_LINE_SEPARATOR;
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_PARAGRAPH_SEPARATOR;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.boardJson;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.jsonEscaped;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.listsJson;
@@ -55,6 +57,14 @@ final class TrelloHandoffToolHandlerTest {
     private static final String BLOCKER_RECHECK_ACTION_ID = "action-blocker-recheck";
     private static final String CHECKING_STATUS = TrelloHandoffToolHandler.BLOCKER_RECHECK_CHECKING;
     private static final String RESUMED_STATUS_PREFIX = TrelloHandoffToolHandler.RESUMED_WORK_PREFIX;
+    private static final String LINE_SEPARATOR = Character.toString(UNICODE_LINE_SEPARATOR);
+    private static final String PARAGRAPH_SEPARATOR = Character.toString(UNICODE_PARAGRAPH_SEPARATOR);
+    private static final String RIGHT_TO_LEFT_OVERRIDE = "\u202E";
+    private static final String LEFT_TO_RIGHT_ISOLATE = "\u2066";
+    private static final String POP_DIRECTIONAL_ISOLATE = "\u2069";
+    private static final String NO_BREAK_SPACE = "\u00A0";
+    private static final String NUL_IN_USAGE_MESSAGE = "\u0000";
+    private static final String ROCKET_EMOJI = "\uD83D\uDE80";
 
     private final ObjectMapper json = new ObjectMapper();
     private final AtomicReference<String> commentText = new AtomicReference<>();
@@ -619,7 +629,8 @@ final class TrelloHandoffToolHandlerTest {
         // given
         TrelloHandoffToolHandler handler = handler();
         cardResponse.set(cardJson(actionsJson(commentAction(
-                BLOCKER_ACTION_ID, " \r\n\u2028Blocked by a missing repository issue\nDetails follow."))));
+                BLOCKER_ACTION_ID,
+                " \r\n" + LINE_SEPARATOR + "Blocked by a missing repository issue\nDetails follow."))));
 
         // when
         JsonNode result = updateBlockerRecheckStatus(handler, "checking");
@@ -1173,8 +1184,9 @@ final class TrelloHandoffToolHandlerTest {
     void resumedTaskSummaryNeutralizesMarkupControlsAndStaysWithinCodePointLimit() {
         // given
         TrelloHandoffToolHandler handler = handler();
-        String unsafeTitle = "Fix [link](https://example.invalid) <script> @reviewer\r\nnext\u2028\u202E **bold** "
-                + "\uD83D\uDE80".repeat(150)
+        String unsafeTitle = "Fix [link](https://example.invalid) <script> @reviewer\r\nnext" + LINE_SEPARATOR
+                + RIGHT_TO_LEFT_OVERRIDE + " **bold** "
+                + ROCKET_EMOJI.repeat(150)
                 + ".";
         cardResponse.set(cardJson(
                 unsafeTitle,
@@ -1191,7 +1203,19 @@ final class TrelloHandoffToolHandlerTest {
         String summary = visibleStatus.substring(RESUMED_STATUS_PREFIX.length());
         assertThat(summary.codePointCount(0, summary.length())).isLessThanOrEqualTo(120);
         assertThat(visibleStatus)
-                .doesNotContain("\r", "\u2028", "\u202E", "[", "]", "(", ")", "<", ">", "**", "https:", "@reviewer")
+                .doesNotContain(
+                        "\r",
+                        LINE_SEPARATOR,
+                        RIGHT_TO_LEFT_OVERRIDE,
+                        "[",
+                        "]",
+                        "(",
+                        ")",
+                        "<",
+                        ">",
+                        "**",
+                        "https:",
+                        "@reviewer")
                 .doesNotEndWith("....");
     }
 
@@ -1966,8 +1990,8 @@ final class TrelloHandoffToolHandlerTest {
         // given
         TrelloHandoffToolHandler handler = handler();
         Instant nextAttempt = Instant.parse("2026-07-10T13:00:00Z");
-        String section =
-                CodexUsageWorkpadSection.paused("Usage\n[account](https://example.invalid/private)\u0000", nextAttempt);
+        String section = CodexUsageWorkpadSection.paused(
+                "Usage\n[account](https://example.invalid/private)" + NUL_IN_USAGE_MESSAGE, nextAttempt);
 
         // when
         boolean updated = handler.updateCodexUsageSection(config(List.of("Review"), List.of()), "card-1", section);
@@ -1981,7 +2005,7 @@ final class TrelloHandoffToolHandlerTest {
                         "Usage \\[account\\]\\(https://example.invalid/private\\)",
                         "2026-07-10T13:00:00Z",
                         CodexUsageWorkpadSection.END_MARKER)
-                .doesNotContain("\u0000");
+                .doesNotContain(NUL_IN_USAGE_MESSAGE);
     }
 
     @Test
@@ -2092,8 +2116,9 @@ final class TrelloHandoffToolHandlerTest {
     void normalizesUnicodeSeparatorsWhitespaceAndFormatControlsInUsageMessage() {
         // given
         TrelloHandoffToolHandler handler = handler();
-        String unsafeMessage =
-                "alpha\u2028beta\u2029gamma\u00a0delta\u202eevil\u2066tail\u2069 &#x202e;entity &NewLine;break &lrm;mark";
+        String unsafeMessage = "alpha" + LINE_SEPARATOR + "beta" + PARAGRAPH_SEPARATOR + "gamma" + NO_BREAK_SPACE
+                + "delta" + RIGHT_TO_LEFT_OVERRIDE + "evil" + LEFT_TO_RIGHT_ISOLATE + "tail"
+                + POP_DIRECTIONAL_ISOLATE + " &#x202e;entity &NewLine;break &lrm;mark";
 
         // when
         boolean updated = handler.updateCodexUsageSection(
@@ -2105,7 +2130,12 @@ final class TrelloHandoffToolHandlerTest {
         assertThat(updated).isTrue();
         assertThat(commentText.get())
                 .contains("- Message: alpha beta gamma delta evil tail \\&#x202e;entity \\&NewLine;break \\&lrm;mark\n")
-                .doesNotContain("\u2028", "\u2029", "\u202e", "\u2066", "\u2069");
+                .doesNotContain(
+                        LINE_SEPARATOR,
+                        PARAGRAPH_SEPARATOR,
+                        RIGHT_TO_LEFT_OVERRIDE,
+                        LEFT_TO_RIGHT_ISOLATE,
+                        POP_DIRECTIONAL_ISOLATE);
     }
 
     @Test

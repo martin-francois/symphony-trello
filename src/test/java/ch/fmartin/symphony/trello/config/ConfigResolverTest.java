@@ -21,6 +21,8 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 final class ConfigResolverTest {
+    private static final String NUL_IN_REPOSITORY_PATH = "\u0000";
+
     @TempDir
     Path tempDir;
 
@@ -291,8 +293,10 @@ final class ConfigResolverTest {
 
         // when
         EffectiveConfig config = resolver.resolve(workflowDefinitionWithRepository(Map.of(
-                "default_url", "https://github.com/example/project.git",
-                "default_path", "bad\u0000path")));
+                "default_url",
+                "https://github.com/example/project.git",
+                "default_path",
+                "bad" + NUL_IN_REPOSITORY_PATH + "path")));
 
         // then
         assertThat(config.repository().defaultUrl()).isEqualTo("https://github.com/example/project.git");
@@ -308,7 +312,7 @@ final class ConfigResolverTest {
             case "SYMPHONY_DEFAULT_REPOSITORY_URL" -> Optional.of("ssh://git@example.com/team/project.git");
             case "SYMPHONY_DEFAULT_REPOSITORY_PATH" -> {
                 pathEnvironmentRequests.incrementAndGet();
-                yield Optional.of("bad\u0000path");
+                yield Optional.of("bad" + NUL_IN_REPOSITORY_PATH + "path");
             }
             default -> Optional.empty();
         });
@@ -358,7 +362,8 @@ final class ConfigResolverTest {
         // when
         ConfigException error = catchThrowableOfType(
                 ConfigException.class,
-                () -> resolver.resolve(workflowDefinitionWithRepository(Map.of("default_path", "bad\u0000path"))));
+                () -> resolver.resolve(workflowDefinitionWithRepository(
+                        Map.of("default_path", "bad" + NUL_IN_REPOSITORY_PATH + "path"))));
 
         // then
         assertThat(error.code()).isEqualTo("config_value_error");

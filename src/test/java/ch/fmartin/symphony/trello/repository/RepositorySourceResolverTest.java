@@ -1,5 +1,8 @@
 package ch.fmartin.symphony.trello.repository;
 
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_LINE_SEPARATOR;
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_NEXT_LINE;
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_PARAGRAPH_SEPARATOR;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ch.fmartin.symphony.trello.TestCards;
@@ -18,6 +21,10 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 final class RepositorySourceResolverTest {
+    private static final String LINE_SEPARATOR = Character.toString(UNICODE_LINE_SEPARATOR);
+    private static final String PARAGRAPH_SEPARATOR = Character.toString(UNICODE_PARAGRAPH_SEPARATOR);
+    private static final String NUL_IN_REPOSITORY_PATH = "\u0000";
+
     private final RepositorySourceResolver resolver = new RepositorySourceResolver();
 
     @TempDir
@@ -265,9 +272,9 @@ final class RepositorySourceResolverTest {
         return Stream.of(
                 Arguments.of("next line", "\n"),
                 Arguments.of("CRLF", "\r\n"),
-                Arguments.of("NEL", "\u0085"),
-                Arguments.of("line separator", "\u2028"),
-                Arguments.of("paragraph separator", "\u2029"));
+                Arguments.of("NEL", UNICODE_NEXT_LINE),
+                Arguments.of("line separator", LINE_SEPARATOR),
+                Arguments.of("paragraph separator", PARAGRAPH_SEPARATOR));
     }
 
     @Test
@@ -455,7 +462,7 @@ final class RepositorySourceResolverTest {
     @Test
     void rejectsLiteralControlCharactersInLocalPath() {
         // given
-        Card card = cardWithDescription("Repository path: /tmp/repo\u0000injected");
+        Card card = cardWithDescription("Repository path: /tmp/repo" + NUL_IN_REPOSITORY_PATH + "injected");
 
         // when
         RepositorySourceSelection selection = resolver.select(card, noDefault());
@@ -499,7 +506,9 @@ final class RepositorySourceResolverTest {
 
     private static Stream<Arguments> invalidSetupRepositoryUrls() {
         return Stream.of(
-                Arguments.of("literal NEL in SCP path", "git@example.invalid:team/repo\u0085injected.git"),
+                Arguments.of(
+                        "literal NEL in SCP path",
+                        "git@example.invalid:team/repo" + UNICODE_NEXT_LINE + "injected.git"),
                 Arguments.of(
                         "percent-decoded NEL in HTTPS path", "https://example.invalid/team/repo%C2%85injected.git"),
                 Arguments.of(

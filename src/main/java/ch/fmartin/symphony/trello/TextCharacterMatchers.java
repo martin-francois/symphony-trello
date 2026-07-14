@@ -4,6 +4,8 @@ import com.google.common.base.CharMatcher;
 
 /** Shared character classes whose semantics must stay aligned across package boundaries. */
 public final class TextCharacterMatchers {
+    public static final String UNICODE_BYTE_ORDER_MARK = "\uFEFF";
+    public static final String UNICODE_NEXT_LINE = "\u0085";
     public static final char UNICODE_LINE_SEPARATOR = '\u2028';
     public static final char UNICODE_PARAGRAPH_SEPARATOR = '\u2029';
 

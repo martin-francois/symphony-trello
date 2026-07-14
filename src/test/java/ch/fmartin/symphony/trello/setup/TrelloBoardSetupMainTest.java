@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.setup;
 
 import static ch.fmartin.symphony.trello.CliExitCodes.SETUP_FAILURE;
 import static ch.fmartin.symphony.trello.TestHttpExchange.query;
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_BYTE_ORDER_MARK;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.boardJson;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.createdListJson;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.listsJson;
@@ -68,6 +69,7 @@ final class TrelloBoardSetupMainTest {
     private static final String CLI_COMMAND_PROPERTY = "symphony.trello.command";
     private static final String REPOSITORY_URL_REFERENCE = "$SYNTHETIC_REPOSITORY_URL";
     private static final String REPOSITORY_PATH_REFERENCE = "$SYNTHETIC_REPOSITORY_PATH";
+    private static final String ANSI_ESCAPE_IN_CLI_INPUT = "\u001B";
     private static final List<String> TRELLO_CREDENTIAL_ENVIRONMENT_NAMES =
             List.of("TRELLO_API_KEY", "TRELLO_API_TOKEN", "SYMPHONY_TRELLO_DOTENV");
 
@@ -3064,7 +3066,10 @@ final class TrelloBoardSetupMainTest {
     void listWorkspacesReadsCredentialsBehindAByteOrderMark() throws Exception {
         // given
         Path env = tempDir.resolve(".env.bom");
-        Files.writeString(env, "\uFEFFTRELLO_API_KEY=bom-key\nTRELLO_API_TOKEN=bom-token\n", StandardCharsets.UTF_8);
+        Files.writeString(
+                env,
+                UNICODE_BYTE_ORDER_MARK + "TRELLO_API_KEY=bom-key\nTRELLO_API_TOKEN=bom-token\n",
+                StandardCharsets.UTF_8);
 
         // when
         CliRunResult result =
@@ -6222,7 +6227,8 @@ final class TrelloBoardSetupMainTest {
     @ValueSource(strings = {"--active", "--terminal", "--in-progress", "--blocked"})
     void rejectsControlCharactersInDirectImportListSelectorsBeforeTrelloRequest(String optionName) {
         // given
-        String badListSelector = "Bad\n# injected\u001B[31mred\u001B[0m";
+        String badListSelector =
+                "Bad\n# injected" + ANSI_ESCAPE_IN_CLI_INPUT + "[31mred" + ANSI_ESCAPE_IN_CLI_INPUT + "[0m";
         Path workflow = tempDir.resolve("control-list-selector.WORKFLOW.md");
         List<String> args = new ArrayList<>(List.of(
                 "import-board",
@@ -6250,7 +6256,8 @@ final class TrelloBoardSetupMainTest {
                 .stderrContains(
                         "setup_failed code=setup_invalid_arguments",
                         optionName + " must not contain control characters")
-                .stderrDoesNotContain(badListSelector, "\n# injected", "\u001B", "Troubleshooting report written")
+                .stderrDoesNotContain(
+                        badListSelector, "\n# injected", ANSI_ESCAPE_IN_CLI_INPUT, "Troubleshooting report written")
                 .stdoutDoesNotContain("Imported Trello board", badListSelector);
         assertThat(workflow).doesNotExist();
         assertThat(createdLists).isEmpty();
@@ -6560,7 +6567,8 @@ final class TrelloBoardSetupMainTest {
     @ValueSource(strings = {"start", "stop", "status", "logs"})
     void lifecycleCommandsRejectControlCharactersInBoardSelectorBeforeSelection(String command) {
         // given
-        String badBoardSelector = "No such board\n# injected\u001B[31mred\u001B[0m";
+        String badBoardSelector =
+                "No such board\n# injected" + ANSI_ESCAPE_IN_CLI_INPUT + "[31mred" + ANSI_ESCAPE_IN_CLI_INPUT + "[0m";
 
         // when
         CliRunResult result = runCli(command, "--board", badBoardSelector);
@@ -6569,7 +6577,8 @@ final class TrelloBoardSetupMainTest {
         result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_invalid_arguments", "--board must not contain control characters")
-                .stderrDoesNotContain(badBoardSelector, "\n# injected", "\u001B", "Troubleshooting report written")
+                .stderrDoesNotContain(
+                        badBoardSelector, "\n# injected", ANSI_ESCAPE_IN_CLI_INPUT, "Troubleshooting report written")
                 .stdoutDoesNotContain("running ", "stopped ", badBoardSelector);
     }
 
@@ -6869,7 +6878,8 @@ final class TrelloBoardSetupMainTest {
     @Test
     void diagnosticsRejectsControlCharactersInBoardSelectorWithoutRenderingReport() {
         // given
-        String badBoardSelector = "No such board\n# injected\u001B[31mred\u001B[0m";
+        String badBoardSelector =
+                "No such board\n# injected" + ANSI_ESCAPE_IN_CLI_INPUT + "[31mred" + ANSI_ESCAPE_IN_CLI_INPUT + "[0m";
 
         // when
         CliRunResult result = runCli("diagnostics", "--board", badBoardSelector);
@@ -6878,14 +6888,15 @@ final class TrelloBoardSetupMainTest {
         result.assertFailure(SETUP_FAILURE)
                 .stderrContains(
                         "setup_failed code=setup_invalid_arguments", "--board must not contain control characters")
-                .stderrDoesNotContain(badBoardSelector, "\n# injected", "\u001B", "Troubleshooting report written")
+                .stderrDoesNotContain(
+                        badBoardSelector, "\n# injected", ANSI_ESCAPE_IN_CLI_INPUT, "Troubleshooting report written")
                 .stdoutDoesNotContain("# Symphony for Trello Diagnostics", badBoardSelector);
     }
 
     @Test
     void parameterErrorsNeutralizeControlCharactersInMessages() {
         // given
-        String badCommand = "bad\n# injected\u001B[31mred\u001B[0m";
+        String badCommand = "bad\n# injected" + ANSI_ESCAPE_IN_CLI_INPUT + "[31mred" + ANSI_ESCAPE_IN_CLI_INPUT + "[0m";
 
         // when
         CliRunResult result = runCli(badCommand);
@@ -6893,7 +6904,8 @@ final class TrelloBoardSetupMainTest {
         // then
         result.assertFailure(SETUP_FAILURE)
                 .stderrContains("setup_failed code=setup_invalid_arguments", "bad\\n# injected\\u001B[31mred\\u001B[0m")
-                .stderrDoesNotContain(badCommand, "\n# injected", "\u001B", "Troubleshooting report written")
+                .stderrDoesNotContain(
+                        badCommand, "\n# injected", ANSI_ESCAPE_IN_CLI_INPUT, "Troubleshooting report written")
                 .stdoutDoesNotContain(badCommand);
     }
 

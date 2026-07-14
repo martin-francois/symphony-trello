@@ -15,6 +15,9 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 final class WorkspaceAccessFlowTest {
+    private static final String JAVA_TRIMMED_END_OF_TRANSMISSION = "\u0004";
+    private static final String PRESERVED_EN_SPACE = "\u2002";
+
     @TempDir
     Path tempDir;
 
@@ -90,13 +93,19 @@ final class WorkspaceAccessFlowTest {
     void additionalPathCsvRetainsJavaTrimSemantics() throws Exception {
         // given
         LocalSetup.Options options = SetupOptionFactory.options(tempDir);
-        RecordingTerminal terminal = new RecordingTerminal("y", "\u0004project\u0004,\u2002project\u2002");
+        RecordingTerminal terminal = new RecordingTerminal(
+                "y",
+                JAVA_TRIMMED_END_OF_TRANSMISSION + "project" + JAVA_TRIMMED_END_OF_TRANSMISSION + ","
+                        + PRESERVED_EN_SPACE + "project" + PRESERVED_EN_SPACE);
 
         // when
         List<Path> paths = new WorkspaceAccessFlow().resolve(options, terminal);
 
         // then
-        assertThat(paths).containsExactly(tempDir.resolve("project"), tempDir.resolve("\u2002project\u2002"));
+        assertThat(paths)
+                .containsExactly(
+                        tempDir.resolve("project"),
+                        tempDir.resolve(PRESERVED_EN_SPACE + "project" + PRESERVED_EN_SPACE));
     }
 
     @Test
