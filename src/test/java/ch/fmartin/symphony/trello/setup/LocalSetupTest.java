@@ -1,6 +1,7 @@
 package ch.fmartin.symphony.trello.setup;
 
 import static ch.fmartin.symphony.trello.CliExitCodes.SETUP_FAILURE;
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_NEXT_LINE;
 import static ch.fmartin.symphony.trello.testsupport.ManifestAssertions.assertThatManifest;
 import static ch.fmartin.symphony.trello.testsupport.TerminalTranscriptAssertions.assertThatTranscript;
 import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUrls.HTTP;
@@ -46,6 +47,11 @@ import org.junit.jupiter.params.provider.ValueSource;
 final class LocalSetupTest extends LocalSetupFixtureSupport {
     private static final String REPOSITORY_URL_REFERENCE = "$SYNTHETIC_REPOSITORY_URL";
     private static final String REPOSITORY_PATH_REFERENCE = "$SYNTHETIC_REPOSITORY_PATH";
+    private static final String ANSI_ESCAPE_IN_CLI_INPUT = "\u001B";
+    private static final String JAVA_TRIMMED_END_OF_TRANSMISSION = "\u0004";
+    private static final String PRESERVED_EN_SPACE = "\u2002";
+    private static final String RIGHT_SINGLE_QUOTATION_MARK = "\u2019";
+    private static final String EM_DASH = "\u2014";
 
     @Test
     void dryRunReportsPlannedWorkflowWithoutChangingTrello() {
@@ -161,7 +167,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 HTTPS + ",",
                 "https://example.invalid/team/\nproject.git",
                 HTTPS + "\t",
-                "git@example.invalid:team/project\u0085injected.git",
+                "git@example.invalid:team/project" + UNICODE_NEXT_LINE + "injected.git",
                 "https://example.invalid/team/project%C2%85injected.git",
                 "https://example.invalid:0/team/project.git",
                 "ssh://git@example.invalid:65536/team/project.git",
@@ -586,7 +592,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
     @ValueSource(strings = {"--active", "--terminal", "--in-progress", "--blocked"})
     void dryRunRejectsControlCharactersInListSelectorsBeforePlannedSetupOutput(String optionName) {
         // given
-        String invalidValue = "Bad\n# injected\u001B[31mred\u001B[0m";
+        String invalidValue =
+                "Bad\n# injected" + ANSI_ESCAPE_IN_CLI_INPUT + "[31mred" + ANSI_ESCAPE_IN_CLI_INPUT + "[0m";
 
         // when
         SetupRunResult result = runSetup("--dry-run", "--non-interactive", "--no-start", optionName, invalidValue);
@@ -596,7 +603,8 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 .stderrContains(
                         "setup_failed code=setup_invalid_arguments",
                         optionName + " must not contain control characters.")
-                .stderrDoesNotContain(invalidValue, "\n# injected", "\u001B", "Troubleshooting report written")
+                .stderrDoesNotContain(
+                        invalidValue, "\n# injected", ANSI_ESCAPE_IN_CLI_INPUT, "Troubleshooting report written")
                 .stdoutDoesNotContain("Dry run", "WOULD write workflows", invalidValue);
         assertThat(trello.createdLists()).isEmpty();
     }
@@ -1638,7 +1646,11 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "symphony-trello logs --workflow '"
                                 + workflow.toAbsolutePath().normalize() + "'")
                 .stdoutDoesNotContain(
-                        "TRELLO_API_TOKEN=token", "Log:", "workflow's Trello handoff lists", "\u2019", "\u2014");
+                        "TRELLO_API_TOKEN=token",
+                        "Log:",
+                        "workflow's Trello handoff lists",
+                        RIGHT_SINGLE_QUOTATION_MARK,
+                        EM_DASH);
         assertThat(result.stdout())
                 .containsOnlyOnce("You're good to go - your Trello board is now a queue for Codex work.")
                 .containsOnlyOnce("Connected board: \"Local Queue\"")
@@ -4753,16 +4765,21 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                 """
                 [
                   {"id":"list-1","name":"Queue","closed":false,"pos":1},
-                  {"id":"list-2","name":"\u2002Review\u2002","closed":false,"pos":2},
+                  {"id":"list-2","name":"%1$sReview%1$s","closed":false,"pos":2},
                   {"id":"list-3","name":"Working","closed":false,"pos":3},
                   {"id":"list-4","name":"Blocked","closed":false,"pos":4},
                   {"id":"list-5","name":"Finished","closed":false,"pos":5}
                 ]
-                """);
+                """
+                        .formatted(PRESERVED_EN_SPACE));
 
         // when
         SetupRunResult result = runSetupWithInput(
-                "2\n\nboard-1\n\n\n\u0004Queue\u0004,\u2002Review\u2002\n\u0004Finished\u0004\nWorking\nBlocked\n\nn\nn\n",
+                "2\n\nboard-1\n\n\n"
+                        + JAVA_TRIMMED_END_OF_TRANSMISSION + "Queue" + JAVA_TRIMMED_END_OF_TRANSMISSION
+                        + "," + PRESERVED_EN_SPACE + "Review" + PRESERVED_EN_SPACE + "\n"
+                        + JAVA_TRIMMED_END_OF_TRANSMISSION + "Finished" + JAVA_TRIMMED_END_OF_TRANSMISSION
+                        + "\nWorking\nBlocked\n\nn\nn\n",
                 "--endpoint",
                 endpoint(),
                 "--key",
@@ -4776,8 +4793,11 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         result.assertSuccess();
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
-                .contains("- \"Queue\"", "- \"\u2002Review\u2002\"", "- \"Finished\"")
-                .doesNotContain("\u0004");
+                .contains(
+                        "- \"Queue\"",
+                        "- \"" + PRESERVED_EN_SPACE + "Review" + PRESERVED_EN_SPACE + "\"",
+                        "- \"Finished\"")
+                .doesNotContain(JAVA_TRIMMED_END_OF_TRANSMISSION);
     }
 
     @Test
@@ -7803,7 +7823,7 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
                         "symphony-trello status",
                         "symphony-trello logs --workflow '"
                                 + workflow.toAbsolutePath().normalize() + "'")
-                .stdoutDoesNotContain("workflow's Trello handoff lists", "\u2019", "\u2014");
+                .stdoutDoesNotContain("workflow's Trello handoff lists", RIGHT_SINGLE_QUOTATION_MARK, EM_DASH);
         assertThat(trello.createdLists())
                 .containsExactly(
                         "Inbox", "Ready for Codex", "In Progress", "Blocked", "Human Review", "Merging", "Done");

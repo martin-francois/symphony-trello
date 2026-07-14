@@ -43,6 +43,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 final class SetupDiagnosticReporterTest {
     private static final String SYNTHETIC_BOARD_ID = "000000000000000000000001";
+    private static final String ANSI_ESCAPE_IN_LOG = "\u001B";
+    private static final String TERMINAL_BELL_IN_LOG = "\u0007";
 
     @TempDir
     Path tempDir;
@@ -2706,12 +2708,13 @@ final class SetupDiagnosticReporterTest {
                 stateHome.resolve("fake-control.log"),
                 """
                 normal line
-                ansi \u001B[31mred\u001B[0m line
-                osc \u001B]8;;https://example.com\u0007Link\u001B]8;;\u0007 line
+                ansi %1$s[31mred%1$s[0m line
+                osc %1$s]8;;https://example.com%2$sLink%1$s]8;;%2$s line
                 backspace abc\b\bxy
                 formfeed before\fafter
                 carriage before\rafter
-                """,
+                """
+                        .formatted(ANSI_ESCAPE_IN_LOG, TERMINAL_BELL_IN_LOG),
                 StandardCharsets.UTF_8);
         var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
 
@@ -2728,7 +2731,7 @@ final class SetupDiagnosticReporterTest {
                         "formfeed before\\fafter",
                         "carriage before",
                         "after")
-                .doesNotContain("\u001B", "\u0007", "\b", "\f", "\r");
+                .doesNotContain(ANSI_ESCAPE_IN_LOG, TERMINAL_BELL_IN_LOG, "\b", "\f", "\r");
     }
 
     @Test

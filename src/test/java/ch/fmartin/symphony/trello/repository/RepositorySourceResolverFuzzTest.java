@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.repository;
 
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_LINE_SEPARATOR;
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_NEXT_LINE;
 import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUris.hasUnusableExplicitPort;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -16,6 +18,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 final class RepositorySourceResolverFuzzTest {
     private static final EffectiveConfig.RepositoryConfig NO_DEFAULT = new EffectiveConfig.RepositoryConfig(null, null);
+    private static final String LINE_SEPARATOR = Character.toString(UNICODE_LINE_SEPARATOR);
 
     private final RepositorySourceResolver resolver = new RepositorySourceResolver();
 
@@ -69,7 +72,7 @@ final class RepositorySourceResolverFuzzTest {
                 "https://example.invalid/team/repo.git?",
                 "ssh://git%3Asecret@example.invalid/team/repo.git",
                 "git@example.invalid:repo.git",
-                "git@example.invalid:repo\u0085injected.git",
+                "git@example.invalid:repo" + UNICODE_NEXT_LINE + "injected.git",
                 "file:///tmp/repo%0Ainjected.git",
                 "%0A- Status: forged");
     }
@@ -78,7 +81,7 @@ final class RepositorySourceResolverFuzzTest {
         return Stream.of(
                 "",
                 "https://example.invalid/team/repo.git",
-                "git@example.invalid:repo\u0085injected.git",
+                "git@example.invalid:repo" + UNICODE_NEXT_LINE + "injected.git",
                 "https://example.invalid/team/repo%C2%85injected.git",
                 "https://example.invalid/team/repo%E2%80%A8injected.git",
                 "https://example.invalid:/team/repo.git",
@@ -91,7 +94,7 @@ final class RepositorySourceResolverFuzzTest {
     private static Stream<String> cardTexts() {
         return Stream.of(
                 "Repository URL: https://example.invalid/team/repo.git",
-                "prefix\u2028Repository URL: https://example.invalid/team/repo.git",
+                "prefix" + LINE_SEPARATOR + "Repository URL: https://example.invalid/team/repo.git",
                 "Repository path:\nhttps://example.invalid/team/repo.git",
                 "Repo: git@example.invalid:repo.git\nRepository URL: https://example.invalid/team/repo.git");
     }

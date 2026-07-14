@@ -1,5 +1,7 @@
 package ch.fmartin.symphony.trello.config;
 
+import static ch.fmartin.symphony.trello.TextCharacterMatchers.UNICODE_BYTE_ORDER_MARK;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -71,7 +73,7 @@ public final class LocalEnvironment {
      * file. Exactly one leading mark is ignorable so the first key is not silently dropped.
      */
     private static String stripLeadingByteOrderMark(String firstLine) {
-        return firstLine.startsWith("\uFEFF") ? firstLine.substring(1) : firstLine;
+        return firstLine.startsWith(UNICODE_BYTE_ORDER_MARK) ? firstLine.substring(1) : firstLine;
     }
 
     public static Path defaultDotenv(Map<String, String> environment) {
