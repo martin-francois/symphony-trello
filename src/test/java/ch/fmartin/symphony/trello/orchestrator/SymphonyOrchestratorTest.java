@@ -1619,7 +1619,6 @@ final class SymphonyOrchestratorTest {
                 .isEqualTo("TRELLO-first"));
     }
 
-    // TODO Flaky: #579
     @Test
     void sameRawCardIdAcrossTargetsRunsIndependentlyWithoutCrossRemoval() throws Exception {
         // given
@@ -1659,6 +1658,7 @@ final class SymphonyOrchestratorTest {
         // when
         orchestrator.start();
         assertThat(workerAStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        orchestrator.stopWorkflowWatcherForTests();
         rewriteWorkflowWithTarget(workflow, endpoint, "board-b", "token-b", "same-command", "work-b", 60_000, 2);
         orchestrator.tickNowForTests();
         assertThat(workerBStarted.await(5, TimeUnit.SECONDS)).isTrue();
