@@ -770,6 +770,26 @@ final class SymphonyOrchestratorTest {
     }
 
     @Test
+    void refreshAtExecutorShutdownBoundaryIsANoOp() throws Exception {
+        // given
+        Path workflow = tempDir.resolve("WORKFLOW.md");
+        writeWorkflow(workflow, "60000");
+        SymphonyOrchestrator orchestrator = orchestrator(workflow, new FakeTracker(List.of()), mock());
+        AtomicReference<Throwable> refreshFailure = new AtomicReference<>();
+        orchestrator.executorsStoppedHookForTests =
+                () -> refreshFailure.set(catchThrowable(orchestrator::requestRefresh));
+        orchestrator.start();
+
+        // when
+        orchestrator.stop();
+
+        // then
+        assertThat(refreshFailure)
+                .as("refresh at the executor shutdown boundary must observe the stopped lifecycle state")
+                .hasValue(null);
+    }
+
+    @Test
     void workflowPathCannotChangeOnceStartHasBegun() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");

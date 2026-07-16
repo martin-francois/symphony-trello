@@ -132,7 +132,7 @@ public class SymphonyOrchestrator {
     private final AtomicBoolean refreshRequested = new AtomicBoolean();
     private final AtomicBoolean workflowReloadRequested = new AtomicBoolean();
     private WorkflowProcessLock workflowProcessLock;
-    private volatile boolean tickRunning;
+    private boolean tickRunning;
     private boolean started;
     private DispatchPause dispatchPause;
 
@@ -148,6 +148,7 @@ public class SymphonyOrchestrator {
     Runnable retryTimerWaitingHookForTests = () -> {};
     Runnable workerExitCompletionHookForTests = () -> {};
     Runnable workerLaunchHookForTests = () -> {};
+    Runnable executorsStoppedHookForTests = () -> {};
 
     @ConfigProperty(name = "symphony.workflow.path")
     volatile Path workflowPath;
@@ -269,6 +270,7 @@ public class SymphonyOrchestrator {
             retryPendingUsageWorkpadCleanup(true);
             scheduler.shutdownNow();
             workers.shutdownNow();
+            executorsStoppedHookForTests.run();
             releaseWorkflowProcessLock();
         } finally {
             operationLock.unlock();

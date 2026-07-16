@@ -25,7 +25,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicReference;
 
 final class CodexModelDefaultsResolver {
     private static final System.Logger LOG = System.getLogger(CodexModelDefaultsResolver.class.getName());
@@ -312,7 +311,8 @@ final class CodexModelDefaultsResolver {
         private static final Object END_OF_STREAM = new Object();
 
         private final BlockingQueue<Object> lines = new LinkedBlockingQueue<>();
-        private final AtomicReference<Throwable> failure = new AtomicReference<>();
+        // Enqueuing END_OF_STREAM publishes the preceding failure assignment to the reader.
+        private Throwable failure;
         private final BufferedReader reader;
 
         private AppServerResponseReader(InputStream input) {
@@ -327,7 +327,7 @@ final class CodexModelDefaultsResolver {
                     throw new IOException("Timed out waiting for Codex app-server response");
                 }
                 if (item == END_OF_STREAM) {
-                    Throwable cause = failure.get();
+                    Throwable cause = failure;
                     if (cause instanceof IOException ioException) {
                         throw ioException;
                     }
@@ -351,7 +351,7 @@ final class CodexModelDefaultsResolver {
                     line = reader.readLine();
                 }
             } catch (Exception e) {
-                failure.set(e);
+                failure = e;
             } finally {
                 lines.add(END_OF_STREAM);
             }

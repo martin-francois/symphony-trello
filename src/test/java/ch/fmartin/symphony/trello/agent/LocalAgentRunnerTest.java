@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
@@ -818,6 +819,66 @@ final class LocalAgentRunnerTest {
         assertThat(interrupted).hasValue(true);
         assertThat(result.get().success()).isFalse();
         assertThat(result.get().reason()).isEqualTo("interrupted");
+    }
+
+    @Test
+    void completedDuplicateIdentityCannotUnregisterNewerActiveWorker() throws Exception {
+        // given
+        CodexAppServerClient codex = mock();
+        CountDownLatch firstEntered = new CountDownLatch(1);
+        CountDownLatch secondEntered = new CountDownLatch(1);
+        CountDownLatch releaseFirst = new CountDownLatch(1);
+        AtomicBoolean secondInterrupted = new AtomicBoolean();
+        when(codex.runSession(any(), any(), any(), any(), any(), any(), any())).thenAnswer(invocation -> {
+            Card card = invocation.getArgument(1);
+            if (card.id().equals("card-first")) {
+                firstEntered.countDown();
+                assertThat(releaseFirst.await(5, TimeUnit.SECONDS)).isTrue();
+                return AgentRunResult.ok();
+            }
+            secondEntered.countDown();
+            try {
+                blockUntilInterruptedOrTimedOut();
+                return AgentRunResult.ok();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                secondInterrupted.set(true);
+                return AgentRunResult.fail("interrupted");
+            }
+        });
+        var runner = runner(codex, CardLookupResult.Found::new);
+        EffectiveConfig config = config(Map.of());
+        AtomicReference<AgentRunResult> firstResult = new AtomicReference<>();
+        AtomicReference<AgentRunResult> secondResult = new AtomicReference<>();
+        Thread first = Thread.ofVirtual()
+                .start(() -> firstResult.set(runner.run(new AgentRunner.AgentRunRequest(
+                        TestCards.card("card-first", "TRELLO-duplicate-first", "Ready for Codex"),
+                        null,
+                        "prompt",
+                        config,
+                        "worker-duplicate",
+                        event -> {}))));
+        assertThat(firstEntered.await(5, TimeUnit.SECONDS)).isTrue();
+        Thread second = Thread.ofVirtual()
+                .start(() -> secondResult.set(runner.run(new AgentRunner.AgentRunRequest(
+                        TestCards.card("card-second", "TRELLO-duplicate-second", "Ready for Codex"),
+                        null,
+                        "prompt",
+                        config,
+                        "worker-duplicate",
+                        event -> {}))));
+        assertThat(secondEntered.await(5, TimeUnit.SECONDS)).isTrue();
+        releaseFirst.countDown();
+        first.join(TimeUnit.SECONDS.toMillis(5));
+
+        // when
+        runner.cancel("worker-duplicate");
+        second.join(TimeUnit.SECONDS.toMillis(5));
+
+        // then
+        assertThat(firstResult).hasValue(AgentRunResult.ok());
+        assertThat(secondInterrupted).isTrue();
+        assertThat(secondResult).hasValue(AgentRunResult.fail("interrupted"));
     }
 
     @Test
