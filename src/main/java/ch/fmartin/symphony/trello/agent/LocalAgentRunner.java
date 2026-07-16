@@ -102,7 +102,7 @@ public class LocalAgentRunner implements AgentRunner {
                         workspace.path(),
                         request.config().hooks());
             }
-            active.remove(request.workerIdentity());
+            active.remove(request.workerIdentity(), Thread.currentThread());
         }
     }
 

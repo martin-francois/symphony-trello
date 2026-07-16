@@ -22,16 +22,15 @@ import java.time.Clock;
 import java.time.DateTimeException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 import org.jboss.logging.Logger;
@@ -337,16 +336,17 @@ public class CodexAppServerClient {
         private final Card card;
         private final String workerIdentity;
         private final AgentEventListener listener;
-        private final AtomicInteger ids = new AtomicInteger();
+        // One session owner sends protocol requests sequentially; reader threads only consume IDs.
+        private int nextRequestId;
         private final Map<Integer, CompletableFuture<JsonNode>> responses = new ConcurrentHashMap<>();
-        private final Map<String, CompletableFuture<JsonNode>> turnCompletions = new ConcurrentHashMap<>();
-        private final Map<String, JsonNode> completedTurns = new ConcurrentHashMap<>();
-        private final Map<String, Throwable> terminalTurnFailures = new ConcurrentHashMap<>();
+        // The turn-completion monitor owns these three maps and the early/late completion handoff.
+        private final Map<String, CompletableFuture<JsonNode>> turnCompletions = new HashMap<>();
+        private final Map<String, JsonNode> completedTurns = new HashMap<>();
+        private final Map<String, Throwable> terminalTurnFailures = new HashMap<>();
         private final Object turnCompletionLock = new Object();
         private final Object writerLock = new Object();
         private final AtomicReference<Throwable> readerFailure = new AtomicReference<>();
         private final RateLimitState rateLimitState;
-        private final CountDownLatch readerStarted = new CountDownLatch(1);
         private final BufferedWriter writer;
 
         private AppServerSession(
@@ -365,12 +365,9 @@ public class CodexAppServerClient {
             this.writer = new BufferedWriter(new OutputStreamWriter(process.getOutputStream(), StandardCharsets.UTF_8));
         }
 
-        void start() throws IOException, InterruptedException {
+        void start() {
             Thread.ofVirtual().name("codex-app-server-stdout").start(this::readStdout);
             Thread.ofVirtual().name("codex-app-server-stderr").start(this::readStderr);
-            if (!readerStarted.await(5, TimeUnit.SECONDS)) {
-                throw new IOException("codex app-server stdout reader did not start");
-            }
         }
 
         JsonNode request(String method, ObjectNode params, Duration timeout) throws Exception {
@@ -378,7 +375,8 @@ public class CodexAppServerClient {
             if (failure != null) {
                 throw unwrapReaderFailure(failure);
             }
-            int id = ids.incrementAndGet();
+            nextRequestId++;
+            int id = nextRequestId;
             CompletableFuture<JsonNode> future = new CompletableFuture<>();
             responses.put(id, future);
             ObjectNode request = object("id", id, "method", method, "params", params);
@@ -439,7 +437,6 @@ public class CodexAppServerClient {
         }
 
         private void readStdout() {
-            readerStarted.countDown();
             try (BufferedReader reader = new BufferedReader(
                     new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8), 10 * 1024 * 1024)) {
                 String line = reader.readLine();

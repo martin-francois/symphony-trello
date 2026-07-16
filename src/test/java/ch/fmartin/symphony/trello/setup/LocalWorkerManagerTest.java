@@ -572,7 +572,8 @@ final class LocalWorkerManagerTest {
                     .isTrue();
             second = startThread(() -> fixture.start(fixture.startRequest("Queue")), secondResult, secondError);
             secondThread.set(second);
-            awaitCondition(() -> startCalls.get() > 1 || threadIsWaiting(secondThread.get()));
+            awaitCondition(
+                    () -> startCalls.get() > 1 || secondError.get() != null || threadIsWaiting(secondThread.get()));
 
             // when
             assertThat(startCalls).hasValue(1);
@@ -590,6 +591,54 @@ final class LocalWorkerManagerTest {
         assertThat(firstResult.get().stdout()).contains("Started Symphony for Trello: \"Queue\"");
         assertThat(secondResult.get().stdout()).contains("already running").doesNotContain("Started Symphony");
         verify(fixture.platform).start(any(), eq(fixture.paths.appHome()), any(), any(), any());
+    }
+
+    @Test
+    void startWaitsForAnotherProcessHoldingTheWorkerLock() throws Exception {
+        // given
+        LocalWorkerManagerTestFixture fixture = new LocalWorkerManagerTestFixture(tempDir);
+        ConnectedBoard board = fixture.connectedBoard("board-1", "Queue");
+        fixture.save(board);
+        fixture.stubHealthyStartedWorker(board, 42);
+        AtomicInteger startCalls = new AtomicInteger();
+        when(fixture.platform.start(any(), eq(fixture.paths.appHome()), any(), any(), any()))
+                .thenAnswer(invocation -> {
+                    startCalls.incrementAndGet();
+                    return new ManagedProcessHandle(42);
+                });
+        Path processLockFile = fixture.managedFiles(board).processLockFile();
+        Files.createDirectories(processLockFile.getParent());
+        Process lockHolder = new ProcessBuilder(
+                        Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+                        "-cp",
+                        System.getProperty("java.class.path"),
+                        ExternalFileLockHolder.class.getName(),
+                        processLockFile.toString())
+                .redirectErrorStream(true)
+                .start();
+        try {
+            assertThat(lockHolder.inputReader().readLine()).isEqualTo("locked");
+            AtomicReference<WorkerRunResult> startResult = new AtomicReference<>();
+            AtomicReference<Throwable> startError = new AtomicReference<>();
+            Thread start = startThread(() -> fixture.start(fixture.startRequest("Queue")), startResult, startError);
+
+            // when
+            awaitCondition(() -> startCalls.get() > 0 || threadIsWaitingForFileLock(start));
+
+            // then
+            assertThat(startCalls).hasValue(0);
+            assertThat(threadIsWaitingForFileLock(start)).isTrue();
+            lockHolder.getOutputStream().close();
+            assertThat(lockHolder.waitFor(5, TimeUnit.SECONDS)).isTrue();
+            start.join(Duration.ofSeconds(5));
+            assertThat(startError).hasValue(null);
+            startResult.get().assertSuccess().stdoutContains("Started Symphony for Trello");
+        } finally {
+            if (lockHolder.isAlive()) {
+                lockHolder.destroyForcibly();
+                lockHolder.waitFor(5, TimeUnit.SECONDS);
+            }
+        }
     }
 
     @Test
@@ -4210,6 +4259,12 @@ final class LocalWorkerManagerTest {
     private static boolean threadIsWaiting(Thread thread) {
         Thread.State state = thread.getState();
         return state == Thread.State.BLOCKED || state == Thread.State.WAITING || state == Thread.State.TIMED_WAITING;
+    }
+
+    private static boolean threadIsWaitingForFileLock(Thread thread) {
+        return Stream.of(thread.getStackTrace())
+                .anyMatch(frame -> frame.getClassName().startsWith("sun.nio.ch.")
+                        && frame.getMethodName().startsWith("lock"));
     }
 
     private static void awaitCondition(BooleanSupplier condition) {

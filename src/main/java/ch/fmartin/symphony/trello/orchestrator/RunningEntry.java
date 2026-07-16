@@ -14,20 +14,20 @@ final class RunningEntry {
     final EffectiveConfig launchConfig;
     final TrackerTarget launchTarget;
     final String launchCommand;
-    volatile Card card;
-    volatile String sessionId;
-    volatile String threadId;
-    volatile String turnId;
-    volatile String lastEvent;
-    volatile String lastMessage;
-    volatile Instant lastEventAt;
-    volatile long inputTokens;
-    volatile long outputTokens;
-    volatile long totalTokens;
-    volatile long lastReportedInputTokens;
-    volatile long lastReportedOutputTokens;
-    volatile long lastReportedTotalTokens;
-    volatile Future<?> workerTask;
+    Card card;
+    String sessionId;
+    String threadId;
+    String turnId;
+    String lastEvent;
+    String lastMessage;
+    Instant lastEventAt;
+    long inputTokens;
+    long outputTokens;
+    long totalTokens;
+    long lastReportedInputTokens;
+    long lastReportedOutputTokens;
+    long lastReportedTotalTokens;
+    Future<?> workerTask;
     int turnCount;
 
     RunningEntry(
