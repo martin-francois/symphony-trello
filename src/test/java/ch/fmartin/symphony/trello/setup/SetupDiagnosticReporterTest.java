@@ -3438,6 +3438,7 @@ final class SetupDiagnosticReporterTest {
                 Authorization: Basic basic-secret
                 Authorization: token ghp-secret
                 Authorization: OAuth oauth_consumer_key="oauth-key-secret", oauth_token="oauth-token-secret"
+                credential url https://private-user:private-password@example.invalid/repository
                 path=/home/alice/private-project
                 trailing slash path /home/alice/private-project/: denied
                 backtick path /mnt/client`name/repo failed
@@ -3556,6 +3557,8 @@ final class SetupDiagnosticReporterTest {
                         "ghp-secret",
                         "oauth-key-secret",
                         "oauth-token-secret",
+                        "private-user",
+                        "private-password",
                         "git@github.com:private/repo.git",
                         "feature/private-ref",
                         privateSourceCommit,

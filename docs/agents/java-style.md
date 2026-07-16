@@ -42,6 +42,12 @@ References.
   for the same capability. Do not couple source code to an undeclared transitive dependency. Treat a
   new runtime or build dependency as an architecture decision when its lifecycle or platform impact
   is non-trivial, and update the owning ADR or add one when required by the ADR policy.
+- Before retaining a small traversal, range-search, conversion, or collection-copy helper, check the
+  exact Java 25 API for a matching overload. For example, bounded string searches should use the
+  JDK's range-aware `String.indexOf` overload instead of maintaining a character loop. Compare the
+  exact-version Javadoc contract for bounds, nulls, ordering, mutability, and exceptions before
+  replacing local code. Keep the focused helper when the nearest library API changes domain
+  semantics, such as replacing ASCII-only matching with Unicode case folding.
 - Guava is a directly declared dependency. Before writing or retaining small character-boundary
   loops, delimiter-only regex splitting, null-to-empty String adapters, immutable collection
   collectors, or manually capped FIFO queues, check the matching Guava API (`CharMatcher`,
