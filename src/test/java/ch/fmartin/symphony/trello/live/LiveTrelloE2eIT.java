@@ -34,7 +34,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
@@ -560,7 +559,7 @@ final class LiveTrelloE2eIT {
                     .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                     .redirectError(ProcessBuilder.Redirect.DISCARD)
                     .start();
-            return process.waitFor(30, TimeUnit.SECONDS) && process.exitValue() == 0;
+            return process.waitFor(Duration.ofSeconds(30)) && process.exitValue() == 0;
         } catch (IOException e) {
             return false;
         } catch (InterruptedException e) {
@@ -708,7 +707,7 @@ final class LiveTrelloE2eIT {
 
     private static void pollDelayForBoundedLiveWait() {
         try {
-            Thread.sleep(LIVE_POLL_INTERVAL.toMillis());
+            Thread.sleep(LIVE_POLL_INTERVAL);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new AssertionError("Interrupted while waiting for live E2E condition", e);
@@ -941,7 +940,7 @@ final class LiveTrelloE2eIT {
         public void close() {
             process.destroy();
             try {
-                if (!process.waitFor(10, TimeUnit.SECONDS)) {
+                if (!process.waitFor(Duration.ofSeconds(10))) {
                     process.destroyForcibly();
                     process.waitFor();
                 }

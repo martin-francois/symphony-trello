@@ -617,7 +617,7 @@ final class SymphonyOrchestratorTestSupport {
     }
 
     static void pollDelayForBoundedConditionWait() throws InterruptedException {
-        Thread.sleep(POLL_INTERVAL.toMillis());
+        Thread.sleep(POLL_INTERVAL);
     }
 
     static void blockUntilInterruptedOrTimedOut(Duration timeout) throws InterruptedException {

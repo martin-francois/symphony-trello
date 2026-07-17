@@ -629,14 +629,18 @@ final class LocalWorkerManagerTest {
             assertThat(startCalls).hasValue(0);
             assertThat(threadIsWaitingForFileLock(start)).isTrue();
             lockHolder.getOutputStream().close();
-            assertThat(lockHolder.waitFor(5, TimeUnit.SECONDS)).isTrue();
-            start.join(Duration.ofSeconds(5));
-            assertThat(startError).hasValue(null);
+            assertThat(lockHolder.waitFor(Duration.ofSeconds(5)))
+                    .as("the external worker-lock holder exits within 5 seconds")
+                    .isTrue();
+            assertThat(start.join(Duration.ofSeconds(5)))
+                    .as("the worker start completes after the external lock is released")
+                    .isTrue();
+            assertThat(startError).hasNullValue();
             startResult.get().assertSuccess().stdoutContains("Started Symphony for Trello");
         } finally {
             if (lockHolder.isAlive()) {
                 lockHolder.destroyForcibly();
-                lockHolder.waitFor(5, TimeUnit.SECONDS);
+                lockHolder.waitFor(Duration.ofSeconds(5));
             }
         }
     }

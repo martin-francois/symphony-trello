@@ -104,7 +104,7 @@ final class LocalHealthChecker {
     /** Returns false when interrupted, so callers report the freshest health instead of probing on. */
     private static boolean sleptWithoutInterrupt(Duration delay) {
         try {
-            Thread.sleep(delay.toMillis());
+            Thread.sleep(delay);
             return true;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

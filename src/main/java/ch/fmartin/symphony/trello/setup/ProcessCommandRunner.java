@@ -5,7 +5,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.concurrent.TimeUnit;
 
 final class ProcessCommandRunner implements CommandRunner {
     private static final Duration COMMAND_TIMEOUT = Duration.ofSeconds(10);
@@ -30,9 +29,9 @@ final class ProcessCommandRunner implements CommandRunner {
                     .redirectErrorStream(true)
                     .redirectOutput(outputFile.toFile())
                     .start();
-            if (!process.waitFor(commandTimeout.toMillis(), TimeUnit.MILLISECONDS)) {
+            if (!process.waitFor(commandTimeout)) {
                 process.destroyForcibly();
-                process.waitFor(1, TimeUnit.SECONDS);
+                process.waitFor(Duration.ofSeconds(1));
                 return new CommandResult(CommandResult.TIMED_OUT_EXIT_CODE, "command timed out");
             }
             String output = Files.readString(outputFile, StandardCharsets.UTF_8);

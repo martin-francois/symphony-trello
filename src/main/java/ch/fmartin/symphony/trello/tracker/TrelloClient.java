@@ -1296,7 +1296,7 @@ public class TrelloClient implements TrackerClient {
                 .formatted(config.polling().interval().toMillis(), config.workflowPath());
     }
 
-    private static Duration backoff(EffectiveConfig config, int attempt, HttpResponse<?> response) {
+    static Duration backoff(EffectiveConfig config, int attempt, HttpResponse<?> response) {
         Optional<Duration> retryAfter = response == null
                 ? Optional.empty()
                 : response.headers().firstValue("Retry-After").flatMap(TrelloClient::parseRetryAfter);
@@ -1311,7 +1311,7 @@ public class TrelloClient implements TrackerClient {
 
     private static Optional<Duration> parseRetryAfter(String value) {
         try {
-            return Optional.of(Duration.ofSeconds(Long.parseLong(value)));
+            return Optional.of(Duration.ofSeconds(Long.parseLong(value))).filter(duration -> !duration.isNegative());
         } catch (NumberFormatException e) {
             return Optional.empty();
         }
@@ -1322,7 +1322,7 @@ public class TrelloClient implements TrackerClient {
     // the request (see docs/adr/0053-sleep-based-waits-kept-as-polling-boundaries.md).
     private static void sleep(Duration duration) {
         try {
-            Thread.sleep(duration.toMillis());
+            Thread.sleep(duration);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new TrelloException("trello_api_request", "Trello retry sleep interrupted", e);

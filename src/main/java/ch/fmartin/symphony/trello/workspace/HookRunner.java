@@ -8,7 +8,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import org.jboss.logging.Logger;
 
 @ApplicationScoped
@@ -53,7 +52,7 @@ public class HookRunner {
             return HookResult.failure("start_failed: " + e.getMessage());
         }
         try {
-            boolean finished = process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS);
+            boolean finished = process.waitFor(timeout);
             if (!finished) {
                 process.destroyForcibly();
                 return HookResult.failure("timeout after " + timeout.toMillis() + " ms");

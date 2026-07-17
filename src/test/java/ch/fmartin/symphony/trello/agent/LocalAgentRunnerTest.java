@@ -22,6 +22,7 @@ import ch.fmartin.symphony.trello.workspace.HookRunner;
 import ch.fmartin.symphony.trello.workspace.WorkspaceManager;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -813,7 +814,9 @@ final class LocalAgentRunnerTest {
 
         // when
         runner.cancel("worker-cancel");
-        worker.join(TimeUnit.SECONDS.toMillis(5));
+        assertThat(worker.join(Duration.ofSeconds(5)))
+                .as("the cancelled worker terminates within 5 seconds")
+                .isTrue();
 
         // then
         assertThat(interrupted).hasValue(true);
@@ -869,11 +872,15 @@ final class LocalAgentRunnerTest {
                         event -> {}))));
         assertThat(secondEntered.await(5, TimeUnit.SECONDS)).isTrue();
         releaseFirst.countDown();
-        first.join(TimeUnit.SECONDS.toMillis(5));
+        assertThat(first.join(Duration.ofSeconds(5)))
+                .as("the superseded duplicate-identity worker terminates within 5 seconds")
+                .isTrue();
 
         // when
         runner.cancel("worker-duplicate");
-        second.join(TimeUnit.SECONDS.toMillis(5));
+        assertThat(second.join(Duration.ofSeconds(5)))
+                .as("the cancelled replacement worker terminates within 5 seconds")
+                .isTrue();
 
         // then
         assertThat(firstResult).hasValue(AgentRunResult.ok());
