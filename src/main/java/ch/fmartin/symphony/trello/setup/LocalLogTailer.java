@@ -89,7 +89,7 @@ final class LocalLogTailer {
                 }
             }
             String tailText = decodeChunks(chunks);
-            List<String> lines = new ArrayList<>(tailText.lines().toList());
+            List<String> lines = tailText.lines().toList();
             int start = Math.max(0, lines.size() - maxLines);
             return List.copyOf(lines.subList(start, lines.size()));
         }
@@ -136,8 +136,8 @@ final class LocalLogTailer {
     private static String decodeChunks(List<byte[]> reversedChunks) {
         ByteArrayOutputStream tail = new ByteArrayOutputStream(
                 reversedChunks.stream().mapToInt(chunk -> chunk.length).sum());
-        for (int i = reversedChunks.size() - 1; i >= 0; i--) {
-            tail.writeBytes(reversedChunks.get(i));
+        for (byte[] chunk : reversedChunks.reversed()) {
+            tail.writeBytes(chunk);
         }
         return tail.toString(StandardCharsets.UTF_8);
     }
