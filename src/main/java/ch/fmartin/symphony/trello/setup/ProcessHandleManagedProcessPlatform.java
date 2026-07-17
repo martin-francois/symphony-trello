@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -118,7 +117,7 @@ abstract class ProcessHandleManagedProcessPlatform implements ManagedProcessPlat
     private static Optional<List<String>> commandArguments(long pid) {
         return ProcessHandle.of(pid)
                 .flatMap(handle -> handle.info().arguments())
-                .map(arguments -> List.copyOf(Arrays.asList(arguments)));
+                .map(List::of);
     }
 
     private static boolean waitForExit(ProcessHandle handle, Duration timeout) {
