@@ -3,6 +3,7 @@ package ch.fmartin.symphony.trello.setup;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import com.google.common.base.CharMatcher;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -10,9 +11,12 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 final class ProcessCommandRunnerTest {
     private static final String BASH = "/bin/bash";
+    private static final CharMatcher BMP_DIGIT = CharMatcher.forPredicate(Character::isDigit);
 
     @BeforeAll
     static void assumeBash() {
@@ -75,6 +79,20 @@ final class ProcessCommandRunnerTest {
         }
     }
 
+    @CsvSource(
+            delimiter = '|',
+            value = {"1|true", "00123|true", "١٢٣|true", "''|false", "12a|false", "-1|false", "12 3|false", "𝟙|false"})
+    @ParameterizedTest(name = "[{index}] PID candidate <{0}> is numeric: {1}")
+    void numericPidMatchesBmpDigitContract(String pid, boolean expected) {
+        // given
+
+        // when
+        boolean numeric = isNumericPid(pid);
+
+        // then
+        assertThat(numeric).as("PID candidate <%s> numeric classification", pid).isEqualTo(expected);
+    }
+
     private static long waitForPid(Path pidFile) throws Exception {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
         while (System.nanoTime() < deadline) {
@@ -90,15 +108,7 @@ final class ProcessCommandRunnerTest {
     }
 
     private static boolean isNumericPid(String pid) {
-        if (pid.isEmpty()) {
-            return false;
-        }
-        for (int i = 0; i < pid.length(); i++) {
-            if (!Character.isDigit(pid.charAt(i))) {
-                return false;
-            }
-        }
-        return true;
+        return !pid.isEmpty() && BMP_DIGIT.matchesAllOf(pid);
     }
 
     private static boolean processIsAlive(long pid) throws InterruptedException {
