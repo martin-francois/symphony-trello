@@ -321,6 +321,26 @@ final class RepositorySourceResolverTest {
     }
 
     @Test
+    void acceptsEquivalentLocalPathDeclarationsWithNullRepositoryIdentities() {
+        // given
+        Path repository = tempDir.resolve("local checkout").toAbsolutePath().normalize();
+        String declaration = "Repository path: <" + repository + ">";
+        Card card = cardWithText(declaration, declaration, List.of(comment(declaration)));
+
+        // when
+        RepositorySourceSelection selection = resolver.select(card, noDefault());
+
+        // then
+        assertThat(selection)
+                .isEqualTo(RepositorySourceSelection.selected(new RepositorySource(
+                        RepositorySource.Kind.LOCAL_PATH,
+                        RepositorySource.Origin.CARD,
+                        repository.toString(),
+                        null,
+                        repository)));
+    }
+
+    @Test
     void conflictingDeclarationsFailClosed() {
         // given
         Card card = cardWithText(
