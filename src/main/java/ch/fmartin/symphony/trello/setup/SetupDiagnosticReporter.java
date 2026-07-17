@@ -2468,7 +2468,7 @@ final class SetupDiagnosticReporter {
             }
             int authorityStart = schemeStart + httpSchemeLength(value, schemeStart);
             int authorityEnd = urlAuthorityEnd(value, authorityStart);
-            int at = indexOf(value, '@', authorityStart, authorityEnd);
+            int at = value.indexOf('@', authorityStart, authorityEnd);
             if (at < 0) {
                 redacted.append(value, cursor, authorityEnd);
             } else {
@@ -2593,15 +2593,6 @@ final class SetupDiagnosticReporter {
     private static int absolutePosixPathEnd(String value, int start) {
         int terminator = POSIX_PATH_TERMINATOR.indexIn(value, start + 1);
         return terminator < 0 ? value.length() : terminator;
-    }
-
-    private static int indexOf(String value, char needle, int start, int end) {
-        for (int index = start; index < end; index++) {
-            if (value.charAt(index) == needle) {
-                return index;
-            }
-        }
-        return -1;
     }
 
     private static int indexOfIgnoreCase(String value, String needle, int start) {
