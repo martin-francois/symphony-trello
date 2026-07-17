@@ -18,6 +18,8 @@ import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -85,6 +87,27 @@ final class StatusResourceTest {
         // then
         assertThat(orderedHtml).containsSubsequence("TRELLO-second", "TRELLO-&lt;abc&gt;");
         assertThat(emptyHtml).contains("<tbody></tbody>");
+    }
+
+    @Test
+    void logInfoSnapshotsOuterListAndMapStructure() {
+        // given
+        Map<String, Object> sourceLog = new LinkedHashMap<>();
+        sourceLog.put("path", "session.log");
+        List<Map<String, Object>> sourceLogs = new ArrayList<>();
+        sourceLogs.add(sourceLog);
+        CardDebugDetails.LogInfo logInfo = new CardDebugDetails.LogInfo(sourceLogs);
+
+        // when
+        List<Map<String, Object>> snapshot = logInfo.codexSessionLogs();
+        sourceLog.put("path", "changed.log");
+        sourceLogs.clear();
+
+        // then
+        assertThat(logInfo.codexSessionLogs()).containsExactlyElementsOf(snapshot);
+        assertThat(snapshot).isUnmodifiable().singleElement().satisfies(log -> assertThat(log)
+                .containsEntry("path", "session.log")
+                .isUnmodifiable());
     }
 
     @Test
