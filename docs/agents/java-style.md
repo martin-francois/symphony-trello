@@ -26,6 +26,21 @@ References.
 
 ## Reuse and dependency selection
 
+- Before writing or retaining hand-made utility logic, search the Java 25 API and the APIs of
+  dependencies declared directly in `pom.xml`. Start with the operation's owning type rather than
+  a generic helper: for example, check `Process` and `Thread` for `Duration` overloads, `String` for
+  bounded searches, `Files.walkFileTree` for recursive file lifecycle work, sequenced collections
+  for first/last or reversed views, and the compiler tree API before scanning Java syntax. In tests,
+  also check the exact AssertJ API before maintaining custom assertion loops. Prefer these APIs when
+  they state the same contract directly and remove conversion, restoration, parser, or accumulator
+  machinery.
+- Resolve the version actually used by Maven and consult that version's official API documentation
+  or Javadocs before adopting an overload or dependency method whose behavior is subtle. Verify
+  null rejection, empty-input behavior, encounter order, defensive-copy and mutability guarantees,
+  end-exclusive bounds, timeout precision, interruption, exception cleanup, symlink traversal, and
+  short-circuiting as applicable. Add a focused regression at that boundary. A similarly named API
+  is not a replacement when it changes one of those properties; retain explicit local code and
+  record the concrete mismatch instead.
 - Prefer a well-maintained dependency over hand-written infrastructure when it materially reduces
   code or complexity and the resulting API remains readable. Do not reject a library merely because
   it adds a dependency; compare the whole implementation, operational, security, and maintenance
