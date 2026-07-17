@@ -1,10 +1,11 @@
 ---
 name: java-optionals-eval-capture
 description: >
-  Use in Symphony for Trello whenever Java Optional code is written, reviewed,
-  or refactored to improve Optional usage, whether the change is self-initiated,
-  review-driven, or requested by the user. Capture the before/prompt/after code
-  and create or update a self-contained eval issue in
+  Use in Symphony for Trello when a Java change or review presents a reusable
+  Optional or absence/fallback strategy-selection lesson, including on an
+  adjacent owning API such as ScopedValue even when no java.util.Optional
+  appears. Capture the before/prompt/after code and create or update a
+  self-contained eval issue in
   martinfrancois/java-optionals-skill.
 ---
 
@@ -12,18 +13,25 @@ description: >
 
 ## Goal
 
-When a Symphony for Trello change improves Java Optional usage, preserve the
-teaching example for the Java Optionals skill. Create or update an issue in
-`martinfrancois/java-optionals-skill` that stands on its own: it must include
-the relevant code before the prompt, the prompt or review request that triggered
-the change, the intermediate or rejected implementation when one exists, the
-final preferred code, and why the final code is better.
+When a Symphony for Trello change provides a reusable Optional or adjacent
+absence/fallback strategy-selection lesson, preserve the teaching example for
+the Java Optionals skill. Capture the reusable absence-handling shape without
+generalizing an unrelated container or context migration. Create or update an
+issue in `martinfrancois/java-optionals-skill` that stands on its own: it must
+include the relevant code before the prompt, the prompt or review request that
+triggered the change, the intermediate or rejected implementation when one
+exists, the final preferred code, and why the final code is better.
 
 When the Optional improvement is prompted by a reviewer or user after Codex
 introduced the weaker Optional shape, also capture the earlier prompt that
 caused Codex to write that shape. The eval issue must make the trigger failure
 explicit: the Optionals skill should have activated during the original
 implementation prompt, not only during the later refactor request.
+
+When a later request reveals only that activation or eval capture was missed,
+even though the implementation was already preferred, capture both prompts and
+state that no code correction was needed. The eval must reward recognizing and
+capturing the reusable lesson without inventing a defect.
 
 When an Optional refactor is later found to be non-equivalent, over-abstracted,
 or worse than the original code, capture the full correction chain. Include the
@@ -43,18 +51,30 @@ Use this skill whenever you:
   with a direct Optional shape;
 - improve `map`, `flatMap`, `or`, `orElseGet`, `ifPresent`, or
   `ifPresentOrElse` usage;
+- simplify nullable, absent, fallback, or default strategy selection on an
+  adjacent owning API such as `ScopedValue.orElse(...)` when choosing and
+  invoking the strategy is a reusable lesson, even when the final code contains
+  no `java.util.Optional`;
 - preserve checked-exception or side-effect boundaries while improving Optional
   readability;
 - accept a user-provided Optional refactor;
-- correct an Optional refactor after review feedback.
+- correct an Optional refactor after review feedback;
 - revert or repair an Optional refactor because it changed behavior, laziness,
   exception handling, side effects, nullability, prompt ordering, or a checked
   boundary.
 
-Do not use this skill for unrelated Java edits that merely touch a line
-containing `Optional` without changing the Optional design.
+Do not use this skill for unrelated Java edits that merely touch `Optional`, a
+null validation, a configuration default, or collection work inside
+`Optional.map(...)` without changing the Optional design or absence/fallback
+behavior. Collection-only mapping lessons belong to Streams capture instead.
 
 ## Workflow
+
+For a broad Java, API, or refactoring audit, enumerate every implemented
+nullable, absent, fallback, and default-selection change that presents a
+reusable strategy or behavior lesson before capture. Create or update one issue
+for each distinct reusable behavior boundary, including missed triggers on
+adjacent owning APIs; do not stop at changes that spell `Optional` explicitly.
 
 1. Capture the pre-refactor code from Git before editing when possible:
 
@@ -153,9 +173,11 @@ Explain the old behavior, then include the smallest relevant code block.
 
 ## Prompt that caused the implementation
 
-List the relevant user, review, or product requirements that caused the weaker
-Optional code to be written. If this is a missed-trigger case, this is the
-original implementation prompt, not the later refactor request.
+List the relevant user, review, or product requirements that caused the
+absence- or fallback-relevant pattern to be implemented. If this is a
+missed-trigger case, this is the original implementation prompt, not the later
+capture request. Do not call already-preferred code weak merely because
+activation or capture was missed.
 
 ## Later prompt that exposed the issue
 
@@ -163,21 +185,24 @@ Use this section when a reviewer or user later asked to use the Optionals skill
 or corrected the implementation. Explain that the later prompt is useful context
 but should not be the only eval trigger.
 
-## Prompt-produced code before maintainer correction
+## Prompt-produced or reviewed code
 
-Use this section when an intermediate or rejected implementation exists. If the
-reviewed code is the pre-prompt code, say so explicitly. Explain that it may be
-correct but has an Optional/readability/maintainability issue, or that it is not
-behavior-equivalent.
+Show the implementation that should have triggered the skill. If the reviewed
+code is the pre-prompt code, say so explicitly. When an intermediate or rejected
+implementation exists, explain its concrete Optional, readability,
+maintainability, or behavior-equivalence problem. When the code was already
+preferred and only activation or capture failed, say so explicitly.
 
 ```java
-// intermediate or reviewed code
+// prompt-produced or reviewed code
 ```
 
-## Why the prompt-produced code is weak
+## What the skill missed
 
-Explain the concrete weakness. Distinguish functional correctness from the
-Optional API, readability, laziness, side-effect, or exception-boundary problem.
+State whether the miss was the code choice, behavior analysis, skill activation,
+eval capture, or some combination. Explain a code weakness only when one exists.
+When it does, distinguish functional correctness from the Optional API,
+readability, laziness, side-effect, or exception-boundary problem.
 
 ## Behavior-equivalence analysis
 
@@ -188,6 +213,10 @@ or not provable from local context. Include the behavior-preserving alternative
 when the final preferred code intentionally changes behavior.
 
 ## Maintainer-preferred code
+
+When no code correction was needed, repeat the already-preferred code and say
+that the desired change is activation/capture behavior, not a different
+implementation.
 
 ```java
 // final preferred code
@@ -225,13 +254,18 @@ transformation, preserved side effects, or checked-exception boundaries.
 
 - Keep the issue self-contained. Include enough code and prompt context that a
   maintainer can build the eval without knowing Symphony for Trello.
-- For missed-trigger cases, include both prompts: the original prompt that
-  produced the weak Optional code and the later refactor/review prompt that
-  exposed it.
+- For missed-trigger cases, include both prompts: the original implementation
+  prompt and the later refactor, review, or capture prompt that exposed the
+  miss.
+- For activation/capture-only misses, explicitly state that the implementation
+  was already preferred, identify the missing trigger or capture behavior, and
+  do not invent a code defect, intermediate implementation, or maintainer
+  correction.
 - For non-equivalent refactors, include the full correction chain: original
   code, prompt-produced weaker code, later correction/revert prompt, and final
   code.
-- Explain why the weaker code is weaker even when it is functionally correct.
+- When the implementation is actually weaker, explain why even when it is
+  functionally correct.
 - Explain behavior-equivalence explicitly. Do not treat fallback laziness,
   exception behavior, side-effect order, nullability, prompt order, or checked
   boundaries as incidental unless the surrounding code proves the change is
