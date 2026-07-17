@@ -1,6 +1,8 @@
 package ch.fmartin.symphony.trello.agent;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatObject;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import ch.fmartin.symphony.trello.TestCards;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
@@ -9,6 +11,7 @@ import ch.fmartin.symphony.trello.tracker.TrelloClient;
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
@@ -199,9 +202,9 @@ final class CodexAppServerClientTest {
                 event -> {});
 
         // then
-        assertThat(result.success()).isFalse();
-        assertThat(result.reason()).startsWith("codex_protocol_error:").contains("bad initialize");
-        assertThat(result.reason()).doesNotContain("app-server reader failed");
+        assertThat(result)
+                .isEqualTo(
+                        AgentRunResult.fail("codex_protocol_error: {\"code\":-32000,\"message\":\"bad initialize\"}"));
     }
 
     @Test
@@ -311,7 +314,9 @@ final class CodexAppServerClientTest {
         JsonNode sandboxPolicy =
                 json.readTree(Files.readString(capture)).path("params").path("sandboxPolicy");
         assertThat(sandboxPolicy.path("type").asText()).isEqualTo("workspaceWrite");
-        assertThat(sandboxPolicy.path("networkAccess").asBoolean()).isTrue();
+        assertThat(sandboxPolicy.path("networkAccess"))
+                .as("workspace-write sandbox policy networkAccess")
+                .isEqualTo(json.getNodeFactory().booleanNode(true));
         assertThat(sandboxPolicy.path("writableRoots"))
                 .extracting(JsonNode::asText)
                 .contains(extraRoot.toAbsolutePath().normalize().toString());
@@ -425,9 +430,19 @@ final class CodexAppServerClientTest {
         assertThat(requests)
                 .extracting(request -> request.path("method").asText())
                 .containsExactly("thread/start", "turn/start");
-        assertThat(requests.get(0).path("params").has("model")).isFalse();
-        assertThat(requests.get(1).path("params").has("model")).isFalse();
-        assertThat(requests.get(1).path("params").has("effort")).isFalse();
+        assertThat(requests)
+                .satisfiesExactly(
+                        request -> assertThat(request.path("params"))
+                                .as("thread/start params")
+                                .isInstanceOfSatisfying(ObjectNode.class, params -> assertThat(params.path("model"))
+                                        .as("thread/start omitted model")
+                                        .isEqualTo(json.missingNode())),
+                        request -> assertThat(request.path("params"))
+                                .as("turn/start params")
+                                .isInstanceOfSatisfying(ObjectNode.class, params -> assertThatObject(params)
+                                        .as("turn/start omitted [model, effort]")
+                                        .extracting(node -> node.path("model"), node -> node.path("effort"))
+                                        .containsExactly(json.missingNode(), json.missingNode())));
     }
 
     @Test
@@ -529,11 +544,9 @@ final class CodexAppServerClientTest {
                 event -> {});
 
         // then
-        assertThat(result.success()).isFalse();
-        assertThat(result.reason())
-                .startsWith("process_exit:")
-                .doesNotStartWith("response_timeout:")
-                .doesNotStartWith("turn_timeout:");
+        assertThat(result)
+                .isEqualTo(AgentRunResult.fail(
+                        "process_exit: codex app-server stdout closed before active turn completed"));
     }
 
     @Test
@@ -568,11 +581,9 @@ final class CodexAppServerClientTest {
                 event -> {});
 
         // then
-        assertThat(result.success()).isFalse();
-        assertThat(result.reason())
-                .startsWith("process_exit:")
-                .doesNotStartWith("response_timeout:")
-                .doesNotStartWith("turn_timeout:");
+        assertThat(result)
+                .isEqualTo(AgentRunResult.fail(
+                        "process_exit: codex app-server stdout closed before active turn completed"));
     }
 
     @Test
@@ -875,8 +886,7 @@ final class CodexAppServerClientTest {
 
         // then
         assertThat(result).isEqualTo(AgentRunResult.ok());
-        assertThat(publishedRateLimits).singleElement().satisfies(payload -> assertThat(payload.isNull())
-                .isTrue());
+        assertThat(publishedRateLimits).containsExactly(json.nullNode());
     }
 
     @Test
@@ -979,9 +989,13 @@ final class CodexAppServerClientTest {
         assertThat(first).isEqualTo(AgentRunResult.ok());
         assertThat(second.failureCategory()).isEqualTo(AgentRunResult.FailureCategory.CODEX_USAGE_LIMIT);
         assertThat(second.retryNotBefore()).contains(secondAccountReset);
-        assertThat(publishedRateLimits).hasSize(2);
-        assertThat(publishedRateLimits.get(1).has("primary")).isFalse();
-        assertThat(publishedRateLimits.get(1).has("planType")).isFalse();
+        assertThat(publishedRateLimits)
+                .hasSize(2)
+                .element(1)
+                .isInstanceOfSatisfying(ObjectNode.class, snapshot -> assertThatObject(snapshot)
+                        .as("second rate-limit snapshot omitted [primary, planType]")
+                        .extracting(node -> node.path("primary"), node -> node.path("planType"))
+                        .containsExactly(json.missingNode(), json.missingNode()));
     }
 
     @Test
@@ -1135,7 +1149,9 @@ final class CodexAppServerClientTest {
                 if (event.event().equals("account/rateLimits/updated")) {
                     markObserved(acceptanceEntered);
                     try {
-                        assertThat(releaseAcceptance.await(5, TimeUnit.SECONDS)).isTrue();
+                        assertThat(releaseAcceptance.await(5, TimeUnit.SECONDS))
+                                .as("the test releases in-flight rate-limit acceptance within 5 seconds")
+                                .isTrue();
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                         throw new AssertionError(e);
@@ -1154,16 +1170,13 @@ final class CodexAppServerClientTest {
             Future<AgentRunResult> second =
                     executor.submit(() -> runTurn(client, config, "inflight-rate-limit-second", listener));
             try {
-                assertThat(usageFailurePublished.await(5, TimeUnit.SECONDS)).isTrue();
+                assertThat(usageFailurePublished.await(5, TimeUnit.SECONDS))
+                        .as("the usage-limit event is published within 5 seconds")
+                        .isTrue();
                 Future<AgentRunResult> usageResult = usageWorker.get().endsWith("first") ? first : second;
-                boolean completedBeforeDecision;
-                try {
-                    usageResult.get(500, TimeUnit.MILLISECONDS);
-                    completedBeforeDecision = true;
-                } catch (TimeoutException expectedWhileUpdateIsInFlight) {
-                    completedBeforeDecision = false;
-                }
-                assertThat(completedBeforeDecision).isFalse();
+                assertThatThrownBy(() -> usageResult.get(500, TimeUnit.MILLISECONDS))
+                        .as("the usage-limit run remains incomplete while event acceptance is in flight")
+                        .isInstanceOf(TimeoutException.class);
             } finally {
                 releaseAcceptance.countDown();
             }

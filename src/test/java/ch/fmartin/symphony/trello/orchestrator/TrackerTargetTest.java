@@ -13,27 +13,27 @@ final class TrackerTargetTest {
         TrackerTarget plain = TrackerTarget.from("trello", "https://api.example.test/%7E1", "board-1");
 
         // when
-        boolean equivalent = decorated.equals(plain);
         String display = decorated.toString();
 
         // then
-        assertThat(equivalent).isTrue();
+        assertThat(decorated).isEqualTo(plain);
         assertThat(display).doesNotContainIgnoringCase("api.example.test", "https", "/%7e1");
     }
 
     @Test
     void keepsDotSegmentsDistinctWhenRawEndpointPathIsSent() {
         // given
-        TrackerTarget endpointWithDotSegments =
-                TrackerTarget.from("trello", "https://api.example.test/x/../1", "board-1");
-        TrackerTarget endpointWithoutDotSegments =
-                TrackerTarget.from("trello", "https://api.example.test/1", "board-1");
+        String trackerKind = "trello";
+        String boardId = "board-1";
 
         // when
-        boolean equivalent = endpointWithDotSegments.equals(endpointWithoutDotSegments);
+        TrackerTarget endpointWithDotSegments =
+                TrackerTarget.from(trackerKind, "https://api.example.test/x/../1", boardId);
+        TrackerTarget endpointWithoutDotSegments =
+                TrackerTarget.from(trackerKind, "https://api.example.test/1", boardId);
 
         // then
-        assertThat(equivalent).isFalse();
+        assertThat(endpointWithDotSegments).isNotEqualTo(endpointWithoutDotSegments);
     }
 
     @Test
@@ -54,30 +54,27 @@ final class TrackerTargetTest {
     @Test
     void onlyNormalizesSlashesAtEndOfWholeRawEndpoint() {
         // given
-        TrackerTarget trailingSlashes = TrackerTarget.from("trello", "https://api.example.test/1///", "board-1");
-        TrackerTarget plain = TrackerTarget.from("trello", "https://api.example.test/1", "board-1");
-        TrackerTarget slashBeforeQuery =
-                TrackerTarget.from("trello", "https://api.example.test/1/?tenant=x", "board-1");
-        TrackerTarget noSlashBeforeQuery =
-                TrackerTarget.from("trello", "https://api.example.test/1?tenant=x", "board-1");
-        TrackerTarget slashBeforeFragment =
-                TrackerTarget.from("trello", "https://api.example.test/1/#section", "board-1");
-        TrackerTarget noSlashBeforeFragment =
-                TrackerTarget.from("trello", "https://api.example.test/1#section", "board-1");
-        TrackerTarget slashBeforeEmptyQuery = TrackerTarget.from("trello", "https://api.example.test/1/?", "board-1");
-        TrackerTarget noSlashBeforeEmptyQuery = TrackerTarget.from("trello", "https://api.example.test/1?", "board-1");
+        String trackerKind = "trello";
+        String boardId = "board-1";
+        String endpoint = "https://api.example.test/1";
 
         // when
-        boolean trailingSlashesMatch = trailingSlashes.equals(plain);
-        boolean queryVariantsMatch = slashBeforeQuery.equals(noSlashBeforeQuery);
-        boolean fragmentVariantsMatch = slashBeforeFragment.equals(noSlashBeforeFragment);
-        boolean emptyQueryVariantsMatch = slashBeforeEmptyQuery.equals(noSlashBeforeEmptyQuery);
+        TrackerTarget trailingSlashes = TrackerTarget.from(trackerKind, endpoint + "///", boardId);
+        TrackerTarget plain = TrackerTarget.from(trackerKind, endpoint, boardId);
+        TrackerTarget slashBeforeQuery = TrackerTarget.from(trackerKind, endpoint + "/?tenant=x", boardId);
+        TrackerTarget noSlashBeforeQuery = TrackerTarget.from(trackerKind, endpoint + "?tenant=x", boardId);
+        TrackerTarget slashBeforeFragment = TrackerTarget.from(trackerKind, endpoint + "/#section", boardId);
+        TrackerTarget noSlashBeforeFragment = TrackerTarget.from(trackerKind, endpoint + "#section", boardId);
+        TrackerTarget slashBeforeEmptyQuery = TrackerTarget.from(trackerKind, endpoint + "/?", boardId);
+        TrackerTarget noSlashBeforeEmptyQuery = TrackerTarget.from(trackerKind, endpoint + "?", boardId);
 
         // then
-        assertThat(trailingSlashesMatch).isTrue();
-        assertThat(queryVariantsMatch).isFalse();
-        assertThat(fragmentVariantsMatch).isFalse();
-        assertThat(emptyQueryVariantsMatch).isFalse();
+        assertThat(trailingSlashes).isEqualTo(plain);
+        assertThat(List.of(slashBeforeQuery, slashBeforeFragment, slashBeforeEmptyQuery))
+                .as("endpoints with a slash before [query, fragment, empty query]")
+                .zipSatisfy(
+                        List.of(noSlashBeforeQuery, noSlashBeforeFragment, noSlashBeforeEmptyQuery),
+                        (withSlash, withoutSlash) -> assertThat(withSlash).isNotEqualTo(withoutSlash));
     }
 
     @Test

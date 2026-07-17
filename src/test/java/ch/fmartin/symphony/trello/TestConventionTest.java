@@ -8,14 +8,24 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.source.tree.AnnotationTree;
 import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.ExpressionTree;
+import com.sun.source.tree.IdentifierTree;
+import com.sun.source.tree.LiteralTree;
+import com.sun.source.tree.MemberSelectTree;
+import com.sun.source.tree.MethodInvocationTree;
 import com.sun.source.tree.MethodTree;
+import com.sun.source.tree.ParenthesizedTree;
 import com.sun.source.util.JavacTask;
+import com.sun.source.util.TreePath;
 import com.sun.source.util.TreePathScanner;
 import com.sun.source.util.Trees;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -24,8 +34,16 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
+import javax.lang.model.element.Element;
+import javax.lang.model.element.ElementKind;
+import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.element.PackageElement;
+import javax.lang.model.type.TypeKind;
+import javax.lang.model.type.TypeMirror;
+import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
 import javax.tools.DiagnosticCollector;
 import javax.tools.JavaCompiler;
@@ -41,6 +59,15 @@ final class TestConventionTest {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final Pattern SIMPLE_MANUAL_MOCK = Pattern.compile(
             "\\b(new\\s+AgentRunner\\s*\\(\\)|extends\\s+(SymphonyOrchestrator|CodexAppServerClient)|implements\\s+AgentRunner)");
+    private static final Set<String> ASSERTJ_BOOLEAN_ENTRY_POINTS = Set.of("assertThat", "assumeThat", "given", "then");
+    private static final Set<String> ASSERTJ_BOOLEAN_ASSERT_TYPES = Set.of(
+            "org.assertj.core.api.AbstractBooleanAssert",
+            "org.assertj.core.api.AtomicBooleanAssert",
+            "org.assertj.core.api.BooleanAssert");
+    private static final Set<String> ASSERTJ_BOOLEAN_TERMINALS = Set.of("isFalse", "isTrue");
+    private static final Set<String> ASSERTJ_DESCRIPTION_METHODS = Set.of("as", "describedAs");
+    private static final Set<String> ASSERTJ_FAILURE_MESSAGE_METHODS =
+            Set.of("overridingErrorMessage", "withFailMessage");
     private static final Set<String> TEST_ANNOTATIONS = Set.of("FuzzTest", "ParameterizedTest", "Test");
 
     @Test
@@ -223,6 +250,318 @@ final class TestConventionTest {
     }
 
     @Test
+    void directAssertJBooleanAssertionsAreRejectedWithCompilerPositions(@TempDir Path tempDir) throws IOException {
+        // given
+        Path source = tempDir.resolve("RawBooleanAssertionsTest.java");
+        Files.writeString(
+                source,
+                """
+                import static org.assertj.core.api.Assertions.assertThat;
+
+                final class RawBooleanAssertionsTest {
+                    void direct(boolean ready) {
+                        assertThat(ready).isTrue();
+                    }
+
+                    void multiline(boolean finished) {
+                        assertThat(
+                                finished)
+                                .isFalse();
+                    }
+                }
+                """);
+
+        // when
+        List<String> violations = undescribedDirectAssertJBooleanAssertionViolations(source);
+
+        // then
+        assertThat(violations)
+                .containsExactly(
+                        source
+                                + ":5: direct AssertJ boolean assertion requires a description without a blank literal before isTrue()",
+                        source
+                                + ":11: direct AssertJ boolean assertion requires a description without a blank literal before isFalse()");
+    }
+
+    @Test
+    void describedDirectAssertJBooleanAssertionsAreAccepted(@TempDir Path tempDir) throws IOException {
+        // given
+        Path source = tempDir.resolve("DescribedBooleanAssertionsTest.java");
+        Files.writeString(
+                source,
+                """
+                import static org.assertj.core.api.Assertions.assertThat;
+
+                final class DescribedBooleanAssertionsTest {
+                    void described(boolean ready) {
+                        assertThat(ready).as("worker should reach ready state").isTrue();
+                        assertThat(ready).describedAs("worker should remain ready").isTrue();
+                        assertThat(ready).withFailMessage("worker should reject new work").isFalse();
+                        assertThat(ready).overridingErrorMessage("worker should finish before timeout").isTrue();
+                    }
+                }
+                """);
+
+        // when
+        List<String> violations = undescribedDirectAssertJBooleanAssertionViolations(source);
+
+        // then
+        assertThat(violations).isEmpty();
+    }
+
+    @Test
+    void qualifiedAssertJBooleanAssertionsAreRejected(@TempDir Path tempDir) throws IOException {
+        // given
+        Path source = tempDir.resolve("QualifiedBooleanAssertionsTest.java");
+        Files.writeString(
+                source,
+                """
+                import org.assertj.core.api.Assertions;
+                import org.assertj.core.api.AssertionsForClassTypes;
+
+                final class QualifiedBooleanAssertionsTest {
+                    void qualified(boolean ready) {
+                        Assertions.assertThat(ready).isTrue();
+                        AssertionsForClassTypes.assertThat(ready).isFalse();
+                        org.assertj.core.api.Assertions.assertThat(ready).isTrue();
+                    }
+                }
+                """);
+
+        // when
+        List<String> violations = undescribedDirectAssertJBooleanAssertionViolations(source);
+
+        // then
+        assertThat(violations)
+                .containsExactly(
+                        source
+                                + ":6: direct AssertJ boolean assertion requires a description without a blank literal before isTrue()",
+                        source
+                                + ":7: direct AssertJ boolean assertion requires a description without a blank literal before isFalse()",
+                        source
+                                + ":8: direct AssertJ boolean assertion requires a description without a blank literal before isTrue()");
+    }
+
+    @Test
+    void alternativeAssertJBooleanEntryPointsAreRejected(@TempDir Path tempDir) throws IOException {
+        // given
+        Path source = tempDir.resolve("AlternativeBooleanAssertionsTest.java");
+        Files.writeString(
+                source,
+                """
+                import static org.assertj.core.api.BDDAssertions.then;
+
+                import java.util.concurrent.atomic.AtomicBoolean;
+                import org.assertj.core.api.Assumptions;
+                import org.assertj.core.api.BDDAssumptions;
+                import org.assertj.core.api.BDDAssertions;
+                import org.assertj.core.api.BDDSoftAssertions;
+                import org.assertj.core.api.SoftAssertions;
+
+                final class AlternativeBooleanAssertionsTest {
+                    void bdd(boolean primitive, Boolean boxed, AtomicBoolean atomic) {
+                        then(primitive).isTrue();
+                        BDDAssertions.then(boxed).isFalse();
+                        org.assertj.core.api.BDDAssertions.and.then(atomic).isTrue();
+                        BDDAssertions.assertThat(primitive).isFalse();
+                        BDDAssertions.then(primitive).as("BDD state should be ready").isTrue();
+                    }
+
+                    void softAndAssumptions(boolean ready) {
+                        new SoftAssertions().assertThat(ready).isTrue();
+                        new BDDSoftAssertions().then(ready).isFalse();
+                        Assumptions.assumeThat(ready).isTrue();
+                        BDDAssumptions.given(ready).isFalse();
+                    }
+                }
+                """);
+
+        // when
+        List<String> violations = undescribedDirectAssertJBooleanAssertionViolations(source);
+
+        // then
+        assertThat(violations)
+                .containsExactly(
+                        source
+                                + ":12: direct AssertJ boolean assertion requires a description without a blank literal before isTrue()",
+                        source
+                                + ":13: direct AssertJ boolean assertion requires a description without a blank literal before isFalse()",
+                        source
+                                + ":14: direct AssertJ boolean assertion requires a description without a blank literal before isTrue()",
+                        source
+                                + ":15: direct AssertJ boolean assertion requires a description without a blank literal before isFalse()",
+                        source
+                                + ":20: direct AssertJ boolean assertion requires a description without a blank literal before isTrue()",
+                        source
+                                + ":21: direct AssertJ boolean assertion requires a description without a blank literal before isFalse()",
+                        source
+                                + ":22: direct AssertJ boolean assertion requires a description without a blank literal before isTrue()",
+                        source
+                                + ":23: direct AssertJ boolean assertion requires a description without a blank literal before isFalse()");
+    }
+
+    @Test
+    void customAssertThatRootsAreIgnored(@TempDir Path tempDir) throws IOException {
+        // given
+        Path source = tempDir.resolve("CustomBooleanAssertionsTest.java");
+        Files.writeString(
+                source,
+                """
+                import static org.assertj.core.api.Assertions.assertThat;
+                import static org.assertj.core.api.BDDAssertions.then;
+
+                final class CustomBooleanAssertionsTest {
+                    void custom(boolean ready) {
+                        customAssertions().assertThat(ready).isTrue();
+                        assertThat(ready).isFalse();
+                        then(ready).isTrue();
+                        new BDDAssertions().then(ready).isFalse();
+                    }
+
+                    private LocalBooleanAssert assertThat(boolean value) {
+                        return new LocalBooleanAssert();
+                    }
+
+                    private LocalBooleanAssert then(boolean value) {
+                        return new LocalBooleanAssert();
+                    }
+
+                    private LocalAssertions customAssertions() {
+                        return new LocalAssertions();
+                    }
+
+                    private static final class BDDAssertions {
+                        private LocalBooleanAssert then(boolean value) {
+                            return new LocalBooleanAssert();
+                        }
+                    }
+
+                    private static final class LocalAssertions {
+                        private LocalBooleanAssert assertThat(boolean value) {
+                            return new LocalBooleanAssert();
+                        }
+                    }
+
+                    private static final class LocalBooleanAssert {
+                        private LocalBooleanAssert isTrue() {
+                            return this;
+                        }
+
+                        private LocalBooleanAssert isFalse() {
+                            return this;
+                        }
+                    }
+                }
+                """);
+
+        // when
+        List<String> violations = undescribedDirectAssertJBooleanAssertionViolations(source);
+
+        // then
+        assertThat(violations).isEmpty();
+    }
+
+    @Test
+    void blankLiteralAssertJDescriptionsAreRejectedButNonliteralDescriptionsAreAccepted(@TempDir Path tempDir)
+            throws IOException {
+        // given
+        Path source = tempDir.resolve("BlankBooleanDescriptionsTest.java");
+        Files.writeString(
+                source,
+                """
+                import static org.assertj.core.api.Assertions.assertThat;
+
+                final class BlankBooleanDescriptionsTest {
+                    void descriptions(boolean ready, String description) {
+                        assertThat(ready).as("").isTrue();
+                        assertThat(ready).describedAs("   ").isFalse();
+                        assertThat(ready).withFailMessage("").isTrue();
+                        assertThat(ready).overridingErrorMessage(" ").isFalse();
+                        assertThat(ready).as(description).isTrue();
+                        assertThat(ready).as("earlier description").as("").isTrue();
+                        assertThat(ready).as("").as("effective description").isTrue();
+                        assertThat(ready).as("effective description").withFailMessage("").isTrue();
+                        assertThat(ready).withFailMessage("effective failure message").as("").isTrue();
+                        assertThat(ready).overridingErrorMessage("earlier message").withFailMessage("").isTrue();
+                    }
+                }
+                """);
+
+        // when
+        List<String> violations = undescribedDirectAssertJBooleanAssertionViolations(source);
+
+        // then
+        assertThat(violations)
+                .containsExactly(
+                        source
+                                + ":5: direct AssertJ boolean assertion requires a description without a blank literal before isTrue()",
+                        source
+                                + ":6: direct AssertJ boolean assertion requires a description without a blank literal before isFalse()",
+                        source
+                                + ":7: direct AssertJ boolean assertion requires a description without a blank literal before isTrue()",
+                        source
+                                + ":8: direct AssertJ boolean assertion requires a description without a blank literal before isFalse()",
+                        source
+                                + ":10: direct AssertJ boolean assertion requires a description without a blank literal before isTrue()",
+                        source
+                                + ":14: direct AssertJ boolean assertion requires a description without a blank literal before isTrue()");
+    }
+
+    @Test
+    void directAssertJBooleanScannerIgnoresLexicalTextAndTypeSpecificAssertions(@TempDir Path tempDir)
+            throws IOException {
+        // given
+        Path source = tempDir.resolve("OtherAssertionsTest.java");
+        Files.writeString(
+                source,
+                """
+                import static org.assertj.core.api.Assertions.assertThat;
+
+                import java.nio.file.Path;
+                import java.util.List;
+
+                final class OtherAssertionsTest {
+                    void otherAssertions(String value, Path path, List<String> values) {
+                        String example = "assertThat(ready).isTrue();";
+                        String multiline = \"""
+                                assertThat(ready)
+                                        .isFalse();
+                                \""";
+                        // assertThat(ready).isTrue();
+                        /* assertThat(ready).isFalse(); */
+                        assertThat(value).isEqualTo("ready");
+                        assertThat(value).isNotBlank();
+                        assertThat(path).isDirectory();
+                        assertThat(values).containsExactly("ready");
+                    }
+                }
+                """);
+
+        // when
+        List<String> violations = undescribedDirectAssertJBooleanAssertionViolations(source);
+
+        // then
+        assertThat(violations).isEmpty();
+    }
+
+    @Test
+    void directAssertJBooleanAssertionsHaveDescriptionsWithoutBlankLiterals() throws IOException {
+        // given
+        List<String> violations = new ArrayList<>();
+
+        // when
+        List<Path> files = javaTestSourceFiles();
+        collectUndescribedDirectAssertJBooleanAssertionViolations(files, violations);
+
+        // then
+        assertThat(violations)
+                .as(
+                        "Prefer a type-specific AssertJ assertion. Direct AssertJ isTrue() and isFalse() chains must use as(), describedAs(), withFailMessage(), or overridingErrorMessage(); literal descriptions must not be blank:%n%s",
+                        String.join(System.lineSeparator(), violations))
+                .isEmpty();
+    }
+
+    @Test
     void simpleMocksUseMockitoInsteadOfManualTestDoubles() throws IOException {
         // given
         List<String> violations = new ArrayList<>();
@@ -376,6 +715,158 @@ final class TestConventionTest {
         violations.addAll(testSectionViolations(file));
     }
 
+    static List<String> undescribedDirectAssertJBooleanAssertionViolations(Path file) throws IOException {
+        List<String> violations = new ArrayList<>();
+        ParsedJavaFile parsed = analyzeJava(file, Files.readString(file));
+        collectUndescribedDirectAssertJBooleanAssertionViolations(
+                parsed.file(), parsed.unit(), parsed.trees(), parsed.types(), violations);
+        return List.copyOf(violations);
+    }
+
+    private static void collectUndescribedDirectAssertJBooleanAssertionViolations(
+            List<Path> files, List<String> violations) throws IOException {
+        for (ParsedJavaFile parsed : analyzeJava(files)) {
+            collectUndescribedDirectAssertJBooleanAssertionViolations(
+                    parsed.file(), parsed.unit(), parsed.trees(), parsed.types(), violations);
+        }
+    }
+
+    private static List<Path> javaTestSourceFiles() throws IOException {
+        List<Path> files = new ArrayList<>();
+        Files.walkFileTree(Path.of("src/test/java"), new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) {
+                if (attributes.isRegularFile() && file.toString().endsWith(".java")) {
+                    files.add(file);
+                }
+                return FileVisitResult.CONTINUE;
+            }
+        });
+        files.sort(Path::compareTo);
+        return List.copyOf(files);
+    }
+
+    private static void collectUndescribedDirectAssertJBooleanAssertionViolations(
+            Path file, CompilationUnitTree unit, Trees trees, Types types, List<String> violations) {
+        var positions = trees.getSourcePositions();
+        new TreePathScanner<Void, Void>() {
+            @Override
+            public Void visitMethodInvocation(MethodInvocationTree invocation, Void unused) {
+                if (isUndescribedDirectAssertJBooleanAssertion(invocation, unit, trees, types)) {
+                    String terminal = invocationMethodName(invocation);
+                    long terminalEnd = positions.getEndPosition(unit, invocation.getMethodSelect());
+                    checkState(
+                            terminalEnd != Diagnostic.NOPOS,
+                            "Compiler did not provide a source position for %s()",
+                            terminal);
+                    long terminalStart = terminalEnd - terminal.length();
+                    long line = unit.getLineMap().getLineNumber(terminalStart);
+                    violations.add(
+                            "%s:%d: direct AssertJ boolean assertion requires a description without a blank literal before %s()"
+                                    .formatted(file, line, terminal));
+                }
+                return super.visitMethodInvocation(invocation, null);
+            }
+        }.scan(unit, null);
+    }
+
+    private static boolean isUndescribedDirectAssertJBooleanAssertion(
+            MethodInvocationTree invocation, CompilationUnitTree unit, Trees trees, Types types) {
+        if (!invocation.getArguments().isEmpty()
+                || !ASSERTJ_BOOLEAN_TERMINALS.contains(invocationMethodName(invocation))) {
+            return false;
+        }
+
+        AssertJMessageStatus description = AssertJMessageStatus.ABSENT;
+        AssertJMessageStatus failureMessage = AssertJMessageStatus.ABSENT;
+        ExpressionTree receiver = invocationReceiver(invocation);
+        while (receiver != null) {
+            receiver = unwrapParentheses(receiver);
+            if (!(receiver instanceof MethodInvocationTree receiverInvocation)) {
+                return false;
+            }
+
+            if (isAssertJBooleanEntryPoint(receiverInvocation, unit, trees, types)) {
+                return description != AssertJMessageStatus.USABLE && failureMessage != AssertJMessageStatus.USABLE;
+            }
+            String methodName = invocationMethodName(receiverInvocation);
+            if (description == AssertJMessageStatus.ABSENT && ASSERTJ_DESCRIPTION_METHODS.contains(methodName)) {
+                description = assertJMessageStatus(receiverInvocation);
+            }
+            if (failureMessage == AssertJMessageStatus.ABSENT && ASSERTJ_FAILURE_MESSAGE_METHODS.contains(methodName)) {
+                failureMessage = assertJMessageStatus(receiverInvocation);
+            }
+            receiver = invocationReceiver(receiverInvocation);
+        }
+        return false;
+    }
+
+    private static boolean isAssertJBooleanEntryPoint(
+            MethodInvocationTree invocation, CompilationUnitTree unit, Trees trees, Types types) {
+        if (!ASSERTJ_BOOLEAN_ENTRY_POINTS.contains(invocationMethodName(invocation))) {
+            return false;
+        }
+        TreePath invocationPath = TreePath.getPath(unit, invocation);
+        if (invocationPath == null || !(trees.getElement(invocationPath) instanceof ExecutableElement method)) {
+            return false;
+        }
+        if (!isAssertJApiElement(method)) {
+            return false;
+        }
+        TypeMirror returnType = trees.getTypeMirror(invocationPath);
+        if (returnType == null || returnType.getKind() == TypeKind.ERROR) {
+            return false;
+        }
+        return ASSERTJ_BOOLEAN_ASSERT_TYPES.contains(types.erasure(returnType).toString());
+    }
+
+    private static boolean isAssertJApiElement(Element element) {
+        Element owner = element;
+        while (owner != null && owner.getKind() != ElementKind.PACKAGE) {
+            owner = owner.getEnclosingElement();
+        }
+        return owner instanceof PackageElement packageElement
+                && packageElement.getQualifiedName().contentEquals("org.assertj.core.api");
+    }
+
+    private static AssertJMessageStatus assertJMessageStatus(MethodInvocationTree invocation) {
+        if (invocation.getArguments().isEmpty()) {
+            return AssertJMessageStatus.ABSENT;
+        }
+        ExpressionTree message = unwrapParentheses(invocation.getArguments().getFirst());
+        if (!(message instanceof LiteralTree literal)) {
+            return AssertJMessageStatus.USABLE;
+        }
+        return literal.getValue() instanceof String value && !value.isBlank()
+                ? AssertJMessageStatus.USABLE
+                : AssertJMessageStatus.BLANK_LITERAL;
+    }
+
+    private static ExpressionTree invocationReceiver(MethodInvocationTree invocation) {
+        return invocation.getMethodSelect() instanceof MemberSelectTree memberSelect
+                ? memberSelect.getExpression()
+                : null;
+    }
+
+    private static ExpressionTree unwrapParentheses(ExpressionTree expression) {
+        ExpressionTree unwrapped = expression;
+        while (unwrapped instanceof ParenthesizedTree parenthesized) {
+            unwrapped = parenthesized.getExpression();
+        }
+        return unwrapped;
+    }
+
+    private static String invocationMethodName(MethodInvocationTree invocation) {
+        ExpressionTree methodSelect = invocation.getMethodSelect();
+        if (methodSelect instanceof IdentifierTree identifier) {
+            return identifier.getName().toString();
+        }
+        if (methodSelect instanceof MemberSelectTree memberSelect) {
+            return memberSelect.getIdentifier().toString();
+        }
+        return "";
+    }
+
     static List<String> testSectionViolations(Path file) throws IOException {
         List<String> violations = new ArrayList<>();
         String source = Files.readString(file);
@@ -480,6 +971,21 @@ final class TestConventionTest {
     }
 
     private static List<TestMethod> testMethods(Path file, String source) throws IOException {
+        List<TestMethod> methods = new ArrayList<>();
+        ParsedJavaFile parsed = parseJava(file, source);
+        collectTestMethods(parsed.unit(), parsed.trees(), methods);
+        return List.copyOf(methods);
+    }
+
+    private static ParsedJavaFile parseJava(Path file, String source) throws IOException {
+        return compileJava(file, source, false);
+    }
+
+    private static ParsedJavaFile analyzeJava(Path file, String source) throws IOException {
+        return compileJava(file, source, true);
+    }
+
+    private static ParsedJavaFile compileJava(Path file, String source, boolean analyze) throws IOException {
         JavaCompiler compiler =
                 Objects.requireNonNull(ToolProvider.getSystemJavaCompiler(), "Test convention checks require a JDK");
         DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
@@ -488,13 +994,54 @@ final class TestConventionTest {
             JavaFileObject sourceFile = sourceFile(file, source);
             JavacTask task = (JavacTask)
                     compiler.getTask(null, fileManager, diagnostics, List.of("-proc:none"), null, List.of(sourceFile));
-            List<TestMethod> methods = new ArrayList<>();
-            for (CompilationUnitTree unit : task.parse()) {
-                collectTestMethods(unit, Trees.instance(task), methods);
-            }
+            List<CompilationUnitTree> units = parseCompilationUnits(task);
             rejectParseErrors(file, diagnostics);
-            return List.copyOf(methods);
+            checkState(units.size() == 1, "Expected one compilation unit for %s but found %s", file, units.size());
+            if (analyze) {
+                task.analyze();
+                rejectAnalysisErrors(file, diagnostics);
+            }
+            return new ParsedJavaFile(file, units.getFirst(), Trees.instance(task), task.getTypes());
         }
+    }
+
+    private static List<ParsedJavaFile> analyzeJava(List<Path> files) throws IOException {
+        JavaCompiler compiler =
+                Objects.requireNonNull(ToolProvider.getSystemJavaCompiler(), "Test convention checks require a JDK");
+        DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
+        Map<Path, Path> sourcePaths = new HashMap<>();
+        for (Path file : files) {
+            sourcePaths.put(file.toAbsolutePath().normalize(), file);
+        }
+        try (StandardJavaFileManager fileManager =
+                compiler.getStandardFileManager(diagnostics, Locale.ROOT, StandardCharsets.UTF_8)) {
+            Iterable<? extends JavaFileObject> sourceFiles = fileManager.getJavaFileObjectsFromPaths(files);
+            JavacTask task = (JavacTask)
+                    compiler.getTask(null, fileManager, diagnostics, List.of("-proc:none"), null, sourceFiles);
+            List<CompilationUnitTree> units = parseCompilationUnits(task);
+            rejectParseErrors(diagnostics);
+            task.analyze();
+            rejectAnalysisErrors(diagnostics);
+            Trees trees = Trees.instance(task);
+            Types types = task.getTypes();
+            List<ParsedJavaFile> parsed = new ArrayList<>();
+            for (CompilationUnitTree unit : units) {
+                Path absolutePath =
+                        Path.of(unit.getSourceFile().toUri()).toAbsolutePath().normalize();
+                Path displayPath = sourcePaths.get(absolutePath);
+                checkState(displayPath != null, "Compiler returned an unexpected source path: %s", absolutePath);
+                parsed.add(new ParsedJavaFile(displayPath, unit, trees, types));
+            }
+            return List.copyOf(parsed);
+        }
+    }
+
+    private static List<CompilationUnitTree> parseCompilationUnits(JavacTask task) throws IOException {
+        List<CompilationUnitTree> units = new ArrayList<>();
+        for (CompilationUnitTree unit : task.parse()) {
+            units.add(unit);
+        }
+        return units;
     }
 
     private static JavaFileObject sourceFile(Path file, String source) {
@@ -546,15 +1093,55 @@ final class TestConventionTest {
 
     private static void rejectParseErrors(Path file, DiagnosticCollector<JavaFileObject> diagnostics)
             throws IOException {
-        List<String> errors = new ArrayList<>();
-        for (Diagnostic<? extends JavaFileObject> diagnostic : diagnostics.getDiagnostics()) {
-            if (diagnostic.getKind() == Diagnostic.Kind.ERROR) {
-                errors.add("line " + diagnostic.getLineNumber() + ": " + diagnostic.getMessage(Locale.ROOT));
-            }
-        }
+        List<String> errors = errorDiagnostics(diagnostics, TestConventionTest::diagnosticWithoutSource);
         if (!errors.isEmpty()) {
             throw new IOException("Could not parse " + file + ": " + String.join("; ", errors));
         }
+    }
+
+    private static void rejectParseErrors(DiagnosticCollector<JavaFileObject> diagnostics) throws IOException {
+        List<String> errors = errorDiagnostics(diagnostics, TestConventionTest::diagnosticWithSource);
+        if (!errors.isEmpty()) {
+            throw new IOException("Could not parse Java test sources: " + String.join("; ", errors));
+        }
+    }
+
+    private static void rejectAnalysisErrors(Path file, DiagnosticCollector<JavaFileObject> diagnostics)
+            throws IOException {
+        List<String> errors = errorDiagnostics(diagnostics, TestConventionTest::diagnosticWithoutSource);
+        if (!errors.isEmpty()) {
+            throw new IOException("Could not analyze " + file + ": " + String.join("; ", errors));
+        }
+    }
+
+    private static void rejectAnalysisErrors(DiagnosticCollector<JavaFileObject> diagnostics) throws IOException {
+        List<String> errors = errorDiagnostics(diagnostics, TestConventionTest::diagnosticWithSource);
+        if (!errors.isEmpty()) {
+            throw new IOException("Could not analyze Java test sources: " + String.join("; ", errors));
+        }
+    }
+
+    private static List<String> errorDiagnostics(
+            DiagnosticCollector<JavaFileObject> diagnostics,
+            Function<Diagnostic<? extends JavaFileObject>, String> formatter) {
+        List<String> errors = new ArrayList<>();
+        for (Diagnostic<? extends JavaFileObject> diagnostic : diagnostics.getDiagnostics()) {
+            if (diagnostic.getKind() == Diagnostic.Kind.ERROR) {
+                errors.add(formatter.apply(diagnostic));
+            }
+        }
+        return List.copyOf(errors);
+    }
+
+    private static String diagnosticWithoutSource(Diagnostic<? extends JavaFileObject> diagnostic) {
+        return "line " + diagnostic.getLineNumber() + ": " + diagnostic.getMessage(Locale.ROOT);
+    }
+
+    private static String diagnosticWithSource(Diagnostic<? extends JavaFileObject> diagnostic) {
+        JavaFileObject source = diagnostic.getSource();
+        String sourceName =
+                source == null ? "unknown source" : Path.of(source.toUri()).toString();
+        return sourceName + ":line " + diagnostic.getLineNumber() + ": " + diagnostic.getMessage(Locale.ROOT);
     }
 
     private static void assertTestSections(
@@ -589,6 +1176,12 @@ final class TestConventionTest {
         return -1;
     }
 
+    private enum AssertJMessageStatus {
+        ABSENT,
+        BLANK_LITERAL,
+        USABLE
+    }
+
     private enum JavaLexicalState {
         CODE,
         BLOCK_COMMENT,
@@ -596,6 +1189,8 @@ final class TestConventionTest {
         CHARACTER,
         TEXT_BLOCK
     }
+
+    private record ParsedJavaFile(Path file, CompilationUnitTree unit, Trees trees, Types types) {}
 
     private record TestMethod(int startLine, int endLine) {}
 }

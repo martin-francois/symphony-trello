@@ -38,9 +38,9 @@ final class WorkspaceManagerTest {
         Workspace second = manager.createForCard("TRELLO-a/b", config);
 
         // then
-        assertThat(first.workspaceKey()).isEqualTo("TRELLO-a_b");
-        assertThat(first.createdNow()).isTrue();
-        assertThat(second.createdNow()).isFalse();
+        Path workspacePath = marker.getParent().toAbsolutePath().normalize();
+        assertThat(first).isEqualTo(new Workspace(workspacePath, "TRELLO-a_b", true));
+        assertThat(second).isEqualTo(new Workspace(workspacePath, "TRELLO-a_b", false));
         assertThat(Files.readString(marker)).contains("created");
     }
 

@@ -25,8 +25,12 @@ final class DiagnosticsTokenHasherTest {
         String secondToken = second.token("private-board-id");
 
         // then
-        assertThat(first.persisted()).isTrue();
-        assertThat(second.persisted()).isTrue();
+        assertThat(first.persisted())
+                .as("the initial load persists a local diagnostics key")
+                .isTrue();
+        assertThat(second.persisted())
+                .as("reloading the local diagnostics key retains persisted-key semantics")
+                .isTrue();
         assertThat(firstToken).isEqualTo(secondToken).hasSize(12);
         assertThat(configDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME))
                 .exists()
@@ -44,7 +48,9 @@ final class DiagnosticsTokenHasherTest {
         String token = hasher.token("private-board-id");
 
         // then
-        assertThat(hasher.persisted()).isFalse();
+        assertThat(hasher.persisted())
+                .as("loadExisting does not create a missing diagnostics key")
+                .isFalse();
         assertThat(token).hasSize(12);
         assertThat(configDir).doesNotExist();
     }
@@ -92,7 +98,9 @@ final class DiagnosticsTokenHasherTest {
         String token = hasher.token("private-board-id");
 
         // then
-        assertThat(hasher.persisted()).isFalse();
+        assertThat(hasher.persisted())
+                .as("an invalid local key falls back to an ephemeral diagnostics key")
+                .isFalse();
         assertThat(token).hasSize(12);
         assertThat(key).content(StandardCharsets.UTF_8).isEqualTo("not-a-valid-key");
     }

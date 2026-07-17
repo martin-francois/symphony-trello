@@ -264,7 +264,9 @@ final class InstallerScriptLifecycleTest {
         assertThat(stop.output())
                 .contains("Stopped WORKFLOW.lifecycle-board.md")
                 .doesNotContain("Stopped WORKFLOW.lifecycle-board.md.");
-        assertThat(processStopsWithin(managedPid, 5)).isTrue();
+        assertThat(processStopsWithin(managedPid, 5))
+                .as("the managed process stops within 5 seconds")
+                .isTrue();
         assertThat(restart.exitCode()).isZero();
         assertThat(restart.output()).contains("Started Symphony for Trello");
         assertThat(uninstall.exitCode()).isZero();
@@ -278,7 +280,9 @@ final class InstallerScriptLifecycleTest {
                 .isLessThan(fakeLogDuringUninstall.indexOf("systemctl --user disable --now symphony-trello.service"));
         assertThat(userService).doesNotExist();
         assertThat(autostartEnvironment).doesNotExist();
-        assertThat(processStopsWithin(restartedManagedPid, 5)).isTrue();
+        assertThat(processStopsWithin(restartedManagedPid, 5))
+                .as("the restarted managed process stops during uninstall within 5 seconds")
+                .isTrue();
         assertThat(installPrefix).doesNotExist();
         assertThat(binDirectory.resolve("symphony-trello")).doesNotExist();
         assertThat(configDirectory).exists();

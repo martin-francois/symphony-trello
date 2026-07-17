@@ -20,28 +20,51 @@ parallel safety. Live end-to-end and deployed-verification rules live in
 
 ## Frameworks
 
-- Use JUnit 6 and AssertJ. Prefer readable AssertJ chains when they improve the failure message.
-- Prefer AssertJ's type-specific assertions over asserting raw booleans from helper APIs when the
-  feature exists. For example, use `assertThat(path).isSymbolicLink().isDirectory()` instead of
+- Use JUnit 6 and AssertJ.
+- Design assertions in this priority order: actionable failure output, readable intent, then fewer
+  chains and less duplication. Prefer one fluent AssertJ chain when it keeps the same subject and
+  every failure still identifies the violated property or element. Keep independent chains when
+  combining them would make a failure less specific.
+- Before retaining repeated `assertThat(...)` roots or repeated element or property traversal, inspect
+  the complete assertion block, resolve the AssertJ version from `pom.xml`, and inspect that version's
+  Javadocs. For example, reconsider multiple assertions that begin from
+  `ctSwitch.getCases().get(0)`. Choose the native assertion that matches the contract:
+  `element`/`elements` for indexed navigation, `singleElement` for exact cardinality,
+  `extracting`/`flatExtracting` for projections, `satisfiesExactly` for ordered per-element
+  requirements, and `zipSatisfy` for paired collections. A new or changed test **MUST NOT** add a
+  custom assertion helper or wrapper solely to shorten or merge chains when AssertJ expresses the
+  expectation directly.
+- Prefer AssertJ's type-specific assertions over asserting raw booleans from helper APIs. For
+  example, use `assertThat(path).isSymbolicLink().isDirectory()` instead of
   `assertThat(Files.isSymbolicLink(path)).isTrue()` followed by
-  `assertThat(Files.isDirectory(path)).isTrue()`. Reserve `isTrue()` and `isFalse()` for values that
-  are already domain booleans or for cases where AssertJ has no clearer assertion.
+  `assertThat(Files.isDirectory(path)).isTrue()`. When AssertJ has no more specific assertion and
+  `isTrue()` or `isFalse()` is necessary, the assertion **MUST** include an actionable invariant or
+  timing description through `as(...)`, `describedAs(...)`, `withFailMessage(...)`, or
+  `overridingErrorMessage(...)`. A domain-boolean variable or helper name does not replace that
+  description; state what must hold or what must happen before the relevant deadline. This applies
+  to attributed AssertJ boolean entry points including standard and soft `assertThat(...)`, BDD
+  `then(...)`, and assumption `assumeThat(...)`/`given(...)` forms; changing the factory spelling
+  does not bypass the convention.
 - Prefer AssertJ's collection, map, path, optional, string, throwable, and type-specific assertions
   over assertion loops, assertion streams, boolean reducers, or collected intermediate values.
-  Reaching for `for`, `.forEach(...)`, `.stream()`, `.allMatch(...)`, `.anyMatch(...)`, or
-  `.map(...).toList()` in a test assertion is a code smell when AssertJ can express the expectation
-  directly with better failure output. Use features such as `extracting`, `flatExtracting`,
+  New or changed Java tests **MUST NOT** introduce Stream pipelines, including pipelines used only
+  to filter, map, or project assertion data. Use features such as `extracting`, `flatExtracting`,
   `filteredOn`, `containsExactly`, `containsExactlyInAnyOrder`, `containsEntry`, `allSatisfy`,
-  `anySatisfy`, `noneSatisfy`, `zipSatisfy`, and `singleElement` where they fit. Keep loops or
-  streams when they are clearer for fixture construction, fake protocol behavior, concurrency
-  orchestration, or another non-assertion purpose; add a short explanation when that intent is not
-  obvious.
+  `anySatisfy`, `noneSatisfy`, `zipSatisfy`, and `singleElement` for assertions. Use an explicit loop
+  when fixture construction, fake protocol behavior, concurrency orchestration, or another
+  non-assertion purpose requires iteration.
 - Use Mockito for mocks. Keep purpose-built fakes only when they model an external protocol, stateful
   fixture, or concurrency behavior more clearly than Mockito stubbing.
-- Prefer parameterized tests with `@MethodSource` for data-driven behavior.
+- Prefer a parameterized test when cases share the same setup, action, and assertion contract, differ
+  only in data, and parameterization removes duplication without obscuring scenario intent. Select
+  the narrowest suitable JUnit source, such as `@ValueSource`, `@CsvSource`, `@EnumSource`, or
+  `@MethodSource`. Give cases meaningful display names when their arguments do not identify the
+  scenario. Keep separate tests when the scenarios represent distinct behavior or need independent
+  failure narratives.
 - Statically import test framework methods everywhere in tests: JUnit assertions and assumptions,
   AssertJ assertions, and Mockito methods such as `assertThat`, `assertThatThrownBy`, `assumeTrue`,
-  `abort`, `mock`, `when`, and `verify`. Do not call them through the class name like
+  `abort`, `mock`, `when`, and `verify`. This repository convention takes precedence over examples
+  that qualify factory methods. Do not call them through the class name like
   `Assumptions.assumeTrue(...)`.
 
 ## Parallel safety
@@ -106,10 +129,14 @@ parallel safety. Live end-to-end and deployed-verification rules live in
 - When two or more tests repeat the same given-scaffolding or differ only in input data, extract a
   shared fixture helper or use a parameterized test instead of copying the block. Keep each test's
   distinctive inputs and assertions visible at the call site; share only the genuinely common setup.
+- When repetition is in assertion navigation rather than setup, apply the native AssertJ guidance
+  above before extracting a helper. Use an assertion helper only when AssertJ cannot express the
+  expectation directly and the helper names a reusable domain contract; do not extract one solely to
+  hide repeated indexing or property traversal.
 - If you catch yourself making the same setup, command-construction, or assertion edit in more than
-  one test, stop and decide whether a parameterized test, scenario record, enum, or helper would make
-  the coupling explicit. Apply that refactor before committing unless the cases truly represent
-  different concepts that should evolve independently.
+  one test, stop and decide whether a native AssertJ assertion, parameterized test, scenario record,
+  enum, or helper would make the coupling explicit. Apply that refactor before committing unless the
+  cases truly represent different concepts that should evolve independently.
 - Before adding a new fake server, CLI command array, workflow/env text block, manifest assertion,
   workflow assertion, or terminal transcript assertion, check
   `src/test/java/ch/fmartin/symphony/trello/testsupport` and existing package-local fixtures for a
