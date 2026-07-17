@@ -2378,10 +2378,12 @@ public final class TrelloBoardSetup {
     }
 
     private static boolean hasDuplicateMatchingOpenListName(String configured, List<String> openListNames) {
-        Map<String, Long> matchingOpenNameCounts = openListNames.stream()
-                .filter(name -> StateNames.normalize(name).equals(StateNames.normalize(configured)))
-                .collect(Collectors.groupingBy(StateNames::normalize, LinkedHashMap::new, Collectors.counting()));
-        return matchingOpenNameCounts.values().stream().anyMatch(count -> count > 1);
+        String normalizedConfigured = StateNames.normalize(configured);
+        return openListNames.stream()
+                        .filter(name -> StateNames.normalize(name).equals(normalizedConfigured))
+                        .limit(2)
+                        .count()
+                > 1;
     }
 
     private static void validateConfiguredList(
