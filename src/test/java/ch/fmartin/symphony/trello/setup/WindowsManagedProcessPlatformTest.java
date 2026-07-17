@@ -65,7 +65,9 @@ final class WindowsManagedProcessPlatformTest {
         boolean appendsToExistingLogs = platform.appendsToExistingLogs();
 
         // then
-        assertThat(appendsToExistingLogs).isFalse();
+        assertThat(appendsToExistingLogs)
+                .as("PowerShell Start-Process rewrites redirected worker logs")
+                .isFalse();
     }
 
     @Test

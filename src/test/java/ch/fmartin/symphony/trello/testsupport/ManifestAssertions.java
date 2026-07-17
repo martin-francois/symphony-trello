@@ -63,12 +63,16 @@ public final class ManifestAssertions {
     }
 
     public ManifestAssertions hasGithubEnabled(String name) {
-        assertThat(board(name).githubEnabled()).isTrue();
+        assertThat(board(name).githubEnabled())
+                .as("GitHub integration for board <%s>", name)
+                .isTrue();
         return this;
     }
 
     public ManifestAssertions hasGithubDisabled(String name) {
-        assertThat(board(name).githubEnabled()).isFalse();
+        assertThat(board(name).githubEnabled())
+                .as("GitHub integration for board <%s>", name)
+                .isFalse();
         return this;
     }
 
@@ -83,12 +87,16 @@ public final class ManifestAssertions {
     }
 
     public ManifestAssertions hasDangerFullAccess(String boardName) {
-        assertThat(board(boardName).dangerFullAccess()).isTrue();
+        assertThat(board(boardName).dangerFullAccess())
+                .as("danger-full-access for board <%s>", boardName)
+                .isTrue();
         return this;
     }
 
     public ManifestAssertions hasNoDangerFullAccess(String boardName) {
-        assertThat(board(boardName).dangerFullAccess()).isFalse();
+        assertThat(board(boardName).dangerFullAccess())
+                .as("danger-full-access for board <%s>", boardName)
+                .isFalse();
         return this;
     }
 

@@ -341,8 +341,7 @@ final class WorkflowConfigEditorTest {
         WorkflowValidation validation = editor.diagnosticsValidation(workflow);
 
         // then
-        assertThat(validation.ok()).isFalse();
-        assertThat(validation.message()).isEqualTo("overlapping tracker list roles");
+        assertThat(validation).isEqualTo(WorkflowValidation.warn("overlapping tracker list roles"));
     }
 
     @Test
@@ -382,10 +381,9 @@ final class WorkflowConfigEditorTest {
         WorkflowValidation validation = editor.validate(board, ignored -> Optional.empty());
 
         // then
-        assertThat(validation.ok()).isFalse();
-        assertThat(validation.message())
-                .contains(
-                        "Workflow tracker list roles overlap for \"Overlap Queue\"", "overlapping tracker list roles");
+        assertThat(validation)
+                .isEqualTo(WorkflowValidation.warn(
+                        "Workflow tracker list roles overlap for \"Overlap Queue\": overlapping tracker list roles"));
     }
 
     @Test
@@ -422,7 +420,7 @@ final class WorkflowConfigEditorTest {
         WorkflowValidation validation = editor.diagnosticsValidation(workflow);
 
         // then
-        assertThat(validation.ok()).isTrue();
+        assertThat(validation).isEqualTo(WorkflowValidation.valid());
     }
 
     @Test
@@ -458,8 +456,7 @@ final class WorkflowConfigEditorTest {
         WorkflowValidation validation = editor.diagnosticsValidation(workflow);
 
         // then
-        assertThat(validation.ok()).isFalse();
-        assertThat(validation.message()).isEqualTo("overlapping tracker list roles");
+        assertThat(validation).isEqualTo(WorkflowValidation.warn("overlapping tracker list roles"));
     }
 
     @Test
@@ -552,8 +549,12 @@ final class WorkflowConfigEditorTest {
         EffectiveConfig config = editor.prepareLaunchWorkflow(workflow, trelloCredentialsAndForcedDanger(), true);
 
         // then
-        assertThat(config.codex().forceDangerFullAccess()).isTrue();
-        assertThat(config.codex().turnSandboxPolicy()).isEqualTo(List.of());
+        assertThat(config.codex())
+                .as("Codex config [forceDangerFullAccess, turnSandboxPolicy]")
+                .extracting(
+                        EffectiveConfig.CodexConfig::forceDangerFullAccess,
+                        EffectiveConfig.CodexConfig::turnSandboxPolicy)
+                .containsExactly(true, List.of());
         assertThat(workflow).content(StandardCharsets.UTF_8).isEqualTo(original);
     }
 
@@ -689,7 +690,7 @@ final class WorkflowConfigEditorTest {
         WorkflowValidation validation = editor.diagnosticsValidation(workflow);
 
         // then
-        assertThat(validation.ok()).isTrue();
+        assertThat(validation).isEqualTo(WorkflowValidation.valid());
     }
 
     private static String workflowWithBody(String body) {

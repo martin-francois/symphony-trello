@@ -95,7 +95,9 @@ final class SetupDiagnosticReporterTest {
                         SetupDiagnosticReporter.shouldReport(new TrelloBoardSetupException(code, "unexpected failure")))
                 .as(code)
                 .isTrue());
-        assertThat(reportsIoFailure).isTrue();
+        assertThat(reportsIoFailure)
+                .as("unexpected I/O failures are reportable diagnostics")
+                .isTrue();
     }
 
     @Test

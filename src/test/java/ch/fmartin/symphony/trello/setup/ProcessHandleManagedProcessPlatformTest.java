@@ -46,8 +46,12 @@ final class ProcessHandleManagedProcessPlatformTest {
                 ProcessHandleManagedProcessPlatform.isManagedCommand(arguments, appHome, Optional.empty());
 
         // then
-        assertThat(workflowMatch).isTrue();
-        assertThat(installMatch).isTrue();
+        assertThat(workflowMatch)
+                .as("the exact workflow-scoped command matches the managed process")
+                .isTrue();
+        assertThat(installMatch)
+                .as("the exact install-scoped command matches the managed process")
+                .isTrue();
     }
 
     @Test
@@ -65,8 +69,12 @@ final class ProcessHandleManagedProcessPlatformTest {
                 otherWorkflowArguments, appHome, Optional.of(workflow));
 
         // then
-        assertThat(installPrefixMatch).isFalse();
-        assertThat(workflowPrefixMatch).isFalse();
+        assertThat(installPrefixMatch)
+                .as("an install-path prefix does not match the managed process")
+                .isFalse();
+        assertThat(workflowPrefixMatch)
+                .as("a workflow-path prefix does not match the managed process")
+                .isFalse();
     }
 
     private static List<String> javaArguments(Path appHome, Path workflow) {

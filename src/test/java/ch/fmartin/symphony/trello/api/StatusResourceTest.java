@@ -33,10 +33,10 @@ final class StatusResourceTest {
                 StatusResource.class.getConstructor(SymphonyOrchestrator.class, Clock.class);
 
         // when
-        boolean hasInjectAnnotation = constructor.isAnnotationPresent(Inject.class);
+        Inject annotation = constructor.getAnnotation(Inject.class);
 
         // then
-        assertThat(hasInjectAnnotation).isTrue();
+        assertThat(annotation).as("@Inject on the production constructor").isNotNull();
     }
 
     @Test

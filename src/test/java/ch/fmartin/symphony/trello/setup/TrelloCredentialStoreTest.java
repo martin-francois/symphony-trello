@@ -51,7 +51,10 @@ final class TrelloCredentialStoreTest {
                 store.loadOrPrompt(options, env, new RecordingTerminal());
 
         // then
-        assertThat(credentials.persist()).isFalse();
+        assertThat(credentials)
+                .isEqualTo(new TrelloCredentialStore.CredentialSelection(
+                        TrelloCredentialStore.CredentialValue.environment("env-key"),
+                        TrelloCredentialStore.CredentialValue.environment("env-token")));
         assertThat(env).doesNotExist();
     }
 
@@ -67,10 +70,10 @@ final class TrelloCredentialStoreTest {
                 new TrelloCredentialStore(Map.of()).loadOrPrompt(options, env, new RecordingTerminal());
 
         // then
-        assertThat(credentials.persist()).isFalse();
-        assertThat(credentials.credentials())
-                .extracting(TrelloBoardSetup.TrelloCredentials::apiKey, TrelloBoardSetup.TrelloCredentials::apiToken)
-                .containsExactly("dotenv-key", "dotenv-token");
+        assertThat(credentials)
+                .isEqualTo(new TrelloCredentialStore.CredentialSelection(
+                        TrelloCredentialStore.CredentialValue.dotenv("dotenv-key"),
+                        TrelloCredentialStore.CredentialValue.dotenv("dotenv-token")));
     }
 
     @Test

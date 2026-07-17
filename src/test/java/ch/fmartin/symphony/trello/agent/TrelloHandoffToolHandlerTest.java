@@ -30,6 +30,7 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sun.net.httpserver.HttpExchange;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -65,6 +66,8 @@ final class TrelloHandoffToolHandlerTest {
     private static final String NO_BREAK_SPACE = "\u00A0";
     private static final String NUL_IN_USAGE_MESSAGE = "\u0000";
     private static final String ROCKET_EMOJI = "\uD83D\uDE80";
+    private static final JsonNode SUCCESS_NODE = JsonNodeFactory.instance.booleanNode(true);
+    private static final JsonNode FAILURE_NODE = JsonNodeFactory.instance.booleanNode(false);
 
     private final ObjectMapper json = new ObjectMapper();
     private final AtomicReference<String> commentText = new AtomicReference<>();
@@ -264,7 +267,7 @@ final class TrelloHandoffToolHandlerTest {
                         .set("arguments", json.createObjectNode().put("text", "Ready for review")));
 
         // then
-        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
         assertThat(commentText.get()).isEqualTo("Ready for review");
     }
 
@@ -284,7 +287,7 @@ final class TrelloHandoffToolHandlerTest {
                                 json.createObjectNode().put("text", "- #2076: Fixed\nSee #2077 for follow-up")));
 
         // then
-        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
         assertThat(commentText.get()).isEqualTo("- \\#2076: Fixed\nSee #2077 for follow-up");
     }
 
@@ -297,7 +300,7 @@ final class TrelloHandoffToolHandlerTest {
         var result = upsertChecklistItem(handler, config(List.of("Review"), List.of()));
 
         // then
-        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains("checklist_item_created", "card-1", "checklist-created", "item-created");
         assertThat(createdChecklistName.get()).isEqualTo("Release tasks");
@@ -329,7 +332,7 @@ final class TrelloHandoffToolHandlerTest {
         var result = upsertChecklistItem(handler, config(List.of("Review"), List.of()));
 
         // then
-        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains("checklist_item_updated", "card-1", "checklist-existing", "item-existing");
         assertThat(updatedChecklistItemState.get()).isEqualTo("complete");
@@ -345,7 +348,7 @@ final class TrelloHandoffToolHandlerTest {
         var result = upsertChecklistItem(handler, configWithChecklistAndAttachmentWrites(false, true));
 
         // then
-        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText()).contains("trello_checklists_disabled");
         assertThat(checklistRequests).isEmpty();
         assertThat(createdChecklistName.get()).isNull();
@@ -369,7 +372,7 @@ final class TrelloHandoffToolHandlerTest {
                                         .put("item_name", "Publish release")));
 
         // then
-        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText()).contains("complete");
         assertThat(checklistRequests).isEmpty();
         assertThat(createdChecklistName.get()).isNull();
@@ -389,7 +392,7 @@ final class TrelloHandoffToolHandlerTest {
                 json.createObjectNode().put("tool", tool).set("arguments", arguments));
 
         // then
-        assertThat(result.path("success").asBoolean()).as(scenario).isFalse();
+        assertThat(result.path("success")).as("%s success field", scenario).isEqualTo(FAILURE_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains("Argument " + argumentName + " must be a string");
         assertThat(commentText.get()).isNull();
@@ -418,7 +421,7 @@ final class TrelloHandoffToolHandlerTest {
                                         .put("name", "Pull request")));
 
         // then
-        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains("url_attachment_added", "card-1", "attachment-1");
         assertThat(attachmentUrl.get()).isEqualTo("https://github.com/example/project/pull/12");
@@ -444,7 +447,7 @@ final class TrelloHandoffToolHandlerTest {
                                         .put("name", "Pull request")));
 
         // then
-        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains("trello_unknown_payload")
                 .doesNotContain("url_attachment_added");
@@ -468,7 +471,7 @@ final class TrelloHandoffToolHandlerTest {
                                 json.createObjectNode().put("url", "https://github.com/example/project/pull/12")));
 
         // then
-        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains("trello_url_attachments_disabled");
         assertThat(attachmentUrl.get()).isNull();
@@ -525,7 +528,7 @@ final class TrelloHandoffToolHandlerTest {
                         .set("arguments", json.createObjectNode().put("text", "- Plan: inspect the failure")));
 
         // then
-        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText()).contains("workpad_created");
         assertThat(commentText.get()).startsWith(TrelloHandoffToolHandler.WORKPAD_MARKER);
         assertThat(updatedCommentText.get()).isNull();
@@ -549,7 +552,7 @@ final class TrelloHandoffToolHandlerTest {
                                         .put("text", "## Codex Workpad\n\n#2076: Fixed\n- #2077: Follow-up")));
 
         // then
-        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
         assertThat(commentText.get()).isEqualTo("## Codex Workpad\n\n\\#2076: Fixed\n- \\#2077: Follow-up");
     }
 
@@ -566,7 +569,7 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode result = updateBlockerRecheckStatus(handler, "checking");
 
         // then
-        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
         assertThat(commentText.get())
                 .startsWith("Checking whether this card is still blocked...")
                 .contains("_Managed by Symphony · [View the comment explaining why this card was previously blocked](")
@@ -585,7 +588,7 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode result = updateBlockerRecheckStatus(handler, "checking", configWithComments(false));
 
         // then
-        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains("trello_comments_disabled")
                 .doesNotContain("trello_blocker_recheck_refresh_failed");
@@ -602,7 +605,7 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode result = updateBlockerRecheckStatus(handler, "checking");
 
         // then
-        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains("trello_blocker_recheck_card_missing");
         assertNoManagedCommentMutation();
@@ -618,7 +621,7 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode result = updateBlockerRecheckStatus(handler, "checking");
 
         // then
-        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains("trello_blocker_recheck_refresh_failed");
         assertNoManagedCommentMutation();
@@ -636,7 +639,7 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode result = updateBlockerRecheckStatus(handler, "checking");
 
         // then
-        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
         assertThat(commentText.get()).contains(CHECKING_STATUS);
     }
 
@@ -650,7 +653,7 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode result = updateBlockerRecheckStatus(handler, "checking");
 
         // then
-        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
         assertThat(commentText.get()).contains(CHECKING_STATUS);
     }
 
@@ -709,7 +712,7 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode result = updateBlockerRecheckStatus(handler, "resumed");
 
         // then
-        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText()).contains("resumed_work_confirmed");
         assertThat(updatedCommentText.get())
                 .contains("No longer blocked; working on Implement #20.")
@@ -729,7 +732,7 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode result = updateBlockerRecheckStatus(handler, "resumed");
 
         // then
-        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains("trello_blocker_recheck_not_started");
         assertThat(commentText.get()).isNull();
@@ -749,7 +752,7 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode result = updateBlockerRecheckStatus(handler, "resumed");
 
         // then
-        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText()).contains("trello_blocker_recheck_stale");
         assertThat(updatedCommentText.get()).isNull();
         assertThat(commentText.get()).isNull();
@@ -766,7 +769,7 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode result = updateBlockerRecheckStatus(handler, "checking");
 
         // then
-        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText()).contains("blocker_recheck_not_needed");
         assertThat(commentText.get()).isNull();
         assertThat(updatedCommentText.get()).isNull();
@@ -787,7 +790,7 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode result = updateBlockerRecheckStatus(handler, "checking");
 
         // then
-        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
         assertThat(commentText.get()).contains(CHECKING_STATUS, "#comment-" + BLOCKER_ACTION_ID);
     }
 
@@ -887,7 +890,7 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode result = updateBlockerRecheckStatus(handler, "checking");
 
         // then
-        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
         assertThat(updatedCommentText.get())
                 .contains(CHECKING_STATUS, "#comment-action-blocker-new")
                 .doesNotContain("No longer blocked");
@@ -904,7 +907,7 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode result = updateBlockerRecheckStatus(handler, "checking");
 
         // then
-        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains("trello_blocker_recheck_comment_window_incomplete");
         assertThat(commentText.get()).isNull();
@@ -920,7 +923,7 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode result = updateBlockerRecheckStatus(handler, "checking");
 
         // then
-        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains("trello_blocker_recheck_missing_source_id");
         assertThat(commentText.get()).isNull();
@@ -938,7 +941,7 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode result = updateBlockerRecheckStatus(handler, "checking");
 
         // then
-        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains("trello_blocker_recheck_missing_action_id");
         assertThat(commentText.get()).isNull();
@@ -958,7 +961,7 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode result = updateBlockerRecheckStatus(handler, "checking");
 
         // then
-        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains("\"action_id\":\"action-blocker-recheck-older\"", "\"duplicate_statuses_found\":\"1\"");
         assertThat(updatedCommentText.get()).contains(TrelloHandoffToolHandler.DUPLICATE_BLOCKER_RECHECK_NOTE_PREFIX);
@@ -974,7 +977,7 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode result = updateBlockerRecheckStatus(handler, "complete");
 
         // then
-        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText()).contains("invalid_blocker_recheck_status");
         assertThat(commentText.get()).isNull();
         assertThat(updatedCommentText.get()).isNull();
@@ -1038,7 +1041,7 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode result = updateBlockerRecheckStatus(handler, "checking", configWithDestructiveOperations());
 
         // then
-        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
         assertThat(deletedActionIds).isEmpty();
         assertThat(commentText.get()).isNull();
     }
@@ -1058,7 +1061,7 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode result = updateBlockerRecheckStatus(handler, "checking", configWithDestructiveOperations());
 
         // then
-        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains("\"duplicate_statuses_delete_failed\":\"1\"", "delete_failed");
         assertThat(deletedActionIds).isEmpty();
@@ -1198,7 +1201,7 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode result = updateBlockerRecheckStatus(handler, "resumed");
 
         // then
-        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
         String visibleStatus = resumedStatusLine(updatedCommentText.get());
         String summary = visibleStatus.substring(RESUMED_STATUS_PREFIX.length());
         assertThat(summary.codePointCount(0, summary.length())).isLessThanOrEqualTo(120);
@@ -1279,7 +1282,7 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode result = upsertWorkpad(handler);
 
         // then
-        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains("workpad_updated", "\"duplicate_workpads_cleanup_status\":\"not_needed\"");
         assertThat(updatedCommentText.get()).isEqualTo("## Codex Workpad\n\nUpdated plan");
@@ -1304,12 +1307,14 @@ final class TrelloHandoffToolHandlerTest {
         boolean orchestratorCleanup = handler.updateCodexUsageSection(config, "card-1", null);
 
         // then
-        assertThat(agentUpdate.path("success").asBoolean()).isTrue();
+        assertThat(agentUpdate.path("success")).isEqualTo(SUCCESS_NODE);
         assertThat(preserved)
                 .contains("Updated agent plan", paused)
                 .doesNotContain("Old agent plan")
                 .containsOnlyOnce(CodexUsageWorkpadSection.START_MARKER);
-        assertThat(orchestratorCleanup).isTrue();
+        assertThat(orchestratorCleanup)
+                .as("orchestrator cleanup removes the managed usage section")
+                .isTrue();
         assertThat(updatedCommentText.get()).isEqualTo("## Codex Workpad\n\nUpdated agent plan");
     }
 
@@ -1327,7 +1332,7 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode result = upsertWorkpad(handler, "## Codex Workpad\n\nUpdated agent plan\n\n" + forged);
 
         // then
-        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains("trello_workpad_managed_section_forbidden");
         assertThat(cardFetchCount).hasValue(0);
@@ -1346,7 +1351,7 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode result = upsertWorkpad(handler, "## Codex Workpad\n\nAgent plan\n\n" + forged);
 
         // then
-        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains("trello_workpad_managed_section_forbidden");
         assertThat(cardFetchCount).hasValue(0);
@@ -1367,7 +1372,7 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode result = upsertWorkpad(handler, "## Codex Workpad\n\nUpdated agent plan");
 
         // then
-        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
         assertThat(updatedCommentText.get())
                 .contains("Updated agent plan", paused)
                 .containsOnlyOnce(CodexUsageWorkpadSection.START_MARKER)
@@ -1396,7 +1401,7 @@ final class TrelloHandoffToolHandlerTest {
                                         .put("text", "## Codex Workpad\n\nUpdated agent plan\n\n" + forged)));
 
         // then
-        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains("trello_workpad_managed_section_forbidden");
         assertThat(cardFetchCount).hasValue(0);
@@ -1416,7 +1421,7 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode result = upsertWorkpad(handler, malformed);
 
         // then
-        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains("trello_workpad_managed_section_malformed");
         assertThat(cardFetchCount).hasValue(0);
@@ -1439,7 +1444,7 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode result = upsertWorkpad(handler, "## Codex Workpad\n\nAgent plan\n\n" + hiddenForgedSection);
 
         // then
-        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains("trello_workpad_managed_section_forbidden");
         assertThat(cardFetchCount).hasValue(0);
@@ -1458,7 +1463,7 @@ final class TrelloHandoffToolHandlerTest {
                 upsertWorkpad(handler, "## Codex Workpad\n\nAgent plan\n\n" + CodexUsageWorkpadSection.END_MARKER);
 
         // then
-        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains("trello_workpad_managed_section_malformed");
         assertThat(cardFetchCount).hasValue(0);
@@ -1485,10 +1490,12 @@ final class TrelloHandoffToolHandlerTest {
         boolean orchestratorResult = handler.updateCodexUsageSection(config, "card-1", paused);
 
         // then
-        assertThat(agentResult.path("success").asBoolean()).isFalse();
+        assertThat(agentResult.path("success")).isEqualTo(FAILURE_NODE);
         assertThat(agentResult.path("contentItems").get(0).path("text").asText())
                 .contains("trello_workpad_managed_section_malformed");
-        assertThat(orchestratorResult).isFalse();
+        assertThat(orchestratorResult)
+                .as("a malformed older workpad prevents orchestrator cleanup")
+                .isFalse();
         assertThat(updatedCommentText.get()).isNull();
         assertThat(deletedActionIds).isEmpty();
         assertThat(managedCommentCallOrder).isEmpty();
@@ -1516,10 +1523,12 @@ final class TrelloHandoffToolHandlerTest {
         boolean orchestratorResult = handler.updateCodexUsageSection(config, "card-1", null);
 
         // then
-        assertThat(agentResult.path("success").asBoolean()).isFalse();
+        assertThat(agentResult.path("success")).isEqualTo(FAILURE_NODE);
         assertThat(agentResult.path("contentItems").get(0).path("text").asText())
                 .contains("trello_workpad_managed_section_ambiguous");
-        assertThat(orchestratorResult).isFalse();
+        assertThat(orchestratorResult)
+                .as("ambiguous managed sections prevent orchestrator cleanup")
+                .isFalse();
         assertThat(updatedCommentText.get()).isNull();
         assertThat(deletedActionIds).isEmpty();
         assertThat(managedCommentCallOrder).isEmpty();
@@ -1544,7 +1553,7 @@ final class TrelloHandoffToolHandlerTest {
                         .set("arguments", json.createObjectNode().put("text", "## Codex Workpad\n\nUpdated plan")));
 
         // then
-        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
         assertThat(updatedCommentText.get())
                 .contains("Updated plan", paused)
                 .containsOnlyOnce(CodexUsageWorkpadSection.START_MARKER);
@@ -1572,7 +1581,7 @@ final class TrelloHandoffToolHandlerTest {
         String rolledBackPrimary = updatedCommentText.get();
 
         // then
-        assertThat(firstResult.path("success").asBoolean()).isFalse();
+        assertThat(firstResult.path("success")).isEqualTo(FAILURE_NODE);
         assertThat(firstResult.path("contentItems").get(0).path("text").asText())
                 .contains("trello_workpad_managed_section_cleanup_failed");
         assertThat(rolledBackPrimary).isEqualTo("## Codex Workpad\n\nNewest plan");
@@ -1592,7 +1601,7 @@ final class TrelloHandoffToolHandlerTest {
                         .set("arguments", json.createObjectNode().put("text", "## Codex Workpad\n\nRetry plan")));
 
         // then the managed section is transferred and its former owner is removed
-        assertThat(retryResult.path("success").asBoolean()).isTrue();
+        assertThat(retryResult.path("success")).isEqualTo(SUCCESS_NODE);
         assertThat(updatedCommentText.get())
                 .contains("Retry plan", paused)
                 .containsOnlyOnce(CodexUsageWorkpadSection.START_MARKER);
@@ -1613,7 +1622,7 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode result = upsertWorkpad(handler, "## Codex Workpad\n\nUpdated plan");
 
         // then
-        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains("trello_workpad_managed_section_non_primary");
         assertThat(updatedCommentText.get()).isNull();
@@ -1635,7 +1644,9 @@ final class TrelloHandoffToolHandlerTest {
         boolean result = handler.updateCodexUsageSection(config(List.of("Review"), List.of()), "card-1", null);
 
         // then
-        assertThat(result).isFalse();
+        assertThat(result)
+                .as("cleanup defers while an older workpad owns the managed section")
+                .isFalse();
         assertThat(updatedCommentText.get()).isNull();
         assertThat(deletedActionIds).isEmpty();
         assertThat(managedCommentCallOrder).isEmpty();
@@ -1651,7 +1662,7 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode result = upsertWorkpad(handler);
 
         // then
-        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains(
                         "action-workpad",
@@ -1703,7 +1714,7 @@ final class TrelloHandoffToolHandlerTest {
                                         .put("text", "## Codex Workpad\n\nUpdated plan\n\n" + echoedNote)));
 
         // then
-        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
         assertThat(updatedCommentText.get())
                 .as("a stale echoed cleanup note must not survive once the duplicates are gone")
                 .isEqualTo("## Codex Workpad\n\nUpdated plan");
@@ -1719,7 +1730,7 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode result = upsertWorkpadWithDestructiveOperations(handler);
 
         // then
-        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains(
                         "action-workpad",
@@ -1748,7 +1759,7 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode result = upsertWorkpadWithDestructiveOperations(handler);
 
         // then
-        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
         assertThat(deletedActionIds)
                 .as("a failed authoritative update must leave every workpad in place")
                 .isEmpty();
@@ -1770,7 +1781,7 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode result = upsertWorkpadWithDestructiveOperations(handler);
 
         // then
-        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains(
                         "workpad_updated",
@@ -1792,7 +1803,7 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode result = upsertWorkpadWithDestructiveOperations(handler);
 
         // then
-        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains(
                         "action-workpad",
@@ -1838,7 +1849,7 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode result = upsertWorkpadWithDestructiveOperations(handler);
 
         // then
-        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains(
                         "\"duplicate_workpads_found\":\"2\"",
@@ -1875,7 +1886,7 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode result = upsertWorkpadWithDestructiveOperations(handler);
 
         // then
-        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains("trello_workpad_missing_action_id");
         assertThat(deletedActionIds).isEmpty();
@@ -1957,7 +1968,7 @@ final class TrelloHandoffToolHandlerTest {
                         .set("arguments", json.createObjectNode().put("text", "Updated plan")));
 
         // then
-        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText()).contains("trello_workpad_refresh_failed");
         assertThat(commentText.get()).isNull();
         assertThat(updatedCommentText.get()).isNull();
@@ -1978,7 +1989,7 @@ final class TrelloHandoffToolHandlerTest {
                         .set("arguments", json.createObjectNode().put("text", "New plan")));
 
         // then
-        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains("trello_workpad_comment_window_incomplete");
         assertThat(commentText.get()).isNull();
@@ -1997,7 +2008,9 @@ final class TrelloHandoffToolHandlerTest {
         boolean updated = handler.updateCodexUsageSection(config(List.of("Review"), List.of()), "card-1", section);
 
         // then
-        assertThat(updated).isTrue();
+        assertThat(updated)
+                .as("the usage-limit update creates the authoritative managed workpad")
+                .isTrue();
         assertThat(commentText.get())
                 .startsWith(TrelloHandoffToolHandler.WORKPAD_MARKER)
                 .contains(
@@ -2059,8 +2072,10 @@ final class TrelloHandoffToolHandlerTest {
         JsonNode blockerUpdated = updateBlockerRecheckStatus(handler, "resumed", config);
 
         // then
-        assertThat(usageUpdated).isTrue();
-        assertThat(blockerUpdated.path("success").asBoolean()).isTrue();
+        assertThat(usageUpdated)
+                .as("the usage section update succeeds before blocker confirmation")
+                .isTrue();
+        assertThat(blockerUpdated.path("success")).isEqualTo(SUCCESS_NODE);
         assertThat(blockerUpdated.path("contentItems").get(0).path("text").asText())
                 .contains("resumed_work_confirmed");
         assertThat(writes).extracting(Card.Comment::id).containsExactly("action-workpad", BLOCKER_RECHECK_ACTION_ID);
@@ -2097,7 +2112,9 @@ final class TrelloHandoffToolHandlerTest {
                 CodexUsageWorkpadSection.paused(oversizedMessage, Instant.parse("2026-07-10T13:00:00Z")));
 
         // then
-        assertThat(updated).isTrue();
+        assertThat(updated)
+                .as("the bounded usage message is written to the managed workpad")
+                .isTrue();
         assertThat(commentText.get())
                 .contains("- Message: " + "x".repeat(497) + "...\n")
                 .doesNotContain("x".repeat(498));
@@ -2127,7 +2144,9 @@ final class TrelloHandoffToolHandlerTest {
                 CodexUsageWorkpadSection.paused(unsafeMessage, Instant.parse("2026-07-10T13:00:00Z")));
 
         // then
-        assertThat(updated).isTrue();
+        assertThat(updated)
+                .as("the sanitized usage message is written to the managed workpad")
+                .isTrue();
         assertThat(commentText.get())
                 .contains("- Message: alpha beta gamma delta evil tail \\&#x202e;entity \\&NewLine;break \\&lrm;mark\n")
                 .doesNotContain(
@@ -2153,7 +2172,7 @@ final class TrelloHandoffToolHandlerTest {
         cardResponse.set(cardJsonWithWorkpad(pausedWorkpad));
         updatedCommentText.set(null);
         boolean unchanged = handler.updateCodexUsageSection(config, "card-1", paused);
-        boolean skippedIdenticalWrite = updatedCommentText.get() == null;
+        String unexpectedIdenticalWrite = updatedCommentText.get();
         boolean rechecking = handler.updateCodexUsageSection(
                 config, "card-1", CodexUsageWorkpadSection.rechecking("Usage is unavailable."));
         String recheckingWorkpad = updatedCommentText.get();
@@ -2161,18 +2180,26 @@ final class TrelloHandoffToolHandlerTest {
         boolean removed = handler.updateCodexUsageSection(config, "card-1", null);
 
         // then
-        assertThat(created).isTrue();
+        assertThat(created)
+                .as("the first pause update creates the managed usage section")
+                .isTrue();
         assertThat(pausedWorkpad)
                 .contains("- User plan: keep this.", "Paused after Codex reported a usage limit.")
                 .containsOnlyOnce(CodexUsageWorkpadSection.START_MARKER);
-        assertThat(unchanged).isTrue();
-        assertThat(skippedIdenticalWrite).isTrue();
-        assertThat(rechecking).isTrue();
+        assertThat(unchanged)
+                .as("reapplying an identical pause update succeeds idempotently")
+                .isTrue();
+        assertThat(unexpectedIdenticalWrite)
+                .as("identical managed content does not trigger a Trello write")
+                .isNull();
+        assertThat(rechecking)
+                .as("the recheck update replaces the paused usage section")
+                .isTrue();
         assertThat(recheckingWorkpad)
                 .contains("- User plan: keep this.", "Rechecking Codex usage availability.")
                 .doesNotContain("Paused after Codex reported a usage limit.")
                 .containsOnlyOnce(CodexUsageWorkpadSection.START_MARKER);
-        assertThat(removed).isTrue();
+        assertThat(removed).as("cleanup removes only the managed usage section").isTrue();
         assertThat(updatedCommentText.get()).isEqualTo(original);
     }
 
@@ -2201,7 +2228,9 @@ final class TrelloHandoffToolHandlerTest {
             String value = invocation.getArgument(2);
             if (firstUpdate.compareAndSet(true, false)) {
                 firstUpdateEntered.countDown();
-                assertThat(releaseFirstUpdate.await(5, TimeUnit.SECONDS)).isTrue();
+                assertThat(releaseFirstUpdate.await(5, TimeUnit.SECONDS))
+                        .as("the test releases the first workpad update within 5 seconds")
+                        .isTrue();
             }
             writes.add(value);
             currentCard.set(cardWithSingleWorkpad(value));
@@ -2216,7 +2245,9 @@ final class TrelloHandoffToolHandlerTest {
                 json.createObjectNode()
                         .put("tool", TrelloHandoffToolHandler.UPSERT_WORKPAD)
                         .set("arguments", json.createObjectNode().put("text", agentText))));
-        assertThat(firstUpdateEntered.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(firstUpdateEntered.await(5, TimeUnit.SECONDS))
+                .as("the first workpad update reaches the serialized write within 5 seconds")
+                .isTrue();
 
         // when
         CompletableFuture<Boolean> usageUpdate =
@@ -2225,9 +2256,15 @@ final class TrelloHandoffToolHandlerTest {
         releaseFirstUpdate.countDown();
 
         // then
-        assertThat(agentUpdate.get(5, TimeUnit.SECONDS).path("success").asBoolean())
-                .isTrue();
-        assertThat(usageUpdate.get(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(agentUpdate)
+                .as("the serialized agent workpad update")
+                .succeedsWithin(Duration.ofSeconds(5))
+                .extracting(result -> result.path("success"))
+                .isEqualTo(SUCCESS_NODE);
+        assertThat(usageUpdate)
+                .as("the concurrent usage update completes successfully within 5 seconds")
+                .succeedsWithin(Duration.ofSeconds(5))
+                .isEqualTo(true);
         assertThat(secondFetchOvertookFirstWrite)
                 .as("the second read must wait until the first read-modify-write has completed")
                 .isFalse();
@@ -2259,11 +2296,15 @@ final class TrelloHandoffToolHandlerTest {
         assertThat(scenario).isNotBlank();
         assertThat(removed).isEqualTo(malformedWorkpad);
         assertThat(upserted).isEqualTo(malformedWorkpad);
-        assertThat(agentUpsert.path("success").asBoolean()).isFalse();
+        assertThat(agentUpsert.path("success")).isEqualTo(FAILURE_NODE);
         assertThat(agentUpsert.path("contentItems").get(0).path("text").asText())
                 .contains("trello_workpad_managed_section_malformed");
-        assertThat(pauseUpdated).isFalse();
-        assertThat(cleanupUpdated).isFalse();
+        assertThat(pauseUpdated)
+                .as("a malformed managed section prevents the pause mutation")
+                .isFalse();
+        assertThat(cleanupUpdated)
+                .as("a malformed managed section prevents the cleanup mutation")
+                .isFalse();
         assertThat(updatedCommentText.get()).isNull();
         assertThat(commentText.get()).isNull();
         assertThat(managedCommentCallOrder).isEmpty();
@@ -2295,9 +2336,13 @@ final class TrelloHandoffToolHandlerTest {
         String cleanedWorkpad = updatedCommentText.get();
 
         // then
-        assertThat(paused).isTrue();
-        assertThat(rechecking).isTrue();
-        assertThat(cleaned).isTrue();
+        assertThat(paused)
+                .as("the initial duplicate-workpad pause update succeeds")
+                .isTrue();
+        assertThat(rechecking)
+                .as("the duplicate-workpad recheck update succeeds")
+                .isTrue();
+        assertThat(cleaned).as("the duplicate-workpad cleanup update succeeds").isTrue();
         assertThat(List.of(pausedWorkpad, recheckingWorkpad, cleanedWorkpad)).allSatisfy(workpad -> {
             assertThat(workpad)
                     .contains("- Human plan: keep this.")
@@ -2323,7 +2368,9 @@ final class TrelloHandoffToolHandlerTest {
                 CodexUsageWorkpadSection.paused("Usage is unavailable.", Instant.parse("2026-07-10T13:00:00Z")));
 
         // then
-        assertThat(updated).isFalse();
+        assertThat(updated)
+                .as("an incomplete comment window prevents workpad creation")
+                .isFalse();
         assertThat(commentText.get()).isNull();
         assertThat(updatedCommentText.get()).isNull();
     }
@@ -2338,7 +2385,9 @@ final class TrelloHandoffToolHandlerTest {
         boolean updated = handler.updateCodexUsageSection(config(List.of("Review"), List.of()), "card-1", null);
 
         // then
-        assertThat(updated).isFalse();
+        assertThat(updated)
+                .as("a full comment window prevents potentially destructive cleanup")
+                .isFalse();
         assertThat(commentText.get()).isNull();
         assertThat(updatedCommentText.get()).isNull();
         assertThat(managedCommentCallOrder).isEmpty();
@@ -2357,7 +2406,9 @@ final class TrelloHandoffToolHandlerTest {
                 CodexUsageWorkpadSection.paused("Usage is unavailable.", Instant.parse("2026-07-10T13:00:00Z")));
 
         // then
-        assertThat(updated).isFalse();
+        assertThat(updated)
+                .as("an incomplete comment window prevents managed-section insertion")
+                .isFalse();
         assertThat(commentText.get()).isNull();
         assertThat(updatedCommentText.get()).isNull();
         assertThat(managedCommentCallOrder).isEmpty();
@@ -2373,7 +2424,9 @@ final class TrelloHandoffToolHandlerTest {
         boolean updated = handler.updateCodexUsageSection(config(List.of("Review"), List.of()), "card-1", null);
 
         // then
-        assertThat(updated).isFalse();
+        assertThat(updated)
+                .as("an incomplete comment window prevents managed-section cleanup")
+                .isFalse();
         assertThat(commentText.get()).isNull();
         assertThat(updatedCommentText.get()).isNull();
         assertThat(managedCommentCallOrder).isEmpty();
@@ -2391,7 +2444,9 @@ final class TrelloHandoffToolHandlerTest {
                 CodexUsageWorkpadSection.paused("Usage is unavailable.", Instant.parse("2026-07-10T13:00:00Z")));
 
         // then
-        assertThat(updated).isFalse();
+        assertThat(updated)
+                .as("disabled Trello writes prevent workpad I/O mutations")
+                .isFalse();
         assertThat(commentText.get()).isNull();
         assertThat(updatedCommentText.get()).isNull();
     }
@@ -2408,7 +2463,9 @@ final class TrelloHandoffToolHandlerTest {
                 CodexUsageWorkpadSection.paused("Usage is unavailable.", Instant.parse("2026-07-10T13:00:00Z")));
 
         // then
-        assertThat(updated).isFalse();
+        assertThat(updated)
+                .as("disabled comment writes prevent workpad I/O mutations")
+                .isFalse();
         assertThat(commentText.get()).isNull();
         assertThat(updatedCommentText.get()).isNull();
     }
@@ -2427,7 +2484,7 @@ final class TrelloHandoffToolHandlerTest {
                         .set("arguments", json.createObjectNode().put("list_name", "Review")));
 
         // then
-        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
         assertThat(movedToListId.get()).isEqualTo("list-review");
     }
 
@@ -2449,7 +2506,7 @@ final class TrelloHandoffToolHandlerTest {
                         .set("arguments", json.createObjectNode().put("list_name", "Review")));
 
         // then
-        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains("trello_move_not_allowed", "matches multiple open Trello lists", "list_id");
         assertThat(movedToListId.get()).isNull();
@@ -2464,7 +2521,7 @@ final class TrelloHandoffToolHandlerTest {
         var result = moveToListId(handler, "list-review");
 
         // then
-        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
         assertThat(movedToListId.get()).isEqualTo("list-review");
     }
 
@@ -2481,7 +2538,7 @@ final class TrelloHandoffToolHandlerTest {
         var result = moveToListId(handler, "list-review");
 
         // then
-        assertThat(result.path("success").asBoolean()).isTrue();
+        assertThat(result.path("success")).isEqualTo(SUCCESS_NODE);
         assertThat(movedToListId.get()).isEqualTo("list-review");
     }
 
@@ -2503,7 +2560,7 @@ final class TrelloHandoffToolHandlerTest {
                         .set("arguments", json.createObjectNode().put("list_id", "list-review")));
 
         // then
-        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains("trello_move_not_allowed", "matches multiple open Trello lists", "exact list_id");
         assertThat(movedToListId.get()).isNull();
@@ -2523,7 +2580,7 @@ final class TrelloHandoffToolHandlerTest {
                         .set("arguments", json.createObjectNode().put("list_name", "Review")));
 
         // then
-        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText()).contains("trello_move_not_allowed");
         assertThat(movedToListId.get()).isNull();
     }
@@ -2736,7 +2793,7 @@ final class TrelloHandoffToolHandlerTest {
     }
 
     private void assertUnsafeUrlAttachmentRejected(ObjectNode result) {
-        assertThat(result.path("success").asBoolean()).isFalse();
+        assertThat(result.path("success")).isEqualTo(FAILURE_NODE);
         assertThat(result.path("contentItems").get(0).path("text").asText())
                 .contains("invalid_url_attachment")
                 .doesNotContain("token")

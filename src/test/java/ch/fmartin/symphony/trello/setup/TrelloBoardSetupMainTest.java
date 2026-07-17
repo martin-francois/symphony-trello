@@ -7447,7 +7447,9 @@ final class TrelloBoardSetupMainTest {
 
     private static void writeExecutable(Path path, String content) throws IOException {
         Files.writeString(path, content, StandardCharsets.UTF_8);
-        assertThat(path.toFile().setExecutable(true)).isTrue();
+        assertThat(path.toFile().setExecutable(true))
+                .as("the generated helper script is executable")
+                .isTrue();
     }
 
     private static String javaExecutable() {
