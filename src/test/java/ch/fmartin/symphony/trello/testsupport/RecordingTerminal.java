@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
+import java.util.Collections;
 import java.util.Queue;
 
 public final class RecordingTerminal implements Terminal {
@@ -16,9 +17,7 @@ public final class RecordingTerminal implements Terminal {
     private final PrintStream err = new PrintStream(stderr, true, StandardCharsets.UTF_8);
 
     public RecordingTerminal(String... input) {
-        for (String line : input) {
-            this.input.add(line);
-        }
+        Collections.addAll(this.input, input);
     }
 
     @Override

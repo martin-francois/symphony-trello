@@ -3,6 +3,7 @@ package ch.fmartin.symphony.trello.testsupport;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
+import java.util.Objects;
 
 public record SetupRunResult(int exitCode, String stdout, String stderr) {
     public SetupRunResult assertSuccess() {
@@ -46,13 +47,8 @@ public record SetupRunResult(int exitCode, String stdout, String stderr) {
     }
 
     public SetupRunResult stdoutContainsSubsequence(String... expectedLinesOrFragments) {
-        int cursor = 0;
-        for (String expected : expectedLinesOrFragments) {
-            int next = stdout.indexOf(expected, cursor);
-            assertThat(next)
-                    .as("stdout fragment %s appears after offset %s", expected, cursor)
-                    .isGreaterThanOrEqualTo(cursor);
-            cursor = next + expected.length();
+        if (expectedLinesOrFragments.length > 0) {
+            assertThat(Objects.requireNonNull(stdout)).containsSubsequence(expectedLinesOrFragments);
         }
         return this;
     }
