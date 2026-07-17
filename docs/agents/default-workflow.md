@@ -46,11 +46,17 @@ commit and open pull requests. Topic-specific rules live in the pages linked und
   seeing that tradeoff. Do not leave unrelated committed work unpublished on a local branch; push and
   create or update the selected pull request, or push `main` only when the user chose that path.
 - Update documentation and ADRs when behavior, setup, architecture, or tradeoffs change.
-- Before finishing a task where you made or explained a deliberate design tradeoff, run an explicit
-  ADR check: if the choice would be costly for a future maintainer to rediscover, add or update the
-  ADR in the same change without waiting for the user to ask. Treat a user having to ask for an ADR
-  after the fact as evidence that the agent-doc trigger was too weak; strengthen or move the
-  relevant guidance before finishing.
+- Treat the ADR check as a decision gate, not as handoff cleanup. As soon as a task selects among
+  meaningful alternatives or rejects a plausible approach, stop before implementing, committing, or
+  publishing the chosen path and apply
+  [Specification & ADR discipline](specification-and-adr-discipline.md). This includes choosing an
+  external action, library, or tool instead of repository-owned code, or the reverse. Put the
+  required ADR in the same change. An implementation, pull-request description, checklist, review
+  reply, research note, commit message, or chat summary does not satisfy that requirement. Before
+  the first commit or push, review the conversation, research, and diff for considered alternatives
+  and verify that every qualifying decision has a tracked ADR. Treat a user having to ask for an ADR
+  after the fact as evidence that the trigger was too weak; strengthen or move the relevant
+  guidance before finishing.
 - Before finishing code that is not self-explanatory, make the meaning or rationale explicit. Prefer
   a named variable, constant, method, type, or helper when the name can carry the explanation. Use a
   short comment or Javadoc when naming cannot express a local constraint clearly. If the reason is a
