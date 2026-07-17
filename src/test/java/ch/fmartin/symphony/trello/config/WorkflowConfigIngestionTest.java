@@ -64,10 +64,14 @@ final class WorkflowConfigIngestionTest {
         TypedWorkflowConfig config = WorkflowConfigIngestion.collect(workflow, ignored -> Optional.empty());
 
         // then
-        assertThat(config.serverPort().present()).isTrue();
-        assertThat(config.localServerPortSetting().diagnosticsCell()).isEqualTo("invalid");
-        assertThat(config.serverPortClassification().kind())
-                .isEqualTo(WorkflowServerPortClassification.Kind.INVALID_VALUE);
+        assertThat(config.serverPort()).isEqualTo(new WorkflowIntegerSetting(Optional.empty(), Optional.empty(), true));
+        assertThat(config.localServerPortSetting())
+                .isEqualTo(WorkflowIntegerSetting.invalid(WorkflowConfigFinding.strict(
+                        "server.port",
+                        WorkflowConfigFinding.Kind.NOT_A_NUMBER,
+                        "",
+                        "server.port must be a whole number")));
+        assertThat(config.serverPortClassification()).isEqualTo(WorkflowServerPortClassification.invalidValue());
     }
 
     @Test
@@ -83,9 +87,8 @@ final class WorkflowConfigIngestionTest {
                 frontMatter, ignored -> Optional.empty(), WorkflowConfigIngestion.UnresolvedEnvironmentPolicy.OMIT);
 
         // then
-        assertThat(omitted)
-                .hasValueSatisfying(
-                        config -> assertThat(config.serverPort().present()).isFalse());
+        assertThat(omitted).hasValueSatisfying(config -> assertThat(config.serverPort())
+                .isEqualTo(WorkflowIntegerSetting.omitted()));
         assertThatThrownBy(() -> WorkflowConfigIngestion.collectFrontMatter(
                         frontMatter,
                         ignored -> Optional.empty(),

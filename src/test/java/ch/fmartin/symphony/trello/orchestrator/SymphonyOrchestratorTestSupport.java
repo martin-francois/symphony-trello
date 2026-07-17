@@ -97,7 +97,9 @@ final class SymphonyOrchestratorTestSupport {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
             requests.put(request.config().codex().command(), request);
             workersStarted.countDown();
-            assertThat(releaseWorkers.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(releaseWorkers.await(5, TimeUnit.SECONDS))
+                    .as("the concurrent-command workers should be released within 5 seconds")
+                    .isTrue();
             return AgentRunResult.ok();
         });
         SymphonyOrchestrator orchestrator = orchestrator(
@@ -138,7 +140,9 @@ final class SymphonyOrchestratorTestSupport {
             AgentRunner.AgentRunRequest request)
             throws InterruptedException {
         workerBStarted.countDown();
-        assertThat(releaseWorkerB.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(releaseWorkerB.await(5, TimeUnit.SECONDS))
+                .as("the board B worker should be released within 5 seconds")
+                .isTrue();
         tracker.setCardState(
                 endpoint,
                 "board-b",
@@ -871,7 +875,9 @@ final class SymphonyOrchestratorTestSupport {
         public List<Card> fetchTerminalCards(EffectiveConfig config) {
             terminalFetchStarted.countDown();
             try {
-                assertThat(releaseTerminalFetch.await(5, TimeUnit.SECONDS)).isTrue();
+                assertThat(releaseTerminalFetch.await(5, TimeUnit.SECONDS))
+                        .as("the blocked terminal-card fetch should be released within 5 seconds")
+                        .isTrue();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new AssertionError(e);
@@ -900,7 +906,9 @@ final class SymphonyOrchestratorTestSupport {
             if (candidateFetches.incrementAndGet() == 1) {
                 firstFetchStarted.countDown();
                 try {
-                    assertThat(releaseFirstFetch.await(5, TimeUnit.SECONDS)).isTrue();
+                    assertThat(releaseFirstFetch.await(5, TimeUnit.SECONDS))
+                            .as("the first blocked candidate-card fetch should be released within 5 seconds")
+                            .isTrue();
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     throw new AssertionError(e);

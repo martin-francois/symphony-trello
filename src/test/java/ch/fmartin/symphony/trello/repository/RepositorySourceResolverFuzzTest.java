@@ -13,12 +13,14 @@ import com.code_intelligence.jazzer.mutation.annotation.WithUtf8Length;
 import java.net.URI;
 import java.time.Instant;
 import java.util.List;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.junit.jupiter.params.provider.MethodSource;
 
 final class RepositorySourceResolverFuzzTest {
     private static final EffectiveConfig.RepositoryConfig NO_DEFAULT = new EffectiveConfig.RepositoryConfig(null, null);
     private static final String LINE_SEPARATOR = Character.toString(UNICODE_LINE_SEPARATOR);
+    private static final Pattern UNSAFE_PROMPT_LINE_CHARACTER = Pattern.compile("[\\p{javaISOControl}\\p{Zl}\\p{Zp}]");
 
     private final RepositorySourceResolver resolver = new RepositorySourceResolver();
 
@@ -110,21 +112,21 @@ final class RepositorySourceResolverFuzzTest {
 
     private static void assertProblemFitsPromptBoundaries(RepositorySourceProblem problem) {
         assertThat(problem.code()).isNotBlank();
-        assertThat(safePromptLine(problem.code())).isTrue();
+        assertSafePromptLine(problem.code(), "problem code");
         assertThat(problem.guidance()).isNotBlank();
-        assertThat(safePromptLine(problem.guidance())).isTrue();
+        assertSafePromptLine(problem.guidance(), "problem guidance");
     }
 
     private static void assertSourceFitsPromptBoundaries(RepositorySource source) {
         assertThat(source.value()).isNotBlank();
-        assertThat(safePromptLine(source.value())).isTrue();
+        assertSafePromptLine(source.value(), "repository source value");
         if (source.identity() != null) {
-            assertThat(safePromptLine(source.identity().host())).isTrue();
-            assertThat(safePromptLine(source.identity().repositoryPath())).isTrue();
-            assertThat(safePromptLine(source.identity().key())).isTrue();
+            assertSafePromptLine(source.identity().host(), "repository identity host");
+            assertSafePromptLine(source.identity().repositoryPath(), "repository identity path");
+            assertSafePromptLine(source.identity().key(), "repository identity key");
         }
         if (source.path() != null) {
-            assertThat(safePromptLine(source.path().toString())).isTrue();
+            assertSafePromptLine(source.path().toString(), "repository filesystem path");
         }
     }
 
@@ -134,24 +136,21 @@ final class RepositorySourceResolverFuzzTest {
             return;
         }
         URI uri = URI.create(rawValue.strip());
-        assertThat(safePromptLine(uri.getAuthority())).isTrue();
-        assertThat(safePromptLine(uri.getUserInfo())).isTrue();
-        assertThat(safePromptLine(uri.getPath())).isTrue();
+        assertSafePromptLine(uri.getAuthority(), "selected URI authority");
+        assertSafePromptLine(uri.getUserInfo(), "selected URI user info");
+        assertSafePromptLine(uri.getPath(), "selected URI path");
         assertThat(hasUnusableExplicitPort(uri))
                 .as("selected URI has a usable explicit port")
                 .isFalse();
     }
 
-    private static boolean safePromptLine(String value) {
-        return value == null
-                || value.codePoints().noneMatch(RepositorySourceResolverFuzzTest::unsafePromptLineCharacter);
-    }
-
-    private static boolean unsafePromptLineCharacter(int codePoint) {
-        int type = Character.getType(codePoint);
-        return Character.isISOControl(codePoint)
-                || type == Character.LINE_SEPARATOR
-                || type == Character.PARAGRAPH_SEPARATOR;
+    private static void assertSafePromptLine(String value, String field) {
+        if (value == null) {
+            return;
+        }
+        assertThat(value)
+                .as("%s contains no control or Unicode line-separator code points", field)
+                .doesNotContainPattern(UNSAFE_PROMPT_LINE_CHARACTER);
     }
 
     private static Card cardWithDescription(String description) {

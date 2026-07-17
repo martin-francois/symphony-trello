@@ -1099,9 +1099,13 @@ final class ConfigResolverTest {
         EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
 
         // then
-        assertThat(config.codex().forceDangerFullAccess()).isTrue();
-        assertThat(config.codex().turnSandboxPolicy()).isEqualTo(Map.of("type", "readOnly"));
-        assertThat(config.codex().additionalWritableRoots()).isEmpty();
+        assertThat(config.codex())
+                .as("Codex config [forceDangerFullAccess, turnSandboxPolicy, additionalWritableRoots]")
+                .extracting(
+                        EffectiveConfig.CodexConfig::forceDangerFullAccess,
+                        EffectiveConfig.CodexConfig::turnSandboxPolicy,
+                        EffectiveConfig.CodexConfig::additionalWritableRoots)
+                .containsExactly(true, Map.of("type", "readOnly"), List.of());
     }
 
     @MethodSource("invalidSandboxFallbacksIgnoredWhenDangerFullAccessIsForced")
@@ -1124,8 +1128,12 @@ final class ConfigResolverTest {
         EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
 
         // then
-        assertThat(config.codex().forceDangerFullAccess()).isTrue();
-        assertThat(config.codex().additionalWritableRoots()).isEmpty();
+        assertThat(config.codex())
+                .as("Codex config [forceDangerFullAccess, additionalWritableRoots]")
+                .extracting(
+                        EffectiveConfig.CodexConfig::forceDangerFullAccess,
+                        EffectiveConfig.CodexConfig::additionalWritableRoots)
+                .containsExactly(true, List.of());
     }
 
     @Test
@@ -1167,8 +1175,12 @@ final class ConfigResolverTest {
         EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
 
         // then
-        assertThat(config.codex().forceDangerFullAccess()).isTrue();
-        assertThat(config.codex().turnSandboxPolicy()).isEqualTo(List.of());
+        assertThat(config.codex())
+                .as("Codex config [forceDangerFullAccess, turnSandboxPolicy]")
+                .extracting(
+                        EffectiveConfig.CodexConfig::forceDangerFullAccess,
+                        EffectiveConfig.CodexConfig::turnSandboxPolicy)
+                .containsExactly(true, List.of());
     }
 
     private static Stream<String> invalidSandboxFallbacksIgnoredWhenDangerFullAccessIsForced() {

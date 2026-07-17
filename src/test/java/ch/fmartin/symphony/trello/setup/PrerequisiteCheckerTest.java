@@ -58,6 +58,7 @@ final class PrerequisiteCheckerTest {
 
         // then
         assertThat(prerequisites.readyFor(SetupOptionFactory.options(java.nio.file.Path.of("target"))))
+                .as("GitHub authentication is optional when GitHub mode is not required")
                 .isTrue();
     }
 

@@ -5463,7 +5463,9 @@ final class LocalSetupTest extends LocalSetupFixtureSupport {
         firstResult.assertSuccess();
         // Force a repair by occupying the configured port with a foreign listener.
         try (ServerSocket portBlocker = new ServerSocket(boardPort, 1, InetAddress.getLoopbackAddress())) {
-            assertThat(portBlocker.isBound()).isTrue();
+            assertThat(portBlocker.isBound())
+                    .as("the foreign listener occupies the configured board port")
+                    .isTrue();
             int stalePort = boardPort + 1;
             Path staleWorkflow = tempDir.resolve("config").resolve("WORKFLOW.stale-port.md");
             Files.writeString(

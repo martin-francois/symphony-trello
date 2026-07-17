@@ -24,7 +24,7 @@ final class GitHubConfiguratorTest {
                         SetupOptionFactory.options(Path.of("target/github-auth")), prerequisites(true, true), terminal);
 
         // then
-        assertThat(integration.enabled()).isTrue();
+        assertThat(integration).isEqualTo(GitHubIntegration.ENABLED);
         assertThat(terminal.stdout()).contains("GitHub CLI authenticated", "GitHub integration configured");
     }
 
@@ -47,7 +47,7 @@ final class GitHubConfiguratorTest {
                         terminal);
 
         // then
-        assertThat(integration.enabled()).isTrue();
+        assertThat(integration).isEqualTo(GitHubIntegration.ENABLED);
         assertThat(commands.interactiveCommands()).containsExactly(List.of("gh", "auth", "login"));
     }
 
@@ -90,7 +90,7 @@ final class GitHubConfiguratorTest {
                         terminal);
 
         // then
-        assertThat(integration.enabled()).isTrue();
+        assertThat(integration).isEqualTo(GitHubIntegration.ENABLED);
         assertThat(commands.interactiveCommands())
                 .containsExactly(List.of("bash", "-lc", "apt-get update && apt-get install -y gh"));
         assertThat(terminal.stdout())
@@ -110,7 +110,7 @@ final class GitHubConfiguratorTest {
                 new GitHubConfigurator(new FakeCommandRunner()).resolve(options, prerequisites(false, false), terminal);
 
         // then
-        assertThat(integration.enabled()).isFalse();
+        assertThat(integration).isEqualTo(GitHubIntegration.DISABLED);
         assertThat(terminal.stdout())
                 .contains(
                         "GitHub integration skipped", "curl -fsSL https://symphony-trello.fmartin.ch/install.sh | bash")

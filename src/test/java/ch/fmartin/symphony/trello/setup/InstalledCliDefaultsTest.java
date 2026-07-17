@@ -175,7 +175,9 @@ final class InstalledCliDefaultsTest {
         boolean userOverride = paths.stateHomeFromUserEnvironment();
 
         // then
-        assertThat(userOverride).isTrue();
+        assertThat(userOverride)
+                .as("the user environment overrides the installed state-home default")
+                .isTrue();
     }
 
     private InstalledCliDefaults.InstalledPaths installedPaths() {

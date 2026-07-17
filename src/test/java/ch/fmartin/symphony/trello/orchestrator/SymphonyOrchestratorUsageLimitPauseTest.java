@@ -80,7 +80,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         orchestrator.stop();
 
         // then
-        assertThat(pauseVisibleBeforeTrelloIo).isTrue();
+        assertThat(pauseVisibleBeforeTrelloIo)
+                .as("the fallback usage pause should be visible before worker-exit Trello I/O")
+                .isTrue();
         assertThat(paused.dispatchPause())
                 .isEqualTo(new RuntimeSnapshot.DispatchPause("CODEX_USAGE_LIMIT", now, now.plusSeconds(60)));
         assertThat(paused.retrying()).singleElement().satisfies(retry -> {
@@ -197,10 +199,14 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
             workersStarted.countDown();
             if (request.card().id().equals("card-generic")) {
                 genericRuns.incrementAndGet();
-                assertThat(releaseGeneric.await(5, TimeUnit.SECONDS)).isTrue();
+                assertThat(releaseGeneric.await(5, TimeUnit.SECONDS))
+                        .as("the test should release the generic-failure worker within 5 seconds")
+                        .isTrue();
                 return AgentRunResult.fail("generic failure");
             }
-            assertThat(releaseUsage.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(releaseUsage.await(5, TimeUnit.SECONDS))
+                    .as("the test should release the usage-limited worker within 5 seconds")
+                    .isTrue();
             tracker.setCardState(TestCards.card("card-usage", "TRELLO-usage", "Human Review"));
             return AgentRunResult.codexUsageLimit(
                     "turn_failed: Usage is unavailable.", Optional.of(now.plusSeconds(5)));
@@ -209,7 +215,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
 
         // when
         orchestrator.start();
-        assertThat(workersStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(workersStarted.await(5, TimeUnit.SECONDS))
+                .as("the generic and usage workers should both start within 5 seconds")
+                .isTrue();
         releaseGeneric.countDown();
         waitUntil(() -> containsRetryingCard(orchestrator.snapshot(), "TRELLO-generic")
                 && orchestrator.snapshot().dispatchPause() == null);
@@ -411,10 +419,14 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         tracker.setCardState(card);
         clock.advance(Duration.ofSeconds(60));
         orchestrator.retryNowForTests("card-1");
-        assertThat(probeStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(probeStarted.await(5, TimeUnit.SECONDS))
+                .as("the usage availability probe should start within 5 seconds")
+                .isTrue();
         tracker.setCardState(TestCards.cardWithLabels("card-1", "TRELLO-abc", "In Progress", List.of()));
         orchestrator.tickNowForTests();
-        assertThat(staleExitHandled.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(staleExitHandled.await(5, TimeUnit.SECONDS))
+                .as("both reconciled worker exits should be handled within 5 seconds")
+                .isTrue();
         RuntimeSnapshot rearmed = orchestrator.snapshot();
         tracker.setCardState(card);
         clock.advance(Duration.ofSeconds(60));
@@ -480,11 +492,15 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         waitUntil(() -> orchestrator.snapshot().counts().retrying() == 1);
         clock.advance(Duration.ofSeconds(60));
         orchestrator.retryNowForTests("card-1");
-        assertThat(probeStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(probeStarted.await(5, TimeUnit.SECONDS))
+                .as("the usage probe that will become stale should start within 5 seconds")
+                .isTrue();
         tracker.setCardState(TestCards.card("card-1", "TRELLO-first", "Human Review"));
         tracker.setCandidateList(List.of(second));
         orchestrator.tickNowForTests();
-        assertThat(staleResultReturned.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(staleResultReturned.await(5, TimeUnit.SECONDS))
+                .as("the interrupted stale probe should return its late result within 5 seconds")
+                .isTrue();
         waitUntil(() -> runs.get() == 3 && orchestrator.snapshot().dispatchPause() == null);
         RuntimeSnapshot recovered = orchestrator.snapshot();
         orchestrator.stop();
@@ -549,18 +565,24 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
             workersStarted.countDown();
             if (request.card().id().equals("card-usage")) {
-                assertThat(releaseUsage.await(5, TimeUnit.SECONDS)).isTrue();
+                assertThat(releaseUsage.await(5, TimeUnit.SECONDS))
+                        .as("the test should release the usage-limited worker within 5 seconds")
+                        .isTrue();
                 return AgentRunResult.codexUsageLimit(
                         "turn_failed: Usage is unavailable.", Optional.of(now.plusSeconds(120)));
             }
-            assertThat(releaseGeneric.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(releaseGeneric.await(5, TimeUnit.SECONDS))
+                    .as("the test should release the generic-failure worker within 5 seconds")
+                    .isTrue();
             return AgentRunResult.fail("generic failure");
         });
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner, clock, successfulWorkpadHandler());
 
         // when
         orchestrator.start();
-        assertThat(workersStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(workersStarted.await(5, TimeUnit.SECONDS))
+                .as("the usage and generic workers should both start within 5 seconds")
+                .isTrue();
         releaseUsage.countDown();
         waitUntil(() -> orchestrator.snapshot().dispatchPause() != null);
         releaseGeneric.countDown();
@@ -598,9 +620,13 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
 
         // when
         orchestrator.start();
-        assertThat(workerStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(workerStarted.await(5, TimeUnit.SECONDS))
+                .as("the usage-limited worker should start within 5 seconds before stop")
+                .isTrue();
         orchestrator.stop();
-        assertThat(exitHandled.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(exitHandled.await(5, TimeUnit.SECONDS))
+                .as("the queued worker exit should be handled within 5 seconds after stop")
+                .isTrue();
         RuntimeSnapshot snapshot = orchestrator.snapshot();
 
         // then
@@ -624,19 +650,25 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             workerStarted.countDown();
-            assertThat(releaseWorker.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(releaseWorker.await(5, TimeUnit.SECONDS))
+                    .as("the exceptional worker should be released within 5 seconds")
+                    .isTrue();
             throw new IllegalStateException("agent process exited unexpectedly");
         });
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
 
         // when
         orchestrator.start();
-        assertThat(workerStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(workerStarted.await(5, TimeUnit.SECONDS))
+                .as("the worker that will exit exceptionally should start within 5 seconds")
+                .isTrue();
         tracker.stateFetchHook = () -> {
             if (hookedFetches.incrementAndGet() == 1) {
                 tickFetchStarted.countDown();
                 try {
-                    assertThat(releaseTickFetch.await(5, TimeUnit.SECONDS)).isTrue();
+                    assertThat(releaseTickFetch.await(5, TimeUnit.SECONDS))
+                            .as("the active refresh tracker fetch should be released within 5 seconds")
+                            .isTrue();
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     throw new AssertionError(e);
@@ -646,7 +678,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
             }
         };
         orchestrator.requestRefresh();
-        assertThat(tickFetchStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(tickFetchStarted.await(5, TimeUnit.SECONDS))
+                .as("the refresh tracker fetch should start within 5 seconds")
+                .isTrue();
         releaseWorker.countDown();
 
         // then
@@ -689,7 +723,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
             if (request.card().id().equals("card-running")) {
                 runningWorkerStarted.countDown();
-                assertThat(releaseRunningWorker.await(5, TimeUnit.SECONDS)).isTrue();
+                assertThat(releaseRunningWorker.await(5, TimeUnit.SECONDS))
+                        .as("the already-running worker should be released within 5 seconds")
+                        .isTrue();
                 return AgentRunResult.ok();
             }
             return AgentRunResult.codexUsageLimit(
@@ -699,14 +735,18 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
 
         // when
         orchestrator.start();
-        assertThat(runningWorkerStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(runningWorkerStarted.await(5, TimeUnit.SECONDS))
+                .as("the worker that spans the usage pause should start within 5 seconds")
+                .isTrue();
         waitUntil(() -> orchestrator.snapshot().dispatchPause() != null
                 && containsRetryingCard(orchestrator.snapshot(), "TRELLO-limiter"));
         tracker.stateFetchHook = () -> {
             if (hookedFetches.incrementAndGet() == 1) {
                 tickFetchStarted.countDown();
                 try {
-                    assertThat(releaseTickFetch.await(5, TimeUnit.SECONDS)).isTrue();
+                    assertThat(releaseTickFetch.await(5, TimeUnit.SECONDS))
+                            .as("the active refresh tracker fetch should be released within 5 seconds")
+                            .isTrue();
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     throw new AssertionError(e);
@@ -716,7 +756,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
             }
         };
         orchestrator.requestRefresh();
-        assertThat(tickFetchStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(tickFetchStarted.await(5, TimeUnit.SECONDS))
+                .as("the refresh tracker fetch should start within 5 seconds")
+                .isTrue();
         clock.advance(Duration.ofSeconds(60));
         CompletableFuture<Void> deadline =
                 CompletableFuture.runAsync(() -> orchestrator.dispatchPauseDeadlineNowForTests(now.plusSeconds(60)));
@@ -786,7 +828,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                 return AgentRunResult.codexUsageLimit("turn_failed: Usage is unavailable.", Optional.empty());
             }
             candidateProbeStarted.countDown();
-            assertThat(releaseCandidateProbe.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(releaseCandidateProbe.await(5, TimeUnit.SECONDS))
+                    .as("the controlled candidate probe should be released within 5 seconds")
+                    .isTrue();
             tracker.setCardState(
                     TestCards.card(request.card().id(), request.card().identifier(), "Human Review"));
             return AgentRunResult.ok();
@@ -800,7 +844,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         tracker.setCandidateList(List.of(second));
         clock.advance(Duration.ofSeconds(60));
         orchestrator.dispatchPauseDeadlineNowForTests(now.plusSeconds(60));
-        assertThat(candidateProbeStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(candidateProbeStarted.await(5, TimeUnit.SECONDS))
+                .as("the controlled candidate probe should start within 5 seconds at the usage deadline")
+                .isTrue();
         RuntimeSnapshot probing = orchestrator.snapshot();
         releaseCandidateProbe.countDown();
         waitUntil(() -> orchestrator.snapshot().dispatchPause() == null);
@@ -1037,7 +1083,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                 return AgentRunResult.ok();
             }
             secondWorkerStarted.countDown();
-            assertThat(releaseSecondWorker.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(releaseSecondWorker.await(5, TimeUnit.SECONDS))
+                    .as("the post-restart worker should be released within 5 seconds")
+                    .isTrue();
             tracker.setCardState(TestCards.card("card-1", "TRELLO-abc", "Human Review"));
             return AgentRunResult.ok();
         });
@@ -1057,7 +1105,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                 cleanupAttempts.get() == 1 && orchestrator.snapshot().counts().retrying() == 1);
         clock.advance(Duration.ofSeconds(1));
         orchestrator.retryNowForTests("card-1");
-        assertThat(secondWorkerStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(secondWorkerStarted.await(5, TimeUnit.SECONDS))
+                .as("the post-restart worker should start within 5 seconds after its retry")
+                .isTrue();
         orchestrator.tickNowForTests();
         assertThat(cleanupAttempts).hasValue(1);
         clock.advance(Duration.ofSeconds(59));
@@ -1096,17 +1146,23 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
             workersStarted.countDown();
             if (request.card().id().equals("card-long")) {
-                assertThat(releaseLong.await(5, TimeUnit.SECONDS)).isTrue();
+                assertThat(releaseLong.await(5, TimeUnit.SECONDS))
+                        .as("the worker returning the longer usage pause should be released within 5 seconds")
+                        .isTrue();
                 return AgentRunResult.codexUsageLimit("turn_failed: Long pause.", Optional.of(now.plusSeconds(120)));
             }
-            assertThat(releaseShort.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(releaseShort.await(5, TimeUnit.SECONDS))
+                    .as("the worker returning the shorter usage pause should be released within 5 seconds")
+                    .isTrue();
             return AgentRunResult.codexUsageLimit("turn_failed: Short pause.", Optional.of(now.plusSeconds(60)));
         });
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner, clock, successfulWorkpadHandler());
 
         // when
         orchestrator.start();
-        assertThat(workersStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(workersStarted.await(5, TimeUnit.SECONDS))
+                .as("the long- and short-pause workers should both start within 5 seconds")
+                .isTrue();
         releaseLong.countDown();
         waitUntil(() -> orchestrator.snapshot().dispatchPause() != null);
         verify(runner, never()).cancel(anyString());
@@ -1175,7 +1231,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
             }
             staleCallback.set(CompletableFuture.runAsync(() -> orchestrator.retryNowForTests(cardId, generation)));
             try {
-                assertThat(staleCallbackWaiting.await(5, TimeUnit.SECONDS)).isTrue();
+                assertThat(staleCallbackWaiting.await(5, TimeUnit.SECONDS))
+                        .as("the superseded retry callback should reach its timer wait within 5 seconds")
+                        .isTrue();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new AssertionError(e);
@@ -1227,18 +1285,24 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
             runs.incrementAndGet();
             if (request.card().id().equals("card-late")) {
                 initialWorkersStarted.countDown();
-                assertThat(releaseLateWorker.await(5, TimeUnit.SECONDS)).isTrue();
+                assertThat(releaseLateWorker.await(5, TimeUnit.SECONDS))
+                        .as("the late concurrent usage worker should be released within 5 seconds")
+                        .isTrue();
                 return AgentRunResult.codexUsageLimit(
                         "turn_failed: Later concurrent usage result.", Optional.of(now.plusSeconds(120)));
             }
             if (probeCardRuns.incrementAndGet() == 1) {
                 initialWorkersStarted.countDown();
-                assertThat(releaseInitialProbeCard.await(5, TimeUnit.SECONDS)).isTrue();
+                assertThat(releaseInitialProbeCard.await(5, TimeUnit.SECONDS))
+                        .as("the initial probe-card worker should be released within 5 seconds")
+                        .isTrue();
                 return AgentRunResult.codexUsageLimit(
                         "turn_failed: Initial usage result.", Optional.of(now.plusSeconds(60)));
             }
             availabilityProbeStarted.countDown();
-            assertThat(releaseAvailabilityProbe.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(releaseAvailabilityProbe.await(5, TimeUnit.SECONDS))
+                    .as("the bound availability probe should be released within 5 seconds")
+                    .isTrue();
             tracker.setCardState(TestCards.card("card-probe", "TRELLO-probe", "Human Review"));
             return AgentRunResult.ok();
         });
@@ -1246,12 +1310,16 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
 
         // when
         orchestrator.start();
-        assertThat(initialWorkersStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(initialWorkersStarted.await(5, TimeUnit.SECONDS))
+                .as("the initial probe-card and late-result workers should start within 5 seconds")
+                .isTrue();
         releaseInitialProbeCard.countDown();
         waitUntil(() -> containsRetryingCard(orchestrator.snapshot(), "TRELLO-probe"));
         clock.advance(Duration.ofSeconds(60));
         orchestrator.retryNowForTests("card-probe");
-        assertThat(availabilityProbeStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(availabilityProbeStarted.await(5, TimeUnit.SECONDS))
+                .as("the bound availability probe should start within 5 seconds")
+                .isTrue();
         releaseLateWorker.countDown();
         waitUntil(() -> orchestrator.snapshot().dispatchPause() != null
                 && orchestrator.snapshot().dispatchPause().until().equals(now.plusSeconds(120))
@@ -1341,7 +1409,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
 
         // when
         orchestrator.start();
-        assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(started.await(5, TimeUnit.SECONDS))
+                .as("the worker supplying rate-limit events should start within 5 seconds")
+                .isTrue();
         boolean currentAccepted = request.get()
                 .listener()
                 .onEventAndReportAccepted(rateLimitEvent(
@@ -1359,8 +1429,12 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         RuntimeSnapshot afterStop = orchestrator.snapshot();
 
         // then
-        assertThat(currentAccepted).isTrue();
-        assertThat(staleAccepted).isFalse();
+        assertThat(currentAccepted)
+                .as("a rate-limit event from the current worker should be accepted")
+                .isTrue();
+        assertThat(staleAccepted)
+                .as("a rate-limit event from the stopped worker should be rejected")
+                .isFalse();
         assertThat(whileRunning.rateLimits().toString()).contains("current").doesNotContain("stale");
         assertThat(afterStop.rateLimits().toString()).contains("current").doesNotContain("stale");
     }
@@ -1420,7 +1494,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                 """);
         orchestrator.tickNowForTests();
         RuntimeSnapshot afterReload = orchestrator.snapshot();
-        assertThat(commandBStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(commandBStarted.await(5, TimeUnit.SECONDS))
+                .as("the command B recovery worker should start within 5 seconds after reload")
+                .isTrue();
         orchestrator.stop();
 
         // then
@@ -1467,10 +1543,14 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
             firstWorkersStarted.countDown();
             if (request.card().id().equals("card-generic")) {
                 genericRuns.incrementAndGet();
-                assertThat(releaseGeneric.await(5, TimeUnit.SECONDS)).isTrue();
+                assertThat(releaseGeneric.await(5, TimeUnit.SECONDS))
+                        .as("the command A generic-failure worker should be released within 5 seconds")
+                        .isTrue();
                 return AgentRunResult.fail("generic failure");
             }
-            assertThat(releaseUsage.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(releaseUsage.await(5, TimeUnit.SECONDS))
+                    .as("the command A usage-limited worker should be released within 5 seconds")
+                    .isTrue();
             return AgentRunResult.codexUsageLimit(
                     "turn_failed: Command A is exhausted.", Optional.of(now.plusSeconds(60)));
         });
@@ -1478,7 +1558,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
 
         // when
         orchestrator.start();
-        assertThat(firstWorkersStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(firstWorkersStarted.await(5, TimeUnit.SECONDS))
+                .as("both command A workers should start within 5 seconds")
+                .isTrue();
         releaseGeneric.countDown();
         waitUntil(() -> containsRetryingCard(orchestrator.snapshot(), "TRELLO-generic")
                 && orchestrator.snapshot().dispatchPause() == null);
@@ -1493,7 +1575,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                   max_concurrent_agents: 2
                 """);
         orchestrator.tickNowForTests();
-        assertThat(commandBUsageStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(commandBUsageStarted.await(5, TimeUnit.SECONDS))
+                .as("the command B usage probe should start within 5 seconds after reload")
+                .isTrue();
         RuntimeSnapshot afterReload = orchestrator.snapshot();
         orchestrator.stop();
 
@@ -1578,7 +1662,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                   max_concurrent_agents: 2
                 """);
         scenario.orchestrator().tickNowForTests();
-        assertThat(scenario.workersStarted().await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(scenario.workersStarted().await(5, TimeUnit.SECONDS))
+                .as("the previous- and current-command workers should start within 5 seconds")
+                .isTrue();
         waitUntil(() -> scenario.requests().containsKey("command-b"));
         return scenario.requests().get("command-b");
     }
@@ -1610,7 +1696,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
             if (request.config().codex().command().equals("command-a")) {
                 commandAStarted.countDown();
-                assertThat(releaseCommandA.await(5, TimeUnit.SECONDS)).isTrue();
+                assertThat(releaseCommandA.await(5, TimeUnit.SECONDS))
+                        .as("the previous-command worker should be released within 5 seconds")
+                        .isTrue();
                 return AgentRunResult.codexUsageLimit(
                         "turn_failed: Late command A result.", Optional.of(now.plusSeconds(60)));
             }
@@ -1622,7 +1710,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
 
         // when
         orchestrator.start();
-        assertThat(commandAStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(commandAStarted.await(5, TimeUnit.SECONDS))
+                .as("the previous-command worker should start within 5 seconds")
+                .isTrue();
         rewriteWorkflowWithCommand(workflow, "command-b", "");
         orchestrator.tickNowForTests();
         releaseCommandA.countDown();
@@ -1630,7 +1720,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
                 && orchestrator.snapshot().counts().retrying() == 1);
         RuntimeSnapshot afterLateResult = orchestrator.snapshot();
         orchestrator.retryNowForTests("card-1");
-        assertThat(commandBStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(commandBStarted.await(5, TimeUnit.SECONDS))
+                .as("the current-command retry worker should start within 5 seconds")
+                .isTrue();
         orchestrator.stop();
 
         // then
@@ -1708,7 +1800,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         orchestrator.workerLaunchHookForTests = () -> {
             workerClosureEntered.countDown();
             try {
-                assertThat(releaseWorkerClosure.await(5, TimeUnit.SECONDS)).isTrue();
+                assertThat(releaseWorkerClosure.await(5, TimeUnit.SECONDS))
+                        .as("the queued worker closure should be released within 5 seconds")
+                        .isTrue();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new AssertionError(e);
@@ -1717,7 +1811,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
 
         // when
         orchestrator.start();
-        assertThat(workerClosureEntered.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(workerClosureEntered.await(5, TimeUnit.SECONDS))
+                .as("the queued worker closure should capture its launch config within 5 seconds")
+                .isTrue();
         rewriteWorkflowWithCommand(workflow, "command-b", "");
         orchestrator.tickNowForTests();
         releaseWorkerClosure.countDown();
@@ -1797,7 +1893,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         waitUntil(() -> orchestrator.snapshot().dispatchPause() != null);
         rewriteWorkflowWithCommand(workflow, "command-b", "");
         orchestrator.tickNowForTests();
-        assertThat(commandBReturnedUsage.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(commandBReturnedUsage.await(5, TimeUnit.SECONDS))
+                .as("the command B worker should return its usage result within 5 seconds after reload")
+                .isTrue();
         waitUntil(() -> orchestrator.snapshot().dispatchPause() != null
                 && orchestrator.snapshot().dispatchPause().until().equals(now.plusSeconds(120)));
         orchestrator.stop();
@@ -1840,7 +1938,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         tracker.setCandidates(List.of(boardBCard));
         rewriteWorkflowWithCommandAndBoard(workflow, "command-b", "board-2", "token-b");
         orchestrator.tickNowForTests();
-        assertThat(commandBReturnedUsage.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(commandBReturnedUsage.await(5, TimeUnit.SECONDS))
+                .as("the new-board command B worker should return its usage result within 5 seconds")
+                .isTrue();
         waitUntil(() -> orchestrator.snapshot().dispatchPause() != null
                 && orchestrator.snapshot().dispatchPause().until().equals(now.plusSeconds(120)));
         orchestrator.stop();
@@ -1882,7 +1982,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
 
         // when
         orchestrator.start();
-        assertThat(commandAStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(commandAStarted.await(5, TimeUnit.SECONDS))
+                .as("the command A worker should start within 5 seconds before tracker reload")
+                .isTrue();
         rewriteWorkflowWithTarget(workflow, endpoint, "board-b", "token-b", "command", "work-b");
         orchestrator.tickNowForTests();
         RuntimeSnapshot whileOldWorkerRuns = orchestrator.snapshot();
@@ -1928,7 +2030,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
             requests.add(request);
             if (request.config().tracker().resolvedBoardId().equals("board-a")) {
                 oldTargetStarted.countDown();
-                assertThat(releaseOldTarget.await(5, TimeUnit.SECONDS)).isTrue();
+                assertThat(releaseOldTarget.await(5, TimeUnit.SECONDS))
+                        .as("the old-target worker should be released within 5 seconds")
+                        .isTrue();
                 return AgentRunResult.codexUsageLimit("turn_failed: Late board A usage limit.", Optional.empty());
             }
             newTargetStarted.countDown();
@@ -1942,7 +2046,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
 
         // when
         orchestrator.start();
-        assertThat(oldTargetStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(oldTargetStarted.await(5, TimeUnit.SECONDS))
+                .as("the old-target worker should start within 5 seconds before target reload")
+                .isTrue();
         rewriteWorkflowWithTarget(workflow, endpoint, "board-b", "token-b", "same-command", "work-b", 120_000, 1);
         orchestrator.tickNowForTests();
         tracker.setCandidates(endpoint, "board-b", List.of(cardB));
@@ -1962,7 +2068,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         clock.advance(Duration.ofMinutes(2));
         orchestrator.dispatchPauseDeadlineNowForTests(
                 afterLateUsage.dispatchPause().until());
-        assertThat(newTargetStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(newTargetStarted.await(5, TimeUnit.SECONDS))
+                .as("the current-target availability probe should start within 5 seconds at the pause deadline")
+                .isTrue();
         waitUntil(() -> orchestrator.snapshot().dispatchPause() == null);
         RuntimeSnapshot afterFreshProbe = orchestrator.snapshot();
         orchestrator.stop();
@@ -2009,14 +2117,18 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             oldTargetStarted.countDown();
-            assertThat(releaseOldTarget.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(releaseOldTarget.await(5, TimeUnit.SECONDS))
+                    .as("the old-target worker should be released within 5 seconds")
+                    .isTrue();
             return AgentRunResult.codexUsageLimit("turn_failed: Late board A usage limit.", Optional.empty());
         });
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner, clock, workpads);
 
         // when
         orchestrator.start();
-        assertThat(oldTargetStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(oldTargetStarted.await(5, TimeUnit.SECONDS))
+                .as("the original-target worker should start within 5 seconds before multi-hop rotation")
+                .isTrue();
         orchestrator.stopWorkflowWatcherForTests();
         rewriteWorkflowWithTarget(workflow, endpoint, "board-b", "token-b", "same-command", "work-b", 120_000, 1);
         orchestrator.tickNowForTests();
@@ -2060,14 +2172,18 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         AgentRunner runner = mock();
         when(runner.run(any())).thenAnswer(invocation -> {
             workerStarted.countDown();
-            assertThat(releaseWorker.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(releaseWorker.await(5, TimeUnit.SECONDS))
+                    .as("the same-target worker should be released within 5 seconds")
+                    .isTrue();
             return AgentRunResult.codexUsageLimit("turn_failed: Same target late usage.", Optional.empty());
         });
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner, clock, workpads);
 
         // when
         orchestrator.start();
-        assertThat(workerStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(workerStarted.await(5, TimeUnit.SECONDS))
+                .as("the same-target worker should start within 5 seconds before credential reload")
+                .isTrue();
         rewriteWorkflowWithTarget(workflow, endpoint, "board-a", "token-b", "same-command", "work-b", 120_000, 1);
         orchestrator.tickNowForTests();
         releaseWorker.countDown();
@@ -2117,7 +2233,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
             AgentRunner.AgentRunRequest request = invocation.getArgument(0);
             if (request.config().tracker().apiToken().equals("token-a-old")) {
                 oldTargetStarted.countDown();
-                assertThat(releaseOldTarget.await(5, TimeUnit.SECONDS)).isTrue();
+                assertThat(releaseOldTarget.await(5, TimeUnit.SECONDS))
+                        .as("the old-owner target worker should be released within 5 seconds")
+                        .isTrue();
                 return AgentRunResult.codexUsageLimit("turn_failed: Late A usage.", Optional.empty());
             }
             freshTargetStarted.countDown();
@@ -2131,7 +2249,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
 
         // when
         orchestrator.start();
-        assertThat(oldTargetStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(oldTargetStarted.await(5, TimeUnit.SECONDS))
+                .as("the old-owner target worker should start within 5 seconds before rotation")
+                .isTrue();
         orchestrator.stopWorkflowWatcherForTests();
         rewriteWorkflowWithTarget(workflow, endpoint, "board-b", "token-b", "same-command", "work-b", 120_000, 1);
         orchestrator.tickNowForTests();
@@ -2151,7 +2271,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         tracker.setCandidates(endpoint, "board-a", List.of(freshCard));
         clock.advance(Duration.ofMinutes(3));
         orchestrator.dispatchPauseDeadlineNowForTests(now.plusSeconds(300));
-        assertThat(freshTargetStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(freshTargetStarted.await(5, TimeUnit.SECONDS))
+                .as("the refreshed-target availability probe should start within 5 seconds")
+                .isTrue();
         waitUntil(() -> workpadEvents.contains("card-a-late/token-a-new/180000:clear"));
         RuntimeSnapshot afterRecovery = orchestrator.snapshot();
         orchestrator.stop();
@@ -2331,7 +2453,9 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         tracker.setCandidates(endpointB, "shared-board", List.of(cardB));
         rewriteWorkflowWithTarget(workflow, endpointB, "shared-board", "token-b", "command-b", "work-b");
         orchestrator.tickNowForTests();
-        assertThat(commandBReturnedUsage.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(commandBReturnedUsage.await(5, TimeUnit.SECONDS))
+                .as("the endpoint B worker should return its usage result within 5 seconds")
+                .isTrue();
         waitUntil(() -> orchestrator.snapshot().dispatchPause() != null
                 && orchestrator.snapshot().dispatchPause().until().equals(now.plusSeconds(120)));
         orchestrator.stop();

@@ -293,8 +293,12 @@ final class RepositorySourcePromptTest {
         String prompt = RepositorySourcePrompt.render(selection, repository);
 
         // then
-        assertThat(selection.status()).isEqualTo(RepositorySourceSelection.Status.INVALID_SELECTED);
-        assertThat(selection.invalidWorkflowFallback()).isTrue();
+        assertThat(selection)
+                .isEqualTo(
+                        RepositorySourceSelection.invalidWorkflowFallback(
+                                new RepositorySourceProblem(
+                                        "repository_remote_unsupported",
+                                        "The selected repository remote uses an unsupported transport. Use HTTPS, SSH, SCP-style SSH, or a local checkout path.")));
         assertThat(prompt)
                 .contains("- Status: invalid workflow fallback")
                 .contains("First inspect ordinary Trello card context for exactly one unambiguous repository identity")

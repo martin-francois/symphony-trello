@@ -19,7 +19,9 @@ final class CodexSandboxFlowTest {
                 new CodexSandboxFlow().resolve(SetupOptionFactory.options(Path.of("target/sandbox-no")), terminal);
 
         // then
-        assertThat(dangerFullAccess).isFalse();
+        assertThat(dangerFullAccess)
+                .as("declining the prompt keeps the command and filesystem sandbox enabled")
+                .isFalse();
         assertThat(terminal.stdout())
                 .contains("Codex execution")
                 .contains("Allow Codex to run without its command/filesystem sandbox")
@@ -36,7 +38,9 @@ final class CodexSandboxFlowTest {
                 new CodexSandboxFlow().resolve(SetupOptionFactory.options(Path.of("target/sandbox-yes")), terminal);
 
         // then
-        assertThat(dangerFullAccess).isTrue();
+        assertThat(dangerFullAccess)
+                .as("accepting the prompt enables danger-full-access")
+                .isTrue();
         assertThat(terminal.stdout())
                 .containsSubsequence(
                         "Allow Codex to run without its command/filesystem sandbox",
@@ -54,7 +58,9 @@ final class CodexSandboxFlowTest {
         boolean dangerFullAccess = new CodexSandboxFlow().resolve(options, terminal);
 
         // then
-        assertThat(dangerFullAccess).isTrue();
+        assertThat(dangerFullAccess)
+                .as("the explicit CLI flag enables danger-full-access")
+                .isTrue();
         assertThat(terminal.stdout())
                 .contains("Codex execution", "danger-full-access disables Codex's command/filesystem sandbox")
                 .doesNotContain("[y/N]");
@@ -71,7 +77,9 @@ final class CodexSandboxFlowTest {
         boolean dangerFullAccess = new CodexSandboxFlow().resolve(options, terminal);
 
         // then
-        assertThat(dangerFullAccess).isTrue();
+        assertThat(dangerFullAccess)
+                .as("non-interactive setup preserves the explicit danger-full-access flag")
+                .isTrue();
         assertThat(terminal.stdout()).contains("danger-full-access disables Codex's command/filesystem sandbox");
     }
 }

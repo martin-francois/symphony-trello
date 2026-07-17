@@ -775,8 +775,7 @@ final class LocalAgentRunnerTest {
         runner.cancel("worker-failed-hook");
 
         // then
-        assertThat(result.success()).isFalse();
-        assertThat(result.reason()).contains("Hook before_run failed");
+        assertThat(result).isEqualTo(AgentRunResult.fail("Hook before_run failed: exit_code=9 output=broken\n"));
         verifyNoInteractions(codex);
     }
 
@@ -810,7 +809,9 @@ final class LocalAgentRunnerTest {
                         config,
                         "worker-cancel",
                         event -> {}))));
-        assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(entered.await(5, TimeUnit.SECONDS))
+                .as("the active worker enters its Codex session within 5 seconds")
+                .isTrue();
 
         // when
         runner.cancel("worker-cancel");
@@ -820,8 +821,7 @@ final class LocalAgentRunnerTest {
 
         // then
         assertThat(interrupted).hasValue(true);
-        assertThat(result.get().success()).isFalse();
-        assertThat(result.get().reason()).isEqualTo("interrupted");
+        assertThat(result).hasValue(AgentRunResult.fail("interrupted"));
     }
 
     @Test
@@ -836,7 +836,9 @@ final class LocalAgentRunnerTest {
             Card card = invocation.getArgument(1);
             if (card.id().equals("card-first")) {
                 firstEntered.countDown();
-                assertThat(releaseFirst.await(5, TimeUnit.SECONDS)).isTrue();
+                assertThat(releaseFirst.await(5, TimeUnit.SECONDS))
+                        .as("the test releases the first duplicate-identity worker within 5 seconds")
+                        .isTrue();
                 return AgentRunResult.ok();
             }
             secondEntered.countDown();
@@ -861,7 +863,9 @@ final class LocalAgentRunnerTest {
                         config,
                         "worker-duplicate",
                         event -> {}))));
-        assertThat(firstEntered.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(firstEntered.await(5, TimeUnit.SECONDS))
+                .as("the first duplicate-identity worker starts within 5 seconds")
+                .isTrue();
         Thread second = Thread.ofVirtual()
                 .start(() -> secondResult.set(runner.run(new AgentRunner.AgentRunRequest(
                         TestCards.card("card-second", "TRELLO-duplicate-second", "Ready for Codex"),
@@ -870,7 +874,9 @@ final class LocalAgentRunnerTest {
                         config,
                         "worker-duplicate",
                         event -> {}))));
-        assertThat(secondEntered.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(secondEntered.await(5, TimeUnit.SECONDS))
+                .as("the replacement duplicate-identity worker starts within 5 seconds")
+                .isTrue();
         releaseFirst.countDown();
         assertThat(first.join(Duration.ofSeconds(5)))
                 .as("the superseded duplicate-identity worker terminates within 5 seconds")
@@ -884,7 +890,9 @@ final class LocalAgentRunnerTest {
 
         // then
         assertThat(firstResult).hasValue(AgentRunResult.ok());
-        assertThat(secondInterrupted).isTrue();
+        assertThat(secondInterrupted)
+                .as("cancelling a duplicate identity interrupts the currently registered worker")
+                .isTrue();
         assertThat(secondResult).hasValue(AgentRunResult.fail("interrupted"));
     }
 

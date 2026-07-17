@@ -402,7 +402,9 @@ final class SymphonyOrchestratorTest {
 
         // when
         orchestrator.start();
-        assertThat(workerStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(workerStarted.await(5, TimeUnit.SECONDS))
+                .as("the active worker should start within 5 seconds before idle-card reconciliation")
+                .isTrue();
         waitUntil(() -> tracker.releasedCards.size() == 1);
         RuntimeSnapshot snapshot = orchestrator.snapshot();
         releaseWorker.countDown();
@@ -606,7 +608,9 @@ final class SymphonyOrchestratorTest {
 
         // when
         orchestrator.start();
-        assertThat(tracker.firstFetchStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(tracker.firstFetchStarted.await(5, TimeUnit.SECONDS))
+                .as("the active tick should enter its first tracker fetch within 5 seconds")
+                .isTrue();
         orchestrator.requestRefresh();
         tracker.releaseFirstFetch.countDown();
         waitUntil(() -> tracker.candidateFetches.get() >= 2);
@@ -627,7 +631,9 @@ final class SymphonyOrchestratorTest {
 
         // when
         orchestrator.start();
-        assertThat(tracker.firstFetchStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(tracker.firstFetchStarted.await(5, TimeUnit.SECONDS))
+                .as("the blocked tick should enter its first tracker fetch within 5 seconds")
+                .isTrue();
         CompletableFuture<String> boardId = CompletableFuture.supplyAsync(orchestrator::selectedBoardId);
         CompletableFuture<String> configuredBoardId =
                 CompletableFuture.supplyAsync(orchestrator::selectedConfiguredBoardId);
@@ -704,7 +710,9 @@ final class SymphonyOrchestratorTest {
         orchestrator.tickCompletionHookForTests = tickCompletions::incrementAndGet;
 
         orchestrator.start();
-        assertThat(blockingRun.started().await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(blockingRun.started().await(5, TimeUnit.SECONDS))
+                .as("the agent run should start within 5 seconds before terminal reconciliation")
+                .isTrue();
         int completedTicksBeforeFailure = tickCompletions.get();
         tracker.setCardState(TestCards.card("card-1", "TRELLO-abc", "done"));
 
@@ -752,7 +760,9 @@ final class SymphonyOrchestratorTest {
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
         orchestratorReference.set(orchestrator);
         orchestrator.start();
-        assertThat(agentStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(agentStarted.await(5, TimeUnit.SECONDS))
+                .as("the agent should start within 5 seconds before refresh and stop requests")
+                .isTrue();
         int fetchesBeforeStop = tracker.candidateFetches.get();
 
         // when
@@ -799,7 +809,9 @@ final class SymphonyOrchestratorTest {
         SymphonyOrchestrator orchestrator = orchestrator(workflow, tracker, runner);
         Thread starter = new Thread(orchestrator::start);
         starter.start();
-        assertThat(tracker.terminalFetchStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(tracker.terminalFetchStarted.await(5, TimeUnit.SECONDS))
+                .as("startup should enter terminal-card fetching within 5 seconds")
+                .isTrue();
 
         // when
         CountDownLatch changeAttempted = new CountDownLatch(1);
@@ -807,7 +819,9 @@ final class SymphonyOrchestratorTest {
             changeAttempted.countDown();
             return catchThrowable(() -> orchestrator.setWorkflowPath(tempDir.resolve("WORKFLOW.other.md")));
         });
-        assertThat(changeAttempted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(changeAttempted.await(5, TimeUnit.SECONDS))
+                .as("the concurrent workflow-path change should be attempted within 5 seconds")
+                .isTrue();
         waitForBoundedQuietPeriod(rejection);
         tracker.releaseTerminalFetch.countDown();
         assertThat(starter.join(Duration.ofSeconds(5)))
@@ -999,7 +1013,9 @@ final class SymphonyOrchestratorTest {
 
         // when
         orchestrator.start();
-        assertThat(blockingRun.started().await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(blockingRun.started().await(5, TimeUnit.SECONDS))
+                .as("the accounted agent run should start within 5 seconds before graceful stop")
+                .isTrue();
         clock.advance(Duration.ofSeconds(12));
         orchestrator.stop();
         RuntimeSnapshot stopped = orchestrator.snapshot();
@@ -1106,7 +1122,9 @@ final class SymphonyOrchestratorTest {
 
         // when
         orchestrator.start();
-        assertThat(eventsEmitted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(eventsEmitted.await(5, TimeUnit.SECONDS))
+                .as("the running agent should emit both continuation events within 5 seconds")
+                .isTrue();
         RuntimeSnapshot snapshot = orchestrator.snapshot();
         releaseWorker.countDown();
         orchestrator.stop();
@@ -1227,7 +1245,9 @@ final class SymphonyOrchestratorTest {
 
         // when
         orchestrator.start();
-        assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(started.await(5, TimeUnit.SECONDS))
+                .as("the card worker should start within 5 seconds before its snapshot row is inspected")
+                .isTrue();
         RuntimeSnapshot snapshot = orchestrator.snapshot();
         releaseWorker.countDown();
         orchestrator.stop();
@@ -1380,7 +1400,9 @@ final class SymphonyOrchestratorTest {
 
         // when
         orchestrator.start();
-        assertThat(blockingRun.started().await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(blockingRun.started().await(5, TimeUnit.SECONDS))
+                .as("the card worker should start within 5 seconds before the card leaves the active state")
+                .isTrue();
         tracker.setCandidates(List.of());
         tracker.setCardState(TestCards.card("card-1", "TRELLO-abc", "Review"));
         orchestrator.requestRefresh();
@@ -1430,7 +1452,9 @@ final class SymphonyOrchestratorTest {
 
         // when
         orchestrator.start();
-        assertThat(blockingRun.started().await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(blockingRun.started().await(5, TimeUnit.SECONDS))
+                .as("the card worker should start within 5 seconds before its required label is removed")
+                .isTrue();
         tracker.setCandidates(List.of());
         tracker.setCardState(TestCards.cardWithLabels("card-1", "TRELLO-abc", "In Progress", List.of()));
         orchestrator.requestRefresh();
@@ -1566,7 +1590,9 @@ final class SymphonyOrchestratorTest {
 
         // when
         orchestrator.start();
-        assertThat(blockingRun.started().await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(blockingRun.started().await(5, TimeUnit.SECONDS))
+                .as("the card worker should start within 5 seconds before a non-terminal blocker is added")
+                .isTrue();
         int stateFetchesAfterDispatch = tracker.stateFetches.get();
         tracker.setCardState(TestCards.cardWithBlockers(
                 "card-1",
@@ -1669,7 +1695,9 @@ final class SymphonyOrchestratorTest {
                             boardId.equals("board-a") ? "from A" : "from B"));
             if (boardId.equals("board-a")) {
                 workerAStarted.countDown();
-                assertThat(releaseWorkerA.await(5, TimeUnit.SECONDS)).isTrue();
+                assertThat(releaseWorkerA.await(5, TimeUnit.SECONDS))
+                        .as("the test should release target A's worker within 5 seconds")
+                        .isTrue();
                 return AgentRunResult.fail("old target failed after reload");
             }
             return finishBoardBRun(tracker, endpoint, workerBStarted, releaseWorkerB, request);
@@ -1679,11 +1707,15 @@ final class SymphonyOrchestratorTest {
 
         // when
         orchestrator.start();
-        assertThat(workerAStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(workerAStarted.await(5, TimeUnit.SECONDS))
+                .as("target A's same-ID worker should start within 5 seconds")
+                .isTrue();
         orchestrator.stopWorkflowWatcherForTests();
         rewriteWorkflowWithTarget(workflow, endpoint, "board-b", "token-b", "same-command", "work-b", 60_000, 2);
         orchestrator.tickNowForTests();
-        assertThat(workerBStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(workerBStarted.await(5, TimeUnit.SECONDS))
+                .as("target B's same-ID worker should start within 5 seconds after reload")
+                .isTrue();
         AgentRunner.AgentRunRequest requestA = requests.stream()
                 .filter(request -> request.config().tracker().resolvedBoardId().equals("board-a"))
                 .findFirst()
@@ -1748,7 +1780,9 @@ final class SymphonyOrchestratorTest {
         orchestrator.retryTimerWaitingHookForTests = () -> {
             staleCallbackEntered.countDown();
             try {
-                assertThat(releaseStaleCallback.await(5, TimeUnit.SECONDS)).isTrue();
+                assertThat(releaseStaleCallback.await(5, TimeUnit.SECONDS))
+                        .as("the test should release the stale target callback within 5 seconds")
+                        .isTrue();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new AssertionError(e);
@@ -1760,10 +1794,14 @@ final class SymphonyOrchestratorTest {
         waitUntil(() -> orchestrator.snapshot().counts().retrying() == 1);
         CompletableFuture<Void> staleCallback =
                 CompletableFuture.runAsync(() -> orchestrator.retryNowForTests("shared-card"));
-        assertThat(staleCallbackEntered.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(staleCallbackEntered.await(5, TimeUnit.SECONDS))
+                .as("the stale target retry callback should enter within 5 seconds")
+                .isTrue();
         rewriteWorkflowWithTarget(workflow, endpoint, "board-b", "token-b", "same-command", "work-b");
         orchestrator.tickNowForTests();
-        assertThat(workerBStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(workerBStarted.await(5, TimeUnit.SECONDS))
+                .as("the current target worker should start within 5 seconds while the stale callback is blocked")
+                .isTrue();
         RuntimeSnapshot beforeStaleCallback = orchestrator.snapshot();
         releaseStaleCallback.countDown();
         staleCallback.get(5, TimeUnit.SECONDS);
@@ -1822,11 +1860,15 @@ final class SymphonyOrchestratorTest {
 
         // when
         orchestrator.start();
-        assertThat(workerACompleted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(workerACompleted.await(5, TimeUnit.SECONDS))
+                .as("target A's same-ID worker should complete within 5 seconds")
+                .isTrue();
         waitUntil(() -> orchestrator.snapshot().counts().running() == 0);
         rewriteWorkflowWithTarget(workflow, endpoint, "board-b", "token-b", "same-command", "work-b");
         orchestrator.tickNowForTests();
-        assertThat(workerBStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(workerBStarted.await(5, TimeUnit.SECONDS))
+                .as("target B's same-ID worker should start within 5 seconds after reload")
+                .isTrue();
         CardDebugDetails details = orchestrator.cardDetails("TRELLO-history-b").orElseThrow();
         releaseWorkerB.countDown();
         waitUntil(() -> orchestrator.snapshot().counts().running() == 0);
@@ -1864,7 +1906,9 @@ final class SymphonyOrchestratorTest {
 
         // when
         orchestrator.start();
-        assertThat(workerStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(workerStarted.await(5, TimeUnit.SECONDS))
+                .as("the launch-target worker should start within 5 seconds before workflow reload")
+                .isTrue();
         Path launchWorkspace = tempDir.resolve("work-a/TRELLO-workspace");
         Path reloadedWorkspace = tempDir.resolve("work-b/TRELLO-workspace");
         Files.createDirectories(launchWorkspace);
@@ -1896,7 +1940,9 @@ final class SymphonyOrchestratorTest {
 
         // when
         orchestrator.start();
-        assertThat(blocking.started().await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(blocking.started().await(5, TimeUnit.SECONDS))
+                .as("the launch with an enabled stall timeout should start within 5 seconds")
+                .isTrue();
         rewriteWorkflowWithStallTimeout(workflow, 0);
         clock.advance(Duration.ofSeconds(2));
         orchestrator.tickNowForTests();
@@ -1922,7 +1968,9 @@ final class SymphonyOrchestratorTest {
 
         // when
         orchestrator.start();
-        assertThat(blocking.started().await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(blocking.started().await(5, TimeUnit.SECONDS))
+                .as("the launch with a disabled stall timeout should start within 5 seconds")
+                .isTrue();
         rewriteWorkflowWithStallTimeout(workflow, 1_000);
         clock.advance(Duration.ofSeconds(2));
         orchestrator.tickNowForTests();

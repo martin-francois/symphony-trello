@@ -825,13 +825,11 @@ final class TrelloClientTest {
 
         // then
         assertThat(cards).singleElement().satisfies(card -> {
-            assertThat(card.checklists()).singleElement().satisfies(checklist -> {
-                assertThat(checklist.name()).isEqualTo("Must finish first");
-                assertThat(checklist.items()).singleElement().satisfies(item -> {
-                    assertThat(item.text()).isEqualTo(cardUrl("PREREQ01"));
-                    assertThat(item.complete()).isFalse();
-                });
-            });
+            assertThat(card.checklists())
+                    .containsExactly(new Card.Checklist(
+                            "checklist-1",
+                            "Must finish first",
+                            List.of(new Card.ChecklistItem("item-1", cardUrl("PREREQ01"), false))));
             assertThat(card.blockedBy()).singleElement().satisfies(blocker -> {
                 assertThat(blocker.identifier()).isEqualTo("TRELLO-PREREQ01");
                 assertThat(blocker.state()).isEqualTo("Todo");
@@ -1320,10 +1318,18 @@ final class TrelloClientTest {
                 .toList();
 
         // then
-        assertThat(TrelloClient.isActive(highPriorityReady, config)).isTrue();
-        assertThat(TrelloClient.isTerminal(done, config)).isTrue();
-        assertThat(TrelloClient.isActive(done, config)).isFalse();
-        assertThat(TrelloClient.isActive(outOfScope, config)).isFalse();
+        assertThat(TrelloClient.isActive(highPriorityReady, config))
+                .as("the high-priority ready card is active")
+                .isTrue();
+        assertThat(TrelloClient.isTerminal(done, config))
+                .as("the done card is terminal")
+                .isTrue();
+        assertThat(TrelloClient.isActive(done, config))
+                .as("the done card is not active")
+                .isFalse();
+        assertThat(TrelloClient.isActive(outOfScope, config))
+                .as("the out-of-scope card is not active")
+                .isFalse();
         assertThat(sorted).extracting(Card::identifier).containsExactly("TRELLO-a", "TRELLO-c", "TRELLO-b");
     }
 

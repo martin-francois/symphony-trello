@@ -545,7 +545,9 @@ final class LocalWorkerManagerTest {
                 .thenAnswer(invocation -> {
                     startCalls.incrementAndGet();
                     firstStartEntered.countDown();
-                    assertThat(releaseFirstStart.await(5, TimeUnit.SECONDS)).isTrue();
+                    assertThat(releaseFirstStart.await(5, TimeUnit.SECONDS))
+                            .as("the test releases the first concurrent start within 5 seconds")
+                            .isTrue();
                     return new ManagedProcessHandle(42);
                 });
         when(fixture.healthChecker.waitForSameWorkflow(eq(board), eq(board.serverPort()), any()))
@@ -627,7 +629,9 @@ final class LocalWorkerManagerTest {
 
             // then
             assertThat(startCalls).hasValue(0);
-            assertThat(threadIsWaitingForFileLock(start)).isTrue();
+            assertThat(threadIsWaitingForFileLock(start))
+                    .as("the start thread waits for the external worker lock")
+                    .isTrue();
             lockHolder.getOutputStream().close();
             assertThat(lockHolder.waitFor(Duration.ofSeconds(5)))
                     .as("the external worker-lock holder exits within 5 seconds")
@@ -2470,7 +2474,9 @@ final class LocalWorkerManagerTest {
                 .thenAnswer(invocation -> {
                     stopCalls.incrementAndGet();
                     firstStopEntered.countDown();
-                    assertThat(releaseFirstStop.await(5, TimeUnit.SECONDS)).isTrue();
+                    assertThat(releaseFirstStop.await(5, TimeUnit.SECONDS))
+                            .as("the test releases the first concurrent stop within 5 seconds")
+                            .isTrue();
                     return true;
                 });
 

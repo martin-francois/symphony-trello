@@ -681,12 +681,17 @@ final class TrelloBoardSetupTest {
         assertThat(config.tracker().activeStates()).containsExactly("Ready for Codex", "In Progress", "Merging");
         assertThat(config.tracker().terminalStates())
                 .contains("done", "archived", "archivedlist", "archivedboard", "deleted");
-        assertThat(config.trelloTools().enabled()).isTrue();
-        assertThat(config.trelloTools().allowWrites()).isTrue();
-        assertThat(config.trelloTools().allowedMoveListNames())
-                .containsExactly("in progress", "human review", "blocked", "done");
-        assertThat(config.trelloTools().allowChecklists()).isFalse();
-        assertThat(config.trelloTools().allowUrlAttachments()).isFalse();
+        assertThat(config.trelloTools())
+                .isEqualTo(new EffectiveConfig.TrelloToolsConfig(
+                        true,
+                        true,
+                        List.of(),
+                        List.of("in progress", "human review", "blocked", "done"),
+                        true,
+                        false,
+                        false,
+                        false,
+                        false));
         assertThat(config.polling().interval()).isEqualTo(ConfigDefaults.GENERATED_WORKFLOW_POLLING_INTERVAL);
     }
 
@@ -1115,8 +1120,9 @@ final class TrelloBoardSetupTest {
                 .doesNotContain("required initial `checking` call")
                 .doesNotContain("## Stale Blocker Recheck");
         EffectiveConfig config = resolve(workflow);
-        assertThat(config.trelloTools().enabled()).isFalse();
-        assertThat(config.trelloTools().allowWrites()).isFalse();
+        assertThat(config.trelloTools())
+                .isEqualTo(new EffectiveConfig.TrelloToolsConfig(
+                        false, false, List.of(), List.of(), false, false, false, false, false));
     }
 
     @Test
@@ -1604,8 +1610,17 @@ final class TrelloBoardSetupTest {
         assertThat(config.tracker().activeStates()).containsExactly("Queue for Codex", "Escalated for Codex");
         assertThat(config.tracker().terminalStates())
                 .contains("released", "parked", "archived", "archivedlist", "archivedboard", "deleted");
-        assertThat(config.trelloTools().enabled()).isTrue();
-        assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("review", "needs help", "released");
+        assertThat(config.trelloTools())
+                .isEqualTo(new EffectiveConfig.TrelloToolsConfig(
+                        true,
+                        true,
+                        List.of(),
+                        List.of("review", "needs help", "released"),
+                        true,
+                        false,
+                        false,
+                        false,
+                        false));
         assertThat(config.agent().maxConcurrentAgents()).isEqualTo(2);
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
@@ -1855,9 +1870,9 @@ final class TrelloBoardSetupTest {
 
         // then
         EffectiveConfig config = resolve(workflow);
-        assertThat(config.trelloTools().enabled()).isTrue();
-        assertThat(config.trelloTools().allowWrites()).isTrue();
-        assertThat(config.trelloTools().allowedMoveListNames()).containsExactly("done");
+        assertThat(config.trelloTools())
+                .isEqualTo(new EffectiveConfig.TrelloToolsConfig(
+                        true, true, List.of(), List.of("done"), true, false, false, false, false));
         assertThat(workflow)
                 .content(StandardCharsets.UTF_8)
                 .contains("allowed_move_list_names:")

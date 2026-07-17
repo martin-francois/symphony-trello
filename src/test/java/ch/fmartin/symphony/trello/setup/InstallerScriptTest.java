@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -211,25 +212,25 @@ final class InstallerScriptTest {
                         "refs/heads/not-a-valid-ref");
     }
 
-    @Test
-    void repositoryEnvironmentControlPrefixIsCaseInsensitive() {
+    @CsvSource(
+            delimiter = '|',
+            value = {
+                "SYMPHONY_HOME|true",
+                "sYmPhOnY_future_control|true",
+                "SYMPHONY|false",
+                "NOT_SYMPHONY_CONTROL|false"
+            })
+    @ParameterizedTest(name = "[{index}] {0} is a repository environment control: {1}")
+    void repositoryEnvironmentControlPrefixMatchesCaseInsensitively(String variable, boolean expected) {
         // given
-        String upperCaseControl = "SYMPHONY_HOME";
-        String mixedCaseControl = "sYmPhOnY_future_control";
-        String incompletePrefix = "SYMPHONY";
-        String unrelatedControl = "NOT_SYMPHONY_CONTROL";
 
         // when
-        boolean upperCaseMatches = isRepositoryEnvironmentControl(upperCaseControl);
-        boolean mixedCaseMatches = isRepositoryEnvironmentControl(mixedCaseControl);
-        boolean incompletePrefixMatches = isRepositoryEnvironmentControl(incompletePrefix);
-        boolean unrelatedMatches = isRepositoryEnvironmentControl(unrelatedControl);
+        boolean matches = isRepositoryEnvironmentControl(variable);
 
         // then
-        assertThat(upperCaseMatches).isTrue();
-        assertThat(mixedCaseMatches).isTrue();
-        assertThat(incompletePrefixMatches).isFalse();
-        assertThat(unrelatedMatches).isFalse();
+        assertThat(matches)
+                .as("repository environment-control classification for <%s>", variable)
+                .isEqualTo(expected);
     }
 
     private static Path installerHomeFromDryRunOutput(String output) {
@@ -266,8 +267,13 @@ final class InstallerScriptTest {
         result.assertSuccess();
         List<String> environment = Files.readAllLines(capturedEnvironment, StandardCharsets.UTF_8);
         Path isolatedHome = Path.of(environment.get(0));
-        assertThat(isolatedHome).isAbsolute().doesNotExist();
-        assertThat(isolatedHome.startsWith(Path.of("").toAbsolutePath())).isFalse();
+        Path repositoryRoot = Path.of("").toAbsolutePath();
+        assertThat(isolatedHome)
+                .isAbsolute()
+                .doesNotExist()
+                .doesNotMatch(
+                        path -> path.startsWith(repositoryRoot),
+                        "path under repository working tree <%s>".formatted(repositoryRoot));
         if (System.getProperty("os.name", "").equalsIgnoreCase("Linux")) {
             assertThat(environment.get(1)).isEqualTo("Linux");
             assertThat(environment.get(2)).isEqualTo("debian");
@@ -324,8 +330,13 @@ final class InstallerScriptTest {
         // then
         result.assertSuccess();
         Path isolatedHome = Path.of(result.output());
-        assertThat(isolatedHome).isAbsolute().doesNotExist();
-        assertThat(isolatedHome.startsWith(Path.of("").toAbsolutePath())).isFalse();
+        Path repositoryRoot = Path.of("").toAbsolutePath();
+        assertThat(isolatedHome)
+                .isAbsolute()
+                .doesNotExist()
+                .doesNotMatch(
+                        path -> path.startsWith(repositoryRoot),
+                        "path under repository working tree <%s>".formatted(repositoryRoot));
     }
 
     @Test
@@ -3330,7 +3341,7 @@ final class InstallerScriptTest {
         // then
         assertThat(result.exitCode()).as(result.output()).isEqualTo(2);
         assertThat(result.output()).contains("--prefix must not be a symlink.").doesNotContain("REMOVE  " + symlinkApp);
-        assertThat(Files.isSymbolicLink(symlinkApp)).isTrue();
+        assertThat(symlinkApp).isSymbolicLink();
         assertThat(targetApp.resolve(".symphony-trello-install")).exists();
     }
 
@@ -4675,7 +4686,9 @@ final class InstallerScriptTest {
                         .formatted(pathLine);
         Path shellProfile = home.resolve(".bashrc");
         Files.writeString(shellProfile, profile, StandardCharsets.UTF_8);
-        assertThat(shellProfile.toFile().setWritable(false, false)).isTrue();
+        assertThat(shellProfile.toFile().setWritable(false, false))
+                .as("the profile is made non-writable for the cleanup-failure scenario")
+                .isTrue();
         assumeFalse(Files.isWritable(shellProfile));
         Map<String, String> environment = Map.of(
                 "HOME", home.toString(),
@@ -4719,7 +4732,9 @@ final class InstallerScriptTest {
                         .formatted(pathLine);
         Path shellProfile = home.resolve(".bashrc");
         Files.writeString(shellProfile, profile, StandardCharsets.UTF_8);
-        assertThat(shellProfile.toFile().setReadable(false, false)).isTrue();
+        assertThat(shellProfile.toFile().setReadable(false, false))
+                .as("the profile is made unreadable for the cleanup-failure scenario")
+                .isTrue();
 
         // when
         ProcessResult result = run(
@@ -8320,7 +8335,9 @@ final class InstallerScriptTest {
         assertThat(logs.exitCode()).as(logs.output()).isEqualTo(124);
         assertThat(stop.output()).contains("Stopped WORKFLOW.relative.md");
         assertThat(uninstall.exitCode()).isZero();
-        assertThat(processStopsWithin(managedPid, 5)).isTrue();
+        assertThat(processStopsWithin(managedPid, 5))
+                .as("the relative-workflow managed process stops within 5 seconds")
+                .isTrue();
         assertThat(fakeLog)
                 .content()
                 .contains(
