@@ -57,6 +57,37 @@ final class StatusResourceTest {
     }
 
     @Test
+    void rendersRunningRowsInSnapshotOrderAndHandlesAnEmptyList() {
+        // given
+        RuntimeSnapshot base = snapshotWithRunningCard();
+        RuntimeSnapshot.RunningRow first = base.running().getFirst();
+        RuntimeSnapshot.RunningRow second = new RuntimeSnapshot.RunningRow(
+                "card-2",
+                "TRELLO-second",
+                "https://trello.com/c/SYNTH003",
+                "Ready",
+                "thread-second",
+                1,
+                "turn/completed",
+                "done",
+                Instant.parse("2026-05-05T00:00:04Z"),
+                Instant.parse("2026-05-05T00:00:05Z"),
+                Map.of());
+        SymphonyOrchestrator orchestrator = mock();
+        when(orchestrator.snapshot())
+                .thenReturn(withRunningRows(base, List.of(second, first)), withRunningRows(base, List.of()));
+        var resource = new StatusResource(orchestrator);
+
+        // when
+        String orderedHtml = resource.index();
+        String emptyHtml = resource.index();
+
+        // then
+        assertThat(orderedHtml).containsSubsequence("TRELLO-second", "TRELLO-&lt;abc&gt;");
+        assertThat(emptyHtml).contains("<tbody></tbody>");
+    }
+
+    @Test
     void statusBannerDoesNotRenderRateLimitAccountProviderOrCommandDetails() {
         // given
         RuntimeSnapshot base = snapshotWithRunningCard();
@@ -242,5 +273,18 @@ final class StatusResourceTest {
                 new RuntimeSnapshot.DispatchPause(
                         "CODEX_<USAGE>&", Instant.parse("2026-05-05T00:00:03Z"), Instant.parse("2026-05-05T01:00:00Z")),
                 null);
+    }
+
+    private static RuntimeSnapshot withRunningRows(
+            RuntimeSnapshot snapshot, List<RuntimeSnapshot.RunningRow> runningRows) {
+        return new RuntimeSnapshot(
+                snapshot.generatedAt(),
+                new RuntimeSnapshot.Counts(runningRows.size(), snapshot.counts().retrying()),
+                snapshot.routing(),
+                runningRows,
+                snapshot.retrying(),
+                snapshot.codexTotals(),
+                snapshot.dispatchPause(),
+                snapshot.rateLimits());
     }
 }
