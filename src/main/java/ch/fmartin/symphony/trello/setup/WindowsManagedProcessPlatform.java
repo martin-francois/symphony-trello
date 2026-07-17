@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 final class WindowsManagedProcessPlatform extends ProcessHandleManagedProcessPlatform {
     @Override
@@ -80,12 +81,7 @@ final class WindowsManagedProcessPlatform extends ProcessHandleManagedProcessPla
     static String windowsCommandLine(List<String> arguments) {
         return arguments.stream()
                 .map(WindowsManagedProcessPlatform::windowsArgument)
-                .reduce("", (left, right) -> {
-                    if (left.isEmpty()) {
-                        return right;
-                    }
-                    return left + " " + right;
-                });
+                .collect(Collectors.joining(" "));
     }
 
     private static long parsePid(String output) throws IOException {
