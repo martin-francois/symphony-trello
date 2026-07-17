@@ -103,10 +103,16 @@ References.
   refactor changes one of those properties, either keep the behavior-preserving shape or make the
   behavior change explicit with the reason it is safe. When the context is insufficient, ask or leave
   the behavior unchanged.
-- When refactoring Java code to make better use of streams, use the repo-local
-  `java-streams-eval-capture` Codex skill. Capture the before, prompt, intermediate when present,
-  and final code, then create or update the corresponding eval issue in
-  `martinfrancois/java-streams-skill`.
+- Whenever a Java change or review presents a reusable lesson about choosing or preserving a stream,
+  collector, direct result-producing collection transformation, or character-predicate traversal,
+  use the repo-local `java-streams-eval-capture` Codex skill, even when the preferred final code
+  contains no stream. For broad Java or API audits, enumerate every implemented transformation that
+  presents a distinct reusable equivalence boundary, not only the most visibly stream-shaped change.
+- Whenever a Java change or review presents a reusable Optional or absence/fallback
+  strategy-selection lesson, use the repo-local `java-optionals-eval-capture` Codex skill. This also
+  applies to adjacent owning APIs such as `ScopedValue.orElse(...)` when the reusable lesson is the
+  absence or fallback strategy rather than the container migration; routine null checks, defaults,
+  and collection-only work inside `Optional.map(...)` do not trigger it.
 - Avoid Optional-as-null-control-flow. Do not use `optional.isPresent()` followed by `optional.get()`,
   `optional.orElseThrow()`, or equivalent value reads, and do not convert an `Optional` to nullable
   state with `optional.orElse(null)` just to branch on `value != null`. Do not convert an `Optional`
@@ -174,7 +180,11 @@ skill's advice.
   only answer whether any element matches should usually become `anyMatch(...)`, with any terminal
   side effect such as adding one warning kept outside the stream. Keep the loop when the body
   performs IO, writes per-element output, mutates state for later steps, depends on an index, scans
-  characters, probes ports, or otherwise has side effects that are the point of the method.
+  characters with state or code-point-sensitive logic, probes ports, or otherwise has side effects
+  that are the point of the method. A pure UTF-16 code-unit predicate scan may instead use
+  `String.chars().anyMatch(...)` or `allMatch(...)`; with `allMatch(...)`, add an explicit non-empty
+  guard when empty input must be rejected. Use `codePoints()` only when Unicode code-point semantics
+  are intended.
 - Streams issue
   [#50](https://github.com/martinfrancois/java-streams-skill/issues/50): when code builds a mutable
   append buffer only to pass it directly into an immutable-copying boundary, prefer a
@@ -195,6 +205,31 @@ skill's advice.
   encounter order, equivalent-match semantics, null handling, and result mutability. Check this
   issue's state at most once per turn before applying this override, and remove the override when the
   issue is closed.
+- Streams issue
+  [#58](https://github.com/martinfrancois/java-streams-skill/issues/58): when reviewing or changing a
+  constructor-owned immutable snapshot, including during a broad audit, capture the reusable choice
+  between repeating nested mapping at construction and access versus taking the deep/nested snapshot
+  once in the constructor while retaining any required shallow `List.copyOf(field)` accessor
+  boundary. Verify the constructor invariant, nested mutability, null rejection, and accessor
+  contract.
+- Streams issue
+  [#59](https://github.com/martinfrancois/java-streams-skill/issues/59): when reviewing or changing
+  adapter-plus-copy collection work inside another fluent mapping, including during a broad audit,
+  capture the direct immutable mapping even when the final code has no stream. Verify varargs target
+  typing, snapshot behavior, iteration order, and null rejection.
+- Streams issues [#60](https://github.com/martinfrancois/java-streams-skill/issues/60) and
+  [#62](https://github.com/martinfrancois/java-streams-skill/issues/62): during broad audits,
+  enumerate conditional delimiter reductions and identity concatenation reductions as separate
+  `joining(...)` equivalence boundaries. For `.reduce("", String::concat)`, verify null elements,
+  empty-source and empty-element behavior, and encounter order. For conditional delimiter reducers,
+  additionally verify delimiter placement and sentinel collisions.
+- Streams issue
+  [#61](https://github.com/martinfrancois/java-streams-skill/issues/61): when reviewing or changing a
+  pure character-predicate loop, including during a broad audit, capture the primitive match-stream
+  choice. Verify empty-input and vacuous-truth behavior plus the intended UTF-16 code-unit versus
+  Unicode code-point semantics.
+- For Streams issues #58 through #62, check each linked issue state at most once per turn before
+  applying its override, and remove a closed link with its corresponding rule.
 - Streams issue
   [#51](https://github.com/martinfrancois/java-streams-skill/issues/51): use `findAny()` for
   equivalent matches, but keep `findFirst()` when encounter order is part of the product contract.
@@ -240,6 +275,20 @@ skill's advice.
   empty/present check followed by one or more `get()` calls for ordinary value flow. Check this issue
   state at most once per turn before applying this override, and remove the override when the issue
   is closed.
+- Optional issue
+  [#77](https://github.com/martinfrancois/java-optionals-skill/issues/77): apply eval capture to
+  nullable, absent, fallback, and default strategy selection on adjacent owning APIs such as
+  `ScopedValue.orElse(...)`, even without `java.util.Optional`. Prefer selecting the prebuilt
+  strategy and invoking it once; do not generalize a `ThreadLocal`-to-`ScopedValue` migration into
+  an Optional rule. Check this issue state at most once per turn before applying this override, and
+  remove this override when the issue is closed.
+- Optional issue
+  [#78](https://github.com/martinfrancois/java-optionals-skill/issues/78): before a present Optional
+  value suppresses non-trivial fallback work, validate that the value is semantically usable by the
+  present branch. Use `filter(...)` at the value-producing boundary when an invalid parsed value
+  should behave as absence, and keep the fallback lazy with `orElseGet(...)`. Check this issue state
+  at most once per turn before applying this override, and remove this override when the issue is
+  closed.
 
 ## Nullness
 

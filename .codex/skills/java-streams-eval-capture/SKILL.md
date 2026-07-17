@@ -1,28 +1,39 @@
 ---
 name: java-streams-eval-capture
 description: >
-  Use in Symphony for Trello whenever Java code is refactored to make better
-  use of Java Streams, whether the refactor is self-initiated, review-driven,
-  or requested by the user. Capture the before/prompt/after code and create or
-  update a self-contained eval issue in martinfrancois/java-streams-skill.
+  Use in Symphony for Trello when a Java change or review presents a reusable
+  lesson about choosing or preserving a stream, collector, direct
+  result-producing collection transformation, or character-predicate
+  traversal, including identity or delimited string reductions, even when the
+  preferred final code contains no stream. Capture the before/prompt/after code
+  and create or update a self-contained eval issue in
+  martinfrancois/java-streams-skill.
 ---
 
 # Java Streams Eval Capture
 
 ## Goal
 
-When a Symphony for Trello change improves Java Streams usage, preserve the
-teaching example for the Java Streams skill. Create or update an issue in
-`martinfrancois/java-streams-skill` that stands on its own: it must include the
-relevant code before the refactor, the prompt or review request that triggered
-the change, the intermediate or rejected implementation when one exists, the
-final preferred code, and why the final code is better.
+When a Symphony for Trello change provides a reusable stream, collector, direct
+result-producing collection API, or character-predicate equivalence lesson,
+preserve the teaching example for the Java Streams skill. This includes cases
+where a direct owning API is better than a stream or where a useful
+stream-equivalence pattern appears inside another fluent API. Create or update
+an issue in `martinfrancois/java-streams-skill` that stands on its own: it must
+include the relevant code before the refactor, the prompt or review request that
+triggered the change, the intermediate or rejected implementation when one
+exists, the final preferred code, and why the final code is better.
 
 When the stream improvement is prompted by a reviewer or user after Codex
 introduced the weaker stream shape, also capture the earlier prompt that caused
 Codex to write that shape. The eval issue must make the trigger failure
 explicit: the Streams skill should have activated during the original
 implementation prompt, not only during the later stream-refactor request.
+
+When a later request reveals only that activation or eval capture was missed,
+even though the implementation was already preferred, capture both prompts and
+state that no code correction was needed. The eval must reward recognizing and
+capturing the reusable lesson without inventing a defect.
 
 When a stream refactor is later found to be non-equivalent, over-allocated,
 over-abstracted, or worse than the original code, capture the full correction
@@ -38,17 +49,44 @@ Use this skill whenever you:
 
 - refactor Java code to use streams more clearly, lazily, or safely;
 - replace a loop with a stream or a stream with a clearer stream shape;
+- replace or remove a stream with a stronger direct collection API where the
+  choice or equivalence boundary is reusable;
+- simplify result-producing collection work inside `Optional.map(...)` or a
+  similar fluent mapping when the collection transformation itself presents a
+  reusable lesson, even when the final code contains no `.stream()`;
+- replace a loop or character scan with a primitive stream and a match
+  terminal when empty-input, UTF-16, or code-point semantics matter;
+- replace an identity string reduction such as `.reduce("", String::concat)`
+  with `Collectors.joining()`, even when a related delimiter reduction was
+  already captured;
 - fix stream short-circuiting, ordering, allocation, collector, Optional, or
   pipeline readability problems;
 - accept a user-provided streams refactor;
-- correct a streams refactor after review feedback.
+- correct a streams refactor after review feedback;
 - revert or repair a stream refactor because it changed behavior, allocation,
   mutability, ordering, laziness, parser semantics, or side-effect boundaries.
 
 Do not use this skill for unrelated Java edits that merely happen to touch a
-line containing `.stream()` without changing the stream design.
+line containing `.stream()`, a routine collection factory/copy, or character
+indexing without a reusable stream/direct-API choice or behavior-equivalence
+lesson. When only collection work inside an Optional mapping changes, use this
+skill without also triggering Optionals capture unless the Optional design or
+absence behavior changes too.
 
 ## Workflow
+
+For a broad Java, API, or refactoring audit, enumerate every implemented
+collection, stream, and character-transformation change that presents a
+reusable choice or equivalence lesson before capture. Create or update one
+issue for each distinct reusable equivalence boundary. Combine occurrences
+only when the same inputs, outputs, and behavior constraints make them one
+pattern; do not stop after capturing only the most visibly stream-shaped
+change. Do not combine cases solely because they use the same destination API.
+Capture identity concatenation such as `.reduce("", String::concat)`
+separately from a conditional delimiter reducer: verify null elements, empty
+sources, empty elements, and encounter order for the identity reduction, and
+verify delimiter placement and sentinel collisions separately for the
+delimiter reduction.
 
 1. Capture the pre-refactor code from Git before editing when possible:
 
@@ -92,18 +130,20 @@ line containing `.stream()` without changing the stream design.
 
 6. Capture the final preferred code.
 
-7. Search for an existing Java Streams skill issue for the same pattern:
+7. Search all open and closed Java Streams skill issues for the same pattern:
 
    ```bash
-   gh issue list --repo martinfrancois/java-streams-skill --state open --search '<pattern keywords>'
+   gh issue list --repo martinfrancois/java-streams-skill --state all --search '<pattern keywords>'
    ```
 
-   Update an existing matching issue instead of creating a duplicate. If the
-   same pattern appears in a different code location, add a comment to the
-   existing issue with that occurrence's relevant before code, triggering
-   prompt, intermediate code when available, final code, and why the same eval
-   should cover it. Do not skip the capture merely because the issue already
-   exists for another file.
+   Update an existing matching issue instead of creating a duplicate. A
+   matching closed issue also prevents a duplicate; record why it already owns
+   the lesson, and reopen it only when the new occurrence proves that required
+   work remains. If the same pattern appears in a different code location, add
+   a comment to the existing issue with that occurrence's relevant before
+   code, triggering prompt, intermediate code when available, final code, and
+   why the same eval should cover it. Do not skip the capture merely because
+   the issue already exists for another file.
 
 8. Create or update the issue with a self-contained body. Do not include a
    "Repository context" section, and do not require the reader to open the
@@ -147,9 +187,11 @@ Explain the old behavior, then include the smallest relevant code block.
 
 ## Prompt that caused the implementation
 
-List the relevant user, review, or product requirements that caused the weaker
-stream code to be written. If this is a missed-trigger case, this is the
-original implementation prompt, not the later refactor request.
+List the relevant user, review, or product requirements that caused the
+stream-relevant pattern to be implemented. If this is a missed-trigger case,
+this is the original implementation prompt, not the later capture request. Do
+not call already-preferred code weak merely because activation or capture was
+missed.
 
 ## Later prompt that exposed the issue
 
@@ -157,20 +199,23 @@ Use this section when a reviewer or user later asked to use the Streams skill or
 corrected the implementation. Explain that the later prompt is useful context
 but should not be the only eval trigger.
 
-## Prompt-produced code before maintainer correction
+## Prompt-produced or reviewed code
 
-Use this section when an intermediate or rejected implementation exists.
-Explain that it may be correct but has a streams/readability/performance issue,
-or that it is not behavior-equivalent.
+Show the implementation that should have triggered the skill. When an
+intermediate or rejected implementation exists, explain its concrete streams,
+readability, performance, or behavior-equivalence problem. When the code was
+already preferred and only activation or capture failed, say so explicitly.
 
 ```java
-// intermediate code
+// prompt-produced or reviewed code
 ```
 
-## Why the prompt-produced code is bad
+## What the skill missed
 
-Explain the concrete defect. For short-circuiting cases, state whether work
-happens inside or before the lazy stream pipeline.
+State whether the miss was the code choice, behavior analysis, skill activation,
+eval capture, or some combination. Explain a code defect only when one exists.
+For short-circuiting cases, state whether work happens inside or before the lazy
+stream pipeline.
 
 ## Behavior-equivalence analysis
 
@@ -181,6 +226,10 @@ from local context. Include the behavior-preserving alternative when the final
 preferred code intentionally changes behavior.
 
 ## Maintainer-preferred code
+
+When no code correction was needed, repeat the already-preferred code and say
+that the desired change is activation/capture behavior, not a different
+implementation.
 
 ```java
 // final preferred code
@@ -217,13 +266,18 @@ short-circuiting, encounter order, allocation, collector choice, or readability.
 
 - Keep the issue self-contained. Include enough code and prompt context that a
   maintainer can build the eval without knowing Symphony for Trello.
-- For missed-trigger cases, include both prompts: the original prompt that
-  produced the weak stream code and the later refactor/review prompt that
-  exposed it.
+- For missed-trigger cases, include both prompts: the original implementation
+  prompt and the later refactor, review, or capture prompt that exposed the
+  miss.
+- For activation/capture-only misses, explicitly state that the implementation
+  was already preferred, identify the missing trigger or capture behavior, and
+  do not invent a code defect, intermediate implementation, or maintainer
+  correction.
 - For non-equivalent refactors, include the full correction chain: original
   code, prompt-produced weaker code, later correction/revert prompt, and final
   code.
-- Explain why the weaker code is weaker even when it is functionally correct.
+- When the implementation is actually weaker, explain why even when it is
+  functionally correct.
 - Explain behavior-equivalence explicitly. Do not treat `.toList()` mutability,
   encounter order, duplicate handling, parser splitting, laziness, exception
   behavior, or side effects as incidental unless the surrounding code proves the
