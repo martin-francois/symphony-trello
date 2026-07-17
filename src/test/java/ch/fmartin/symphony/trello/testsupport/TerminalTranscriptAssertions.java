@@ -2,6 +2,8 @@ package ch.fmartin.symphony.trello.testsupport;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.Objects;
+
 public final class TerminalTranscriptAssertions {
     private final String transcript;
 
@@ -14,13 +16,8 @@ public final class TerminalTranscriptAssertions {
     }
 
     public TerminalTranscriptAssertions containsSectionsInOrder(String... sections) {
-        int cursor = 0;
-        for (String section : sections) {
-            int next = transcript.indexOf(section, cursor);
-            assertThat(next)
-                    .as("section %s appears after offset %s", section, cursor)
-                    .isGreaterThanOrEqualTo(cursor);
-            cursor = next + section.length();
+        if (sections.length > 0) {
+            assertThat(Objects.requireNonNull(transcript)).containsSubsequence(sections);
         }
         return this;
     }
