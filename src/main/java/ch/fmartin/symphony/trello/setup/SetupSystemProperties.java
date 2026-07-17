@@ -4,26 +4,17 @@ import java.util.function.Function;
 import java.util.function.IntSupplier;
 
 final class SetupSystemProperties {
-    private static final ThreadLocal<Function<String, String>> PROPERTY_LOOKUP = new ThreadLocal<>();
+    private static final Function<String, String> SYSTEM_PROPERTY_LOOKUP = System::getProperty;
+    private static final ScopedValue<Function<String, String>> PROPERTY_LOOKUP = ScopedValue.newInstance();
 
     private SetupSystemProperties() {}
 
     static String get(String name) {
-        Function<String, String> lookup = PROPERTY_LOOKUP.get();
-        return lookup == null ? System.getProperty(name) : lookup.apply(name);
+        return PROPERTY_LOOKUP.orElse(SYSTEM_PROPERTY_LOOKUP).apply(name);
     }
 
     static int withLookup(Function<String, String> properties, IntSupplier run) {
-        Function<String, String> previous = PROPERTY_LOOKUP.get();
-        PROPERTY_LOOKUP.set(properties);
-        try {
-            return run.getAsInt();
-        } finally {
-            if (previous == null) {
-                PROPERTY_LOOKUP.remove();
-            } else {
-                PROPERTY_LOOKUP.set(previous);
-            }
-        }
+        Function<String, String> lookup = properties == null ? SYSTEM_PROPERTY_LOOKUP : properties;
+        return ScopedValue.where(PROPERTY_LOOKUP, lookup).call(run::getAsInt);
     }
 }
