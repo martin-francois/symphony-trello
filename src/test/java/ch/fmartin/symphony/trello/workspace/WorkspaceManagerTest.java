@@ -114,6 +114,32 @@ final class WorkspaceManagerTest {
     }
 
     @Test
+    void removesWorkspaceSymlinkWithoutFollowingIt() throws Exception {
+        // given
+        Path outside = tempDir.resolve("outside");
+        Files.createDirectories(outside);
+        Path preserved = Files.writeString(outside.resolve("preserved.txt"), "outside");
+        var config = new ConfigResolver()
+                .resolve(new WorkflowDefinition(
+                        tempDir.resolve("WORKFLOW.md"),
+                        Map.of(
+                                "tracker",
+                                Map.of("kind", "trello", "api_key", "k", "api_token", "t", "board_id", "b"),
+                                "workspace",
+                                Map.of("root", "work")),
+                        ""));
+        Workspace workspace = manager.createForCard("TRELLO-symlink", config);
+        Files.createSymbolicLink(workspace.path().resolve("outside-link"), outside);
+
+        // when
+        manager.removeForIdentifierIfPresent("TRELLO-symlink", config);
+
+        // then
+        assertThat(workspace.path()).doesNotExist();
+        assertThat(preserved).content().isEqualTo("outside");
+    }
+
+    @Test
     void rejectsMissingWorkspaceIdentifierBeforeTouchingFilesystem() {
         // given
         String blankIdentifier = " ";
