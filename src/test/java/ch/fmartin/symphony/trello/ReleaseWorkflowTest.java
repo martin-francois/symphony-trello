@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 final class ReleaseWorkflowTest {
@@ -93,13 +94,17 @@ final class ReleaseWorkflowTest {
     void releasePleasePullRequestsDoNotCreateCiChecks() throws IOException {
         // given
         Path releaseConfig = Path.of("release-please-config.json");
-        Path labelerWorkflow = Path.of(".github/workflows/compatibility-labeler.yml");
+        Path compatibilityLabelerWorkflow = Path.of(".github/workflows/compatibility-labeler.yml");
+        Path commitlintWorkflow = Path.of(".github/workflows/commitlint.yml");
+        Path sizeLabelerWorkflow = Path.of(".github/workflows/size-labeler.yml");
         Path codeQlWorkflow = Path.of(".github/workflows/codeql.yml");
         Path codeRabbitConfig = Path.of(".coderabbit.yaml");
 
         // when
         String releaseSource = Files.readString(releaseConfig);
-        String labelerSource = Files.readString(labelerWorkflow);
+        String compatibilityLabelerSource = Files.readString(compatibilityLabelerWorkflow);
+        String commitlintSource = Files.readString(commitlintWorkflow);
+        String sizeLabelerSource = Files.readString(sizeLabelerWorkflow);
         String codeQlSource = Files.readString(codeQlWorkflow);
         String codeRabbitSource = Files.readString(codeRabbitConfig);
 
@@ -108,25 +113,39 @@ final class ReleaseWorkflowTest {
                 .contains(
                         "\"pull-request-title-pattern\": \"chore${scope}: release${component} ${version} [skip ci]\"",
                         "\"group-pull-request-title-pattern\": \"chore${scope}: release${component} ${version} [skip ci]\"");
-        assertThat(labelerSource)
+        assertThat(Map.of(
+                        "compatibility labeler", compatibilityLabelerSource,
+                        "size labeler", sizeLabelerSource,
+                        "CodeQL", codeQlSource))
+                .allSatisfy((workflow, source) -> assertThat(source)
+                        .as("%s workflow", workflow)
+                        .contains(
+                                "paths-ignore:",
+                                "- .release-please-manifest.json",
+                                "- CHANGELOG.md",
+                                "- install.ps1",
+                                "- install.sh",
+                                "- pom.xml"));
+        assertThat(compatibilityLabelerSource)
+                .contains("pull_request_target:")
+                .doesNotContain("startsWith(github.head_ref, 'release-please--branches--')");
+        assertThat(commitlintSource)
+                .contains(
+                        "name: Commitlint",
+                        "pull_request:",
+                        "types: [opened, reopened, synchronize, ready_for_review, edited]")
+                .doesNotContain("paths:", "paths-ignore:");
+        assertThat(sizeLabelerSource)
                 .contains(
                         "pull_request_target:",
                         "paths-ignore:",
-                        "- .release-please-manifest.json",
-                        "- CHANGELOG.md",
-                        "- install.ps1",
-                        "- install.sh",
-                        "- pom.xml")
+                        "workflow_run:",
+                        "workflows: [Commitlint]",
+                        "types: [completed]",
+                        "github.event.workflow_run.event == 'pull_request'",
+                        "schedule:")
                 .doesNotContain("startsWith(github.head_ref, 'release-please--branches--')");
-        assertThat(codeQlSource)
-                .contains(
-                        "pull_request:",
-                        "paths-ignore:",
-                        "- .release-please-manifest.json",
-                        "- CHANGELOG.md",
-                        "- install.ps1",
-                        "- install.sh",
-                        "- pom.xml");
+        assertThat(codeQlSource).contains("pull_request:");
         assertThat(codeRabbitSource)
                 .contains(
                         "commit_status: false",
