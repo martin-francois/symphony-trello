@@ -2436,6 +2436,35 @@ final class SetupDiagnosticReporterTest {
     }
 
     @Test
+    void diagnosticsRedactsUrlUserInfoOnlyInsideTheAuthority() throws Exception {
+        // given
+        Path configDir = tempDir.resolve("url-user-info-config");
+        Path workspaceRoot = tempDir.resolve("url-user-info-workspaces");
+        Path stateHome = tempDir.resolve("url-user-info-state");
+        Files.createDirectories(configDir);
+        Files.createDirectories(workspaceRoot);
+        Files.createDirectories(stateHome);
+        Files.writeString(
+                configDir.resolve(ConnectedBoardManifest.FILE_NAME), "{\"boards\":[]}", StandardCharsets.UTF_8);
+        Files.writeString(
+                stateHome.resolve("url-user-info.log"),
+                "authority https://user:secret@example.invalid/path\n"
+                        + "path-at https://example.invalid/path@outside\n",
+                StandardCharsets.UTF_8);
+        var reporter = new SetupDiagnosticReporter(Map.of(), new FakeCommandRunner());
+
+        // when
+        String report = renderDefaultDiagnostics(reporter, configDir, workspaceRoot, stateHome);
+
+        // then
+        assertThat(report)
+                .contains(
+                        "authority https://<redacted>@example.invalid/path",
+                        "path-at https://example.invalid/path@outside")
+                .doesNotContain("user:secret");
+    }
+
+    @Test
     void rendersEachPrivatePathOccurrenceInRecentLogsAsOneSinglePathToken() throws Exception {
         // given
         Path configDir = tempDir.resolve("single-token-log-config");
