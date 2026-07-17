@@ -1,0 +1,276 @@
+name: size-labeler
+# pull_request_target covers forks, conflicts, and skip directives without executing PR code.
+# Commitlint covers ordinary PRs whose paths are ignored below. The schedule reconciles the
+# residual case where GitHub suppresses Commitlint and every changed path is ignored here.
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, edited]
+    paths-ignore:
+      - .release-please-manifest.json
+      - CHANGELOG.md
+      - install.ps1
+      - install.sh
+      - pom.xml
+  workflow_run:
+    workflows: [Commitlint]
+    types: [completed]
+    branches-ignore:
+      - release-please--branches--**
+  schedule:
+    - cron: "7,22,37,52 * * * *"
+
+permissions: read-all
+
+jobs:
+  resolve_pull_requests:
+    if: >-
+      ${{
+        github.event_name == 'pull_request_target' ||
+        github.event_name == 'schedule' ||
+        github.event.workflow_run.event == 'pull_request'
+      }}
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      issue_numbers: ${{ steps.resolve.outputs.issue_numbers }}
+    steps:
+      - name: Resolve pull requests from trusted event metadata
+        id: resolve
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          # github-script accepts JavaScript; the TypeScript test runs this exact block.
+          script: |
+            const { owner, repo } = context.repo;
+            const setIssueNumbers = (issueNumbers) => {
+              const uniqueIssueNumbers = [...new Set(issueNumbers)];
+              if (uniqueIssueNumbers.length > 256) {
+                core.setFailed(
+                  `Cannot reconcile ${uniqueIssueNumbers.length} pull requests in one 256-job matrix`,
+                );
+                return;
+              }
+              core.setOutput("issue_numbers", JSON.stringify(uniqueIssueNumbers));
+            };
+
+            if (context.eventName === "pull_request_target") {
+              const issueNumber = context.payload.pull_request?.number;
+              if (!Number.isSafeInteger(issueNumber) || issueNumber <= 0) {
+                core.warning(`Invalid pull request number: ${issueNumber}`);
+                return;
+              }
+              setIssueNumbers([issueNumber]);
+              return;
+            }
+
+            if (context.eventName === "schedule") {
+              let openPullRequests;
+              try {
+                openPullRequests = await github.paginate(github.rest.pulls.list, {
+                  owner,
+                  repo,
+                  state: "open",
+                });
+              } catch (error) {
+                core.warning(`Unable to list open pull requests: ${error}`);
+                return;
+              }
+
+              setIssueNumbers(
+                openPullRequests
+                  .filter(
+                    (candidate) =>
+                      Number.isSafeInteger(candidate.number)
+                      && candidate.number > 0
+                      && candidate.state === "open"
+                      && candidate.base?.repo?.full_name === `${owner}/${repo}`,
+                  )
+                  .map(({ number }) => number),
+              );
+              return;
+            }
+
+            const workflowRun = context.payload.workflow_run;
+            if (!workflowRun) {
+              return;
+            }
+
+            const associatedPullRequests = workflowRun.pull_requests ?? [];
+            if (associatedPullRequests.length > 0) {
+              const issueNumbers = associatedPullRequests.map(({ number }) => number);
+              if (issueNumbers.some((number) => !Number.isSafeInteger(number) || number <= 0)) {
+                core.warning("Unable to resolve pull requests: invalid associated pull request number");
+                return;
+              }
+              setIssueNumbers(issueNumbers);
+              return;
+            }
+
+            const headRepository = workflowRun.head_repository?.full_name;
+            const headBranch = workflowRun.head_branch;
+            const headSha = workflowRun.head_sha;
+            const headRepositoryParts = headRepository?.split("/") ?? [];
+            if (
+              headRepositoryParts.length !== 2
+              || headRepositoryParts.some((part) => !part)
+              || !headBranch
+              || !headSha
+            ) {
+              core.warning(
+                "Unable to resolve pull request: missing trusted head repository, branch, or SHA",
+              );
+              return;
+            }
+
+            let candidatePullRequests;
+            try {
+              candidatePullRequests = await github.paginate(
+                github.rest.pulls.list,
+                {
+                  owner,
+                  repo,
+                  head: `${headRepositoryParts[0]}:${headBranch}`,
+                  state: "open",
+                },
+              );
+            } catch (error) {
+              core.warning(
+                `Unable to resolve pull request for ${headRepository}@${headSha}: ${error}`,
+              );
+              return;
+            }
+
+            const matchingPullRequests = candidatePullRequests.filter(
+              (candidate) =>
+                Number.isSafeInteger(candidate.number)
+                && candidate.number > 0
+                && candidate.state === "open"
+                && candidate.base?.repo?.full_name === `${owner}/${repo}`
+                && candidate.head?.repo?.full_name === headRepository
+                && candidate.head?.ref === headBranch
+                && candidate.head?.sha === headSha,
+            );
+            if (matchingPullRequests.length === 0) {
+              core.warning(
+                `Unable to find an open pull request for ${headRepository}@${headSha}`,
+              );
+              return;
+            }
+
+            setIssueNumbers(matchingPullRequests.map(({ number }) => number));
+
+  sync-size-label:
+    needs: resolve_pull_requests
+    if: >-
+      ${{
+        needs.resolve_pull_requests.outputs.issue_numbers != '' &&
+        needs.resolve_pull_requests.outputs.issue_numbers != '[]'
+      }}
+    strategy:
+      fail-fast: false
+      matrix:
+        issue_number: ${{ fromJSON(needs.resolve_pull_requests.outputs.issue_numbers) }}
+    concurrency:
+      group: size-labeler-${{ matrix.issue_number }}
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Apply size label from changed lines
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          ISSUE_NUMBER: ${{ matrix.issue_number }}
+        with:
+          # github-script accepts JavaScript; the TypeScript test runs this exact block.
+          script: |
+            const issueNumber = Number(process.env.ISSUE_NUMBER);
+            const { owner, repo } = context.repo;
+            if (!Number.isSafeInteger(issueNumber) || issueNumber <= 0) {
+              core.warning(`Invalid pull request number: ${process.env.ISSUE_NUMBER}`);
+              return;
+            }
+
+            const sizes = [
+              { maximum: 49, name: "size XS" },
+              { maximum: 199, name: "size S" },
+              { maximum: 499, name: "size M" },
+              { maximum: 999, name: "size L" },
+              { maximum: Number.POSITIVE_INFINITY, name: "size XL" },
+            ];
+            const managedLabels = sizes.map(({ name }) => name);
+
+            let additions;
+            let deletions;
+            try {
+              const response = await github.rest.pulls.get({
+                owner,
+                repo,
+                pull_number: issueNumber,
+              });
+              additions = response.data.additions;
+              deletions = response.data.deletions;
+            } catch (error) {
+              core.warning(`Unable to read changed lines for #${issueNumber}: ${error}`);
+              return;
+            }
+
+            if (
+              !Number.isSafeInteger(additions)
+              || additions < 0
+              || !Number.isSafeInteger(deletions)
+              || deletions < 0
+              || !Number.isSafeInteger(additions + deletions)
+            ) {
+              core.warning(`Invalid changed-line counts for #${issueNumber}: additions=${additions}, deletions=${deletions}`);
+              return;
+            }
+
+            const changedLines = additions + deletions;
+            const targetLabel = sizes.find(({ maximum }) => changedLines <= maximum)?.name;
+            if (!targetLabel) {
+              core.warning(`Unable to classify ${changedLines} changed lines for #${issueNumber}`);
+              return;
+            }
+
+            let existingLabels;
+            try {
+              existingLabels = await github.paginate(github.rest.issues.listLabelsOnIssue, {
+                owner,
+                repo,
+                issue_number: issueNumber,
+              });
+            } catch (error) {
+              core.warning(`Unable to read labels for #${issueNumber}: ${error}`);
+              return;
+            }
+
+            const existingNames = new Set(existingLabels.map(({ name }) => name));
+            if (!existingNames.has(targetLabel)) {
+              try {
+                await github.rest.issues.addLabels({
+                  owner,
+                  repo,
+                  issue_number: issueNumber,
+                  labels: [targetLabel],
+                });
+              } catch (error) {
+                core.warning(`Unable to add ${targetLabel} label for #${issueNumber}: ${error}`);
+                return;
+              }
+            }
+
+            for (const staleLabel of managedLabels.filter(
+              (label) => label !== targetLabel && existingNames.has(label),
+            )) {
+              try {
+                await github.rest.issues.removeLabel({
+                  owner,
+                  repo,
+                  issue_number: issueNumber,
+                  name: staleLabel,
+                });
+              } catch (error) {
+                core.warning(`Unable to remove ${staleLabel} label for #${issueNumber}: ${error}`);
+              }
+            }

@@ -47,13 +47,13 @@ auditing that may create issues lives in
   are closed, add missing useful links, fix incorrect links, update labels and milestones, add or
   remove native issue dependencies, and reserve `blocked` for unresolved external prerequisites or
   waiting conditions. For labels, apply the full Triage labels policy on every sweep, including type
-  labels, exactly one priority label, `breaking change`, `blocked` for external waits,
-  `needs human review`, `not ready`, `idea`, assigned-issue `help wanted` removal, unassigned-ready
-  `help wanted`, and `good first issue` when the 80% one-shot bar is met. A hard issue-to-issue
-  prerequisite must have the matching native relationship. Non-ordering links such as related work,
-  coordination, and follow-ups remain ordinary references and must not be converted into
-  dependencies; keep a matching backlink on the other open issue so both sides remain discoverable.
-  Historical provenance for closed work does not require a backlink.
+  labels, exactly one priority label, exactly one size label, `breaking change`, `blocked` for
+  external waits, `needs human review`, `not ready`, `idea`, assigned-issue `help wanted` removal,
+  unassigned-ready `help wanted`, and `good first issue` when the 80% one-shot bar is met. A hard
+  issue-to-issue prerequisite must have the matching native relationship. Non-ordering links such as
+  related work, coordination, and follow-ups remain ordinary references and must not be converted
+  into dependencies; keep a matching backlink on the other open issue so both sides remain
+  discoverable. Historical provenance for closed work does not require a backlink.
   Prefer editing issue descriptions over adding comments unless a historical note or external
   artifact link must be preserved. For issues created by the authenticated maintainer account, update
   the body as if the issue had been written that way from the start, weaving new context into the
@@ -97,8 +97,42 @@ auditing that may create issues lives in
   adding only the minimum template label. Explicitly evaluate type labels, priority, `blocked`,
   `breaking change`, `not ready`, `help wanted`, and `good first issue` as applicable. Every open
   issue should have exactly one priority label: `priority high`, `priority medium`, or
-  `priority low`. Do not defer `good first issue` to a later sweep: apply it immediately when the
-  issue satisfies the 80% one-shot implementation bar.
+  `priority low`. Every issue MUST have exactly one size label as defined below. Do not defer
+  `good first issue` to a later sweep: apply it immediately when the issue satisfies the 80%
+  one-shot implementation bar.
+
+### Size labels
+
+- Every open or closed issue MUST have exactly one of `size XS`, `size S`, `size M`, `size L`, or
+  `size XL`. The label estimates the complete repository change needed to satisfy the issue's current
+  scope, including implementation, tests, documentation, configuration, and tracked generated
+  output:
+
+  | Label | Expected changed lines |
+  | --- | ---: |
+  | `size XS` | 0-49 |
+  | `size S` | 50-199 |
+  | `size M` | 200-499 |
+  | `size L` | 500-999 |
+  | `size XL` | 1,000 or more |
+
+- Estimate changed lines as additions plus deletions across the entire issue, including all expected
+  pull requests when an issue deliberately requires more than one. Choose the smallest label whose
+  upper bound contains the reasonable estimate. When the reasonable range crosses a label boundary,
+  use the larger label. Re-evaluate the size whenever the accepted scope changes.
+- Size labels measure expected review volume. They MUST NOT substitute for priority, implementation
+  effort, cognitive complexity, risk, readiness, or `good first issue` evaluation. Keep those
+  classifications independent.
+- Pull requests use the same labels, but `.github/workflows/size-labeler.yml` measures their current
+  GitHub additions plus deletions instead of copying the linked issue's estimate. Maintainers SHOULD
+  let that workflow own pull-request size labels; a manual override is appropriate only while the
+  workflow is unavailable, because the next pull-request update recalculates the label.
+  Metadata-only `pull_request_target` runs handle normal updates, conflicts, skip directives, and
+  forks without executing pull-request code. Trusted Commitlint completions cover ordinary pull
+  requests whose paths match the Release Please exclusions. A scheduled default-branch
+  reconciliation repairs suppressed events, base-branch diff changes, and pull requests that were
+  already open when the workflow was introduced.
+
 - During issue triage, check every open issue for breaking-change risk, especially while the
   affected contract is still small enough to change deliberately. Add the `breaking change` label
   when the accepted implementation may intentionally change or invalidate current user-facing
