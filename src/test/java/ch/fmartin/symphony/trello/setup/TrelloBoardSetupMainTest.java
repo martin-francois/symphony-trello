@@ -40,13 +40,13 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -7422,7 +7422,7 @@ final class TrelloBoardSetupMainTest {
         byte[] stdout;
         byte[] stderr;
         try {
-            if (!process.waitFor(30, TimeUnit.SECONDS)) {
+            if (!process.waitFor(Duration.ofSeconds(30))) {
                 process.destroyForcibly();
                 throw new AssertionError("Timed out waiting for " + String.join(" ", command));
             }

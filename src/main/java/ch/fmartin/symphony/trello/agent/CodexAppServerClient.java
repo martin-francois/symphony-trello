@@ -15,7 +15,6 @@ import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Clock;
@@ -362,7 +361,7 @@ public class CodexAppServerClient {
             this.listener = listener;
             this.rateLimitState =
                     rateLimitsByCodexCommand.computeIfAbsent(config.codex().command(), ignored -> new RateLimitState());
-            this.writer = new BufferedWriter(new OutputStreamWriter(process.getOutputStream(), StandardCharsets.UTF_8));
+            this.writer = process.outputWriter(StandardCharsets.UTF_8);
         }
 
         void start() {
@@ -759,7 +758,7 @@ public class CodexAppServerClient {
             closeWriter();
             process.destroy();
             try {
-                if (!process.waitFor(2, TimeUnit.SECONDS)) {
+                if (!process.waitFor(Duration.ofSeconds(2))) {
                     process.destroyForcibly();
                 }
             } catch (InterruptedException e) {

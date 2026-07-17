@@ -110,7 +110,7 @@ final class PackagedAppSmokeIT {
     }
 
     private static void pollDelayForBoundedStartupWait() throws InterruptedException {
-        Thread.sleep(STARTUP_POLL_INTERVAL.toMillis());
+        Thread.sleep(STARTUP_POLL_INTERVAL);
     }
 
     private static void assertDoesNotExitAfterHealthyStartup(Process process, Duration duration)
@@ -173,9 +173,9 @@ final class PackagedAppSmokeIT {
 
     private static void stop(Process process) throws InterruptedException {
         process.destroy();
-        if (!process.waitFor(5, TimeUnit.SECONDS)) {
+        if (!process.waitFor(Duration.ofSeconds(5))) {
             process.destroyForcibly();
-            process.waitFor(5, TimeUnit.SECONDS);
+            process.waitFor(Duration.ofSeconds(5));
         }
     }
 

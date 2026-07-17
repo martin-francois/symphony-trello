@@ -61,12 +61,15 @@ final class ProcessCommandRunnerTest {
             runThread.start();
             long childPid = waitForPid(pidFile);
             runThread.interrupt();
-            runThread.join(TimeUnit.SECONDS.toMillis(5));
+            assertThat(runThread.join(Duration.ofSeconds(5)))
+                    .as("the interrupted command-runner thread terminates within 5 seconds")
+                    .isTrue();
 
             // then
-            assertThat(runThread.isAlive()).isFalse();
             assertThat(result.get().exitCode()).isEqualTo(CommandResult.INTERRUPTED_EXIT_CODE);
-            assertThat(processIsAlive(childPid)).isFalse();
+            assertThat(processIsAlive(childPid))
+                    .as("the interrupted command runner terminates its child process")
+                    .isFalse();
         } finally {
             Files.deleteIfExists(pidFile);
         }

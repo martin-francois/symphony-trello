@@ -10,6 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -171,7 +172,7 @@ final class InstallerScriptFixture {
         Process process = processBuilder.start();
         process.getOutputStream().write(input.getBytes(StandardCharsets.UTF_8));
         process.getOutputStream().close();
-        boolean completed = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
+        boolean completed = process.waitFor(Duration.ofSeconds(timeoutSeconds));
         String output = output(process);
         assertThat(completed)
                 .as("process timed out: %s output:%n%s", processBuilder.command(), output)
@@ -224,7 +225,7 @@ final class InstallerScriptFixture {
     static boolean commandExists(String name) {
         try {
             Process process = new ProcessBuilder(name, "--version").start();
-            return process.waitFor(10, TimeUnit.SECONDS) && process.exitValue() == 0;
+            return process.waitFor(Duration.ofSeconds(10)) && process.exitValue() == 0;
         } catch (IOException e) {
             return false;
         } catch (InterruptedException e) {
@@ -238,7 +239,7 @@ final class InstallerScriptFixture {
             Process process = new ProcessBuilder("docker", "info", "--format", "{{.ServerVersion}}")
                     .redirectErrorStream(true)
                     .start();
-            boolean completed = process.waitFor(10, TimeUnit.SECONDS);
+            boolean completed = process.waitFor(Duration.ofSeconds(10));
             String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
             return completed
                     && process.exitValue() == 0

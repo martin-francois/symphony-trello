@@ -6,6 +6,8 @@ import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.respond;
 import static ch.fmartin.symphony.trello.testsupport.FakeTrelloServer.trelloList;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import ch.fmartin.symphony.trello.config.ConfigDefaults;
 import ch.fmartin.symphony.trello.config.ConfigResolver;
@@ -17,8 +19,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Splitter;
 import java.math.BigDecimal;
 import java.net.URLDecoder;
+import java.net.http.HttpHeaders;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -668,6 +673,34 @@ final class TrelloClientTest {
                 .contains(tempDir.resolve("WORKFLOW.md").toString())
                 .contains("more than 5-10 boards")
                 .contains("same Trello token");
+    }
+
+    @Test
+    void negativeRetryAfterFallsBackToExponentialDelay() {
+        // given
+        var config = config("input", Map.of());
+        HttpResponse<String> response = responseWithRetryAfter("-1");
+
+        // when
+        Duration delay = TrelloClient.backoff(config, 1, response);
+
+        // then
+        assertThat(delay)
+                .isGreaterThanOrEqualTo(config.tracker().apiRetryBaseDelay())
+                .isLessThan(config.tracker().apiRetryBaseDelay().multipliedBy(2));
+    }
+
+    @Test
+    void nonNegativeRetryAfterRemainsAuthoritative() {
+        // given
+        var config = config("input", Map.of());
+        HttpResponse<String> response = responseWithRetryAfter("4");
+
+        // when
+        Duration delay = TrelloClient.backoff(config, 1, response);
+
+        // then
+        assertThat(delay).isEqualTo(Duration.ofSeconds(4));
     }
 
     @Test
@@ -1539,6 +1572,13 @@ final class TrelloClientTest {
                     .isEqualTo("Done"));
             assertThat(card.prerequisiteProblems()).isEmpty();
         });
+    }
+
+    private static HttpResponse<String> responseWithRetryAfter(String value) {
+        HttpResponse<String> response = mock();
+        when(response.headers())
+                .thenReturn(HttpHeaders.of(Map.of("Retry-After", List.of(value)), (name, headerValue) -> true));
+        return response;
     }
 
     private List<Card> fetchDependencyCandidates() {

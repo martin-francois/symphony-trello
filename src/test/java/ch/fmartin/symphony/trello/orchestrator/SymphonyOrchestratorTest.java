@@ -810,7 +810,9 @@ final class SymphonyOrchestratorTest {
         assertThat(changeAttempted.await(5, TimeUnit.SECONDS)).isTrue();
         waitForBoundedQuietPeriod(rejection);
         tracker.releaseTerminalFetch.countDown();
-        starter.join(TimeUnit.SECONDS.toMillis(5));
+        assertThat(starter.join(Duration.ofSeconds(5)))
+                .as("the orchestrator startup thread terminates after the terminal fetch is released")
+                .isTrue();
 
         // then
         assertThat(rejection)
