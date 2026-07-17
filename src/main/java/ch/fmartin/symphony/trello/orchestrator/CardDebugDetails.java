@@ -33,7 +33,7 @@ public record CardDebugDetails(
 
         @Override
         public List<Map<String, Object>> codexSessionLogs() {
-            return codexSessionLogs.stream().map(Map::copyOf).toList();
+            return List.copyOf(codexSessionLogs);
         }
     }
 
