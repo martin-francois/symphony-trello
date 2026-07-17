@@ -1753,6 +1753,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
         orchestrator.start();
         waitUntil(() -> orchestrator.snapshot().dispatchPause() != null
                 && orchestrator.snapshot().counts().retrying() == 1);
+        orchestrator.stopWorkflowWatcherForTests();
         rewriteWorkflowWithCommand(workflow, "command-b", "");
         orchestrator.tickNowForTests();
         waitUntil(() -> commandBRuns.get() == 1 && orchestrator.snapshot().dispatchPause() != null);
