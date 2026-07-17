@@ -11,6 +11,7 @@ import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -357,10 +358,8 @@ public final class RepositorySourceResolver {
         RepositorySource right = actual.source();
         return left.kind() == right.kind()
                 && left.value().equals(right.value())
-                && (left.identity() == null
-                        ? right.identity() == null
-                        : left.identity().equals(right.identity()))
-                && (left.path() == null ? right.path() == null : left.path().equals(right.path()));
+                && Objects.equals(left.identity(), right.identity())
+                && Objects.equals(left.path(), right.path());
     }
 
     private static SourceMode labelMode(String label) {
