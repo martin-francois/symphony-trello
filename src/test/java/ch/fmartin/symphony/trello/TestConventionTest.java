@@ -1,19 +1,38 @@
 package ch.fmartin.symphony.trello;
 
+import static com.google.common.base.Preconditions.checkState;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.source.tree.AnnotationTree;
+import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.MethodTree;
+import com.sun.source.util.JavacTask;
+import com.sun.source.util.TreePathScanner;
+import com.sun.source.util.Trees;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
+import javax.tools.Diagnostic;
+import javax.tools.DiagnosticCollector;
+import javax.tools.JavaCompiler;
+import javax.tools.JavaFileObject;
+import javax.tools.SimpleJavaFileObject;
+import javax.tools.StandardJavaFileManager;
+import javax.tools.ToolProvider;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -22,8 +41,7 @@ final class TestConventionTest {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final Pattern SIMPLE_MANUAL_MOCK = Pattern.compile(
             "\\b(new\\s+AgentRunner\\s*\\(\\)|extends\\s+(SymphonyOrchestrator|CodexAppServerClient)|implements\\s+AgentRunner)");
-    private static final Pattern TEST_ANNOTATION = Pattern.compile("^\\s*@(FuzzTest|ParameterizedTest|Test)\\b");
-    private static final Pattern METHOD_BODY_START = Pattern.compile("\\)\\s*(?:throws\\s+[\\w.,\\s]+)?\\{");
+    private static final Set<String> TEST_ANNOTATIONS = Set.of("FuzzTest", "ParameterizedTest", "Test");
 
     @Test
     void methodsUseGivenWhenThenSections() throws IOException {
@@ -53,6 +71,8 @@ final class TestConventionTest {
         List<String> fixtureLines = List.of(
                 "class WrappedFuzzSignatureTest {",
                 "    @FuzzTest",
+                "    @SuppressWarnings(",
+                "            value = \"fixture }\")",
                 "    void fuzz(",
                 "            @NotNull String input) {",
                 "        // " + "when",
@@ -68,7 +88,138 @@ final class TestConventionTest {
         List<String> violations = testSectionViolations(source);
 
         // then
-        assertThat(violations).singleElement().asString().contains("expected // given");
+        assertThat(violations).containsExactly(source + ":6: expected // given, // when, and // then in order");
+    }
+
+    @Test
+    void compilerPositionsIgnoreJavaLexicalBraces(@TempDir Path tempDir) throws IOException {
+        // given
+        Path source = tempDir.resolve("LexicalBracesTest.java");
+        Files.writeString(
+                source,
+                """
+                final class LexicalBracesTest {
+                    @Test
+                    void conventionalTest() {
+                        // %s
+                        String open = "{not valid json";
+                        String close = "early closer }";
+                        String escaped = "a\\\"b{";
+                        String text = \"""
+                                {"boards":[{}]}
+                                extra } closer
+                                \""";
+                        char brace = '{';
+                        // dangling }
+                        /* { block comment } */
+
+                        // %s
+                        Runnable nested = () -> { open.length(); };
+
+                        // %s
+                        assertThat(text + close + escaped + brace + nested).isNotEmpty();
+                    }
+
+                    @Test
+                    void missingSections() {
+                        assertThat(1).isEqualTo(1);
+                    }
+                }
+                """
+                        .formatted("given", "when", "then"));
+
+        // when
+        List<String> violations = testSectionViolations(source);
+
+        // then
+        assertThat(violations).containsExactly(source + ":24: expected // given, // when, and // then in order");
+    }
+
+    @Test
+    void sectionsIgnoreMarkersInsideTextBlocksAndBlockComments(@TempDir Path tempDir) throws IOException {
+        // given
+        Path source = tempDir.resolve("FakeSectionMarkersTest.java");
+        Files.writeString(
+                source,
+                """
+                final class FakeSectionMarkersTest {
+                    @Test
+                    void fakeSections() {
+                        String text = \"""
+                                // %s
+                                // %s
+                                // %s
+                                \""";
+                        /*
+                         // %s
+                         // %s
+                         // %s
+                         */
+                        assertThat(text).isNotBlank();
+                    }
+                }
+                """
+                        .formatted("given", "when", "then", "given", "when", "then"));
+
+        // when
+        List<String> violations = testSectionViolations(source);
+
+        // then
+        assertThat(violations).containsExactly(source + ":3: expected // given, // when, and // then in order");
+    }
+
+    @Test
+    void compilerPositionsPreserveBlankLineViolationNumbers(@TempDir Path tempDir) throws IOException {
+        // given
+        Path source = tempDir.resolve("BlankLineTest.java");
+        Files.writeString(
+                source,
+                """
+                final class BlankLineTest {
+                    @Test
+                    void missingBlankLine() {
+                        // %s
+                        int value = 1;
+                        // %s
+                        value++;
+
+                        // %s
+                        assertThat(value).isEqualTo(2);
+                    }
+                }
+                """
+                        .formatted("given", "when", "then"));
+
+        // when
+        List<String> violations = testSectionViolations(source);
+
+        // then
+        assertThat(violations).containsExactly(source + ":6: expected a blank line before // when");
+    }
+
+    @Test
+    void compilerParseErrorsIncludeTheFixtureAndDiagnosticLine(@TempDir Path tempDir) throws IOException {
+        // given
+        Path source = tempDir.resolve("BrokenTest.java");
+        Files.writeString(
+                source,
+                """
+                final class BrokenTest {
+                    @Test
+                    void broken() {
+                        String value = ;
+                    }
+                }
+                """);
+
+        // when
+        Throwable thrown = catchThrowable(() -> testSectionViolations(source));
+
+        // then
+        assertThat(thrown)
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("Could not parse %s", source)
+                .hasMessageContaining("line 4:");
     }
 
     @Test
@@ -228,97 +379,223 @@ final class TestConventionTest {
     static List<String> testSectionViolations(Path file) throws IOException {
         List<String> violations = new ArrayList<>();
         String source = Files.readString(file);
-        List<String> lines = source.lines().toList();
-        // Braces inside string literals, text blocks, char literals, and comments are data, not
-        // code structure: a fixture like "{not valid json" must not move method boundaries, so
-        // brace scanning runs on a code-only view while markers and annotations use raw lines.
-        List<String> codeLines = TestSourceLexer.stripNonCode(source).lines().toList();
-        int index = 0;
-        while (index < lines.size()) {
-            if (!TEST_ANNOTATION.matcher(lines.get(index)).find()) {
-                index++;
-                continue;
-            }
-            int methodStart = findMethodStart(lines, codeLines, index + 1);
-            int methodEnd = findMethodEnd(codeLines, methodStart);
-            if (methodStart < 0 || methodEnd < 0) {
-                violations.add("%s:%d: could not parse test method".formatted(file, index + 1));
-                index++;
-                continue;
-            }
-            List<String> body = methodEnd > methodStart ? lines.subList(methodStart + 1, methodEnd) : List.of();
-            assertTestSections(file, methodStart, body, violations);
-            index = methodEnd;
-            index++;
+        String normalizedSource = source.replace("\r\n", "\n").replace('\r', '\n');
+        List<String> lines = Files.readAllLines(file);
+        Map<Integer, String> lineComments = standaloneLineComments(normalizedSource);
+        for (TestMethod testMethod : testMethods(file, source)) {
+            assertTestSections(file, testMethod, lines, lineComments, violations);
         }
         return violations;
     }
 
-    private static int findMethodStart(List<String> lines, List<String> codeLines, int start) {
-        for (int index = start; index < lines.size(); index++) {
-            if (isStandaloneAnnotationLine(lines.get(index), codeLines.get(index))) {
+    private static Map<Integer, String> standaloneLineComments(String source) {
+        Map<Integer, String> comments = new HashMap<>();
+        JavaLexicalState state = JavaLexicalState.CODE;
+        int line = 0;
+        int lineStart = 0;
+        int index = 0;
+        while (index < source.length()) {
+            char current = source.charAt(index);
+            if (current == '\n') {
+                line++;
+                lineStart = index + 1;
+                index++;
                 continue;
             }
-            if (codeLines.get(index).contains("{")) {
-                return index;
+            switch (state) {
+                case CODE -> {
+                    if (source.startsWith("//", index)) {
+                        int lineEnd = source.indexOf('\n', index + 2);
+                        if (lineEnd < 0) {
+                            lineEnd = source.length();
+                        }
+                        if (source.substring(lineStart, index).isBlank()) {
+                            comments.put(
+                                    line, source.substring(index + 2, lineEnd).trim());
+                        }
+                        index = lineEnd;
+                    } else if (source.startsWith("/*", index)) {
+                        state = JavaLexicalState.BLOCK_COMMENT;
+                        index += 2;
+                    } else if (source.startsWith("\"\"\"", index)) {
+                        state = JavaLexicalState.TEXT_BLOCK;
+                        index += 3;
+                    } else if (current == '"') {
+                        state = JavaLexicalState.STRING;
+                        index++;
+                    } else if (current == '\'') {
+                        state = JavaLexicalState.CHARACTER;
+                        index++;
+                    } else {
+                        index++;
+                    }
+                }
+                case BLOCK_COMMENT -> {
+                    if (source.startsWith("*/", index)) {
+                        state = JavaLexicalState.CODE;
+                        index += 2;
+                    } else {
+                        index++;
+                    }
+                }
+                case STRING -> {
+                    if (current == '\\') {
+                        index = Math.min(source.length(), index + 2);
+                    } else {
+                        if (current == '"') {
+                            state = JavaLexicalState.CODE;
+                        }
+                        index++;
+                    }
+                }
+                case CHARACTER -> {
+                    if (current == '\\') {
+                        index = Math.min(source.length(), index + 2);
+                    } else {
+                        if (current == '\'') {
+                            state = JavaLexicalState.CODE;
+                        }
+                        index++;
+                    }
+                }
+                case TEXT_BLOCK -> {
+                    if (source.startsWith("\"\"\"", index) && !isEscaped(source, index)) {
+                        state = JavaLexicalState.CODE;
+                        index += 3;
+                    } else {
+                        index++;
+                    }
+                }
             }
         }
-        return -1;
+        return Map.copyOf(comments);
     }
 
-    private static boolean isStandaloneAnnotationLine(String line, String codeLine) {
-        return line.stripLeading().startsWith("@")
-                && !METHOD_BODY_START.matcher(codeLine).find();
-    }
-
-    private static int findMethodEnd(List<String> codeLines, int methodStart) {
-        if (methodStart < 0) {
-            return -1;
+    private static boolean isEscaped(String source, int index) {
+        int backslashes = 0;
+        for (int current = index - 1; current >= 0 && source.charAt(current) == '\\'; current--) {
+            backslashes++;
         }
-        int depth = 0;
-        for (int index = methodStart; index < codeLines.size(); index++) {
-            String line = codeLines.get(index);
-            depth += count(line, '{');
-            depth -= count(line, '}');
-            if (depth == 0) {
-                return index;
+        return backslashes % 2 != 0;
+    }
+
+    private static List<TestMethod> testMethods(Path file, String source) throws IOException {
+        JavaCompiler compiler =
+                Objects.requireNonNull(ToolProvider.getSystemJavaCompiler(), "Test convention checks require a JDK");
+        DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
+        try (StandardJavaFileManager fileManager =
+                compiler.getStandardFileManager(diagnostics, Locale.ROOT, StandardCharsets.UTF_8)) {
+            JavaFileObject sourceFile = sourceFile(file, source);
+            JavacTask task = (JavacTask)
+                    compiler.getTask(null, fileManager, diagnostics, List.of("-proc:none"), null, List.of(sourceFile));
+            List<TestMethod> methods = new ArrayList<>();
+            for (CompilationUnitTree unit : task.parse()) {
+                collectTestMethods(unit, Trees.instance(task), methods);
+            }
+            rejectParseErrors(file, diagnostics);
+            return List.copyOf(methods);
+        }
+    }
+
+    private static JavaFileObject sourceFile(Path file, String source) {
+        return new SimpleJavaFileObject(file.toUri(), JavaFileObject.Kind.SOURCE) {
+            @Override
+            public CharSequence getCharContent(boolean ignoreEncodingErrors) {
+                return source;
+            }
+        };
+    }
+
+    private static void collectTestMethods(CompilationUnitTree unit, Trees trees, List<TestMethod> methods) {
+        var positions = trees.getSourcePositions();
+        new TreePathScanner<Void, Void>() {
+            @Override
+            public Void visitMethod(MethodTree method, Void unused) {
+                if (isTestMethod(method) && method.getBody() != null) {
+                    long start = positions.getStartPosition(unit, method.getBody());
+                    long end = positions.getEndPosition(unit, method.getBody());
+                    checkState(
+                            start != Diagnostic.NOPOS && end != Diagnostic.NOPOS,
+                            "Compiler did not provide source positions for %s",
+                            method.getName());
+                    methods.add(new TestMethod(lineIndex(unit, start), lineIndex(unit, end - 1)));
+                }
+                return super.visitMethod(method, null);
+            }
+        }.scan(unit, null);
+    }
+
+    private static boolean isTestMethod(MethodTree method) {
+        for (AnnotationTree annotation : method.getModifiers().getAnnotations()) {
+            if (TEST_ANNOTATIONS.contains(simpleAnnotationName(annotation))) {
+                return true;
             }
         }
-        return -1;
+        return false;
     }
 
-    private static int count(String line, char expected) {
-        int count = 0;
-        for (int index = 0; index < line.length(); index++) {
-            if (line.charAt(index) == expected) {
-                count++;
+    private static String simpleAnnotationName(AnnotationTree annotation) {
+        String name = annotation.getAnnotationType().toString();
+        int separator = name.lastIndexOf('.');
+        return separator < 0 ? name : name.substring(separator + 1);
+    }
+
+    private static int lineIndex(CompilationUnitTree unit, long position) {
+        return Math.toIntExact(unit.getLineMap().getLineNumber(position) - 1);
+    }
+
+    private static void rejectParseErrors(Path file, DiagnosticCollector<JavaFileObject> diagnostics)
+            throws IOException {
+        List<String> errors = new ArrayList<>();
+        for (Diagnostic<? extends JavaFileObject> diagnostic : diagnostics.getDiagnostics()) {
+            if (diagnostic.getKind() == Diagnostic.Kind.ERROR) {
+                errors.add("line " + diagnostic.getLineNumber() + ": " + diagnostic.getMessage(Locale.ROOT));
             }
         }
-        return count;
+        if (!errors.isEmpty()) {
+            throw new IOException("Could not parse " + file + ": " + String.join("; ", errors));
+        }
     }
 
-    private static void assertTestSections(Path file, int methodStart, List<String> body, List<String> violations) {
-        int given = indexOfMarker(body, "// given");
-        int when = indexOfMarker(body, "// when");
-        int then = indexOfMarker(body, "// then");
+    private static void assertTestSections(
+            Path file,
+            TestMethod method,
+            List<String> lines,
+            Map<Integer, String> lineComments,
+            List<String> violations) {
+        int firstBodyLine = method.startLine() + 1;
+        int given = lineOfMarker(lineComments, firstBodyLine, method.endLine(), "given");
+        int when = lineOfMarker(lineComments, firstBodyLine, method.endLine(), "when");
+        int then = lineOfMarker(lineComments, firstBodyLine, method.endLine(), "then");
         if (given < 0 || when < 0 || then < 0 || !(given < when && when < then)) {
-            violations.add("%s:%d: expected // given, // when, and // then in order".formatted(file, methodStart + 1));
+            violations.add(
+                    "%s:%d: expected // given, // when, and // then in order".formatted(file, method.startLine() + 1));
             return;
         }
-        if (when == 0 || !body.get(when - 1).isBlank()) {
-            violations.add("%s:%d: expected a blank line before // when".formatted(file, methodStart + when + 2));
+        if (!lines.get(when - 1).isBlank()) {
+            violations.add("%s:%d: expected a blank line before // when".formatted(file, when + 1));
         }
-        if (then == 0 || !body.get(then - 1).isBlank()) {
-            violations.add("%s:%d: expected a blank line before // then".formatted(file, methodStart + then + 2));
+        if (!lines.get(then - 1).isBlank()) {
+            violations.add("%s:%d: expected a blank line before // then".formatted(file, then + 1));
         }
     }
 
-    private static int indexOfMarker(List<String> body, String marker) {
-        for (int index = 0; index < body.size(); index++) {
-            if (body.get(index).trim().equals(marker)) {
-                return index;
+    private static int lineOfMarker(Map<Integer, String> lineComments, int firstBodyLine, int endLine, String marker) {
+        for (int line = firstBodyLine; line < endLine; line++) {
+            if (marker.equals(lineComments.get(line))) {
+                return line;
             }
         }
         return -1;
     }
+
+    private enum JavaLexicalState {
+        CODE,
+        BLOCK_COMMENT,
+        STRING,
+        CHARACTER,
+        TEXT_BLOCK
+    }
+
+    private record TestMethod(int startLine, int endLine) {}
 }
