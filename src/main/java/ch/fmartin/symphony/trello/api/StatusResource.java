@@ -22,6 +22,7 @@ import java.time.Clock;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.BooleanSupplier;
+import java.util.stream.Collectors;
 
 @Path("/")
 public class StatusResource {
@@ -97,7 +98,7 @@ public class StatusResource {
                                                 escape(row.sessionId()),
                                                 escape(row.lastEvent()),
                                                 row.turnCount()))
-                                .reduce("", String::concat));
+                                .collect(Collectors.joining()));
     }
 
     private static String dispatchPauseBanner(RuntimeSnapshot.DispatchPause pause) {
