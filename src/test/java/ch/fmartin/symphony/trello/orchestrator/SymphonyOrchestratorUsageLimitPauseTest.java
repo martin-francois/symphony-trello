@@ -1619,6 +1619,7 @@ final class SymphonyOrchestratorUsageLimitPauseTest {
     }
 
     @Test
+    // TODO Flaky: #578
     void latePreviousCommandRateLimitEventCannotOverwriteCurrentCommandSnapshot() throws Exception {
         // given
         Path workflow = tempDir.resolve("WORKFLOW.md");
