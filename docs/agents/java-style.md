@@ -13,6 +13,9 @@ References.
 - Use imports instead of inline fully qualified type names. Write `Arrays.stream(...)`, not
   `java.util.Arrays.stream(...)`. PMD enforces this with the narrow `UnnecessaryFullyQualifiedName`
   rule.
+- Prefer the Java file APIs' specified UTF-8 defaults for `Files.readString`, `Files.readAllLines`,
+  and `Files.writeString`. Keep an explicit charset for APIs that otherwise use the platform
+  default and for protocol conversions whose byte encoding is part of the contract.
 - Use Java 25 LTS language/runtime features where they make the code clearer, but do not be clever
   for its own sake.
 - Keep code ASCII unless an existing file or domain requirement clearly needs Unicode.

@@ -119,7 +119,7 @@ final class CliInputValidation {
         if (message == null || !ISO_CONTROL_CHARACTERS.matchesAnyOf(message)) {
             return message;
         }
-        StringBuilder safe = new StringBuilder(message.length());
+        var safe = new StringBuilder(message.length());
         message.codePoints().forEach(codePoint -> appendSafeCliCodePoint(safe, codePoint));
         return safe.toString();
     }
@@ -128,7 +128,7 @@ final class CliInputValidation {
         if (message == null || !ISO_CONTROL_CHARACTERS.matchesAnyOf(message)) {
             return message;
         }
-        StringBuilder safe = new StringBuilder(message.length());
+        var safe = new StringBuilder(message.length());
         message.codePoints().forEach(codePoint -> appendSafeDiagnosticsCodePoint(safe, codePoint));
         return safe.toString();
     }

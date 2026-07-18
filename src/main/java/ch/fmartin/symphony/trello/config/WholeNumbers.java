@@ -3,14 +3,12 @@ package ch.fmartin.symphony.trello.config;
 import java.math.BigDecimal;
 import java.util.OptionalInt;
 
-/**
- * Precise whole-number classification for numeric configuration values. YAML and environment
- * sources deliver numbers as arbitrary {@link Number} text (Integer, Long, BigInteger, Double),
- * and naive {@code intValue()} silently truncates fractional values such as {@code 18080.5}.
- * Going through BigDecimal keeps huge integers and huge doubles exact, so a fractional value, a
- * whole-but-too-large value, and a non-numeric value each classify distinctly; whole-valued
- * floats such as {@code 18080.0} normalize to their integer value everywhere.
- */
+/// Precise whole-number classification for numeric configuration values. YAML and environment
+/// sources deliver numbers as arbitrary [Number] text (Integer, Long, BigInteger, Double),
+/// and naive `intValue()` silently truncates fractional values such as `18080.5`.
+/// Going through BigDecimal keeps huge integers and huge doubles exact, so a fractional value, a
+/// whole-but-too-large value, and a non-numeric value each classify distinctly; whole-valued
+/// floats such as `18080.0` normalize to their integer value everywhere.
 public final class WholeNumbers {
     public enum Kind {
         WHOLE,

@@ -67,8 +67,7 @@ final class CodexAppServerClientTest {
         EffectiveConfig config = config(appServer);
         Path workspace = config.workspace().root().resolve("TRELLO-ceiling");
         Files.createDirectories(workspace);
-        CodexAppServerClient client =
-                new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
+        var client = new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
 
         // when
         AgentRunResult result = client.runTurn(
@@ -109,7 +108,7 @@ final class CodexAppServerClientTest {
         Path workspace = config.workspace().root().resolve("TRELLO-fast");
         Files.createDirectories(workspace);
         Instant eventTime = Instant.parse("2026-05-11T12:34:56Z");
-        CodexAppServerClient client = new CodexAppServerClient(
+        var client = new CodexAppServerClient(
                 json,
                 new TrelloHandoffToolHandler(json, new TrelloClient(json)),
                 Clock.fixed(eventTime, ZoneOffset.UTC));
@@ -153,8 +152,7 @@ final class CodexAppServerClientTest {
                 config(Map.of("command", appServer.toString(), "read_timeout_ms", 1000, "turn_timeout_ms", 10000));
         Path workspace = config.workspace().root().resolve("TRELLO-completed-exit");
         Files.createDirectories(workspace);
-        CodexAppServerClient client =
-                new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
+        var client = new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
 
         // when
         AgentRunResult result = client.runTurn(
@@ -189,8 +187,7 @@ final class CodexAppServerClientTest {
         EffectiveConfig config = config(appServer);
         Path workspace = config.workspace().root().resolve("TRELLO-error-response");
         Files.createDirectories(workspace);
-        CodexAppServerClient client =
-                new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
+        var client = new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
 
         // when
         AgentRunResult result = client.runTurn(
@@ -240,8 +237,7 @@ final class CodexAppServerClientTest {
                 1000));
         Path workspace = config.workspace().root().resolve("TRELLO-capture");
         Files.createDirectories(workspace);
-        CodexAppServerClient client =
-                new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
+        var client = new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
 
         // when
         AgentRunResult result = client.runTurn(
@@ -297,8 +293,7 @@ final class CodexAppServerClientTest {
                 1000));
         Path workspace = config.workspace().root().resolve("TRELLO-capture-network");
         Files.createDirectories(workspace);
-        CodexAppServerClient client =
-                new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
+        var client = new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
 
         // when
         AgentRunResult result = client.runTurn(
@@ -360,8 +355,7 @@ final class CodexAppServerClientTest {
                 1000));
         Path workspace = config.workspace().root().resolve("TRELLO-model");
         Files.createDirectories(workspace);
-        CodexAppServerClient client =
-                new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
+        var client = new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
 
         // when
         AgentRunResult result = client.runTurn(
@@ -378,7 +372,7 @@ final class CodexAppServerClientTest {
         assertThat(requests)
                 .extracting(request -> request.path("method").asText())
                 .containsExactly("thread/start", "turn/start");
-        assertThat(requests.get(0).path("params").path("model").asText()).isEqualTo("gpt-5.5");
+        assertThat(requests.getFirst().path("params").path("model").asText()).isEqualTo("gpt-5.5");
         assertThat(requests.get(1).path("params").path("model").asText()).isEqualTo("gpt-5.5");
         assertThat(requests.get(1).path("params").path("effort").asText()).isEqualTo("xhigh");
     }
@@ -412,8 +406,7 @@ final class CodexAppServerClientTest {
                 config(Map.of("command", appServer + " " + capture, "read_timeout_ms", 1000, "turn_timeout_ms", 1000));
         Path workspace = config.workspace().root().resolve("TRELLO-default-model");
         Files.createDirectories(workspace);
-        CodexAppServerClient client =
-                new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
+        var client = new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
 
         // when
         AgentRunResult result = client.runTurn(
@@ -473,8 +466,7 @@ final class CodexAppServerClientTest {
                 config(Map.of("command", appServer + " " + capture, "read_timeout_ms", 1000, "turn_timeout_ms", 1000));
         Path workspace = config.workspace().root().resolve("TRELLO-multi-turn");
         Files.createDirectories(workspace);
-        CodexAppServerClient client =
-                new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
+        var client = new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
 
         // when
         AgentRunResult result = client.runSession(
@@ -531,8 +523,7 @@ final class CodexAppServerClientTest {
                 config(Map.of("command", appServer.toString(), "read_timeout_ms", 1000, "turn_timeout_ms", 10000));
         Path workspace = config.workspace().root().resolve("TRELLO-exit");
         Files.createDirectories(workspace);
-        CodexAppServerClient client =
-                new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
+        var client = new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
 
         // when
         AgentRunResult result = client.runTurn(
@@ -568,8 +559,7 @@ final class CodexAppServerClientTest {
                 config(Map.of("command", appServer.toString(), "read_timeout_ms", 1000, "turn_timeout_ms", 10000));
         Path workspace = config.workspace().root().resolve("TRELLO-exit-request");
         Files.createDirectories(workspace);
-        CodexAppServerClient client =
-                new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
+        var client = new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
 
         // when
         AgentRunResult result = client.runTurn(
@@ -608,8 +598,7 @@ final class CodexAppServerClientTest {
         EffectiveConfig config = config(appServer);
         Path workspace = config.workspace().root().resolve("TRELLO-failed");
         Files.createDirectories(workspace);
-        CodexAppServerClient client =
-                new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
+        var client = new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
 
         // when
         AgentRunResult result = client.runTurn(
@@ -676,8 +665,7 @@ final class CodexAppServerClientTest {
         EffectiveConfig config = config(appServer);
         Path workspace = config.workspace().root().resolve("TRELLO-error");
         Files.createDirectories(workspace);
-        CodexAppServerClient client =
-                new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
+        var client = new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
 
         // when
         AgentRunResult result = client.runTurn(
@@ -716,7 +704,7 @@ final class CodexAppServerClientTest {
         assertThat(result.failureCategory()).isEqualTo(AgentRunResult.FailureCategory.CODEX_USAGE_LIMIT);
         assertThat(result.reason()).isEqualTo("turn_failed: Usage is unavailable.");
         assertThat(result.reason()).doesNotContain("private account payload", "additionalDetails", "rateLimits");
-        assertThat(result.retryNotBefore()).contains(secondaryReset);
+        assertThat(result.retryNotBefore()).hasValue(secondaryReset);
         assertThat(events.stream()
                         .filter(event -> event.event().equals("turn/completed"))
                         .map(AgentEvent::message))
@@ -782,7 +770,7 @@ final class CodexAppServerClientTest {
 
         // then
         assertThat(result.failureCategory()).isEqualTo(AgentRunResult.FailureCategory.CODEX_USAGE_LIMIT);
-        assertThat(result.retryNotBefore()).contains(farFutureReset);
+        assertThat(result.retryNotBefore()).hasValue(farFutureReset);
     }
 
     @Test
@@ -813,7 +801,7 @@ final class CodexAppServerClientTest {
 
         // then
         assertThat(result.failureCategory()).isEqualTo(AgentRunResult.FailureCategory.CODEX_USAGE_LIMIT);
-        assertThat(result.retryNotBefore()).contains(laterPrimaryReset);
+        assertThat(result.retryNotBefore()).hasValue(laterPrimaryReset);
         assertThat(publishedRateLimits).hasSize(3);
         assertThat(publishedRateLimits.get(1).path("primary").path("resetsAt").asLong())
                 .isEqualTo(laterPrimaryReset.getEpochSecond());
@@ -853,7 +841,7 @@ final class CodexAppServerClientTest {
         // then
         assertThat(result).isEqualTo(AgentRunResult.ok());
         assertThat(publishedRateLimits).hasSize(2);
-        JsonNode canonical = publishedRateLimits.get(0);
+        JsonNode canonical = publishedRateLimits.getFirst();
         assertThat(canonical.path("primary").path("resetsAt").asLong()).isEqualTo(reset.getEpochSecond());
         assertThat(canonical.path("planType").asText()).isEqualTo("team");
         assertThat(publishedRateLimits.get(1)).isEqualTo(canonical);
@@ -919,7 +907,7 @@ final class CodexAppServerClientTest {
                         .replace("__PRIMARY_RESET__", Long.toString(laterPrimaryReset.getEpochSecond()))
                         .replace("__SECONDARY_RESET__", Long.toString(earlierSecondaryReset.getEpochSecond())));
         EffectiveConfig config = config(appServer);
-        CodexAppServerClient client = new CodexAppServerClient(
+        var client = new CodexAppServerClient(
                 json, new TrelloHandoffToolHandler(json, new TrelloClient(json)), Clock.fixed(now, ZoneOffset.UTC));
         AgentEventListener listener = event -> {
             if ("account/rateLimits/updated".equals(event.event())) {
@@ -934,7 +922,7 @@ final class CodexAppServerClientTest {
         // then
         assertThat(first).isEqualTo(AgentRunResult.ok());
         assertThat(second.failureCategory()).isEqualTo(AgentRunResult.FailureCategory.CODEX_USAGE_LIMIT);
-        assertThat(second.retryNotBefore()).contains(laterPrimaryReset);
+        assertThat(second.retryNotBefore()).hasValue(laterPrimaryReset);
         assertThat(publishedRateLimits).hasSize(2);
         JsonNode merged = publishedRateLimits.get(1);
         assertThat(merged.path("primary").path("resetsAt").asLong()).isEqualTo(laterPrimaryReset.getEpochSecond());
@@ -973,7 +961,7 @@ final class CodexAppServerClientTest {
         EffectiveConfig firstConfig = config(firstAppServer);
         EffectiveConfig secondConfig = config(secondAppServer);
         List<JsonNode> publishedRateLimits = new ArrayList<>();
-        CodexAppServerClient client = new CodexAppServerClient(
+        var client = new CodexAppServerClient(
                 json, new TrelloHandoffToolHandler(json, new TrelloClient(json)), Clock.fixed(now, ZoneOffset.UTC));
         AgentEventListener listener = event -> {
             if ("account/rateLimits/updated".equals(event.event())) {
@@ -988,7 +976,7 @@ final class CodexAppServerClientTest {
         // then
         assertThat(first).isEqualTo(AgentRunResult.ok());
         assertThat(second.failureCategory()).isEqualTo(AgentRunResult.FailureCategory.CODEX_USAGE_LIMIT);
-        assertThat(second.retryNotBefore()).contains(secondAccountReset);
+        assertThat(second.retryNotBefore()).hasValue(secondAccountReset);
         assertThat(publishedRateLimits)
                 .hasSize(2)
                 .element(1)
@@ -1047,7 +1035,7 @@ final class CodexAppServerClientTest {
                         .replace("__SECONDARY_RESET__", Long.toString(earlierSecondaryReset.getEpochSecond())));
         EffectiveConfig config =
                 config(Map.of("command", appServer.toString(), "read_timeout_ms", 5000, "turn_timeout_ms", 5000));
-        CodexAppServerClient client = new CodexAppServerClient(
+        var client = new CodexAppServerClient(
                 json, new TrelloHandoffToolHandler(json, new TrelloClient(json)), Clock.fixed(now, ZoneOffset.UTC));
         AgentEventListener listener = event -> {
             if (!"account/rateLimits/updated".equals(event.event())) {
@@ -1090,9 +1078,9 @@ final class CodexAppServerClientTest {
                 .filter(result -> result.failureCategory() == AgentRunResult.FailureCategory.CODEX_USAGE_LIMIT)
                 .findFirst()
                 .orElseThrow();
-        assertThat(usageLimit.retryNotBefore()).contains(laterPrimaryReset);
+        assertThat(usageLimit.retryNotBefore()).hasValue(laterPrimaryReset);
         assertThat(publishedRateLimits).hasSize(2);
-        JsonNode latestPublished = publishedRateLimits.get(publishedRateLimits.size() - 1);
+        JsonNode latestPublished = publishedRateLimits.getLast();
         assertThat(latestPublished.path("primary").path("resetsAt").asLong())
                 .isEqualTo(laterPrimaryReset.getEpochSecond());
         assertThat(latestPublished.path("secondary").path("resetsAt").asLong())
@@ -1130,11 +1118,11 @@ final class CodexAppServerClientTest {
                         .replace("__RESET__", Long.toString(reset.getEpochSecond())));
         EffectiveConfig config =
                 config(Map.of("command", appServer.toString(), "read_timeout_ms", 5000, "turn_timeout_ms", 5000));
-        CodexAppServerClient client = new CodexAppServerClient(
+        var client = new CodexAppServerClient(
                 json, new TrelloHandoffToolHandler(json, new TrelloClient(json)), Clock.fixed(now, ZoneOffset.UTC));
-        CountDownLatch releaseAcceptance = new CountDownLatch(1);
-        CountDownLatch usageFailurePublished = new CountDownLatch(1);
-        AtomicReference<String> usageWorker = new AtomicReference<>();
+        var releaseAcceptance = new CountDownLatch(1);
+        var usageFailurePublished = new CountDownLatch(1);
+        var usageWorker = new AtomicReference<String>();
         AgentEventListener listener = new AgentEventListener() {
             @Override
             public void onEvent(AgentEvent event) {
@@ -1189,7 +1177,7 @@ final class CodexAppServerClientTest {
                 .findFirst()
                 .orElseThrow();
         if (accepted) {
-            assertThat(usageLimit.retryNotBefore()).contains(reset);
+            assertThat(usageLimit.retryNotBefore()).hasValue(reset);
         } else {
             assertThat(usageLimit.retryNotBefore()).isEmpty();
         }
@@ -1264,8 +1252,7 @@ final class CodexAppServerClientTest {
         EffectiveConfig config = config(appServer);
         Path workspace = config.workspace().root().resolve("TRELLO-cancelled");
         Files.createDirectories(workspace);
-        CodexAppServerClient client =
-                new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
+        var client = new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
 
         // when
         AgentRunResult result = client.runTurn(
@@ -1302,8 +1289,7 @@ final class CodexAppServerClientTest {
         EffectiveConfig config = config(appServer);
         Path workspace = config.workspace().root().resolve("TRELLO-interrupted");
         Files.createDirectories(workspace);
-        CodexAppServerClient client =
-                new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
+        var client = new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)));
 
         // when
         AgentRunResult result = client.runTurn(
@@ -1329,8 +1315,7 @@ final class CodexAppServerClientTest {
     private AgentRunResult runFailureTurn(Path appServer, Clock clock, String identifier, AgentEventListener listener)
             throws Exception {
         EffectiveConfig config = config(appServer);
-        CodexAppServerClient client =
-                new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)), clock);
+        var client = new CodexAppServerClient(json, new TrelloHandoffToolHandler(json, new TrelloClient(json)), clock);
         return runTurn(client, config, identifier, listener);
     }
 

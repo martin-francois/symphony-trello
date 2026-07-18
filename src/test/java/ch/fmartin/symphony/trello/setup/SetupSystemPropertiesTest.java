@@ -36,7 +36,7 @@ final class SetupSystemPropertiesTest {
     void failedLookupScopeRestoresOuterLookup() {
         // given
         String propertyName = SetupSystemPropertiesTest.class.getName();
-        IllegalStateException failure = new IllegalStateException("failed nested setup");
+        var failure = new IllegalStateException("failed nested setup");
         List<String> observedValues = new ArrayList<>();
 
         // when

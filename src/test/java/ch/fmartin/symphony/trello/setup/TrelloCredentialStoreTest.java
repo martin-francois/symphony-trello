@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledOnOs;
 import org.junit.jupiter.api.condition.OS;
@@ -24,7 +25,7 @@ final class TrelloCredentialStoreTest {
         // given
         Path env = tempDir.resolve(".env");
         LocalSetup.Options options = options(env, "direct-key", "direct-token");
-        RecordingTerminal terminal = new RecordingTerminal();
+        var terminal = new RecordingTerminal();
 
         // when
         TrelloCredentialStore.CredentialSelection credentials =
@@ -43,8 +44,7 @@ final class TrelloCredentialStoreTest {
         // given
         Path env = tempDir.resolve(".env");
         LocalSetup.Options options = SetupOptionFactory.options(tempDir);
-        TrelloCredentialStore store =
-                new TrelloCredentialStore(Map.of("TRELLO_API_KEY", "env-key", "TRELLO_API_TOKEN", "env-token"));
+        var store = new TrelloCredentialStore(Map.of("TRELLO_API_KEY", "env-key", "TRELLO_API_TOKEN", "env-token"));
 
         // when
         TrelloCredentialStore.CredentialSelection credentials =
@@ -62,7 +62,7 @@ final class TrelloCredentialStoreTest {
     void existingDotenvCredentialsAreNotCopiedIntoAnotherDotenv() throws Exception {
         // given
         Path env = tempDir.resolve(".env");
-        Files.writeString(env, "TRELLO_API_KEY=dotenv-key\nTRELLO_API_TOKEN=dotenv-token\n", StandardCharsets.UTF_8);
+        Files.writeString(env, "TRELLO_API_KEY=dotenv-key\nTRELLO_API_TOKEN=dotenv-token\n");
         LocalSetup.Options options = SetupOptionFactory.options(tempDir);
 
         // when
@@ -105,7 +105,7 @@ final class TrelloCredentialStoreTest {
         // given
         Path env = tempDir.resolve(".env");
         LocalSetup.Options options = options(env, "key", "token");
-        TrelloCredentialStore store = new TrelloCredentialStore(Map.of());
+        var store = new TrelloCredentialStore(Map.of());
 
         // when
         store.write(store.loadOrPrompt(options, env, new RecordingTerminal()), env, new RecordingTerminal());
@@ -126,8 +126,8 @@ final class TrelloCredentialStoreTest {
                 options.forceNewSetup(),
                 options.configureGithub(),
                 options.githubMode(),
-                java.util.Optional.of(key),
-                java.util.Optional.of(token),
+                Optional.of(key),
+                Optional.of(token),
                 options.boardName(),
                 options.existingBoardId(),
                 options.workspaceId(),

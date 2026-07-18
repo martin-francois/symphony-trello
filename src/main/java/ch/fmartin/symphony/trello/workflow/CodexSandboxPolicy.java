@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.StreamSupport;
+import org.jspecify.annotations.Nullable;
 
 public final class CodexSandboxPolicy {
 
@@ -26,7 +27,7 @@ public final class CodexSandboxPolicy {
         validateCodexSection(codexValue, false);
     }
 
-    public static void validateCodexSection(Object codexValue, boolean forceDangerFullAccess) {
+    public static void validateCodexSection(@Nullable Object codexValue, boolean forceDangerFullAccess) {
         if (codexValue == null) {
             return;
         }
@@ -65,7 +66,7 @@ public final class CodexSandboxPolicy {
 
     public static JsonNode effectivePolicy(
             ObjectMapper json,
-            Object configuredPolicy,
+            @Nullable Object configuredPolicy,
             List<Path> additionalWritableRoots,
             boolean forceDangerFullAccess) {
         validateResolvedPolicy(configuredPolicy, additionalWritableRoots, forceDangerFullAccess);
@@ -97,7 +98,7 @@ public final class CodexSandboxPolicy {
     }
 
     public static void validateResolvedPolicy(
-            Object configuredPolicy, List<Path> additionalWritableRoots, boolean forceDangerFullAccess) {
+            @Nullable Object configuredPolicy, List<Path> additionalWritableRoots, boolean forceDangerFullAccess) {
         if (forceDangerFullAccess) {
             return;
         }

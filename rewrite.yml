@@ -1,0 +1,41 @@
+---
+type: specs.openrewrite.org/v1beta/recipe
+name: ch.fmartin.symphony.trello.OpenRewriteMaintenance
+displayName: Symphony for Trello OpenRewrite maintenance
+description: >-
+  Applies the reviewed semantic-maintenance recipes that complement the repository's blocking
+  formatting, compiler, static-analysis, and test gates.
+recipeList:
+  - org.openrewrite.java.ShortenFullyQualifiedTypeReferences
+  - org.openrewrite.java.migrate.lang.JavadocToMarkdownDocComment
+  - org.openrewrite.java.migrate.lang.var.UseVarForConstructors
+  - org.openrewrite.java.migrate.lang.var.UseVarForTypeCast
+  - org.openrewrite.java.migrate.lang.IfElseIfConstructToSwitch
+  - org.openrewrite.java.migrate.lang.UseTextBlocks:
+      convertStringsWithoutNewlines: false
+      avoidLineContinuations: false
+  - org.openrewrite.java.migrate.nio.file.RedundantUtf8Charset
+  - org.openrewrite.staticanalysis.AnnotateNullableParameters
+  - org.openrewrite.staticanalysis.HideUtilityClassConstructor
+  - org.openrewrite.staticanalysis.RemoveUnusedPrivateMethods
+  - org.openrewrite.staticanalysis.ReplaceLambdaWithMethodReference
+  - org.openrewrite.staticanalysis.IndexOfReplaceableByContains
+  - org.openrewrite.staticanalysis.FinalizePrivateFields
+  - org.openrewrite.java.testing.junit5.CsvSourceToValueSource
+  - org.openrewrite.java.testing.mockito.RemoveTimesZeroAndOne
+  - org.openrewrite.java.testing.assertj.AssertJIntegerRulesRecipes$AbstractIntegerAssertIsOneRecipe
+  - org.openrewrite.java.testing.assertj.ReturnActual
+  - tech.picnic.errorprone.refasterrules.AssertJNumberRulesRecipes$NumberAssertIsNotNegativeRecipe
+  - tech.picnic.errorprone.refasterrules.AssertJNumberRulesRecipes$NumberAssertIsPositiveRecipe
+  - tech.picnic.errorprone.refasterrules.AssertJOptionalRulesRecipes$AbstractOptionalAssertHasValueRecipe
+  - tech.picnic.errorprone.refasterrules.AssertJPathRulesRecipes$AssertThatHasFileNameRecipe
+  - tech.picnic.errorprone.refasterrules.AssertJObjectRulesRecipes$AssertThatHasToStringRecipe
+  - tech.picnic.errorprone.refasterrules.AssertJRulesRecipes$AssertThatContainsExactlyElementsOfListRecipe
+  - tech.picnic.errorprone.refasterrules.AssertJRulesRecipes$AssertThatHasSameElementsAsSetRecipe
+  - tech.picnic.errorprone.refasterrules.AssertJStringRulesRecipes$AssertThatContentRecipe
+  - tech.picnic.errorprone.refasterrules.AssertJStringRulesRecipes$AssertThatContentUtf8Recipe
+  - tech.picnic.errorprone.refasterrules.AssertJPathRulesRecipes$AssertThatIsSymbolicLinkRecipe
+  - org.openrewrite.java.testing.assertj.StaticImports
+  - org.openrewrite.maven.cleanup.ExplicitPluginGroupId
+  - org.openrewrite.java.migrate.lang.MigrateProcessWaitForDuration
+  - org.openrewrite.java.migrate.util.ListFirstAndLast

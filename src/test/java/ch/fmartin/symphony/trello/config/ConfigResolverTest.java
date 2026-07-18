@@ -6,7 +6,6 @@ import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import ch.fmartin.symphony.trello.workflow.WorkflowLoader;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -37,7 +36,7 @@ final class ConfigResolverTest {
                 server:
                   port: $SYMPHONY_TEST_PORT
                 """);
-        ConfigResolver resolver = new ConfigResolver(name -> switch (name) {
+        var resolver = new ConfigResolver(name -> switch (name) {
             case "SYMPHONY_BOARD_ID" -> Optional.of("board-shortlink");
             case "SYMPHONY_RESOLVED_BOARD_ID" -> Optional.of("resolved-board-id");
             case "SYMPHONY_TEST_PORT" -> Optional.of("19093");
@@ -62,7 +61,7 @@ final class ConfigResolverTest {
                 repository:
                   default_url: https://github.com/example/project.git
                 """);
-        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
 
         // when
         EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
@@ -82,7 +81,7 @@ final class ConfigResolverTest {
                 repository:
                   default_url: $SYMPHONY_DEFAULT_REPOSITORY_URL
                 """);
-        ConfigResolver resolver = new ConfigResolver(name -> "SYMPHONY_DEFAULT_REPOSITORY_URL".equals(name)
+        var resolver = new ConfigResolver(name -> "SYMPHONY_DEFAULT_REPOSITORY_URL".equals(name)
                 ? Optional.of("ssh://git@example.com/team/project.git")
                 : Optional.empty());
 
@@ -103,7 +102,7 @@ final class ConfigResolverTest {
                 repository:
                   default_url: $SYMPHONY_MISSING_REPOSITORY_URL
                 """);
-        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
 
         // when
         EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
@@ -122,7 +121,7 @@ final class ConfigResolverTest {
                 repository:
                   default_url: $SYMPHONY_BLANK_REPOSITORY_URL
                 """);
-        ConfigResolver resolver = new ConfigResolver(
+        var resolver = new ConfigResolver(
                 name -> "SYMPHONY_BLANK_REPOSITORY_URL".equals(name) ? Optional.of("   ") : Optional.empty());
 
         // when
@@ -142,7 +141,7 @@ final class ConfigResolverTest {
                 repository:
                   default_path: ../repositories/project
                 """);
-        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
 
         // when
         EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
@@ -167,7 +166,7 @@ final class ConfigResolverTest {
                   default_path: %s
                 """
                         .formatted(missingCheckout));
-        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
 
         // when
         EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
@@ -188,7 +187,7 @@ final class ConfigResolverTest {
                 repository:
                   default_path: $SYMPHONY_DEFAULT_REPOSITORY_PATH
                 """);
-        ConfigResolver resolver = new ConfigResolver(name -> "SYMPHONY_DEFAULT_REPOSITORY_PATH".equals(name)
+        var resolver = new ConfigResolver(name -> "SYMPHONY_DEFAULT_REPOSITORY_PATH".equals(name)
                 ? Optional.of(repositoryPath.toString())
                 : Optional.empty());
 
@@ -211,7 +210,7 @@ final class ConfigResolverTest {
                 repository:
                   default_path: $SYMPHONY_REPOSITORY_PARENT/project
                 """);
-        ConfigResolver resolver = new ConfigResolver(name -> "SYMPHONY_REPOSITORY_PARENT".equals(name)
+        var resolver = new ConfigResolver(name -> "SYMPHONY_REPOSITORY_PARENT".equals(name)
                 ? Optional.of(repositoryParent.toString())
                 : Optional.empty());
 
@@ -232,7 +231,7 @@ final class ConfigResolverTest {
                 repository:
                   default_path: $SYMPHONY_MISSING_REPOSITORY_PATH
                 """);
-        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
 
         // when
         EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
@@ -251,7 +250,7 @@ final class ConfigResolverTest {
                 repository:
                   default_path: $SYMPHONY_BLANK_REPOSITORY_PATH
                 """);
-        ConfigResolver resolver = new ConfigResolver(
+        var resolver = new ConfigResolver(
                 name -> "SYMPHONY_BLANK_REPOSITORY_PATH".equals(name) ? Optional.of("   ") : Optional.empty());
 
         // when
@@ -272,7 +271,7 @@ final class ConfigResolverTest {
                   default_url: https://github.com/example/project.git
                   default_path: ../repositories/project
                 """);
-        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
 
         // when
         EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
@@ -289,7 +288,7 @@ final class ConfigResolverTest {
     @Test
     void repositoryDefaultUrlSuppressesMalformedLowerPriorityPath() {
         // given
-        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
 
         // when
         EffectiveConfig config = resolver.resolve(workflowDefinitionWithRepository(Map.of(
@@ -307,8 +306,8 @@ final class ConfigResolverTest {
     @Test
     void environmentRepositoryDefaultUrlIgnoresMalformedLowerPriorityEnvironmentPath() {
         // given
-        AtomicInteger pathEnvironmentRequests = new AtomicInteger();
-        ConfigResolver resolver = new ConfigResolver(name -> switch (name) {
+        var pathEnvironmentRequests = new AtomicInteger();
+        var resolver = new ConfigResolver(name -> switch (name) {
             case "SYMPHONY_DEFAULT_REPOSITORY_URL" -> Optional.of("ssh://git@example.com/team/project.git");
             case "SYMPHONY_DEFAULT_REPOSITORY_PATH" -> {
                 pathEnvironmentRequests.incrementAndGet();
@@ -342,7 +341,7 @@ final class ConfigResolverTest {
                   default_path: %s
                 """
                         .formatted(repositoryPath));
-        ConfigResolver resolver = new ConfigResolver(name -> Optional.ofNullable(environment.get(name)));
+        var resolver = new ConfigResolver(name -> Optional.ofNullable(environment.get(name)));
 
         // when
         EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
@@ -357,7 +356,7 @@ final class ConfigResolverTest {
     @Test
     void malformedSelectedRepositoryDefaultPathFailsAsConfigurationError() {
         // given
-        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
 
         // when
         ConfigException error = catchThrowableOfType(
@@ -376,7 +375,7 @@ final class ConfigResolverTest {
             throws Exception {
         // given
         Path workflow = writeDefaultWorkflow("WORKFLOW." + name + ".md", section);
-        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
 
         // when
         ConfigException error = catchThrowableOfType(
@@ -413,7 +412,7 @@ final class ConfigResolverTest {
             throws Exception {
         // given
         Path workflow = writeDefaultWorkflow("WORKFLOW." + name + ".md", section);
-        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
 
         // when
         ConfigException error = catchThrowableOfType(
@@ -439,7 +438,7 @@ final class ConfigResolverTest {
                   priority_labels:
                     rush:
                 """);
-        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
 
         // when
         EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
@@ -457,7 +456,7 @@ final class ConfigResolverTest {
                 server:
                   port: $SYMPHONY_FRACTIONAL_PORT
                 """);
-        ConfigResolver resolver = new ConfigResolver(
+        var resolver = new ConfigResolver(
                 name -> "SYMPHONY_FRACTIONAL_PORT".equals(name) ? Optional.of("18080.5") : Optional.empty());
 
         // when
@@ -478,7 +477,7 @@ final class ConfigResolverTest {
                 server:
                   port: 99999999999999999999999
                 """);
-        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
 
         // when
         ConfigException error = catchThrowableOfType(
@@ -498,7 +497,7 @@ final class ConfigResolverTest {
                 server:
                   port: $SYMPHONY_HUGE_PORT
                 """);
-        ConfigResolver resolver = new ConfigResolver(
+        var resolver = new ConfigResolver(
                 name -> "SYMPHONY_HUGE_PORT".equals(name) ? Optional.of("9999999999") : Optional.empty());
 
         // when
@@ -519,7 +518,7 @@ final class ConfigResolverTest {
                 server:
                   port: 18080.0
                 """);
-        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
 
         // when
         EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
@@ -543,7 +542,7 @@ final class ConfigResolverTest {
                 server:
                   port: 70000
                 """);
-        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
 
         // when
         EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
@@ -566,7 +565,7 @@ final class ConfigResolverTest {
                 server:
                   port: 0
                 """);
-        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
 
         // when
         EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
@@ -586,7 +585,7 @@ final class ConfigResolverTest {
                   priority_labels:
                     rush: 2.5
                 """);
-        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
 
         // when
         EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
@@ -627,7 +626,7 @@ final class ConfigResolverTest {
                 ---
                 Prompt
                 """);
-        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
 
         // when
         EffectiveConfig configured = resolver.resolve(new WorkflowLoader().load(configuredWorkflow));
@@ -656,7 +655,7 @@ final class ConfigResolverTest {
                 ---
                 Prompt
                 """);
-        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
 
         // when
         EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
@@ -690,7 +689,7 @@ final class ConfigResolverTest {
                 ---
                 Prompt
                 """);
-        ConfigResolver resolver = new ConfigResolver();
+        var resolver = new ConfigResolver();
 
         // when
         EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
@@ -724,7 +723,7 @@ final class ConfigResolverTest {
                 ---
                 Prompt
                 """);
-        ConfigResolver resolver = new ConfigResolver();
+        var resolver = new ConfigResolver();
 
         // when
         EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
@@ -762,7 +761,7 @@ final class ConfigResolverTest {
                 ---
                 Prompt
                 """);
-        ConfigResolver resolver = new ConfigResolver();
+        var resolver = new ConfigResolver();
 
         // when
         EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
@@ -798,7 +797,7 @@ final class ConfigResolverTest {
                 ---
                 Prompt
                 """);
-        ConfigResolver resolver = new ConfigResolver();
+        var resolver = new ConfigResolver();
 
         // when
         EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
@@ -833,7 +832,7 @@ final class ConfigResolverTest {
                 ---
                 Prompt
                 """);
-        ConfigResolver resolver = new ConfigResolver();
+        var resolver = new ConfigResolver();
 
         // when
         EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
@@ -861,7 +860,7 @@ final class ConfigResolverTest {
                 ---
                 Prompt
                 """);
-        ConfigResolver resolver = new ConfigResolver(name -> Optional.empty());
+        var resolver = new ConfigResolver(name -> Optional.empty());
 
         // when
         ConfigException error = catchThrowableOfType(
@@ -888,7 +887,7 @@ final class ConfigResolverTest {
                 ---
                 Prompt
                 """);
-        ConfigResolver resolver = new ConfigResolver(name -> Optional.empty());
+        var resolver = new ConfigResolver(name -> Optional.empty());
 
         // when
         EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
@@ -915,7 +914,7 @@ final class ConfigResolverTest {
                 ---
                 Prompt
                 """);
-        ConfigResolver resolver = new ConfigResolver(name -> Optional.empty());
+        var resolver = new ConfigResolver(name -> Optional.empty());
 
         // when
         EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
@@ -942,7 +941,7 @@ final class ConfigResolverTest {
                 ---
                 Prompt
                 """);
-        ConfigResolver resolver = new ConfigResolver();
+        var resolver = new ConfigResolver();
 
         // when
         EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
@@ -968,7 +967,7 @@ final class ConfigResolverTest {
                 ---
                 Prompt
                 """);
-        ConfigResolver resolver = new ConfigResolver(name -> switch (name) {
+        var resolver = new ConfigResolver(name -> switch (name) {
             case "SYMPHONY_TEST_KEY" -> Optional.of("resolved-key");
             case "SYMPHONY_TEST_TOKEN" -> Optional.of("resolved-token");
             default -> Optional.empty();
@@ -998,7 +997,7 @@ final class ConfigResolverTest {
                 ---
                 Prompt
                 """);
-        ConfigResolver resolver = new ConfigResolver(name -> Optional.of("should-not-resolve"));
+        var resolver = new ConfigResolver(name -> Optional.of("should-not-resolve"));
 
         // when
         EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
@@ -1018,7 +1017,7 @@ final class ConfigResolverTest {
                   turn_sandbox_policy:
                     type: readOnly
                 """);
-        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
 
         // when
         EffectiveConfig config = resolver.resolve(new WorkflowLoader().load(workflow));
@@ -1040,7 +1039,7 @@ final class ConfigResolverTest {
                   additional_writable_roots:
                     - /allowed/project
                 """);
-        ConfigResolver resolver = new ConfigResolver(ignored -> Optional.empty());
+        var resolver = new ConfigResolver(ignored -> Optional.empty());
 
         // when
         ConfigException error = catchThrowableOfType(
@@ -1064,7 +1063,7 @@ final class ConfigResolverTest {
                   turn_sandbox_policy:
                     type: readOnly
                 """);
-        ConfigResolver resolver = new ConfigResolver(name -> "SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS".equals(name)
+        var resolver = new ConfigResolver(name -> "SYMPHONY_CODEX_ADDITIONAL_WRITABLE_ROOTS".equals(name)
                 ? Optional.of("/allowed/env")
                 : Optional.empty());
 
@@ -1092,7 +1091,7 @@ final class ConfigResolverTest {
                   additional_writable_roots:
                     - /allowed/project
                 """);
-        ConfigResolver resolver = new ConfigResolver(
+        var resolver = new ConfigResolver(
                 name -> "SYMPHONY_CODEX_DANGER_FULL_ACCESS".equals(name) ? Optional.of("true") : Optional.empty());
 
         // when
@@ -1121,7 +1120,7 @@ final class ConfigResolverTest {
                 %s
                 """
                         .formatted(codexYaml.indent(2)));
-        ConfigResolver resolver = new ConfigResolver(
+        var resolver = new ConfigResolver(
                 name -> "SYMPHONY_CODEX_DANGER_FULL_ACCESS".equals(name) ? Optional.of("true") : Optional.empty());
 
         // when
@@ -1166,9 +1165,8 @@ final class ConfigResolverTest {
                 ## Trello List Routing
 
                 Card URL: {{ card.url }}
-                """,
-                StandardCharsets.UTF_8);
-        ConfigResolver resolver = new ConfigResolver(
+                """);
+        var resolver = new ConfigResolver(
                 name -> "SYMPHONY_CODEX_DANGER_FULL_ACCESS".equals(name) ? Optional.of("true") : Optional.empty());
 
         // when

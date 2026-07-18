@@ -91,7 +91,7 @@ final class DiagnosticsTokenHasherTest {
         Path configDir = tempDir.resolve("config");
         Files.createDirectories(configDir);
         Path key = configDir.resolve(DiagnosticsTokenHasher.KEY_FILE_NAME);
-        Files.writeString(key, "not-a-valid-key", StandardCharsets.UTF_8);
+        Files.writeString(key, "not-a-valid-key");
 
         // when
         DiagnosticsTokenHasher hasher = DiagnosticsTokenHasher.load(configDir);

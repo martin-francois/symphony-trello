@@ -40,6 +40,12 @@
     <guava.version>33.6.0-jre</guava.version>
     <jazzer.version>0.30.0</jazzer.version>
     <jspecify.version>1.0.0</jspecify.version>
+    <rewrite-maven-plugin.version>6.44.0</rewrite-maven-plugin.version>
+    <rewrite-maven.version>8.87.0</rewrite-maven.version>
+    <rewrite-error-prone-support.version>0.30.0</rewrite-error-prone-support.version>
+    <rewrite-migrate-java.version>3.40.0</rewrite-migrate-java.version>
+    <rewrite-static-analysis.version>2.39.0</rewrite-static-analysis.version>
+    <rewrite-testing-frameworks.version>3.42.0</rewrite-testing-frameworks.version>
     <spotbugs-maven-plugin.version>4.9.8.3</spotbugs-maven-plugin.version>
     <spotless.version>3.5.1</spotless.version>
     <surefire.version>3.5.6</surefire.version>
@@ -193,6 +199,7 @@
         </configuration>
       </plugin>
       <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
         <version>${maven-compiler-plugin.version}</version>
         <configuration>
@@ -235,6 +242,7 @@
         </configuration>
       </plugin>
       <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-dependency-plugin</artifactId>
         <version>${maven-dependency-plugin.version}</version>
         <executions>
@@ -246,6 +254,7 @@
         </executions>
       </plugin>
       <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
         <version>${surefire.version}</version>
         <configuration>
@@ -262,6 +271,7 @@
         </configuration>
       </plugin>
       <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-failsafe-plugin</artifactId>
         <version>${maven-failsafe-plugin.version}</version>
         <configuration>
@@ -286,6 +296,7 @@
         </executions>
       </plugin>
       <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-pmd-plugin</artifactId>
         <version>${maven-pmd-plugin.version}</version>
         <configuration>
@@ -429,6 +440,7 @@
       <build>
         <plugins>
           <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-pmd-plugin</artifactId>
             <executions>
               <execution>
@@ -447,6 +459,53 @@
                 </configuration>
               </execution>
             </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <profile>
+      <id>openrewrite</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.openrewrite.maven</groupId>
+            <artifactId>rewrite-maven-plugin</artifactId>
+            <version>${rewrite-maven-plugin.version}</version>
+            <configuration>
+              <activeRecipes>
+                <recipe>ch.fmartin.symphony.trello.OpenRewriteMaintenance</recipe>
+              </activeRecipes>
+              <configLocation>${maven.multiModuleProjectDirectory}/rewrite.yml</configLocation>
+              <failOnInvalidActiveRecipes>true</failOnInvalidActiveRecipes>
+            </configuration>
+            <dependencies>
+              <dependency>
+                <groupId>org.openrewrite</groupId>
+                <artifactId>rewrite-maven</artifactId>
+                <version>${rewrite-maven.version}</version>
+              </dependency>
+              <dependency>
+                <groupId>org.openrewrite.recipe</groupId>
+                <artifactId>rewrite-migrate-java</artifactId>
+                <version>${rewrite-migrate-java.version}</version>
+              </dependency>
+              <dependency>
+                <groupId>org.openrewrite.recipe</groupId>
+                <artifactId>rewrite-static-analysis</artifactId>
+                <version>${rewrite-static-analysis.version}</version>
+              </dependency>
+              <dependency>
+                <groupId>org.openrewrite.recipe</groupId>
+                <artifactId>rewrite-testing-frameworks</artifactId>
+                <version>${rewrite-testing-frameworks.version}</version>
+              </dependency>
+              <dependency>
+                <groupId>tech.picnic.error-prone-support</groupId>
+                <artifactId>error-prone-contrib</artifactId>
+                <version>${rewrite-error-prone-support.version}</version>
+                <classifier>recipes</classifier>
+              </dependency>
+            </dependencies>
           </plugin>
         </plugins>
       </build>

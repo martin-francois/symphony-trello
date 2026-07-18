@@ -20,7 +20,7 @@ import ch.fmartin.symphony.trello.workflow.WorkflowDefinition;
 import ch.fmartin.symphony.trello.workspace.CodexSkillInstaller;
 import ch.fmartin.symphony.trello.workspace.HookRunner;
 import ch.fmartin.symphony.trello.workspace.WorkspaceManager;
-import java.nio.file.Files;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
@@ -77,8 +77,12 @@ final class LocalAgentRunnerTest {
                 .contains("No workflow repository default is configured");
         assertThat(workspace.getValue())
                 .isEqualTo(expectedWorkspace.toAbsolutePath().normalize());
-        assertThat(Files.readString(expectedWorkspace.resolve("before.txt"))).contains("before");
-        assertThat(Files.readString(expectedWorkspace.resolve("after.txt"))).contains("after");
+        assertThat(expectedWorkspace.resolve("before.txt"))
+                .content(StandardCharsets.UTF_8)
+                .contains("before");
+        assertThat(expectedWorkspace.resolve("after.txt"))
+                .content(StandardCharsets.UTF_8)
+                .contains("after");
         assertThat(expectedWorkspace.resolve(CodexSkillInstaller.installedSkillPath("commit")))
                 .content()
                 .contains("configure it from the authenticated GitHub login");
@@ -783,8 +787,8 @@ final class LocalAgentRunnerTest {
     void cancelInterruptsActiveWorkerThread() throws Exception {
         // given
         CodexAppServerClient codex = mock();
-        CountDownLatch entered = new CountDownLatch(1);
-        AtomicReference<Boolean> interrupted = new AtomicReference<>(false);
+        var entered = new CountDownLatch(1);
+        var interrupted = new AtomicReference<Boolean>(false);
         doAnswer(invocation -> {
                     entered.countDown();
                     try {
@@ -828,10 +832,10 @@ final class LocalAgentRunnerTest {
     void completedDuplicateIdentityCannotUnregisterNewerActiveWorker() throws Exception {
         // given
         CodexAppServerClient codex = mock();
-        CountDownLatch firstEntered = new CountDownLatch(1);
-        CountDownLatch secondEntered = new CountDownLatch(1);
-        CountDownLatch releaseFirst = new CountDownLatch(1);
-        AtomicBoolean secondInterrupted = new AtomicBoolean();
+        var firstEntered = new CountDownLatch(1);
+        var secondEntered = new CountDownLatch(1);
+        var releaseFirst = new CountDownLatch(1);
+        var secondInterrupted = new AtomicBoolean();
         when(codex.runSession(any(), any(), any(), any(), any(), any(), any())).thenAnswer(invocation -> {
             Card card = invocation.getArgument(1);
             if (card.id().equals("card-first")) {
@@ -853,8 +857,8 @@ final class LocalAgentRunnerTest {
         });
         var runner = runner(codex, CardLookupResult.Found::new);
         EffectiveConfig config = config(Map.of());
-        AtomicReference<AgentRunResult> firstResult = new AtomicReference<>();
-        AtomicReference<AgentRunResult> secondResult = new AtomicReference<>();
+        var firstResult = new AtomicReference<AgentRunResult>();
+        var secondResult = new AtomicReference<AgentRunResult>();
         Thread first = Thread.ofVirtual()
                 .start(() -> firstResult.set(runner.run(new AgentRunner.AgentRunRequest(
                         TestCards.card("card-first", "TRELLO-duplicate-first", "Ready for Codex"),
@@ -900,7 +904,7 @@ final class LocalAgentRunnerTest {
     void continuesSameSessionWhileCardRemainsActiveAndMaxTurnsAllowsIt() throws Exception {
         // given
         CodexAppServerClient codex = mock();
-        AtomicReference<CodexAppServerClient.TurnController> controller = new AtomicReference<>();
+        var controller = new AtomicReference<CodexAppServerClient.TurnController>();
         when(codex.runSession(any(), any(), any(), any(), any(), any(), any())).thenAnswer(invocation -> {
             controller.set(invocation.getArgument(6));
             return AgentRunResult.ok();
@@ -927,7 +931,7 @@ final class LocalAgentRunnerTest {
     void stopsSameSessionWhenCardLeavesActiveStates() throws Exception {
         // given
         CodexAppServerClient codex = mock();
-        AtomicReference<CodexAppServerClient.TurnController> controller = new AtomicReference<>();
+        var controller = new AtomicReference<CodexAppServerClient.TurnController>();
         when(codex.runSession(any(), any(), any(), any(), any(), any(), any())).thenAnswer(invocation -> {
             controller.set(invocation.getArgument(6));
             return AgentRunResult.ok();
@@ -966,7 +970,7 @@ final class LocalAgentRunnerTest {
 
     private String promptPassedToCodex(EffectiveConfig config, String renderedPrompt, Card card) {
         CodexAppServerClient codex = mock();
-        AtomicReference<String> prompt = new AtomicReference<>();
+        var prompt = new AtomicReference<String>();
         when(codex.runSession(any(), any(), any(), any(), any(), any(), any())).thenAnswer(invocation -> {
             prompt.set(invocation.getArgument(3));
             return AgentRunResult.ok();

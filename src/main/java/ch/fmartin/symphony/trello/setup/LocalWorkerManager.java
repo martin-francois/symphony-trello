@@ -36,12 +36,10 @@ final class LocalWorkerManager {
     private final LocalLogTailer logTailer;
     private final TrelloCredentialPreflight credentialPreflight;
 
-    /**
-     * Verifies resolved Trello credentials against the configured endpoint before a worker launch.
-     * Implementations throw {@link TrelloBoardSetupException} with code {@code trello_auth_failed}
-     * or {@code trello_permission_denied} for credential problems and {@code trello_api_request}
-     * for transport problems.
-     */
+    /// Verifies resolved Trello credentials against the configured endpoint before a worker launch.
+    /// Implementations throw [TrelloBoardSetupException] with code `trello_auth_failed`
+    /// or `trello_permission_denied` for credential problems and `trello_api_request`
+    /// for transport problems.
     @FunctionalInterface
     interface TrelloCredentialPreflight {
         void verify(URI endpoint, String apiKey, String apiToken);
@@ -146,12 +144,10 @@ final class LocalWorkerManager {
         return stableBoardIdentifiers(board).stream().anyMatch(rowIdentifiers::contains);
     }
 
-    /**
-     * Collects every stable Trello identifier of a board row. Created-board manifest rows can
-     * store the 24-character board id in boardKey, leaving the short link only recoverable from
-     * the stored board URL. Identifiers are lowercased to match connected-board selector
-     * case handling.
-     */
+    /// Collects every stable Trello identifier of a board row. Created-board manifest rows can
+    /// store the 24-character board id in boardKey, leaving the short link only recoverable from
+    /// the stored board URL. Identifiers are lowercased to match connected-board selector
+    /// case handling.
     private static Set<String> stableBoardIdentifiers(ConnectedBoard board) {
         Set<String> identifiers = new HashSet<>();
         addBoardIdentifier(identifiers, board.boardId());
@@ -224,7 +220,7 @@ final class LocalWorkerManager {
         workflowConfig.requireLaunchableWorkflowFile(board.workflowPath());
         Function<String, Optional<String>> workflowEnvironment =
                 WorkflowEnvironmentResolver.resolver(environment, envPath);
-        ManagedProcessStore store = new ManagedProcessStore(paths.stateHome());
+        var store = new ManagedProcessStore(paths.stateHome());
         ManagedProcessStore.ManagedProcessFiles files = store.files(board.workflowPath());
         Files.createDirectories(paths.stateHome());
         startWithProcessLock(paths, board, envPath, explicitEnvOverride, out, store, files, workflowEnvironment);
@@ -615,13 +611,11 @@ final class LocalWorkerManager {
                 usage.envPath(), usage.apiTokenEnvironment(), usage.apiTokenSource(), usage.apiTokenDotenvValue());
     }
 
-    /**
-     * The worker uses a dotenv value only when the shell environment does not provide the
-     * variable, so only a value the dotenv file actually contributes is checked against the
-     * shared credential-file contract in {@link TrelloCredentialStore#dotenvCredential}. The
-     * check runs before the Trello credential preflight and before the worker launch, so a
-     * reference-looking value fails locally instead of reaching Trello as a literal credential.
-     */
+    /// The worker uses a dotenv value only when the shell environment does not provide the
+    /// variable, so only a value the dotenv file actually contributes is checked against the
+    /// shared credential-file contract in [TrelloCredentialStore#dotenvCredential]. The
+    /// check runs before the Trello credential preflight and before the worker launch, so a
+    /// reference-looking value fails locally instead of reaching Trello as a literal credential.
     private static void rejectReferenceLookingDotenvCredential(
             Path envPath,
             Optional<String> environmentName,
@@ -781,7 +775,7 @@ final class LocalWorkerManager {
         List<ConnectedBoard> boards =
                 selectForStop(manifest, request.board(), request.workflow(), paths.defaultEnvPath());
         boards = withDefaultEnvForExplicitWorkflow(paths, request.workflow(), boards);
-        ManagedProcessStore store = new ManagedProcessStore(paths.stateHome());
+        var store = new ManagedProcessStore(paths.stateHome());
         if (boards.isEmpty()) {
             stopPidFiles(paths, store, out);
             return 0;
@@ -798,7 +792,7 @@ final class LocalWorkerManager {
 
     void rotateLogsForReplacedBoards(LocalWorkerPaths paths, ConnectedBoard board, List<ConnectedBoard> replacedBoards)
             throws IOException {
-        ManagedProcessStore store = new ManagedProcessStore(paths.stateHome());
+        var store = new ManagedProcessStore(paths.stateHome());
         for (ConnectedBoard replaced : replacedBoards) {
             if (PathsEqual.samePath(replaced.workflowPath(), board.workflowPath())
                     && !replaced.boardId().equals(board.boardId())) {
@@ -808,18 +802,16 @@ final class LocalWorkerManager {
     }
 
     boolean canStopManagedWorker(LocalWorkerPaths paths, ConnectedBoard board) throws IOException {
-        ManagedProcessStore store = new ManagedProcessStore(paths.stateHome());
+        var store = new ManagedProcessStore(paths.stateHome());
         ManagedProcessStore.ManagedProcessFiles files = store.files(board.workflowPath());
         Long pid = store.readPid(files.pidFile());
         return pid != null && platform.isAlive(pid) && platform.isManaged(pid, paths.appHome(), board.workflowPath());
     }
 
-    /**
-     * True when stop would actually stop a running worker for this board: either a managed pid
-     * file exists, or the board is healthy without a pid file and reports a worker pid that
-     * verifies as managed for this install. Setup flows use this to decide whether a replaced
-     * board needs a restart after its worker was stopped.
-     */
+    /// True when stop would actually stop a running worker for this board: either a managed pid
+    /// file exists, or the board is healthy without a pid file and reports a worker pid that
+    /// verifies as managed for this install. Setup flows use this to decide whether a replaced
+    /// board needs a restart after its worker was stopped.
     boolean canStopRunningWorker(LocalWorkerPaths paths, ConnectedBoard board) throws IOException {
         if (canStopManagedWorker(paths, board)) {
             return true;
@@ -840,7 +832,7 @@ final class LocalWorkerManager {
             printPidFileStatus(paths, out);
             return 0;
         }
-        ManagedProcessStore store = new ManagedProcessStore(paths.stateHome());
+        var store = new ManagedProcessStore(paths.stateHome());
         Set<String> duplicateBoardNames = duplicateBoardNames(boards);
         for (ConnectedBoard board : boards) {
             String boardLabel = statusBoardLabel(board, duplicateBoardNames);
@@ -1110,20 +1102,16 @@ final class LocalWorkerManager {
         }
     }
 
-    /**
-     * Pid-file fallback output runs only when no boards are connected, so no board name exists;
-     * the label is the workflow file name without the internal state-file hash suffix.
-     */
+    /// Pid-file fallback output runs only when no boards are connected, so no board name exists;
+    /// the label is the workflow file name without the internal state-file hash suffix.
     private static String stateFileLabel(Path pidFile) {
         String name = PathNames.fileName(pidFile).replaceFirst("\\.pid$", "");
         return name.replaceFirst("\\.[0-9a-f]{12}$", "");
     }
 
-    /**
-     * Refusing to kill the unrelated process is the safety contract; the pid file cleanup is only
-     * best effort on top. A failed or already-done removal must say so instead of claiming the
-     * file was removed.
-     */
+    /// Refusing to kill the unrelated process is the safety contract; the pid file cleanup is only
+    /// best effort on top. A failed or already-done removal must say so instead of claiming the
+    /// file was removed.
     private void removeStalePidFile(LocalWorkerPaths paths, ManagedProcessStore store, Path pidFile, PrintStream out) {
         try {
             if (store.deletePid(pidFile)) {
@@ -1156,7 +1144,7 @@ final class LocalWorkerManager {
     }
 
     private void printPidFileStatus(LocalWorkerPaths paths, PrintStream out) throws IOException {
-        ManagedProcessStore store = new ManagedProcessStore(paths.stateHome());
+        var store = new ManagedProcessStore(paths.stateHome());
         List<Path> pidFiles = store.pidFiles();
         if (pidFiles.isEmpty()) {
             out.println("No managed Symphony process found");

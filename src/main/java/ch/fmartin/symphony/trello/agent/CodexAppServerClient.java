@@ -87,7 +87,7 @@ public class CodexAppServerClient {
             return AgentRunResult.fail("codex_not_found: " + e.getMessage());
         }
 
-        try (AppServerSession session = new AppServerSession(process, config, card, workerIdentity, listener)) {
+        try (var session = new AppServerSession(process, config, card, workerIdentity, listener)) {
             ObjectNode capabilities = object();
             if (trelloTools.shouldEnableExperimentalApi(config)) {
                 capabilities.put("experimentalApi", true);
@@ -376,7 +376,7 @@ public class CodexAppServerClient {
             }
             nextRequestId++;
             int id = nextRequestId;
-            CompletableFuture<JsonNode> future = new CompletableFuture<>();
+            var future = new CompletableFuture<JsonNode>();
             responses.put(id, future);
             ObjectNode request = object("id", id, "method", method, "params", params);
             write(request);
@@ -436,7 +436,7 @@ public class CodexAppServerClient {
         }
 
         private void readStdout() {
-            try (BufferedReader reader = new BufferedReader(
+            try (var reader = new BufferedReader(
                     new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8), 10 * 1024 * 1024)) {
                 String line = reader.readLine();
                 while (line != null) {
@@ -451,7 +451,7 @@ public class CodexAppServerClient {
         }
 
         private void readStderr() {
-            try (BufferedReader reader =
+            try (var reader =
                     new BufferedReader(new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8))) {
                 String line = reader.readLine();
                 while (line != null) {

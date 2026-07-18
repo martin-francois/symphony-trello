@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.catchThrowable;
 
 import ch.fmartin.symphony.trello.config.EffectiveConfig;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
@@ -48,8 +47,7 @@ final class HookRunnerTest {
 
         // then
         assertThat(tempDir.resolve("cwd.txt")).content(StandardCharsets.UTF_8).contains(tempDir.toString());
-        assertThat(Files.readString(tempDir.resolve("shell.txt"), StandardCharsets.UTF_8))
-                .contains("non-login");
+        assertThat(tempDir.resolve("shell.txt")).content(StandardCharsets.UTF_8).contains("non-login");
     }
 
     @Test

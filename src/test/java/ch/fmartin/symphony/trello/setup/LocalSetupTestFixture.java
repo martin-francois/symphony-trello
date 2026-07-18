@@ -205,14 +205,12 @@ final class LocalSetupTestFixture implements AutoCloseable {
                 ---
                 # Test workflow
                 """
-                        .formatted(boardId, port),
-                StandardCharsets.UTF_8);
+                        .formatted(boardId, port));
     }
 
     void givenWorkflowWithGithub(Path workflow, String boardId, int port) throws IOException {
         givenWorkflow(workflow, boardId, port);
-        Files.writeString(
-                workflow, Files.readString(workflow, StandardCharsets.UTF_8) + "\n## Pull Request Publication\n");
+        Files.writeString(workflow, Files.readString(workflow) + "\n## Pull Request Publication\n");
     }
 
     void givenWorkflowWithoutGithub(Path workflow, String boardId, int port) throws IOException {
@@ -221,7 +219,7 @@ final class LocalSetupTestFixture implements AutoCloseable {
 
     void givenManifest(String content) throws IOException {
         Files.createDirectories(manifestPath().getParent());
-        Files.writeString(manifestPath(), content, StandardCharsets.UTF_8);
+        Files.writeString(manifestPath(), content);
     }
 
     void givenCodexAuthenticated() {
@@ -545,8 +543,7 @@ final class LocalSetupTestFixture implements AutoCloseable {
 
         int workflowPort(Path workflowPath) {
             try {
-                var matcher = Pattern.compile("(?m)^\\s*port:\\s*(\\d+)\\s*$")
-                        .matcher(Files.readString(workflowPath, StandardCharsets.UTF_8));
+                var matcher = Pattern.compile("(?m)^\\s*port:\\s*(\\d+)\\s*$").matcher(Files.readString(workflowPath));
                 return matcher.find() ? Integer.parseInt(matcher.group(1)) : defaultServerPort;
             } catch (IOException e) {
                 return defaultServerPort;

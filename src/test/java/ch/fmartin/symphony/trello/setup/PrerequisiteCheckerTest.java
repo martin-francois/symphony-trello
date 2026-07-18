@@ -2,6 +2,7 @@ package ch.fmartin.symphony.trello.setup;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.nio.file.Path;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -57,7 +58,7 @@ final class PrerequisiteCheckerTest {
         Prerequisites prerequisites = new PrerequisiteChecker(commands).check();
 
         // then
-        assertThat(prerequisites.readyFor(SetupOptionFactory.options(java.nio.file.Path.of("target"))))
+        assertThat(prerequisites.readyFor(SetupOptionFactory.options(Path.of("target"))))
                 .as("GitHub authentication is optional when GitHub mode is not required")
                 .isTrue();
     }

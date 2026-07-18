@@ -228,11 +228,10 @@ final class TrelloHandoffToolHandlerTest {
                         .path("inputSchema")
                         .path("properties")
                         .path("status")
-                        .path("enum")
-                        .toString())
-                .isEqualTo("[\"checking\",\"resumed\"]");
-        assertThat(tools.get(3).path("inputSchema").path("required").toString())
-                .isEqualTo("[\"checklist_name\",\"item_name\",\"complete\"]");
+                        .path("enum"))
+                .hasToString("[\"checking\",\"resumed\"]");
+        assertThat(tools.get(3).path("inputSchema").path("required"))
+                .hasToString("[\"checklist_name\",\"item_name\",\"complete\"]");
     }
 
     @Test
@@ -2025,7 +2024,7 @@ final class TrelloHandoffToolHandlerTest {
     void codexUsageAndBlockerRecheckManagedFamiliesUpdateIndependently() {
         // given
         TrelloClient client = mock();
-        TrelloHandoffToolHandler handler = new TrelloHandoffToolHandler(json, client);
+        var handler = new TrelloHandoffToolHandler(json, client);
         EffectiveConfig config = config(List.of("Review"), List.of());
         Instant commentTime = Instant.parse("2026-07-10T12:00:00Z");
         String originalWorkpad = CodexUsageWorkpadSection.upsert(
@@ -2033,12 +2032,12 @@ final class TrelloHandoffToolHandlerTest {
                 CodexUsageWorkpadSection.paused("Usage is unavailable.", Instant.parse("2026-07-10T13:00:00Z")));
         String recheckingSection = CodexUsageWorkpadSection.rechecking("Usage is unavailable.");
         String recheckingWorkpad = CodexUsageWorkpadSection.upsert(originalWorkpad, recheckingSection);
-        Card.Comment managedBlockerRecheck = new Card.Comment(
+        var managedBlockerRecheck = new Card.Comment(
                 BLOCKER_RECHECK_ACTION_ID,
                 managedRecheckText(CHECKING_STATUS, BLOCKER_ACTION_ID, "abc"),
                 "Symphony",
                 commentTime.minusSeconds(1));
-        Card.Comment blocker = new Card.Comment(
+        var blocker = new Card.Comment(
                 BLOCKER_ACTION_ID, "Blocked: repository issue is unavailable.", "Codex", commentTime.minusSeconds(2));
         Card beforeUsageUpdate = TestCards.cardWithComments(
                 "card-1",
@@ -2079,7 +2078,7 @@ final class TrelloHandoffToolHandlerTest {
         assertThat(blockerUpdated.path("contentItems").get(0).path("text").asText())
                 .contains("resumed_work_confirmed");
         assertThat(writes).extracting(Card.Comment::id).containsExactly("action-workpad", BLOCKER_RECHECK_ACTION_ID);
-        assertThat(writes.get(0).text())
+        assertThat(writes.getFirst().text())
                 .isEqualTo(recheckingWorkpad)
                 .contains("- Agent plan: keep this.", CodexUsageWorkpadSection.START_MARKER, recheckingSection)
                 .doesNotContain(
@@ -2207,12 +2206,11 @@ final class TrelloHandoffToolHandlerTest {
     void serializesAgentAndOrchestratorWorkpadReadModifyWriteForSameCard() throws Exception {
         // given
         TrelloClient client = mock();
-        TrelloHandoffToolHandler handler = new TrelloHandoffToolHandler(json, client);
+        var handler = new TrelloHandoffToolHandler(json, client);
         EffectiveConfig config = config(List.of("Review"), List.of());
-        AtomicReference<Card> currentCard =
-                new AtomicReference<>(cardWithSingleWorkpad("## Codex Workpad\n\nOld agent plan"));
-        AtomicInteger fetches = new AtomicInteger();
-        CountDownLatch secondFetchEntered = new CountDownLatch(1);
+        var currentCard = new AtomicReference<Card>(cardWithSingleWorkpad("## Codex Workpad\n\nOld agent plan"));
+        var fetches = new AtomicInteger();
+        var secondFetchEntered = new CountDownLatch(1);
         when(client.fetchCardStateForWorkpad(any(), eq("card-1"))).thenAnswer(invocation -> {
             if (fetches.incrementAndGet() == 2) {
                 secondFetchEntered.countDown();
@@ -2220,9 +2218,9 @@ final class TrelloHandoffToolHandlerTest {
             return new CardLookupResult.Found(currentCard.get());
         });
 
-        CountDownLatch firstUpdateEntered = new CountDownLatch(1);
-        CountDownLatch releaseFirstUpdate = new CountDownLatch(1);
-        AtomicBoolean firstUpdate = new AtomicBoolean(true);
+        var firstUpdateEntered = new CountDownLatch(1);
+        var releaseFirstUpdate = new CountDownLatch(1);
+        var firstUpdate = new AtomicBoolean(true);
         List<String> writes = new CopyOnWriteArrayList<>();
         when(client.updateComment(any(), eq("action-workpad"), anyString())).thenAnswer(invocation -> {
             String value = invocation.getArgument(2);

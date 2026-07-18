@@ -14,20 +14,20 @@ final class MarkdownTableTest {
                         List.of("name", "status"), List.of(MarkdownTable.Alignment.LEFT, MarkdownTable.Alignment.LEFT))
                 .row("git", "available")
                 .row("codex", "missing");
-        StringBuilder body = new StringBuilder();
+        var body = new StringBuilder();
 
         // when
         table.appendTo(body);
 
         // then
-        assertThat(body.toString())
-                .isEqualTo(
+        assertThat(body)
+                .hasToString(
                         """
-                        | name | status |
-                        | --- | --- |
-                        | git | available |
-                        | codex | missing |
-                        """);
+                | name | status |
+                | --- | --- |
+                | git | available |
+                | codex | missing |
+                """);
     }
 
     @Test
@@ -35,7 +35,7 @@ final class MarkdownTableTest {
         // given
         MarkdownTable table =
                 MarkdownTable.leftAligned(List.of("name", "status", "detail")).row("git", "available", "system");
-        StringBuilder body = new StringBuilder();
+        var body = new StringBuilder();
 
         // when
         table.appendTo(body);
@@ -50,7 +50,7 @@ final class MarkdownTableTest {
         MarkdownTable table = MarkdownTable.of(
                         List.of("name", "count"), List.of(MarkdownTable.Alignment.LEFT, MarkdownTable.Alignment.RIGHT))
                 .row("boards", 3);
-        StringBuilder body = new StringBuilder();
+        var body = new StringBuilder();
 
         // when
         table.appendTo(body);
@@ -64,7 +64,7 @@ final class MarkdownTableTest {
         // given
         MarkdownTable table = MarkdownTable.of(List.of("value"), List.of(MarkdownTable.Alignment.LEFT))
                 .row("a|b");
-        StringBuilder body = new StringBuilder();
+        var body = new StringBuilder();
 
         // when
         table.appendTo(body);
@@ -78,7 +78,7 @@ final class MarkdownTableTest {
         // given
         MarkdownTable table = MarkdownTable.of(List.of("value"), List.of(MarkdownTable.Alignment.LEFT))
                 .row("first\r\nsecond\nthird");
-        StringBuilder body = new StringBuilder();
+        var body = new StringBuilder();
 
         // when
         table.appendTo(body);

@@ -29,6 +29,15 @@ itself lives in [Java style & design preferences](java-style.md).
   already cleaner to leave as they are. A large diff is acceptable when the resulting code is
   meaningfully better. High counts of justified findings should become staged cleanup work or a
   candidate profile, not a noisy-rule classification.
+- For source-rewrite tools whose output is normalized by Spotless, evaluate the ordered final state.
+  Run OpenRewrite first and `spotless:apply` second. A recipe MUST NOT be rejected only because its
+  raw output uses different formatting or because its justified final diff is large. The accepted
+  CI invariant is that this ordered pipeline leaves the committed repository state unchanged; a
+  raw `rewrite:dryRun` result or a second unformatted OpenRewrite run is not a substitute.
+- Give every evaluated leaf recipe an individual status and evidence-based rationale in the
+  repository recipe decision record. A parent-composite decision MUST NOT stand in for its
+  children. Classify a zero-finding recipe as not applicable or as an accepted recurrence guard
+  after an independent invariant review; do not call it rejected without a recipe-specific reason.
 - Do not treat a report-only or candidate static-analysis profile as finished while it still
   contains known justified findings. If the current branch cannot fix every finding, make the
   remaining work explicit in GitHub issues before finishing and link every follow-up issue from the

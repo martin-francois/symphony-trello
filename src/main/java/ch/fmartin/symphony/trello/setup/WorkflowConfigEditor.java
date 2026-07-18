@@ -18,7 +18,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
@@ -135,12 +134,10 @@ final class WorkflowConfigEditor {
         return classifyServerPortForDiagnostics(workflowPath, ignored -> Optional.empty());
     }
 
-    /**
-     * Classifies the effective workflow server.port for diagnostics health probing, resolving
-     * environment references through the given resolver. A reference the resolver cannot satisfy
-     * classifies as omitted: diagnostics without the board environment cannot know the real port,
-     * so the manifest fallback covers it like a missing setting.
-     */
+    /// Classifies the effective workflow server.port for diagnostics health probing, resolving
+    /// environment references through the given resolver. A reference the resolver cannot satisfy
+    /// classifies as omitted: diagnostics without the board environment cannot know the real port,
+    /// so the manifest fallback covers it like a missing setting.
     WorkflowServerPortClassification classifyServerPortForDiagnostics(
             Path workflowPath, Function<String, Optional<String>> environmentResolver) {
         SequencedMap<String, Object> yaml;
@@ -202,11 +199,9 @@ final class WorkflowConfigEditor {
         }
     }
 
-    /**
-     * Rejects literal server.port values outside the local port range before a worker launch.
-     * Environment-reference problems are reported by validateServerPortReference first, so this
-     * check only flags literal values such as 70000, -1, or fractional YAML numbers.
-     */
+    /// Rejects literal server.port values outside the local port range before a worker launch.
+    /// Environment-reference problems are reported by validateServerPortReference first, so this
+    /// check only flags literal values such as 70000, -1, or fractional YAML numbers.
     private void validateLaunchServerPort(
             SequencedMap<String, Object> yaml, Function<String, Optional<String>> environmentResolver) {
         if (invalidServerPortSetting(yaml, environmentResolver)) {
@@ -332,7 +327,7 @@ final class WorkflowConfigEditor {
         ReadWorkflow readWorkflow = readWorkflowForLaunch(workflowPath);
         try {
             SequencedMap<String, Object> yaml = parseYaml(readWorkflow.frontMatter());
-            WorkflowDefinition workflow = new WorkflowDefinition(
+            var workflow = new WorkflowDefinition(
                     workflowPath.toAbsolutePath().normalize(),
                     yaml,
                     readWorkflow.frontMatter().body().trim());
@@ -354,10 +349,8 @@ final class WorkflowConfigEditor {
         }
     }
 
-    /**
-     * Rejects workflow paths that cannot possibly launch, with the same expected
-     * setup_workflow_invalid classification as unusable workflow content.
-     */
+    /// Rejects workflow paths that cannot possibly launch, with the same expected
+    /// setup_workflow_invalid classification as unusable workflow content.
     void requireLaunchableWorkflowFile(Path workflowPath) {
         if (Files.isRegularFile(workflowPath)) {
             return;
@@ -687,7 +680,7 @@ final class WorkflowConfigEditor {
         if (!Files.isRegularFile(workflowPath)) {
             throw new IOException("Workflow path is not a regular file.");
         }
-        String content = Files.readString(workflowPath, StandardCharsets.UTF_8);
+        String content = Files.readString(workflowPath);
         return new ReadWorkflow(content, FrontMatter.parse(content));
     }
 
@@ -718,7 +711,7 @@ final class WorkflowConfigEditor {
         requireUnchangedTarget(target, expectedContent);
         Path temporary = Files.createTempFile(parent, temporaryPrefix(target), ".tmp");
         try {
-            Files.writeString(temporary, content, StandardCharsets.UTF_8);
+            Files.writeString(temporary, content);
             if (permissions.isPresent()) {
                 Files.setPosixFilePermissions(temporary, permissions.get());
             }
@@ -737,7 +730,7 @@ final class WorkflowConfigEditor {
     }
 
     private static void requireUnchangedTarget(Path target, String expectedContent) throws IOException {
-        if (!Files.readString(target, StandardCharsets.UTF_8).equals(expectedContent)) {
+        if (!Files.readString(target).equals(expectedContent)) {
             throw new IOException("Workflow file changed while preparing the update.");
         }
     }

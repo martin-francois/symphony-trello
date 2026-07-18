@@ -12,7 +12,7 @@ final class CodexSandboxFlowTest {
     @Test
     void defaultNoKeepsSandboxEnabled() throws Exception {
         // given
-        RecordingTerminal terminal = new RecordingTerminal("n");
+        var terminal = new RecordingTerminal("n");
 
         // when
         boolean dangerFullAccess =
@@ -31,7 +31,7 @@ final class CodexSandboxFlowTest {
     @Test
     void acceptedPromptEnablesDangerFullAccess() throws Exception {
         // given
-        RecordingTerminal terminal = new RecordingTerminal("y");
+        var terminal = new RecordingTerminal("y");
 
         // when
         boolean dangerFullAccess =
@@ -52,7 +52,7 @@ final class CodexSandboxFlowTest {
         // given
         LocalSetup.Options options = SetupOptionFactory.options(
                 Path.of("target/sandbox-flag"), false, Optional.empty(), List.of(), false, true);
-        RecordingTerminal terminal = new RecordingTerminal();
+        var terminal = new RecordingTerminal();
 
         // when
         boolean dangerFullAccess = new CodexSandboxFlow().resolve(options, terminal);
@@ -71,7 +71,7 @@ final class CodexSandboxFlowTest {
         // given
         LocalSetup.Options options = SetupOptionFactory.options(
                 Path.of("target/sandbox-non-interactive"), true, Optional.empty(), List.of(), false, true);
-        RecordingTerminal terminal = new RecordingTerminal();
+        var terminal = new RecordingTerminal();
 
         // when
         boolean dangerFullAccess = new CodexSandboxFlow().resolve(options, terminal);
