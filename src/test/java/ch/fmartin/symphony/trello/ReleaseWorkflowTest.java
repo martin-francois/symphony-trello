@@ -79,7 +79,7 @@ final class ReleaseWorkflowTest {
     }
 
     @Test
-    void releasePleaseConfigCreatesDraftReleasesAndRefreshesGeneratedMetadata() throws IOException {
+    void releasePleaseConfigCreatesDraftReleasesRefreshesMetadataAndCreditsContributors() throws IOException {
         // given
         Path normalConfig = Path.of("release-please-config.json");
 
@@ -87,7 +87,12 @@ final class ReleaseWorkflowTest {
         String normalSource = Files.readString(normalConfig);
 
         // then
-        assertThat(normalSource).contains("\"draft\": true", "\"force-tag-creation\": true", "\"always-update\": true");
+        assertThat(normalSource)
+                .contains(
+                        "\"changelog-type\": \"github\"",
+                        "\"draft\": true",
+                        "\"force-tag-creation\": true",
+                        "\"always-update\": true");
     }
 
     @Test

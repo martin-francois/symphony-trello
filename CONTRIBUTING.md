@@ -325,6 +325,11 @@ requests before reaching `main`. If repository rules require full PR CI on every
 repository owner may need to use an explicit maintainer bypass for generated release pull requests
 after reviewing the release automation output.
 
+Release Please delegates changelog content to GitHub's generated release notes. Each merged pull
+request credits its author, and GitHub adds a separate `New Contributors` section when the release
+contains a contributor's first merged pull request. This contributor recognition is generated
+automatically from GitHub pull request history.
+
 When Release Please creates a GitHub release, the release workflow checks out the tag, builds the
 packaged Quarkus app, uploads `install.sh`, `install.ps1`, `uninstall.sh`, `uninstall.ps1`, Linux
 and Windows release archives, and a SHA3-256 `checksums.txt` file. Release assets are not replaced
