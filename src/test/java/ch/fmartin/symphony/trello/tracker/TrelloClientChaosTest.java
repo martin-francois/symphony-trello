@@ -123,7 +123,7 @@ final class TrelloClientChaosTest {
     void readRateLimitRetriesButWriteRateLimitDoesNotRetry() throws IOException {
         // given
         CountingResponse board = new CountingResponse(429, boardJson("board-1", "Board", false));
-        trello.on("/1/boards/input", exchange -> board.respond(exchange));
+        trello.on("/1/boards/input", board::respond);
         trello.on(
                 "/1/boards/board-1/lists",
                 exchange -> respond(exchange, listsJson(trelloList("list-todo", "Todo", 1))));

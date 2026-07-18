@@ -620,8 +620,8 @@ final class LiveTrelloE2eIT {
                 STARTUP_TIMEOUT,
                 () -> {
                     List<String> cardIds = trello.cardIdsInList(listId);
-                    return cardIds.indexOf(higherCard.id()) >= 0
-                            && cardIds.indexOf(lowerCard.id()) >= 0
+                    return cardIds.contains(higherCard.id())
+                            && cardIds.contains(lowerCard.id())
                             && cardIds.indexOf(higherCard.id()) < cardIds.indexOf(lowerCard.id());
                 },
                 "moved Trello card reaches the expected list order");

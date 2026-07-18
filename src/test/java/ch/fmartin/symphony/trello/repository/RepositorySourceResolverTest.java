@@ -19,6 +19,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 final class RepositorySourceResolverTest {
     private static final String LINE_SEPARATOR = Character.toString(UNICODE_LINE_SEPARATOR);
@@ -100,8 +101,8 @@ final class RepositorySourceResolverTest {
         assertThat(selection.problem().code()).isEqualTo("repository_path_malformed");
     }
 
-    @CsvSource({"file:///tmp/repo.git?", "file:///tmp/repo.git#"})
     @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"file:///tmp/repo.git?", "file:///tmp/repo.git#"})
     void rejectsFileUriWithEmptyQueryOrFragmentMarker(String repositoryUrl) {
         // given
         Card card = cardWithDescription("Repository: " + repositoryUrl);
@@ -176,12 +177,13 @@ final class RepositorySourceResolverTest {
         assertThat(selection.problem().code()).isEqualTo("repository_remote_unsupported");
     }
 
-    @CsvSource({
-        "See https://github.example/team/project.git for background.",
-        "Update https://github.example/team/project/issues/123.",
-        "Review https://github.example/team/project/pull/123."
-    })
     @ParameterizedTest(name = "{0}")
+    @ValueSource(
+            strings = {
+                "See https://github.example/team/project.git for background.",
+                "Update https://github.example/team/project/issues/123.",
+                "Review https://github.example/team/project/pull/123."
+            })
     void ignoresUnlabelledOrdinaryWebLinks(String description) {
         // given
         Card card = cardWithDescription(description);
@@ -418,15 +420,16 @@ final class RepositorySourceResolverTest {
         assertThat(selection.problem().code()).isEqualTo("repository_remote_unsupported");
     }
 
-    @CsvSource({
-        "Repository URL: https://user:secret@example.invalid/team/project.git",
-        "Repository URL: https://token@example.invalid/team/project.git",
-        "Repository URL: https://example.invalid/team/project.git?access_token=secret",
-        "Repository URL: https://example.invalid/team/project.git#secret",
-        "Repository URL: ssh://git%3Asecret@example.invalid/team/project.git",
-        "Repository URL: ssh://git:secret@example.invalid/team/project.git"
-    })
     @ParameterizedTest(name = "{0}")
+    @ValueSource(
+            strings = {
+                "Repository URL: https://user:secret@example.invalid/team/project.git",
+                "Repository URL: https://token@example.invalid/team/project.git",
+                "Repository URL: https://example.invalid/team/project.git?access_token=secret",
+                "Repository URL: https://example.invalid/team/project.git#secret",
+                "Repository URL: ssh://git%3Asecret@example.invalid/team/project.git",
+                "Repository URL: ssh://git:secret@example.invalid/team/project.git"
+            })
     void rejectsCredentialBearingRemoteWithoutEchoingSecret(String cardText) {
         // given
         Card card = cardWithDescription(cardText);
@@ -459,14 +462,15 @@ final class RepositorySourceResolverTest {
         assertThat(selection.problem().code()).isEqualTo(code);
     }
 
-    @CsvSource({
-        "Repository URL: https://example.invalid/team/repo%0D.git",
-        "Repository URL: https://example.invalid/team/repo%0A.git",
-        "Repository URL: https://example.invalid/team/repo%00.git",
-        "Repository URL: https://example.invalid/team/repo%1F.git",
-        "Repository URL: https://example.invalid/team/repo%7F.git"
-    })
     @ParameterizedTest(name = "{0}")
+    @ValueSource(
+            strings = {
+                "Repository URL: https://example.invalid/team/repo%0D.git",
+                "Repository URL: https://example.invalid/team/repo%0A.git",
+                "Repository URL: https://example.invalid/team/repo%00.git",
+                "Repository URL: https://example.invalid/team/repo%1F.git",
+                "Repository URL: https://example.invalid/team/repo%7F.git"
+            })
     void rejectsEncodedUriControls(String cardText) {
         // given
         Card card = cardWithDescription(cardText);
@@ -588,8 +592,8 @@ final class RepositorySourceResolverTest {
         assertThat(selection.problem().code()).isEqualTo("repository_remote_unsupported");
     }
 
-    @CsvSource({"https://example.invalid/team/project.git?", "https://example.invalid/team/project.git#"})
     @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"https://example.invalid/team/project.git?", "https://example.invalid/team/project.git#"})
     void rejectsWorkflowDefaultUrlWithEmptyQueryOrFragmentMarkerAndSuppressesPath(String defaultUrl) {
         // given
         Path fallbackPath = tempDir.resolve("fallback").toAbsolutePath().normalize();

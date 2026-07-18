@@ -90,6 +90,25 @@
   },
   "packageRules": [
     {
+      "matchDatasources": ["maven"],
+      "matchPackageNames": [
+        "org.openrewrite:*",
+        "org.openrewrite.maven:*",
+        "org.openrewrite.recipe:*",
+        "io.quarkus:quarkus-update-recipes"
+      ],
+      "groupName": null,
+      "minimumReleaseAge": "7 days",
+      "automerge": false,
+      "dependencyDashboardApproval": true,
+      "addLabels": ["openrewrite"],
+      "prBodyNotes": [
+        "OpenRewrite updates change executable transformations and MUST NOT be automerged.",
+        "Before merge, the required CI OpenRewrite dry run and the full Maven gate MUST pass.",
+        "In a clean branch or disposable worktree, a maintainer MUST run `./mvnw -Popenrewrite rewrite:run`, review the complete diff, run the same command again, and confirm that the second run produces no diff."
+      ]
+    },
+    {
       "matchPackageNames": ["tessl-labs/good-oss-citizen"],
       "minimumReleaseAge": "7 days",
       "automerge": false,

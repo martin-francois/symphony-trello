@@ -232,6 +232,24 @@ SYMPHONY_TRELLO_TEST_PWSH=./scripts/pwsh-docker.sh ./mvnw -Dtest=InstallerScript
 
 Prefix these commands with `SYMPHONY_TRELLO_CONTAINER_RUNTIME=podman` on a Podman host.
 
+## OpenRewrite Maintenance
+
+The opt-in OpenRewrite profile provides a curated semantic-maintenance check without changing the
+normal `./mvnw -q spotless:check verify` gate:
+
+```bash
+./mvnw -Popenrewrite rewrite:discover
+./mvnw clean
+./mvnw -Popenrewrite rewrite:dryRun
+```
+
+The dry run is read-only and fails when the reviewed composite proposes a change. It writes the
+generated patch to `target/rewrite/rewrite.patch`. Maintainers can use
+`./mvnw -Popenrewrite rewrite:run` only in a clean branch or disposable worktree, then must review
+the complete diff, run the full repository gate, and repeat the apply command to prove that the
+recipe is idempotent. The [OpenRewrite maintenance guide](docs/openrewrite.md) documents the pinned
+inventory, candidate decisions, artifact handling, rollback, validation, and update policy.
+
 ## Commit Style
 
 Use Conventional Commits. The pull request template asks how the change should appear in `main`:

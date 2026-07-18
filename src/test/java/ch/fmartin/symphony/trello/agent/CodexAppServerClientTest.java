@@ -378,7 +378,7 @@ final class CodexAppServerClientTest {
         assertThat(requests)
                 .extracting(request -> request.path("method").asText())
                 .containsExactly("thread/start", "turn/start");
-        assertThat(requests.get(0).path("params").path("model").asText()).isEqualTo("gpt-5.5");
+        assertThat(requests.getFirst().path("params").path("model").asText()).isEqualTo("gpt-5.5");
         assertThat(requests.get(1).path("params").path("model").asText()).isEqualTo("gpt-5.5");
         assertThat(requests.get(1).path("params").path("effort").asText()).isEqualTo("xhigh");
     }
@@ -853,7 +853,7 @@ final class CodexAppServerClientTest {
         // then
         assertThat(result).isEqualTo(AgentRunResult.ok());
         assertThat(publishedRateLimits).hasSize(2);
-        JsonNode canonical = publishedRateLimits.get(0);
+        JsonNode canonical = publishedRateLimits.getFirst();
         assertThat(canonical.path("primary").path("resetsAt").asLong()).isEqualTo(reset.getEpochSecond());
         assertThat(canonical.path("planType").asText()).isEqualTo("team");
         assertThat(publishedRateLimits.get(1)).isEqualTo(canonical);
@@ -1092,7 +1092,7 @@ final class CodexAppServerClientTest {
                 .orElseThrow();
         assertThat(usageLimit.retryNotBefore()).contains(laterPrimaryReset);
         assertThat(publishedRateLimits).hasSize(2);
-        JsonNode latestPublished = publishedRateLimits.get(publishedRateLimits.size() - 1);
+        JsonNode latestPublished = publishedRateLimits.getLast();
         assertThat(latestPublished.path("primary").path("resetsAt").asLong())
                 .isEqualTo(laterPrimaryReset.getEpochSecond());
         assertThat(latestPublished.path("secondary").path("resetsAt").asLong())

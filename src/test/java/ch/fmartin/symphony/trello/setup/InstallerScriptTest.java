@@ -266,7 +266,7 @@ final class InstallerScriptTest {
         // then
         result.assertSuccess();
         List<String> environment = Files.readAllLines(capturedEnvironment, StandardCharsets.UTF_8);
-        Path isolatedHome = Path.of(environment.get(0));
+        Path isolatedHome = Path.of(environment.getFirst());
         Path repositoryRoot = Path.of("").toAbsolutePath();
         assertThat(isolatedHome)
                 .isAbsolute()

@@ -2079,7 +2079,7 @@ final class TrelloHandoffToolHandlerTest {
         assertThat(blockerUpdated.path("contentItems").get(0).path("text").asText())
                 .contains("resumed_work_confirmed");
         assertThat(writes).extracting(Card.Comment::id).containsExactly("action-workpad", BLOCKER_RECHECK_ACTION_ID);
-        assertThat(writes.get(0).text())
+        assertThat(writes.getFirst().text())
                 .isEqualTo(recheckingWorkpad)
                 .contains("- Agent plan: keep this.", CodexUsageWorkpadSection.START_MARKER, recheckingSection)
                 .doesNotContain(

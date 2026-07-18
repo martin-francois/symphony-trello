@@ -9,7 +9,7 @@ final class ConnectedBoardBuilder {
     private String boardKey = "SYNTH001";
     private String boardName = "Queue";
     private String boardUrl = "https://trello.com/b/SYNTH001/synthetic-board";
-    private Path workflowPath;
+    private final Path workflowPath;
     private Path envPath;
     private Path workspaceRoot;
     private int serverPort = ConfigDefaults.DEFAULT_SERVER_PORT;

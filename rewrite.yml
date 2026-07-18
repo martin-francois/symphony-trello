@@ -1,0 +1,15 @@
+---
+type: specs.openrewrite.org/v1beta/recipe
+name: ch.fmartin.symphony.trello.OpenRewriteMaintenance
+displayName: Symphony for Trello OpenRewrite maintenance
+description: >-
+  Applies the reviewed semantic-maintenance recipes that complement the repository's blocking
+  formatting, compiler, static-analysis, and test gates.
+recipeList:
+  - org.openrewrite.staticanalysis.ReplaceLambdaWithMethodReference
+  - org.openrewrite.staticanalysis.IndexOfReplaceableByContains
+  - org.openrewrite.staticanalysis.FinalizePrivateFields
+  - org.openrewrite.java.testing.junit5.CsvSourceToValueSource
+  - org.openrewrite.maven.cleanup.ExplicitPluginGroupId
+  - org.openrewrite.java.migrate.lang.MigrateProcessWaitForDuration
+  - org.openrewrite.java.migrate.util.ListFirstAndLast

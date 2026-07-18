@@ -37,7 +37,6 @@ import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -202,8 +201,8 @@ final class SetupDiagnosticReporterTest {
                 .doesNotContain("shell-key", "shell-token", tempDir.toString()));
     }
 
-    @CsvSource({"-1", "99999"})
     @ParameterizedTest
+    @ValueSource(ints = {-1, 99999})
     void selectedWorkflowDiagnosticsSkipsOutOfRangeFrontMatterPorts(int port) throws Exception {
         // given
         DiagnosticsFixture fixture =
@@ -282,8 +281,8 @@ final class SetupDiagnosticReporterTest {
                 .doesNotContain("IllegalArgumentException", "port out of range", "http://127.0.0.1:99999");
     }
 
-    @CsvSource({"-1", "99999"})
     @ParameterizedTest
+    @ValueSource(ints = {-1, 99999})
     void diagnosticsSkipDeclaredOutOfRangeWorkflowPortWithoutManifestFallback(int port) throws Exception {
         // given
         DiagnosticsFixture fixture =

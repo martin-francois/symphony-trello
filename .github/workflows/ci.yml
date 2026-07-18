@@ -99,6 +99,8 @@ jobs:
         run: ./mvnw spotless:check
       - name: Test and coverage, including fuzz, chaos, and installer lifecycle
         run: ./mvnw -Djunit.parallel.enabled=true -Djunit.parallel.config.fixed.parallelism=2 verify
+      - name: OpenRewrite accepted-maintenance dry run
+        run: ./mvnw -Popenrewrite rewrite:dryRun
 
   windows-powershell:
     if: ${{ !startsWith(github.head_ref, 'release-please--branches--') }}

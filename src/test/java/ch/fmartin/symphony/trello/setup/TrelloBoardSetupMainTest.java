@@ -58,7 +58,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
@@ -3165,8 +3164,8 @@ final class TrelloBoardSetupMainTest {
         }
     }
 
-    @CsvSource({"$REAL_KEY", "${REAL_KEY}", "${REAL_KEY:-fallback}"})
     @ParameterizedTest
+    @ValueSource(strings = {"$REAL_KEY", "${REAL_KEY}", "${REAL_KEY:-fallback}"})
     void rejectsReferenceLookingCredentialFileValuesBeforeAnyTrelloRequest(String dotenvValue) throws Exception {
         // given
         Path env = tempDir.resolve(".env.reference");
@@ -4237,7 +4236,7 @@ final class TrelloBoardSetupMainTest {
 
         // when
         CliRunResult result = runCli(
-                () -> TrelloBoardSetup.CodexModelDefaults.unsupportedFirstClassFields(),
+                TrelloBoardSetup.CodexModelDefaults::unsupportedFirstClassFields,
                 "new-board",
                 "--endpoint",
                 endpoint(),
@@ -5639,7 +5638,7 @@ final class TrelloBoardSetupMainTest {
 
         // when
         CliRunResult result = runCli(
-                () -> TrelloBoardSetup.CodexModelDefaults.unsupportedFirstClassFields(),
+                TrelloBoardSetup.CodexModelDefaults::unsupportedFirstClassFields,
                 "import-board",
                 "--endpoint",
                 endpoint(),
@@ -7072,7 +7071,7 @@ final class TrelloBoardSetupMainTest {
     }
 
     private CliRunResult runCli(String... args) {
-        return runCli(() -> TrelloBoardSetup.CodexModelDefaults.fallback(), withIsolatedDirectCredentialEnv(args));
+        return runCli(TrelloBoardSetup.CodexModelDefaults::fallback, withIsolatedDirectCredentialEnv(args));
     }
 
     private CliRunResult runCliWithNoBusyPorts(String... args) {
